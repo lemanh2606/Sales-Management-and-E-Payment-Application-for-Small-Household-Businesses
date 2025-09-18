@@ -1,0 +1,88 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <title>Invoice {{order.orderCode}}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 10px;
+        }
+
+        th,
+        td {
+            padding: 6px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+
+        .right {
+            text-align: right;
+        }
+
+        .total {
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <h2>{{store.storeName}}</h2>
+        <div>{{store.address}} - {{store.phone}}</div>
+        <h3>HÓA ĐƠN BÁN HÀNG</h3>
+    </div>
+
+    <div>
+        <strong>Mã HD:</strong> {{order.orderCode}} <br />
+        <strong>Ngày:</strong> {{order.orderDate}} <br />
+        <strong>Khách hàng:</strong> {{order.customer.fullName}} <br />
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Sản phẩm</th>
+                <th>Số lượng</th>
+                <th>Đơn giá</th>
+                <th>Thành tiền</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{#each order.items}}
+            <tr>
+                <td>{{@index}}</td>
+                <td>{{this.product.name}}</td>
+                <td class="right">{{this.quantity}}</td>
+                <td class="right">{{this.unitPrice}}</td>
+                <td class="right">{{this.totalPrice}}</td>
+            </tr>
+            {{/each}}
+        </tbody>
+    </table>
+
+    <div class="right">
+        <div>Subtotal: {{order.subTotal}}</div>
+        <div>VAT ({{order.vatRate}}%): {{order.vatAmount}}</div>
+        <div class="total">Total: {{order.totalAmount}}</div>
+    </div>
+
+    <div style="margin-top:20px">
+        <div>Người bán: {{user.fullName}}</div>
+    </div>
+</body>
+
+</html>
