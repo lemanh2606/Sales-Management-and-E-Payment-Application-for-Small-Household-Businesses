@@ -1,0 +1,24 @@
+version: '3.8'
+services:
+  mongo:
+    image: mongo:6
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+  app:
+    build: .
+    command: npm run dev
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/pos_mvp_unified
+      - JWT_SECRET=changeme
+      - PORT=4000
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./:/usr/src/app
+    depends_on:
+      - mongo
+volumes:
+  mongo-data:
