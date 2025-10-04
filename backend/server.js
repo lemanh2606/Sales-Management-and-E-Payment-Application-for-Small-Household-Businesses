@@ -6,6 +6,9 @@ const errorHandler = require("./middlewares/errorHandler");
 const notFoundHandler = require("./middlewares/notFoundHandler");
 require("dotenv").config();
 
+require("./models/Product");
+require("./models/Supplier");
+
 const app = express();
 
 // Kết nối DB
@@ -29,9 +32,11 @@ app.get("/", (req, res) => {
 // Routers
 const storeRouters = require("./routers/storeRouters");
 const userRouters = require("./routers/userRouters");
+const productRouters = require("./routers/productRouters");
 
 app.use("/api/stores", storeRouters);
 app.use("/api/users", userRouters);
+app.use("/api/products", productRouters);
 
 
 // Middleware 404 + error
