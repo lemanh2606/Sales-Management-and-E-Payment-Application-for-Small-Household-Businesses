@@ -8,6 +8,7 @@ require("dotenv").config();
 
 require("./models/Product");
 require("./models/Supplier");
+require("./models/Employee");
 
 const app = express();
 
