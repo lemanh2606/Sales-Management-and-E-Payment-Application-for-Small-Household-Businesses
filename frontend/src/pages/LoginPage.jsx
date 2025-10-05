@@ -34,7 +34,7 @@ export default function LoginPage() {
             <div className="w-full max-w-md p-8 bg-white rounded-3xl shadow-xl border-t-4 border-green-500">
                 <div className="text-center mb-6">
                     <h1 className="text-4xl font-extrabold text-green-600">Smallbiz-Sales</h1>
-                    <p className="text-gray-500">Đăng nhập vào dashboard</p>
+                    <p className="text-gray-500">Đăng nhập vào hệ thống</p>
                 </div>
 
                 {error && <p className="text-red-500 mb-3">{error}</p>}
