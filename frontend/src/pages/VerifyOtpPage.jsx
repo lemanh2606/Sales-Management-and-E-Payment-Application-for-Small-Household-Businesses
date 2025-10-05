@@ -91,7 +91,14 @@ export default function VerifyOtpPage() {
         </p>
 
         <form onSubmit={handleVerify}>
-          <InputField label="Email" name="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <InputField
+            label="Email"
+            name="email"
+            value={email}
+            disabled
+            readOnnly
+            className="bg-gray-100 cursor-not-allowed"
+          />
           <InputField
             label="OTP"
             name="otp"
@@ -116,8 +123,15 @@ export default function VerifyOtpPage() {
             Bạn có thể yêu cầu lại sau <span className="font-mono text-blue-500">{formatTime(timer)}</span>
           </span>
         </div>
-        <small className="block mt-4 text-md text-yellow-800 bg-yellow-50 p-2 rounded-md text-center border border-yellow-200 italic">
+        <small className="block mt-4 text-sm text-yellow-800 bg-yellow-50 p-3 rounded-md text-center border border-yellow-200 italic">
           Nếu không nhận được mã OTP, vui lòng kiểm tra lại địa chỉ email hoặc hộp thư <b>Spam/Junk</b>.
+          <br />
+          <span className="not-italic text-gray-600">
+            Nhập sai email?{" "}
+            <button onClick={() => navigate("/register")} className="text-green-600 font-medium hover:underline">
+              Đăng ký lại
+            </button>
+          </span>
         </small>
       </div>
     </div>
