@@ -7,7 +7,7 @@ const mongoose = require("mongoose");
  * Tạo store mới (MANAGER)
  * Body: { name, address, phone }
  */
-exports.createStore = async (req, res) => {
+const createStore = async (req, res) => {
   try {
     const { name, address, phone } = req.body;
     const userId = req.user.id;
@@ -49,7 +49,7 @@ exports.createStore = async (req, res) => {
 /**
  * Lấy danh sách store của Manager (owner)
  */
-exports.getStoresByManager = async (req, res) => {
+const getStoresByManager = async (req, res) => {
   try {
     const userId = req.user.id;
     const user = await User.findById(userId);
@@ -69,7 +69,7 @@ exports.getStoresByManager = async (req, res) => {
  * Chọn store hiện tại cho user (cả manager hoặc staff)
  * POST /api/stores/select/:storeId
  */
-exports.selectStore = async (req, res) => {
+const selectStore = async (req, res) => {
   try {
     const { storeId } = req.params;
     const userId = req.user.id;
@@ -103,7 +103,7 @@ exports.selectStore = async (req, res) => {
  * Ensure store: nếu manager chưa có store -> tạo default; nếu có store và user.current_store null -> gán mặc định.
  * Trả về stores list + currentStore
  */
-exports.ensureStore = async (req, res) => {
+const ensureStore = async (req, res) => {
   try {
     const userId = req.user.id;
     const user = await User.findById(userId);
@@ -159,7 +159,7 @@ exports.ensureStore = async (req, res) => {
  * GET /api/stores/:storeId/dashboard (protected bằng checkStoreAccess)
  * Trả dữ liệu demo cho dashboard store (doanh số, orders, ...). Bạn thay bằng logic thật.
  */
-exports.getStoreDashboard = async (req, res) => {
+const getStoreDashboard = async (req, res) => {
   try {
     // req.store được gắn bởi checkStoreAccess middleware
     const store = req.store;
@@ -169,7 +169,10 @@ exports.getStoreDashboard = async (req, res) => {
       name: store.name,
       totalSales: 12345,
       ordersToday: 12,
-      topProducts: [{ name: "Product A", sold: 50 }, { name: "Product B", sold: 30 }],
+      topProducts: [
+        { name: "Product A", sold: 50 },
+        { name: "Product B", sold: 30 },
+      ],
     };
     return res.json({ data });
   } catch (err) {
@@ -182,7 +185,7 @@ exports.getStoreDashboard = async (req, res) => {
  * Gán staff cho 1 store (owner thực hiện)
  * POST /api/stores/:storeId/assign-staff  body: { staffUserId, role = "STAFF" }
  */
-exports.assignStaffToStore = async (req, res) => {
+const assignStaffToStore = async (req, res) => {
   try {
     const userId = req.user.id; // caller
     const { storeId } = req.params;
@@ -218,4 +221,13 @@ exports.assignStaffToStore = async (req, res) => {
     console.error("assignStaffToStore error:", err);
     return res.status(500).json({ message: "Lỗi server" });
   }
+};
+
+module.exports = {
+  createStore,
+  getStoresByManager,
+  selectStore,
+  ensureStore,
+  getStoreDashboard,
+  assignStaffToStore,
 };
