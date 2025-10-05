@@ -1,6 +1,7 @@
 const Product = require("../models/Product");
 const Store = require("../models/Store");
 const User = require("../models/User");
+const Employee = require("../models/Employee");
 
 // Lấy tất cả sản phẩm của một cửa hàng với thông tin nhà cung cấp
 exports.getProductsByStore = async (req, res) => {
@@ -20,9 +21,20 @@ exports.getProductsByStore = async (req, res) => {
       return res.status(404).json({ message: "Cửa hàng không tồn tại" });
     }
 
-    // Kiểm tra quyền truy cập: chỉ owner của store mới được xem sản phẩm
+    // Kiểm tra quyền truy cập: owner của store hoặc employee thuộc store đó
     if (user.role === "MANAGER" && store.owner_id.toString() !== userId) {
       return res.status(403).json({ message: "Bạn không có quyền truy cập cửa hàng này" });
+    }
+
+    if (user.role === "STAFF") {
+      // Tìm thông tin employee để lấy store_id
+      const employee = await Employee.findOne({ user_id: userId });
+      if (!employee) {
+        return res.status(404).json({ message: "Không tìm thấy thông tin nhân viên" });
+      }
+      if (employee.store_id.toString() !== storeId) {
+        return res.status(403).json({ message: "Bạn không có quyền truy cập cửa hàng này" });
+      }
     }
 
     // Lấy tất cả sản phẩm của store với thông tin supplier
@@ -75,6 +87,17 @@ exports.getProductById = async (req, res) => {
     const user = await User.findById(userId);
     if (user.role === "MANAGER" && product.store_id.owner_id.toString() !== userId) {
       return res.status(403).json({ message: "Bạn không có quyền truy cập sản phẩm này" });
+    }
+    
+    if (user.role === "STAFF") {
+      // Tìm thông tin employee để lấy store_id
+      const employee = await Employee.findOne({ user_id: userId });
+      if (!employee) {
+        return res.status(404).json({ message: "Không tìm thấy thông tin nhân viên" });
+      }
+      if (employee.store_id.toString() !== product.store_id._id.toString()) {
+        return res.status(403).json({ message: "Bạn không có quyền truy cập sản phẩm này" });
+      }
     }
 
     // Format lại dữ liệu
