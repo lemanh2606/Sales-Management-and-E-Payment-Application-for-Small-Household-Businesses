@@ -3,6 +3,7 @@ import InputField from "../components/InputField";
 import Button from "../components/Button";
 import { verifyOtp, registerManager } from "../api/userApi";
 import { useLocation, useNavigate } from "react-router-dom";
+import Swal from "sweetalert2"; // ✅ import sweetalert2
 
 export default function VerifyOtpPage() {
   const location = useLocation();
@@ -11,9 +12,8 @@ export default function VerifyOtpPage() {
 
   const [email, setEmail] = useState(emailFromState);
   const [otp, setOtp] = useState("");
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const [timer, setTimer] = useState(60 * Number(import.meta.env.VITE_OTP_EXPIRE_MINUTES || 5));
+  const [isVerifying, setIsVerifying] = useState(false);
 
   useEffect(() => {
     if (timer <= 0) return;
@@ -25,28 +25,56 @@ export default function VerifyOtpPage() {
 
   const handleVerify = async (e) => {
     e.preventDefault();
-    setError("");
-    setSuccess("");
+    setIsVerifying(true);
+
     try {
       const res = await verifyOtp({ email, otp });
-      setSuccess(res.message || "Xác thực thành công");
-      setTimeout(() => navigate("/login"), 1400);
+
+      await Swal.fire({
+        title: "✅ Xác thực thành công!",
+        text: res.message || "Tài khoản của bạn đã được xác thực. Hãy đăng nhập để tiếp tục.",
+        icon: "success",
+        confirmButtonText: "Đi đến đăng nhập",
+        confirmButtonColor: "#16a34a",
+        timer: 2500,
+      });
+
+      navigate("/login");
     } catch (err) {
-      setError(err?.response?.data?.message || err?.message || "Lỗi server");
+      Swal.fire({
+        title: "❌ Lỗi xác thực!",
+        text: err?.response?.data?.message || err?.message || "Mã OTP không hợp lệ hoặc đã hết hạn.",
+        icon: "error",
+        confirmButtonText: "Thử lại",
+        confirmButtonColor: "#dc2626",
+      });
+    } finally {
+      setIsVerifying(false);
     }
   };
 
   const handleResend = async () => {
-    setError("");
     try {
-      // Chúng tôi sử dụng lại điểm cuối register để gửi lại OTP: tạo người dùng phải thất bại nếu tồn tại,
-      // vì vậy để gửi lại, bạn có thể cần một điểm cuối chuyên dụng. Một cách tiếp cận đơn giản là
-      // chỉ gọi register một lần nữa nếu máy chủ hỗ trợ gửi lại; nếu không, hãy triển khai điểm cuối resend ở phía sau.
-      // Ở đây, chúng tôi gọi một điểm cuối giả định /resend-otp. Nếu phía sau không có, hãy xóa điểm cuối này.
       await registerManager({ username: "resend", email, password: "temporary123!", phone: "" });
+
+      Swal.fire({
+        title: "📨 Đã gửi lại OTP!",
+        text: `Mã OTP mới đã được gửi đến ${email}.`,
+        icon: "info",
+        confirmButtonText: "Xác nhận",
+        confirmButtonColor: "#16a34a",
+        timer: 2000,
+      });
+
       setTimer(60 * Number(import.meta.env.VITE_OTP_EXPIRE_MINUTES || 5));
     } catch (err) {
-      setError(err?.response?.data?.message || "Không thể gửi lại OTP");
+      Swal.fire({
+        title: "😢 Không thể gửi lại OTP!",
+        text: err?.response?.data?.message || "Đã xảy ra lỗi khi gửi lại mã OTP.",
+        icon: "error",
+        confirmButtonText: "Đóng",
+        confirmButtonColor: "#dc2626",
+      });
     }
   };
 
@@ -56,14 +84,11 @@ export default function VerifyOtpPage() {
         <h2 className="text-2xl font-bold text-green-600 mb-4 text-center">Xác thực OTP</h2>
 
         <p className="text-gray-600 mb-3">
-          OTP đã gửi tới: <b>{email}</b>
+          OTP đã gửi tới email: <b>{email}</b>
         </p>
         <p className="text-gray-500 mb-4">
-          Hết hạn sau: <span className="font-mono">{formatTime(timer)}</span>
+          Hết hạn sau: <span className="font-mono text-blue-500">{formatTime(timer)}</span>
         </p>
-
-        {error && <p className="text-red-500 mb-2">{error}</p>}
-        {success && <p className="text-green-600 mb-2">{success}</p>}
 
         <form onSubmit={handleVerify}>
           <InputField label="Email" name="email" value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -74,8 +99,8 @@ export default function VerifyOtpPage() {
             onChange={(e) => setOtp(e.target.value)}
             placeholder="Nhập mã 6 chữ số"
           />
-          <Button type="submit" className="w-full mt-3">
-            Xác nhận
+          <Button type="submit" className="w-full mt-3" disabled={isVerifying}>
+            {isVerifying ? "Đang xác thực..." : "Xác nhận"}
           </Button>
         </form>
 
@@ -85,10 +110,15 @@ export default function VerifyOtpPage() {
             disabled={timer > 0}
             className="text-green-600 hover:underline disabled:text-gray-300"
           >
-            Gửi lại OTP
+            Gửi lại mã OTP
           </button>
-          <span className="text-gray-400">Bạn có thể yêu cầu lại sau {formatTime(timer)}</span>
+          <span className="text-gray-400">
+            Bạn có thể yêu cầu lại sau <span className="font-mono text-blue-500">{formatTime(timer)}</span>
+          </span>
         </div>
+        <small className="block mt-4 text-md text-yellow-800 bg-yellow-50 p-2 rounded-md text-center border border-yellow-200 italic">
+          Nếu không nhận được mã OTP, vui lòng kiểm tra lại địa chỉ email hoặc hộp thư <b>Spam/Junk</b>.
+        </small>
       </div>
     </div>
   );

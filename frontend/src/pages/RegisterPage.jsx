@@ -3,6 +3,7 @@ import InputField from "../components/InputField";
 import Button from "../components/Button";
 import { registerManager } from "../api/userApi";
 import { useNavigate } from "react-router-dom";
+import Swal from "sweetalert2"; // ✅ import sweetalert2
 
 export default function RegisterPage() {
   const navigate = useNavigate();
@@ -14,14 +15,13 @@ export default function RegisterPage() {
     confirmPassword: "",
   });
   const [error, setError] = useState("");
-  const [info, setInfo] = useState("");
+  const [isLoading, setIsLoading] = useState(false); // ✅ để disable nút khi đang gửi
 
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
-    setInfo("");
 
     if (form.password !== form.confirmPassword) {
       setError("Mật khẩu nhập lại không trùng khớp, vui lòng nhập lại");
@@ -29,12 +29,31 @@ export default function RegisterPage() {
     }
 
     try {
+      setIsLoading(true); // ✅ bật loading
       const data = await registerManager(form);
-      setInfo(data.message || "Đã gửi OTP. Kiểm tra email.");
-      // chuyển sang trang xác thực OTP kèm email
+
+      // ✅ hiện popup thông báo đăng ký thành công
+      await Swal.fire({
+        title: "🎉 Đăng ký thành công!",
+        text: "Hãy xác thực OTP gửi tới Email của bạn.",
+        icon: "success",
+        confirmButtonText: "Xác nhận",
+        confirmButtonColor: "#16a34a",
+        timer: 2500,
+      });
+
+      // ✅ chuyển sang trang xác thực OTP kèm email
       navigate("/verify-otp", { state: { email: form.email } });
     } catch (err) {
-      setError(err?.response?.data?.message || err?.message || "Lỗi server");
+      Swal.fire({
+        title: "Lỗi",
+        text: err?.response?.data?.message || "Đã có lỗi xảy ra, vui lòng thử lại sau.",
+        icon: "error",
+        confirmButtonText: "Đóng",
+        confirmButtonColor: "#dc2626",
+      });
+    } finally {
+      setIsLoading(false); // ✅ tắt loading
     }
   };
 
@@ -47,11 +66,10 @@ export default function RegisterPage() {
         </div>
 
         {error && <p className="text-red-500 mb-3">{error}</p>}
-        {info && <p className="text-green-600 mb-3">{info}</p>}
 
         <form onSubmit={handleSubmit}>
           <InputField
-            label="Username"
+            label="Tên đăng nhập"
             name="username"
             value={form.username}
             onChange={handleChange}
@@ -68,7 +86,7 @@ export default function RegisterPage() {
           <br />
           <InputField label="Phone" name="phone" value={form.phone} onChange={handleChange} placeholder="09xxxxxxxx" />
           <InputField
-            label="Password"
+            label="Mật khẩu"
             name="password"
             type="password"
             value={form.password}
@@ -76,7 +94,7 @@ export default function RegisterPage() {
             placeholder="********"
           />
           <InputField
-            label="Nhập lại Password"
+            label="Nhập lại Mật khẩu"
             name="confirmPassword"
             type="password"
             value={form.confirmPassword}
@@ -84,12 +102,11 @@ export default function RegisterPage() {
             placeholder="********"
           />
 
-          <Button type="submit" className="w-full mt-3">
-            Đăng ký
+          <Button type="submit" className="w-full mt-3" disabled={isLoading}>
+            {isLoading ? "Đang xử lý..." : "Đăng ký"}
           </Button>
         </form>
 
-        {/* Nút chuyển qua login */}
         <div className="text-center mt-4">
           <p className="text-sm text-gray-500">
             Đã có tài khoản?{" "}
