@@ -124,3 +124,69 @@ exports.getProductById = async (req, res) => {
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
+
+// Cập nhật giá bán sản phẩm (chỉ manager)
+exports.updateProductPrice = async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const { price } = req.body;
+    const userId = req.user.id;
+
+    // Validate input
+    if (!price) {
+      return res.status(400).json({ message: "Giá bán (price) là bắt buộc" });
+    }
+
+    if (isNaN(price) || price < 0) {
+      return res.status(400).json({ message: "Giá bán phải là số dương" });
+    }
+
+    // Kiểm tra user là manager
+    const user = await User.findById(userId);
+    if (!user || user.role !== "MANAGER") {
+      return res.status(403).json({ message: "Chỉ Manager mới được cập nhật giá sản phẩm" });
+    }
+
+    // Tìm sản phẩm và populate store để kiểm tra quyền
+    const product = await Product.findById(productId).populate('store_id', 'owner_id');
+    if (!product) {
+      return res.status(404).json({ message: "Sản phẩm không tồn tại" });
+    }
+
+    // Kiểm tra quyền: chỉ owner của store mới được cập nhật giá
+    if (product.store_id.owner_id.toString() !== userId) {
+      return res.status(403).json({ message: "Bạn chỉ có thể cập nhật giá sản phẩm trong cửa hàng của mình" });
+    }
+
+    // Cập nhật giá bán sản phẩm
+    const updatedProduct = await Product.findByIdAndUpdate(
+      productId,
+      { price: price },
+      { new: true }
+    ).populate('supplier_id', 'name')
+     .populate('store_id', 'name address phone');
+
+    // Format lại dữ liệu
+    const formattedProduct = {
+      _id: updatedProduct._id,
+      name: updatedProduct.name,
+      description: updatedProduct.description,
+      price: parseFloat(updatedProduct.price.toString()),
+      cost_price: parseFloat(updatedProduct.cost_price.toString()),
+      stock_quantity: updatedProduct.stock_quantity,
+      unit: updatedProduct.unit,
+      created_at: updatedProduct.created_at,
+      store: updatedProduct.store_id,
+      supplier: updatedProduct.supplier_id
+    };
+
+    res.status(200).json({
+      message: "Cập nhật giá bán sản phẩm thành công",
+      product: formattedProduct
+    });
+
+  } catch (error) {
+    console.error("❌ Lỗi updateProductPrice:", error);
+    res.status(500).json({ message: "Lỗi server", error: error.message });
+  }
+};

@@ -6,6 +6,9 @@ const { verifyToken } = require('../middlewares/authMiddleware');
 // Route để lấy tất cả sản phẩm của một cửa hàng với thông tin nhà cung cấp
 router.get('/store/:storeId', verifyToken, productController.getProductsByStore);
 
+// Route để cập nhật giá một sản phẩm
+router.put('/:productId/price', verifyToken, productController.updateProductPrice);
+
 // Route để lấy chi tiết một sản phẩm với thông tin nhà cung cấp
 router.get('/:productId', verifyToken, productController.getProductById);
 
