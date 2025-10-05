@@ -4,7 +4,7 @@ const User = require("../models/User");
 const Employee = require("../models/Employee");
 
 // Lấy tất cả sản phẩm của một cửa hàng với thông tin nhà cung cấp
-exports.getProductsByStore = async (req, res) => {
+const getProductsByStore = async (req, res) => {
   try {
     const { storeId } = req.params;
     const userId = req.user.id;
@@ -70,7 +70,7 @@ exports.getProductsByStore = async (req, res) => {
 };
 
 // Lấy chi tiết một sản phẩm với thông tin nhà cung cấp
-exports.getProductById = async (req, res) => {
+const getProductById = async (req, res) => {
   try {
     const { productId } = req.params;
     const userId = req.user.id;
@@ -126,7 +126,7 @@ exports.getProductById = async (req, res) => {
 };
 
 // Cập nhật giá bán sản phẩm (chỉ manager)
-exports.updateProductPrice = async (req, res) => {
+const updateProductPrice = async (req, res) => {
   try {
     const { productId } = req.params;
     const { price } = req.body;
@@ -190,3 +190,5 @@ exports.updateProductPrice = async (req, res) => {
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
+
+module.exports = { getProductsByStore, getProductById, updateProductPrice };

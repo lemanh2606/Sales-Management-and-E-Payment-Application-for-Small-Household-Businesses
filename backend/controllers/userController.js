@@ -21,7 +21,7 @@
 const User = require("../models/User");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const nodemailer = require("nodemailer");
+const { sendVerificationEmail } = require("../services/emailService");
 
 const IS_PROD = process.env.NODE_ENV === "production";
 
@@ -47,21 +47,6 @@ const BCRYPT_SALT_ROUNDS = Number(process.env.BCRYPT_SALT_ROUNDS || 10);
 const ACCESS_TOKEN_EXPIRES = process.env.JWT_EXPIRES || process.env.ACCESS_TOKEN_EXPIRES || "2d";
 // Thời hạn refresh token (chuỗi '7d' hoặc tương tự)
 const REFRESH_TOKEN_EXPIRES = process.env.REFRESH_TOKEN_EXPIRES || `${process.env.REFRESH_TOKEN_EXPIRES_DAYS || 7}d`;
-
-/* -------------------------
-   Cấu hình gửi email (Nodemailer)
-   ------------------------- */
-/**
- * Lưu ý: nếu dùng Gmail, bắt buộc tạo App Password (khi bật 2FA) và dùng ở EMAIL_PASS.
- * Đừng dùng mật khẩu Gmail trực tiếp nếu chưa bật 2FA.
- */
-const transporter = nodemailer.createTransport({
-  service: process.env.EMAIL_SERVICE || "gmail",
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS || "", // PHẢI cấu hình trong .env
-  },
-});
 
 /* -------------------------
    Helper functions
@@ -93,8 +78,7 @@ const compareHash = async (plain, hash) => bcrypt.compare(plain, hash);
  * Tạo access token (JWT) với payload, sử dụng secret từ .env (JWT_SECRET).
  * Access token dùng để authorize API, có thời hạn ngắn.
  */
-const signAccessToken = (payload) =>
-  jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: ACCESS_TOKEN_EXPIRES });
+const signAccessToken = (payload) => jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: ACCESS_TOKEN_EXPIRES });
 
 /**
  * Tạo refresh token (JWT) — có thời hạn dài hơn và lưu ở cookie HttpOnly cho web.
@@ -112,89 +96,61 @@ const signRefreshToken = (payload) =>
    - Gửi OTP qua email
    - KHÔNG trả OTP cho client
    ------------------------- */
-exports.registerManager = async (req, res) => {
+const registerManager = async (req, res) => {
   try {
     const { username, email, password, phone } = req.body;
 
-    // Kiểm tra dữ liệu đầu vào cơ bản
     if (!username || !email || !password) {
-      return res.status(400).json({ message: "Username, email và password bắt buộc" });
+      return res.status(400).json({ message: "Tên đăng nhập, email và mật khẩu là bắt buộc" });
     }
 
-    // Chuẩn hoá email: trim + lowercase
     const emailNorm = String(email).trim().toLowerCase();
-
-    // Kiểm tra username/email đã tồn tại chưa
     const existUser = await User.findOne({ $or: [{ username }, { email: emailNorm }] });
     if (existUser) {
-      // Trả lỗi 400 để client biết cần đổi username/email
-      return res.status(400).json({ message: "Username hoặc email đã tồn tại" });
+      return res.status(400).json({ message: "Tên đăng nhập hoặc email đã tồn tại" });
     }
 
-    // Chính sách password cơ bản: yêu cầu >= 8 ký tự (bạn có thể nâng cấp)
     if (password.length < 8) {
-      return res.status(400).json({ message: "Password phải có ít nhất 8 ký tự" });
+      return res.status(400).json({ message: "Mật khẩu phải có ít nhất 8 ký tự" });
     }
 
-    // Hash password để lưu vào DB (bcrypt)
     const password_hash = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
 
-    // Sinh OTP và hash OTP trước khi lưu (lưu hash để an toàn)
     const otp = generateOTP();
     const otp_hash = await hashString(otp);
-    // Tính thời hạn OTP (timestamp ms)
     const otp_expires = Date.now() + OTP_EXPIRE_MINUTES * 60 * 1000;
 
-    // Tạo document user mới (chưa kích hoạt)
     const newUser = new User({
       username,
       email: emailNorm,
       phone: phone || null,
       password_hash,
       role: "MANAGER",
-      isVerified: false,    // mặc định chưa verified
-      otp_hash,             // lưu hash của OTP
-      otp_expires,          // thời hạn OTP
-      otp_attempts: 0,      // số lần thử OTP hiện tại
-      loginAttempts: 0,     // số lần login sai hiện tại
-      lockUntil: null,      // nếu account bị khóa tạm thời
+      isVerified: false,
+      otp_hash,
+      otp_expires,
+      otp_attempts: 0,
+      loginAttempts: 0,
+      lockUntil: null,
     });
 
-    // Lưu user vào DB
     await newUser.save();
 
-    // Gửi email chứa OTP cho user (nếu gửi mail lỗi, rollback user vừa tạo để tránh tài khoản "dead")
     try {
-      await transporter.sendMail({
-        from: `"Smallbiz-Sales" <${process.env.EMAIL_USER}>`,
-        to: emailNorm,
-        subject: "Smallbiz-Sales - Mã OTP xác nhận email",
-        html: `
-          <div>
-            <p>Xin chào <b>${username}</b>,</p>
-            <p>Mã OTP xác nhận đăng ký của bạn là:</p>
-            <h2 style="color:green">${otp}</h2>
-            <p>Mã có hiệu lực trong ${OTP_EXPIRE_MINUTES} phút.</p>
-            <p>Nếu bạn không yêu cầu mã này, hãy bỏ qua email này.</p>
-          </div>
-        `,
-      });
+      // gọi service gửi email
+      await sendVerificationEmail(emailNorm, username, otp, OTP_EXPIRE_MINUTES);
     } catch (mailErr) {
-      // Nếu gửi mail thất bại, xóa user vừa tạo để tránh có user không thể active.
       console.error("Mail send error:", mailErr);
       await User.deleteOne({ _id: newUser._id }).catch((e) => console.error("Rollback delete failed:", e));
       return res.status(500).json({ message: "Không thể gửi OTP tới email. Vui lòng thử lại sau." });
     }
 
-    // Trả response cho client: KHÔNG bao gồm OTP hoặc otp_hash.
-    // Client sẽ hiển thị form nhập OTP (client gửi email + otp để verify).
     return res.status(201).json({
       message: "Đăng ký thành công. Mã OTP đã được gửi tới email của bạn.",
       user: { id: newUser._id, username: newUser.username, email: newUser.email },
     });
   } catch (err) {
     console.error("registerManager error:", err);
-    // Trả lỗi tổng quát để tránh lộ thông tin nhạy cảm
     return res.status(500).json({ message: "Lỗi server" });
   }
 };
@@ -206,7 +162,7 @@ exports.registerManager = async (req, res) => {
    - So sánh otp (so sánh hash bằng bcrypt.compare)
    - Nếu đúng => set isVerified = true, xóa otp_hash, reset attempts
    ------------------------- */
-exports.verifyOtp = async (req, res) => {
+const verifyOtp = async (req, res) => {
   try {
     const { email, otp } = req.body;
     if (!email || !otp) return res.status(400).json({ message: "Email và OTP bắt buộc" });
@@ -259,7 +215,7 @@ exports.verifyOtp = async (req, res) => {
    - Nếu đúng: reset attempts, cập nhật last_login, cấp access + refresh token
    - Refresh token set vào cookie HttpOnly (để client web không thể đọc JS)
    ------------------------- */
-exports.login = async (req, res) => {
+const login = async (req, res) => {
   try {
     const { username, password } = req.body;
     if (!username || !password) return res.status(400).json({ message: "Username và password bắt buộc" });
@@ -336,7 +292,7 @@ exports.login = async (req, res) => {
    - Nếu hợp lệ, cấp access token mới
    - Nếu không hợp lệ, trả 401
    ------------------------- */
-exports.refreshToken = async (req, res) => {
+const refreshToken = async (req, res) => {
   try {
     // Lấy refresh token từ cookie (yêu cầu dùng cookie-parser middleware)
     const token = req.cookies?.refreshToken;
@@ -362,3 +318,5 @@ exports.refreshToken = async (req, res) => {
     return res.status(500).json({ message: "Lỗi server" });
   }
 };
+
+module.exports = { registerManager, verifyOtp, login, refreshToken };
