@@ -7,6 +7,10 @@ commission_rate: { type: mongoose.Schema.Types.Decimal128 },
 hired_date: { type: Date, default: Date.now },
 user_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
 store_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Store', required: true }
-});
+},
+{
+  timestamps: true, // tự động thêm createdAt và updatedAt
+}
+);
 
 module.exports = mongoose.model('Employee', employeeSchema);
