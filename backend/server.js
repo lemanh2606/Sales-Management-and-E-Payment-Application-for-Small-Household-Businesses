@@ -8,6 +8,7 @@ const notFoundHandler = require("./middlewares/notFoundHandler");
 require("dotenv").config();
 
 require("./models/Product");
+require("./models/ProductGroup");
 require("./models/Supplier");
 require("./models/Employee");
 
@@ -37,10 +38,12 @@ app.get("/", (req, res) => {
 const storeRouters = require("./routers/storeRouters");
 const userRouters = require("./routers/userRouters");
 const productRouters = require("./routers/productRouters");
+const productGroupRouters = require("./routers/productGroupRouters");
 
 app.use("/api/stores", storeRouters);
 app.use("/api/users", userRouters);
 app.use("/api/products", productRouters);
+app.use("/api/product-groups", productGroupRouters);
 
 // Middleware 404 + error
 app.use(notFoundHandler);

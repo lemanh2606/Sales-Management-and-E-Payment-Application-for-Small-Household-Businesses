@@ -1,19 +1,37 @@
 const Product = require("../models/Product");
+const ProductGroup = require("../models/ProductGroup");
 const Store = require("../models/Store");
 const User = require("../models/User");
 const Employee = require("../models/Employee");
+const Supplier = require("../models/Supplier");
+
+// ============= HELPER FUNCTIONS =============
+// Tạo SKU tự động với format SPXXXXXX (X là số)
+const generateSKU = async () => {
+  const lastProduct = await Product.findOne().sort({ createdAt: -1 });
+  let nextNumber = 1;
+
+  if (lastProduct && lastProduct.sku && lastProduct.sku.startsWith('SP')) {
+    const lastNumber = parseInt(lastProduct.sku.substring(2));
+    if (!isNaN(lastNumber)) {
+      nextNumber = lastNumber + 1;
+    }
+  }
+
+  return `SP${nextNumber.toString().padStart(6, '0')}`;
+};
 
 // ============= CREATE - Tạo sản phẩm mới =============
 const createProduct = async (req, res) => {
   try {
     // Kiểm tra xem request body có tồn tại không
     if (!req.body || Object.keys(req.body).length === 0) {
-      return res.status(400).json({ 
-        message: "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json" 
+      return res.status(400).json({
+        message: "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json"
       });
     }
 
-    const { name, description, price, cost_price, stock_quantity, unit, supplier_id } = req.body;
+    const {name, description, sku, price, cost_price, stock_quantity, min_stock, max_stock, unit, status, supplier_id, group_id} = req.body;
     const { storeId } = req.params;
     const userId = req.user.id;
 
@@ -34,6 +52,22 @@ const createProduct = async (req, res) => {
       return res.status(400).json({ message: "Số lượng tồn kho phải là số không âm" });
     }
 
+    if (min_stock !== undefined && (isNaN(min_stock) || min_stock < 0)) {
+      return res.status(400).json({ message: "Tồn kho tối thiểu phải là số không âm" });
+    }
+
+    if (max_stock !== undefined && (isNaN(max_stock) || max_stock < 0)) {
+      return res.status(400).json({ message: "Tồn kho tối đa phải là số không âm" });
+    }
+
+    if (min_stock !== undefined && max_stock !== undefined && min_stock > max_stock) {
+      return res.status(400).json({ message: "Tồn kho tối thiểu không thể lớn hơn tồn kho tối đa" });
+    }
+
+    if (status && !['Đang kinh doanh', 'Ngừng kinh doanh', 'Ngừng bán'].includes(status)) {
+      return res.status(400).json({ message: "Trạng thái sản phẩm không hợp lệ" });
+    }
+
     // Kiểm tra user là manager
     const user = await User.findById(userId);
     if (!user || user.role !== "MANAGER") {
@@ -50,16 +84,46 @@ const createProduct = async (req, res) => {
       return res.status(403).json({ message: "Bạn chỉ có thể tạo sản phẩm trong cửa hàng của mình" });
     }
 
+    // Kiểm tra ProductGroup nếu được cung cấp
+    if (group_id) {
+      const productGroup = await ProductGroup.findById(group_id);
+      if (!productGroup) {
+        return res.status(404).json({ message: "Nhóm sản phẩm không tồn tại" });
+      }
+      if (productGroup.storeId.toString() !== storeId) {
+        return res.status(400).json({ message: "Nhóm sản phẩm không thuộc cửa hàng này" });
+      }
+    }
+
+    // Kiểm tra Supplier nếu được cung cấp
+    if (supplier_id) {
+      const supplier = await Supplier.findById(supplier_id);
+      if (!supplier) {
+        return res.status(404).json({ message: "Nhà cung cấp không tồn tại" });
+      }
+      if (supplier.store_id.toString() !== storeId) {
+        return res.status(400).json({ message: "Nhà cung cấp không thuộc cửa hàng này" });
+      }
+    }
+
+    // Tạo SKU tự động nếu không được cung cấp
+    const productSKU = sku || await generateSKU();
+
     // Tạo sản phẩm mới
     const newProduct = new Product({
       name,
       description,
+      sku: productSKU,
       price,
       cost_price,
       stock_quantity: stock_quantity || 0,
+      min_stock: min_stock || 0,
+      max_stock: max_stock || null,
       unit,
+      status: status || 'active',
       store_id: storeId,
-      supplier_id: supplier_id || null
+      supplier_id: supplier_id || null,
+      group_id: group_id || null
     });
 
     await newProduct.save();
@@ -67,19 +131,26 @@ const createProduct = async (req, res) => {
     // Lấy thông tin chi tiết và định dạng dữ liệu trả về
     const populatedProduct = await Product.findById(newProduct._id)
       .populate('supplier_id', 'name')
-      .populate('store_id', 'name address phone');
+      .populate('store_id', 'name')
+      .populate('group_id', 'name');
 
     const formattedProduct = {
       _id: populatedProduct._id,
       name: populatedProduct.name,
       description: populatedProduct.description,
+      sku: populatedProduct.sku,
       price: parseFloat(populatedProduct.price.toString()),
       cost_price: parseFloat(populatedProduct.cost_price.toString()),
       stock_quantity: populatedProduct.stock_quantity,
+      min_stock: populatedProduct.min_stock,
+      max_stock: populatedProduct.max_stock,
       unit: populatedProduct.unit,
-      created_at: populatedProduct.created_at,
+      status: populatedProduct.status,
       store: populatedProduct.store_id,
-      supplier: populatedProduct.supplier_id
+      supplier: populatedProduct.supplier_id,
+      group: populatedProduct.group_id,
+      createdAt: populatedProduct.createdAt,
+      updatedAt: populatedProduct.updatedAt
     };
 
     res.status(201).json({
@@ -98,13 +169,13 @@ const updateProduct = async (req, res) => {
   try {
     // Kiểm tra xem request body có tồn tại không
     if (!req.body || Object.keys(req.body).length === 0) {
-      return res.status(400).json({ 
-        message: "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json" 
+      return res.status(400).json({
+        message: "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json"
       });
     }
 
     const { productId } = req.params;
-    const { name, description, price, cost_price, stock_quantity, unit, supplier_id } = req.body;
+    const { name, description, sku, price, cost_price, stock_quantity, min_stock, max_stock, unit, status, supplier_id, group_id } = req.body;
     const userId = req.user.id;
 
     // Kiểm tra và xác thực dữ liệu đầu vào
@@ -118,6 +189,22 @@ const updateProduct = async (req, res) => {
 
     if (stock_quantity !== undefined && (isNaN(stock_quantity) || stock_quantity < 0)) {
       return res.status(400).json({ message: "Số lượng tồn kho phải là số không âm" });
+    }
+
+    if (min_stock !== undefined && (isNaN(min_stock) || min_stock < 0)) {
+      return res.status(400).json({ message: "Tồn kho tối thiểu phải là số không âm" });
+    }
+
+    if (max_stock !== undefined && (isNaN(max_stock) || max_stock < 0)) {
+      return res.status(400).json({ message: "Tồn kho tối đa phải là số không âm" });
+    }
+
+    if (min_stock !== undefined && max_stock !== undefined && min_stock > max_stock) {
+      return res.status(400).json({ message: "Tồn kho tối thiểu không thể lớn hơn tồn kho tối đa" });
+    }
+
+    if (status && !['Đang kinh doanh', 'Ngừng kinh doanh', 'Ngừng bán'].includes(status)) {
+      return res.status(400).json({ message: "Trạng thái sản phẩm không hợp lệ" });
     }
 
     // Kiểm tra user là manager
@@ -136,15 +223,42 @@ const updateProduct = async (req, res) => {
       return res.status(403).json({ message: "Bạn chỉ có thể cập nhật sản phẩm trong cửa hàng của mình" });
     }
 
+    // Kiểm tra ProductGroup nếu được cung cấp
+    if (group_id) {
+      const productGroup = await ProductGroup.findById(group_id);
+      if (!productGroup) {
+        return res.status(404).json({ message: "Nhóm sản phẩm không tồn tại" });
+      }
+      if (productGroup.storeId.toString() !== product.store_id._id.toString()) {
+        return res.status(400).json({ message: "Nhóm sản phẩm không thuộc cửa hàng này" });
+      }
+    }
+
+    // Kiểm tra Supplier nếu được cung cấp
+    if (supplier_id) {
+      const supplier = await Supplier.findById(supplier_id);
+      if (!supplier) {
+        return res.status(404).json({ message: "Nhà cung cấp không tồn tại" });
+      }
+      if (supplier.store_id.toString() !== product.store_id._id.toString()) {
+        return res.status(400).json({ message: "Nhà cung cấp không thuộc cửa hàng này" });
+      }
+    }
+
     // Chuẩn bị dữ liệu cập nhật
     const updateData = {};
     if (name !== undefined) updateData.name = name;
     if (description !== undefined) updateData.description = description;
+    if (sku !== undefined) updateData.sku = sku;
     if (price !== undefined) updateData.price = price;
     if (cost_price !== undefined) updateData.cost_price = cost_price;
     if (stock_quantity !== undefined) updateData.stock_quantity = stock_quantity;
+    if (min_stock !== undefined) updateData.min_stock = min_stock;
+    if (max_stock !== undefined) updateData.max_stock = max_stock;
     if (unit !== undefined) updateData.unit = unit;
+    if (status !== undefined) updateData.status = status;
     if (supplier_id !== undefined) updateData.supplier_id = supplier_id;
+    if (group_id !== undefined) updateData.group_id = group_id;
 
     // Cập nhật sản phẩm
     const updatedProduct = await Product.findByIdAndUpdate(
@@ -152,20 +266,27 @@ const updateProduct = async (req, res) => {
       updateData,
       { new: true }
     ).populate('supplier_id', 'name')
-     .populate('store_id', 'name address phone');
+      .populate('store_id', 'name')
+      .populate('group_id', 'name');
 
     // Định dạng lại dữ liệu trả về
     const formattedProduct = {
       _id: updatedProduct._id,
       name: updatedProduct.name,
       description: updatedProduct.description,
+      sku: updatedProduct.sku,
       price: parseFloat(updatedProduct.price.toString()),
       cost_price: parseFloat(updatedProduct.cost_price.toString()),
       stock_quantity: updatedProduct.stock_quantity,
+      min_stock: updatedProduct.min_stock,
+      max_stock: updatedProduct.max_stock,
       unit: updatedProduct.unit,
-      created_at: updatedProduct.created_at,
+      status: updatedProduct.status,
       store: updatedProduct.store_id,
-      supplier: updatedProduct.supplier_id
+      supplier: updatedProduct.supplier_id,
+      group: updatedProduct.group_id,
+      createdAt: updatedProduct.createdAt,
+      updatedAt: updatedProduct.updatedAt
     };
 
     res.status(200).json({
@@ -252,21 +373,28 @@ const getProductsByStore = async (req, res) => {
     // Lấy tất cả sản phẩm của store với thông tin supplier
     const products = await Product.find({ store_id: storeId })
       .populate('supplier_id', 'name')
-      .populate('store_id', 'name address phone')
-      .sort({ created_at: -1 }); // Sắp xếp theo ngày tạo mới nhất
+      .populate('store_id', 'name')
+      .populate('group_id', 'name')
+      .sort({ createdAt: -1 }); // Sắp xếp theo ngày tạo mới nhất
 
     // Chuyển đổi price và cost_price từ Decimal128 sang number
     const formattedProducts = products.map(product => ({
       _id: product._id,
       name: product.name,
       description: product.description,
+      sku: product.sku,
       price: parseFloat(product.price.toString()),
       cost_price: parseFloat(product.cost_price.toString()),
       stock_quantity: product.stock_quantity,
+      min_stock: product.min_stock,
+      max_stock: product.max_stock,
       unit: product.unit,
-      created_at: product.created_at,
+      status: product.status,
       store: product.store_id,
-      supplier: product.supplier_id
+      supplier: product.supplier_id,
+      group: product.group_id,
+      createdAt: product.createdAt,
+      updatedAt: product.updatedAt
     }));
 
     res.status(200).json({
@@ -289,7 +417,8 @@ const getProductById = async (req, res) => {
 
     const product = await Product.findById(productId)
       .populate('supplier_id', 'name')
-      .populate('store_id', 'name address phone owner_id');
+      .populate('store_id', 'name')
+      .populate('group_id', 'name');
 
     if (!product) {
       return res.status(404).json({ message: "Sản phẩm không tồn tại" });
@@ -300,7 +429,7 @@ const getProductById = async (req, res) => {
     if (user.role === "MANAGER" && product.store_id.owner_id.toString() !== userId) {
       return res.status(403).json({ message: "Bạn không có quyền truy cập sản phẩm này" });
     }
-    
+
     if (user.role === "STAFF") {
       // Tìm thông tin employee để lấy store_id
       const employee = await Employee.findOne({ user_id: userId });
@@ -317,13 +446,19 @@ const getProductById = async (req, res) => {
       _id: product._id,
       name: product.name,
       description: product.description,
+      sku: product.sku,
       price: parseFloat(product.price.toString()),
       cost_price: parseFloat(product.cost_price.toString()),
       stock_quantity: product.stock_quantity,
+      min_stock: product.min_stock,
+      max_stock: product.max_stock,
       unit: product.unit,
-      created_at: product.created_at,
+      status: product.status,
       store: product.store_id,
-      supplier: product.supplier_id
+      supplier: product.supplier_id,
+      group: product.group_id,
+      createdAt: product.createdAt,
+      updatedAt: product.updatedAt
     };
 
     res.status(200).json({
@@ -342,8 +477,8 @@ const updateProductPrice = async (req, res) => {
   try {
     // Kiểm tra xem request body có tồn tại không
     if (!req.body || Object.keys(req.body).length === 0) {
-      return res.status(400).json({ 
-        message: "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json" 
+      return res.status(400).json({
+        message: "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json"
       });
     }
 
@@ -383,20 +518,27 @@ const updateProductPrice = async (req, res) => {
       { price: price },
       { new: true }
     ).populate('supplier_id', 'name')
-     .populate('store_id', 'name address phone');
+      .populate('store_id', 'name')
+      .populate('group_id', 'name');
 
     // Định dạng lại dữ liệu trả về
     const formattedProduct = {
       _id: updatedProduct._id,
       name: updatedProduct.name,
       description: updatedProduct.description,
+      sku: updatedProduct.sku,
       price: parseFloat(updatedProduct.price.toString()),
       cost_price: parseFloat(updatedProduct.cost_price.toString()),
       stock_quantity: updatedProduct.stock_quantity,
+      min_stock: updatedProduct.min_stock,
+      max_stock: updatedProduct.max_stock,
       unit: updatedProduct.unit,
-      created_at: updatedProduct.created_at,
+      status: updatedProduct.status,
       store: updatedProduct.store_id,
-      supplier: updatedProduct.supplier_id
+      supplier: updatedProduct.supplier_id,
+      group: updatedProduct.group_id,
+      createdAt: updatedProduct.createdAt,
+      updatedAt: updatedProduct.updatedAt
     };
 
     res.status(200).json({
@@ -410,14 +552,14 @@ const updateProductPrice = async (req, res) => {
   }
 };
 
-module.exports = { 
+module.exports = {
   // CUD 
   createProduct,
   updateProduct,
   deleteProduct,
   // Reads
-  getProductsByStore, 
-  getProductById, 
+  getProductsByStore,
+  getProductById,
   // Updates
-  updateProductPrice 
+  updateProductPrice
 };
