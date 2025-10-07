@@ -12,6 +12,9 @@ require("./models/ProductGroup");
 require("./models/Supplier");
 require("./models/Employee");
 require("./models/StockDisposal");
+require("./models/StockCheck");
+require("./models/PurchaseOrder");
+require("./models/PurchaseReturn");
 
 const app = express();
 
@@ -41,12 +44,20 @@ const userRouters = require("./routers/userRouters");
 const productRouters = require("./routers/productRouters");
 const productGroupRouters = require("./routers/productGroupRouters");
 const stockDisposalRouters = require("./routers/stockDisposalRouters");
+const stockCheckRouters = require("./routers/stockCheckRouters");
+const supplierRouters = require("./routers/supplierRouters");
+const purchaseOrderRouters = require("./routers/purchaseOrderRouters");
+const purchaseReturnRouters = require("./routers/purchaseReturnRouters");
 
 app.use("/api/stores", storeRouters);
 app.use("/api/users", userRouters);
 app.use("/api/products", productRouters);
 app.use("/api/product-groups", productGroupRouters);
 app.use("/api/stock-disposals", stockDisposalRouters);
+app.use("/api/stock-checks", stockCheckRouters);
+app.use("/api/suppliers", supplierRouters);
+app.use("/api/purchase-orders", purchaseOrderRouters);
+app.use("/api/purchase-returns", purchaseReturnRouters);
 
 // Middleware 404 + error
 app.use(notFoundHandler);
