@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const productSchema = new mongoose.Schema({
   name: { type: String, required: true, maxlength: 150, trim: true },
   description: { type: String, maxlength: 500, trim: true },
-  sku: { type: String, unique: true, maxlength: 100, trim: true }, // Mã SKU sản phẩm
+  sku: { type: String, maxlength: 100, trim: true }, // Mã SKU sản phẩm - unique per store
   price: { type: mongoose.Schema.Types.Decimal128, required: true },
   cost_price: { type: mongoose.Schema.Types.Decimal128, required: true },
   stock_quantity: { type: Number, required: true, default: 0 },
@@ -23,5 +23,8 @@ const productSchema = new mongoose.Schema({
   timestamps: true // Tự động thêm createdAt và updatedAt
 }
 );
+
+// Tạo compound index để SKU unique trong từng store
+productSchema.index({ sku: 1, store_id: 1 }, { unique: true });
 
 module.exports = mongoose.model('Product', productSchema);
