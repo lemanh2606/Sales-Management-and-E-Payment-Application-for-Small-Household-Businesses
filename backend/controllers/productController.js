@@ -6,9 +6,10 @@ const Employee = require("../models/Employee");
 const Supplier = require("../models/Supplier");
 
 // ============= HELPER FUNCTIONS =============
-// Tạo SKU tự động với format SPXXXXXX (X là số)
-const generateSKU = async () => {
-  const lastProduct = await Product.findOne().sort({ createdAt: -1 });
+// Tạo SKU tự động với format SPXXXXXX (X là số) - duy nhất theo từng cửa hàng
+// Tự động mở rộng khi vượt quá SP999999
+const generateSKU = async (storeId) => {
+  const lastProduct = await Product.findOne({ store_id: storeId }).sort({ createdAt: -1 });
   let nextNumber = 1;
 
   if (lastProduct && lastProduct.sku && lastProduct.sku.startsWith('SP')) {
@@ -18,7 +19,13 @@ const generateSKU = async () => {
     }
   }
 
-  return `SP${nextNumber.toString().padStart(6, '0')}`;
+  // Tự động mở rộng độ dài khi vượt quá 999999
+  let paddingLength = 6;
+  if (nextNumber > 999999) {
+    paddingLength = Math.max(6, nextNumber.toString().length);
+  }
+
+  return `SP${nextNumber.toString().padStart(paddingLength, '0')}`;
 };
 
 // ============= CREATE - Tạo sản phẩm mới =============
@@ -106,8 +113,16 @@ const createProduct = async (req, res) => {
       }
     }
 
+    // Kiểm tra SKU tùy chỉnh có trùng trong cửa hàng không
+    if (sku) {
+      const existingProduct = await Product.findOne({ sku: sku, store_id: storeId });
+      if (existingProduct) {
+        return res.status(409).json({ message: "Mã SKU này đã tồn tại trong cửa hàng" });
+      }
+    }
+
     // Tạo SKU tự động nếu không được cung cấp
-    const productSKU = sku || await generateSKU();
+    const productSKU = sku || await generateSKU(storeId);
 
     // Tạo sản phẩm mới
     const newProduct = new Product({
@@ -242,6 +257,18 @@ const updateProduct = async (req, res) => {
       }
       if (supplier.store_id.toString() !== product.store_id._id.toString()) {
         return res.status(400).json({ message: "Nhà cung cấp không thuộc cửa hàng này" });
+      }
+    }
+
+    // Kiểm tra SKU tùy chỉnh có trùng trong cửa hàng không (nếu thay đổi SKU)
+    if (sku !== undefined && sku !== product.sku) {
+      const existingProduct = await Product.findOne({ 
+        sku: sku, 
+        store_id: product.store_id._id,
+        _id: { $ne: productId } // Loại trừ chính sản phẩm đang cập nhật
+      });
+      if (existingProduct) {
+        return res.status(409).json({ message: "Mã SKU này đã tồn tại trong cửa hàng" });
       }
     }
 
