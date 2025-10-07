@@ -5,7 +5,7 @@ const stockDisposalItemSchema = new mongoose.Schema({
   product_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true }, // Sản phẩm xuất hủy
   quantity: { type: Number, required: true, min: 1 }, // Số lượng xuất hủy
   unit_cost_price: { type: mongoose.Schema.Types.Decimal128, required: true } // Giá vốn tại thời điểm xuất hủy
-}, { _id: true });
+}, { _id: false });
 
 const stockDisposalSchema = new mongoose.Schema({
   disposal_code: { type: String, required: true, unique: true, maxlength: 50, trim: true }, // Mã xuất hủy

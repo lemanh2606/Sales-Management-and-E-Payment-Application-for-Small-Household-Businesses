@@ -8,7 +8,7 @@ const stockCheckItemSchema = new mongoose.Schema({
   actual_quantity: { type: Number, required: true, default: 0 }, // Thực tế (kiểm đếm)
   cost_price: { type: mongoose.Schema.Types.Decimal128, required: true }, // Giá vốn để tính giá trị lệch
   price: { type: mongoose.Schema.Types.Decimal128, required: true } // Giá bán
-}, { _id: true });
+}, { _id: false });
 
 const stockCheckSchema = new mongoose.Schema({
   check_code: { type: String, required: true, unique: true, maxlength: 50, trim: true }, // Mã kiểm kho
