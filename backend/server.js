@@ -48,7 +48,7 @@ const stockCheckRouters = require("./routers/stockCheckRouters");
 const supplierRouters = require("./routers/supplierRouters");
 const purchaseOrderRouters = require("./routers/purchaseOrderRouters");
 const purchaseReturnRouters = require("./routers/purchaseReturnRouters");
-const paymentRouters = require("./routers/paymentRouters");
+const vietQRRouters = require("./routers/vietQRRouters");
 
 app.use("/api/stores", storeRouters);
 app.use("/api/users", userRouters);
@@ -59,7 +59,7 @@ app.use("/api/stock-checks", stockCheckRouters);
 app.use("/api/suppliers", supplierRouters);
 app.use("/api/purchase-orders", purchaseOrderRouters);
 app.use("/api/purchase-returns", purchaseReturnRouters);
-app.use("/api/payments", paymentRouters);
+app.use("/api/vietqr", vietQRRouters);  // Mount riêng /api/vietqr
 
 // Middleware 404 + error
 app.use(notFoundHandler);
