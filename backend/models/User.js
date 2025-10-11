@@ -45,7 +45,7 @@ const userSchema = new mongoose.Schema(
     // Login security
     loginAttempts: { type: Number, default: 0 },
     lockUntil: { type: Date, default: null },
-
+    alertCount: { type: Number, default: 0 },
     // Other
     last_login: { type: Date, default: null },
   },

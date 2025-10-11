@@ -3,7 +3,7 @@ const axios = require("axios");
 const crypto = require("crypto");
 const Order = require("../models/Order");
 
-const PAYOS_HOST = "https://api-merchant.payos.vn";
+const PAYOS_HOST = "https://api-merchant.payos.vn"; //theo docs api 2025 - đổi host
 const PAYOS_CLIENT_ID = process.env.PAYOS_CLIENT_ID;
 const PAYOS_API_KEY = process.env.PAYOS_API_KEY;
 const PAYOS_CHECKSUM_KEY = process.env.PAYOS_CHECKSUM_KEY;
