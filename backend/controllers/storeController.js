@@ -1,7 +1,9 @@
 // controllers/storeController.js
+const mongoose = require("mongoose");
+const bcrypt = require("bcryptjs");
 const Store = require("../models/Store");
 const User = require("../models/User");
-const mongoose = require("mongoose");
+const Employee = require("../models/Employee");
 
 /**
  * Tạo store mới (MANAGER)
@@ -223,6 +225,207 @@ const assignStaffToStore = async (req, res) => {
   }
 };
 
+// POST /api/stores/:storeId/employees - Tạo nhân viên mới cho store (tạo User STAFF + Employee bind user_id + gán store_roles)
+const createEmployee = async (req, res) => {
+  try {
+    const { storeId } = req.params;  // Lấy storeId từ params để bind cố định
+    const { username, email, password, fullName, salary, shift, commission_rate, phone } = req.body;
+    
+    // Validate input cơ bản (tạo user + employee)
+    if (!username || !fullName || !salary || !password || !shift) {
+      console.log('Lỗi: Thiếu thông tin bắt buộc khi tạo nhân viên (username, fullName, salary, password, shift)');
+      return res.status(400).json({ message: 'Thiếu username, fullName, salary, password hoặc shift' });
+    }
+    if (password.length < 6) {  // Pass tạm min 6 chars để an toàn
+      console.log('Lỗi: Password phải ít nhất 6 ký tự');
+      return res.status(400).json({ message: 'Password phải ít nhất 6 ký tự' });
+    }
+
+    // Validate store tồn tại và quyền (đã check qua middleware checkStoreAccess)
+    const store = req.store;  // Dùng req.store từ middleware
+    if (!store) {
+      console.log('Lỗi: Cửa hàng không tồn tại:', storeId);
+      return res.status(404).json({ message: 'Cửa hàng không tồn tại' });
+    }
+
+    // Validate unique username/email (dùng $or để catch OR duplicate, email optional → null)
+    const usernameTrim = username.trim();
+    let emailForQuery = null;  // 👈 Tweak: Mặc định null cho query nếu trống
+    if (email && email.trim()) {
+      emailForQuery = email.toLowerCase().trim();
+    }
+    const existingUser = await User.findOne({ 
+      $or: [ 
+        { username: usernameTrim }, 
+        { email: emailForQuery }  // 👈 Fix: Chỉ query nếu email có giá trị, null ko check unique
+      ].filter(Boolean)
+    });
+    if (existingUser) {
+      console.log('Lỗi: Username hoặc email đã tồn tại:', usernameTrim);
+      return res.status(400).json({ message: 'Username hoặc email đã được sử dụng' });
+    }
+
+    // Validate quyền: Dùng req.storeRole từ middleware (OWNER cho manager store)
+    if (req.storeRole !== 'OWNER') {
+      console.log('Lỗi: Bạn không có quyền tạo nhân viên cho cửa hàng này');
+      return res.status(403).json({ message: 'Bạn không có quyền tạo nhân viên cho cửa hàng này' });
+    }
+
+    // Tạo User STAFF mới + hash password (bcrypt salt 10)
+    const salt = await bcrypt.genSalt(10);
+    const password_hash = await bcrypt.hash(password, salt);
+    let userEmail = null;  // 👈 Tweak: Default null nếu empty (model conditional required skip cho STAFF)
+    if (email && email.trim()) {
+      userEmail = email.toLowerCase().trim();
+    }
+    const userPhone = phone ? phone.trim() : '';  // Phone optional, default ''
+    const newUser = new User({
+      username: usernameTrim,
+      password_hash,
+      role: 'STAFF',  // Role STAFF cho nhân viên bán hàng
+      email: userEmail,  // 👈 Tweak: Null nếu empty, conditional required cho phép STAFF
+      phone: userPhone,
+      stores: [],  // Staff ko own store
+      current_store: store._id,  // Gán store hiện tại = store này
+      store_roles: [{  // Gán mapping role STAFF cho store
+        store: store._id,
+        role: 'STAFF'
+      }],
+      isVerified: true  // Default verified, staff đổi pass sau
+    });
+    await newUser.save();
+    console.log(`Tạo User STAFF thành công: ${usernameTrim} cho cửa hàng ${store.name}`);
+
+    // Tạo Employee ref user_id mới
+    const newEmployee = new Employee({
+      fullName,
+      salary: salary.toString(),  // Convert sang string cho Decimal128
+      shift,
+      commission_rate: commission_rate ? commission_rate.toString() : null,  // Null safe nếu ko input
+      user_id: newUser._id,  // Ref user_id mới tạo
+      store_id: storeId  // Bind cố định với store này
+    });
+    await newEmployee.save();
+    console.log(`Tạo Employee thành công: ${fullName} bind với User ${usernameTrim}`);
+
+    // Return enriched response (user + employee)
+    const enrichedEmployee = await Employee.findById(newEmployee._id)
+      .populate('user_id', 'username email role')  // Populate user info cơ bản
+      .populate('store_id', 'name');  // Tên store
+
+    res.status(201).json({ 
+      message: 'Tạo nhân viên và tài khoản cho nhân viên thành công', 
+      user: newUser, 
+      employee: enrichedEmployee 
+    });
+  } catch (err) {
+    console.error('Lỗi tạo nhân viên:', err.message);
+    res.status(500).json({ message: 'Lỗi server khi tạo nhân viên: ' + err.message });
+  }
+};
+
+// GET /api/stores/:storeId/employees - Lấy danh sách nhân viên theo store (chỉ manager store xem)
+const getEmployeesByStore = async (req, res) => {
+  try {
+    const { storeId } = req.params;
+
+    // Validate store và quyền (đã check qua middleware)
+    const store = req.store; // 👈 Dùng req.store từ middleware
+    if (!store || req.storeRole !== "OWNER") {
+      // Chỉ owner (manager) xem
+      console.log("Lỗi: Không có quyền xem nhân viên cửa hàng:", storeId);
+      return res.status(403).json({ message: "Bạn không có quyền xem nhân viên cửa hàng này" });
+    }
+
+    // Lấy list employee của store, populate user_id nếu cần (name từ User)
+    const employees = await Employee.find({ store_id: storeId })
+      .populate("user_id", "name email") // Populate info user (tên, email)
+      .populate("store_id", "name") // Tên store
+      .sort({ createdAt: -1 }) // Mới nhất trước
+      .lean();
+
+    console.log(`Lấy danh sách nhân viên thành công cho cửa hàng ${store.name}`);
+    res.json({ message: "Lấy danh sách nhân viên thành công", employees });
+  } catch (err) {
+    console.error("Lỗi lấy danh sách nhân viên:", err.message);
+    res.status(500).json({ message: "Lỗi server khi lấy nhân viên" });
+  }
+};
+
+// controllers/storeController.js (tweak nhỏ: add check employee.store_id == req.params.storeId ở get/update - paste vào functions tương ứng)
+const getEmployeeById = async (req, res) => {
+  try {
+    const { id, storeId } = req.params; // 👈 Add storeId từ params
+
+    const employee = await Employee.findById(id)
+      .populate("user_id", "name email role") // Populate user info
+      .populate("store_id", "name") // Store name
+      .lean();
+
+    if (!employee) {
+      console.log("Lỗi: Không tìm thấy nhân viên:", id);
+      return res.status(404).json({ message: "Nhân viên không tồn tại" });
+    }
+
+    // 👈 Tweak: Check employee thuộc storeId này (an toàn hơn middleware)
+    if (String(employee.store_id) !== String(storeId)) {
+      console.log("Lỗi: Nhân viên không thuộc cửa hàng này:", id);
+      return res.status(403).json({ message: `Nhân viên ${employee.fullName} không thuộc cửa hàng này` });
+    }
+
+    // Validate quyền: Dùng req.storeRole (chỉ manager owner xem)
+    if (req.storeRole !== "OWNER") {
+      console.log("Lỗi: Bạn không có quyền xem nhân viên này:", id);
+      return res.status(403).json({ message: "Bạn không có quyền xem nhân viên này" });
+    }
+
+    console.log(`Lấy chi tiết nhân viên thành công: ${employee.fullName}`);
+    res.json({ message: "Lấy nhân viên thành công", employee });
+  } catch (err) {
+    console.error("Lỗi lấy nhân viên:", err.message);
+    res.status(500).json({ message: "Lỗi server khi lấy nhân viên" });
+  }
+};
+
+// PUT /api/stores/:storeId/employees/:id - Update nhân viên (ko đổi store_id/user_id, validate quyền)
+const updateEmployee = async (req, res) => {
+  try {
+    const { id, storeId } = req.params; // 👈 Add storeId từ params
+    const { fullName, salary, shift, commission_rate } = req.body; // Ko cho update store_id/user_id (cố định)
+
+    const employee = await Employee.findById(id);
+    if (!employee) {
+      console.log("Lỗi: Không tìm thấy nhân viên để update:", id);
+      return res.status(404).json({ message: "Nhân viên không tồn tại" });
+    }
+
+    // Check employee thuộc storeId này
+    if (String(employee.store_id) !== String(storeId)) {
+      console.log("Lỗi: Nhân viên không thuộc cửa hàng này:", employee.fullName);
+      return res.status(403).json({ message: `Nhân viên ${employee.fullName} không thuộc cửa hàng này` });
+    }
+
+    // Validate quyền store (dùng req.storeRole từ middleware)
+    if (req.storeRole !== "OWNER") {
+      console.log("Lỗi: Bạn không có quyền update nhân viên này");
+      return res.status(403).json({ message: "Bạn không có quyền update nhân viên này" });
+    }
+
+    // Update fields cho phép (ko chạm store_id/user_id)
+    if (fullName) employee.fullName = fullName;
+    if (salary) employee.salary = salary.toString();
+    if (shift !== undefined) employee.shift = shift;
+    if (commission_rate !== undefined) employee.commission_rate = commission_rate ? commission_rate.toString() : null;
+
+    await employee.save();
+    console.log(`Update nhân viên thành công: ${employee.fullName}`);
+    res.json({ message: "Update nhân viên thành công", employee });
+  } catch (err) {
+    console.error("Lỗi update nhân viên:", err.message);
+    res.status(500).json({ message: "Lỗi server khi update nhân viên" });
+  }
+};
+
 module.exports = {
   createStore,
   getStoresByManager,
@@ -230,4 +433,9 @@ module.exports = {
   ensureStore,
   getStoreDashboard,
   assignStaffToStore,
+  //tạo nhân viên cho store
+  createEmployee,
+  getEmployeesByStore,
+  getEmployeeById,
+  updateEmployee,
 };

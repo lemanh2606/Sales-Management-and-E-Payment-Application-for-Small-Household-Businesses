@@ -24,15 +24,17 @@ async function generateVietQR(req) {
   // Clean accountName: Uppercase no accents/special (docs yêu cầu)
   const cleanAccountName = accountName.toUpperCase().replace(/[^A-Z0-9\s]/g, '').substring(0, 50).trim();  // 5-50 chars
 
-  // Body cho API VietQR (thêm accountName required)
+  // Body cho API VietQR
   const bodyData = {
-    accountNo: accountNo,
-    accountName: cleanAccountName,  // 👈 Thêm required field
-    acqId: Number(acqId),  // 6 digits number
-    amount: amount,  // Embed dynamic
-    addInfo: orderInfo,  // Nội dung <=25 clean
+    accountNo: accountNo, //Số tài khoản người nhận tại ngân hàng thụ hưởng.
+    accountName: cleanAccountName,  // Tên chủ tài khoản
+    acqId: Number(acqId),  // Mã BIN 6 số định dang ngân hàng
+    amount: amount,  // số tiền phải trả
+    addInfo: orderInfo,  // Nội dung chuyển tiền, tiếng việt ko dấu
+    format: "text",
     reference: txnRef,  // Track (optional docs)
-    template: "compact2",  // Theo ảnh/table bạn gửi, hỗ trợ amount + logo bank
+    template: "compact2",  //Bao gồm : Mã QR, các logo , thông tin chuyển khoản
+    //template còn có compact, qr_only, print với các định dạng khác nhau khi generate ra Ảnh
   };
 
   try {
@@ -68,36 +70,52 @@ async function generateVietQR(req) {
 }
 
 // verifyTransactionVietQR (thêm accountNo/acqId theo docs lookup, desc từ response)
-async function verifyTransactionVietQR(txnRef) {
+async function verifyTransactionVietQR(txnRef, maxRetries = 5) {  // 👈 Thêm: Retry max 5 lần cho delay real tx
   const clientId = process.env.VIETQR_CLIENT_ID;
   const apiKey = process.env.VIETQR_API_KEY;
   const acqId = process.env.VIETQR_ACQ_ID;
   const accountNo = process.env.VIETQR_ACCOUNT_NO;
-  const lookupEndpoint = "https://api.vietqr.io/v2/lookup";  // Giữ, params theo docs
+  const lookupEndpoint = "https://api.vietqr.io/v2/lookup";  // Giữ nguyên
 
-  try {
-    const response = await axios.get(lookupEndpoint, {
-      params: { 
-        acqId: Number(acqId),
-        accountNo: accountNo,
-        reference: txnRef  // Tra theo reference
-      },
-      headers: {
-        "x-client-id": clientId,
-        "x-api-key": apiKey,
-      },
-    });
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`🔄 Poll VietQR lần ${attempt}/${maxRetries} cho txnRef: ${txnRef}`)
+      const response = await axios.get(lookupEndpoint, {
+        params: { 
+          acqId: Number(acqId),
+          accountNo: accountNo,
+          reference: txnRef  // Tra theo reference (ORDER_...)
+        },
+        headers: {
+          "x-client-id": clientId,
+          "x-api-key": apiKey,
+        },
+      });
 
-    console.log("Lookup Response:", JSON.stringify(response.data, null, 2));
+      console.log(`📊 Lookup response lần ${attempt}:`, JSON.stringify(response.data, null, 2));
 
-    if (response.data.code === "00" && response.data.data && response.data.data.status === "SUCCESS") {
-      return true;
+      if (response.data.code === "00" && response.data.data && response.data.data.status === "SUCCESS") {
+        console.log(`✅ Verify VietQR success cho ${txnRef}, amount: ${response.data.data.amount}`);
+        return { status: 'SUCCESS', amount: response.data.data.amount };  // 👈 Return object full cho check amount >= total
+      } else if (response.data.code !== "00") {
+        console.log(`❌ Lookup error lần ${attempt}: code ${response.data.code}, desc: ${response.data.desc}`);
+      } else {
+        console.log(`⏳ Chờ tx lần ${attempt}, status: ${response.data.data?.status || 'pending'}`);  // 👈 Log chờ delay
+      }
+
+      // Delay 30s trước retry (trừ lần cuối)
+      if (attempt < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 30000));  // 👈 Delay 30s real time
+      }
+    } catch (err) {
+      console.error(`💥 Verify error lần ${attempt}:`, err.response?.data?.desc || err.response?.data?.code || err.message);
+      if (attempt === maxRetries) throw err;  // 👈 Throw chỉ lần cuối
+      await new Promise(resolve => setTimeout(resolve, 30000));  // 👈 Delay retry nếu error
     }
-    return false;
-  } catch (err) {
-    console.error("Verify error:", err.response?.data?.desc || err.response?.data?.code || err.message);
-    return false;
   }
+
+  console.log(`🚫 Verify VietQR fail sau ${maxRetries} lần cho ${txnRef}`);
+  return false;  // 👈 Return false nếu hết retry
 }
 
 module.exports = { generateVietQR, verifyTransactionVietQR };
