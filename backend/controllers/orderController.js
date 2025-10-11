@@ -2,9 +2,12 @@
 const mongoose = require("mongoose");
 const Order = require("../models/Order");
 const OrderItem = require("../models/OrderItem");
+const OrderRefund = require("../models/OrderRefund");
 const Product = require("../models/Product");
+const Employee = require("../models/Employee");
 const Store = require("../models/Store");
 const { generateQRWithPayOS } = require("../services/payOSService");
+const { v2: cloudinary } = require("cloudinary");
 
 const createOrder = async (req, res) => {
   try {
@@ -66,24 +69,26 @@ const createOrder = async (req, res) => {
       let paymentRef = null;
       // Nếu chọn QR thì tạo QR PayOS (pending, chờ webhook confirm)
       if (paymentMethod === "qr") {
-        qrData = await generateQRWithPayOS({ 
-          body: { 
+        qrData = await generateQRWithPayOS({
+          body: {
             amount: total,
-            orderInfo: `Thanh toan hoa don ${newOrder._id}`  // Không dấu theo lưu ý cậu
-          } 
+            orderInfo: `Thanh toan hoa don ${newOrder._id}`, // Không dấu theo lưu ý cậu
+          },
         });
         console.log("Sử dụng PayOS QR thành công");
-        paymentRef = qrData.txnRef;  // Ref từ PayOS cho webhook
+        paymentRef = qrData.txnRef; // Ref từ PayOS cho webhook
         newOrder.paymentRef = paymentRef;
-        newOrder.qrExpiry = new Date(Date.now() + 15 * 60 * 1000);  // Hết hạn 15 phút
+        newOrder.qrExpiry = new Date(Date.now() + 15 * 60 * 1000); // Hết hạn 15 phút
+
         await newOrder.save({ session });
+
         console.log(`Tạo QR pending thành công cho hóa đơn ${newOrder._id}, ref: ${paymentRef}, chờ webhook confirm`);
       } else {
         // Cash: Pending, chờ in bill để paid + trừ stock (ko làm gì ở đây)
         console.log(`Tạo hóa đơn cash pending thành công cho ${newOrder._id}, chờ in bill`);
       }
 
-      await session.commitTransaction();  // Commit tất cả
+      await session.commitTransaction(); // Commit tất cả
       session.endSession();
 
       // Inner try res.json sau commit, catch local format error ko abort
@@ -96,26 +101,26 @@ const createOrder = async (req, res) => {
           items: validatedItems,
         };
 
-        res.status(201).json({ 
-          message: 'Tạo hóa đơn thành công (pending)', 
+        res.status(201).json({
+          message: "Tạo hóa đơn thành công (pending)",
           order: orderedOrder,
-          qrRef: paymentRef,  // Ref để webhook
-          qrDataURL: qrData ? qrData.qrDataURL : null,  // QR base64 FE render
-          paymentLinkUrl: qrData ? qrData.paymentLinkUrl : null,  // Link quẹt nếu PayOS
-          qrExpiry: paymentMethod === 'qr' ? newOrder.qrExpiry : null  // Expiry FE countdown
+          qrRef: paymentRef, // Ref để webhook
+          qrDataURL: qrData ? qrData.qrDataURL : null, // QR base64 FE render
+          paymentLinkUrl: qrData ? qrData.paymentLinkUrl : null, // Link quẹt nếu PayOS
+          qrExpiry: paymentMethod === "qr" ? newOrder.qrExpiry : null, // Expiry FE countdown
         });
       } catch (format_err) {
-        console.log("Lỗi format response order:", format_err.message);  // Log tiếng Việt format error
-        res.status(500).json({ message: "Lỗi format response: " + format_err.message });  // Return local ko abort
+        console.log("Lỗi format response order:", format_err.message); // Log tiếng Việt format error
+        res.status(500).json({ message: "Lỗi format response: " + format_err.message }); // Return local ko abort
       }
     } catch (inner_err) {
-      await session.abortTransaction();  // Abort chỉ inner error (validate/save)
+      await session.abortTransaction(); // Abort chỉ inner error (validate/save)
       session.endSession();
-      console.error("Lỗi inner createOrder:", inner_err.message);  // Log tiếng Việt inner error
+      console.error("Lỗi inner createOrder:", inner_err.message); // Log tiếng Việt inner error
       res.status(500).json({ message: "Lỗi tạo hóa đơn nội bộ: " + inner_err.message });
     }
   } catch (err) {
-    console.error("Lỗi tạo hóa đơn:", err.message);  // Log tiếng Việt outer error
+    console.error("Lỗi tạo hóa đơn:", err.message); // Log tiếng Việt outer error
     res.status(500).json({ message: "Lỗi server khi tạo hóa đơn: " + err.message });
   }
 };
@@ -172,7 +177,7 @@ const printBill = async (req, res) => {
           if (prod) {
             prod.stock_quantity -= item.quantity; // Trừ stock thật
             await prod.save({ session });
-            console.log(`Trừ stock khi in bill thành công cho ${prod.name}: -${item.quantity}`);
+            console.log(`In bill thành công cho ${prod.name}: Stock -${item.quantity}`);
           }
         }
         await session.commitTransaction();
@@ -229,4 +234,138 @@ const printBill = async (req, res) => {
   }
 };
 
-module.exports = { createOrder, printBill, setPaidCash };
+const vietqrReturn = (req, res) => {
+  console.log("✅ Người dùng quay lại sau khi thanh toán thành công");
+  return res.status(200).json({
+    message: "Thanh toán thành công! Cảm ơn bạn đã mua hàng.",
+    query: req.query, // PayOS có thể gửi kèm orderCode, amount,...
+  });
+};
+
+const vietqrCancel = (req, res) => {
+  console.log("❌ Người dùng hủy thanh toán hoặc lỗi");
+  return res.status(400).json({
+    message: "Thanh toán bị hủy hoặc không thành công.",
+    query: req.query,
+  });
+};
+
+const getOrderById = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const order = await Order.findById(orderId).populate("storeId", "name").populate("employeeId", "fullName").lean();
+
+    if (!order) {
+      return res.status(404).json({ message: "Không tìm thấy hóa đơn hoặc Hóa đơn không tồn tại" });
+    }
+
+    const items = await OrderItem.find({ orderId: order._id }).populate("productId", "name sku price").lean();
+
+    const enrichedOrder = {
+      ...order,
+      items: items.map((item) => ({
+        ...item,
+        productName: item.productId?.name || "N/A",
+        productSku: item.productId?.sku || "N/A",
+      })),
+    };
+    res.json({ message: "Lấy hóa đơn thành công", order: enrichedOrder });
+  } catch (err) {
+    console.error("Lỗi lấy hóa đơn:", err.message);
+    res.status(500).json({ message: "Lỗi server" });
+  }
+};
+
+// fix refundOrder: query OrderItem để lấy items, loop cộng stock, populate product name cho log
+const refundOrder = async (req, res) => {
+  try {
+    const { orderId: mongoId } = req.params; // Lấy _id từ params
+    const { employeeId, refundReason } = req.body; // Body: employeeId + lý do hoàn
+
+    // Kiểm tra nhân viên
+    const employee = await Employee.findById(employeeId);
+    if (!employee) return res.status(400).json({ message: "Nhân viên không tồn tại" });
+
+    // Kiểm tra đơn hàng
+    const order = await Order.findById(mongoId).populate("employeeId", "fullName");
+    if (!order) return res.status(404).json({ message: "Không tìm thấy đơn hàng" });
+    if (order.status !== "paid") return res.status(400).json({ message: "Chỉ hoàn đơn đã thanh toán" });
+
+    const files = req.files || []; // Files từ middleware upload.array("files", 5)
+    const evidenceMedia = []; // Mảng media upload Cloudinary
+
+    // Upload lần lượt từng file lên Cloudinary (dùng Promise để đợi xong)
+    for (const file of files) {
+      const resourceType = file.mimetype.startsWith("video") ? "video" : "image"; // Xác định type image/video
+
+      const result = await new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+          {
+            folder: `refunds/${mongoId}`, // Folder Cloudinary theo orderId
+            resource_type: resourceType, // Type image/video
+          },
+          (err, result) => {
+            if (err) reject(err); // Reject nếu upload fail
+            else resolve(result); // Resolve result {secure_url, public_id}
+          }
+        );
+        uploadStream.end(file.buffer); // Kết thúc stream với buffer file
+      });
+
+      evidenceMedia.push({
+        url: result.secure_url, // URL an toàn HTTPS
+        public_id: result.public_id, // ID Cloudinary để xóa sau nếu cần
+        type: resourceType, // Type image/video
+      });
+    }
+
+    // Tạo bản ghi refund
+    const refund = await OrderRefund.create({
+      orderId: mongoId,
+      refundedBy: employeeId, // Ref employee hoàn hàng
+      refundedAt: new Date(), // Thời gian hoàn
+      refundTransactionId: null, // Tx ref nếu có (sau thêm)
+      refundReason, // Lý do hoàn từ body
+      evidenceMedia, // Mảng media upload
+    });
+
+    // Cập nhật đơn hàng
+    order.status = "refunded"; // Update status hoàn
+    order.refundId = refund._id; // Ref refund record
+    await order.save(); // Save DB
+
+    // Cộng lại stock từ OrderItem (query items thay vì order.items undefined)
+    const items = await OrderItem.find({ orderId: mongoId }).populate("productId", "name"); // Query OrderItem + populate product name cho log
+    const session = await mongoose.startSession(); // Session atomic cộng stock
+    session.startTransaction();
+    try {
+      for (const item of items) {
+        // Loop items từ OrderItem
+        const prod = await Product.findById(item.productId._id).session(session); // Ref productId sau populate
+        if (prod) {
+          prod.stock_quantity += item.quantity; // Cộng stock lại (inc positive)
+          await prod.save({ session });
+          console.log(`Cộng stock hoàn hàng thành công cho ${prod.name}: +${item.quantity}`);
+        }
+      }
+      await session.commitTransaction(); // Commit atomic
+      session.endSession();
+    } catch (stock_err) {
+      await session.abortTransaction(); // Rollback nếu cộng stock fail
+      session.endSession();
+      console.error("Lỗi cộng stock hoàn hàng:", stock_err.message);
+      throw new Error("Lỗi cộng stock: " + stock_err.message);
+    }
+
+    res.status(200).json({
+      message: "Hoàn hàng thành công (nội bộ)",
+      refund, // Refund record
+      order, // Order updated
+    });
+  } catch (err) {
+    console.error("Lỗi refund:", err.message);
+    res.status(500).json({ message: "Lỗi khi hoàn hàng", error: err.message });
+  }
+};
+
+module.exports = { createOrder, setPaidCash, printBill, vietqrReturn, vietqrCancel, getOrderById, refundOrder };

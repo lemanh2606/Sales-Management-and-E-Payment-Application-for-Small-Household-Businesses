@@ -1,4 +1,4 @@
-// services/emailService.js
+// services/emailService.js (sửa createTransporter → createTransport để fix TypeError, export transporter cho cronJob)
 const nodemailer = require("nodemailer");
 
 /**
@@ -16,16 +16,17 @@ const nodemailer = require("nodemailer");
  * Lưu ý: nếu dùng Gmail, bắt buộc tạo App Password (khi bật 2FA) và dùng ở EMAIL_PASS.
  * Đừng dùng mật khẩu Gmail trực tiếp nếu chưa bật 2FA.
  */
-async function sendVerificationEmail(to, username, otp, expireMinutes = 5) {
-  const transporter = nodemailer.createTransport({
-    service: process.env.EMAIL_SERVICE || "gmail",
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-  });
 
-   const mailOptions = {
+const transporter = nodemailer.createTransport({
+  service: process.env.EMAIL_SERVICE || "gmail",
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
+
+async function sendVerificationEmail(to, username, otp, expireMinutes = 5) {
+  const mailOptions = {
     from: `"SmartRetail System" <${process.env.EMAIL_USER}>`,
     to,
     subject: "Mã OTP xác thực tài khoản của bạn",
@@ -41,7 +42,10 @@ async function sendVerificationEmail(to, username, otp, expireMinutes = 5) {
     `,
   };
 
-  await transporter.sendMail(mailOptions);
+  await transporter.sendMail(mailOptions);  // Gửi email với transporter
 }
 
-module.exports = { sendVerificationEmail };
+module.exports = { 
+  sendVerificationEmail, 
+  transporter
+};

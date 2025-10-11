@@ -12,7 +12,7 @@ const generateSKU = async (storeId) => {
   const lastProduct = await Product.findOne({ store_id: storeId }).sort({ createdAt: -1 });
   let nextNumber = 1;
 
-  if (lastProduct && lastProduct.sku && lastProduct.sku.startsWith('SP')) {
+  if (lastProduct && lastProduct.sku && lastProduct.sku.startsWith("SP")) {
     const lastNumber = parseInt(lastProduct.sku.substring(2));
     if (!isNaN(lastNumber)) {
       nextNumber = lastNumber + 1;
@@ -25,7 +25,7 @@ const generateSKU = async (storeId) => {
     paddingLength = Math.max(6, nextNumber.toString().length);
   }
 
-  return `SP${nextNumber.toString().padStart(paddingLength, '0')}`;
+  return `SP${nextNumber.toString().padStart(paddingLength, "0")}`;
 };
 
 // ============= CREATE - Tạo sản phẩm mới =============
@@ -34,11 +34,24 @@ const createProduct = async (req, res) => {
     // Kiểm tra xem request body có tồn tại không
     if (!req.body || Object.keys(req.body).length === 0) {
       return res.status(400).json({
-        message: "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json"
+        message: "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json",
       });
     }
 
-    const {name, description, sku, price, cost_price, stock_quantity, min_stock, max_stock, unit, status, supplier_id, group_id} = req.body;
+    const {
+      name,
+      description,
+      sku,
+      price,
+      cost_price,
+      stock_quantity,
+      min_stock,
+      max_stock,
+      unit,
+      status,
+      supplier_id,
+      group_id,
+    } = req.body;
     const { storeId } = req.params;
     const userId = req.user.id;
 
@@ -71,7 +84,7 @@ const createProduct = async (req, res) => {
       return res.status(400).json({ message: "Tồn kho tối thiểu không thể lớn hơn tồn kho tối đa" });
     }
 
-    if (status && !['Đang kinh doanh', 'Ngừng kinh doanh', 'Ngừng bán'].includes(status)) {
+    if (status && !["Đang kinh doanh", "Ngừng kinh doanh", "Ngừng bán"].includes(status)) {
       return res.status(400).json({ message: "Trạng thái sản phẩm không hợp lệ" });
     }
 
@@ -122,7 +135,7 @@ const createProduct = async (req, res) => {
     }
 
     // Tạo SKU tự động nếu không được cung cấp
-    const productSKU = sku || await generateSKU(storeId);
+    const productSKU = sku || (await generateSKU(storeId));
 
     // Tạo sản phẩm mới
     const newProduct = new Product({
@@ -135,19 +148,19 @@ const createProduct = async (req, res) => {
       min_stock: min_stock || 0,
       max_stock: max_stock || null,
       unit,
-      status: status || 'active',
+      status: status || "active",
       store_id: storeId,
       supplier_id: supplier_id || null,
-      group_id: group_id || null
+      group_id: group_id || null,
     });
 
     await newProduct.save();
 
     // Lấy thông tin chi tiết và định dạng dữ liệu trả về
     const populatedProduct = await Product.findById(newProduct._id)
-      .populate('supplier_id', 'name')
-      .populate('store_id', 'name')
-      .populate('group_id', 'name');
+      .populate("supplier_id", "name")
+      .populate("store_id", "name")
+      .populate("group_id", "name");
 
     const formattedProduct = {
       _id: populatedProduct._id,
@@ -165,14 +178,13 @@ const createProduct = async (req, res) => {
       supplier: populatedProduct.supplier_id,
       group: populatedProduct.group_id,
       createdAt: populatedProduct.createdAt,
-      updatedAt: populatedProduct.updatedAt
+      updatedAt: populatedProduct.updatedAt,
     };
 
     res.status(201).json({
       message: "Tạo sản phẩm thành công",
-      product: formattedProduct
+      product: formattedProduct,
     });
-
   } catch (error) {
     console.error("❌ Lỗi createProduct:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
@@ -185,12 +197,25 @@ const updateProduct = async (req, res) => {
     // Kiểm tra xem request body có tồn tại không
     if (!req.body || Object.keys(req.body).length === 0) {
       return res.status(400).json({
-        message: "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json"
+        message: "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json",
       });
     }
 
     const { productId } = req.params;
-    const { name, description, sku, price, cost_price, stock_quantity, min_stock, max_stock, unit, status, supplier_id, group_id } = req.body;
+    const {
+      name,
+      description,
+      sku,
+      price,
+      cost_price,
+      stock_quantity,
+      min_stock,
+      max_stock,
+      unit,
+      status,
+      supplier_id,
+      group_id,
+    } = req.body;
     const userId = req.user.id;
 
     // Kiểm tra và xác thực dữ liệu đầu vào
@@ -218,7 +243,7 @@ const updateProduct = async (req, res) => {
       return res.status(400).json({ message: "Tồn kho tối thiểu không thể lớn hơn tồn kho tối đa" });
     }
 
-    if (status && !['Đang kinh doanh', 'Ngừng kinh doanh', 'Ngừng bán'].includes(status)) {
+    if (status && !["Đang kinh doanh", "Ngừng kinh doanh", "Ngừng bán"].includes(status)) {
       return res.status(400).json({ message: "Trạng thái sản phẩm không hợp lệ" });
     }
 
@@ -229,7 +254,7 @@ const updateProduct = async (req, res) => {
     }
 
     // Tìm sản phẩm và kiểm tra quyền
-    const product = await Product.findById(productId).populate('store_id', 'owner_id');
+    const product = await Product.findById(productId).populate("store_id", "owner_id");
     if (!product) {
       return res.status(404).json({ message: "Sản phẩm không tồn tại" });
     }
@@ -262,10 +287,10 @@ const updateProduct = async (req, res) => {
 
     // Kiểm tra SKU tùy chỉnh có trùng trong cửa hàng không (nếu thay đổi SKU)
     if (sku !== undefined && sku !== product.sku) {
-      const existingProduct = await Product.findOne({ 
-        sku: sku, 
+      const existingProduct = await Product.findOne({
+        sku: sku,
         store_id: product.store_id._id,
-        _id: { $ne: productId } // Loại trừ chính sản phẩm đang cập nhật
+        _id: { $ne: productId }, // Loại trừ chính sản phẩm đang cập nhật
       });
       if (existingProduct) {
         return res.status(409).json({ message: "Mã SKU này đã tồn tại trong cửa hàng" });
@@ -287,14 +312,16 @@ const updateProduct = async (req, res) => {
     if (supplier_id !== undefined) updateData.supplier_id = supplier_id;
     if (group_id !== undefined) updateData.group_id = group_id;
 
+    // Thêm logic reset lowStockAlerted nếu stock_quantity > min_stock (explicit trong controller, double-check với pre-save hook)
+    if (stock_quantity !== undefined && min_stock !== undefined && stock_quantity > min_stock) {
+      updateData.lowStockAlerted = false; // Reset cảnh báo nếu stock tăng > min_stock
+    }
+
     // Cập nhật sản phẩm
-    const updatedProduct = await Product.findByIdAndUpdate(
-      productId,
-      updateData,
-      { new: true }
-    ).populate('supplier_id', 'name')
-      .populate('store_id', 'name')
-      .populate('group_id', 'name');
+    const updatedProduct = await Product.findByIdAndUpdate(productId, updateData, { new: true })
+      .populate("supplier_id", "name")
+      .populate("store_id", "name")
+      .populate("group_id", "name");
 
     // Định dạng lại dữ liệu trả về
     const formattedProduct = {
@@ -313,16 +340,15 @@ const updateProduct = async (req, res) => {
       supplier: updatedProduct.supplier_id,
       group: updatedProduct.group_id,
       createdAt: updatedProduct.createdAt,
-      updatedAt: updatedProduct.updatedAt
+      updatedAt: updatedProduct.updatedAt,
     };
 
     res.status(200).json({
       message: "Cập nhật sản phẩm thành công",
-      product: formattedProduct
+      product: formattedProduct,
     });
-
   } catch (error) {
-    console.error("❌ Lỗi updateProduct:", error);
+    console.error("Lỗi updateProduct:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
@@ -340,7 +366,7 @@ const deleteProduct = async (req, res) => {
     }
 
     // Tìm sản phẩm và kiểm tra quyền
-    const product = await Product.findById(productId).populate('store_id', 'owner_id');
+    const product = await Product.findById(productId).populate("store_id", "owner_id");
     if (!product) {
       return res.status(404).json({ message: "Sản phẩm không tồn tại" });
     }
@@ -354,9 +380,8 @@ const deleteProduct = async (req, res) => {
 
     res.status(200).json({
       message: "Xóa sản phẩm thành công",
-      deletedProductId: productId
+      deletedProductId: productId,
     });
-
   } catch (error) {
     console.error("❌ Lỗi deleteProduct:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
@@ -399,13 +424,13 @@ const getProductsByStore = async (req, res) => {
 
     // Lấy tất cả sản phẩm của store với thông tin supplier
     const products = await Product.find({ store_id: storeId })
-      .populate('supplier_id', 'name')
-      .populate('store_id', 'name')
-      .populate('group_id', 'name')
+      .populate("supplier_id", "name")
+      .populate("store_id", "name")
+      .populate("group_id", "name")
       .sort({ createdAt: -1 }); // Sắp xếp theo ngày tạo mới nhất
 
     // Chuyển đổi price và cost_price từ Decimal128 sang number
-    const formattedProducts = products.map(product => ({
+    const formattedProducts = products.map((product) => ({
       _id: product._id,
       name: product.name,
       description: product.description,
@@ -421,15 +446,14 @@ const getProductsByStore = async (req, res) => {
       supplier: product.supplier_id,
       group: product.group_id,
       createdAt: product.createdAt,
-      updatedAt: product.updatedAt
+      updatedAt: product.updatedAt,
     }));
 
     res.status(200).json({
       message: "Lấy danh sách sản phẩm thành công",
       total: formattedProducts.length,
-      products: formattedProducts
+      products: formattedProducts,
     });
-
   } catch (error) {
     console.error("❌ Lỗi getProductsByStore:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
@@ -443,9 +467,9 @@ const getProductById = async (req, res) => {
     const userId = req.user.id;
 
     const product = await Product.findById(productId)
-      .populate('supplier_id', 'name')
-      .populate('store_id', 'name')
-      .populate('group_id', 'name');
+      .populate("supplier_id", "name")
+      .populate("store_id", "name")
+      .populate("group_id", "name");
 
     if (!product) {
       return res.status(404).json({ message: "Sản phẩm không tồn tại" });
@@ -485,14 +509,13 @@ const getProductById = async (req, res) => {
       supplier: product.supplier_id,
       group: product.group_id,
       createdAt: product.createdAt,
-      updatedAt: product.updatedAt
+      updatedAt: product.updatedAt,
     };
 
     res.status(200).json({
       message: "Lấy thông tin sản phẩm thành công",
-      product: formattedProduct
+      product: formattedProduct,
     });
-
   } catch (error) {
     console.error("❌ Lỗi getProductById:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
@@ -505,7 +528,7 @@ const updateProductPrice = async (req, res) => {
     // Kiểm tra xem request body có tồn tại không
     if (!req.body || Object.keys(req.body).length === 0) {
       return res.status(400).json({
-        message: "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json"
+        message: "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json",
       });
     }
 
@@ -529,7 +552,7 @@ const updateProductPrice = async (req, res) => {
     }
 
     // Tìm sản phẩm và populate store để kiểm tra quyền
-    const product = await Product.findById(productId).populate('store_id', 'owner_id');
+    const product = await Product.findById(productId).populate("store_id", "owner_id");
     if (!product) {
       return res.status(404).json({ message: "Sản phẩm không tồn tại" });
     }
@@ -540,13 +563,10 @@ const updateProductPrice = async (req, res) => {
     }
 
     // Cập nhật giá bán sản phẩm
-    const updatedProduct = await Product.findByIdAndUpdate(
-      productId,
-      { price: price },
-      { new: true }
-    ).populate('supplier_id', 'name')
-      .populate('store_id', 'name')
-      .populate('group_id', 'name');
+    const updatedProduct = await Product.findByIdAndUpdate(productId, { price: price }, { new: true })
+      .populate("supplier_id", "name")
+      .populate("store_id", "name")
+      .populate("group_id", "name");
 
     // Định dạng lại dữ liệu trả về
     const formattedProduct = {
@@ -565,22 +585,50 @@ const updateProductPrice = async (req, res) => {
       supplier: updatedProduct.supplier_id,
       group: updatedProduct.group_id,
       createdAt: updatedProduct.createdAt,
-      updatedAt: updatedProduct.updatedAt
+      updatedAt: updatedProduct.updatedAt,
     };
 
     res.status(200).json({
       message: "Cập nhật giá bán sản phẩm thành công",
-      product: formattedProduct
+      product: formattedProduct,
     });
-
   } catch (error) {
     console.error("❌ Lỗi updateProductPrice:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
 
+//Lấy list sản phẩm tồn kho thấp (stock <= min_stock, status "Đang kinh doanh", min_stock > 0, lowStockAlerted = false)
+const getLowStockProducts = async (req, res) => {
+  try {
+    const { storeId } = req.query; // Filter theo storeId (optional, cho manager multi-store)
+
+    const query = {
+      stock_quantity: { $lte: "$min_stock" }, // Tồn kho <= min_stock
+      status: "Đang kinh doanh", // Chỉ sản phẩm đang bán
+      min_stock: { $gt: 0 }, // Min stock > 0 tránh cảnh báo ảo
+      lowStockAlerted: false, // Chưa cảnh báo
+      store_id: storeId ? new mongoose.Types.ObjectId(storeId) : { $exists: true }, // Filter store nếu có
+    };
+
+    const lowStockProds = await Product.find(query)
+      .select("name sku stock_quantity min_stock unit") // Chỉ lấy field cần thiết
+      .sort({ stock_quantity: 1 }) // Sắp xếp tăng dần tồn kho (thấp nhất trước)
+      .limit(20) // Limit 20 để tránh query lớn
+      .lean(); // Lean cho nhanh
+
+    console.log(
+      `Query low stock thành công, số lượng: ${lowStockProds.length} sản phẩm cho store ${storeId || "tất cả"}`
+    );
+    res.json({ message: "Lấy danh sách tồn kho thấp thành công", products: lowStockProds });
+  } catch (err) {
+    console.error("Lỗi query low stock:", err.message); // Log tiếng Việt error
+    res.status(500).json({ message: "Lỗi server khi lấy tồn kho thấp" });
+  }
+};
+
 module.exports = {
-  // CUD 
+  // CUD
   createProduct,
   updateProduct,
   deleteProduct,
@@ -588,5 +636,7 @@ module.exports = {
   getProductsByStore,
   getProductById,
   // Updates
-  updateProductPrice
+  updateProductPrice,
+  // thông báo, cảnh báo
+  getLowStockProducts,
 };

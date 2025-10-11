@@ -1,4 +1,5 @@
-const mongoose = require('mongoose');
+// models/Product.js (xóa alertCount không dùng, giữ lowStockAlerted + pre-save hook reset - paste thay schema)
+const mongoose = require("mongoose");
 
 const productSchema = new mongoose.Schema({
   name: { type: String, required: true, maxlength: 150, trim: true },
@@ -17,14 +18,25 @@ const productSchema = new mongoose.Schema({
   }, // Trạng thái sản phẩm
   store_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Store', required: true },
   supplier_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Supplier' },
-  group_id: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductGroup' } // Nhóm sản phẩm
+  group_id: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductGroup' }, // Nhóm sản phẩm
+  lowStockAlerted: { type: Boolean, default: false }, // Đã cảnh báo tồn kho thấp (reset khi update stock > min_stock)
 },
 {
   timestamps: true // Tự động thêm createdAt và updatedAt
-}
-);
+});
 
-// Tạo compound index để SKU unique trong từng store
+// Pre-save hook reset lowStockAlerted nếu stock > min_stock khi update
+productSchema.pre('save', function (next) {
+  if (this.isModified('stock_quantity') && this.stock_quantity > this.min_stock) {
+    this.lowStockAlerted = false;  // Reset cảnh báo nếu stock tăng > min_stock
+  }
+  next();
+});
+
+// Index compound cho SKU unique per store
 productSchema.index({ sku: 1, store_id: 1 }, { unique: true });
+
+// Index cho query low stock nhanh
+productSchema.index({ stock_quantity: 1, min_stock: 1, status: 1, lowStockAlerted: 1 });
 
 module.exports = mongoose.model('Product', productSchema);
