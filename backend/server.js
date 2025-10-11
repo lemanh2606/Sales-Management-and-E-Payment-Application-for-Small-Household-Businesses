@@ -1,3 +1,4 @@
+require("dotenv").config();
 const express = require("express");
 const connectDB = require("./config/db");
 const morgan = require("morgan");
@@ -5,7 +6,6 @@ const cors = require("cors");
 const cookieParser = require("cookie-parser"); // 👈 cần để đọc cookie refreshToken
 const errorHandler = require("./middlewares/errorHandler");
 const notFoundHandler = require("./middlewares/notFoundHandler");
-require("dotenv").config();
 
 require("./models/Product");
 require("./models/ProductGroup");
@@ -18,9 +18,10 @@ require("./models/PurchaseReturn");
 
 const app = express();
 connectDB();
+require("./services/cronJobs"); // Cron jobs (cảnh báo tồn kho thấp)
 
-const orderWebhookHandler = require('./routers/orderWebhookHandler'); // (Phải viết trước app.use(express.json()))
-app.post('/api/orders/vietqr-webhooks', express.raw({ type: '*/*' }), orderWebhookHandler);
+const orderWebhookHandler = require("./routers/orderWebhookHandler"); // (Phải viết trước app.use(express.json()))
+app.post("/api/orders/vietqr-webhook", express.raw({ type: "*/*" }), orderWebhookHandler);
 
 // Middleware
 app.use(
@@ -50,7 +51,6 @@ const stockCheckRouters = require("./routers/stockCheckRouters");
 const supplierRouters = require("./routers/supplierRouters");
 const purchaseOrderRouters = require("./routers/purchaseOrderRouters");
 const purchaseReturnRouters = require("./routers/purchaseReturnRouters");
-const vietQRRouters = require("./routers/vietQRRouters");
 const orderRouters = require("./routers/orderRouters");
 
 app.use("/api/stores", storeRouters);
@@ -62,7 +62,6 @@ app.use("/api/stock-checks", stockCheckRouters);
 app.use("/api/suppliers", supplierRouters);
 app.use("/api/purchase-orders", purchaseOrderRouters);
 app.use("/api/purchase-returns", purchaseReturnRouters);
-app.use("/api/vietqr", vietQRRouters);
 app.use("/api/orders", orderRouters);
 
 // Middleware 404 + error

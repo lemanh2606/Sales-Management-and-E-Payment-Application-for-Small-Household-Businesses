@@ -25,7 +25,7 @@ module.exports = async (req, res) => {
     const ok = await verifyPaymentWithPayOS(parsed, rawBody);
 
     if (ok) {
-      console.log(`✅ Đã nhận tiền, set trạng thái paid cho orderRef=${parsed.data?.orderCode}`);
+      console.log(`✅ Đã nhận tiền, đặt trạng thái 'paid' cho orderRef=${parsed.data?.orderCode}`);
       return res.status(200).json({ message: "Webhook received" });
     } else {
       console.log("❌ Webhook không hợp lệ hoặc sai chữ ký");

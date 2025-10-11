@@ -14,7 +14,7 @@ const orderSchema = new mongoose.Schema(
     paymentRef: { type: String, trim: true }, // Mã giao dịch QR
     qrExpiry: { type: Date, default: null }, // Hết hạn QR 15p (Date.now() + 15*60*1000, chỉ cho qr method, FE countdown)
     status: { type: String, enum: ["pending", "paid", "refunded"], default: "pending" }, // Trạng thái
-    refundReason: { type: String, maxlength: 500, default: null }, // Lý do hoàn tiền
+    refundId: { type: mongoose.Schema.Types.ObjectId, ref: "OrderRefund", default: null }, // sản phẩm bị hoàn trả
     printDate: { type: Date, default: null }, // Ngày in bill
     printCount: { type: Number, default: 0 }, // Số lần in bill (stock chỉ trừ lần 1, khách muốn in lại hoá đơn làm kỉ niệm không trừ nữa)
   },
