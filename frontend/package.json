@@ -11,6 +11,7 @@
     "axios": "^1.12.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-qr-code": "^2.0.18",
     "react-router-dom": "^7.9.3",
     "sweetalert2": "^11.23.0",
     "tailwindcss": "^4.1.14",

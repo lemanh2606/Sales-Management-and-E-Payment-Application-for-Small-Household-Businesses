@@ -12,7 +12,7 @@ const productSchema = new mongoose.Schema({
   unit: { type: String, maxlength: 50, trim: true },
   status: { 
     type: String, 
-    enum: ['Đang kinh doanh', 'Ngừng kinh doanh', 'Ngừng bán'], 
+    enum: ['Đang kinh doanh', 'Ngừng kinh doanh', 'Ngừng bán'],
     default: 'Đang kinh doanh' 
   }, // Trạng thái sản phẩm
   store_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Store', required: true },
