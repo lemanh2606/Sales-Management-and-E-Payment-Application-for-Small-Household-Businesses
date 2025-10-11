@@ -18,7 +18,15 @@ const userSchema = new mongoose.Schema(
     // role global (MANAGER: có thể tạo store; STAFF: nhân viên)
     role: { type: String, enum: ["MANAGER", "STAFF"], required: true, default: "MANAGER" },
 
-    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    email: { 
+      type: String, 
+      unique: true, 
+      lowercase: true, 
+      trim: true,
+      required: function() {  // 👈 Tweak: Conditional required - chỉ bắt buộc cho MANAGER (register cần OTP email), STAFF optional null/empty
+        return this.role === "MANAGER";
+      }
+    },
     phone: { type: String, default: "" },
 
     // Store-related fields

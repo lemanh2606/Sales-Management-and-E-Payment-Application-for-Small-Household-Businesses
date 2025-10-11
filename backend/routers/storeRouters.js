@@ -1,7 +1,6 @@
 // backend/routers/storeRouters.js
 const express = require("express");
 const router = express.Router();
-
 const storeController = require("../controllers/storeController");
 const auth = require("../middlewares/authMiddleware"); // import toàn bộ để tránh nhầm tên
 
@@ -14,22 +13,25 @@ if (process.env.NODE_ENV !== "production") {
 // Ánh xạ rõ ràng các middleware/handler
 const { verifyToken, isManager, checkStoreAccess } = auth;
 
-// Route: đảm bảo user có store (create default nếu chưa có)
-router.post("/ensure-store", verifyToken, storeController.ensureStore);
+router.post("/ensure-store", verifyToken, storeController.ensureStore); // Route: đảm bảo user có store (create default nếu chưa có)
 
-// Tạo store (chỉ Manager)
-router.post("/", verifyToken, isManager, storeController.createStore);
+router.post("/", verifyToken, isManager, storeController.createStore); // Tạo store (chỉ Manager)
 
-// Lấy stores của Manager
-router.get("/", verifyToken, isManager, storeController.getStoresByManager);
+router.get("/", verifyToken, isManager, storeController.getStoresByManager); // Lấy stores của Manager
 
-// Chọn store hiện tại (Manager hoặc staff được gán)
-router.post("/select/:storeId", verifyToken, storeController.selectStore);
+router.post("/select/:storeId", verifyToken, storeController.selectStore); // Chọn store hiện tại (Manager hoặc staff được gán)
 
-// Dashboard data (phải có quyền trên store)
-router.get("/:storeId/dashboard", verifyToken, checkStoreAccess, storeController.getStoreDashboard);
+router.get("/:storeId/dashboard", verifyToken, checkStoreAccess, storeController.getStoreDashboard); // Dashboard data (phải có quyền trên store)
 
-// Gán staff cho store (owner thực hiện) — controller kiểm tra owner bên trong
-router.post("/:storeId/assign-staff", verifyToken, checkStoreAccess, storeController.assignStaffToStore);
+router.post("/:storeId/assign-staff", verifyToken, checkStoreAccess, storeController.assignStaffToStore); // Gán staff cho store (owner thực hiện) — controller kiểm tra owner bên trong
+
+// Routes employee bind store (URL: /api/stores/:storeId/employees)
+router.post("/:storeId/employees", verifyToken, checkStoreAccess, isManager, storeController.createEmployee); // Tạo nhân viên cho store
+
+router.get("/:storeId/employees", verifyToken, checkStoreAccess, isManager, storeController.getEmployeesByStore); // List nhân viên theo store
+
+router.get("/:storeId/employees/:id", verifyToken, checkStoreAccess, isManager, storeController.getEmployeeById); // Chi tiết nhân viên (thêm /:id)
+
+router.put("/:storeId/employees/:id", verifyToken, checkStoreAccess, isManager, storeController.updateEmployee); // Update nhân viên
 
 module.exports = router;
