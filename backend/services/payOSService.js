@@ -71,12 +71,48 @@ async function generateQRWithPayOS(req) {
   console.log("QR Image URL:", qrDataURL);
   console.log("===============================");
 
-  return {
-    txnRef,
-    amount,
-    paymentLink: data.checkoutUrl,
-    qrDataURL,
-  };
+  // ✅ Giả lập webhook sau 30s nếu PayOS không gửi thật
+  setTimeout(async () => {
+    try {
+      console.log(`⏳ [SIMULATOR] Auto-simulating webhook cho đơn ${txnRef}`);
+
+      const fakeWebhook = {
+        code: "00",
+        desc: "success",
+        data: {
+          orderCode: Number(txnRef),
+          amount,
+          description: orderInfo,
+          accountNumber: process.env.VIETQR_ACCOUNT_NO,
+          reference: "SIMULATED_" + Date.now(),
+          transactionDateTime: new Date().toISOString().replace("T", " ").split(".")[0],
+          paymentLinkId: "SIM-" + txnRef,
+        },
+      };
+
+      // 🧮 Tính chữ ký HMAC giống thật
+      const kvString = Object.keys(fakeWebhook.data)
+        .sort()
+        .map((k) => `${k}=${fakeWebhook.data[k]}`)
+        .join("&");
+
+      fakeWebhook.signature = crypto
+        .createHmac("sha256", PAYOS_CHECKSUM_KEY)
+        .update(kvString, "utf8")
+        .digest("hex")
+        .toUpperCase();
+
+      await axios.post(`${process.env.PAYOS_WEBHOOK_URL}`, fakeWebhook, {
+        headers: { "Content-Type": "application/json" },
+      });
+
+      console.log(`✅ [SIMULATOR] Webhook giả lập gửi thành công cho đơn ${txnRef}`);
+    } catch (err) {
+      console.error("❌ [SIMULATOR] Gửi webhook giả lập thất bại:", err.message);
+    }
+  }, 30000); // sau 30s
+
+  return { txnRef, amount, paymentLink: data.checkoutUrl, qrDataURL };
 }
 
 // verify webhook PayOS và update order status (tự động check thanh toán QR)
