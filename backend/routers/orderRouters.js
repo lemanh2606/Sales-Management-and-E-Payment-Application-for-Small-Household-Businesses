@@ -13,10 +13,7 @@ router.post("/:orderId/print-bill", printBill); //In bill và trừ stock (cho c
 router.get("/:orderId", async (req, res) => {
   try {
     const { orderId } = req.params;
-    const order = await Order.findOne({ orderId })
-      .populate("storeId", "name")
-      .populate("employeeId", "fullName")
-      .lean();
+    const order = await Order.findById(orderId).populate("storeId", "name").populate("employeeId", "fullName").lean();
 
     if (!order) {
       console.log("Không tìm thấy hóa đơn:", orderId);
@@ -24,7 +21,7 @@ router.get("/:orderId", async (req, res) => {
     }
 
     const items = await OrderItem.find({ orderId: order._id }).populate("productId", "name sku price").lean();
-    
+
     const enrichedOrder = {
       ...order,
       items: items.map((item) => ({
