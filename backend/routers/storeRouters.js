@@ -7,7 +7,7 @@ const auth = require("../middlewares/authMiddleware"); // import toàn bộ đ�
 // Kiểm tra các hàm có tồn tại (debug - có thể bỏ sau khi chạy OK)
 if (process.env.NODE_ENV !== "production") {
   // nếu 1 trong các handler bị undefined thì log ra để dễ debug
-  console.log("auth middleware keys:", Object.keys(auth));
+  //console.log("auth middleware keys:", Object.keys(auth)); //đã log đầy đủ các hàm
 }
 
 // Ánh xạ rõ ràng các middleware/handler
