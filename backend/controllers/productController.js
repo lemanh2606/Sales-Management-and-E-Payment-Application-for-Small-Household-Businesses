@@ -312,9 +312,13 @@ const updateProduct = async (req, res) => {
     if (supplier_id !== undefined) updateData.supplier_id = supplier_id;
     if (group_id !== undefined) updateData.group_id = group_id;
 
-    // Thêm logic reset lowStockAlerted nếu stock_quantity > min_stock (explicit trong controller, double-check với pre-save hook)
-    if (stock_quantity !== undefined && min_stock !== undefined && stock_quantity > min_stock) {
-      updateData.lowStockAlerted = false; // Reset cảnh báo nếu stock tăng > min_stock
+    // Thêm logic reset lowStockAlerted (explicit trong controller, double-check với pre-save hook)
+    if (stock_quantity !== undefined && min_stock !== undefined) {
+      if (stock_quantity <= min_stock) {
+        updateData.lowStockAlerted = true; // Bật cảnh báo thiếu hàng và sẽ gửi email
+      } else {
+        updateData.lowStockAlerted = false; // Tắt cảnh báo vì đã đủ hàng và sẽ reset để gửi cảnh báo sau này 
+      }
     }
 
     // Cập nhật sản phẩm
