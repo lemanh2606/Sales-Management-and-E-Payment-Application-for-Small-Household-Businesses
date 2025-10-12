@@ -19,7 +19,7 @@ const productSchema = new mongoose.Schema({
   store_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Store', required: true },
   supplier_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Supplier' },
   group_id: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductGroup' }, // Nhóm sản phẩm
-  lowStockAlerted: { type: Boolean, default: false }, // Đã cảnh báo tồn kho thấp (reset khi update stock > min_stock)
+  lowStockAlerted: { type: Boolean, default: false }, // False = không báo, true = báo (reset về false khi update stock > min_stock)
 },
 {
   timestamps: true // Tự động thêm createdAt và updatedAt
