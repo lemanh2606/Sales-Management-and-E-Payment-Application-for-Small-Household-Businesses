@@ -368,4 +368,123 @@ const refundOrder = async (req, res) => {
   }
 };
 
-module.exports = { createOrder, setPaidCash, printBill, vietqrReturn, vietqrCancel, getOrderById, refundOrder };
+// GET /api/orders/top-products - Top sản phẩm bán chạy (sum quantity/sales từ OrderItem, filter paid + range/date/store)
+const getTopSellingProducts = async (req, res) => {
+  try {
+    const { limit = 10, storeId, range, dateFrom, dateTo } = req.query; // Params: limit, storeId, range quick/custom date
+    // Xử lý date range
+    let matchDate = {};
+    const now = new Date();
+
+    if (range) {
+      switch (range) {
+        case "today":
+          matchDate = { $gte: new Date(now.setHours(0, 0, 0, 0)), $lte: new Date(now.setHours(23, 59, 59, 999)) };
+          break;
+        case "yesterday":
+          const yesterday = new Date(now);
+          yesterday.setDate(now.getDate() - 1);
+          matchDate = {
+            $gte: new Date(yesterday.setHours(0, 0, 0, 0)),
+            $lte: new Date(yesterday.setHours(23, 59, 59, 999)),
+          };
+          break;
+        case "thisWeek":
+          const weekStart = new Date(now.setDate(now.getDate() - now.getDay()));
+          matchDate = { $gte: new Date(weekStart.setHours(0, 0, 0, 0)) };
+          break;
+        case "thisMonth":
+          const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+          matchDate = { $gte: new Date(monthStart.setHours(0, 0, 0, 0)) };
+          break;
+        case "thisYear":
+          const yearStart = new Date(now.getFullYear(), 0, 1);
+          matchDate = { $gte: new Date(yearStart.setHours(0, 0, 0, 0)) };
+          break;
+        default:
+          matchDate = {}; // Default nếu range sai
+      }
+    } else if (dateFrom || dateTo) {
+      if (dateFrom) matchDate.$gte = new Date(dateFrom);
+      if (dateTo) matchDate.$lte = new Date(dateTo);
+    } else {
+      // Default thisMonth nếu ko có range/date
+      const monthStart = new Date();
+      monthStart.setDate(1);
+      monthStart.setHours(0, 0, 0, 0);
+      matchDate.$gte = monthStart;
+    }
+    //chỉ khi có lọc ngày mới ép vào $match, còn không thì khỏi nhét – tránh crash query
+    const match = { "order.status": "paid" };
+    if (Object.keys(matchDate).length > 0) {
+      match["order.createdAt"] = matchDate;
+    }
+
+    if (storeId) {
+      match["order.storeId"] = new mongoose.Types.ObjectId(storeId); // Filter store nếu có
+    }
+
+    const topProducts = await OrderItem.aggregate([
+      // Join với Order để filter status 'paid' + date/store
+      {
+        $lookup: {
+          from: "orders",
+          localField: "orderId",
+          foreignField: "_id",
+          as: "order",
+        },
+      },
+      { $unwind: "$order" },
+      { $match: match }, // Match filter paid + date/store
+
+      // Group by productId, sum quantity/sales/count orders
+      {
+        $group: {
+          _id: "$productId",
+          totalQuantity: { $sum: "$quantity" }, // Tổng số lượng bán
+          totalSales: { $sum: "$subtotal" }, // Tổng doanh thu
+          countOrders: { $sum: 1 }, // Số order có sản phẩm này
+        },
+      },
+      // Sort top (quantity desc)
+      { $sort: { totalQuantity: -1 } },
+      // Limit
+      { $limit: parseInt(limit) },
+      // Populate product name/sku
+      {
+        $lookup: {
+          from: "products",
+          localField: "_id",
+          foreignField: "_id",
+          as: "product",
+        },
+      },
+      { $unwind: "$product" },
+      {
+        $project: {
+          // Project fields cần
+          productName: "$product.name",
+          productSku: "$product.sku",
+          totalQuantity: 1,
+          totalSales: 1,
+          countOrders: 1,
+        },
+      },
+    ]);
+    res.json({ message: `Top selling products thành công, limit ${limit}, kết quả: ${topProducts.length} sản phẩm`, data: topProducts });
+  } catch (err) {
+    console.error("Lỗi top selling products:", err.message);
+    res.status(500).json({ message: "Lỗi server khi lấy top sản phẩm bán chạy" });
+  }
+};
+
+module.exports = {
+  createOrder,
+  setPaidCash,
+  printBill,
+  vietqrReturn,
+  vietqrCancel,
+  getOrderById,
+  refundOrder,
+  getTopSellingProducts,
+};
