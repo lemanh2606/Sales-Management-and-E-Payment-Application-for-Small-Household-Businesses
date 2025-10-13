@@ -17,7 +17,6 @@ cron.schedule("0 8 * * *", async () => {
           $expr: { $lte: ["$stock_quantity", "$min_stock"] }, // So sánh field stock_quantity <= min_stock
           status: "Đang kinh doanh",
           min_stock: { $gt: 0 },
-          lowStockAlerted: false,
         },
       },
       {
@@ -133,11 +132,6 @@ cron.schedule("0 8 * * *", async () => {
       user.alertCount += 1;
       await user.save();
     }
-
-    // Update lowStockAlerted = true cho tất cả low stock (bulk theo prodIds)
-    const allLowProdIds = lowStockByStore.flatMap((storeLow) => storeLow.lowProducts.map((p) => p._id)); // Flat all prodIds
-    await Product.updateMany({ _id: { $in: allLowProdIds } }, { lowStockAlerted: true }); // Bulk update
-    console.log(`Cập nhật lowStockAlerted = true cho ${allLowProdIds.length} sản phẩm`);
   } catch (err) {
     console.error("Lỗi cron cảnh báo tồn kho:", err.message);
   }
