@@ -2,36 +2,30 @@
 const express = require("express");
 const router = express.Router();
 const storeController = require("../controllers/storeController");
-const auth = require("../middlewares/authMiddleware"); // import toàn bộ để tránh nhầm tên
+const auth = require("../middlewares/authMiddleware"); 
 
-// Kiểm tra các hàm có tồn tại (debug - có thể bỏ sau khi chạy OK)
-if (process.env.NODE_ENV !== "production") {
-  // nếu 1 trong các handler bị undefined thì log ra để dễ debug
-  //console.log("auth middleware keys:", Object.keys(auth)); //đã log đầy đủ các hàm
-}
-
-// Ánh xạ rõ ràng các middleware/handler
 const { verifyToken, isManager, checkStoreAccess } = auth;
 
-router.post("/ensure-store", verifyToken, storeController.ensureStore); // Route: đảm bảo user có store (create default nếu chưa có)
+// ------------------------- Store routes -------------------------
+router.post("/ensure-store", verifyToken, storeController.ensureStore); 
+router.post("/", verifyToken, isManager, storeController.createStore); 
+router.get("/", verifyToken, isManager, storeController.getStoresByManager); 
+router.get("/:storeId", verifyToken, checkStoreAccess, storeController.getStoreById); // Chi tiết store
+router.put("/:storeId", verifyToken, checkStoreAccess, isManager, storeController.updateStore); // Update store
+router.delete("/:storeId", verifyToken, checkStoreAccess, isManager, storeController.deleteStore); // Xóa store (soft delete nếu cần)
 
-router.post("/", verifyToken, isManager, storeController.createStore); // Tạo store (chỉ Manager)
+// ------------------------- Select / Dashboard -------------------------
+router.post("/select/:storeId", verifyToken, storeController.selectStore); 
+router.get("/:storeId/dashboard", verifyToken, checkStoreAccess, storeController.getStoreDashboard); 
 
-router.get("/", verifyToken, isManager, storeController.getStoresByManager); // Lấy stores của Manager
+// ------------------------- Staff assignment -------------------------
+router.post("/:storeId/assign-staff", verifyToken, checkStoreAccess, storeController.assignStaffToStore); 
 
-router.post("/select/:storeId", verifyToken, storeController.selectStore); // Chọn store hiện tại (Manager hoặc staff được gán)
-
-router.get("/:storeId/dashboard", verifyToken, checkStoreAccess, storeController.getStoreDashboard); // Dashboard data (phải có quyền trên store)
-
-router.post("/:storeId/assign-staff", verifyToken, checkStoreAccess, storeController.assignStaffToStore); // Gán staff cho store (owner thực hiện) — controller kiểm tra owner bên trong
-
-// Routes employee bind store (URL: /api/stores/:storeId/employees)
-router.post("/:storeId/employees", verifyToken, checkStoreAccess, isManager, storeController.createEmployee); // Tạo nhân viên cho store
-
-router.get("/:storeId/employees", verifyToken, checkStoreAccess, isManager, storeController.getEmployeesByStore); // List nhân viên theo store
-
-router.get("/:storeId/employees/:id", verifyToken, checkStoreAccess, isManager, storeController.getEmployeeById); // Chi tiết nhân viên (thêm /:id)
-
-router.put("/:storeId/employees/:id", verifyToken, checkStoreAccess, isManager, storeController.updateEmployee); // Update nhân viên
+// ------------------------- Employee routes -------------------------
+router.post("/:storeId/employees", verifyToken, checkStoreAccess, isManager, storeController.createEmployee); 
+router.get("/:storeId/employees", verifyToken, checkStoreAccess, isManager, storeController.getEmployeesByStore); 
+router.get("/:storeId/employees/:id", verifyToken, checkStoreAccess, isManager, storeController.getEmployeeById); 
+router.put("/:storeId/employees/:id", verifyToken, checkStoreAccess, isManager, storeController.updateEmployee); 
+// router.delete("/:storeId/employees/:id", verifyToken, checkStoreAccess, isManager, storeController.deleteEmployee); // Xóa nhân viên
 
 module.exports = router;
