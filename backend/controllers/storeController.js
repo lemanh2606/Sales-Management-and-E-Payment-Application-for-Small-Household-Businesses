@@ -49,6 +49,67 @@ const createStore = async (req, res) => {
 };
 
 /**
+ * Lấy thông tin store theo id
+ */
+const getStoreById = async (req, res) => {
+  try {
+    const { storeId } = req.params;
+    const store = await Store.findOne({ _id: storeId, deleted: false });
+    if (!store) return res.status(404).json({ message: "Không tìm thấy cửa hàng" });
+    res.json({ store });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Lỗi server khi lấy store" });
+  }
+};
+
+/**
+ * Cập nhật thông tin store (MANAGER)
+ * Body: { name, address, phone }
+ */
+const updateStore = async (req, res) => {
+  try {
+    const { storeId } = req.params;
+    const { name, address, phone } = req.body;
+    const userId = req.user.id;
+
+    const store = await Store.findById(storeId);
+    if (!store || store.deleted) return res.status(404).json({ message: "Không tìm thấy cửa hàng" });
+    if (store.owner_id.toString() !== userId) return res.status(403).json({ message: "Chỉ owner mới được chỉnh sửa" });
+
+    if (name) store.name = name.trim();
+    if (address) store.address = address.trim();
+    if (phone) store.phone = phone.trim();
+
+    await store.save();
+    res.json({ store });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Lỗi server khi cập nhật store" });
+  }
+};
+
+/**
+ * Xóa store (soft delete) - chỉ ẩn
+ */
+const deleteStore = async (req, res) => {
+  try {
+    const { storeId } = req.params;
+    const userId = req.user.id;
+
+    const store = await Store.findById(storeId);
+    if (!store || store.deleted) return res.status(404).json({ message: "Không tìm thấy cửa hàng" });
+    if (store.owner_id.toString() !== userId) return res.status(403).json({ message: "Chỉ owner mới được xóa" });
+
+    store.deleted = true;
+    await store.save();
+    res.json({ message: "Đã xóa cửa hàng (soft delete)" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Lỗi server khi xóa store" });
+  }
+};
+/**
  * Lấy danh sách store của Manager (owner)
  */
 const getStoresByManager = async (req, res) => {
@@ -428,6 +489,9 @@ const updateEmployee = async (req, res) => {
 
 module.exports = {
   createStore,
+  updateStore,
+  deleteStore,
+  getStoreById,
   getStoresByManager,
   selectStore,
   ensureStore,
