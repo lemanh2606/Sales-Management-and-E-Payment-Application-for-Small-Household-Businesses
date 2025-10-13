@@ -35,7 +35,7 @@ const createOrder = async (req, res) => {
           prod.status !== "Đang kinh doanh"
         ) {
           // Kiểm tra stock đủ trước, nhưng ko trừ - chỉ warn nếu thiếu
-          throw new Error(`Sản phẩm ${prod?.name || "không tồn tại"} hết hàng hoặc không hợp lệ`);
+          throw new Error(`Sản phẩm ${prod?.name || "không tồn tại"} hết hàng hoặc không tồn tại trong cửa hàng`);
         }
         const priceAtTime = prod.price;
         const subtotal = (parseFloat(priceAtTime) * item.quantity).toFixed(2);
@@ -136,6 +136,20 @@ const setPaidCash = async (req, res) => {
     }
     order.status = "paid";
     await order.save();
+    // Gửi socket thông báo hóa đơn đã paid (FE lắng nghe để refresh)
+    const io = req.app.get("io");
+    if (io) {
+      io.emit("payment_success", {
+        orderId: order._id,
+        ref: order._id.toString(), // Cash ko có paymentRef, dùng _id
+        amount: order.totalAmount,
+        method: order.paymentMethod,
+        message: `Đơn hàng ${order._id} đã thanh toán thành công (TIỀN MẶT)!`,
+      });
+      console.log(
+        `🔔 [SOCKET] Gửi thông báo: Thanh toán thành công, số tiền: (${order.totalAmount}đ) - Mã đơn hàng: ${order._id}`
+      );
+    }
     console.log(`Set paid cash thành công cho hóa đơn ${mongoId}, sẵn sàng in bill`);
     res.json({ message: "Xác nhận thanh toán cash thành công, sẵn sàng in hóa đơn" });
   } catch (err) {

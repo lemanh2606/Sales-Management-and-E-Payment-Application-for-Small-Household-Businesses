@@ -1,0 +1,41 @@
+// routes/taxRouters.js
+const express = require("express");
+const router = express.Router();
+const {
+  previewSystemRevenue,
+  createTaxDeclaration,
+  updateTaxDeclaration,
+  cloneTaxDeclaration,
+  deleteTaxDeclaration,
+  listDeclarations,
+  exportDeclaration,
+} = require("../controllers/taxController");
+const { verifyToken, isManager, checkStoreAccess } = require("../middlewares/authMiddleware");
+
+/**
+ * Flow:
+ * 1️⃣ Preview doanh thu hệ thống (chưa lưu DB)
+ * 2️⃣ Create tờ khai (bản gốc)
+ * 3️⃣ Update tờ khai
+ * 4️⃣ Clone (bản sao)
+ * 5️⃣ Delete tờ khai (Manager only)
+ * 6️⃣ List tất cả tờ khai theo cửa hàng/kỳ
+ * 7️⃣ Export CSV/PDF
+ */
+
+// 1️⃣ PREVIEW: Xem tổng doanh thu hệ thống theo kỳ (chưa tạo DB)
+router.get("/preview", verifyToken, checkStoreAccess, previewSystemRevenue);
+// 2️⃣ CREATE: Tạo tờ khai thuế mới (bản gốc)
+router.post("/", verifyToken, checkStoreAccess, createTaxDeclaration);
+// 3️⃣ UPDATE: Cập nhật khai báo doanh thu
+router.put("/:id", verifyToken, updateTaxDeclaration);
+// 4️⃣ CLONE: Tạo bản sao từ tờ khai cũ
+router.post("/:id/clone", verifyToken, cloneTaxDeclaration);
+// 5️⃣ DELETE: Xóa tờ khai (chỉ Manager)
+router.delete("/:id", verifyToken, isManager, deleteTaxDeclaration);
+// 6️⃣ LIST: Lấy danh sách tờ khai theo cửa hàng / kỳ
+router.get("/", verifyToken, checkStoreAccess, listDeclarations); // Params: ?shopId=...&periodType=&periodKey=
+// 7️⃣ EXPORT: Xuất CSV/PDF
+router.get("/:id/export", verifyToken, exportDeclaration); // /api/tax/:id/export?format=csv  OR  format=pdf
+
+module.exports = router;
