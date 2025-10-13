@@ -1,0 +1,440 @@
+openapi: 3.0.3
+info:
+  title: Sales-Management-and-E-Payment API
+  version: "1.0.0"
+  description: API documentation for Sales Management & E-Payment Application (SEP490_G136)
+servers:
+  - url: http://localhost:9999
+    description: Local dev server
+
+tags:
+  - name: Auth
+  - name: Users
+  - name: Stores
+  - name: Products
+  - name: ProductGroups
+  - name: Suppliers
+  - name: StockChecks
+  - name: StockDisposals
+  - name: PurchaseOrders
+  - name: PurchaseReturns
+  - name: Orders
+  - name: Webhook
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        role:
+          type: string
+          enum: [MANAGER, STAFF]
+        isVerified:
+          type: boolean
+    Store:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        address: { type: string }
+        phone: { type: string }
+        owner_id: { type: string }
+        isDefault: { type: boolean }
+    Product:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        sku: { type: string }
+        group_id: { type: string }
+        price: { type: number }
+        minStock: { type: number }
+        maxStock: { type: number }
+        status: { type: string }
+    Order:
+      type: object
+      properties:
+        id: { type: string }
+        store_id: { type: string }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              product_id: { type: string }
+              qty: { type: integer }
+              price: { type: number }
+        total: { type: number }
+        status: { type: string }
+
+security:
+  - BearerAuth: []
+
+paths:
+  /api/users/register:
+    post:
+      tags: [Auth]
+      summary: Register manager (sends OTP)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username: { type: string }
+                email: { type: string }
+                password: { type: string }
+                phone: { type: string }
+      responses:
+        "201":
+          description: Registered, OTP sent
+        "400":
+          description: Bad request
+
+  /api/users/verify-otp:
+    post:
+      tags: [Auth]
+      summary: Verify OTP to activate account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string }
+                otp: { type: string }
+      responses:
+        "200": { description: "OTP verified" }
+        "400": { description: "Invalid or expired OTP" }
+
+  /api/users/login:
+    post:
+      tags: [Auth]
+      summary: Login (returns access token)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username: { type: string }
+                password: { type: string }
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+                  user: { $ref: "#/components/schemas/User" }
+        "400": { description: "Invalid credentials" }
+
+  /api/stores:
+    get:
+      tags: [Stores]
+      summary: Get stores for authenticated manager
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: list of stores
+    post:
+      tags: [Stores]
+      summary: Create new store (manager)
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                address: { type: string }
+                phone: { type: string }
+      responses:
+        "201": { description: "Store created" }
+
+  /api/stores/{id}:
+    get:
+      tags: [Stores]
+      summary: Get store by id
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: "Store object" }
+
+  /api/products:
+    get:
+      tags: [Products]
+      summary: Get products (filter by store)
+      parameters:
+        - in: query
+          name: store_id
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer }
+      responses:
+        "200": { description: "Products list" }
+    post:
+      tags: [Products]
+      summary: Create product
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Product"
+      responses:
+        "201": { description: "Created" }
+
+  /api/products/{id}:
+    get:
+      tags: [Products]
+      summary: Get product by id
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: "Product" }
+    put:
+      tags: [Products]
+      summary: Update product
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Product"
+      responses:
+        "200": { description: "Updated" }
+    delete:
+      tags: [Products]
+      summary: Delete product
+      security: [{ BearerAuth: [] }]
+      responses:
+        "204": { description: "Deleted" }
+
+  /api/product-groups:
+    get:
+      tags: [ProductGroups]
+      summary: List product groups
+      responses:
+        "200": { description: "Groups list" }
+    post:
+      tags: [ProductGroups]
+      summary: Create product group
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+      responses:
+        "201": { description: "Created" }
+
+  /api/suppliers:
+    get:
+      tags: [Suppliers]
+      summary: List suppliers
+      responses:
+        "200": { description: "Suppliers list" }
+    post:
+      tags: [Suppliers]
+      summary: Create supplier
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                phone: { type: string }
+                address: { type: string }
+      responses:
+        "201": { description: "Created" }
+
+  /api/stock-checks:
+    get:
+      tags: [StockChecks]
+      summary: List stock check records
+      responses:
+        "200": { description: "Stock checks" }
+    post:
+      tags: [StockChecks]
+      summary: Create stock check record
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                product_id: { type: string }
+                qty: { type: number }
+                note: { type: string }
+      responses:
+        "201": { description: "Created" }
+
+  /api/stock-disposals:
+    get:
+      tags: [StockDisposals]
+      summary: List disposals
+      responses:
+        "200": { description: "List" }
+    post:
+      tags: [StockDisposals]
+      summary: Dispose stock (destroy)
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                product_id: { type: string }
+                qty: { type: number }
+                reason: { type: string }
+      responses:
+        "201": { description: "Created" }
+
+  /api/purchase-orders:
+    get:
+      tags: [PurchaseOrders]
+      summary: List purchase orders
+      responses:
+        "200": { description: "List" }
+    post:
+      tags: [PurchaseOrders]
+      summary: Create purchase order
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                supplier_id: { type: string }
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      product_id: { type: string }
+                      qty: { type: number }
+      responses:
+        "201": { description: "Created" }
+
+  /api/purchase-returns:
+    get:
+      tags: [PurchaseReturns]
+      summary: List purchase returns
+      responses:
+        "200": { description: "List" }
+    post:
+      tags: [PurchaseReturns]
+      summary: Create purchase return
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                purchase_order_id: { type: string }
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      product_id: { type: string }
+                      qty: { type: number }
+      responses:
+        "201": { description: "Created" }
+
+  /api/orders:
+    get:
+      tags: [Orders]
+      summary: List orders
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: "Orders list" }
+    post:
+      tags: [Orders]
+      summary: Create order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Order"
+      responses:
+        "201": { description: "Created" }
+
+  /api/orders/{id}:
+    get:
+      tags: [Orders]
+      summary: Get order by id
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: "Order" }
+    patch:
+      tags: [Orders]
+      summary: Update order partial (e.g., status)
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status: { type: string }
+      responses:
+        "200": { description: "Updated" }
+
+  /api/orders/vietqr-webhook:
+    post:
+      tags: [Webhook]
+      summary: Webhook for VietQR / PayOS callback
+      requestBody:
+        required: true
+        content:
+          "*/*":
+            schema:
+              type: string
+      responses:
+        "200": { description: "Webhook processed" }
