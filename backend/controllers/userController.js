@@ -286,12 +286,6 @@ const login = async (req, res) => {
   }
 };
 
-/* -------------------------
-   Controller: refreshToken (tùy chọn)
-   - Đọc cookie refreshToken từ req.cookies (cần cookie-parser)
-   - Nếu hợp lệ, cấp access token mới
-   - Nếu không hợp lệ, trả 401
-   ------------------------- */
 const refreshToken = async (req, res) => {
   try {
     // Lấy refresh token từ cookie (yêu cầu dùng cookie-parser middleware)
