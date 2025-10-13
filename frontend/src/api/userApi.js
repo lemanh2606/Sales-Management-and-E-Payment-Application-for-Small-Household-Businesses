@@ -1,59 +1,40 @@
+// src/api/userApi.js
 import axios from "axios";
-const API_URL = import.meta.env.VITE_API_URL + "/users"; // Lấy từ .env
 
-// Cấu hình axios instance
+const API_URL = import.meta.env.VITE_API_URL;
+
+// ✅ Tạo 1 instance axios duy nhất
 const api = axios.create({
   baseURL: API_URL,
-  withCredentials: true, // 👈 cho phép gửi/nhận cookie
+  withCredentials: true, // cho phép gửi cookie
 });
 
-// Đăng ký
-export const registerManager = async (data) => {
-  const res = await api.post(`/register`, data);
-  return res.data;
-};
+// Interceptor để tự động thêm token từ localStorage
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
-// Xác thực OTP
-export const verifyOtp = async (data) => {
-  const res = await api.post(`/verify-otp`, data);
-  return res.data;
-};
+// ------------------ User API ------------------
+export const registerManager = async (data) => (await api.post("/users/register", data)).data;
+export const verifyOtp = async (data) => (await api.post("/users/verify-otp", data)).data;
+export const loginUser = async (data) => (await api.post("/users/login", data)).data;
+export const getProfile = async () => (await api.get("/users/profile")).data;
 
-// Đăng nhập
-export const loginUser = async (data) => {
-  const res = await api.post(`/login`, data);
-  return res.data;
-};
+// ------------------ Store API ------------------
+export const ensureStore = async () => (await api.post("/stores/ensure-store")).data;
+export const getStores = async () => (await api.get("/stores")).data;
+export const selectStore = async (storeId) => (await api.post(`/stores/select/${storeId}`)).data;
+export const getStoreDashboard = async (storeId) => (await api.get(`/stores/${storeId}/dashboard`)).data;
 
-// Ví dụ gọi API cần cookie (profile)
-export const getProfile = async () => {
-  const res = await api.get(`/profile`);
-  return res.data;
-};
-
-// NEW: ensure user has store(s). Backend: POST /api/stores/ensure-store (note base is /api/stores)
-export const ensureStore = async () => {
-  // ensureStore endpoint is under /api/stores, so call full path
-  const res = await axios.post(`${BASE}/stores/ensure-store`, {}, { withCredentials: true });
-  return res.data;
-};
-
-// NEW: get list stores for manager
-export const getStores = async () => {
-  const res = await axios.get(`${BASE}/stores`, { withCredentials: true });
-  return res.data;
-};
-
-// NEW: select a store (set user's current_store)
-export const selectStore = async (storeId) => {
-  const res = await axios.post(`${BASE}/stores/select/${storeId}`, {}, { withCredentials: true });
-  return res.data;
-};
-
-// NEW: get dashboard data for a store
-export const getStoreDashboard = async (storeId) => {
-  const res = await axios.get(`${BASE}/stores/${storeId}/dashboard`, { withCredentials: true });
-  return res.data;
-};
+export const createStore = async (data) => (await api.post("/stores", data)).data;
+export const updateStore = async (storeId, data) => (await api.put(`/stores/${storeId}`, data)).data;
+export const deleteStore = async (storeId) => (await api.delete(`/stores/${storeId}`)).data;
 
 export default api;
