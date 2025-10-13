@@ -10,7 +10,6 @@ const path = require("path");
 const errorHandler = require("./middlewares/errorHandler");
 const notFoundHandler = require("./middlewares/notFoundHandler");
 
-<<<<<<< HEAD
 
 
 // Swagger
@@ -47,29 +46,6 @@ app.use(
   cors({
     origin: "http://localhost:3000",
     credentials: true,
-=======
-require("./models/Product");
-require("./models/ProductGroup");
-require("./models/Supplier");
-require("./models/Employee");
-require("./models/StockDisposal");
-require("./models/StockCheck");
-require("./models/PurchaseOrder");
-require("./models/PurchaseReturn");
-
-const app = express();
-connectDB();
-require("./services/cronJobs"); // Cron jobs (cảnh báo tồn kho thấp)
-
-const orderWebhookHandler = require("./routers/orderWebhookHandler"); // (Phải viết trước app.use(express.json()))
-app.post("/api/orders/vietqr-webhook", express.raw({ type: "*/*" }), orderWebhookHandler);
-
-// Middleware
-app.use(
-  cors({
-    origin: "http://localhost:3000", // 👈 Web client
-    credentials: true, // 👈 cho phép gửi cookie cross-origin (refreshToken)
->>>>>>> developer
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "Cache-Control", "Pragma"],
   })
@@ -79,15 +55,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(morgan("dev"));
 
-<<<<<<< HEAD
 // --- ROUTERS ---
-=======
-app.get("/", (req, res) => {
-  res.send("Backend đã chạy 🚀");
-});
-
-// Routers
->>>>>>> developer
 const storeRouters = require("./routers/storeRouters");
 const userRouters = require("./routers/userRouters");
 const productRouters = require("./routers/productRouters");
@@ -145,11 +113,7 @@ app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-<<<<<<< HEAD
 // --- SERVER START ---
-=======
-// Khởi động server backend cổng 9999
->>>>>>> developer
 const PORT = process.env.PORT || 9999;
 app.listen(PORT, () => {
   console.log(`🔥 Server running: http://localhost:${PORT}`);
