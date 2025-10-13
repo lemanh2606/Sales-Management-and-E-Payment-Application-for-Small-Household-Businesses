@@ -1,3 +1,5 @@
+// controllers/productController.js
+const mongoose = require("mongoose");
 const Product = require("../models/Product");
 const ProductGroup = require("../models/ProductGroup");
 const Store = require("../models/Store");
@@ -312,9 +314,13 @@ const updateProduct = async (req, res) => {
     if (supplier_id !== undefined) updateData.supplier_id = supplier_id;
     if (group_id !== undefined) updateData.group_id = group_id;
 
-    // Thêm logic reset lowStockAlerted nếu stock_quantity > min_stock (explicit trong controller, double-check với pre-save hook)
-    if (stock_quantity !== undefined && min_stock !== undefined && stock_quantity > min_stock) {
-      updateData.lowStockAlerted = false; // Reset cảnh báo nếu stock tăng > min_stock
+    // Thêm logic reset lowStockAlerted (explicit trong controller, double-check với pre-save hook)
+    if (stock_quantity !== undefined && min_stock !== undefined) {
+      if (stock_quantity <= min_stock) {
+        updateData.lowStockAlerted = true; // Bật cảnh báo thiếu hàng và sẽ gửi email
+      } else {
+        updateData.lowStockAlerted = false; // Tắt cảnh báo vì đã đủ hàng và sẽ reset để gửi cảnh báo sau này 
+      }
     }
 
     // Cập nhật sản phẩm
@@ -627,11 +633,44 @@ const getLowStockProducts = async (req, res) => {
   }
 };
 
+// GET /api/products/search - Tìm sản phẩm theo tên hoặc SKU (regex case-insensitive)
+const searchProducts = async (req, res) => {
+  try {
+    const { query, storeId, limit = 10 } = req.query;  // Params: query (tên/SKU), storeId, limit (default 10)
+
+    if (!query || query.trim().length === 0) {
+      return res.status(400).json({ message: "Query tìm kiếm không được để trống" });
+    }
+
+    const searchQuery = {
+      $or: [
+        { name: { $regex: query.trim(), $options: 'i' } },  // Tìm tên (case-insensitive)
+        { sku: { $regex: query.trim(), $options: 'i' } }  // Tìm SKU (case-insensitive)
+      ],
+      status: 'Đang kinh doanh',  // Chỉ sản phẩm đang bán
+      store_id: new mongoose.Types.ObjectId(storeId)  // Filter store của staff/manager
+    };
+
+    const products = await Product.find(searchQuery)
+      .select('name sku price stock_quantity unit')  // Chỉ lấy field cần thiết
+      .sort({ name: 1 })  // Sắp xếp theo tên A-Z
+      .limit(parseInt(limit))  // Limit số kết quả
+      .lean();  // Lean cho nhanh
+
+    console.log(`Tìm kiếm sản phẩm thành công: "${query}" trong store ${storeId}, kết quả: ${products.length} sản phẩm`);
+    res.json({ message: `Tìm thấy ${products.length} sản phẩm`, products });
+  } catch (err) {
+    console.error("Lỗi search sản phẩm:", err.message);
+    res.status(500).json({ message: "Lỗi server khi tìm kiếm sản phẩm" });
+  }
+};
+
 module.exports = {
   // CUD
   createProduct,
   updateProduct,
   deleteProduct,
+  searchProducts,
   // Reads
   getProductsByStore,
   getProductById,

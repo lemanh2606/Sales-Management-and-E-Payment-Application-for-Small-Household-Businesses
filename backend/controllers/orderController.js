@@ -1,11 +1,12 @@
 // controllers/orderController.js (update: create pending luôn, ko trừ stock; add confirmQR + printBill để trừ khi in)
 const mongoose = require("mongoose");
+const { Parser } = require("json2csv");
+const PDFDocument = require("pdfkit");
 const Order = require("../models/Order");
 const OrderItem = require("../models/OrderItem");
 const OrderRefund = require("../models/OrderRefund");
 const Product = require("../models/Product");
 const Employee = require("../models/Employee");
-const Store = require("../models/Store");
 const { generateQRWithPayOS } = require("../services/payOSService");
 const { v2: cloudinary } = require("cloudinary");
 
@@ -368,4 +369,409 @@ const refundOrder = async (req, res) => {
   }
 };
 
-module.exports = { createOrder, setPaidCash, printBill, vietqrReturn, vietqrCancel, getOrderById, refundOrder };
+// GET /api/orders/top-products - Top sản phẩm bán chạy (sum quantity/sales từ OrderItem, filter paid + range/date/store)
+const getTopSellingProducts = async (req, res) => {
+  try {
+    const { limit = 10, storeId, range, dateFrom, dateTo } = req.query; // Params: limit, storeId, range quick/custom date
+    // Xử lý date range
+    let matchDate = {};
+    const now = new Date();
+
+    if (range) {
+      switch (range) {
+        case "today":
+          matchDate = { $gte: new Date(now.setHours(0, 0, 0, 0)), $lte: new Date(now.setHours(23, 59, 59, 999)) };
+          break;
+        case "yesterday":
+          const yesterday = new Date(now);
+          yesterday.setDate(now.getDate() - 1);
+          matchDate = {
+            $gte: new Date(yesterday.setHours(0, 0, 0, 0)),
+            $lte: new Date(yesterday.setHours(23, 59, 59, 999)),
+          };
+          break;
+        case "thisWeek": // Tuần hiện tại từ Thứ 2, vì việt nam thứ 2 là đầu tuần
+          const currentDay = now.getDay(); // 0 (Sun) -> 6 (Sat)
+          const diffToMonday = currentDay === 0 ? 6 : currentDay - 1; // Nếu chủ nhật -> lùi 6 ngày
+          const monday = new Date(now);
+          monday.setDate(now.getDate() - diffToMonday);
+          matchDate = { $gte: new Date(monday.setHours(0, 0, 0, 0)) };
+          break;
+        case "thisMonth":
+          const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+          matchDate = { $gte: new Date(monthStart.setHours(0, 0, 0, 0)) };
+          break;
+        case "thisYear":
+          const yearStart = new Date(now.getFullYear(), 0, 1);
+          matchDate = { $gte: new Date(yearStart.setHours(0, 0, 0, 0)) };
+          break;
+        default:
+          matchDate = {}; // Default nếu range sai
+      }
+    } else if (dateFrom || dateTo) {
+      if (dateFrom) matchDate.$gte = new Date(dateFrom);
+      if (dateTo) matchDate.$lte = new Date(dateTo);
+    } else {
+      // Default thisMonth nếu ko có range/date
+      const monthStart = new Date();
+      monthStart.setDate(1);
+      monthStart.setHours(0, 0, 0, 0);
+      matchDate.$gte = monthStart;
+    }
+    const match = {
+      "order.status": "paid",
+      "order.createdAt": matchDate,
+    };
+
+    if (storeId) {
+      match["order.storeId"] = new mongoose.Types.ObjectId(storeId); // Filter store nếu có
+    }
+
+    const topProducts = await OrderItem.aggregate([
+      // Join với Order để filter status 'paid' + date/store
+      {
+        $lookup: {
+          from: "orders",
+          localField: "orderId",
+          foreignField: "_id",
+          as: "order",
+        },
+      },
+      { $unwind: "$order" },
+      { $match: match }, // Match filter paid + date/store
+
+      // Group by productId, sum quantity/sales/count orders
+      {
+        $group: {
+          _id: "$productId",
+          totalQuantity: { $sum: "$quantity" }, // Tổng số lượng bán
+          totalSales: { $sum: "$subtotal" }, // Tổng doanh thu
+          countOrders: { $sum: 1 }, // Số order có sản phẩm này
+        },
+      },
+      // Sort top (quantity desc)
+      { $sort: { totalQuantity: -1 } },
+      // Limit
+      { $limit: parseInt(limit) },
+      // Populate product name/sku
+      {
+        $lookup: {
+          from: "products",
+          localField: "_id",
+          foreignField: "_id",
+          as: "product",
+        },
+      },
+      { $unwind: "$product" },
+      {
+        $project: {
+          // Project fields cần
+          productName: "$product.name",
+          productSku: "$product.sku",
+          totalQuantity: 1,
+          totalSales: 1,
+          countOrders: 1,
+        },
+      },
+    ]);
+    res.json({
+      message: `Top selling products thành công, limit ${limit}, kết quả: ${topProducts.length} sản phẩm`,
+      data: topProducts,
+    });
+  } catch (err) {
+    console.error("Lỗi top selling products:", err.message);
+    res.status(500).json({ message: "Lỗi server khi lấy top sản phẩm bán chạy" });
+  }
+};
+
+//api/orders/top-customers?limit=5&range=thisMonth&storeId=68e81dbffae46c6d9fe2e895
+const getTopFrequentCustomers = async (req, res) => {
+  try {
+    const { limit = 10, storeId, dateFrom, dateTo } = req.query; // Params: limit, storeId, dateFrom/To (optional)
+
+    // Xử lý date range (tương tự top products)
+    let matchDate = {};
+    const now = new Date();
+
+    if (req.query.range) {
+      switch (req.query.range) {
+        case "today":
+          matchDate = { $gte: new Date(now.setHours(0, 0, 0, 0)), $lte: new Date(now.setHours(23, 59, 59, 999)) };
+          break;
+        case "yesterday":
+          const yesterday = new Date(now);
+          yesterday.setDate(now.getDate() - 1);
+          matchDate = {
+            $gte: new Date(yesterday.setHours(0, 0, 0, 0)),
+            $lte: new Date(yesterday.setHours(23, 59, 59, 999)),
+          };
+          break;
+        case "thisWeek": // Tuần hiện tại từ Thứ 2, vì việt nam thứ 2 là đầu tuần
+          const currentDay = now.getDay(); // 0 (Sun) -> 6 (Sat)
+          const diffToMonday = currentDay === 0 ? 6 : currentDay - 1; // Nếu chủ nhật -> lùi 6 ngày
+          const monday = new Date(now);
+          monday.setDate(now.getDate() - diffToMonday);
+          matchDate = { $gte: new Date(monday.setHours(0, 0, 0, 0)) };
+          break;
+        case "thisMonth":
+          const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+          matchDate = { $gte: new Date(monthStart.setHours(0, 0, 0, 0)) };
+          break;
+        case "thisYear":
+          const yearStart = new Date(now.getFullYear(), 0, 1);
+          matchDate = { $gte: new Date(yearStart.setHours(0, 0, 0, 0)) };
+          break;
+        default:
+          matchDate = {}; // Default nếu range sai
+      }
+    } else if (dateFrom || dateTo) {
+      if (dateFrom) matchDate.$gte = new Date(dateFrom);
+      if (dateTo) matchDate.$lte = new Date(dateTo);
+    } else {
+      // Default thisMonth nếu ko có range/date
+      const monthStart = new Date();
+      monthStart.setDate(1);
+      monthStart.setHours(0, 0, 0, 0);
+      matchDate.$gte = monthStart;
+    }
+
+    const match = {
+      status: "paid", // Chỉ order đã thanh toán
+      createdAt: matchDate, // Filter date range
+    };
+
+    if (storeId) {
+      match.storeId = new mongoose.Types.ObjectId(storeId); // Filter store nếu có
+    }
+
+    const topCustomers = await Order.aggregate([
+      // Match filter paid + date/store
+      { $match: match },
+
+      // Join với OrderItem để sum totalAmount per order (nếu cần, nhưng group by phone từ Order.customerInfo.phone)
+      {
+        $lookup: {
+          from: "order_items",
+          localField: "_id",
+          foreignField: "orderId",
+          as: "items",
+        },
+      },
+      {
+        $addFields: {
+          totalOrderAmount: { $sum: "$items.subtotal" }, // Sum subtotal từ items per order
+        },
+      },
+      { $unwind: "$items" }, // Unwind để group by phone
+      {
+        $group: {
+          // Group by phone (unique identifier), sum countOrders + totalAmount
+          _id: "$customerInfo.phone", // Group by phone
+          customerName: { $first: "$customerInfo.name" }, // Lấy name đầu tiên (có thể trùng)
+          totalQuantity: { $sum: 1 }, // Số lần mua (countOrders)
+          totalAmount: { $sum: "$items.subtotal" }, // Tổng chi tiêu
+          uniqueOrders: { $addToSet: "$_id" }, // Array orderId unique nếu cần đếm đơn hàng
+          countUniqueOrders: { $sum: 1 }, // Số đơn hàng unique (size uniqueOrders sau)
+        },
+      },
+      {
+        $addFields: { countUniqueOrders: { $size: "$uniqueOrders" } }, // Size array uniqueOrders
+      },
+      { $sort: { totalQuantity: -1 } }, // Sort desc số lần mua
+      { $limit: parseInt(limit) }, // Limit
+      {
+        $project: {
+          // Project fields cần (bỏ uniqueOrders array)
+          customerPhone: "$_id",
+          customerName: 1,
+          totalQuantity: 1,
+          totalAmount: 1,
+          countUniqueOrders: 1,
+        },
+      },
+    ]);
+
+    console.log(`Top frequent customers thành công, limit ${limit}, kết quả: ${topCustomers.length} khách`);
+    res.json({ message: "Top khách hàng thường xuyên", data: topCustomers });
+  } catch (err) {
+    console.error("Lỗi top frequent customers:", err.message);
+    res.status(500).json({ message: "Lỗi server khi lấy top khách hàng thường xuyên" });
+  }
+};
+
+// GET /api/orders/top-products/export - Export top sản phẩm bán chạy ra CSV hoặc PDF (params giống getTopSellingProducts + format='csv' or 'pdf')
+const exportTopSellingProducts = async (req, res) => {
+  try {
+    const { limit = 10, storeId, range, dateFrom, dateTo, format = "csv" } = req.query;
+    // Xử lý date range (giống getTopSellingProducts)
+    let matchDate = {};
+    const now = new Date();
+
+    if (range) {
+      switch (range) {
+        case "today":
+          matchDate = { $gte: new Date(now.setHours(0, 0, 0, 0)), $lte: new Date(now.setHours(23, 59, 59, 999)) };
+          break;
+        case "yesterday":
+          const yesterday = new Date(now);
+          yesterday.setDate(now.getDate() - 1);
+          matchDate = {
+            $gte: new Date(yesterday.setHours(0, 0, 0, 0)),
+            $lte: new Date(yesterday.setHours(23, 59, 59, 999)),
+          };
+          break;
+        case "thisWeek": // Tuần hiện tại từ Thứ 2, vì việt nam thứ 2 là đầu tuần
+          const currentDay = now.getDay(); // 0 (Sun) -> 6 (Sat)
+          const diffToMonday = currentDay === 0 ? 6 : currentDay - 1; // Nếu chủ nhật -> lùi 6 ngày
+          const monday = new Date(now);
+          monday.setDate(now.getDate() - diffToMonday);
+          matchDate = { $gte: new Date(monday.setHours(0, 0, 0, 0)) };
+          break;
+        case "thisMonth":
+          const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+          matchDate = { $gte: new Date(monthStart.setHours(0, 0, 0, 0)) };
+          break;
+        case "thisYear":
+          const yearStart = new Date(now.getFullYear(), 0, 1);
+          matchDate = { $gte: new Date(yearStart.setHours(0, 0, 0, 0)) };
+          break;
+        default:
+          matchDate = {}; // Default nếu range sai
+      }
+    } else if (dateFrom || dateTo) {
+      if (dateFrom) matchDate.$gte = new Date(dateFrom);
+      if (dateTo) matchDate.$lte = new Date(dateTo);
+    } else {
+      // Default thisMonth nếu ko có range/date
+      const monthStart = new Date();
+      monthStart.setDate(1);
+      monthStart.setHours(0, 0, 0, 0);
+      matchDate.$gte = monthStart;
+    }
+
+    const match = {
+      "order.status": "paid",
+      "order.createdAt": matchDate,
+    };
+
+    if (storeId) {
+      match["order.storeId"] = new mongoose.Types.ObjectId(storeId); // Filter store nếu có
+    }
+
+    const topProducts = await OrderItem.aggregate([
+      // Join với Order để filter status 'paid' + date/store
+      {
+        $lookup: {
+          from: "orders",
+          localField: "orderId",
+          foreignField: "_id",
+          as: "order",
+        },
+      },
+      { $unwind: "$order" },
+      { $match: match }, // Match filter paid + date/store
+
+      // Group by productId, sum quantity/sales/count orders
+      {
+        $group: {
+          _id: "$productId",
+          totalQuantity: { $sum: "$quantity" }, // Tổng số lượng bán
+          totalSales: { $sum: "$subtotal" }, // Tổng doanh thu
+          countOrders: { $sum: 1 }, // Số order có sản phẩm này
+        },
+      },
+
+      // Sort top (quantity desc)
+      { $sort: { totalQuantity: -1 } },
+
+      // Limit
+      { $limit: parseInt(limit) },
+
+      // Populate product name/sku
+      {
+        $lookup: {
+          from: "products",
+          localField: "_id",
+          foreignField: "_id",
+          as: "product",
+        },
+      },
+      { $unwind: "$product" },
+      {
+        $project: {
+          // Project fields cần
+          productName: "$product.name",
+          productSku: "$product.sku",
+          totalQuantity: 1,
+          totalSales: 1,
+          countOrders: 1,
+        },
+      },
+    ]);
+
+    if (format === "csv") {
+      // Convert data sang CSV string với json2csv
+      const fields = ["productName", "productSku", "totalQuantity", "totalSales", "countOrders"]; // Fields CSV
+      const csv = new Parser({ fields }).parse(topProducts); // Parse data sang CSV
+      res.header("Content-Type", "text/csv"); // Set header CSV
+      res.attachment("top-selling-products.csv"); // Tên file download
+      res.send(csv); // Gửi CSV string
+    } else if (format === "pdf") {
+      // Generate PDF với pdfkit (table top products)
+      const doc = new PDFDocument();
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", "attachment; filename=top-selling-products.pdf");
+      doc.pipe(res); // Pipe PDF stream vào response
+
+      // Header PDF
+      doc.fontSize(20).text("Báo cáo Top Sản phẩm Bán chạy", { align: "center" });
+      doc.moveDown();
+      doc.fontSize(12).text(`Thời gian: ${new Date().toLocaleDateString("vi-VN")}`);
+      doc.moveDown(0.5);
+
+      // Table header
+      doc.fontSize(10).text("STT", 50, doc.y);
+      doc.text("Tên sản phẩm", 100, doc.y);
+      doc.text("SKU", 250, doc.y);
+      doc.text("Số lượng bán", 300, doc.y);
+      doc.text("Doanh thu", 350, doc.y);
+      doc.text("Số đơn hàng", 450, doc.y);
+      doc.moveDown();
+
+      // Table data
+      topProducts.forEach((prod, index) => {
+        doc.text((index + 1).toString(), 50, doc.y);
+        doc.text(prod.productName, 100, doc.y);
+        doc.text(prod.productSku, 250, doc.y);
+        doc.text(prod.totalQuantity.toString(), 300, doc.y);
+        doc.text(prod.totalSales.toString() + " VND", 350, doc.y);
+        doc.text(prod.countOrders.toString(), 450, doc.y);
+        doc.moveDown();
+      });
+
+      doc.end(); // End PDF stream
+    } else {
+      // Default JSON response
+      res.json({
+        message: `Top selling products thành công, limit ${limit}, kết quả: ${topProducts.length} sản phẩm`,
+        data: topProducts,
+      });
+    }
+  } catch (err) {
+    console.error("Lỗi top selling products:", err.message);
+    res.status(500).json({ message: "Lỗi server khi lấy top sản phẩm bán chạy" });
+  }
+};
+
+module.exports = {
+  createOrder,
+  setPaidCash,
+  printBill,
+  vietqrReturn,
+  vietqrCancel,
+  getOrderById,
+  refundOrder,
+  getTopSellingProducts,
+  getTopFrequentCustomers,
+  exportTopSellingProducts,
+};
