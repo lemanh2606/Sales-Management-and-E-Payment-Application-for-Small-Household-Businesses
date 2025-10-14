@@ -28,8 +28,8 @@ async function generateQRWithPayOS(req) {
     orderCode: txnRef,
     amount,
     description: orderInfo,
-    returnUrl: "http://localhost:9999/api/payments/vietqr_return",
-    cancelUrl: "http://localhost:9999/api/payments/vietqr_cancel",
+    returnUrl: "http://localhost:9999/api/orders/payments/vietqr_return",
+    cancelUrl: "http://localhost:9999/api/orders/payments/vietqr_cancel",
   };
 
   // Tạo signature chuẩn
@@ -108,7 +108,7 @@ async function generateQRWithPayOS(req) {
 
       console.log(`✅ [SIMULATOR] Webhook giả lập gửi thành công cho đơn ${txnRef}`);
     } catch (err) {
-      console.error("❌ [SIMULATOR] Gửi webhook giả lập thất bại:", err.message);
+      console.error("❌ [SIMULATOR] Gửi webhook giả lập thất bại, hãy bật ngrok:", err.message);
     }
   }, 30000); // sau 30s
 

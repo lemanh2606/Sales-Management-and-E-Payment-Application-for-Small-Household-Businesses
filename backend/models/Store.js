@@ -1,3 +1,4 @@
+// models/Store.js
 const mongoose = require("mongoose");
 
 const storeSchema = new mongoose.Schema(

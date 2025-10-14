@@ -1,17 +1,4 @@
 // backend/middleware/authMiddleware.js
-/**
- * Middleware xác thực & quyền:
- * - verifyToken: verify JWT, gắn req.user = { id, role, ... }
- * - isManager: chỉ phép MANAGER
- * - isStaff: chỉ phép STAFF
- * - checkStoreAccess: kiểm tra quyền truy cập một store (owner hoặc staff assigned)
- *
- * Ghi chú:
- * - Cần đặt process.env.JWT_SECRET trong .env
- * - Cần models User & Store ở ../models
- * - Sử dụng cùng cấu trúc User/Store như project
- */
-
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const Store = require("../models/Store");
@@ -19,10 +6,6 @@ const mongoose = require("mongoose");
 
 const JWT_SECRET = process.env.JWT_SECRET || "default_jwt_secret_change_in_env";
 
-/**
- * verifyToken: middleware đọc header Authorization: Bearer <token>
- * Nếu hợp lệ -> gắn req.user = decoded payload
- */
 async function verifyToken(req, res, next) {
   try {
     const authHeader = req.headers["authorization"] || req.headers["Authorization"];
@@ -51,9 +34,6 @@ async function verifyToken(req, res, next) {
   }
 }
 
-/**
- * isManager: allow only users with global role MANAGER
- */
 function isManager(req, res, next) {
   try {
     if (req.user && req.user.role === "MANAGER") return next();
@@ -64,9 +44,6 @@ function isManager(req, res, next) {
   }
 }
 
-/**
- * isStaff: allow only users with global role STAFF
- */
 function isStaff(req, res, next) {
   try {
     if (req.user && req.user.role === "STAFF") return next();
@@ -78,67 +55,93 @@ function isStaff(req, res, next) {
 }
 
 /**
- * checkStoreAccess:
- * - Xác định storeId từ: req.params.storeId || req.body.storeId || user.current_store
- * - Kiểm tra:
- *    + Nếu user là MANAGER và owner_id === userId -> OK
- *    + Nếu user có mapping trong user.store_roles -> OK (role OWNER/STAFF)
- * - Gắn req.store và req.storeRole rồi next()
+ * checkStoreAccess (phiên bản Multi-Tenant)
+ * - Hỗ trợ cả shopId và storeId
+ * - Manager chỉ được vào store thuộc quyền sở hữu (owner_id)
+ * - Staff chỉ được vào store được phân trong store_roles
+ * - Nếu không truyền storeId/shopId → dùng current_store trong User
  */
 async function checkStoreAccess(req, res, next) {
   try {
     const userId = req.user?.id;
-    if (!userId) return res.status(401).json({ message: "User chưa xác thực" });
+    if (!userId) {
+      return res.status(401).json({ message: "User chưa xác thực" });
+    }
 
-    let storeId = req.params?.storeId || req.body?.storeId || null;
+    // 1️⃣ Lấy storeId từ nhiều nguồn (linh hoạt FE)
+    let storeId =
+      req.query.shopId ||
+      req.query.storeId ||
+      req.params.storeId ||
+      req.body.storeId ||
+      null;
 
-    // Nếu chưa có storeId, lấy từ DB user.current_store
-    if (!storeId) {
-      const user = await User.findById(userId).lean();
-      if (user && user.current_store) storeId = String(user.current_store);
+    // 🔍 Load user thực từ DB
+    const userData = await User.findById(userId).lean();
+    if (!storeId && userData?.current_store) {
+      storeId = String(userData.current_store);
     }
 
     if (!storeId) {
-      return res.status(400).json({ message: "storeId không được cung cấp" });
+      return res.status(400).json({
+        message: "Thiếu storeId/shopId (không xác định được cửa hàng)",
+      });
     }
 
     if (!mongoose.Types.ObjectId.isValid(storeId)) {
       return res.status(400).json({ message: "storeId không hợp lệ" });
     }
 
-    const store = await Store.findById(storeId);
-    if (!store) return res.status(404).json({ message: "Cửa hàng không tồn tại" });
-
-    // Nếu là owner (MANAGER) và trùng owner_id
-    if (req.user.role === "MANAGER" && String(store.owner_id) === String(userId)) {
-      req.store = store;
-      req.storeRole = "OWNER";
-      return next();
+    // 2️⃣ Lấy store
+    const store = await Store.findById(storeId).lean();
+    if (!store) {
+      return res.status(404).json({
+        message: "Cửa hàng không tồn tại hoặc đã bị xóa",
+      });
+    }
+    // 3️⃣ PHÂN QUYỀN
+    // 🟢 MANAGER → chỉ được vào store mình sở hữu
+    if (req.user.role === "MANAGER") {
+      if (String(store.owner_id) === String(userId)) {
+        console.log("✅Log này báo: MANAGER đã vào được store của mình");
+        req.store = store;
+        req.storeRole = "OWNER";
+        return next();
+      } else {
+        console.log("🚫 MANAGER TRUY CẬP STORE KHÔNG PHẢI OWNER");
+        return res.status(403).json({
+          message: "Manager không sở hữu cửa hàng này",
+        });
+      }
     }
 
-    // Kiểm tra mapping trong user.store_roles (nếu user được gán là STAFF trên store)
-    const user = await User.findById(userId);
-    if (!user) return res.status(401).json({ message: "User không tồn tại" });
+    // 🔵 STAFF → Kiểm tra store_roles
+    if (req.user.role === "STAFF") {
+      const roleMapping =
+        (userData.store_roles || []).find(
+          (r) => String(r.store) === String(store._id)
+        ) || null;
 
-    const mapping = (user.store_roles || []).find((r) => String(r.store) === String(store._id));
-    if (mapping) {
-      req.store = store;
-      req.storeRole = mapping.role === "OWNER" ? "OWNER" : "STAFF";
-      return next();
+      if (roleMapping) {
+        console.log("✅ STAFF ĐƯỢC GÁN STORE → ALLOW");
+        req.store = store;
+        req.storeRole = roleMapping.role; // OWNER / STAFF
+        return next();
+      }
+      console.log("🚫 STAFF TRUY CẬP STORE KHÔNG ĐƯỢC GÁN");
+      return res.status(403).json({
+        message: "Nhân viên không có quyền tại cửa hàng này",
+      });
     }
 
-    // Nếu không đủ quyền
-    return res.status(403).json({ message: "Bạn không có quyền truy cập cửa hàng này" });
+    // ❗Nếu không thuộc MANAGER / STAFF
+    return res.status(403).json({
+      message: "Role không hợp lệ để truy cập cửa hàng",
+    });
   } catch (err) {
     console.error("checkStoreAccess error:", err);
-    return res.status(500).json({ message: "Lỗi server" });
+    return res.status(500).json({ message: "Lỗi server ở checkStoreAccess" });
   }
 }
 
-// Xuất các hàm để router import bằng destructuring
-module.exports = {
-  verifyToken,
-  isManager,
-  isStaff,
-  checkStoreAccess,
-};
+module.exports = { verifyToken, isManager, isStaff, checkStoreAccess };
