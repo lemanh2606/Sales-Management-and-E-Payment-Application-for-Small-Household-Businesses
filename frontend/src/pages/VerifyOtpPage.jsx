@@ -31,7 +31,7 @@ export default function VerifyOtpPage() {
       const res = await verifyOtp({ email, otp });
 
       await Swal.fire({
-        title: "✅ Xác thực thành công!",
+        title: " Xác thực thành công!",
         text: res.message || "Tài khoản của bạn đã được xác thực. Hãy đăng nhập để tiếp tục.",
         icon: "success",
         confirmButtonText: "Đi đến đăng nhập",
@@ -42,7 +42,7 @@ export default function VerifyOtpPage() {
       navigate("/login");
     } catch (err) {
       Swal.fire({
-        title: "❌ Lỗi xác thực!",
+        title: " Lỗi xác thực!",
         text: err?.response?.data?.message || err?.message || "Mã OTP không hợp lệ hoặc đã hết hạn.",
         icon: "error",
         confirmButtonText: "Thử lại",
@@ -69,7 +69,7 @@ export default function VerifyOtpPage() {
       setTimer(60 * Number(import.meta.env.VITE_OTP_EXPIRE_MINUTES || 5));
     } catch (err) {
       Swal.fire({
-        title: "😢 Không thể gửi lại OTP!",
+        title: " Không thể gửi lại OTP!",
         text: err?.response?.data?.message || "Đã xảy ra lỗi khi gửi lại mã OTP.",
         icon: "error",
         confirmButtonText: "Đóng",

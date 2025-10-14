@@ -6,17 +6,27 @@ const connectDB = require("./config/db");
 const morgan = require("morgan");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
+const listEndpoints = require("express-list-endpoints");
+const path = require("path");
 const errorHandler = require("./middlewares/errorHandler");
 const notFoundHandler = require("./middlewares/notFoundHandler");
-
-require("./models/Product");
-require("./models/ProductGroup");
-require("./models/Supplier");
-require("./models/Employee");
-require("./models/StockDisposal");
-require("./models/StockCheck");
-require("./models/PurchaseOrder");
-require("./models/PurchaseReturn");
+// Swagger
+const swaggerUi = require("swagger-ui-express");
+const YAML = require("yamljs");
+const swaggerDocument = YAML.load(path.join(__dirname, "swagger.yaml")); // 👈 nhớ tạo file swagger.yaml
+// --- DB CONNECT ---
+connectDB();
+// --- LOAD MODELS ---
+[
+  "Product",
+  "ProductGroup",
+  "Supplier",
+  "Employee",
+  "StockDisposal",
+  "StockCheck",
+  "PurchaseOrder",
+  "PurchaseReturn",
+].forEach(model => require(`./models/${model}`));
 
 const app = express();
 const server = http.createServer(app); // 👈 Tạo server http để gắn socket.io
@@ -32,7 +42,6 @@ const io = new Server(server, {
 
 // Lưu io vào app để controller có thể sử dụng (req.app.get("io"))
 app.set("io", io);
-
 // 🧠 Khi có client kết nối socket
 io.on("connection", (socket) => {
   console.log(`🟢 Client kết nối: ${socket.id}`);
@@ -41,15 +50,13 @@ io.on("connection", (socket) => {
     console.log(`🔴 Client ngắt kết nối: ${socket.id}`);
   });
 });
-
-connectDB();
 require("./services/cronJobs");
 
 // Webhook PayOS phải viết trước express.json()
 const orderWebhookHandler = require("./routers/orderWebhookHandler");
 app.post("/api/orders/vietqr-webhook", express.raw({ type: "*/*" }), orderWebhookHandler);
 
-// Middleware
+// --- MIDDLEWARE ---
 app.use(
   cors({
     origin: "http://localhost:3000",
@@ -63,12 +70,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(morgan("dev"));
 
-// Test route
-app.get("/", (req, res) => {
-  res.send("Backend đã chạy 🚀 (Socket.io active 🔔)");
-});
-
-// Routers
+// --- ROUTERS ---
 const storeRouters = require("./routers/storeRouters");
 const userRouters = require("./routers/userRouters");
 const productRouters = require("./routers/productRouters");
@@ -81,6 +83,7 @@ const purchaseReturnRouters = require("./routers/purchaseReturnRouters");
 const orderRouters = require("./routers/orderRouters");
 const taxRouters = require("./routers/taxRouters");
 
+// --- MOUNT ROUTERS ---
 app.use("/api/stores", storeRouters);
 app.use("/api/users", userRouters);
 app.use("/api/products", productRouters);
@@ -93,13 +96,45 @@ app.use("/api/purchase-returns", purchaseReturnRouters);
 app.use("/api/orders", orderRouters);
 app.use("/api/tax", taxRouters);
 
-// Middleware 404 + error
+// --- ROOT ---
+app.get("/", (req, res) => {
+  res.send("✅ Backend đang chạy ổn định 🚀");
+});
+
+// --- API OVERVIEW (JSON) ---
+app.get("/api", (req, res) => {
+  const endpoints = listEndpoints(app);
+  const grouped = {};
+
+  endpoints.forEach(ep => {
+    const prefix = ep.path.split("/")[2] || "root";
+    if (!grouped[prefix]) grouped[prefix] = [];
+    grouped[prefix].push({
+      methods: ep.methods,
+      path: ep.path,
+    });
+  });
+
+  res.json({
+    status: "ok",
+    totalEndpoints: endpoints.length,
+    totalModules: Object.keys(grouped).length,
+    endpoints: grouped,
+  });
+});
+
+// --- SWAGGER UI ---
+app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+
+// --- ERROR HANDLERS ---
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-// Khởi động server
+// --- SERVER START ---
 const PORT = process.env.PORT || 9999;
 server.listen(PORT, () => {
   console.log(`🔥 Server running: http://localhost:${PORT}`);
   console.log("🔔 Socket.io đang hoạt động...");
+  console.log(`📘 Swagger Docs:  http://localhost:${PORT}/docs`);
+  console.log(`📋 API Overview:  http://localhost:${PORT}/api`);
 });
