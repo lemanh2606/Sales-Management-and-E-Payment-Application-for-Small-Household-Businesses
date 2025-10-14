@@ -1,25 +1,21 @@
 require("dotenv").config();
 const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
 const connectDB = require("./config/db");
 const morgan = require("morgan");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const listEndpoints = require("express-list-endpoints");
 const path = require("path");
-
 const errorHandler = require("./middlewares/errorHandler");
 const notFoundHandler = require("./middlewares/notFoundHandler");
-
-
-
 // Swagger
 const swaggerUi = require("swagger-ui-express");
 const YAML = require("yamljs");
 const swaggerDocument = YAML.load(path.join(__dirname, "swagger.yaml")); // 👈 nhớ tạo file swagger.yaml
-
 // --- DB CONNECT ---
 connectDB();
-
 // --- LOAD MODELS ---
 [
   "Product",
@@ -33,11 +29,30 @@ connectDB();
 ].forEach(model => require(`./models/${model}`));
 
 const app = express();
+const server = http.createServer(app); // 👈 Tạo server http để gắn socket.io
 
-// --- SERVICES ---
+// ⚡ Khởi tạo Socket.io
+const io = new Server(server, {
+  cors: {
+    origin: "http://localhost:3000", // 👈 FE React
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "Cache-Control", "Pragma"],
+  },
+});
+
+// Lưu io vào app để controller có thể sử dụng (req.app.get("io"))
+app.set("io", io);
+// 🧠 Khi có client kết nối socket
+io.on("connection", (socket) => {
+  console.log(`🟢 Client kết nối: ${socket.id}`);
+
+  socket.on("disconnect", () => {
+    console.log(`🔴 Client ngắt kết nối: ${socket.id}`);
+  });
+});
 require("./services/cronJobs");
 
-// --- WEBHOOK RAW BODY ---
+// Webhook PayOS phải viết trước express.json()
 const orderWebhookHandler = require("./routers/orderWebhookHandler");
 app.post("/api/orders/vietqr-webhook", express.raw({ type: "*/*" }), orderWebhookHandler);
 
@@ -66,6 +81,7 @@ const supplierRouters = require("./routers/supplierRouters");
 const purchaseOrderRouters = require("./routers/purchaseOrderRouters");
 const purchaseReturnRouters = require("./routers/purchaseReturnRouters");
 const orderRouters = require("./routers/orderRouters");
+const taxRouters = require("./routers/taxRouters");
 
 // --- MOUNT ROUTERS ---
 app.use("/api/stores", storeRouters);
@@ -78,6 +94,7 @@ app.use("/api/suppliers", supplierRouters);
 app.use("/api/purchase-orders", purchaseOrderRouters);
 app.use("/api/purchase-returns", purchaseReturnRouters);
 app.use("/api/orders", orderRouters);
+app.use("/api/tax", taxRouters);
 
 // --- ROOT ---
 app.get("/", (req, res) => {
@@ -115,8 +132,9 @@ app.use(errorHandler);
 
 // --- SERVER START ---
 const PORT = process.env.PORT || 9999;
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`🔥 Server running: http://localhost:${PORT}`);
+  console.log("🔔 Socket.io đang hoạt động...");
   console.log(`📘 Swagger Docs:  http://localhost:${PORT}/docs`);
   console.log(`📋 API Overview:  http://localhost:${PORT}/api`);
 });
