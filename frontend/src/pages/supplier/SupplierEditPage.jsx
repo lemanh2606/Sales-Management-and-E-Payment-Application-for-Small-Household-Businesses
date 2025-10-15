@@ -1,10 +1,16 @@
 import React, { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import axios from "axios";
+import { useNavigate, useParams } from "react-router-dom";
+import Layout from "../../components/Layout";
+import Button from "../../components/Button";
+import { getSupplierById, updateSupplier } from "../../api/supplierApi";
+import toast from "react-hot-toast";
 
-function SupplierEditPage() {
-  const { supplierId } = useParams();
+export default function SupplierEditPage() {
   const navigate = useNavigate();
+  const { supplierId } = useParams();
+  const storeObj = JSON.parse(localStorage.getItem("currentStore")) || {};
+  const storeId = storeObj._id || null;
+
   const [formData, setFormData] = useState({
     name: "",
     phone: "",
@@ -13,147 +19,142 @@ function SupplierEditPage() {
     status: "đang hoạt động",
   });
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  // 🧩 Lấy thông tin supplier để điền vào form
   useEffect(() => {
     const fetchSupplier = async () => {
       try {
-        const token = localStorage.getItem("token");
-        const res = await axios.get(
-          `${import.meta.env.VITE_API_URL || "http://localhost:9999"}/suppliers/${supplierId}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
+        setLoading(true);
+        const supplier = await getSupplierById(supplierId);
+        const data = supplier?.supplier ?? supplier ?? {};
         setFormData({
-          name: res.data.supplier.name || "",
-          phone: res.data.supplier.phone || "",
-          email: res.data.supplier.email || "",
-          address: res.data.supplier.address || "",
-          status: res.data.supplier.status || "đang hoạt động",
+          name: data.name || "",
+          phone: data.phone || "",
+          email: data.email || "",
+          address: data.address || "",
+          status: data.status || "đang hoạt động",
         });
       } catch (err) {
         console.error("Lỗi tải thông tin nhà cung cấp:", err);
-        setError(err.response?.data?.message || "Không thể tải thông tin nhà cung cấp.");
+        toast.error(
+          err?.response?.data?.message ||
+          err?.message ||
+          "Không thể tải thông tin nhà cung cấp."
+        );
       } finally {
         setLoading(false);
       }
     };
 
     if (supplierId) fetchSupplier();
+    else {
+      toast.error("Không có supplierId trong URL.");
+      setLoading(false);
+    }
   }, [supplierId]);
 
-  // 📝 Cập nhật giá trị form
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // 💾 Gửi cập nhật lên server
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!storeId) {
+      toast.error("Chưa chọn cửa hàng.");
+      return;
+    }
+
+    setSaving(true);
     try {
-      const token = localStorage.getItem("token");
-      await axios.put(
-        `${import.meta.env.VITE_API_URL || "http://localhost:9999"}/suppliers/${supplierId}`,
-        formData,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-      alert("✅ Cập nhật thành công!");
-      navigate(-1); // quay lại trang trước (danh sách)
+      await updateSupplier(supplierId, formData);
+      toast.success(" Cập nhật nhà cung cấp thành công!");
+      setTimeout(() => navigate(`/stores/${storeId}/suppliers`), 700);
     } catch (err) {
       console.error("Lỗi cập nhật:", err);
-      alert(err.response?.data?.message || "Không thể cập nhật nhà cung cấp.");
+      toast.error(
+        err?.response?.data?.message ||
+        err?.message ||
+        "Không thể cập nhật nhà cung cấp."
+      );
+    } finally {
+      setSaving(false);
     }
   };
 
-  if (loading) return <p className="text-center mt-10">⏳ Đang tải...</p>;
-  if (error) return <p className="text-center text-red-600 mt-10">❌ {error}</p>;
+  if (loading)
+    return (
+      <Layout>
+        <p className="text-center mt-10 text-gray-500 animate-pulse">
+          ⏳ Đang tải thông tin nhà cung cấp...
+        </p>
+      </Layout>
+    );
 
   return (
-    <div className="max-w-lg mx-auto mt-10 p-6 bg-white shadow rounded">
-      <h1 className="text-2xl font-bold mb-4">Cập nhật nhà cung cấp</h1>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="block font-medium">Tên nhà cung cấp</label>
-          <input
-            type="text"
-            name="name"
-            value={formData.name}
-            onChange={handleChange}
-            className="border p-2 w-full rounded"
-            required
-          />
-        </div>
-        <div>
-          <label className="block font-medium">Số điện thoại</label>
-          <input
-            type="text"
-            name="phone"
-            value={formData.phone}
-            onChange={handleChange}
-            className="border p-2 w-full rounded"
-          />
-        </div>
-        <div>
-          <label className="block font-medium">Email</label>
-          <input
-            type="email"
-            name="email"
-            value={formData.email}
-            onChange={handleChange}
-            className="border p-2 w-full rounded"
-          />
-        </div>
-        <div>
-          <label className="block font-medium">Địa chỉ</label>
-          <input
-            type="text"
-            name="address"
-            value={formData.address}
-            onChange={handleChange}
-            className="border p-2 w-full rounded"
-          />
-        </div>
-        <div>
-          <label className="block font-medium">Trạng thái</label>
-          <select
-            name="status"
-            value={formData.status}
-            onChange={handleChange}
-            className="border p-2 w-full rounded"
-          >
-            <option value="đang hoạt động">Đang hoạt động</option>
-            <option value="ngừng hợp tác">Ngừng hợp tác</option>
-          </select>
-        </div>
+    <Layout>
+      <div className="max-w-xl mx-auto mt-10 p-8 bg-white rounded-3xl shadow-md border border-blue-100">
+        <h1 className="text-3xl font-bold mb-6 text-blue-700 text-center ">
+          Cập nhật nhà cung cấp
+        </h1>
 
-        <div className="flex justify-between">
-          <button
-            type="button"
-            onClick={() => navigate(-1)}
-            className="px-4 py-2 bg-gray-400 text-white rounded hover:bg-gray-500"
-          >
-            Hủy
-          </button>
-          <button
-            type="submit"
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          >
-            Lưu thay đổi
-          </button>
-        </div>
-      </form>
-    </div>
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {["name", "phone", "email", "address"].map((field) => (
+            <div key={field}>
+              <label className="block mb-1 font-medium text-gray-700 capitalize">
+                {field === "name"
+                  ? "Tên nhà cung cấp *"
+                  : field === "phone"
+                    ? "Số điện thoại"
+                    : field === "email"
+                      ? "Email"
+                      : "Địa chỉ"}
+              </label>
+              <input
+                type={field === "email" ? "email" : "text"}
+                name={field}
+                value={formData[field]}
+                onChange={handleChange}
+                required={field === "name"}
+                placeholder={`Nhập ${field}`}
+                className="w-full border border-gray-300 p-3 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm hover:shadow-md transition"
+              />
+            </div>
+          ))}
+
+          <div>
+            <label className="block mb-1 font-medium text-gray-700">Trạng thái</label>
+            <select
+              name="status"
+              value={formData.status}
+              onChange={handleChange}
+              className="w-full border border-gray-300 p-3 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm hover:shadow-md transition"
+            >
+              <option value="đang hoạt động">Đang hoạt động</option>
+              <option value="ngừng hoạt động">Ngừng hoạt động</option>
+            </select>
+          </div>
+
+          <div className="flex justify-between pt-6">
+            <Button
+              type="button"
+              className="bg-gray-100 text-blue-600 hover:bg-blue-50 hover:text-blue-700 transition font-medium px-5 py-2 rounded-2xl shadow"
+              onClick={() => navigate(-1)}
+            >
+              Hủy
+            </Button>
+
+            <Button
+              type="submit"
+              disabled={saving}
+              className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-medium px-5 py-2 rounded-2xl shadow-lg transition"
+            >
+              {saving ? "Đang lưu..." : "Lưu thay đổi"}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </Layout>
   );
 }
-
-export default SupplierEditPage;
-    

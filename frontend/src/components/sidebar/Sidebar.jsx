@@ -6,7 +6,7 @@ import { AiOutlineDashboard } from "react-icons/ai";
 import { MdStorefront } from "react-icons/md";
 import { BsBoxSeam, BsPeople } from "react-icons/bs";
 import { MdShoppingCart } from "react-icons/md";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 
 export default function Sidebar() {
@@ -32,16 +32,28 @@ export default function Sidebar() {
         },
         {
             name: "Sản phẩm",
-            path: "/products",
+            path: "/stores/:storeId/products",
             icon: <BsBoxSeam size={20} />,
             children: [
-                { name: "Danh sách", path: "/products" },
-                { name: "Nhóm sản phẩm", path: "/product-groups" },
+                { name: "Danh sách", path: "/stores/:storeId/products" },
+                { name: "Tạo sản phẩm", path: "/stores/:storeId/products/create" },
+                { name: "Nhóm sản phẩm", path: "/product-groups" }, // nếu nhóm là global
+            ],
+        },
+        {
+            name: "Nhà cung cấp",
+            path: "/stores/:storeId/suppliers",
+            icon: <BsPeople size={20} />, // hoặc đổi icon nếu muốn
+            children: [
+                { name: "Danh sách nhà cung cấp", path: "/stores/:storeId/suppliers" },
+                { name: "Tạo nhà cung cấp", path: "/stores/:storeId/suppliers/create" },
+                // Edit nằm ngoài route store (suppliers/:supplierId/edit) => thường mở từ danh sách
             ],
         },
         { name: "Đơn hàng", path: "/orders", icon: <MdShoppingCart size={20} /> },
         { name: "Người dùng", path: "/users", icon: <BsPeople size={20} /> },
     ];
+
 
     return (
         <>
