@@ -14,28 +14,28 @@ const { verifyToken, isManager, checkStoreAccess } = require("../middlewares/aut
 
 /**
  * Flow:
- * 1️⃣ Preview doanh thu hệ thống (chưa lưu DB)
- * 2️⃣ Create tờ khai (bản gốc)
- * 3️⃣ Update tờ khai
- * 4️⃣ Clone (bản sao)
- * 5️⃣ Delete tờ khai (Manager only)
- * 6️⃣ List tất cả tờ khai theo cửa hàng/kỳ
- * 7️⃣ Export CSV/PDF
+ * 1️ Preview doanh thu hệ thống (chưa lưu DB)
+ * 2️ Create tờ khai (bản gốc)
+ * 3️ Update tờ khai
+ * 4️ Clone (bản sao)
+ * 5️ Delete tờ khai (Manager only)
+ * 6️ List tất cả tờ khai theo cửa hàng/kỳ
+ * 7️ Export CSV/PDF
  */
 
-// 1️⃣ PREVIEW: Xem tổng doanh thu hệ thống theo kỳ (chưa tạo DB)
+// 1️ PREVIEW: Xem tổng doanh thu hệ thống theo kỳ (chưa tạo DB)
 router.get("/preview", verifyToken, checkStoreAccess, previewSystemRevenue);
-// 2️⃣ CREATE: Tạo tờ khai thuế mới (bản gốc)
+// 2️ CREATE: Tạo tờ khai thuế mới (bản gốc)
 router.post("/", verifyToken, checkStoreAccess, createTaxDeclaration);
-// 3️⃣ UPDATE: Cập nhật khai báo doanh thu
+// 3️ UPDATE: Cập nhật khai báo doanh thu
 router.put("/:id", verifyToken, updateTaxDeclaration);
-// 4️⃣ CLONE: Tạo bản sao từ tờ khai cũ
+// 4️ CLONE: Tạo bản sao từ tờ khai cũ
 router.post("/:id/clone", verifyToken, cloneTaxDeclaration);
-// 5️⃣ DELETE: Xóa tờ khai (chỉ Manager)
+// 5️ DELETE: Xóa tờ khai (chỉ Manager)
 router.delete("/:id", verifyToken, isManager, deleteTaxDeclaration);
-// 6️⃣ LIST: Lấy danh sách tờ khai theo cửa hàng / kỳ
+// 6️ LIST: Lấy danh sách tờ khai theo cửa hàng / kỳ
 router.get("/", verifyToken, checkStoreAccess, listDeclarations); // Params: ?shopId=...&periodType=&periodKey=
-// 7️⃣ EXPORT: Xuất CSV/PDF
+// 7️ EXPORT: Xuất CSV/PDF
 router.get("/:id/export", verifyToken, exportDeclaration); // /api/tax/:id/export?format=csv  OR  format=pdf
 
 module.exports = router;

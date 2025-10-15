@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
+import Layout from "../../components/Layout";
 
 function ProductCreatePage() {
   const { storeId } = useParams();
@@ -72,124 +73,126 @@ function ProductCreatePage() {
   };
 
   return (
-    <div className="p-6 max-w-2xl mx-auto">
-      <h1 className="text-2xl font-semibold mb-6">Tạo sản phẩm mới</h1>
+    <Layout>
+      <div className="p-6 max-w-2xl mx-auto">
+        <h1 className="text-2xl font-semibold mb-6">Tạo sản phẩm mới</h1>
 
-      <form onSubmit={handleSubmit} className="space-y-4 bg-white shadow-md rounded-xl p-6">
-        <div>
-          <label className="block font-medium mb-1">Tên sản phẩm</label>
-          <input
-            type="text"
-            name="name"
-            required
-            value={formData.name}
-            onChange={handleChange}
-            className="border rounded-lg w-full px-3 py-2"
-          />
-        </div>
-
-        <div>
-          <label className="block font-medium mb-1">Mã SKU</label>
-          <input
-            type="text"
-            name="sku"
-            required
-            value={formData.sku}
-            onChange={handleChange}
-            className="border rounded-lg w-full px-3 py-2"
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
+        <form onSubmit={handleSubmit} className="space-y-4 bg-white shadow-md rounded-xl p-6">
           <div>
-            <label className="block font-medium mb-1">Giá nhập</label>
-            <input
-              type="number"
-              name="cost_price"
-              value={formData.cost_price}
-              onChange={handleChange}
-              className="border rounded-lg w-full px-3 py-2"
-            />
-          </div>
-
-          <div>
-            <label className="block font-medium mb-1">Giá bán</label>
-            <input
-              type="number"
-              name="price"
-              value={formData.price}
-              onChange={handleChange}
-              className="border rounded-lg w-full px-3 py-2"
-            />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block font-medium mb-1">Số lượng tồn kho</label>
-            <input
-              type="number"
-              name="stock_quantity"
-              value={formData.stock_quantity}
-              onChange={handleChange}
-              className="border rounded-lg w-full px-3 py-2"
-            />
-          </div>
-
-          <div>
-            <label className="block font-medium mb-1">Đơn vị tính</label>
+            <label className="block font-medium mb-1">Tên sản phẩm</label>
             <input
               type="text"
-              name="unit"
-              value={formData.unit}
+              name="name"
+              required
+              value={formData.name}
               onChange={handleChange}
               className="border rounded-lg w-full px-3 py-2"
             />
           </div>
-        </div>
 
-        <div>
-          <label className="block font-medium mb-1">Nhà cung cấp</label>
-          <select
-            name="supplier"
-            value={formData.supplier}
-            onChange={handleChange}
-            className="border rounded-lg w-full px-3 py-2"
+          <div>
+            <label className="block font-medium mb-1">Mã SKU</label>
+            <input
+              type="text"
+              name="sku"
+              required
+              value={formData.sku}
+              onChange={handleChange}
+              className="border rounded-lg w-full px-3 py-2"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block font-medium mb-1">Giá nhập</label>
+              <input
+                type="number"
+                name="cost_price"
+                value={formData.cost_price}
+                onChange={handleChange}
+                className="border rounded-lg w-full px-3 py-2"
+              />
+            </div>
+
+            <div>
+              <label className="block font-medium mb-1">Giá bán</label>
+              <input
+                type="number"
+                name="price"
+                value={formData.price}
+                onChange={handleChange}
+                className="border rounded-lg w-full px-3 py-2"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block font-medium mb-1">Số lượng tồn kho</label>
+              <input
+                type="number"
+                name="stock_quantity"
+                value={formData.stock_quantity}
+                onChange={handleChange}
+                className="border rounded-lg w-full px-3 py-2"
+              />
+            </div>
+
+            <div>
+              <label className="block font-medium mb-1">Đơn vị tính</label>
+              <input
+                type="text"
+                name="unit"
+                value={formData.unit}
+                onChange={handleChange}
+                className="border rounded-lg w-full px-3 py-2"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-medium mb-1">Nhà cung cấp</label>
+            <select
+              name="supplier"
+              value={formData.supplier}
+              onChange={handleChange}
+              className="border rounded-lg w-full px-3 py-2"
+            >
+              <option value="">-- Chọn nhà cung cấp --</option>
+              {suppliers.map((s) => (
+                <option key={s._id} value={s._id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block font-medium mb-1">Trạng thái</label>
+            <select
+              name="status"
+              value={formData.status}
+              onChange={handleChange}
+              className="border rounded-lg w-full px-3 py-2"
+            >
+              <option value="Đang kinh doanh">Đang kinh doanh</option>
+              <option value="Ngừng kinh doanh">Ngừng kinh doanh</option>
+            </select>
+          </div>
+
+          {error && <p className="text-red-600">{error}</p>}
+          {success && <p className="text-green-600">{success}</p>}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
           >
-            <option value="">-- Chọn nhà cung cấp --</option>
-            {suppliers.map((s) => (
-              <option key={s._id} value={s._id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block font-medium mb-1">Trạng thái</label>
-          <select
-            name="status"
-            value={formData.status}
-            onChange={handleChange}
-            className="border rounded-lg w-full px-3 py-2"
-          >
-            <option value="Đang kinh doanh">Đang kinh doanh</option>
-            <option value="Ngừng kinh doanh">Ngừng kinh doanh</option>
-          </select>
-        </div>
-
-        {error && <p className="text-red-600">{error}</p>}
-        {success && <p className="text-green-600">{success}</p>}
-
-        <button
-          type="submit"
-          disabled={loading}
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
-        >
-          {loading ? "Đang tạo..." : "Tạo sản phẩm"}
-        </button>
-      </form>
-    </div>
+            {loading ? "Đang tạo..." : "Tạo sản phẩm"}
+          </button>
+        </form>
+      </div>
+    </Layout>
   );
 }
 

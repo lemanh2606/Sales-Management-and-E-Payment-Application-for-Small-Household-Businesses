@@ -1,0 +1,2412 @@
+openapi: 3.0.3
+info:
+  title: Management API
+  description: API quản lý Users, Orders, Thanh toán, báo cáo bán hàng
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:9999/api
+    description: Local server
+
+tags:
+  - name: User
+    description: Quản lý đăng ký, login, OTP
+  - name: Orders
+    description: Quản lý hóa đơn và thanh toán
+
+paths:
+  # ===== User Routes =====
+  /users/register:
+    post:
+      tags:
+        - User
+      summary: Đăng ký Manager mới
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - email
+                - password
+              properties:
+                name:
+                  type: string
+                  example: "Nguyen Van A"
+                email:
+                  type: string
+                  example: "manager@example.com"
+                password:
+                  type: string
+                  example: "password123"
+      responses:
+        "201":
+          description: Tạo thành công Manager
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  userId:
+                    type: string
+        "400":
+          description: Lỗi dữ liệu đầu vào
+
+  /users/verify-otp:
+    post:
+      tags:
+        - User
+      summary: Xác thực OTP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - otp
+              properties:
+                email:
+                  type: string
+                  example: "manager@example.com"
+                otp:
+                  type: string
+                  example: "123456"
+      responses:
+        "200":
+          description: OTP hợp lệ
+        "400":
+          description: OTP không hợp lệ hoặc hết hạn
+
+  /users/login:
+    post:
+      tags:
+        - User
+      summary: Đăng nhập
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  example: "manager@example.com"
+                password:
+                  type: string
+                  example: "password123"
+      responses:
+        "200":
+          description: Đăng nhập thành công, trả về token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+        "401":
+          description: Email hoặc mật khẩu không đúng
+
+  /users/manager-dashboard:
+    get:
+      tags:
+        - User
+      summary: Dashboard dành cho Manager
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Truy cập thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        "401":
+          description: Token không hợp lệ
+        "403":
+          description: Chỉ Manager mới truy cập
+
+  /users/staff-dashboard:
+    get:
+      tags:
+        - User
+      summary: Dashboard dành cho Staff
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Truy cập thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        "401":
+          description: Token không hợp lệ
+        "403":
+          description: Chỉ Staff mới truy cập
+
+  # ===== Orders Routes =====
+  /orders/:
+    post:
+      tags:
+        - Orders
+      summary: Tạo hóa đơn mới (cash hoặc QR)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                customerName:
+                  type: string
+                  example: "Nguyen Van A"
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      productId:
+                        type: string
+                        example: "63f1c8..."
+                      quantity:
+                        type: integer
+                        example: 2
+                paymentMethod:
+                  type: string
+                  enum: [cash, qr]
+                  example: "cash"
+      responses:
+        "201":
+          description: Hóa đơn tạo thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  orderId:
+                    type: string
+                  message:
+                    type: string
+
+  /orders/{orderId}/set-paid-cash:
+    post:
+      tags:
+        - Orders
+      summary: Xác nhận hóa đơn đã thanh toán bằng tiền mặt
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Thanh toán thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        "404":
+          description: Hóa đơn không tồn tại
+
+  /orders/{orderId}/print-bill:
+    post:
+      tags:
+        - Orders
+      summary: In bill và trừ stock
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: In bill thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+
+  /orders/payments/vietqr_return:
+    get:
+      tags:
+        - Orders
+      summary: Callback khi thanh toán QR thành công
+      responses:
+        "200":
+          description: Nhận callback thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+
+  /orders/payments/vietqr_cancel:
+    get:
+      tags:
+        - Orders
+      summary: Callback khi khách hủy thanh toán QR
+      responses:
+        "200":
+          description: Nhận callback hủy thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+
+  /orders/top-customers:
+    get:
+      tags:
+        - Orders
+      summary: Top khách hàng thường xuyên (chỉ Manager)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Lấy danh sách khách hàng thành công
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    customerName:
+                      type: string
+                    orderCount:
+                      type: integer
+        "403":
+          description: Chỉ Manager mới truy cập
+
+  /orders/{orderId}/refund:
+    post:
+      tags:
+        - Orders
+      summary: Hoàn trả hóa đơn
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+      responses:
+        "200":
+          description: Hoàn trả thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+
+  /orders/top-products:
+    get:
+      tags:
+        - Orders
+      summary: Top sản phẩm bán chạy (chỉ Manager)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Lấy danh sách sản phẩm thành công
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    productName:
+                      type: string
+                    soldCount:
+                      type: integer
+        "403":
+          description: Chỉ Manager mới truy cập
+
+  /orders/top-products/export:
+    get:
+      tags:
+        - Orders
+      summary: Xuất danh sách top sản phẩm bán chạy ra CSV
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Xuất CSV thành công
+          content:
+            text/csv:
+              schema:
+                type: string
+
+  /orders/{orderId}:
+    get:
+      tags:
+        - Orders
+      summary: Lấy chi tiết hóa đơn theo ID
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Thông tin hóa đơn
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  orderId:
+                    type: string
+                  customerName:
+                    type: string
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        productId:
+                          type: string
+                        quantity:
+                          type: integer
+                  totalAmount:
+                    type: number
+                  status:
+                    type: string
+        "404":
+          description: Hóa đơn không tồn tại
+
+  # ===== Store Routes =====
+  /stores/ensure-store:
+    post:
+      tags:
+        - Store
+      summary: Kiểm tra hoặc tạo store mặc định cho user
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: "My Store"
+      responses:
+        "200":
+          description: Store đã được đảm bảo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  storeId:
+                    type: string
+                  message:
+                    type: string
+
+  /stores/:
+    post:
+      tags:
+        - Store
+      summary: Tạo store mới (Manager)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - address
+              properties:
+                name:
+                  type: string
+                  example: "Store A"
+                address:
+                  type: string
+                  example: "123 Nguyen Trai, Hanoi"
+      responses:
+        "201":
+          description: Tạo store thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  storeId:
+                    type: string
+                  message:
+                    type: string
+        "403":
+          description: Chỉ Manager mới tạo được store
+
+    get:
+      tags:
+        - Store
+      summary: Lấy danh sách store của Manager
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Danh sách store
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    storeId:
+                      type: string
+                    name:
+                      type: string
+                    address:
+                      type: string
+
+  /stores/{storeId}:
+    get:
+      tags:
+        - Store
+      summary: Lấy chi tiết store theo ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Thông tin store
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  storeId:
+                    type: string
+                  name:
+                    type: string
+                  address:
+                    type: string
+                  managerId:
+                    type: string
+
+    put:
+      tags:
+        - Store
+      summary: Cập nhật thông tin store (Manager)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: "Store A Updated"
+                address:
+                  type: string
+                  example: "456 Le Loi, Hanoi"
+      responses:
+        "200":
+          description: Cập nhật thành công
+        "403":
+          description: Không có quyền
+
+    delete:
+      tags:
+        - Store
+      summary: Xóa store (soft delete)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Xóa thành công
+        "403":
+          description: Chỉ Manager mới xóa được
+
+  /stores/select/{storeId}:
+    post:
+      tags:
+        - Store
+      summary: Chọn store để làm việc
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Store được chọn thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  storeId:
+                    type: string
+                  message:
+                    type: string
+
+  /stores/{storeId}/dashboard:
+    get:
+      tags:
+        - Store
+      summary: Dashboard của store
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Thông tin dashboard
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalSales:
+                    type: number
+                  totalOrders:
+                    type: integer
+                  topProducts:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        productName:
+                          type: string
+                        soldCount:
+                          type: integer
+
+  /stores/{storeId}/assign-staff:
+    post:
+      tags:
+        - Store
+      summary: Gán nhân viên cho store
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                staffId:
+                  type: string
+      responses:
+        "200":
+          description: Gán nhân viên thành công
+
+  # ===== Employee Routes =====
+  /stores/{storeId}/employees:
+    post:
+      tags:
+        - Employee
+      summary: Tạo nhân viên mới cho store
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - email
+                - password
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+                password:
+                  type: string
+      responses:
+        "201":
+          description: Tạo nhân viên thành công
+
+    get:
+      tags:
+        - Employee
+      summary: Lấy danh sách nhân viên của store
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Danh sách nhân viên
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    name:
+                      type: string
+                    email:
+                      type: string
+
+  /stores/{storeId}/employees/{id}:
+    get:
+      tags:
+        - Employee
+      summary: Lấy chi tiết nhân viên theo ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Thông tin nhân viên
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: string
+                  email:
+                    type: string
+
+    put:
+      tags:
+        - Employee
+      summary: Cập nhật thông tin nhân viên
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+      responses:
+        "200":
+          description: Cập nhật thành công
+
+          # ===== Supplier Routes =====
+  /suppliers/stores/{storeId}:
+    post:
+      tags:
+        - Supplier
+      summary: Tạo nhà cung cấp mới cho một cửa hàng
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - phone
+              properties:
+                name:
+                  type: string
+                  example: "Nhà cung cấp A"
+                phone:
+                  type: string
+                  example: "0123456789"
+                address:
+                  type: string
+                  example: "123 Nguyen Trai, Hanoi"
+      responses:
+        "201":
+          description: Tạo nhà cung cấp thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  supplierId:
+                    type: string
+                  message:
+                    type: string
+
+    get:
+      tags:
+        - Supplier
+      summary: Lấy danh sách nhà cung cấp của cửa hàng
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Danh sách nhà cung cấp
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    supplierId:
+                      type: string
+                    name:
+                      type: string
+                    phone:
+                      type: string
+                    address:
+                      type: string
+
+  /suppliers/{supplierId}:
+    get:
+      tags:
+        - Supplier
+      summary: Lấy thông tin chi tiết một nhà cung cấp
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: supplierId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Thông tin nhà cung cấp
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  supplierId:
+                    type: string
+                  name:
+                    type: string
+                  phone:
+                    type: string
+                  address:
+                    type: string
+
+    put:
+      tags:
+        - Supplier
+      summary: Cập nhật thông tin nhà cung cấp
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: supplierId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: "Nhà cung cấp B"
+                phone:
+                  type: string
+                  example: "0987654321"
+                address:
+                  type: string
+                  example: "456 Le Loi, Hanoi"
+      responses:
+        "200":
+          description: Cập nhật nhà cung cấp thành công
+
+    delete:
+      tags:
+        - Supplier
+      summary: Xóa nhà cung cấp
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: supplierId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Xóa nhà cung cấp thành công
+          # ===== Tax Declaration Routes =====
+  /tax/preview:
+    get:
+      tags:
+        - Tax
+      summary: Xem tổng doanh thu hệ thống theo kỳ (chưa lưu DB)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: periodType
+          in: query
+          required: false
+          schema:
+            type: string
+            example: "monthly"
+        - name: periodKey
+          in: query
+          required: false
+          schema:
+            type: string
+            example: "2025-10"
+      responses:
+        "200":
+          description: Thông tin doanh thu hệ thống
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalRevenue:
+                    type: number
+                  periodType:
+                    type: string
+                  periodKey:
+                    type: string
+
+  /tax/:
+    post:
+      tags:
+        - Tax
+      summary: Tạo tờ khai thuế mới (bản gốc)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                storeId:
+                  type: string
+                periodType:
+                  type: string
+                  example: "monthly"
+                periodKey:
+                  type: string
+                  example: "2025-10"
+                totalRevenue:
+                  type: number
+      responses:
+        "201":
+          description: Tạo tờ khai thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  taxDeclarationId:
+                    type: string
+                  message:
+                    type: string
+
+    get:
+      tags:
+        - Tax
+      summary: Lấy danh sách tờ khai theo cửa hàng/kỳ
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: periodType
+          in: query
+          required: false
+          schema:
+            type: string
+            example: "monthly"
+        - name: periodKey
+          in: query
+          required: false
+          schema:
+            type: string
+            example: "2025-10"
+      responses:
+        "200":
+          description: Danh sách tờ khai thuế
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    storeId:
+                      type: string
+                    periodType:
+                      type: string
+                    periodKey:
+                      type: string
+                    totalRevenue:
+                      type: number
+
+  /tax/{id}:
+    put:
+      tags:
+        - Tax
+      summary: Cập nhật tờ khai thuế
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                totalRevenue:
+                  type: number
+      responses:
+        "200":
+          description: Cập nhật tờ khai thành công
+
+    delete:
+      tags:
+        - Tax
+      summary: Xóa tờ khai (chỉ Manager)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Xóa tờ khai thành công
+        "403":
+          description: Chỉ Manager mới xóa được
+
+  /tax/{id}/clone:
+    post:
+      tags:
+        - Tax
+      summary: Tạo bản sao từ tờ khai cũ
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "201":
+          description: Clone tờ khai thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  taxDeclarationId:
+                    type: string
+                  message:
+                    type: string
+
+  /tax/{id}/export:
+    get:
+      tags:
+        - Tax
+      summary: Xuất tờ khai CSV hoặc PDF
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: format
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [csv, pdf]
+            example: csv
+      responses:
+        "200":
+          description: Xuất file thành công
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+                # ===== Product Group Routes =====
+  /product-groups/store/{storeId}:
+    post:
+      tags:
+        - ProductGroup
+      summary: Tạo nhóm sản phẩm mới trong cửa hàng
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  example: "Nhóm sản phẩm A"
+                description:
+                  type: string
+                  example: "Nhóm sản phẩm đồ uống"
+      responses:
+        "201":
+          description: Tạo nhóm sản phẩm thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  groupId:
+                    type: string
+                  message:
+                    type: string
+
+    get:
+      tags:
+        - ProductGroup
+      summary: Lấy tất cả nhóm sản phẩm của cửa hàng
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Danh sách nhóm sản phẩm
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    groupId:
+                      type: string
+                    name:
+                      type: string
+                    description:
+                      type: string
+
+  /product-groups/{groupId}:
+    get:
+      tags:
+        - ProductGroup
+      summary: Lấy chi tiết một nhóm sản phẩm
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Thông tin nhóm sản phẩm
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  groupId:
+                    type: string
+                  name:
+                    type: string
+                  description:
+                    type: string
+
+    put:
+      tags:
+        - ProductGroup
+      summary: Cập nhật thông tin nhóm sản phẩm
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: "Nhóm sản phẩm B"
+                description:
+                  type: string
+                  example: "Cập nhật mô tả nhóm sản phẩm"
+      responses:
+        "200":
+          description: Cập nhật thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  groupId:
+                    type: string
+                  message:
+                    type: string
+
+    delete:
+      tags:
+        - ProductGroup
+      summary: Xóa nhóm sản phẩm
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Xóa nhóm sản phẩm thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  groupId:
+                    type: string
+                  message:
+                    type: string
+                    # ===== Product Routes =====
+  /products/search:
+    get:
+      tags:
+        - Product
+      summary: Tìm kiếm sản phẩm theo tên hoặc SKU
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: keyword
+          in: query
+          required: true
+          schema:
+            type: string
+            example: "Cà phê"
+      responses:
+        "200":
+          description: Danh sách sản phẩm tìm thấy
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    productId:
+                      type: string
+                    name:
+                      type: string
+                    sku:
+                      type: string
+                    price:
+                      type: number
+                    stock:
+                      type: integer
+
+  /products/low-stock:
+    get:
+      tags:
+        - Product
+      summary: Lấy danh sách sản phẩm sắp hết hàng (chỉ Manager)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Danh sách sản phẩm low stock
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    productId:
+                      type: string
+                    name:
+                      type: string
+                    stock:
+                      type: integer
+
+  /products/store/{storeId}:
+    post:
+      tags:
+        - Product
+      summary: Tạo sản phẩm mới trong cửa hàng
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, price, sku]
+              properties:
+                name:
+                  type: string
+                  example: "Cà phê sữa"
+                sku:
+                  type: string
+                  example: "CF001"
+                price:
+                  type: number
+                  example: 25000
+                stock:
+                  type: integer
+                  example: 100
+                description:
+                  type: string
+                  example: "Cà phê sữa thơm ngon"
+      responses:
+        "201":
+          description: Tạo sản phẩm thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  productId:
+                    type: string
+                  message:
+                    type: string
+
+    get:
+      tags:
+        - Product
+      summary: Lấy tất cả sản phẩm của cửa hàng
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Danh sách sản phẩm
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    productId:
+                      type: string
+                    name:
+                      type: string
+                    sku:
+                      type: string
+                    price:
+                      type: number
+                    stock:
+                      type: integer
+
+  /products/{productId}/price:
+    put:
+      tags:
+        - Product
+      summary: Cập nhật giá sản phẩm
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                price:
+                  type: number
+                  example: 27000
+      responses:
+        "200":
+          description: Cập nhật giá thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  productId:
+                    type: string
+                  message:
+                    type: string
+
+  /products/{productId}:
+    put:
+      tags:
+        - Product
+      summary: Cập nhật toàn bộ thông tin sản phẩm
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                sku:
+                  type: string
+                price:
+                  type: number
+                stock:
+                  type: integer
+                description:
+                  type: string
+      responses:
+        "200":
+          description: Cập nhật sản phẩm thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  productId:
+                    type: string
+                  message:
+                    type: string
+
+    delete:
+      tags:
+        - Product
+      summary: Xóa sản phẩm
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Xóa sản phẩm thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  productId:
+                    type: string
+                  message:
+                    type: string
+
+    get:
+      tags:
+        - Product
+      summary: Lấy chi tiết sản phẩm theo ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Thông tin chi tiết sản phẩm
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  productId:
+                    type: string
+                  name:
+                    type: string
+                  sku:
+                    type: string
+                  price:
+                    type: number
+                  stock:
+                    type: integer
+                  description:
+                    type: string
+                    # ===== Purchase Order Routes =====
+  /purchase-orders/store/{storeId}:
+    post:
+      tags:
+        - PurchaseOrder
+      summary: Tạo đơn nhập hàng mới cho một cửa hàng
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - products
+              properties:
+                products:
+                  type: array
+                  items:
+                    type: object
+                    required: [productId, quantity, price]
+                    properties:
+                      productId:
+                        type: string
+                      quantity:
+                        type: integer
+                        example: 50
+                      price:
+                        type: number
+                        example: 25000
+                note:
+                  type: string
+                  example: "Nhập hàng tháng 10"
+      responses:
+        "201":
+          description: Tạo đơn nhập hàng thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  orderId:
+                    type: string
+                  message:
+                    type: string
+
+    get:
+      tags:
+        - PurchaseOrder
+      summary: Lấy tất cả đơn nhập hàng của cửa hàng
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Danh sách đơn nhập hàng
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    orderId:
+                      type: string
+                    createdAt:
+                      type: string
+                      format: date-time
+                    totalAmount:
+                      type: number
+                    status:
+                      type: string
+
+  /purchase-orders/{orderId}:
+    get:
+      tags:
+        - PurchaseOrder
+      summary: Lấy chi tiết đơn nhập hàng
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Thông tin chi tiết đơn nhập hàng
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  orderId:
+                    type: string
+                  products:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        productId:
+                          type: string
+                        quantity:
+                          type: integer
+                        price:
+                          type: number
+                  totalAmount:
+                    type: number
+                  status:
+                    type: string
+                  note:
+                    type: string
+                  createdAt:
+                    type: string
+                    format: date-time
+
+    put:
+      tags:
+        - PurchaseOrder
+      summary: Cập nhật thông tin đơn nhập hàng
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                products:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      productId:
+                        type: string
+                      quantity:
+                        type: integer
+                      price:
+                        type: number
+                note:
+                  type: string
+      responses:
+        "200":
+          description: Cập nhật đơn nhập hàng thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  orderId:
+                    type: string
+                  message:
+                    type: string
+
+    delete:
+      tags:
+        - PurchaseOrder
+      summary: Xóa đơn nhập hàng
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Xóa đơn nhập hàng thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  orderId:
+                    type: string
+                  message:
+                    type: string
+                    # ===== Purchase Return Routes =====
+  /purchase-returns/store/{storeId}:
+    post:
+      tags:
+        - PurchaseReturn
+      summary: Tạo phiếu trả hàng mới cho cửa hàng (chỉ Manager)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - products
+              properties:
+                products:
+                  type: array
+                  items:
+                    type: object
+                    required: [productId, quantity]
+                    properties:
+                      productId:
+                        type: string
+                      quantity:
+                        type: integer
+                        example: 10
+                      reason:
+                        type: string
+                        example: "Hỏng/mất"
+                note:
+                  type: string
+                  example: "Trả hàng nhập tháng 10"
+      responses:
+        "201":
+          description: Tạo phiếu trả hàng thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  returnId:
+                    type: string
+                  message:
+                    type: string
+
+    get:
+      tags:
+        - PurchaseReturn
+      summary: Lấy tất cả phiếu trả hàng của cửa hàng
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Danh sách phiếu trả hàng
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    returnId:
+                      type: string
+                    createdAt:
+                      type: string
+                      format: date-time
+                    totalQuantity:
+                      type: integer
+                    status:
+                      type: string
+
+  /purchase-returns/{returnId}:
+    get:
+      tags:
+        - PurchaseReturn
+      summary: Lấy chi tiết phiếu trả hàng
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: returnId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Chi tiết phiếu trả hàng
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  returnId:
+                    type: string
+                  products:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        productId:
+                          type: string
+                        quantity:
+                          type: integer
+                        reason:
+                          type: string
+                  note:
+                    type: string
+                  totalQuantity:
+                    type: integer
+                  status:
+                    type: string
+                  createdAt:
+                    type: string
+                    format: date-time
+
+    put:
+      tags:
+        - PurchaseReturn
+      summary: Cập nhật phiếu trả hàng (chỉ Manager)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: returnId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                products:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      productId:
+                        type: string
+                      quantity:
+                        type: integer
+                      reason:
+                        type: string
+                note:
+                  type: string
+      responses:
+        "200":
+          description: Cập nhật phiếu trả hàng thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  returnId:
+                    type: string
+                  message:
+                    type: string
+
+    delete:
+      tags:
+        - PurchaseReturn
+      summary: Hủy phiếu trả hàng (chỉ Manager)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: returnId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Hủy phiếu trả hàng thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  returnId:
+                    type: string
+                  message:
+                    type: string
+                    # ===== Stock Check Routes =====
+  /stock-checks/stores/{storeId}/stock-checks:
+    post:
+      tags:
+        - StockCheck
+      summary: Tạo phiếu kiểm kho mới cho một cửa hàng
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - products
+              properties:
+                products:
+                  type: array
+                  items:
+                    type: object
+                    required: [productId, countedQuantity]
+                    properties:
+                      productId:
+                        type: string
+                      countedQuantity:
+                        type: integer
+                        example: 100
+                note:
+                  type: string
+                  example: "Kiểm kho tháng 10"
+      responses:
+        "201":
+          description: Tạo phiếu kiểm kho thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  checkId:
+                    type: string
+                  message:
+                    type: string
+
+    get:
+      tags:
+        - StockCheck
+      summary: Lấy tất cả phiếu kiểm kho của cửa hàng
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Danh sách phiếu kiểm kho
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    checkId:
+                      type: string
+                    createdAt:
+                      type: string
+                      format: date-time
+                    totalProducts:
+                      type: integer
+                    status:
+                      type: string
+
+  /stock-checks/{checkId}:
+    get:
+      tags:
+        - StockCheck
+      summary: Lấy chi tiết phiếu kiểm kho
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: checkId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Chi tiết phiếu kiểm kho
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  checkId:
+                    type: string
+                  products:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        productId:
+                          type: string
+                        countedQuantity:
+                          type: integer
+                  note:
+                    type: string
+                  totalProducts:
+                    type: integer
+                  status:
+                    type: string
+                  createdAt:
+                    type: string
+                    format: date-time
+
+    put:
+      tags:
+        - StockCheck
+      summary: Cập nhật phiếu kiểm kho
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: checkId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                products:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      productId:
+                        type: string
+                      countedQuantity:
+                        type: integer
+                note:
+                  type: string
+      responses:
+        "200":
+          description: Cập nhật phiếu kiểm kho thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  checkId:
+                    type: string
+                  message:
+                    type: string
+
+    delete:
+      tags:
+        - StockCheck
+      summary: Xóa phiếu kiểm kho
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: checkId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Xóa phiếu kiểm kho thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  checkId:
+                    type: string
+                  message:
+                    type: string
+                    # ===== Stock Disposal Routes =====
+  /stock-disposals/store/{storeId}:
+    post:
+      tags:
+        - StockDisposal
+      summary: Tạo phiếu xuất hủy mới trong cửa hàng
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - products
+              properties:
+                products:
+                  type: array
+                  items:
+                    type: object
+                    required: [productId, quantity]
+                    properties:
+                      productId:
+                        type: string
+                      quantity:
+                        type: integer
+                        example: 5
+                      reason:
+                        type: string
+                        example: "Hỏng/mất"
+                note:
+                  type: string
+                  example: "Xuất hủy hàng hết hạn"
+      responses:
+        "201":
+          description: Tạo phiếu xuất hủy thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  disposalId:
+                    type: string
+                  message:
+                    type: string
+
+    get:
+      tags:
+        - StockDisposal
+      summary: Lấy tất cả phiếu xuất hủy của cửa hàng
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Danh sách phiếu xuất hủy
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    disposalId:
+                      type: string
+                    createdAt:
+                      type: string
+                      format: date-time
+                    totalQuantity:
+                      type: integer
+                    status:
+                      type: string
+
+  /stock-disposals/{disposalId}:
+    get:
+      tags:
+        - StockDisposal
+      summary: Lấy chi tiết phiếu xuất hủy
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: disposalId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Chi tiết phiếu xuất hủy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  disposalId:
+                    type: string
+                  products:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        productId:
+                          type: string
+                        quantity:
+                          type: integer
+                        reason:
+                          type: string
+                  note:
+                    type: string
+                  totalQuantity:
+                    type: integer
+                  status:
+                    type: string
+                  createdAt:
+                    type: string
+                    format: date-time
+
+    put:
+      tags:
+        - StockDisposal
+      summary: Cập nhật phiếu xuất hủy
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: disposalId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                products:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      productId:
+                        type: string
+                      quantity:
+                        type: integer
+                      reason:
+                        type: string
+                note:
+                  type: string
+      responses:
+        "200":
+          description: Cập nhật phiếu xuất hủy thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  disposalId:
+                    type: string
+                  message:
+                    type: string
+
+    delete:
+      tags:
+        - StockDisposal
+      summary: Xóa phiếu xuất hủy
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: disposalId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Xóa phiếu xuất hủy thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  disposalId:
+                    type: string
+                  message:
+                    type: string

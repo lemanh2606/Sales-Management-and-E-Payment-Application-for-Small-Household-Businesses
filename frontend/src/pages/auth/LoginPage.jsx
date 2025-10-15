@@ -1,9 +1,12 @@
 // src/pages/LoginPage.jsx
+
+
 import React, { useState } from "react";
-import InputField from "../components/InputField";
-import Button from "../components/Button";
-import { loginUser } from "../api/userApi";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../../context/AuthContext";
+import { loginUser } from "../../api/userApi";
+import Button from "../../components/Button";
+import InputField from "../../components/InputField";
+
 
 export default function LoginPage() {
     const { login } = useAuth();
