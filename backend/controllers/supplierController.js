@@ -90,7 +90,7 @@ const createSupplier = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("❌ Lỗi createSupplier:", error);
+    console.error(" Lỗi createSupplier:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
@@ -153,7 +153,7 @@ const getSuppliersByStore = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("❌ Lỗi getSuppliersByStore:", error);
+    console.error(" Lỗi getSuppliersByStore:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
@@ -203,7 +203,7 @@ const getSupplierById = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("❌ Lỗi getSupplierById:", error);
+    console.error(" Lỗi getSupplierById:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
@@ -351,7 +351,7 @@ const deleteSupplier = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("❌ Lỗi deleteSupplier:", error);
+    console.error(" Lỗi deleteSupplier:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
