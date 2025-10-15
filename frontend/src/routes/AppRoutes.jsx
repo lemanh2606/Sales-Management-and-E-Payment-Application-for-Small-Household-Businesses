@@ -6,7 +6,11 @@ import DashboardPage from "../pages/DashboardPage";
 import VerifyOtpPage from "../pages/VerifyOtpPage";
 import SelectStorePage from "../pages/SelectStorePage";
 import ProtectedRoute from "./ProtectedRoute";
-
+import SupplierListPage from "../pages/supplier/SupplierListPage";
+import SupplierCreatePage from "../pages/supplier/SupplierCreatePage";
+import SupplierEditPage from "../pages/supplier/SupplierEditPage";
+import ProductListPage from "../pages/product/ProductListPage";
+import ProductCreatePage from "../pages/product/ProductCreatePage";
 function AppRoutes() {
   return (
     <Routes>
@@ -30,7 +34,44 @@ function AppRoutes() {
         }
       />
       <Route path="*" element={<Navigate to="/login" replace />} />
+      <Route
+  path="/stores/:storeId/suppliers"
+  element={
+    <ProtectedRoute>
+      <SupplierListPage />
+    </ProtectedRoute>
+  }
+/>
+<Route
+  path="/stores/:storeId/suppliers/create"
+  element={
+    <ProtectedRoute>
+      <SupplierCreatePage />
+    </ProtectedRoute>
+  }
+/>
+<Route path="/suppliers/:supplierId/edit" element={<SupplierEditPage />} />
+<Route
+  path="/stores/:storeId/products"
+  element={
+    <ProtectedRoute>
+      <ProductListPage />
+    </ProtectedRoute>
+  }
+/>
+<Route
+  path="/stores/:storeId/products/create"
+  element={
+    <ProtectedRoute>
+      <ProductCreatePage />
+    </ProtectedRoute>
+  }
+/>
+
+      
+
     </Routes>
+    
   );
 }
 
