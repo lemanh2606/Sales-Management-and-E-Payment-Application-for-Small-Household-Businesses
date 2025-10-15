@@ -1,7 +1,9 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import api, { ensureStore } from "../api/userApi";
+
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import userApi from "../api/userApi";
+import { ensureStore } from "../api/storeApi";
 
 const AuthContext = createContext();
 
@@ -93,7 +95,7 @@ export const AuthProvider = ({ children }) => {
         localStorage.removeItem("currentStore");
         delete axios.defaults.headers.common["Authorization"];
         // optional: call backend logout to clear refresh cookie
-        try { await api.post("/logout"); } catch (e) { /* ignore */ }
+        try { await userApi.post("/logout"); } catch (e) { /* ignore */ }
         navigate("/login");
     };
 

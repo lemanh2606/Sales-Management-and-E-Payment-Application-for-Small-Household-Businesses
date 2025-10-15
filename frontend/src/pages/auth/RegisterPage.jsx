@@ -1,9 +1,11 @@
 import React, { useState } from "react";
-import InputField from "../components/InputField";
-import Button from "../components/Button";
-import { registerManager } from "../api/userApi";
+
+import InputField from "../../components/InputField";
+import { registerManager } from "../../api/userApi";
 import { useNavigate } from "react-router-dom";
 import Swal from "sweetalert2"; // ✅ import sweetalert2
+import Button from "../../components/Button";
+
 
 export default function RegisterPage() {
   const navigate = useNavigate();

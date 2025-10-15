@@ -1,12 +1,19 @@
 import React, { useState } from "react";
-import axios from "axios";
-import { useParams, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import Layout from "../../components/Layout";
+import Button from "../../components/Button";
+import { createSupplier } from "../../api/supplierApi";
+import { useAuth } from "../../context/AuthContext";
+import toast from "react-hot-toast";
 
-const SupplierCreatePage = () => {
-  const { storeId } = useParams(); // 👈 Lấy storeId từ URL
+export default function SupplierCreatePage() {
+  const { token } = useAuth();
   const navigate = useNavigate();
 
-  const [form, setForm] = useState({
+  const storeObj = JSON.parse(localStorage.getItem("currentStore")) || {};
+  const storeId = storeObj._id || null;
+
+  const [formData, setFormData] = useState({
     name: "",
     phone: "",
     email: "",
@@ -14,123 +21,90 @@ const SupplierCreatePage = () => {
     status: "đang hoạt động",
   });
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
 
-  // Cập nhật dữ liệu form
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // Gửi API tạo nhà cung cấp
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!token || !storeId) {
+      toast.error("Bạn chưa đăng nhập hoặc chưa chọn cửa hàng!");
+      return;
+    }
+
     setLoading(true);
-    setMessage("");
-
     try {
-      const token = localStorage.getItem("token");
-      await axios.post(
-        `http://localhost:9999/api/suppliers/stores/${storeId}`,
-        form,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      setMessage("✅ Tạo nhà cung cấp thành công!");
-      setTimeout(() => {
-        navigate(`/stores/${storeId}/suppliers`);
-      }, 1000);
-    } catch (error) {
-      console.error("❌ Lỗi tạo supplier:", error);
-      setMessage(error.response?.data?.message || "Đã xảy ra lỗi khi tạo nhà cung cấp");
+      await createSupplier(storeId, formData);
+      toast.success(" Tạo nhà cung cấp thành công!");
+      setTimeout(() => navigate(`/stores/${storeId}/suppliers`), 800);
+    } catch (err) {
+      console.error(" Lỗi tạo supplier:", err);
+      toast.error(err?.response?.data?.message || err?.message || "Đã xảy ra lỗi khi tạo nhà cung cấp.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="max-w-xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-6">🧾 Thêm nhà cung cấp mới</h1>
+    <Layout>
+      <div className="max-w-lg mx-auto mt-10 p-8 bg-white rounded-3xl shadow-xl border border-blue-100">
+        <h1 className="text-3xl font-bold mb-6 text-[#000000] text-center"> Thêm nhà cung cấp mới</h1>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="block mb-1 font-medium">Tên nhà cung cấp *</label>
-          <input
-            type="text"
-            name="name"
-            value={form.name}
-            onChange={handleChange}
-            required
-            className="w-full border p-2 rounded"
-            placeholder="VD: Công ty TNHH ABC"
-          />
-        </div>
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {["name", "phone", "email", "address"].map((field) => (
+            <div key={field}>
+              <label className="block mb-1 font-medium text-gray-700 capitalize">
+                {field === "name" ? "Tên nhà cung cấp *" :
+                  field === "phone" ? "Số điện thoại" :
+                    field === "email" ? "Email" : "Địa chỉ"}
+              </label>
+              <input
+                type={field === "email" ? "email" : "text"}
+                name={field}
+                value={formData[field]}
+                onChange={handleChange}
+                required={field === "name"}
+                placeholder={`Nhập ${field}`}
+                className="w-full border border-blue-200 p-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm hover:shadow-md transition"
+              />
+            </div>
+          ))}
 
-        <div>
-          <label className="block mb-1 font-medium">Số điện thoại</label>
-          <input
-            type="text"
-            name="phone"
-            value={form.phone}
-            onChange={handleChange}
-            className="w-full border p-2 rounded"
-            placeholder="VD: 0909123456"
-          />
-        </div>
+          <div>
+            <label className="block mb-1 font-medium text-gray-700">Trạng thái</label>
+            <select
+              name="status"
+              value={formData.status}
+              onChange={handleChange}
+              className="w-full border border-blue-200 p-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm hover:shadow-md transition"
+            >
+              <option value="đang hoạt động">Đang hoạt động</option>
+              <option value="ngừng hoạt động">Ngừng hoạt động</option>
+            </select>
+          </div>
 
-        <div>
-          <label className="block mb-1 font-medium">Email</label>
-          <input
-            type="email"
-            name="email"
-            value={form.email}
-            onChange={handleChange}
-            className="w-full border p-2 rounded"
-            placeholder="VD: lienhe@abc.com"
-          />
-        </div>
+          <div className="flex justify-between pt-6">
+            <Button
+              type="button"
+              className="bg-gray-100 text-blue-600 hover:bg-blue-50 hover:text-blue-700 shadow-md transition px-5 py-2 rounded-xl font-medium"
+              onClick={() => navigate(-1)}
+            >
+              Hủy
+            </Button>
 
-        <div>
-          <label className="block mb-1 font-medium">Địa chỉ</label>
-          <input
-            type="text"
-            name="address"
-            value={form.address}
-            onChange={handleChange}
-            className="w-full border p-2 rounded"
-            placeholder="VD: 123 Nguyễn Trãi, Hà Nội"
-          />
-        </div>
-
-        <div>
-          <label className="block mb-1 font-medium">Trạng thái</label>
-          <select
-            name="status"
-            value={form.status}
-            onChange={handleChange}
-            className="w-full border p-2 rounded"
-          >
-            <option value="đang hoạt động">Đang hoạt động</option>
-            <option value="ngừng hoạt động">Ngừng hoạt động</option>
-          </select>
-        </div>
-
-        <button
-          type="submit"
-          disabled={loading}
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-60"
-        >
-          {loading ? "Đang tạo..." : "Tạo nhà cung cấp"}
-        </button>
-      </form>
-
-      {message && <p className="mt-4 text-center">{message}</p>}
-    </div>
+            <Button
+              type="submit"
+              disabled={loading}
+              className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-lg transition px-5 py-2 rounded-xl font-semibold"
+            >
+              {loading ? "Đang tạo..." : "Tạo nhà cung cấp"}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </Layout>
   );
-};
-
-export default SupplierCreatePage;
+}

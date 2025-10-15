@@ -1,9 +1,13 @@
 import React, { useEffect, useState } from "react";
-import InputField from "../components/InputField";
-import Button from "../components/Button";
-import { verifyOtp, registerManager } from "../api/userApi";
+import InputField from "../../components/InputField";
+import Button from "../../components/Button";
+import { verifyOtp } from "../../api/userApi";
+import { registerManager } from "../../api/userApi";
 import { useLocation, useNavigate } from "react-router-dom";
 import Swal from "sweetalert2"; // ✅ import sweetalert2
+
+
+
 
 export default function VerifyOtpPage() {
   const location = useLocation();

@@ -1,11 +1,12 @@
 import React, { useState } from "react";
-import Sidebar from "./Sidebar";
+
+import Sidebar from "../components/sidebar/Sidebar";
 
 export default function Layout({ children }) {
     const [sidebarOpen, setSidebarOpen] = useState(false);
 
     return (
-        <div className="flex min-h-screen bg-green-50">
+        <div className="flex min-h-screen bg-[#ffffff]">
             {/* Sidebar desktop */}
             <Sidebar
                 openMobile={sidebarOpen}
