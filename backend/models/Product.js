@@ -19,6 +19,10 @@ const productSchema = new mongoose.Schema({
   store_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Store', required: true },
   supplier_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Supplier' },
   group_id: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductGroup' }, // Nhóm sản phẩm
+  image: {
+    url: { type: String, default: null }, // Cloudinary URL
+    public_id: { type: String, default: null } // Cloudinary public_id for deletion
+  },
   lowStockAlerted: { type: Boolean, default: false }, // False = không báo, true = báo (reset về false khi update stock > min_stock)
   isDeleted: { type: Boolean, default: false } // Xóa mềm
 },
