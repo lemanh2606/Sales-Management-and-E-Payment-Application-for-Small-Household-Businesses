@@ -1,296 +1,188 @@
 import React, { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
-import axios from "axios";
-import Modal from "react-modal"; // cài bằng: npm install react-modal
+import toast from "react-hot-toast";
+import Modal from "react-modal";
+import Layout from "../../components/Layout";
+import Button from "../../components/Button";
+import { MdModeEditOutline, MdAdd } from "react-icons/md";
+import { getProductsByStore } from "../../api/productApi";
+import ProductForm from "../../components/product/ProductForm"; // import form mới
 
+export default function ProductListPage() {
+  const storeObj = JSON.parse(localStorage.getItem("currentStore")) || {};
+  const storeId = storeObj._id || null;
 
-function ProductListPage() {
-  const { storeId } = useParams();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
-  
-  // Modal sửa sản phẩm
-const [isModalOpen, setIsModalOpen] = useState(false);
-const [selectedProduct, setSelectedProduct] = useState(null);
-const [editData, setEditData] = useState({
-  name: "",
-  price: "",
-  stock_quantity: "",
-  status: "",
-});
 
+  // Modal Create/Edit
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalProduct, setModalProduct] = useState(null); // null => create, có data => edit
 
   // Phân trang
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  const token = localStorage.getItem("token");
-
+  const fetchProducts = async () => {
+    if (!storeId) return;
+    try {
+      setLoading(true);
+      const data = await getProductsByStore(storeId);
+      setProducts(Array.isArray(data?.products) ? data.products : []);
+    } catch (err) {
+      console.error(err);
+      toast.error("Không thể tải danh sách sản phẩm");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchProducts = async () => {
-      try {
-        setLoading(true);
-        const res = await axios.get(
-          `${import.meta.env.VITE_API_URL}/products/store/${storeId}`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
-        setProducts(res.data.products || []);
-      } catch (err) {
-        setError(err.response?.data?.message || "Lỗi khi tải danh sách sản phẩm");
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchProducts();
   }, [storeId]);
 
-  // Lọc theo tên sản phẩm
-  const filteredProducts = products.filter((p) =>
+  const filteredProducts = products.filter(p =>
     p.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Tính toán phân trang
   const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const currentProducts = filteredProducts.slice(startIndex, startIndex + itemsPerPage);
 
-  const handlePageChange = (page) => {
-    setCurrentPage(page);
+  const handlePageChange = (page) => setCurrentPage(page);
+
+  const openCreateModal = () => {
+    setModalProduct(null);
+    setIsModalOpen(true);
   };
 
-
   const openEditModal = (product) => {
-  setSelectedProduct(product);
-  setEditData({
-    name: product.name,
-    price: product.price,
-    stock_quantity: product.stock_quantity,
-    status: product.status,
-  });
-  setIsModalOpen(true);
-};
+    setModalProduct(product);
+    setIsModalOpen(true);
+  };
 
-const closeModal = () => {
-  setIsModalOpen(false);
-  setSelectedProduct(null);
-};
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setModalProduct(null);
+  };
 
-const handleSaveEdit = async () => {
-  try {
-    await axios.put(
-      `${import.meta.env.VITE_API_URL}/products/${selectedProduct._id}`,
-      editData,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      }
-    );
-    // Cập nhật lại danh sách
-    setProducts((prev) =>
-      prev.map((p) =>
-        p._id === selectedProduct._id ? { ...p, ...editData } : p
-      )
-    );
+  const onFormSuccess = () => {
+    fetchProducts();
     closeModal();
-  } catch (error) {
-    alert(error.response?.data?.message || "Lỗi khi cập nhật sản phẩm");
-  }
-};
-
-
-
-  if (loading) return <div className="p-6 text-center">Đang tải dữ liệu...</div>;
-  if (error) return <div className="p-6 text-red-600 text-center">{error}</div>;
+  };
 
   return (
-    <div className="p-6">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-semibold">Danh sách sản phẩm</h1>
-        <Link to={`/stores/${storeId}/products/create`}>
-          <button className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
-            + Tạo sản phẩm mới
-          </button>
-        </Link>
-      </div>
+    <Layout>
+      <div className="p-6 mx-auto  bg-white ">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+          <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight">Danh sách sản phẩm</h1>
+          <Button
+            onClick={openCreateModal}
+            className="flex items-center gap-2 bg-green-500 text-white px-5 py-2 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200"
+          >
+            <MdAdd size={22} /> Thêm sản phẩm
+          </Button>
+        </div>
 
-      {/* Ô tìm kiếm */}
-      <div className="mb-4">
-        <input
-          type="text"
-          placeholder="Tìm kiếm sản phẩm..."
-          value={searchTerm}
-          onChange={(e) => {
-            setSearchTerm(e.target.value);
-            setCurrentPage(1); // reset page
-          }}
-          className="border rounded-lg px-3 py-2 w-full md:w-1/3"
-        />
-      </div>
+        {/* Search */}
+        <div className="mb-6">
+          <input
+            type="text"
+            placeholder="Tìm kiếm sản phẩm..."
+            value={searchTerm}
+            onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+            className="border border-gray-300 rounded-lg px-4 py-2 w-full md:w-1/3 focus:ring-2 focus:ring-green-400 outline-none transition-all duration-200"
+          />
+        </div>
 
-      {/* Bảng hiển thị sản phẩm */}
-      {filteredProducts.length === 0 ? (
-        <p>Không có sản phẩm nào.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="min-w-full bg-white border rounded-lg shadow-md">
-            <thead className="bg-gray-100">
-              <tr>
-                <th className="py-2 px-4 border-b text-left">Tên sản phẩm</th>
-                <th className="py-2 px-4 border-b">SKU</th>
-                <th className="py-2 px-4 border-b">Giá bán</th>
-                <th className="py-2 px-4 border-b">Tồn kho</th>
-                <th className="py-2 px-4 border-b">Trạng thái</th>
-                <th className="py-2 px-4 border-b text-center">Hành động</th>
-              </tr>
-            </thead>
-            <tbody>
-              {currentProducts.map((product) => (
-                <tr key={product._id} className="hover:bg-gray-50">
-                  <td className="py-2 px-4 border-b">{product.name}</td>
-                  <td className="py-2 px-4 border-b text-gray-600">{product.sku}</td>
-                  <td className="py-2 px-4 border-b text-right">
-                    {product.price.toLocaleString()}₫
-                  </td>
-                  <td className="py-2 px-4 border-b text-center">{product.stock_quantity}</td>
-                  <td className="py-2 px-4 border-b text-center">
-                    <span
-                      className={`${
-                        product.status === "Đang kinh doanh"
-                          ? "text-green-600"
-                          : "text-gray-500"
-                      }`}
-                    >
-                      {product.status}
-                    </span>
-                  </td>
-                  <td className="py-2 px-4 border-b text-center space-x-2">
-                    <Link to={`/products/${product._id}`}>
-                      <button className="border border-gray-300 px-3 py-1 rounded hover:bg-gray-100">
-                        Chi tiết
-                      </button>
-                    </Link>
-                    <button
-  onClick={() => openEditModal(product)}
-  className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
->
-  Sửa
-</button>
-
-                  </td>
+        {/* Table */}
+        {loading ? (
+          <p className="text-center mt-10 text-gray-400 animate-pulse text-lg">⏳ Đang tải...</p>
+        ) : filteredProducts.length === 0 ? (
+          <p className="mt-10 text-center text-gray-400 italic text-lg">Không có sản phẩm nào</p>
+        ) : (
+          <div className="overflow-x-auto rounded-2xl shadow-lg border border-gray-200 bg-white">
+            <table className="min-w-full text-gray-700">
+              <thead className="bg-gray-50 uppercase text-sm sm:text-base font-medium">
+                <tr>
+                  <th className="py-4 px-6 text-left">Tên sản phẩm</th>
+                  <th className="py-4 px-6 text-left">SKU</th>
+                  <th className="py-4 px-6 text-left">Giá bán</th>
+                  <th className="py-4 px-6 text-left">Tồn kho</th>
+                  <th className="py-4 px-6 text-left">Trạng thái</th>
+                  <th className="py-4 px-6 text-center">Hành động</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              </thead>
+              <tbody>
+                {currentProducts.map((product, i) => (
+                  <tr key={product._id} className={`transition-transform duration-200 hover:scale-[1.02] hover:shadow-lg ${i % 2 === 0 ? "bg-white" : "bg-green-50"}`}>
+                    <td className="py-4 px-6 font-medium text-gray-900">{product.name}</td>
+                    <td className="py-4 px-6">{product.sku || "-"}</td>
+                    <td className="py-4 px-6 text-right">{product.price?.toLocaleString()}₫</td>
+                    <td className="py-4 px-6 text-center">{product.stock_quantity}</td>
+                    <td className="py-4 px-6">
+                      <span className={product.status === "Đang kinh doanh" ? "text-green-600 font-semibold" : "text-red-500 font-semibold"}>
+                        {product.status}
+                      </span>
+                    </td>
+                    <td className="py-4 px-6 flex justify-center items-center gap-4">
+                      <button onClick={() => openEditModal(product)} className="text-yellow-500 hover:text-yellow-700 hover:scale-110 transition transform" title="Sửa">
+                        <MdModeEditOutline size={22} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
-      {/* Phân trang */}
-      {totalPages > 1 && (
-        <div className="flex justify-center mt-6 space-x-2">
-          <button
-            disabled={currentPage === 1}
-            onClick={() => handlePageChange(currentPage - 1)}
-            className="px-3 py-1 border rounded disabled:opacity-50"
-          >
-            ← Trước
-          </button>
-          {[...Array(totalPages)].map((_, i) => (
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex flex-wrap justify-center mt-6 gap-2">
             <button
-              key={i}
-              onClick={() => handlePageChange(i + 1)}
-              className={`px-3 py-1 border rounded ${
-                currentPage === i + 1
-                  ? "bg-blue-600 text-white"
-                  : "hover:bg-gray-100"
-              }`}
+              disabled={currentPage === 1}
+              onClick={() => handlePageChange(currentPage - 1)}
+              className="px-4 py-2 border rounded-lg disabled:opacity-50 hover:bg-gray-100 transition"
             >
-              {i + 1}
+              ← Trước
             </button>
-          ))}
-          <button
-            disabled={currentPage === totalPages}
-            onClick={() => handlePageChange(currentPage + 1)}
-            className="px-3 py-1 border rounded disabled:opacity-50"
-          >
-            Sau →
-          </button>
-        </div>
-      )}
-      <Modal
-  isOpen={isModalOpen}
-  onRequestClose={closeModal}
-  ariaHideApp={false}
-  className="bg-white rounded-xl p-6 w-full max-w-md mx-auto mt-20 shadow-lg"
-  overlayClassName="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-start"
->
-  <h2 className="text-xl font-semibold mb-4">Chỉnh sửa sản phẩm</h2>
-  <div className="space-y-3">
-    <div>
-      <label className="block text-sm font-medium">Tên sản phẩm</label>
-      <input
-        type="text"
-        value={editData.name}
-        onChange={(e) => setEditData({ ...editData, name: e.target.value })}
-        className="border rounded w-full p-2"
-      />
-    </div>
-    <div>
-      <label className="block text-sm font-medium">Giá bán</label>
-      <input
-        type="number"
-        value={editData.price}
-        onChange={(e) => setEditData({ ...editData, price: e.target.value })}
-        className="border rounded w-full p-2"
-      />
-    </div>
-    <div>
-      <label className="block text-sm font-medium">Tồn kho</label>
-      <input
-        type="number"
-        value={editData.stock_quantity}
-        onChange={(e) =>
-          setEditData({ ...editData, stock_quantity: e.target.value })
-        }
-        className="border rounded w-full p-2"
-      />
-    </div>
-    <div>
-      <label className="block text-sm font-medium">Trạng thái</label>
-      <select
-        value={editData.status}
-        onChange={(e) => setEditData({ ...editData, status: e.target.value })}
-        className="border rounded w-full p-2"
-      >
-        <option value="Đang kinh doanh">Đang kinh doanh</option>
-        <option value="Ngừng kinh doanh">Ngừng kinh doanh</option>
-      </select>
-    </div>
-  </div>
+            {[...Array(totalPages)].map((_, i) => (
+              <button
+                key={i}
+                onClick={() => handlePageChange(i + 1)}
+                className={`px-4 py-2 border rounded-lg ${currentPage === i + 1 ? "bg-green-600 text-white" : "hover:bg-gray-100"} transition`}
+              >
+                {i + 1}
+              </button>
+            ))}
+            <button
+              disabled={currentPage === totalPages}
+              onClick={() => handlePageChange(currentPage + 1)}
+              className="px-4 py-2 border rounded-lg disabled:opacity-50 hover:bg-gray-100 transition"
+            >
+              Sau →
+            </button>
+          </div>
+        )}
 
-  <div className="flex justify-end mt-6 space-x-2">
-    <button
-      onClick={closeModal}
-      className="border px-4 py-2 rounded hover:bg-gray-100"
-    >
-      Hủy
-    </button>
-    <button
-      onClick={handleSaveEdit}
-      className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-    >
-      Lưu thay đổi
-    </button>
-  </div>
-</Modal>
-
-    </div>
+        {/* Modal Create/Edit */}
+        <Modal
+          isOpen={isModalOpen}
+          onRequestClose={closeModal}
+          ariaHideApp={false}
+          className="bg-white rounded-2xl p-6 w-full max-w-3xl mx-auto mt-20 shadow-2xl overflow-auto max-h-[90vh]"
+          overlayClassName="fixed inset-0 bg-[#070505e1] bg-opacity-40 flex justify-center items-start"
+        >
+          <ProductForm
+            storeId={storeId}
+            product={modalProduct}
+            onSuccess={onFormSuccess}
+            onCancel={closeModal}
+          />
+        </Modal>
+      </div>
+    </Layout>
   );
 }
-
-export default ProductListPage;
