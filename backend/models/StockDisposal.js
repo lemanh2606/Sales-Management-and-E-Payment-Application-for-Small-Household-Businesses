@@ -22,7 +22,6 @@ const stockDisposalSchema = new mongoose.Schema({
 });
 
 // Tạo index để tìm kiếm nhanh
-stockDisposalSchema.index({ disposal_code: 1 });
 stockDisposalSchema.index({ store_id: 1, status: 1 });
 stockDisposalSchema.index({ created_by: 1 });
 stockDisposalSchema.index({ disposal_date: -1 });
