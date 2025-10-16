@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Sales-Management-and-E-Payment API
-  version: "1.0.0"
+  version: "1.0.1"
   description: API documentation for Sales Management & E-Payment Application (SEP490_G136)
 servers:
   - url: http://localhost:9999
@@ -11,6 +11,7 @@ tags:
   - name: Auth
   - name: Users
   - name: Stores
+  - name: Employees
   - name: Products
   - name: ProductGroups
   - name: Suppliers
@@ -19,6 +20,7 @@ tags:
   - name: PurchaseOrders
   - name: PurchaseReturns
   - name: Orders
+  - name: Tax
   - name: Webhook
 
 components:
@@ -32,19 +34,15 @@ components:
     User:
       type: object
       properties:
-        id:
-          type: string
-        username:
-          type: string
-        email:
-          type: string
-        phone:
-          type: string
+        id: { type: string }
+        username: { type: string }
+        email: { type: string }
+        phone: { type: string }
         role:
           type: string
           enum: [MANAGER, STAFF]
-        isVerified:
-          type: boolean
+        isVerified: { type: boolean }
+
     Store:
       type: object
       properties:
@@ -54,6 +52,15 @@ components:
         phone: { type: string }
         owner_id: { type: string }
         isDefault: { type: boolean }
+
+    Employee:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        phone: { type: string }
+        role: { type: string }
+
     Product:
       type: object
       properties:
@@ -65,6 +72,84 @@ components:
         minStock: { type: number }
         maxStock: { type: number }
         status: { type: string }
+
+    ProductGroup:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        store_id: { type: string }
+
+    Supplier:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        phone: { type: string }
+        address: { type: string }
+
+    StockCheck:
+      type: object
+      properties:
+        id: { type: string }
+        store_id: { type: string }
+        products:
+          type: array
+          items:
+            type: object
+            properties:
+              product_id: { type: string }
+              countedQuantity: { type: integer }
+        note: { type: string }
+        status: { type: string }
+
+    StockDisposal:
+      type: object
+      properties:
+        id: { type: string }
+        store_id: { type: string }
+        products:
+          type: array
+          items:
+            type: object
+            properties:
+              product_id: { type: string }
+              quantity: { type: integer }
+              reason: { type: string }
+        note: { type: string }
+        status: { type: string }
+
+    PurchaseOrder:
+      type: object
+      properties:
+        id: { type: string }
+        store_id: { type: string }
+        supplier_id: { type: string }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              product_id: { type: string }
+              qty: { type: integer }
+              price: { type: number }
+        status: { type: string }
+
+    PurchaseReturn:
+      type: object
+      properties:
+        id: { type: string }
+        store_id: { type: string }
+        purchase_order_id: { type: string }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              product_id: { type: string }
+              qty: { type: integer }
+        status: { type: string }
+
     Order:
       type: object
       properties:
@@ -81,14 +166,25 @@ components:
         total: { type: number }
         status: { type: string }
 
+    TaxDeclaration:
+      type: object
+      properties:
+        id: { type: string }
+        store_id: { type: string }
+        periodType: { type: string }
+        periodKey: { type: string }
+        totalRevenue: { type: number }
+        status: { type: string }
+
 security:
   - BearerAuth: []
 
 paths:
+  # ===== Auth / Users =====
   /api/users/register:
     post:
       tags: [Auth]
-      summary: Register manager (sends OTP)
+      summary: Register manager (send OTP)
       requestBody:
         required: true
         content:
@@ -101,10 +197,8 @@ paths:
                 password: { type: string }
                 phone: { type: string }
       responses:
-        "201":
-          description: Registered, OTP sent
-        "400":
-          description: Bad request
+        "201": { description: "Registered, OTP sent" }
+        "400": { description: "Bad request" }
 
   /api/users/verify-otp:
     post:
@@ -126,7 +220,7 @@ paths:
   /api/users/login:
     post:
       tags: [Auth]
-      summary: Login (returns access token)
+      summary: Login (returns JWT)
       requestBody:
         required: true
         content:
@@ -148,17 +242,17 @@ paths:
                   user: { $ref: "#/components/schemas/User" }
         "400": { description: "Invalid credentials" }
 
+  # ===== Stores =====
   /api/stores:
     get:
       tags: [Stores]
       summary: Get stores for authenticated manager
       security: [{ BearerAuth: [] }]
       responses:
-        "200":
-          description: list of stores
+        "200": { description: "List of stores" }
     post:
       tags: [Stores]
-      summary: Create new store (manager)
+      summary: Create store (manager)
       security: [{ BearerAuth: [] }]
       requestBody:
         required: true
@@ -173,22 +267,118 @@ paths:
       responses:
         "201": { description: "Store created" }
 
-  /api/stores/{id}:
+  /api/stores/{storeId}:
     get:
       tags: [Stores]
-      summary: Get store by id
+      summary: Get store by ID
       parameters:
         - in: path
-          name: id
+          name: storeId
           required: true
           schema: { type: string }
+      security: [{ BearerAuth: [] }]
       responses:
         "200": { description: "Store object" }
+    put:
+      tags: [Stores]
+      summary: Update store
+      parameters:
+        - in: path
+          name: storeId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Store"
+      responses:
+        "200": { description: "Updated" }
+    delete:
+      tags: [Stores]
+      summary: Delete store
+      parameters:
+        - in: path
+          name: storeId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      responses:
+        "204": { description: "Deleted" }
 
+  # ===== Employees =====
+  /api/stores/{storeId}/employees:
+    get:
+      tags: [Employees]
+      summary: Get employees by store
+      parameters:
+        - in: path
+          name: storeId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: "List employees" }
+    post:
+      tags: [Employees]
+      summary: Create employee
+      parameters:
+        - in: path
+          name: storeId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Employee"
+      responses:
+        "201": { description: "Created" }
+
+  /api/stores/{storeId}/employees/{employeeId}:
+    get:
+      tags: [Employees]
+      summary: Get employee by ID
+      parameters:
+        - in: path
+          name: storeId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: employeeId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: "Employee object" }
+    put:
+      tags: [Employees]
+      summary: Update employee
+      parameters:
+        - in: path
+          name: storeId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: employeeId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Employee"
+      responses:
+        "200": { description: "Updated" }
+  # ===== Products =====
   /api/products:
     get:
       tags: [Products]
-      summary: Get products (filter by store)
+      summary: Get products (optionally filter by store)
       parameters:
         - in: query
           name: store_id
@@ -196,8 +386,9 @@ paths:
         - in: query
           name: page
           schema: { type: integer }
+      security: [{ BearerAuth: [] }]
       responses:
-        "200": { description: "Products list" }
+        "200": { description: "List of products" }
     post:
       tags: [Products]
       summary: Create product
@@ -211,20 +402,26 @@ paths:
       responses:
         "201": { description: "Created" }
 
-  /api/products/{id}:
+  /api/products/{productId}:
     get:
       tags: [Products]
-      summary: Get product by id
+      summary: Get product by ID
       parameters:
         - in: path
-          name: id
+          name: productId
           required: true
           schema: { type: string }
+      security: [{ BearerAuth: [] }]
       responses:
-        "200": { description: "Product" }
+        "200": { description: "Product object" }
     put:
       tags: [Products]
       summary: Update product
+      parameters:
+        - in: path
+          name: productId
+          required: true
+          schema: { type: string }
       security: [{ BearerAuth: [] }]
       requestBody:
         required: true
@@ -237,16 +434,47 @@ paths:
     delete:
       tags: [Products]
       summary: Delete product
+      parameters:
+        - in: path
+          name: productId
+          required: true
+          schema: { type: string }
       security: [{ BearerAuth: [] }]
       responses:
         "204": { description: "Deleted" }
 
+  /api/products/search:
+    get:
+      tags: [Products]
+      summary: Search products by name or SKU
+      parameters:
+        - in: query
+          name: keyword
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: "Search results" }
+
+  /api/products/low-stock:
+    get:
+      tags: [Products]
+      summary: List low stock products
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: "Low stock products" }
+
+  # ===== Product Groups =====
   /api/product-groups:
     get:
       tags: [ProductGroups]
       summary: List product groups
+      parameters:
+        - in: query
+          name: store_id
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
       responses:
-        "200": { description: "Groups list" }
+        "200": { description: "Product group list" }
     post:
       tags: [ProductGroups]
       summary: Create product group
@@ -256,16 +484,61 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                name: { type: string }
+              $ref: "#/components/schemas/ProductGroup"
       responses:
         "201": { description: "Created" }
 
+  /api/product-groups/{groupId}:
+    get:
+      tags: [ProductGroups]
+      summary: Get product group by ID
+      parameters:
+        - in: path
+          name: groupId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: "Product group object" }
+    put:
+      tags: [ProductGroups]
+      summary: Update product group
+      parameters:
+        - in: path
+          name: groupId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductGroup"
+      responses:
+        "200": { description: "Updated" }
+    delete:
+      tags: [ProductGroups]
+      summary: Delete product group
+      parameters:
+        - in: path
+          name: groupId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      responses:
+        "204": { description: "Deleted" }
+
+  # ===== Suppliers =====
   /api/suppliers:
     get:
       tags: [Suppliers]
-      summary: List suppliers
+      summary: List suppliers (optionally filter by store)
+      parameters:
+        - in: query
+          name: store_id
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
       responses:
         "200": { description: "Suppliers list" }
     post:
@@ -273,125 +546,334 @@ paths:
       summary: Create supplier
       security: [{ BearerAuth: [] }]
       requestBody:
+        required: true
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                name: { type: string }
-                phone: { type: string }
-                address: { type: string }
+              $ref: "#/components/schemas/Supplier"
       responses:
         "201": { description: "Created" }
 
+  /api/suppliers/{supplierId}:
+    get:
+      tags: [Suppliers]
+      summary: Get supplier by ID
+      parameters:
+        - in: path
+          name: supplierId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: "Supplier object" }
+    put:
+      tags: [Suppliers]
+      summary: Update supplier
+      parameters:
+        - in: path
+          name: supplierId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Supplier"
+      responses:
+        "200": { description: "Updated" }
+    delete:
+      tags: [Suppliers]
+      summary: Delete supplier
+      parameters:
+        - in: path
+          name: supplierId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      responses:
+        "204": { description: "Deleted" }
+
+  # ===== Stock Checks =====
   /api/stock-checks:
     get:
       tags: [StockChecks]
-      summary: List stock check records
+      summary: List stock checks
+      parameters:
+        - in: query
+          name: store_id
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
       responses:
-        "200": { description: "Stock checks" }
+        "200": { description: "List of stock checks" }
     post:
       tags: [StockChecks]
-      summary: Create stock check record
+      summary: Create stock check
       security: [{ BearerAuth: [] }]
       requestBody:
+        required: true
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                product_id: { type: string }
-                qty: { type: number }
-                note: { type: string }
+              $ref: "#/components/schemas/StockCheck"
       responses:
         "201": { description: "Created" }
 
+  /api/stock-checks/{checkId}:
+    get:
+      tags: [StockChecks]
+      summary: Get stock check by ID
+      parameters:
+        - in: path
+          name: checkId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: "Stock check object" }
+    put:
+      tags: [StockChecks]
+      summary: Update stock check
+      parameters:
+        - in: path
+          name: checkId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StockCheck"
+      responses:
+        "200": { description: "Updated" }
+    delete:
+      tags: [StockChecks]
+      summary: Delete stock check
+      parameters:
+        - in: path
+          name: checkId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      responses:
+        "204": { description: "Deleted" }
+  # ===== Stock Disposals =====
   /api/stock-disposals:
     get:
       tags: [StockDisposals]
-      summary: List disposals
+      summary: List stock disposals
+      parameters:
+        - in: query
+          name: store_id
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
       responses:
-        "200": { description: "List" }
+        "200": { description: "List of stock disposals" }
     post:
       tags: [StockDisposals]
-      summary: Dispose stock (destroy)
+      summary: Create stock disposal
       security: [{ BearerAuth: [] }]
       requestBody:
+        required: true
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                product_id: { type: string }
-                qty: { type: number }
-                reason: { type: string }
+              $ref: "#/components/schemas/StockDisposal"
       responses:
         "201": { description: "Created" }
 
+  /api/stock-disposals/{disposalId}:
+    get:
+      tags: [StockDisposals]
+      summary: Get stock disposal by ID
+      parameters:
+        - in: path
+          name: disposalId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: "Stock disposal object" }
+    put:
+      tags: [StockDisposals]
+      summary: Update stock disposal
+      parameters:
+        - in: path
+          name: disposalId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StockDisposal"
+      responses:
+        "200": { description: "Updated" }
+    delete:
+      tags: [StockDisposals]
+      summary: Delete stock disposal
+      parameters:
+        - in: path
+          name: disposalId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      responses:
+        "204": { description: "Deleted" }
+
+  # ===== Purchase Orders =====
   /api/purchase-orders:
     get:
       tags: [PurchaseOrders]
       summary: List purchase orders
+      parameters:
+        - in: query
+          name: store_id
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
       responses:
-        "200": { description: "List" }
+        "200": { description: "List of purchase orders" }
     post:
       tags: [PurchaseOrders]
       summary: Create purchase order
       security: [{ BearerAuth: [] }]
       requestBody:
+        required: true
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                supplier_id: { type: string }
-                items:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      product_id: { type: string }
-                      qty: { type: number }
+              $ref: "#/components/schemas/PurchaseOrder"
       responses:
         "201": { description: "Created" }
 
+  /api/purchase-orders/{orderId}:
+    get:
+      tags: [PurchaseOrders]
+      summary: Get purchase order by ID
+      parameters:
+        - in: path
+          name: orderId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: "Purchase order object" }
+    put:
+      tags: [PurchaseOrders]
+      summary: Update purchase order
+      parameters:
+        - in: path
+          name: orderId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PurchaseOrder"
+      responses:
+        "200": { description: "Updated" }
+    delete:
+      tags: [PurchaseOrders]
+      summary: Delete purchase order
+      parameters:
+        - in: path
+          name: orderId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      responses:
+        "204": { description: "Deleted" }
+
+  # ===== Purchase Returns =====
   /api/purchase-returns:
     get:
       tags: [PurchaseReturns]
       summary: List purchase returns
+      parameters:
+        - in: query
+          name: store_id
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
       responses:
-        "200": { description: "List" }
+        "200": { description: "List of purchase returns" }
     post:
       tags: [PurchaseReturns]
       summary: Create purchase return
       security: [{ BearerAuth: [] }]
       requestBody:
+        required: true
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                purchase_order_id: { type: string }
-                items:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      product_id: { type: string }
-                      qty: { type: number }
+              $ref: "#/components/schemas/PurchaseReturn"
       responses:
         "201": { description: "Created" }
 
+  /api/purchase-returns/{returnId}:
+    get:
+      tags: [PurchaseReturns]
+      summary: Get purchase return by ID
+      parameters:
+        - in: path
+          name: returnId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: "Purchase return object" }
+    put:
+      tags: [PurchaseReturns]
+      summary: Update purchase return
+      parameters:
+        - in: path
+          name: returnId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PurchaseReturn"
+      responses:
+        "200": { description: "Updated" }
+    delete:
+      tags: [PurchaseReturns]
+      summary: Delete purchase return
+      parameters:
+        - in: path
+          name: returnId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      responses:
+        "204": { description: "Deleted" }
+
+  # ===== Orders =====
   /api/orders:
     get:
       tags: [Orders]
       summary: List orders
+      parameters:
+        - in: query
+          name: store_id
+          schema: { type: string }
       security: [{ BearerAuth: [] }]
       responses:
-        "200": { description: "Orders list" }
+        "200": { description: "List of orders" }
     post:
       tags: [Orders]
-      summary: Create order
+      summary: Create new order
+      security: [{ BearerAuth: [] }]
       requestBody:
         required: true
         content:
@@ -401,20 +883,26 @@ paths:
       responses:
         "201": { description: "Created" }
 
-  /api/orders/{id}:
+  /api/orders/{orderId}:
     get:
       tags: [Orders]
-      summary: Get order by id
+      summary: Get order by ID
       parameters:
         - in: path
-          name: id
+          name: orderId
           required: true
           schema: { type: string }
+      security: [{ BearerAuth: [] }]
       responses:
-        "200": { description: "Order" }
+        "200": { description: "Order object" }
     patch:
       tags: [Orders]
-      summary: Update order partial (e.g., status)
+      summary: Partial update order (e.g., status)
+      parameters:
+        - in: path
+          name: orderId
+          required: true
+          schema: { type: string }
       security: [{ BearerAuth: [] }]
       requestBody:
         content:
@@ -426,15 +914,136 @@ paths:
       responses:
         "200": { description: "Updated" }
 
-  /api/orders/vietqr-webhook:
+  /api/orders/{orderId}/set-paid-cash:
     post:
-      tags: [Webhook]
-      summary: Webhook for VietQR / PayOS callback
+      tags: [Orders]
+      summary: Mark order as paid by cash
+      parameters:
+        - in: path
+          name: orderId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: "Cash payment confirmed" }
+
+  /api/orders/{orderId}/print-bill:
+    post:
+      tags: [Orders]
+      summary: Print order bill
+      parameters:
+        - in: path
+          name: orderId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: "Bill printed" }
+
+  /api/orders/{orderId}/refund:
+    post:
+      tags: [Orders]
+      summary: Refund an order
+      parameters:
+        - in: path
+          name: orderId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                files:
+                  type: array
+                  items: { type: string, format: binary }
+      responses:
+        "200": { description: "Refund processed" }
+
+  # ===== Tax =====
+  /api/tax:
+    get:
+      tags: [Tax]
+      summary: List tax declarations
+      parameters:
+        - in: query
+          name: store_id
+          schema: { type: string }
+        - in: query
+          name: period_type
+          schema: { type: string }
+        - in: query
+          name: period_key
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: "List of tax declarations" }
+    post:
+      tags: [Tax]
+      summary: Create new tax declaration
+      security: [{ BearerAuth: [] }]
       requestBody:
         required: true
         content:
-          "*/*":
+          application/json:
             schema:
-              type: string
+              $ref: "#/components/schemas/TaxDeclaration"
       responses:
-        "200": { description: "Webhook processed" }
+        "201": { description: "Created" }
+
+  /api/tax/{taxId}:
+    get:
+      tags: [Tax]
+      summary: Get tax declaration by ID
+      parameters:
+        - in: path
+          name: taxId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: "Tax declaration object" }
+    put:
+      tags: [Tax]
+      summary: Update tax declaration
+      parameters:
+        - in: path
+          name: taxId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaxDeclaration"
+      responses:
+        "200": { description: "Updated" }
+    delete:
+      tags: [Tax]
+      summary: Delete tax declaration
+      parameters:
+        - in: path
+          name: taxId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      responses:
+        "204": { description: "Deleted" }
+
+  # ===== Webhook =====
+  /api/webhook/vietqr:
+    post:
+      tags: [Webhook]
+      summary: VietQR payment webhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200": { description: "Webhook received" }

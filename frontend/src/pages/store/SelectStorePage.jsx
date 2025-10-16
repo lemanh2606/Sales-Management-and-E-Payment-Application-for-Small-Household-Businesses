@@ -1,10 +1,15 @@
+
 import React, { useEffect, useState } from "react";
-import { getStores, selectStore, createStore, updateStore, deleteStore } from "../api/userApi";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../../context/AuthContext";
 import { useNavigate } from "react-router-dom";
+import { FiPlus, FiSearch, FiCheck, FiEdit, FiTrash2 } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
-import { FiPlus, FiEdit, FiTrash2, FiCheck, FiSearch } from "react-icons/fi";
-import Button from "../components/Button";
+
+import Button from "../../components/Button";
+import { selectStore, createStore, updateStore, deleteStore, getStoresByManager } from "../../api/storeApi";
+
+
+
 
 export default function SelectStorePage() {
   const [stores, setStores] = useState([]);
@@ -23,7 +28,7 @@ export default function SelectStorePage() {
   const loadStores = async () => {
     setLoading(true);
     try {
-      const res = await getStores();
+      const res = await getStoresByManager();
       const list = res.stores || res;
       setStores(list);
       setFilteredStores(list);

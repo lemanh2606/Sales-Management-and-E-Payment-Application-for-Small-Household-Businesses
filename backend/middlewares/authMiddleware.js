@@ -37,7 +37,7 @@ async function verifyToken(req, res, next) {
 function isManager(req, res, next) {
   try {
     if (req.user && req.user.role === "MANAGER") return next();
-    return res.status(403).json({ message: "🚫 Chỉ Manager mới có quyền này" });
+    return res.status(403).json({ message: " Chỉ Manager mới có quyền này" });
   } catch (err) {
     console.error("isManager error:", err);
     return res.status(500).json({ message: "Lỗi server" });
@@ -47,7 +47,7 @@ function isManager(req, res, next) {
 function isStaff(req, res, next) {
   try {
     if (req.user && req.user.role === "STAFF") return next();
-    return res.status(403).json({ message: "🚫 Chỉ Staff mới có quyền này" });
+    return res.status(403).json({ message: " Chỉ Staff mới có quyền này" });
   } catch (err) {
     console.error("isStaff error:", err);
     return res.status(500).json({ message: "Lỗi server" });
@@ -68,7 +68,7 @@ async function checkStoreAccess(req, res, next) {
       return res.status(401).json({ message: "User chưa xác thực" });
     }
 
-    // 1️⃣ Lấy storeId từ nhiều nguồn (linh hoạt FE)
+    // 1️ Lấy storeId từ nhiều nguồn (linh hoạt FE)
     let storeId =
       req.query.shopId ||
       req.query.storeId ||
@@ -92,30 +92,30 @@ async function checkStoreAccess(req, res, next) {
       return res.status(400).json({ message: "storeId không hợp lệ" });
     }
 
-    // 2️⃣ Lấy store
+    // 2️ Lấy store
     const store = await Store.findById(storeId).lean();
     if (!store) {
       return res.status(404).json({
         message: "Cửa hàng không tồn tại hoặc đã bị xóa",
       });
     }
-    // 3️⃣ PHÂN QUYỀN
-    // 🟢 MANAGER → chỉ được vào store mình sở hữu
+    // 3️ PHÂN QUYỀN
+    //  MANAGER → chỉ được vào store mình sở hữu
     if (req.user.role === "MANAGER") {
       if (String(store.owner_id) === String(userId)) {
-        console.log("✅Log này báo: MANAGER đã vào được store của mình");
+        console.log("Log này báo: MANAGER đã vào được store của mình");
         req.store = store;
         req.storeRole = "OWNER";
         return next();
       } else {
-        console.log("🚫 MANAGER TRUY CẬP STORE KHÔNG PHẢI OWNER");
+        console.log(" MANAGER TRUY CẬP STORE KHÔNG PHẢI OWNER");
         return res.status(403).json({
           message: "Manager không sở hữu cửa hàng này",
         });
       }
     }
 
-    // 🔵 STAFF → Kiểm tra store_roles
+    //  STAFF → Kiểm tra store_roles
     if (req.user.role === "STAFF") {
       const roleMapping =
         (userData.store_roles || []).find(
@@ -123,18 +123,18 @@ async function checkStoreAccess(req, res, next) {
         ) || null;
 
       if (roleMapping) {
-        console.log("✅ STAFF ĐƯỢC GÁN STORE → ALLOW");
+        console.log(" STAFF ĐƯỢC GÁN STORE → ALLOW");
         req.store = store;
         req.storeRole = roleMapping.role; // OWNER / STAFF
         return next();
       }
-      console.log("🚫 STAFF TRUY CẬP STORE KHÔNG ĐƯỢC GÁN");
+      console.log(" STAFF TRUY CẬP STORE KHÔNG ĐƯỢC GÁN");
       return res.status(403).json({
         message: "Nhân viên không có quyền tại cửa hàng này",
       });
     }
 
-    // ❗Nếu không thuộc MANAGER / STAFF
+    // Nếu không thuộc MANAGER / STAFF
     return res.status(403).json({
       message: "Role không hợp lệ để truy cập cửa hàng",
     });
