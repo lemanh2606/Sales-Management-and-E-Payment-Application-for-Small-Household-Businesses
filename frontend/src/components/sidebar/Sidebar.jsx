@@ -1,24 +1,21 @@
 // src/components/Sidebar.jsx
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import SidebarItem from "./SidebarItem";
-import { FiLogOut, FiMenu, FiX } from "react-icons/fi";
+import { FiLogOut, FiMenu, FiX, FiChevronDown } from "react-icons/fi";
 import { AiOutlineDashboard } from "react-icons/ai";
 import { BsBoxSeam, BsPeople } from "react-icons/bs";
 import { MdShoppingCart } from "react-icons/md";
+import { FiFileText, FiBell } from "react-icons/fi";
 import { useAuth } from "../../context/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { FiFileText, FiBell } from "react-icons/fi";
-
 
 export default function Sidebar() {
     const navigate = useNavigate();
     const { logout, user } = useAuth();
     const [openMobile, setOpenMobile] = useState(false);
-
-    const handleLogout = () => {
-        logout();
-        navigate("/login");
-    };
+    const navRef = useRef(null);
+    const [canScrollDown, setCanScrollDown] = useState(false);
+    const [scrollProgress, setScrollProgress] = useState(0); // optional
 
     const items = [
         {
@@ -52,7 +49,7 @@ export default function Sidebar() {
                     children: [{ name: "Danh sách nhà cung cấp", path: "/suppliers" }],
                 },
                 { name: "Quản lý nhập/xuất/hủy hàng", path: "/inventory" },
-                { name: "Nhóm sản phẩm", path: "/product-groups" }, // nếu nhóm là global
+                { name: "Nhóm sản phẩm", path: "/product-groups" },
             ],
         },
         {
@@ -113,6 +110,57 @@ export default function Sidebar() {
         },
     ];
 
+    const handleLogout = () => {
+        logout();
+        navigate("/login");
+    };
+
+    // compute whether nav can scroll further down
+    const recomputeScroll = useCallback(() => {
+        const el = navRef.current;
+        if (!el) return;
+        const maxScrollTop = el.scrollHeight - el.clientHeight;
+        const currentTop = el.scrollTop;
+        setCanScrollDown(currentTop < maxScrollTop - 2);
+        const progress = maxScrollTop <= 0 ? 100 : Math.round((currentTop / maxScrollTop) * 100);
+        setScrollProgress(progress);
+    }, []);
+
+    useEffect(() => {
+        const el = navRef.current;
+        if (!el) return;
+
+        // initial check
+        recomputeScroll();
+
+        const onScroll = () => recomputeScroll();
+        el.addEventListener("scroll", onScroll);
+        window.addEventListener("resize", onScroll);
+
+        // observe changes inside nav (e.g., expand/collapse items)
+        const mo = new MutationObserver(() => requestAnimationFrame(recomputeScroll));
+        mo.observe(el, { childList: true, subtree: true, characterData: true });
+
+        return () => {
+            el.removeEventListener("scroll", onScroll);
+            window.removeEventListener("resize", onScroll);
+            mo.disconnect();
+        };
+    }, [recomputeScroll]);
+
+    // on click: scroll down by ~75% viewport or to bottom
+    const handleScrollDownClick = () => {
+        const el = navRef.current;
+        if (!el) return;
+        const viewport = el.clientHeight;
+        const remaining = el.scrollHeight - el.scrollTop - viewport;
+        if (remaining <= 20) {
+            el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+        } else {
+            const amount = Math.round(viewport * 0.75);
+            el.scrollBy({ top: amount, behavior: "smooth" });
+        }
+    };
 
     return (
         <>
@@ -120,37 +168,58 @@ export default function Sidebar() {
             <button
                 className="md:hidden fixed top-4 left-4 z-50 p-2 rounded-lg bg-green-600 text-white shadow-lg"
                 onClick={() => setOpenMobile(true)}
+                aria-label="Mở menu"
             >
                 <FiMenu size={24} />
             </button>
 
-            {/* Overlay */}
+            {/* Mobile overlay */}
             <div
                 className={`fixed inset-0 bg-black bg-opacity-40 z-40 transition-opacity duration-300 ${openMobile ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
                     }`}
                 onClick={() => setOpenMobile(false)}
-            ></div>
+            />
 
             <aside
-                className={`bg-white w-64 h-full shadow-2xl fixed top-0 left-0 z-50 transform transition-transform duration-300
-          ${openMobile ? "translate-x-0" : "-translate-x-full"} md:translate-x-0`}
+                className={`bg-white w-64 h-full shadow-2xl fixed top-0 left-0 z-50 transform transition-transform duration-300 ${openMobile ? "translate-x-0" : "-translate-x-full"} md:translate-x-0`}
+                aria-hidden={openMobile ? "false" : "true"}
             >
                 <div className="p-6 flex flex-col h-full">
-                    <div className="flex items-center justify-between mb-8">
+                    <div className="flex items-center justify-between mb-6">
                         <h2 className="text-3xl font-extrabold text-green-700 tracking-wide drop-shadow-lg">
                             Smallbiz-Sales
                         </h2>
-                        {/* Close mobile */}
-                        <button className="md:hidden" onClick={() => setOpenMobile(false)}>
+                        <button className="md:hidden" onClick={() => setOpenMobile(false)} aria-label="Đóng menu">
                             <FiX size={24} />
                         </button>
                     </div>
 
-                    <nav className="flex-1 flex flex-col gap-2 overflow-y-auto">
+                    {/* nav: hidden scrollbar but scrollable */}
+                    <nav
+                        ref={navRef}
+                        className="flex-1 flex flex-col gap-2 overflow-y-auto relative scrollbar-none pr-2"
+                        aria-label="Sidebar navigation"
+                    >
                         {items.map((item) => (
                             <SidebarItem key={item.name} item={item} />
                         ))}
                     </nav>
+
+                    {/* Round button fixed to sidebar (won't move with nav content) */}
+                    {canScrollDown && (
+                        <button
+                            onClick={handleScrollDownClick}
+                            aria-label="Xem thêm"
+                            title="Xem thêm"
+                            className="absolute left-1/2 transform -translate-x-1/2 bottom-20 z-40   text-[black] flex items-center justify-center shadow-2xl hover:scale-105 transition-transform"
+                            style={{ touchAction: "manipulation" }}
+                        >
+                            <div className="flex flex-col items-center">
+                                <FiChevronDown size={20} />
+                                <span className="text-xs leading-none -mt-1">Xem thêm</span>
+                            </div>
+                        </button>
+                    )}
 
                     <button
                         onClick={handleLogout}
