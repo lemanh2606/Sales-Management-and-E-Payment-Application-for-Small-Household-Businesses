@@ -27,3 +27,5 @@ export const DialogTitle = ({ children, className = "" }) => (
 export const DialogFooter = ({ children, className = "" }) => (
     <div className={`mt-4 flex justify-end gap-2 ${className}`}>{children}</div>
 );
+
+
