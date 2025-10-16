@@ -79,8 +79,8 @@ const createStockCheck = async (req, res) => {
         return res.status(400).json({ message: "Số lượng tồn kho và thực tế phải không âm" });
       }
 
-      // Kiểm tra sản phẩm có tồn tại và thuộc store này không
-      const product = await Product.findById(item.product_id);
+      // Kiểm tra sản phẩm có tồn tại và thuộc store này không (chỉ kiểm tra sản phẩm chưa bị xóa)
+      const product = await Product.findOne({ _id: item.product_id, isDeleted: false });
       if (!product) {
         return res.status(404).json({ message: `Sản phẩm với ID ${item.product_id} không tồn tại` });
       }
@@ -120,8 +120,8 @@ const createStockCheck = async (req, res) => {
 
     await newStockCheck.save();
 
-    // Lấy thông tin chi tiết và định dạng dữ liệu trả về
-    const populatedStockCheck = await StockCheck.findById(newStockCheck._id)
+    // Lấy thông tin chi tiết và định dạng dữ liệu trả về (chỉ lấy phiếu chưa bị xóa)
+    const populatedStockCheck = await StockCheck.findOne({ _id: newStockCheck._id, isDeleted: false })
       .populate('created_by', 'username full_name')
       .populate('store_id', 'name address')
       .populate('items.product_id', 'name sku unit');
@@ -202,8 +202,8 @@ const getStockChecksByStore = async (req, res) => {
       }
     }
 
-    // Lấy tất cả phiếu kiểm kho của store
-    const stockChecks = await StockCheck.find({ store_id: storeId })
+    // Lấy tất cả phiếu kiểm kho của store (chỉ lấy phiếu chưa bị xóa)
+    const stockChecks = await StockCheck.find({ store_id: storeId, isDeleted: false })
       .populate('created_by', 'username full_name')
       .populate('store_id', 'name')
       .sort({ check_date: -1 });
@@ -254,7 +254,7 @@ const getStockCheckById = async (req, res) => {
     const { checkId } = req.params;
     const userId = req.user.id;
 
-    const stockCheck = await StockCheck.findById(checkId)
+    const stockCheck = await StockCheck.findOne({ _id: checkId, isDeleted: false })
       .populate('created_by', 'username full_name')
       .populate('store_id', 'name address phone owner_id')
       .populate('items.product_id', 'name sku unit');
@@ -350,8 +350,8 @@ const updateStockCheck = async (req, res) => {
       return res.status(403).json({ message: "Chỉ Manager mới được cập nhật phiếu kiểm kho" });
     }
 
-    // Tìm phiếu kiểm kho và kiểm tra quyền
-    const stockCheck = await StockCheck.findById(checkId).populate('store_id', 'owner_id');
+    // Tìm phiếu kiểm kho và kiểm tra quyền (chỉ tìm phiếu chưa bị xóa)
+    const stockCheck = await StockCheck.findOne({ _id: checkId, isDeleted: false }).populate('store_id', 'owner_id');
     if (!stockCheck) {
       return res.status(404).json({ message: "Phiếu kiểm kho không tồn tại" });
     }
@@ -479,8 +479,8 @@ const deleteStockCheck = async (req, res) => {
       return res.status(403).json({ message: "Chỉ Manager mới được xóa phiếu kiểm kho" });
     }
 
-    // Tìm phiếu kiểm kho và kiểm tra quyền
-    const stockCheck = await StockCheck.findById(checkId).populate('store_id', 'owner_id');
+    // Tìm phiếu kiểm kho và kiểm tra quyền (chỉ tìm phiếu chưa bị xóa)
+    const stockCheck = await StockCheck.findOne({ _id: checkId, isDeleted: false }).populate('store_id', 'owner_id');
     if (!stockCheck) {
       return res.status(404).json({ message: "Phiếu kiểm kho không tồn tại" });
     }
@@ -494,8 +494,9 @@ const deleteStockCheck = async (req, res) => {
       return res.status(400).json({ message: "Không thể xóa phiếu kiểm kho đã cân bằng" });
     }
 
-    // Xóa phiếu kiểm kho
-    await StockCheck.findByIdAndDelete(checkId);
+    // Soft delete - đánh dấu phiếu kiểm kho đã bị xóa
+    stockCheck.isDeleted = true;
+    await stockCheck.save();
 
     res.status(200).json({
       message: "Xóa phiếu kiểm kho thành công",
