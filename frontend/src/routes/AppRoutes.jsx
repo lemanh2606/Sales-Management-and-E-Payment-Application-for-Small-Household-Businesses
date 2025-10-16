@@ -8,7 +8,7 @@ import SelectStorePage from "../pages/store/SelectStorePage";
 import SupplierListPage from "../pages/supplier/SupplierListPage";
 
 import ProductListPage from "../pages/product/ProductListPage";
-import ProductCreatePage from "../pages/product/ProductCreatePage";
+
 import ProtectedRoute from "./ProtectedRoute";
 
 function AppRoutes() {
