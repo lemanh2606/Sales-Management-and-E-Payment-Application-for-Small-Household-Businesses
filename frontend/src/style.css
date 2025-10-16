@@ -4,3 +4,30 @@
 body {
     background: linear-gradient(180deg, #e6f4ea 0%, #f7fff7 100%);
 }
+
+/* Ẩn scrollbar Chrome, Edge, Safari */
+nav::-webkit-scrollbar {
+    width: 0px;
+    background: transparent;
+}
+
+/* Ẩn scrollbar Firefox */
+nav {
+    scrollbar-width: none;
+    /* Firefox */
+    -ms-overflow-style: none;
+    /* IE 10+ */
+}
+
+/* Ẩn scrollbar (Chrome, Edge, Safari) */
+.scrollbar-none::-webkit-scrollbar {
+    display: none;
+}
+
+/* Ẩn scrollbar (Firefox) */
+.scrollbar-none {
+    -ms-overflow-style: none;
+    /* IE 10+ */
+    scrollbar-width: none;
+    /* Firefox */
+}
