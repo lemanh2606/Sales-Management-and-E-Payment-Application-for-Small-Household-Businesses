@@ -50,11 +50,11 @@ const calculateTotalFromItems = (items, products = {}) => {
   }, 0);
 };
 
-// Cập nhật stock cho các sản phẩm khi nhập hàng
+// Cập nhật stock cho các sản phẩm khi nhập hàng (chỉ cập nhật sản phẩm chưa bị xóa)
 const updateProductStock = async (items, operation = 'add') => {
   for (const item of items) {
     const productId = item.product_id._id || item.product_id;
-    const product = await Product.findById(productId);
+    const product = await Product.findOne({ _id: productId, isDeleted: false });
     if (product) {
       if (operation === 'add') {
         product.stock_quantity += item.quantity;
@@ -104,8 +104,8 @@ const createPurchaseOrder = async (req, res) => {
       return res.status(403).json({ message: "Bạn chỉ có thể tạo đơn nhập hàng cho cửa hàng của mình" });
     }
 
-    // Kiểm tra supplier
-    const supplier = await Supplier.findOne({ _id: supplier_id, store_id: storeId });
+    // Kiểm tra supplier (chỉ kiểm tra nhà cung cấp chưa bị xóa)
+    const supplier = await Supplier.findOne({ _id: supplier_id, store_id: storeId, isDeleted: false });
     if (!supplier) {
       return res.status(404).json({ message: "Nhà cung cấp không tồn tại hoặc không thuộc cửa hàng này" });
     }
@@ -125,8 +125,8 @@ const createPurchaseOrder = async (req, res) => {
         return res.status(400).json({ message: `Sản phẩm thứ ${i + 1}: product_id là bắt buộc` });
       }
 
-      // Kiểm tra product tồn tại
-      const product = await Product.findOne({ _id: item.product_id, store_id: storeId });
+      // Kiểm tra product tồn tại (chỉ kiểm tra sản phẩm chưa bị xóa)
+      const product = await Product.findOne({ _id: item.product_id, store_id: storeId, isDeleted: false });
       if (!product) {
         return res.status(404).json({ message: `Sản phẩm thứ ${i + 1} không tồn tại hoặc không thuộc cửa hàng này` });
       }
@@ -362,7 +362,7 @@ const updatePurchaseOrder = async (req, res) => {
     }
     
     if (supplier_id !== undefined) {
-      const supplier = await Supplier.findOne({ _id: supplier_id, store_id: purchaseOrder.store_id._id });
+      const supplier = await Supplier.findOne({ _id: supplier_id, store_id: purchaseOrder.store_id._id, isDeleted: false });
       if (!supplier) {
         return res.status(404).json({ message: "Nhà cung cấp không tồn tại" });
       }
@@ -377,7 +377,7 @@ const updatePurchaseOrder = async (req, res) => {
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
         
-        const product = await Product.findOne({ _id: item.product_id, store_id: purchaseOrder.store_id._id });
+        const product = await Product.findOne({ _id: item.product_id, store_id: purchaseOrder.store_id._id, isDeleted: false });
         if (!product) {
           return res.status(404).json({ message: `Sản phẩm thứ ${i + 1} không tồn tại` });
         }

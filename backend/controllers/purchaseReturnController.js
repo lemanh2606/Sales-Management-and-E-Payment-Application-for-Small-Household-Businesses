@@ -102,7 +102,7 @@ const createPurchaseReturn = async (req, res) => {
 
     let total_amount = 0;
     const productIds = items.map(item => item.product_id);
-    const products = await Product.find({ '_id': { $in: productIds }, store_id: storeId });
+    const products = await Product.find({ '_id': { $in: productIds }, store_id: storeId, isDeleted: false });
     const productMap = new Map(products.map(p => [p._id.toString(), p]));
 
     // Nếu có purchase_order_id, kiểm tra sản phẩm trả có trong đơn nhập gốc không
@@ -241,7 +241,7 @@ const updatePurchaseReturn = async (req, res) => {
     if (updates.items) {
         let total_amount = 0;
         const productIds = updates.items.map(item => item.product_id);
-        const products = await Product.find({ '_id': { $in: productIds }, store_id: purchaseReturn.store_id });
+        const products = await Product.find({ '_id': { $in: productIds }, store_id: purchaseReturn.store_id, isDeleted: false });
         const productMap = new Map(products.map(p => [p._id.toString(), p]));
 
         for (const item of updates.items) {
