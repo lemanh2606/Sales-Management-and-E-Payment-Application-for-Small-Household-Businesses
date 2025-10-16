@@ -18,7 +18,8 @@ const stockCheckSchema = new mongoose.Schema({
   status: { type: String, enum: ['phiếu tạm', 'Đã cân bằng'], default: 'phiếu tạm' }, // Trạng thái
   store_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Store', required: true }, // Cửa hàng
   created_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }, // Người tạo phiếu
-  items: [stockCheckItemSchema] // Danh sách hàng hóa được kiểm
+  items: [stockCheckItemSchema], // Danh sách hàng hóa được kiểm
+  isDeleted: { type: Boolean, default: false } // Xóa mềm
 }, {
   timestamps: true, // Tự động tạo createdAt và updatedAt
   collection: 'stock_checks'
@@ -29,10 +30,30 @@ stockCheckSchema.index({ store_id: 1, status: 1 });
 stockCheckSchema.index({ created_by: 1 });
 stockCheckSchema.index({ check_date: -1 });
 
+// Middleware: Tự động thêm isDeleted = false cho documents không có field này
+stockCheckSchema.pre(/^find/, function(next) {
+  // Chỉ áp dụng filter nếu query chưa có điều kiện isDeleted
+  if (this.getQuery().isDeleted === undefined) {
+    this.where({ isDeleted: false });
+  }
+  next();
+});
+// Middleware: Đảm bảo isDeleted được set khi save document cũ
+stockCheckSchema.pre('save', function(next) {
+  if (this.isDeleted === undefined || this.isDeleted === null) {
+    this.isDeleted = false;
+  }
+  next();
+});
+
 // Middleware để tự động cập nhật balance_date khi status chuyển thành 'Đã cân bằng'
 stockCheckSchema.pre('save', function(next) {
   if (this.isModified('status') && this.status === 'Đã cân bằng' && !this.balance_date) {
     this.balance_date = new Date();
+  }
+  // Đảm bảo isDeleted được set khi save document cũ
+  if (this.isDeleted === undefined || this.isDeleted === null) {
+    this.isDeleted = false;
   }
   next();
 });
