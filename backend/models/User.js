@@ -48,6 +48,7 @@ const userSchema = new mongoose.Schema(
     alertCount: { type: Number, default: 0 },
     // Other
     last_login: { type: Date, default: null },
+    isDeleted: {type: Boolean, default: false},
   },
   {
     timestamps: true, // createdAt, updatedAt tự động
