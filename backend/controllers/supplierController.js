@@ -42,10 +42,11 @@ const createSupplier = async (req, res) => {
       return res.status(403).json({ message: "Bạn chỉ có thể tạo nhà cung cấp trong cửa hàng của mình" });
     }
 
-    // Kiểm tra trùng tên nhà cung cấp trong cửa hàng
+    // Kiểm tra trùng tên nhà cung cấp trong cửa hàng (chỉ kiểm tra nhà cung cấp chưa bị xóa)
     const existingSupplier = await Supplier.findOne({
       name: name.trim(),
-      store_id: storeId
+      store_id: storeId,
+      isDeleted: false
     });
 
     if (existingSupplier) {
@@ -128,8 +129,8 @@ const getSuppliersByStore = async (req, res) => {
       }
     }
 
-    // Lấy tất cả nhà cung cấp của store
-    const suppliers = await Supplier.find({ store_id: storeId })
+    // Lấy tất cả nhà cung cấp của store (chỉ lấy nhà cung cấp chưa bị xóa)
+    const suppliers = await Supplier.find({ store_id: storeId, isDeleted: false })
       .populate('store_id', 'name')
       .sort({ name: 1 }); // Sắp xếp theo tên
 
@@ -164,7 +165,7 @@ const getSupplierById = async (req, res) => {
     const { supplierId } = req.params;
     const userId = req.user.id;
 
-    const supplier = await Supplier.findById(supplierId)
+    const supplier = await Supplier.findOne({ _id: supplierId, isDeleted: false })
       .populate('store_id', 'name address phone owner_id');
 
     if (!supplier) {
@@ -227,8 +228,8 @@ const updateSupplier = async (req, res) => {
       return res.status(403).json({ message: "Chỉ Manager mới được cập nhật nhà cung cấp" });
     }
 
-    // Tìm nhà cung cấp và kiểm tra quyền
-    const supplier = await Supplier.findById(supplierId).populate('store_id', 'owner_id');
+    // Tìm nhà cung cấp và kiểm tra quyền (chỉ tìm nhà cung cấp chưa bị xóa)
+    const supplier = await Supplier.findOne({ _id: supplierId, isDeleted: false }).populate('store_id', 'owner_id');
     if (!supplier) {
       return res.status(404).json({ message: "Nhà cung cấp không tồn tại" });
     }
@@ -244,11 +245,12 @@ const updateSupplier = async (req, res) => {
         return res.status(400).json({ message: "Tên nhà cung cấp không được để trống" });
       }
       
-      // Kiểm tra trùng tên (trừ chính nó)
+      // Kiểm tra trùng tên (trừ chính nó, chỉ kiểm tra nhà cung cấp chưa bị xóa)
       const existingSupplier = await Supplier.findOne({
         name: name.trim(),
         store_id: supplier.store_id._id,
-        _id: { $ne: supplierId }
+        _id: { $ne: supplierId },
+        isDeleted: false
       });
 
       if (existingSupplier) {
@@ -322,8 +324,8 @@ const deleteSupplier = async (req, res) => {
       return res.status(403).json({ message: "Chỉ Manager mới được xóa nhà cung cấp" });
     }
 
-    // Tìm nhà cung cấp và kiểm tra quyền
-    const supplier = await Supplier.findById(supplierId).populate('store_id', 'owner_id');
+    // Tìm nhà cung cấp và kiểm tra quyền (chỉ tìm nhà cung cấp chưa bị xóa)
+    const supplier = await Supplier.findOne({ _id: supplierId, isDeleted: false }).populate('store_id', 'owner_id');
     if (!supplier) {
       return res.status(404).json({ message: "Nhà cung cấp không tồn tại" });
     }
@@ -332,9 +334,9 @@ const deleteSupplier = async (req, res) => {
       return res.status(403).json({ message: "Bạn chỉ có thể xóa nhà cung cấp trong cửa hàng của mình" });
     }
 
-    // Kiểm tra xem có sản phẩm nào đang sử dụng nhà cung cấp này không
+    // Kiểm tra xem có sản phẩm nào đang sử dụng nhà cung cấp này không (chỉ kiểm tra sản phẩm chưa bị xóa)
     const Product = require("../models/Product");
-    const productsUsingSupplier = await Product.countDocuments({ supplier_id: supplierId });
+    const productsUsingSupplier = await Product.countDocuments({ supplier_id: supplierId, isDeleted: false });
     
     if (productsUsingSupplier > 0) {
       return res.status(400).json({ 
@@ -342,8 +344,9 @@ const deleteSupplier = async (req, res) => {
       });
     }
 
-    // Xóa nhà cung cấp
-    await Supplier.findByIdAndDelete(supplierId);
+    // Soft delete - đánh dấu nhà cung cấp đã bị xóa
+    supplier.isDeleted = true;
+    await supplier.save();
 
     res.status(200).json({
       message: "Xóa nhà cung cấp thành công",

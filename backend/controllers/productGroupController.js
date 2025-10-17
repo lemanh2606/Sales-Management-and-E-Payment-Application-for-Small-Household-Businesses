@@ -39,10 +39,11 @@ const createProductGroup = async (req, res) => {
       return res.status(403).json({ message: "Bạn chỉ có thể tạo nhóm sản phẩm trong cửa hàng của mình" });
     }
 
-    // Kiểm tra xem nhóm sản phẩm có tên trùng trong cùng cửa hàng không
+    // Kiểm tra xem nhóm sản phẩm có tên trùng trong cùng cửa hàng không (chỉ kiểm tra nhóm chưa bị xóa)
     const existingGroup = await ProductGroup.findOne({ 
       name: name.trim(), 
-      storeId: storeId 
+      storeId: storeId,
+      isDeleted: false
     });
     if (existingGroup) {
       return res.status(409).json({ message: "Nhóm sản phẩm với tên này đã tồn tại trong cửa hàng" });
@@ -57,8 +58,8 @@ const createProductGroup = async (req, res) => {
 
     await newProductGroup.save();
 
-    // Lấy thông tin chi tiết và định dạng dữ liệu trả về
-    const populatedGroup = await ProductGroup.findById(newProductGroup._id)
+    // Lấy thông tin chi tiết và định dạng dữ liệu trả về (chỉ lấy nhóm chưa bị xóa)
+    const populatedGroup = await ProductGroup.findOne({ _id: newProductGroup._id, isDeleted: false })
       .populate('storeId', 'name address phone');
 
     const formattedGroup = {
@@ -115,15 +116,15 @@ const getProductGroupsByStore = async (req, res) => {
       }
     }
 
-    // Lấy tất cả nhóm sản phẩm của store
-    const productGroups = await ProductGroup.find({ storeId: storeId })
+    // Lấy tất cả nhóm sản phẩm của store (chỉ lấy nhóm chưa bị xóa)
+    const productGroups = await ProductGroup.find({ storeId: storeId, isDeleted: false })
       .populate('storeId', 'name address phone')
       .sort({ createdAt: -1 }); // Sắp xếp theo ngày tạo mới nhất
 
-    // Đếm số sản phẩm trong mỗi nhóm
+    // Đếm số sản phẩm trong mỗi nhóm (chỉ đếm sản phẩm chưa bị xóa)
     const formattedGroups = await Promise.all(
       productGroups.map(async (group) => {
-        const productCount = await Product.countDocuments({ group_id: group._id });
+        const productCount = await Product.countDocuments({ group_id: group._id, isDeleted: false });
         return {
           _id: group._id,
           name: group.name,
@@ -154,7 +155,7 @@ const getProductGroupById = async (req, res) => {
     const { groupId } = req.params;
     const userId = req.user.id;
 
-    const productGroup = await ProductGroup.findById(groupId)
+    const productGroup = await ProductGroup.findOne({ _id: groupId, isDeleted: false })
       .populate('storeId', 'name address phone owner_id');
 
     if (!productGroup) {
@@ -178,8 +179,8 @@ const getProductGroupById = async (req, res) => {
       }
     }
 
-    // Đếm số sản phẩm trong nhóm
-    const productCount = await Product.countDocuments({ group_id: groupId });
+    // Đếm số sản phẩm trong nhóm (chỉ đếm sản phẩm chưa bị xóa)
+    const productCount = await Product.countDocuments({ group_id: groupId, isDeleted: false });
 
     // Định dạng lại dữ liệu trả về
     const formattedGroup = {
@@ -228,8 +229,8 @@ const updateProductGroup = async (req, res) => {
       return res.status(403).json({ message: "Chỉ Manager mới được cập nhật nhóm sản phẩm" });
     }
 
-    // Tìm nhóm sản phẩm và kiểm tra quyền
-    const productGroup = await ProductGroup.findById(groupId).populate('storeId', 'owner_id');
+    // Tìm nhóm sản phẩm và kiểm tra quyền (chỉ tìm nhóm chưa bị xóa)
+    const productGroup = await ProductGroup.findOne({ _id: groupId, isDeleted: false }).populate('storeId', 'owner_id');
     if (!productGroup) {
       return res.status(404).json({ message: "Nhóm sản phẩm không tồn tại" });
     }
@@ -238,12 +239,13 @@ const updateProductGroup = async (req, res) => {
       return res.status(403).json({ message: "Bạn chỉ có thể cập nhật nhóm sản phẩm trong cửa hàng của mình" });
     }
 
-    // Kiểm tra tên trùng lặp (nếu thay đổi tên)
+    // Kiểm tra tên trùng lặp (nếu thay đổi tên, chỉ kiểm tra nhóm chưa bị xóa)
     if (name && name.trim() !== productGroup.name) {
       const existingGroup = await ProductGroup.findOne({ 
         name: name.trim(), 
         storeId: productGroup.storeId._id,
-        _id: { $ne: groupId } // Loại trừ chính nó
+        _id: { $ne: groupId }, // Loại trừ chính nó
+        isDeleted: false
       });
       if (existingGroup) {
         return res.status(409).json({ message: "Nhóm sản phẩm với tên này đã tồn tại trong cửa hàng" });
@@ -262,8 +264,8 @@ const updateProductGroup = async (req, res) => {
       { new: true }
     ).populate('storeId', 'name address phone');
 
-    // Đếm số sản phẩm trong nhóm
-    const productCount = await Product.countDocuments({ group_id: groupId });
+    // Đếm số sản phẩm trong nhóm (chỉ đếm sản phẩm chưa bị xóa)
+    const productCount = await Product.countDocuments({ group_id: groupId, isDeleted: false });
 
     // Định dạng lại dữ liệu trả về
     const formattedGroup = {
@@ -299,8 +301,8 @@ const deleteProductGroup = async (req, res) => {
       return res.status(403).json({ message: "Chỉ Manager mới được xóa nhóm sản phẩm" });
     }
 
-    // Tìm nhóm sản phẩm và kiểm tra quyền
-    const productGroup = await ProductGroup.findById(groupId).populate('storeId', 'owner_id');
+    // Tìm nhóm sản phẩm và kiểm tra quyền (chỉ tìm nhóm chưa bị xóa)
+    const productGroup = await ProductGroup.findOne({ _id: groupId, isDeleted: false }).populate('storeId', 'owner_id');
     if (!productGroup) {
       return res.status(404).json({ message: "Nhóm sản phẩm không tồn tại" });
     }
@@ -309,16 +311,17 @@ const deleteProductGroup = async (req, res) => {
       return res.status(403).json({ message: "Bạn chỉ có thể xóa nhóm sản phẩm trong cửa hàng của mình" });
     }
 
-    // Kiểm tra xem có sản phẩm nào đang sử dụng nhóm này không
-    const productsInGroup = await Product.countDocuments({ group_id: groupId });
+    // Kiểm tra xem có sản phẩm nào đang sử dụng nhóm này không (chỉ kiểm tra sản phẩm chưa bị xóa)
+    const productsInGroup = await Product.countDocuments({ group_id: groupId, isDeleted: false });
     if (productsInGroup > 0) {
       return res.status(400).json({ 
         message: `Không thể xóa nhóm sản phẩm này vì có ${productsInGroup} sản phẩm đang sử dụng. Vui lòng chuyển các sản phẩm sang nhóm khác hoặc xóa các sản phẩm trước.` 
       });
     }
 
-    // Xóa nhóm sản phẩm
-    await ProductGroup.findByIdAndDelete(groupId);
+    // Soft delete - đánh dấu nhóm sản phẩm đã bị xóa
+    productGroup.isDeleted = true;
+    await productGroup.save();
 
     res.status(200).json({
       message: "Xóa nhóm sản phẩm thành công",

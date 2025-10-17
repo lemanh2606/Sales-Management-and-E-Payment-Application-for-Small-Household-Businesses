@@ -83,8 +83,8 @@ const createStockDisposal = async (req, res) => {
         return res.status(400).json({ message: "Giá vốn phải lớn hơn 0" });
       }
 
-      // Kiểm tra sản phẩm có tồn tại và thuộc store này không
-      const product = await Product.findById(item.product_id);
+      // Kiểm tra sản phẩm có tồn tại và thuộc store này không (chỉ kiểm tra sản phẩm chưa bị xóa)
+      const product = await Product.findOne({ _id: item.product_id, isDeleted: false });
       if (!product) {
         return res.status(404).json({ message: `Sản phẩm với ID ${item.product_id} không tồn tại` });
       }
@@ -110,8 +110,8 @@ const createStockDisposal = async (req, res) => {
 
     await newStockDisposal.save();
 
-    // Lấy thông tin chi tiết và định dạng dữ liệu trả về
-    const populatedDisposal = await StockDisposal.findById(newStockDisposal._id)
+    // Lấy thông tin chi tiết và định dạng dữ liệu trả về (chỉ lấy phiếu chưa bị xóa)
+    const populatedDisposal = await StockDisposal.findOne({ _id: newStockDisposal._id, isDeleted: false })
       .populate('created_by', 'username full_name')
       .populate('store_id', 'name address')
       .populate('items.product_id', 'name sku unit');
@@ -178,8 +178,8 @@ const getStockDisposalsByStore = async (req, res) => {
       }
     }
 
-    // Lấy tất cả phiếu xuất hủy của store
-    const stockDisposals = await StockDisposal.find({ store_id: storeId })
+    // Lấy tất cả phiếu xuất hủy của store (chỉ lấy phiếu chưa bị xóa)
+    const stockDisposals = await StockDisposal.find({ store_id: storeId, isDeleted: false })
       .populate('created_by', 'username full_name')
       .populate('store_id', 'name')
       .populate('items.product_id', 'name sku')
@@ -218,7 +218,7 @@ const getStockDisposalById = async (req, res) => {
     const { disposalId } = req.params;
     const userId = req.user.id;
 
-    const stockDisposal = await StockDisposal.findById(disposalId)
+    const stockDisposal = await StockDisposal.findOne({ _id: disposalId, isDeleted: false })
       .populate('created_by', 'username full_name')
       .populate('store_id', 'name address phone owner_id')
       .populate('items.product_id', 'name sku unit');
@@ -295,8 +295,8 @@ const updateStockDisposal = async (req, res) => {
       return res.status(403).json({ message: "Chỉ Manager mới được cập nhật phiếu xuất hủy" });
     }
 
-    // Tìm phiếu xuất hủy và kiểm tra quyền
-    const stockDisposal = await StockDisposal.findById(disposalId).populate('store_id', 'owner_id');
+    // Tìm phiếu xuất hủy và kiểm tra quyền (chỉ tìm phiếu chưa bị xóa)
+    const stockDisposal = await StockDisposal.findOne({ _id: disposalId, isDeleted: false }).populate('store_id', 'owner_id');
     if (!stockDisposal) {
       return res.status(404).json({ message: "Phiếu xuất hủy không tồn tại" });
     }
@@ -399,8 +399,8 @@ const deleteStockDisposal = async (req, res) => {
       return res.status(403).json({ message: "Chỉ Manager mới được xóa phiếu xuất hủy" });
     }
 
-    // Tìm phiếu xuất hủy và kiểm tra quyền
-    const stockDisposal = await StockDisposal.findById(disposalId).populate('store_id', 'owner_id');
+    // Tìm phiếu xuất hủy và kiểm tra quyền (chỉ tìm phiếu chưa bị xóa)
+    const stockDisposal = await StockDisposal.findOne({ _id: disposalId, isDeleted: false }).populate('store_id', 'owner_id');
     if (!stockDisposal) {
       return res.status(404).json({ message: "Phiếu xuất hủy không tồn tại" });
     }
@@ -414,8 +414,9 @@ const deleteStockDisposal = async (req, res) => {
       return res.status(400).json({ message: "Không thể xóa phiếu xuất hủy đã hoàn thành" });
     }
 
-    // Xóa phiếu xuất hủy
-    await StockDisposal.findByIdAndDelete(disposalId);
+    // Soft delete - đánh dấu phiếu xuất hủy đã bị xóa
+    stockDisposal.isDeleted = true;
+    await stockDisposal.save();
 
     res.status(200).json({
       message: "Xóa phiếu xuất hủy thành công",

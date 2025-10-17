@@ -19,7 +19,12 @@ const productSchema = new mongoose.Schema({
   store_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Store', required: true },
   supplier_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Supplier' },
   group_id: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductGroup' }, // Nhóm sản phẩm
+  image: {
+    url: { type: String, default: null }, // Cloudinary URL
+    public_id: { type: String, default: null } // Cloudinary public_id for deletion
+  },
   lowStockAlerted: { type: Boolean, default: false }, // False = không báo, true = báo (reset về false khi update stock > min_stock)
+  isDeleted: { type: Boolean, default: false } // Xóa mềm
 },
 {
   timestamps: true // Tự động thêm createdAt và updatedAt
@@ -29,6 +34,19 @@ const productSchema = new mongoose.Schema({
 productSchema.pre('save', function (next) {
   if (this.isModified('stock_quantity') && this.stock_quantity > this.min_stock) {
     this.lowStockAlerted = false;  // Reset cảnh báo nếu stock tăng > min_stock
+  }
+  // Đảm bảo isDeleted được set khi save document cũ
+  if (this.isDeleted === undefined || this.isDeleted === null) {
+    this.isDeleted = false;
+  }
+  next();
+});
+
+// Middleware: Tự động thêm isDeleted = false cho documents không có field này
+productSchema.pre(/^find/, function(next) {
+  // Chỉ áp dụng filter nếu query chưa có điều kiện isDeleted
+  if (this.getQuery().isDeleted === undefined) {
+    this.where({ isDeleted: false });
   }
   next();
 });
