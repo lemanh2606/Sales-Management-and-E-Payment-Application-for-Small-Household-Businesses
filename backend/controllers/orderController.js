@@ -1,6 +1,7 @@
-// controllers/orderController.js (update: create pending luôn, ko trừ stock; add confirmQR + printBill để trừ khi in)
+// controllers/orderController.js
 const mongoose = require("mongoose");
 const { Parser } = require("json2csv");
+const { Types } = require("mongoose");
 const PDFDocument = require("pdfkit");
 const Order = require("../models/Order");
 const OrderItem = require("../models/OrderItem");
@@ -12,7 +13,7 @@ const { v2: cloudinary } = require("cloudinary");
 
 const createOrder = async (req, res) => {
   try {
-    const { storeId, employeeId, customerInfo, items, paymentMethod } = req.body; // Body từ FE: items [{productId, quantity}]
+    const { storeId, employeeId, customerInfo, items, paymentMethod, isVATInvoice, vatInfo } = req.body; //items [{productId, quantity}]
 
     if (!items || items.length === 0) {
       console.log("Lỗi: Không có sản phẩm trong hóa đơn");
@@ -47,6 +48,21 @@ const createOrder = async (req, res) => {
         });
       }
 
+      // Tính VAT nếu cần (bonus: lưu sẵn cho báo cáo)
+      let vatAmountStr = "0";
+      let beforeTaxStr = total.toFixed(2); // Default trước thuế = total nếu ko VAT
+      if (isVATInvoice) {
+        // Tính bằng Number rồi format 2 chữ số
+        const totalNum = Number(parseFloat(total).toFixed(2)); // đảm bảo là number với 2 chữ số
+        const vatNum = Number((totalNum * 0.1).toFixed(2)); // VAT 10%
+        const beforeTaxNum = Number((totalNum - vatNum).toFixed(2)); // Giá chưa thuế
+        // Lưu chuỗi (hoặc dùng Decimal128.fromString nếu muốn)
+        vatAmountStr = vatNum.toFixed(2);
+        beforeTaxStr = beforeTaxNum.toFixed(2);
+
+        console.log(`Tính VAT cho order: beforeTax=${beforeTaxStr}, vat=${vatAmountStr}, total=${total.toFixed(2)}`); // Log debug
+      }
+
       // Tạo Order pending (status default pending)
       const newOrder = new Order({
         storeId,
@@ -54,6 +70,10 @@ const createOrder = async (req, res) => {
         customerInfo,
         totalAmount: total.toFixed(2).toString(),
         paymentMethod,
+        isVATInvoice: !!isVATInvoice, // chuyển thành boolean cho chắc
+        vatInfo: isVATInvoice ? vatInfo : undefined, // chỉ lưu nếu có
+        vatAmount: vatAmountStr,
+        beforeTaxAmount: beforeTaxStr,
       });
 
       await newOrder.save({ session });
@@ -225,6 +245,28 @@ const printBill = async (req, res) => {
     bill += `Phương thức: ${order.paymentMethod === "cash" ? "TIỀN MẶT" : "QR CODE"}\n`; // Rõ ràng hơn cho bill
     bill += `Trạng thái: Đã thanh toán\n`;
     bill += `=== CẢM ƠN QUÝ KHÁCH! ===\n`;
+
+    //nếu là hoá đơn của doanh nghiệp yêu cầu in có kèm cả VAT
+    if (order.isVATInvoice) {
+      if (!order.vatInfo?.companyName || !order.vatInfo?.taxCode) {
+        return res.status(400).json({ message: "Thiếu thông tin VAT để in hóa đơn VAT" });
+      }
+      //Dùng Decimal128 cho chính xác
+      const Decimal128 = mongoose.Types.Decimal128;
+      const vatAmount = parseFloat(order.vatAmount.toString()).toFixed(0); // Lấy từ DB
+      const beforeTax = parseFloat(order.beforeTaxAmount.toString()).toFixed(0);
+
+      const formatVND = (num) => new Intl.NumberFormat("vi-VN").format(num); // Helper format
+
+      bill += `\n--- HÓA ĐƠN GIÁ TRỊ GIA TĂNG (GTGT) ---\n`;
+      bill += `Tên công ty: ${order.vatInfo.companyName}\n`;
+      bill += `Mã số thuế: ${order.vatInfo.taxCode}\n`;
+      bill += `Địa chỉ: ${order.vatInfo.companyAddress}\n`;
+      bill += `Tiền trước thuế: ${formatVND(beforeTax)} VND\n`;
+      bill += `Thuế GTGT (10%): ${formatVND(vatAmount)} VND\n`;
+      bill += `Tổng thanh toán: ${formatVND(order.totalAmount)} VND\n`;
+      bill += `Ngày lập: ${new Date(order.createdAt).toLocaleDateString("vi-VN")}\n`;
+    }
 
     // Update printDate/printCount (luôn update, dù duplicate)
     const updatedOrder = await Order.findByIdAndUpdate(

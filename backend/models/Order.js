@@ -17,6 +17,14 @@ const orderSchema = new mongoose.Schema(
     refundId: { type: mongoose.Schema.Types.ObjectId, ref: "OrderRefund", default: null }, // sản phẩm bị hoàn trả
     printDate: { type: Date, default: null }, // Ngày in bill
     printCount: { type: Number, default: 0 }, // Số lần in bill (stock chỉ trừ lần 1, khách muốn in lại hoá đơn làm kỉ niệm không trừ nữa)
+    isVATInvoice: { type: Boolean, default: false }, // Có xuất hóa đơn VAT không? Đối với doanh nghiệp
+    vatInfo: {
+      companyName: { type: String, trim: true },
+      taxCode: { type: String, trim: true },
+      companyAddress: { type: String, trim: true },
+    },
+    vatAmount: { type: mongoose.Schema.Types.Decimal128, default: '0' }, // VAT thu (lưu sẵn, default 0)
+    beforeTaxAmount: { type: mongoose.Schema.Types.Decimal128, default: '0' }, // Tiền trước thuế (lưu sẵn, default 0)
   },
   {
     timestamps: true,
