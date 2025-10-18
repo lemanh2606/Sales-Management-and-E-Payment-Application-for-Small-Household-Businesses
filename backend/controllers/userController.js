@@ -1,54 +1,35 @@
-// controllers/userController.js
-
-/**
- * Controller quản lý người dùng (đăng ký, xác thực OTP, đăng nhập, refresh token)
- *
- * Cơ chế chính:
- * - Khi register: tạo user (chưa verified), sinh OTP ngẫu nhiên, hash OTP và lưu vào DB,
- *   gửi OTP qua email (không trả OTP cho client).
- * - Khi verifyOtp: so sánh OTP (so sánh hash), kiểm tra expiry và số lần thử, nếu OK -> set isVerified = true.
- * - Khi login: kiểm tra verified, kiểm tra lock (nếu login sai nhiều lần), so khớp password, cấp access token và refresh token.
- * - Refresh token được lưu trong cookie HttpOnly (dành cho web).
- *
- * Mục tiêu bảo mật:
- * - Không trả OTP thô cho client.
- * - Lưu otp_hash thay vì otp thô.
- * - Giới hạn số lần thử OTP và login (brute-force protection).
- * - Sử dụng bcrypt để hash (password + OTP hash).
- * - Sử dụng access token + refresh token; refresh token đặt trong cookie HttpOnly.
- */
-
+// controllers/userController.js (fix changePassword: thêm confirmPassword check khớp, fix compareString scope - paste thay file)
 const User = require("../models/User");
+const Employee = require("../models/Employee");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { sendVerificationEmail } = require("../services/emailService");
 
 const IS_PROD = process.env.NODE_ENV === "production";
 
-/* -------------------------
-   Cấu hình / hằng số (tùy chỉnh qua .env)
+/* ------------------------- 
+   Cấu hình / hằng số (.env)
    ------------------------- */
 // Số chữ số OTP, mặc định 6
 const OTP_LENGTH = 6;
-// Thời gian hiệu lực OTP (phút). Lấy từ .env nếu có
+// Thời gian hiệu lực OTP (phút)
 const OTP_EXPIRE_MINUTES = Number(process.env.OTP_EXPIRE_MINUTES || 5);
-// Số lần thử tối đa cho OTP (sai quá sẽ yêu cầu gửi lại)
+// Số lần thử tối đa cho OTP
 const OTP_MAX_ATTEMPTS = Number(process.env.OTP_MAX_ATTEMPTS || 5);
 
 // Số lần login sai tối đa trước khi khóa tạm
 const LOGIN_MAX_ATTEMPTS = Number(process.env.LOGIN_MAX_ATTEMPTS || 5);
-// Thời gian khóa tạm (phút) nếu vượt quá login attempts
+// Thời gian khóa tạm (phút)
 const LOGIN_LOCK_MINUTES = Number(process.env.LOGIN_LOCK_MINUTES || 15);
 
 // Số vòng salt bcrypt
 const BCRYPT_SALT_ROUNDS = Number(process.env.BCRYPT_SALT_ROUNDS || 10);
 
-// Thời hạn token: ưu tiên JWT_EXPIRES (được dùng như access token), fallback hoặc định nghĩa ACCESS_TOKEN_EXPIRES
-const ACCESS_TOKEN_EXPIRES = process.env.JWT_EXPIRES || process.env.ACCESS_TOKEN_EXPIRES || "2d";
-// Thời hạn refresh token (chuỗi '7d' hoặc tương tự)
+// Thời hạn token
+const ACCESS_TOKEN_EXPIRES = process.env.JWT_EXPIRES || "2d";
 const REFRESH_TOKEN_EXPIRES = process.env.REFRESH_TOKEN_EXPIRES || `${process.env.REFRESH_TOKEN_EXPIRES_DAYS || 7}d`;
 
-/* -------------------------
+/* ------------------------- 
    Helper functions
    ------------------------- */
 
@@ -63,254 +44,369 @@ const generateOTP = (len = OTP_LENGTH) =>
  * Hash một chuỗi (password hoặc OTP) bằng bcrypt.
  * Trả về hash (string).
  */
-const hashString = async (plain) => {
+const hashString = async (str) => {
   const salt = await bcrypt.genSalt(BCRYPT_SALT_ROUNDS);
-  return bcrypt.hash(plain, salt);
+  return await bcrypt.hash(str, salt);
 };
 
 /**
- * So sánh plain text với hash (bcrypt.compare).
- * Trả về boolean.
+ * So sánh chuỗi với hash (password hoặc OTP).
+ * Trả về true nếu khớp.
  */
-const compareHash = async (plain, hash) => bcrypt.compare(plain, hash);
+const compareString = async (str, hash) => await bcrypt.compare(str, hash);
 
 /**
- * Tạo access token (JWT) với payload, sử dụng secret từ .env (JWT_SECRET).
- * Access token dùng để authorize API, có thời hạn ngắn.
+ * Tạo access token (JWT với id, role).
+ * Thời hạn từ ACCESS_TOKEN_EXPIRES.
  */
-const signAccessToken = (payload) => jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: ACCESS_TOKEN_EXPIRES });
+const signAccessToken = (payload) => jwt.sign(payload, process.env.JWT_SECRET || "default_jwt_secret_change_in_env", { expiresIn: ACCESS_TOKEN_EXPIRES });
 
 /**
- * Tạo refresh token (JWT) — có thời hạn dài hơn và lưu ở cookie HttpOnly cho web.
- * Refresh token dùng để cấp lại access token khi access hết hạn.
+ * Tạo refresh token (JWT với id, role).
+ * Thời hạn từ REFRESH_TOKEN_EXPIRES.
  */
-const signRefreshToken = (payload) =>
-  jwt.sign(payload, process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET, {
-    expiresIn: REFRESH_TOKEN_EXPIRES,
-  });
+const signRefreshToken = (payload) => jwt.sign(payload, process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET, { expiresIn: REFRESH_TOKEN_EXPIRES });
 
-/* -------------------------
-   Controller: registerManager
-   - Tạo user chưa verified
-   - Sinh OTP, hash và lưu vào user
-   - Gửi OTP qua email
-   - KHÔNG trả OTP cho client
+/* ------------------------- 
+   Controller: registerManager (đăng ký manager với OTP email)
+   - Tạo user MANAGER, hash pass, sinh OTP hash, gửi email, set isVerified = false
    ------------------------- */
 const registerManager = async (req, res) => {
   try {
-    const { username, email, password, phone } = req.body;
+    const { username, email, password } = req.body;
 
+    // Validate input
     if (!username || !email || !password) {
-      return res.status(400).json({ message: "Tên đăng nhập, email và mật khẩu là bắt buộc" });
+      return res.status(400).json({ message: "Thiếu username, email hoặc password" });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ message: "Password phải ít nhất 6 ký tự" });
     }
 
-    const emailNorm = String(email).trim().toLowerCase();
-    const existUser = await User.findOne({ $or: [{ username }, { email: emailNorm }] });
-    if (existUser) {
-      return res.status(400).json({ message: "Tên đăng nhập hoặc email đã tồn tại" });
+    // Kiểm tra unique username/email
+    const existingUser = await User.findOne({ $or: [{ username }, { email }] });
+    if (existingUser) {
+      return res.status(400).json({ message: "Username hoặc email đã tồn tại" });
     }
 
-    if (password.length < 8) {
-      return res.status(400).json({ message: "Mật khẩu phải có ít nhất 8 ký tự" });
-    }
+    // Hash password
+    const password_hash = await hashString(password);
 
-    const password_hash = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
-
+    // Sinh OTP và hash
     const otp = generateOTP();
     const otp_hash = await hashString(otp);
-    const otp_expires = Date.now() + OTP_EXPIRE_MINUTES * 60 * 1000;
+    const otp_expires = new Date(Date.now() + OTP_EXPIRE_MINUTES * 60 * 1000);
 
+    // Tạo user MANAGER
     const newUser = new User({
-      username,
-      email: emailNorm,
-      phone: phone || null,
+      username: username.trim(),
       password_hash,
       role: "MANAGER",
-      isVerified: false,
+      email: email.toLowerCase().trim(),
       otp_hash,
       otp_expires,
       otp_attempts: 0,
-      loginAttempts: 0,
-      lockUntil: null,
+      isVerified: false,
     });
 
     await newUser.save();
 
-    try {
-      // gọi service gửi email
-      await sendVerificationEmail(emailNorm, username, otp, OTP_EXPIRE_MINUTES);
-    } catch (mailErr) {
-      console.error("Mail send error:", mailErr);
-      await User.deleteOne({ _id: newUser._id }).catch((e) => console.error("Rollback delete failed:", e));
-      return res.status(500).json({ message: "Không thể gửi OTP tới email. Vui lòng thử lại sau." });
-    }
+    // Gửi email OTP
+    await sendVerificationEmail(email, username, otp);
 
-    return res.status(201).json({
-      message: "Đăng ký thành công. Mã OTP đã được gửi tới email của bạn.",
-      user: { id: newUser._id, username: newUser.username, email: newUser.email },
-    });
+    res.status(201).json({ message: "Đăng ký thành công, kiểm tra email để xác minh OTP" });
   } catch (err) {
-    console.error("registerManager error:", err);
-    return res.status(500).json({ message: "Lỗi server" });
+    console.error("Lỗi đăng ký:", err.message);
+    res.status(500).json({ message: "Lỗi server khi đăng ký" });
   }
 };
 
-/* -------------------------
-   Controller: verifyOtp
-   - Nhận email + otp từ client
-   - Tìm user, kiểm tra expiry, số lần thử
-   - So sánh otp (so sánh hash bằng bcrypt.compare)
-   - Nếu đúng => set isVerified = true, xóa otp_hash, reset attempts
+/* ------------------------- 
+   Controller: verifyOtp (xác minh OTP cho register/change pass)
+   - So sánh OTP với hash, check expiry/attempts, nếu OK set isVerified = true hoặc change pass
    ------------------------- */
 const verifyOtp = async (req, res) => {
   try {
-    const { email, otp } = req.body;
-    if (!email || !otp) return res.status(400).json({ message: "Email và OTP bắt buộc" });
+    const { email, password, otp } = req.body;
 
-    const emailNorm = String(email).trim().toLowerCase();
-    const user = await User.findOne({ email: emailNorm });
-    if (!user) return res.status(400).json({ message: "User không tồn tại" });
-
-    // Nếu đã verified trước đó thì báo cho client
-    if (user.isVerified) return res.status(400).json({ message: "Tài khoản đã được xác thực" });
-
-    // Kiểm tra OTP có tồn tại và chưa hết hạn
-    if (!user.otp_expires || Date.now() > new Date(user.otp_expires).getTime()) {
-      return res.status(400).json({ message: "OTP đã hết hạn. Vui lòng yêu cầu gửi lại hoặc đăng ký lại." });
+    if (!email || !otp) {
+      return res.status(400).json({ message: "Thiếu email hoặc OTP" });
     }
 
-    // Kiểm tra số lần thử để chống brute-force
-    if ((user.otp_attempts || 0) >= OTP_MAX_ATTEMPTS) {
-      return res.status(429).json({ message: "Quá nhiều lần thử OTP. Vui lòng yêu cầu gửi lại sau." });
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    if (!user || user.otp_hash === null || user.otp_expires < new Date()) {
+      return res.status(400).json({ message: "OTP không hợp lệ hoặc đã hết hạn" });
     }
 
-    // So sánh OTP (plain) với otp_hash trong DB
-    const isMatch = await compareHash(otp, user.otp_hash || "");
-    if (!isMatch) {
-      // Nếu sai, tăng counter otp_attempts và lưu
-      user.otp_attempts = (user.otp_attempts || 0) + 1;
+    if (user.otp_attempts >= OTP_MAX_ATTEMPTS) {
+      return res.status(400).json({ message: "Quá số lần thử, vui lòng yêu cầu OTP mới" });
+    }
+
+    if (!(await compareString(otp, user.otp_hash))) {
+      user.otp_attempts += 1;
       await user.save();
-      return res.status(400).json({ message: "OTP không đúng" });
+      return res.status(400).json({ message: "OTP không đúng, thử lại" });
     }
 
-    // Nếu đúng: đánh dấu verified, xoá otp fields để không thể reuse
-    user.isVerified = true;
+    // OTP OK, reset OTP fields
     user.otp_hash = null;
     user.otp_expires = null;
     user.otp_attempts = 0;
+    user.isVerified = true;
     await user.save();
 
-    return res.json({ message: "Xác thực OTP thành công, tài khoản đã được kích hoạt." });
+    res.json({ message: "Xác minh thành công" });
   } catch (err) {
-    console.error("verifyOtp error:", err);
-    return res.status(500).json({ message: "Lỗi server" });
+    console.error("Lỗi xác minh OTP:", err.message);
+    res.status(500).json({ message: "Lỗi server khi xác minh OTP" });
   }
 };
 
-/* -------------------------
-   Controller: login
-   - Nhận username + password
-   - Kiểm tra user tồn tại, chưa bị khóa, đã verified
-   - So khớp password, nếu sai tăng loginAttempts; nếu vượt threshold thì lockUntil
-   - Nếu đúng: reset attempts, cập nhật last_login, cấp access + refresh token
-   - Refresh token set vào cookie HttpOnly (để client web không thể đọc JS)
+/* ------------------------- 
+   Controller: login (đăng nhập với pass, check verified/lock, token)
    ------------------------- */
 const login = async (req, res) => {
   try {
     const { username, password } = req.body;
-    if (!username || !password) return res.status(400).json({ message: "Username và password bắt buộc" });
 
-    // Tìm user theo username
-    const user = await User.findOne({ username });
-    if (!user) return res.status(400).json({ message: "Sai username hoặc password" });
-
-    // Kiểm tra xem tài khoản có đang bị khóa tạm thời (lockUntil)
-    if (user.lockUntil && Date.now() < new Date(user.lockUntil).getTime()) {
-      const waitSec = Math.ceil((new Date(user.lockUntil).getTime() - Date.now()) / 1000);
-      // 423 Locked: resource is locked
-      return res.status(423).json({ message: `Tài khoản bị khoá tạm thời. Thử lại sau ${waitSec} giây.` });
+    if (!username || !password) {
+      return res.status(400).json({ message: "Thiếu username hoặc password" });
     }
 
-    // Kiểm tra tài khoản đã xác thực email chưa
-    if (!user.isVerified) return res.status(403).json({ message: "Vui lòng xác thực email (OTP) trước khi đăng nhập" });
+    const user = await User.findOne({ username: username.trim() });
+    if (!user) {
+      return res.status(401).json({ message: "Username hoặc password không đúng" });
+    }
 
-    // So sánh mật khẩu (bcrypt.compare)
-    const passwordMatch = await bcrypt.compare(password, user.password_hash);
-    if (!passwordMatch) {
-      // Nếu sai, tăng loginAttempts; nếu vượt LOGIN_MAX_ATTEMPTS, set lockUntil
-      user.loginAttempts = (user.loginAttempts || 0) + 1;
+    if (!user.isVerified) {
+      return res.status(401).json({ message: "Tài khoản chưa được xác minh" });
+    }
+
+    // Kiểm tra lock
+    if (user.lockUntil > new Date()) {
+      return res.status(423).json({ message: "Tài khoản bị khóa tạm thời" });
+    }
+
+    if (!(await compareString(password, user.password_hash))) {
+      user.loginAttempts += 1;
       if (user.loginAttempts >= LOGIN_MAX_ATTEMPTS) {
-        user.lockUntil = Date.now() + LOGIN_LOCK_MINUTES * 60 * 1000; // khoá tạm
+        user.lockUntil = new Date(Date.now() + LOGIN_LOCK_MINUTES * 60 * 1000);
       }
       await user.save();
-      return res.status(400).json({ message: "Sai username hoặc password" });
+      return res.status(401).json({ message: "Username hoặc password không đúng" });
     }
 
-    // Nếu login thành công: reset counters, cập nhật last_login
+    // Login success, reset counters, update last_login
     user.loginAttempts = 0;
     user.lockUntil = null;
     user.last_login = new Date();
     await user.save();
 
-    // Tạo access token (dùng để authorize các request protected)
+    // Tạo access token (JWT với id, role)
     const accessToken = signAccessToken({ id: user._id, role: user.role });
-    // Tạo refresh token (lưu vào cookie HttpOnly)
+    // Tạo refresh token (JWT với id, role)
     const refreshToken = signRefreshToken({ id: user._id, role: user.role });
 
-    // Tùy chọn cookie: httpOnly để JS client không thể đọc; secure chỉ dùng trên HTTPS/production
+    // Cookie options
     const cookieOptions = {
       httpOnly: true,
       secure: IS_PROD,
       sameSite: "Lax",
       maxAge: (() => {
-        // Sử dụng biến REFRESH_TOKEN_EXPIRES_DAYS nếu có, mặc định 7 ngày
         const days = Number(process.env.REFRESH_TOKEN_EXPIRES_DAYS || 7);
         return days * 24 * 60 * 60 * 1000;
       })(),
       path: "/",
     };
 
-    // Gửi cookie refreshToken cho client (trình duyệt sẽ lưu cookie)
-    // Lưu ý: nếu frontend là SPA trên domain khác, cần cors credentials và axios withCredentials để gửi cookie
+    // Set cookie refreshToken
     res.cookie("refreshToken", refreshToken, cookieOptions);
 
-    // Trả access token và thông tin user (không trả refresh token trong body)
-    return res.json({
+    // Trả access token và info user
+    res.json({
       message: "Đăng nhập thành công",
-      token: accessToken, // client dùng header Authorization: Bearer <token>
+      token: accessToken, // FE dùng header Authorization: Bearer <token>
       user: { id: user._id, username: user.username, role: user.role },
     });
   } catch (err) {
-    console.error("login error:", err);
-    return res.status(500).json({ message: "Lỗi server" });
+    console.error("Lỗi đăng nhập:", err.message);
+    res.status(500).json({ message: "Lỗi server" });
   }
 };
 
+/* ------------------------- 
+   Controller: refreshToken (tùy chọn)
+   - Đọc cookie refreshToken, verify, tạo access token mới
+   ------------------------- */
 const refreshToken = async (req, res) => {
   try {
-    // Lấy refresh token từ cookie (yêu cầu dùng cookie-parser middleware)
     const token = req.cookies?.refreshToken;
     if (!token) return res.status(401).json({ message: "No refresh token" });
 
     let payload;
     try {
-      // Verify refresh token (sử dụng REFRESH_TOKEN_SECRET hoặc JWT_SECRET fallback)
       payload = jwt.verify(token, process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET);
     } catch (e) {
       return res.status(401).json({ message: "Refresh token invalid or expired" });
     }
 
-    // Kiểm tra user còn tồn tại
     const user = await User.findById(payload.id);
     if (!user) return res.status(401).json({ message: "User not found" });
 
-    // Tạo access token mới
     const newAccess = signAccessToken({ id: user._id, role: user.role });
-    return res.json({ token: newAccess });
+    res.json({ token: newAccess });
   } catch (err) {
-    console.error("refreshToken error:", err);
-    return res.status(500).json({ message: "Lỗi server" });
+    console.error("Lỗi refresh token:", err.message);
+    res.status(500).json({ message: "Lỗi server" });
   }
 };
 
-module.exports = { registerManager, verifyOtp, login, refreshToken };
+/* ------------------------- 
+   Controller: updateProfile (thay đổi thông tin cá nhân – username, email, phone, fullName nếu STAFF)
+   - Chỉ update chính user, unique username/email, update Employee nếu role STAFF
+   ------------------------- */
+const updateProfile = async (req, res) => {
+  try {
+    const userId = req.user.id;  // Từ middleware verifyToken
+    const { username, email, phone, fullName } = req.body; 
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User không tồn tại" });
+    }
+
+    // Validate unique username/email nếu thay đổi
+    const query = {};
+    if (username && username.trim() !== user.username) {
+      query.username = username.trim();
+    }
+    if (email && email.trim() !== user.email) {
+      query.email = email.toLowerCase().trim();
+    }
+    if (Object.keys(query).length > 0) {
+      const existing = await User.findOne(query);
+      if (existing) {
+        return res.status(400).json({ message: "Username hoặc email đã tồn tại" });
+      }
+    }
+
+    // Update user fields
+    if (username) user.username = username.trim();
+    if (email) user.email = email.toLowerCase().trim();
+    if (phone !== undefined) user.phone = phone.trim();
+
+    await user.save();
+
+    // Nếu role STAFF, update Employee fullName/phone (fullName optional nếu input)
+    if (user.role === "STAFF") {
+      const employee = await Employee.findOne({ user_id: userId });
+      if (employee) {
+        if (fullName) employee.fullName = fullName.trim();  // Thêm: fullName optional (nếu input, update Employee)
+        if (phone !== undefined) employee.phone = phone.trim();  // Sync phone vào Employee (optional, default '')
+        await employee.save();
+      }
+    }
+
+    // Trả user updated (populate nếu cần)
+    const updatedUser = await User.findById(userId).lean();
+    res.json({ message: "Cập nhật thông tin thành công", user: updatedUser });
+  } catch (err) {
+    console.error("Lỗi cập nhật profile:", err.message);
+    res.status(500).json({ message: "Lỗi server khi cập nhật profile" });
+  }
+};
+
+/* ------------------------- 
+   Controller: sendPasswordOTP (gửi OTP đổi pass – chỉ nếu email có)
+   - Sinh OTP, hash, gửi email, set expiry/attempts
+   ------------------------- */
+const sendPasswordOTP = async (req, res) => {
+  try {
+    const userId = req.user.id;  // Từ middleware verifyToken
+    const { email } = req.body;  // Email (optional, dùng email user nếu ko input)
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User không tồn tại" });
+    }
+
+    const useEmail = email || user.email;
+    if (!useEmail) {
+      return res.status(400).json({ message: "Cần email để gửi OTP đổi mật khẩu, cập nhật profile trước" });
+    }
+
+    // Sinh OTP và hash
+    const otp = generateOTP();
+    const otp_hash = await hashString(otp);
+    const otp_expires = new Date(Date.now() + OTP_EXPIRE_MINUTES * 60 * 1000);
+
+    // Lưu OTP vào user (reset nếu có cũ)
+    user.otp_hash = otp_hash;
+    user.otp_expires = otp_expires;
+    user.otp_attempts = 0;
+    await user.save();
+
+    // Gửi email OTP (đúng tham số, thêm type "change-password" customize)
+    await sendVerificationEmail(useEmail, user.username, otp, OTP_EXPIRE_MINUTES, "change-password");
+
+    res.json({ message: "OTP đổi mật khẩu đã gửi đến email, hết hạn sau 5 phút" });
+  } catch (err) {
+    console.error("Lỗi gửi OTP đổi mật khẩu:", err.message);
+    res.status(500).json({ message: "Lỗi server khi gửi OTP" });
+  }
+};
+
+/* ------------------------- 
+   Controller: changePassword (xác minh OTP + đổi pass mới)
+   - So sánh OTP, nếu OK hash password mới, reset OTP
+   ------------------------- */
+const changePassword = async (req, res) => {
+  try {
+    const userId = req.user.id;  // Từ middleware verifyToken
+    const { password, confirmPassword, otp } = req.body;  // Password mới + confirmPassword + OTP
+
+    if (!password || !confirmPassword || !otp) {
+      return res.status(400).json({ message: "Thiếu mật khẩu mới, xác nhận mật khẩu hoặc OTP" });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ message: "Mật khẩu mới phải ít nhất 6 ký tự" });
+    }
+    if (password !== confirmPassword) {
+      return res.status(400).json({ message: "Mật khẩu mới và xác nhận không khớp" });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User không tồn tại" });
+    }
+
+    if (user.otp_hash === null || user.otp_expires < new Date()) {
+      return res.status(400).json({ message: "OTP không hợp lệ hoặc đã hết hạn" });
+    }
+
+    if (user.otp_attempts >= OTP_MAX_ATTEMPTS) {
+      return res.status(400).json({ message: "Quá số lần thử, vui lòng gửi OTP mới" });
+    }
+
+    if (!(await compareString(otp, user.otp_hash))) {
+      user.otp_attempts += 1;
+      await user.save();
+      return res.status(400).json({ message: "OTP không đúng, thử lại" });
+    }
+
+    // OTP OK, hash password mới, reset OTP
+    const password_hash = await hashString(password);
+    user.password_hash = password_hash;
+    user.otp_hash = null;
+    user.otp_expires = null;
+    user.otp_attempts = 0;
+    await user.save();
+
+    res.json({ message: "Đổi mật khẩu thành công" });
+  } catch (err) {
+    console.error("Lỗi đổi mật khẩu:", err.message);
+    res.status(500).json({ message: "Lỗi server khi đổi mật khẩu" });
+  }
+};
+
+module.exports = { registerManager, verifyOtp, login, refreshToken, updateProfile, sendPasswordOTP, changePassword };

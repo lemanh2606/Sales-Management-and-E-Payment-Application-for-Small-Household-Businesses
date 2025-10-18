@@ -4,6 +4,7 @@ const mongoose = require("mongoose");
 const employeeSchema = new mongoose.Schema(
   {
     fullName: { type: String, required: true, maxlength: 150, trim: true }, // 👈 Thêm: Họ tên đầy đủ nhân viên (dễ populate ở Order, ko cần chain User)
+    phone: { type: String, default: '', maxlength: 15, trim: true },
     salary: { type: mongoose.Schema.Types.Decimal128, required: true }, // Lương cơ bản
     shift: { type: String, maxlength: 50 }, // Ca làm việc (sáng/chiều/tối)
     commission_rate: { type: mongoose.Schema.Types.Decimal128 }, // Tỷ lệ hoa hồng (%)

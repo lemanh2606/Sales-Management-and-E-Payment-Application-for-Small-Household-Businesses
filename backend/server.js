@@ -26,7 +26,7 @@ connectDB();
   "StockCheck",
   "PurchaseOrder",
   "PurchaseReturn",
-].forEach(model => require(`./models/${model}`));
+].forEach((model) => require(`./models/${model}`));
 
 const app = express();
 const server = http.createServer(app); // 👈 Tạo server http để gắn socket.io
@@ -82,6 +82,7 @@ const purchaseOrderRouters = require("./routers/purchaseOrderRouters");
 const purchaseReturnRouters = require("./routers/purchaseReturnRouters");
 const orderRouters = require("./routers/orderRouters");
 const taxRouters = require("./routers/taxRouters");
+const revenueRouters = require("./routers/revenueRouters");
 
 // --- MOUNT ROUTERS ---
 app.use("/api/stores", storeRouters);
@@ -95,6 +96,7 @@ app.use("/api/purchase-orders", purchaseOrderRouters);
 app.use("/api/purchase-returns", purchaseReturnRouters);
 app.use("/api/orders", orderRouters);
 app.use("/api/tax", taxRouters);
+app.use("/api/revenue", revenueRouters);
 
 // --- ROOT ---
 app.get("/", (req, res) => {
@@ -106,7 +108,7 @@ app.get("/api", (req, res) => {
   const endpoints = listEndpoints(app);
   const grouped = {};
 
-  endpoints.forEach(ep => {
+  endpoints.forEach((ep) => {
     const prefix = ep.path.split("/")[2] || "root";
     if (!grouped[prefix]) grouped[prefix] = [];
     grouped[prefix].push({
