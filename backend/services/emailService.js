@@ -24,28 +24,45 @@ const transporter = nodemailer.createTransport({
     pass: process.env.EMAIL_PASS,
   },
 });
+//(thêm parameter type optional để customize subject/html cho "đổi mật khẩu")
+async function sendVerificationEmail(to, username, otp, expireMinutes = 5, type = "register") {
+  let subject = "Mã OTP xác thực tài khoản của bạn";
+  let html = `
+    <div style="font-family: sans-serif; color: #333;">
+      <p>Xin chào <b>${username}</b>,</p>
+      <p>Cảm ơn bạn đã đăng ký tài khoản SmartRetail.</p>
+      <p>Mã OTP của bạn là:</p>
+      <h2 style="color:#007bff; letter-spacing: 2px;">${otp}</h2>
+      <p>Mã có hiệu lực trong ${expireMinutes} phút.</p>
+      <p>Nếu bạn không yêu cầu đăng ký này, vui lòng bỏ qua email này.</p>
+    </div>
+  `;
 
-async function sendVerificationEmail(to, username, otp, expireMinutes = 5) {
-  const mailOptions = {
-    from: `"SmartRetail System" <${process.env.EMAIL_USER}>`,
-    to,
-    subject: "Mã OTP xác thực tài khoản của bạn",
-    html: `
+  if (type === "change-password") {
+    subject = "Mã OTP đổi mật khẩu của bạn";
+    html = `
       <div style="font-family: sans-serif; color: #333;">
         <p>Xin chào <b>${username}</b>,</p>
-        <p>Cảm ơn bạn đã đăng ký tài khoản SmartRetail.</p>
+        <p>Bạn đang yêu cầu đổi mật khẩu tài khoản SmartRetail.</p>
         <p>Mã OTP của bạn là:</p>
         <h2 style="color:#007bff; letter-spacing: 2px;">${otp}</h2>
         <p>Mã có hiệu lực trong ${expireMinutes} phút.</p>
-        <p>Nếu bạn không yêu cầu đăng ký này, vui lòng bỏ qua email này.</p>
+        <p>Nếu bạn không yêu cầu đổi mật khẩu này, vui lòng bỏ qua email này.</p>
       </div>
-    `,
+    `;
+  }
+
+  const mailOptions = {
+    from: `"SmartRetail System" <${process.env.EMAIL_USER}>`,
+    to,
+    subject,
+    html,
   };
 
-  await transporter.sendMail(mailOptions);  // Gửi email với transporter
+  await transporter.sendMail(mailOptions);
 }
 
-module.exports = { 
-  sendVerificationEmail, 
-  transporter
+module.exports = {
+  sendVerificationEmail,
+  transporter,
 };
