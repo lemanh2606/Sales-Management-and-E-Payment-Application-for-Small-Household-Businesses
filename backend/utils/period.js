@@ -26,7 +26,15 @@ function periodToRange(periodType, periodKey, monthFrom, monthTo) {
     end = new Date(Date.UTC(toYear, toMonth, 0, 23, 59, 59, 999)); // Ngày cuối tháng to UTC + ms 999
   }
 
-  console.log("Debug khoảng thời gian:", periodType, periodKey, "start", start.toISOString(), "end", end.toISOString());
+  console.log(
+    "Debug khoảng thời gian:",
+    periodType,
+    periodKey,
+    "start",
+    start.toISOString(),
+    "end",
+    end.toISOString()
+  );
 
   return { start, end };
 }

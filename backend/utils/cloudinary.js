@@ -7,15 +7,15 @@ cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
-  secure: true, // 👈 luôn là https
+  secure: true, //  luôn là https
 });
 
-// 🧩 Cấu hình Multer Storage cho Cloudinary (dùng cho upload ảnh sản phẩm)
+//  Cấu hình Multer Storage cho Cloudinary (dùng cho upload ảnh sản phẩm)
 const productImageStorage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
     folder: "products", // Thư mục lưu ảnh sản phẩm
-    format: async (req, file) => 'png', // Convert to PNG
+    format: async (req, file) => "png", // Convert to PNG
     public_id: (req, file) => `product_${Date.now()}`, // Tạo tên file unique
   },
 });
@@ -63,9 +63,9 @@ const deleteFromCloudinary = async (public_id) => {
   }
 };
 
-module.exports = { 
+module.exports = {
   cloudinary,
-  uploadToCloudinary, 
+  uploadToCloudinary,
   deleteFromCloudinary,
-  uploadProductImage
+  uploadProductImage,
 };

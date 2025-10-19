@@ -5,8 +5,8 @@ const {
   getStockChecksByStore,
   getStockCheckById,
   updateStockCheck,
-  deleteStockCheck
-} = require("../controllers/stockCheckController");
+  deleteStockCheck,
+} = require("../controllers/stock/stockCheckController");
 const { verifyToken } = require("../middlewares/authMiddleware");
 
 // ============= CRUD Routes cho StockCheck =============

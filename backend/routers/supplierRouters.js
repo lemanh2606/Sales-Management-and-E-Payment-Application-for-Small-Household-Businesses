@@ -5,8 +5,8 @@ const {
   getSuppliersByStore,
   getSupplierById,
   updateSupplier,
-  deleteSupplier
-} = require("../controllers/supplierController");
+  deleteSupplier,
+} = require("../controllers/supplier/supplierController");
 const { verifyToken } = require("../middlewares/authMiddleware");
 
 // ============= CRUD Routes cho Supplier =============

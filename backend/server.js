@@ -36,13 +36,18 @@ const io = new Server(server, {
   cors: {
     origin: "http://localhost:3000", // 👈 FE React
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "Cache-Control", "Pragma"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "Cache-Control",
+      "Pragma",
+    ],
   },
 });
 
 // Lưu io vào app để controller có thể sử dụng (req.app.get("io"))
 app.set("io", io);
-// 🧠 Khi có client kết nối socket
+//  Khi có client kết nối socket
 io.on("connection", (socket) => {
   console.log(`🟢 Client kết nối: ${socket.id}`);
 
@@ -54,7 +59,11 @@ require("./services/cronJobs");
 
 // Webhook PayOS phải viết trước express.json()
 const orderWebhookHandler = require("./routers/orderWebhookHandler");
-app.post("/api/orders/vietqr-webhook", express.raw({ type: "*/*" }), orderWebhookHandler);
+app.post(
+  "/api/orders/vietqr-webhook",
+  express.raw({ type: "*/*" }),
+  orderWebhookHandler
+);
 
 // --- MIDDLEWARE ---
 app.use(
@@ -62,7 +71,12 @@ app.use(
     origin: "http://localhost:3000",
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "Cache-Control", "Pragma"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "Cache-Control",
+      "Pragma",
+    ],
   })
 );
 app.use(express.json());

@@ -10,7 +10,11 @@ const {
   listDeclarations,
   exportDeclaration,
 } = require("../controllers/taxController");
-const { verifyToken, isManager, checkStoreAccess } = require("../middlewares/authMiddleware");
+const {
+  verifyToken,
+  isManager,
+  checkStoreAccess,
+} = require("../middlewares/authMiddleware");
 
 /**
  * Flow:

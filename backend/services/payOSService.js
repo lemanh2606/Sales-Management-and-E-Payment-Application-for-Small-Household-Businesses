@@ -38,24 +38,33 @@ async function generateQRWithPayOS(req) {
     .map((k) => `${k}=${bodyData[k]}`)
     .join("&");
 
-  const signature = crypto.createHmac("sha256", PAYOS_CHECKSUM_KEY).update(kvString, "utf8").digest("hex");
+  const signature = crypto
+    .createHmac("sha256", PAYOS_CHECKSUM_KEY)
+    .update(kvString, "utf8")
+    .digest("hex");
 
   const finalBody = { ...bodyData, signature };
 
   // Gửi request tạo link thanh toán PayOS
-  const response = await axios.post(`${PAYOS_HOST}/v2/payment-requests`, finalBody, {
-    headers: {
-      "x-client-id": PAYOS_CLIENT_ID,
-      "x-api-key": PAYOS_API_KEY,
-      "Content-Type": "application/json",
-    },
-    timeout: 30000,
-  });
+  const response = await axios.post(
+    `${PAYOS_HOST}/v2/payment-requests`,
+    finalBody,
+    {
+      headers: {
+        "x-client-id": PAYOS_CLIENT_ID,
+        "x-api-key": PAYOS_API_KEY,
+        "Content-Type": "application/json",
+      },
+      timeout: 30000,
+    }
+  );
 
   console.log("PayOS Response full:", JSON.stringify(response.data, null, 2));
 
   if (response.data.code !== "00") {
-    throw new Error(`PayOS create error: ${response.data.desc || "Unknown error"}`);
+    throw new Error(
+      `PayOS create error: ${response.data.desc || "Unknown error"}`
+    );
   }
 
   const data = response.data.data;
@@ -85,7 +94,10 @@ async function generateQRWithPayOS(req) {
           description: orderInfo,
           accountNumber: process.env.VIETQR_ACCOUNT_NO,
           reference: "SIMULATED_" + Date.now(),
-          transactionDateTime: new Date().toISOString().replace("T", " ").split(".")[0],
+          transactionDateTime: new Date()
+            .toISOString()
+            .replace("T", " ")
+            .split(".")[0],
           paymentLinkId: "SIM-" + txnRef,
         },
       };
@@ -106,9 +118,14 @@ async function generateQRWithPayOS(req) {
         headers: { "Content-Type": "application/json" },
       });
 
-      console.log(`✅ [SIMULATOR] Webhook giả lập gửi thành công cho đơn ${txnRef}`);
+      console.log(
+        `✅ [SIMULATOR] Webhook giả lập gửi thành công cho đơn ${txnRef}`
+      );
     } catch (err) {
-      console.error("❌ [SIMULATOR] Gửi webhook giả lập thất bại, hãy bật ngrok:", err.message);
+      console.error(
+        "❌ [SIMULATOR] Gửi webhook giả lập thất bại, hãy bật ngrok:",
+        err.message
+      );
     }
   }, 30000); // sau 30s
 
@@ -122,10 +139,21 @@ async function verifyPaymentWithPayOS(parsedWebhook) {
     if (!secret) throw new Error("Missing PAYOS_CHECKSUM_KEY");
 
     const receivedSignature = (parsedWebhook.signature || "").toUpperCase();
-    const expectedSignature = computePayOSSignatureFromData(parsedWebhook.data, secret);
+    const expectedSignature = computePayOSSignatureFromData(
+      parsedWebhook.data,
+      secret
+    );
 
-    console.log("KV preview:", buildKeyValueStringFromData(parsedWebhook.data).slice(0, 200));
-    console.log("So sánh 'Signature': nhận được", receivedSignature, "mong đợi", expectedSignature);
+    console.log(
+      "KV preview:",
+      buildKeyValueStringFromData(parsedWebhook.data).slice(0, 200)
+    );
+    console.log(
+      "So sánh 'Signature': nhận được",
+      receivedSignature,
+      "mong đợi",
+      expectedSignature
+    );
 
     if (receivedSignature !== expectedSignature) {
       console.log("❌ Sai chữ ký webhook PayOS, từ chối cập nhật");
@@ -140,7 +168,11 @@ async function verifyPaymentWithPayOS(parsedWebhook) {
     const tx = parsedWebhook.data;
     const order = await Order.findOne({ paymentRef: tx.orderCode });
     if (!order) {
-      console.log("⚠ Không tìm thấy order", tx.orderCode, "→ Nhưng chữ ký đúng → OK 200 cho PayOS");
+      console.log(
+        "⚠ Không tìm thấy order",
+        tx.orderCode,
+        "→ Nhưng chữ ký đúng → OK 200 cho PayOS"
+      );
       return true; // ✅ KHÔNG trả false nữa
     }
     if (order.status !== "pending") {
@@ -174,7 +206,11 @@ function buildKeyValueStringFromData(data) {
 
 function computePayOSSignatureFromData(data, secret) {
   const kvString = buildKeyValueStringFromData(data);
-  return crypto.createHmac("sha256", secret).update(kvString, "utf8").digest("hex").toUpperCase();
+  return crypto
+    .createHmac("sha256", secret)
+    .update(kvString, "utf8")
+    .digest("hex")
+    .toUpperCase();
 }
 
 module.exports = { generateQRWithPayOS, verifyPaymentWithPayOS };
