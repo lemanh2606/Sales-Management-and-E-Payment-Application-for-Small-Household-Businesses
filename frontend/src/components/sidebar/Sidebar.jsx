@@ -211,7 +211,7 @@ export default function Sidebar() {
                             onClick={handleScrollDownClick}
                             aria-label="Xem thêm"
                             title="Xem thêm"
-                            className="absolute left-1/2 transform -translate-x-1/2 bottom-20 z-40   text-[black] flex items-center justify-center shadow-2xl hover:scale-105 transition-transform"
+                            className="absolute left-1/2 transform -translate-x-1/2 bottom-20 z-40 text-[#00000060] flex items-center justify-center shadow-2xl hover:scale-105 transition-transform"
                             style={{ touchAction: "manipulation" }}
                         >
                             <div className="flex flex-col items-center">
@@ -223,7 +223,7 @@ export default function Sidebar() {
 
                     <button
                         onClick={handleLogout}
-                        className="mt-6 w-full flex items-center justify-center gap-2 bg-red-500 text-white py-3 rounded-xl hover:bg-red-600 transition-all duration-300 transform hover:scale-105 shadow-lg"
+                        className="mt-6 w-full flex items-center justify-center gap-2  text-[black] py-3 rounded-xl  hover:text-[red] "
                     >
                         <FiLogOut size={18} /> Đăng xuất ({user?.username || "Manager"})
                     </button>

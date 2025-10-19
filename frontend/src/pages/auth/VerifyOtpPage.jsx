@@ -4,7 +4,7 @@ import Button from "../../components/Button";
 import { verifyOtp } from "../../api/userApi";
 import { registerManager } from "../../api/userApi";
 import { useLocation, useNavigate } from "react-router-dom";
-import Swal from "sweetalert2"; // ✅ import sweetalert2
+import Swal from "sweetalert2";
 
 
 

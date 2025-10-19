@@ -22,9 +22,14 @@ productApi.interceptors.request.use(
 
 // ------------------ PRODUCT API ------------------
 
-//  Tạo sản phẩm mới trong cửa hàng
-export const createProduct = async (storeId, data) =>
-  (await productApi.post(`/products/store/${storeId}`, data)).data;
+// 🛍️ Tạo sản phẩm mới trong cửa hàng (gửi kèm ảnh)
+export const createProduct = async (storeId, data) => {
+  const response = await productApi.post(`/products/store/${storeId}`, data, {
+    headers: { "Content-Type": "multipart/form-data" }, // quan trọng cho upload ảnh
+  });
+  return response.data;
+};
+
 
 //  Cập nhật sản phẩm
 export const updateProduct = async (productId, data) =>

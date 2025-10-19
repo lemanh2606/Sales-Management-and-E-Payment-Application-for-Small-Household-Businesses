@@ -76,7 +76,7 @@ export default function SupplierFormModal({ open, onOpenChange, storeId, supplie
             <DialogContent className="max-w-lg rounded-3xl p-6 shadow-2xl bg-white animate-fade-in scale-95 origin-center transition-all duration-300">
                 <DialogHeader>
                     <DialogTitle className="text-2xl font-bold text-gray-800">
-                        {supplierId ? "✏️ Cập nhật nhà cung cấp" : "🧾 Thêm nhà cung cấp mới"}
+                        {supplierId ? " Cập nhật nhà cung cấp" : " Thêm nhà cung cấp mới"}
                     </DialogTitle>
                 </DialogHeader>
 
