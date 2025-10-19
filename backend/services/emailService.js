@@ -25,7 +25,13 @@ const transporter = nodemailer.createTransport({
   },
 });
 //(thêm parameter type optional để customize subject/html cho "đổi mật khẩu")
-async function sendVerificationEmail(to, username, otp, expireMinutes = 5, type = "register") {
+async function sendVerificationEmail(
+  to,
+  username,
+  otp,
+  expireMinutes = 5,
+  type = "register"
+) {
   let subject = "Mã OTP xác thực tài khoản của bạn";
   let html = `
     <div style="font-family: sans-serif; color: #333;">
