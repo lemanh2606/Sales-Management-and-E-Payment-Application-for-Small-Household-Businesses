@@ -1,13 +1,14 @@
 const express = require("express");
 const router = express.Router();
+
+const { verifyToken } = require("../middlewares/authMiddleware");
 const {
   createPurchaseOrder,
   getPurchaseOrdersByStore,
   getPurchaseOrderById,
   updatePurchaseOrder,
-  deletePurchaseOrder
-} = require("../controllers/purchaseOrderController");
-const { verifyToken } = require("../middlewares/authMiddleware");
+  deletePurchaseOrder,
+} = require("../controllers/purchase/purchaseOrderController");
 
 // ============= CRUD Routes cho Purchase Order =============
 

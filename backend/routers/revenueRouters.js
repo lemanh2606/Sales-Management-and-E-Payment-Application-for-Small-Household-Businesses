@@ -1,8 +1,15 @@
 // routes/revenueRouters.js (route báo cáo doanh thu - tạo file mới)
 const express = require("express");
 const router = express.Router();
-const { getRevenueByPeriod, getRevenueByEmployee, exportRevenue } = require("../controllers/revenueController");
-const { verifyToken, checkStoreAccess } = require("../middlewares/authMiddleware");
+const {
+  getRevenueByPeriod,
+  getRevenueByEmployee,
+  exportRevenue,
+} = require("../controllers/revenueController");
+const {
+  verifyToken,
+  checkStoreAccess,
+} = require("../middlewares/authMiddleware");
 
 // Tổng doanh thu theo period
 router.get("/", verifyToken, checkStoreAccess, getRevenueByPeriod);
