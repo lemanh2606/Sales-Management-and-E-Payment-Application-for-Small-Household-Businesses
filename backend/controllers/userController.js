@@ -59,13 +59,15 @@ const compareString = async (str, hash) => await bcrypt.compare(str, hash);
  * Tạo access token (JWT với id, role).
  * Thời hạn từ ACCESS_TOKEN_EXPIRES.
  */
-const signAccessToken = (payload) => jwt.sign(payload, process.env.JWT_SECRET || "default_jwt_secret_change_in_env", { expiresIn: ACCESS_TOKEN_EXPIRES });
+const signAccessToken = (payload) =>
+  jwt.sign(payload, process.env.JWT_SECRET || "default_jwt_secret_change_in_env", { expiresIn: ACCESS_TOKEN_EXPIRES });
 
 /**
  * Tạo refresh token (JWT với id, role).
  * Thời hạn từ REFRESH_TOKEN_EXPIRES.
  */
-const signRefreshToken = (payload) => jwt.sign(payload, process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET, { expiresIn: REFRESH_TOKEN_EXPIRES });
+const signRefreshToken = (payload) =>
+  jwt.sign(payload, process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET, { expiresIn: REFRESH_TOKEN_EXPIRES });
 
 /* ------------------------- 
    Controller: registerManager (đăng ký manager với OTP email)
@@ -267,8 +269,8 @@ const refreshToken = async (req, res) => {
    ------------------------- */
 const updateProfile = async (req, res) => {
   try {
-    const userId = req.user.id;  // Từ middleware verifyToken
-    const { username, email, phone, fullName } = req.body; 
+    const userId = req.user.id; // Từ middleware verifyToken
+    const { username, email, phone, fullName } = req.body;
 
     const user = await User.findById(userId);
     if (!user) {
@@ -301,8 +303,8 @@ const updateProfile = async (req, res) => {
     if (user.role === "STAFF") {
       const employee = await Employee.findOne({ user_id: userId });
       if (employee) {
-        if (fullName) employee.fullName = fullName.trim();  // Thêm: fullName optional (nếu input, update Employee)
-        if (phone !== undefined) employee.phone = phone.trim();  // Sync phone vào Employee (optional, default '')
+        if (fullName) employee.fullName = fullName.trim(); // Thêm: fullName optional (nếu input, update Employee)
+        if (phone !== undefined) employee.phone = phone.trim(); // Sync phone vào Employee (optional, default '')
         await employee.save();
       }
     }
@@ -322,8 +324,8 @@ const updateProfile = async (req, res) => {
    ------------------------- */
 const sendPasswordOTP = async (req, res) => {
   try {
-    const userId = req.user.id;  // Từ middleware verifyToken
-    const { email } = req.body;  // Email (optional, dùng email user nếu ko input)
+    const userId = req.user.id; // Từ middleware verifyToken
+    const { email } = req.body; // Email (optional, dùng email user nếu ko input)
 
     const user = await User.findById(userId);
     if (!user) {
@@ -362,8 +364,8 @@ const sendPasswordOTP = async (req, res) => {
    ------------------------- */
 const changePassword = async (req, res) => {
   try {
-    const userId = req.user.id;  // Từ middleware verifyToken
-    const { password, confirmPassword, otp } = req.body;  // Password mới + confirmPassword + OTP
+    const userId = req.user.id; // Từ middleware verifyToken
+    const { password, confirmPassword, otp } = req.body; // Password mới + confirmPassword + OTP
 
     if (!password || !confirmPassword || !otp) {
       return res.status(400).json({ message: "Thiếu mật khẩu mới, xác nhận mật khẩu hoặc OTP" });
@@ -409,4 +411,113 @@ const changePassword = async (req, res) => {
   }
 };
 
-module.exports = { registerManager, verifyOtp, login, refreshToken, updateProfile, sendPasswordOTP, changePassword };
+//Chỉ manager xóa staff khác, check store match current_store, set isDeleted=true + deletedAt=now
+const softDeleteUser = async (req, res) => {
+  try {
+    const userId = req.user.id; // Manager ID từ verifyToken
+    const { targetUserId } = req.body; // Target staff ID để xóa
+
+    if (!targetUserId) {
+      return res.status(400).json({ message: "Thiếu targetUserId" });
+    }
+    //check xem có phải role manager đang thao tác không
+    const manager = await User.findById(userId);
+    if (!manager || manager.role !== "MANAGER") {
+      return res.status(403).json({ message: "Chỉ manager mới được xóa nhân viên" });
+    }
+    //check nhân viên trong chính store đó
+    const targetUser = await User.findById(targetUserId);
+    if (!targetUser || targetUser.role !== "STAFF") {
+      return res.status(404).json({ message: "Nhân viên không tồn tại" });
+    }
+    //check nhân viên đã bị xoá từ trước hay chưa
+    if (targetUser.isDeleted) {
+      return res.status(400).json({ message: "Tài khoản nhân viên này đã bị xoá trước đó rồi!" });
+    }
+    // Check quyền: Manager chỉ xóa staff bind store hiện tại (current_store match)
+    if (String(manager.current_store) !== String(targetUser.current_store)) {
+      return res.status(403).json({ message: "Bạn chỉ xóa được nhân viên ở cửa hàng hiện tại" });
+    }
+    // Xóa mềm: đặt isDeleted=true, deletedAt=now
+    targetUser.isDeleted = true;
+    targetUser.deletedAt = new Date();
+    await targetUser.save();
+
+    // Optional: Xóa Employee bind (set isDeleted=true nếu Employee có field)
+    const employee = await Employee.findOne({ user_id: targetUserId });
+    if (employee) {
+      employee.isDeleted = true; //đặt isDeleted = true ở models/Employee.js để không bị mất dữ liệu
+      await employee.save();
+    }
+    console.log(
+      `Manager ${manager.username} xóa mềm nhân viên ${targetUser.username} ở store ${manager.current_store}`
+    );
+    res.json({ message: "Xóa mềm nhân viên thành công" });
+  } catch (err) {
+    console.error("Lỗi xóa mềm nhân viên:", err.message);
+    res.status(500).json({ message: "Lỗi server khi xóa nhân viên" });
+  }
+};
+
+// khôi phục lại tài khoản của nhân viên
+const restoreUser = async (req, res) => {
+  try {
+    const userId = req.user.id; // Manager ID từ verifyToken
+    const { targetUserId } = req.body; // Target staff ID để khôi phục
+
+    if (!targetUserId) {
+      return res.status(400).json({ message: "Thiếu targetUserId" });
+    }
+
+    const manager = await User.findById(userId);
+    if (!manager || manager.role !== "MANAGER") {
+      return res.status(403).json({ message: "Chỉ manager mới được khôi phục nhân viên" });
+    }
+
+    const targetUser = await User.findById(targetUserId);
+    if (!targetUser || targetUser.role !== "STAFF") {
+      return res.status(404).json({ message: "Nhân viên không tồn tại" });
+    }
+
+    if (!targetUser.isDeleted) {
+      return res.status(400).json({ message: "Nhân viên chưa bị xóa mềm" });
+    }
+
+    // Check quyền: Manager chỉ khôi phục staff bind store hiện tại (current_store match)
+    if (String(manager.current_store) !== String(targetUser.current_store)) {
+      return res.status(403).json({ message: "Bạn chỉ khôi phục được nhân viên ở cửa hàng hiện tại" });
+    }
+
+    // Khôi phục: set isDeleted=false, restoredAt=now
+    targetUser.isDeleted = false;
+    targetUser.restoredAt = new Date();
+    await targetUser.save();
+
+    // Optional: Khôi phục Employee bind (set isDeleted=false)
+    const employee = await Employee.findOne({ user_id: targetUserId });
+    if (employee) {
+      employee.isDeleted = false;
+      await employee.save();
+    }
+
+    console.log(
+      `Manager ${manager.username} khôi phục nhân viên ${targetUser.username} ở store ${manager.current_store}`
+    );
+    res.json({ message: "Khôi phục nhân viên thành công" });
+  } catch (err) {
+    console.error("Lỗi khôi phục nhân viên:", err.message);
+    res.status(500).json({ message: "Lỗi server khi khôi phục nhân viên" });
+  }
+};
+
+module.exports = {
+  registerManager,
+  verifyOtp,
+  login,
+  refreshToken,
+  updateProfile,
+  sendPasswordOTP,
+  changePassword,
+  softDeleteUser,
+  restoreUser,
+};
