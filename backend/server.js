@@ -83,6 +83,8 @@ const purchaseReturnRouters = require("./routers/purchaseReturnRouters");
 const orderRouters = require("./routers/orderRouters");
 const taxRouters = require("./routers/taxRouters");
 const revenueRouters = require("./routers/revenueRouters");
+const customerRouters = require("./routers/customerRouters");
+const loyaltyRouters = require("./routers/loyaltyRouters");
 
 // --- MOUNT ROUTERS ---
 app.use("/api/stores", storeRouters);
@@ -95,8 +97,10 @@ app.use("/api/suppliers", supplierRouters);
 app.use("/api/purchase-orders", purchaseOrderRouters);
 app.use("/api/purchase-returns", purchaseReturnRouters);
 app.use("/api/orders", orderRouters);
-app.use("/api/tax", taxRouters);
-app.use("/api/revenue", revenueRouters);
+app.use("/api/taxs", taxRouters);
+app.use("/api/revenues", revenueRouters);
+app.use("/api/customers", customerRouters);
+app.use("/api/loyaltys", loyaltyRouters);
 
 // --- ROOT ---
 app.get("/", (req, res) => {
