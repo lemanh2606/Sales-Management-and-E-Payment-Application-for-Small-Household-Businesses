@@ -223,7 +223,7 @@ export default function Sidebar() {
 
                     <button
                         onClick={handleLogout}
-                        className="mt-6 w-full flex items-center justify-center gap-2 bg-red-500 text-white py-3 rounded-xl hover:bg-red-600 transition-all duration-300 transform hover:scale-105 shadow-lg"
+                        className="mt-6 w-full flex items-center justify-center gap-2 bg-[#ffffffa2] text-[black] py-3 rounded-xl hover:bg-[#ff0000] transition-all duration-300 transform hover:scale-105 shadow-lg"
                     >
                         <FiLogOut size={18} /> Đăng xuất ({user?.username || "Manager"})
                     </button>

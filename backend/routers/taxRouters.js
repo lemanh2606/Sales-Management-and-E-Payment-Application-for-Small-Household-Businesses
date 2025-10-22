@@ -9,7 +9,7 @@ const {
   deleteTaxDeclaration,
   listDeclarations,
   exportDeclaration,
-} = require("../controllers/taxController");
+} = require("../controllers/tax/taxController");
 const {
   verifyToken,
   isManager,
