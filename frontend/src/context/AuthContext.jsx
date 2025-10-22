@@ -98,7 +98,7 @@ export const AuthProvider = ({ children }) => {
                 if (store) navigate("/dashboard");
                 else navigate("/select-store");
             } else if (userData?.role === "MANAGER") {
-                if (res?.stores && res.stores.length > 1) navigate("/select-store");
+                if (res?.stores && res.stores.length >= 1) navigate("/select-store");
                 else if (store) navigate("/dashboard");
                 else navigate("/select-store");
             } else {
