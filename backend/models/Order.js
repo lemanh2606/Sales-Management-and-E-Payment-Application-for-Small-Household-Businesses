@@ -5,10 +5,7 @@ const orderSchema = new mongoose.Schema(
   {
     storeId: { type: mongoose.Schema.Types.ObjectId, ref: "Store", required: true }, // Cửa hàng
     employeeId: { type: mongoose.Schema.Types.ObjectId, ref: "Employee", required: true }, // Nhân viên bán
-    customerInfo: {
-      name: { type: String, trim: true, maxlength: 100 },
-      phone: { type: String, trim: true, maxlength: 15 },
-    }, // Khách hàng
+    customer: { type: mongoose.Schema.Types.ObjectId, ref: "Customer", required: true }, // Khách hàng
     totalAmount: { type: mongoose.Schema.Types.Decimal128, required: true, min: 0 }, // Tổng tiền
     paymentMethod: { type: String, enum: ["cash", "qr"], required: true }, // Hình thức TT
     paymentRef: { type: String, trim: true }, // Mã giao dịch QR
@@ -23,8 +20,8 @@ const orderSchema = new mongoose.Schema(
       taxCode: { type: String, trim: true },
       companyAddress: { type: String, trim: true },
     },
-    vatAmount: { type: mongoose.Schema.Types.Decimal128, default: '0' }, // VAT thu (lưu sẵn, default 0)
-    beforeTaxAmount: { type: mongoose.Schema.Types.Decimal128, default: '0' }, // Tiền trước thuế (lưu sẵn, default 0)
+    vatAmount: { type: mongoose.Schema.Types.Decimal128, default: "0" }, // VAT thu (lưu sẵn, default 0)
+    beforeTaxAmount: { type: mongoose.Schema.Types.Decimal128, default: "0" }, // Tiền trước thuế (lưu sẵn, default 0)
   },
   {
     timestamps: true,
@@ -36,5 +33,6 @@ const orderSchema = new mongoose.Schema(
 orderSchema.index({ storeId: 1, createdAt: -1 });
 orderSchema.index({ employeeId: 1, createdAt: -1 });
 orderSchema.index({ status: 1 });
+orderSchema.index({ customer: 1, createdAt: -1 });
 
 module.exports = mongoose.model("Order", orderSchema);
