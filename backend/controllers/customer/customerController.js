@@ -1,6 +1,6 @@
 // controllers/customerController.js (fix searchCustomers: exact phone + fuzzy name, log query/debug - paste thay file)
-const Customer = require("../models/Customer");
-const Order = require("../models/Order"); // Để check Order ref trước xóa mềm
+const Customer = require("../../models/Customer");
+const Order = require("../../models/Order"); // Để check Order ref trước xóa mềm
 
 // GET /api/customers/search - Tìm kiếm khách hàng theo phone (exact) hoặc name (fuzzy)
 // http://localhost:9999/api/customers/search?query=0987654321&limit=5
@@ -15,29 +15,38 @@ const searchCustomers = async (req, res) => {
 
     // Search exact phone ($eq) + fuzzy name ($regex 'i'), filter isDeleted: { $ne: true } match missing field
     const searchQuery = {
-      isDeleted: { $ne: true }  // Ko true (bao gồm missing field default false)
+      isDeleted: { $ne: true }, // Ko true (bao gồm missing field default false)
     };
-    if (query.length >= 10) { // Giả sử phone VN 10 số, ưu tiên exact match phone
+    if (query.length >= 10) {
+      // Giả sử phone VN 10 số, ưu tiên exact match phone
       searchQuery.phone = query.trim(); // Exact phone = query (ko regex, match full)
     } else {
       searchQuery.$or = [
-        { phone: { $regex: query, $options: 'i' } }, // Phone fuzzy nếu query ngắn
-        { name: { $regex: query, $options: 'i' } }, // Name fuzzy case-insensitive
+        { phone: { $regex: query, $options: "i" } }, // Phone fuzzy nếu query ngắn
+        { name: { $regex: query, $options: "i" } }, // Name fuzzy case-insensitive
       ];
     }
 
     console.log("Search query object:", JSON.stringify(searchQuery, null, 2)); // Log full query để debug
 
     const customers = await Customer.find(searchQuery)
-    .limit(parseInt(limit))
-    .sort({ createdAt: -1 }) // Mới nhất trước
-    .lean(); // Plain object nhanh
+      .limit(parseInt(limit))
+      .sort({ createdAt: -1 }) // Mới nhất trước
+      .lean(); // Plain object nhanh
 
     // Log DB count để debug (tổng active customers)
-    const totalActive = await Customer.countDocuments({ isDeleted: { $ne: true } }); // Ko true (missing ok)
+    const totalActive = await Customer.countDocuments({
+      isDeleted: { $ne: true },
+    }); // Ko true (missing ok)
     // Log raw document match phone exact để debug
-    const rawPhoneMatch = await Customer.findOne({ phone: query.trim(), isDeleted: { $ne: true } }).lean();
-    console.log(`Tổng active customers DB: ${totalActive}, search kết quả: ${customers.length}, raw phone match:`, JSON.stringify(rawPhoneMatch, null, 2)); // Log raw để xem phone/isDeleted
+    const rawPhoneMatch = await Customer.findOne({
+      phone: query.trim(),
+      isDeleted: { $ne: true },
+    }).lean();
+    console.log(
+      `Tổng active customers DB: ${totalActive}, search kết quả: ${customers.length}, raw phone match:`,
+      JSON.stringify(rawPhoneMatch, null, 2)
+    ); // Log raw để xem phone/isDeleted
 
     res.json({ message: "Tìm kiếm thành công", customers });
   } catch (err) {
@@ -59,7 +68,10 @@ const updateCustomer = async (req, res) => {
 
     // Validate unique phone nếu thay đổi
     if (phone && phone.trim() !== customer.phone) {
-      const existing = await Customer.findOne({ phone: phone.trim(), _id: { $ne: id } });
+      const existing = await Customer.findOne({
+        phone: phone.trim(),
+        _id: { $ne: id },
+      });
       if (existing && !existing.isDeleted) {
         return res.status(400).json({ message: "Số phone đã tồn tại" });
       }
@@ -92,12 +104,14 @@ const softDeleteCustomer = async (req, res) => {
     }
 
     // Check ko có Order pending/refunded (an toàn, ko xóa nếu có Order active)
-    const activeOrders = await Order.find({ 
-      customer: id, 
-      status: { $in: ["pending", "refunded"] } 
+    const activeOrders = await Order.find({
+      customer: id,
+      status: { $in: ["pending", "refunded"] },
     });
     if (activeOrders.length > 0) {
-      return res.status(400).json({ message: "Không thể xóa khách hàng có đơn hàng đang xử lý" });
+      return res
+        .status(400)
+        .json({ message: "Không thể xóa khách hàng có đơn hàng đang xử lý" });
     }
 
     customer.isDeleted = true; // Xóa mềm

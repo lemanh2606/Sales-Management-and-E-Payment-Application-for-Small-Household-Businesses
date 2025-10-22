@@ -263,6 +263,102 @@ const login = async (req, res) => {
 };
 
 /* ------------------------- 
+   Controller public: gửi OTP khi quên mật khẩu (không cần login)
+   ------------------------- */
+const sendForgotPasswordOTP = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ message: "Vui lòng nhập email" });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    if (!user) {
+      return res
+        .status(404)
+        .json({ message: "Email không tồn tại trong hệ thống" });
+    }
+
+    const otp = generateOTP();
+    const otp_hash = await hashString(otp);
+    const otp_expires = new Date(Date.now() + OTP_EXPIRE_MINUTES * 60 * 1000);
+
+    user.otp_hash = otp_hash;
+    user.otp_expires = otp_expires;
+    user.otp_attempts = 0;
+    await user.save();
+
+    await sendVerificationEmail(
+      user.email,
+      user.username,
+      otp,
+      OTP_EXPIRE_MINUTES,
+      "forgot-password"
+    );
+
+    res.json({ message: "OTP đã gửi tới email, hết hạn sau 5 phút" });
+  } catch (err) {
+    console.error("Lỗi gửi OTP quên mật khẩu:", err.message);
+    res.status(500).json({ message: "Lỗi server khi gửi OTP" });
+  }
+};
+
+/* ------------------------- 
+   Controller public: đổi mật khẩu khi quên mật khẩu (không cần login)
+   ------------------------- */
+const forgotChangePassword = async (req, res) => {
+  try {
+    const { email, otp, password, confirmPassword } = req.body;
+
+    if (!email || !otp || !password || !confirmPassword) {
+      return res
+        .status(400)
+        .json({ message: "Thiếu thông tin email, OTP hoặc mật khẩu" });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ message: "Mật khẩu phải ít nhất 6 ký tự" });
+    }
+    if (password !== confirmPassword) {
+      return res
+        .status(400)
+        .json({ message: "Mật khẩu và xác nhận không khớp" });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    if (!user || !user.otp_hash || user.otp_expires < new Date()) {
+      return res
+        .status(400)
+        .json({ message: "OTP không hợp lệ hoặc đã hết hạn" });
+    }
+
+    if (user.otp_attempts >= OTP_MAX_ATTEMPTS) {
+      return res
+        .status(400)
+        .json({ message: "Quá số lần thử, vui lòng gửi OTP mới" });
+    }
+
+    if (!(await compareString(otp, user.otp_hash))) {
+      user.otp_attempts += 1;
+      await user.save();
+      return res.status(400).json({ message: "OTP không đúng, thử lại" });
+    }
+
+    const password_hash = await hashString(password);
+    user.password_hash = password_hash;
+    user.otp_hash = null;
+    user.otp_expires = null;
+    user.otp_attempts = 0;
+    await user.save();
+
+    res.json({ message: "Đổi mật khẩu thành công" });
+  } catch (err) {
+    console.error("Lỗi đổi mật khẩu quên:", err.message);
+    res.status(500).json({ message: "Lỗi server khi đổi mật khẩu" });
+  }
+};
+
+/* ------------------------- 
    Controller: refreshToken (tùy chọn)
    - Đọc cookie refreshToken, verify, tạo access token mới
    ------------------------- */
@@ -577,6 +673,8 @@ module.exports = {
   registerManager,
   verifyOtp,
   login,
+  sendForgotPasswordOTP,
+  forgotChangePassword,
   refreshToken,
   updateProfile,
   sendPasswordOTP,
