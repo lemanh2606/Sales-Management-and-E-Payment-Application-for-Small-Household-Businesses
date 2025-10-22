@@ -2,15 +2,19 @@ const express = require("express");
 const router = express.Router();
 const {
   registerManager,
-  login,
   verifyOtp,
+  login,
   updateProfile,
   sendPasswordOTP,
   changePassword,
   softDeleteUser,
   restoreUser,
-} = require("../controllers/userController");
-const { verifyToken, isManager, isStaff } = require("../middlewares/authMiddleware");
+} = require("../controllers/user/userController");
+const {
+  verifyToken,
+  isManager,
+  isStaff,
+} = require("../middlewares/authMiddleware");
 
 // Public routes
 router.post("/register", registerManager);

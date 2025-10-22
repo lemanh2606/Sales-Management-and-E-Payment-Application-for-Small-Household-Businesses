@@ -1,27 +1,27 @@
 // src/pages/LoginPage.jsx
-
-
 import React, { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
-import { loginUser } from "../../api/userApi";
+import * as userApi from "../../api/userApi";
 import Button from "../../components/Button";
 import InputField from "../../components/InputField";
-
+import { useNavigate } from "react-router-dom";
 
 export default function LoginPage() {
     const { login } = useAuth();
+    const navigate = useNavigate();
     const [form, setForm] = useState({ username: "", password: "" });
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
 
-    const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+    const handleChange = (e) =>
+        setForm({ ...form, [e.target.name]: e.target.value });
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError("");
         setLoading(true);
         try {
-            const data = await loginUser(form);
+            const data = await userApi.loginUser(form);
             if (!data?.token || !data?.user) {
                 setError("Server trả thiếu token hoặc user");
                 setLoading(false);
@@ -35,56 +35,92 @@ export default function LoginPage() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center p-4 bg-green-50">
-            <div className="w-full max-w-md md:max-w-lg p-6 md:p-10 bg-white rounded-3xl shadow-2xl border-t-4 border-green-500 animate-fadeIn">
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-200 via-white to-gray-200 p-6">
+            <div className="w-full max-w-md md:max-w-lg p-8 md:p-12 bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl border border-green-200 animate-fadeSlide hover:scale-105 transform transition-all duration-500">
                 {/* Header */}
                 <div className="text-center mb-6">
-                    <h1 className="text-4xl md:text-5xl font-extrabold text-green-600 mb-2">Smallbiz-Sales</h1>
-                    <p className="text-gray-500 text-sm md:text-base">Đăng nhập vào hệ thống</p>
+                    <h1 className="text-4xl md:text-5xl font-extrabold text-green-700 mb-2 tracking-tight drop-shadow-md">
+                        Smallbiz-Sales
+                    </h1>
+                    <p className="text-gray-500 text-sm md:text-base">
+                        Hệ thống quản lý bán hàng cho doanh nghiệp nhỏ
+                    </p>
                 </div>
 
                 {/* Error */}
-                {error && <p className="text-red-500 mb-4 text-center">{error}</p>}
+                {error && (
+                    <div className="bg-red-50 border border-red-300 text-red-700 text-sm py-2 px-4 rounded-lg mb-4 text-center font-medium animate-pulse">
+                        {error}
+                    </div>
+                )}
 
                 {/* Form */}
-                <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+                <form onSubmit={handleSubmit} className="flex flex-col gap-5">
                     <InputField
-                        label="Username"
+                        label="Tên đăng nhập"
                         name="username"
                         value={form.username}
                         onChange={handleChange}
-                        className="transition-all duration-200"
+                        className="focus:ring-2 focus:ring-green-400 rounded-xl transition-all duration-300"
                     />
                     <InputField
-                        label="Password"
+                        label="Mật khẩu"
                         type="password"
                         name="password"
                         value={form.password}
                         onChange={handleChange}
-                        className="transition-all duration-200"
+                        className="focus:ring-2 focus:ring-green-400 rounded-xl transition-all duration-300"
                     />
-                    <Button type="submit" className={`w-full mt-2 ${loading ? "opacity-70 cursor-not-allowed" : ""}`} disabled={loading}>
+                    <Button
+                        type="submit"
+                        className={`w-full mt-3 text-white bg-green-600 hover:bg-green-700 shadow-lg hover:shadow-2xl transition-all duration-300 rounded-xl py-3 font-semibold tracking-wide ${loading ? "opacity-70 cursor-not-allowed" : ""}`}
+                        disabled={loading}
+                    >
                         {loading ? "Đang đăng nhập..." : "Đăng nhập"}
                     </Button>
+
+                    {/* Quên mật khẩu */}
+                    <div className="text-right mt-1">
+                        <button
+                            type="button"
+                            className="text-green-700 font-medium text-sm hover:underline hover:text-green-800 transition-colors duration-200"
+                            onClick={() => navigate("/forgot-password")}
+                        >
+                            Quên mật khẩu?
+                        </button>
+                    </div>
                 </form>
 
                 {/* Register */}
-                <div className="text-center mt-5">
-                    <p className="text-sm text-gray-500">
+                <div className="text-center mt-6">
+                    <p className="text-sm text-gray-600">
                         Chưa có tài khoản?{" "}
                         <button
                             type="button"
-                            onClick={() => window.location.href = "/register"}
-                            className="text-green-600 font-medium hover:underline transition-colors duration-200"
+                            onClick={() => navigate("/register")}
+                            className="text-green-700 font-semibold hover:underline hover:text-green-800 transition-colors duration-200"
                         >
-                            Đăng ký
+                            Đăng ký ngay
                         </button>
                     </p>
                 </div>
 
                 {/* Footer */}
-                <p className="text-center text-xs md:text-sm text-gray-400 mt-6">© 2025 Smallbiz-Sales</p>
+                <p className="text-center text-xs md:text-sm text-gray-400 mt-8">
+                    © 2025 Smallbiz-Sales. All rights reserved.
+                </p>
             </div>
+
+            {/* Custom Animations */}
+            <style>{`
+        @keyframes fadeSlide {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fadeSlide {
+          animation: fadeSlide 0.6s ease-out;
+        }
+      `}</style>
         </div>
     );
 }

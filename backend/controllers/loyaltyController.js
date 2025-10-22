@@ -9,15 +9,21 @@ const setupLoyaltyConfig = async (req, res) => {
 
     // Validate quyền: Chỉ owner store (req.storeRole từ middleware)
     if (req.storeRole !== "OWNER") {
-      return res.status(403).json({ message: "Chỉ chủ cửa hàng mới setup tích điểm" });
+      return res
+        .status(403)
+        .json({ message: "Chỉ chủ cửa hàng mới setup tích điểm" });
     }
 
     // Validate input (min 0, pointsPerVND >0 nếu active)
     if (isActive && (!pointsPerVND || pointsPerVND <= 0)) {
-      return res.status(400).json({ message: "Tỉ lệ tích điểm phải lớn hơn 0 khi bật hệ thống" });
+      return res
+        .status(400)
+        .json({ message: "Tỉ lệ tích điểm phải lớn hơn 0 khi bật hệ thống" });
     }
     if (minOrderValue !== undefined && minOrderValue < 0) {
-      return res.status(400).json({ message: "Giá trị đơn tối thiểu phải lớn hơn hoặc bằng 0" });
+      return res
+        .status(400)
+        .json({ message: "Giá trị đơn tối thiểu phải lớn hơn hoặc bằng 0" });
     }
 
     // Tìm hoặc tạo LoyaltySetting unique per store
@@ -34,7 +40,9 @@ const setupLoyaltyConfig = async (req, res) => {
 
     await loyalty.save();
 
-    console.log(`Setup config tích điểm thành công cho store ${storeId}, isActive: ${loyalty.isActive}`);
+    console.log(
+      `Setup config tích điểm thành công cho store ${storeId}, isActive: ${loyalty.isActive}`
+    );
     res.status(200).json({
       message: "Setup tích điểm thành công",
       config: {
@@ -59,12 +67,16 @@ const getLoyaltyConfig = async (req, res) => {
 
     // Validate quyền: Owner hoặc staff store (req.storeRole từ middleware)
     if (req.storeRole !== "OWNER" && req.storeRole !== "STAFF") {
-      return res.status(403).json({ message: "Không có quyền xem config tích điểm" });
+      return res
+        .status(403)
+        .json({ message: "Không có quyền xem config tích điểm" });
     }
 
     const loyalty = await LoyaltySetting.findOne({ storeId }).lean(); // Lấy config (ko có thì null)
     if (!loyalty) {
-      return res.status(404).json({ message: "Chưa setup config tích điểm cho cửa hàng" });
+      return res
+        .status(404)
+        .json({ message: "Chưa setup config tích điểm cho cửa hàng" });
     }
 
     console.log(`Lấy config tích điểm thành công cho store ${storeId}`);

@@ -1,36 +1,53 @@
-import axios from "axios";
+import apiClient from "./apiClient";
 
-const API_URL = import.meta.env.VITE_API_URL;
+// =============== PUBLIC ROUTES ===============
 
-// Tạo 1 instance axios duy nhất
-const userApi = axios.create({
-  baseURL: API_URL,
-  withCredentials: true, // cho phép gửi cookie
-});
-
-//  Interceptor để tự động thêm token từ localStorage
-userApi.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
-
-// ------------------ USER API ------------------
+// Đăng ký tài khoản Manager mới
 export const registerManager = async (data) =>
-  (await userApi.post("/users/register", data)).data;
+  (await apiClient.post("/users/register", data)).data;
 
+// Xác thực OTP đăng ký
 export const verifyOtp = async (data) =>
-  (await userApi.post("/users/verify-otp", data)).data;
+  (await apiClient.post("/users/verify-otp", data)).data;
 
+// Đăng nhập hệ thống
 export const loginUser = async (data) =>
-  (await userApi.post("/users/login", data)).data;
+  (await apiClient.post("/users/login", data)).data;
 
+// =============== PROTECTED ROUTES ===============
+
+// Lấy thông tin cá nhân (profile)
 export const getProfile = async () =>
-  (await userApi.get("/users/profile")).data;
+  (await apiClient.get("/users/profile")).data;
 
-export default userApi;
+// Cập nhật thông tin cá nhân
+export const updateProfile = async (data) =>
+  (await apiClient.put("/users/profile", data)).data;
+
+// Gửi OTP đổi mật khẩu
+export const sendPasswordOTP = async () =>
+  (await apiClient.post("/users/password/send-otp")).data;
+
+// Đổi mật khẩu bằng OTP
+export const changePassword = async (data) =>
+  (await apiClient.post("/users/password/change", data)).data;
+
+// =============== MANAGER ROUTES ===============
+
+// Xóa mềm nhân viên theo store hiện tại
+export const softDeleteUser = async (data) =>
+  (await apiClient.post("/users/delete-staff", data)).data;
+
+// Khôi phục nhân viên theo store hiện tại
+export const restoreUser = async (data) =>
+  (await apiClient.post("/users/restore-staff", data)).data;
+
+// =============== DEMO ROLE TEST ===============
+
+// Dashboard dành riêng cho Manager
+export const getManagerDashboard = async () =>
+  (await apiClient.get("/users/manager-dashboard")).data;
+
+// Dashboard dành riêng cho Staff
+export const getStaffDashboard = async () =>
+  (await apiClient.get("/users/staff-dashboard")).data;

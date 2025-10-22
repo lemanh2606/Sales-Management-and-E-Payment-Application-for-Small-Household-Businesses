@@ -1,9 +1,9 @@
 // controllers/userController.js (fix changePassword: thêm confirmPassword check khớp, fix compareString scope - paste thay file)
-const User = require("../models/User");
-const Employee = require("../models/Employee");
+const User = require("../../models/User");
+const Employee = require("../../models/Employee");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const { sendVerificationEmail } = require("../services/emailService");
+const { sendVerificationEmail } = require("../../services/emailService");
 
 const IS_PROD = process.env.NODE_ENV === "production";
 
@@ -27,7 +27,9 @@ const BCRYPT_SALT_ROUNDS = Number(process.env.BCRYPT_SALT_ROUNDS || 10);
 
 // Thời hạn token
 const ACCESS_TOKEN_EXPIRES = process.env.JWT_EXPIRES || "2d";
-const REFRESH_TOKEN_EXPIRES = process.env.REFRESH_TOKEN_EXPIRES || `${process.env.REFRESH_TOKEN_EXPIRES_DAYS || 7}d`;
+const REFRESH_TOKEN_EXPIRES =
+  process.env.REFRESH_TOKEN_EXPIRES ||
+  `${process.env.REFRESH_TOKEN_EXPIRES_DAYS || 7}d`;
 
 /* ------------------------- 
    Helper functions
@@ -38,7 +40,9 @@ const REFRESH_TOKEN_EXPIRES = process.env.REFRESH_TOKEN_EXPIRES || `${process.en
  * Trả về chuỗi (string) để dễ hash và so sánh.
  */
 const generateOTP = (len = OTP_LENGTH) =>
-  Math.floor(Math.pow(10, len - 1) + Math.random() * 9 * Math.pow(10, len - 1)).toString();
+  Math.floor(
+    Math.pow(10, len - 1) + Math.random() * 9 * Math.pow(10, len - 1)
+  ).toString();
 
 /**
  * Hash một chuỗi (password hoặc OTP) bằng bcrypt.
@@ -60,14 +64,22 @@ const compareString = async (str, hash) => await bcrypt.compare(str, hash);
  * Thời hạn từ ACCESS_TOKEN_EXPIRES.
  */
 const signAccessToken = (payload) =>
-  jwt.sign(payload, process.env.JWT_SECRET || "default_jwt_secret_change_in_env", { expiresIn: ACCESS_TOKEN_EXPIRES });
+  jwt.sign(
+    payload,
+    process.env.JWT_SECRET || "default_jwt_secret_change_in_env",
+    { expiresIn: ACCESS_TOKEN_EXPIRES }
+  );
 
 /**
  * Tạo refresh token (JWT với id, role).
  * Thời hạn từ REFRESH_TOKEN_EXPIRES.
  */
 const signRefreshToken = (payload) =>
-  jwt.sign(payload, process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET, { expiresIn: REFRESH_TOKEN_EXPIRES });
+  jwt.sign(
+    payload,
+    process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET,
+    { expiresIn: REFRESH_TOKEN_EXPIRES }
+  );
 
 /* ------------------------- 
    Controller: registerManager (đăng ký manager với OTP email)
@@ -79,7 +91,9 @@ const registerManager = async (req, res) => {
 
     // Validate input
     if (!username || !email || !password) {
-      return res.status(400).json({ message: "Thiếu username, email hoặc password" });
+      return res
+        .status(400)
+        .json({ message: "Thiếu username, email hoặc password" });
     }
     if (password.length < 6) {
       return res.status(400).json({ message: "Password phải ít nhất 6 ký tự" });
@@ -88,7 +102,9 @@ const registerManager = async (req, res) => {
     // Kiểm tra unique username/email
     const existingUser = await User.findOne({ $or: [{ username }, { email }] });
     if (existingUser) {
-      return res.status(400).json({ message: "Username hoặc email đã tồn tại" });
+      return res
+        .status(400)
+        .json({ message: "Username hoặc email đã tồn tại" });
     }
 
     // Hash password
@@ -116,7 +132,9 @@ const registerManager = async (req, res) => {
     // Gửi email OTP
     await sendVerificationEmail(email, username, otp);
 
-    res.status(201).json({ message: "Đăng ký thành công, kiểm tra email để xác minh OTP" });
+    res
+      .status(201)
+      .json({ message: "Đăng ký thành công, kiểm tra email để xác minh OTP" });
   } catch (err) {
     console.error("Lỗi đăng ký:", err.message);
     res.status(500).json({ message: "Lỗi server khi đăng ký" });
@@ -137,11 +155,15 @@ const verifyOtp = async (req, res) => {
 
     const user = await User.findOne({ email: email.toLowerCase().trim() });
     if (!user || user.otp_hash === null || user.otp_expires < new Date()) {
-      return res.status(400).json({ message: "OTP không hợp lệ hoặc đã hết hạn" });
+      return res
+        .status(400)
+        .json({ message: "OTP không hợp lệ hoặc đã hết hạn" });
     }
 
     if (user.otp_attempts >= OTP_MAX_ATTEMPTS) {
-      return res.status(400).json({ message: "Quá số lần thử, vui lòng yêu cầu OTP mới" });
+      return res
+        .status(400)
+        .json({ message: "Quá số lần thử, vui lòng yêu cầu OTP mới" });
     }
 
     if (!(await compareString(otp, user.otp_hash))) {
@@ -177,7 +199,9 @@ const login = async (req, res) => {
 
     const user = await User.findOne({ username: username.trim() });
     if (!user) {
-      return res.status(401).json({ message: "Username hoặc password không đúng" });
+      return res
+        .status(401)
+        .json({ message: "Username hoặc password không đúng" });
     }
 
     if (!user.isVerified) {
@@ -195,7 +219,9 @@ const login = async (req, res) => {
         user.lockUntil = new Date(Date.now() + LOGIN_LOCK_MINUTES * 60 * 1000);
       }
       await user.save();
-      return res.status(401).json({ message: "Username hoặc password không đúng" });
+      return res
+        .status(401)
+        .json({ message: "Username hoặc password không đúng" });
     }
 
     // Login success, reset counters, update last_login
@@ -247,9 +273,14 @@ const refreshToken = async (req, res) => {
 
     let payload;
     try {
-      payload = jwt.verify(token, process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET);
+      payload = jwt.verify(
+        token,
+        process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET
+      );
     } catch (e) {
-      return res.status(401).json({ message: "Refresh token invalid or expired" });
+      return res
+        .status(401)
+        .json({ message: "Refresh token invalid or expired" });
     }
 
     const user = await User.findById(payload.id);
@@ -288,7 +319,9 @@ const updateProfile = async (req, res) => {
     if (Object.keys(query).length > 0) {
       const existing = await User.findOne(query);
       if (existing) {
-        return res.status(400).json({ message: "Username hoặc email đã tồn tại" });
+        return res
+          .status(400)
+          .json({ message: "Username hoặc email đã tồn tại" });
       }
     }
 
@@ -334,7 +367,9 @@ const sendPasswordOTP = async (req, res) => {
 
     const useEmail = email || user.email;
     if (!useEmail) {
-      return res.status(400).json({ message: "Cần email để gửi OTP đổi mật khẩu, cập nhật profile trước" });
+      return res.status(400).json({
+        message: "Cần email để gửi OTP đổi mật khẩu, cập nhật profile trước",
+      });
     }
 
     // Sinh OTP và hash
@@ -349,9 +384,17 @@ const sendPasswordOTP = async (req, res) => {
     await user.save();
 
     // Gửi email OTP (đúng tham số, thêm type "change-password" customize)
-    await sendVerificationEmail(useEmail, user.username, otp, OTP_EXPIRE_MINUTES, "change-password");
+    await sendVerificationEmail(
+      useEmail,
+      user.username,
+      otp,
+      OTP_EXPIRE_MINUTES,
+      "change-password"
+    );
 
-    res.json({ message: "OTP đổi mật khẩu đã gửi đến email, hết hạn sau 5 phút" });
+    res.json({
+      message: "OTP đổi mật khẩu đã gửi đến email, hết hạn sau 5 phút",
+    });
   } catch (err) {
     console.error("Lỗi gửi OTP đổi mật khẩu:", err.message);
     res.status(500).json({ message: "Lỗi server khi gửi OTP" });
@@ -368,13 +411,19 @@ const changePassword = async (req, res) => {
     const { password, confirmPassword, otp } = req.body; // Password mới + confirmPassword + OTP
 
     if (!password || !confirmPassword || !otp) {
-      return res.status(400).json({ message: "Thiếu mật khẩu mới, xác nhận mật khẩu hoặc OTP" });
+      return res
+        .status(400)
+        .json({ message: "Thiếu mật khẩu mới, xác nhận mật khẩu hoặc OTP" });
     }
     if (password.length < 6) {
-      return res.status(400).json({ message: "Mật khẩu mới phải ít nhất 6 ký tự" });
+      return res
+        .status(400)
+        .json({ message: "Mật khẩu mới phải ít nhất 6 ký tự" });
     }
     if (password !== confirmPassword) {
-      return res.status(400).json({ message: "Mật khẩu mới và xác nhận không khớp" });
+      return res
+        .status(400)
+        .json({ message: "Mật khẩu mới và xác nhận không khớp" });
     }
 
     const user = await User.findById(userId);
@@ -383,11 +432,15 @@ const changePassword = async (req, res) => {
     }
 
     if (user.otp_hash === null || user.otp_expires < new Date()) {
-      return res.status(400).json({ message: "OTP không hợp lệ hoặc đã hết hạn" });
+      return res
+        .status(400)
+        .json({ message: "OTP không hợp lệ hoặc đã hết hạn" });
     }
 
     if (user.otp_attempts >= OTP_MAX_ATTEMPTS) {
-      return res.status(400).json({ message: "Quá số lần thử, vui lòng gửi OTP mới" });
+      return res
+        .status(400)
+        .json({ message: "Quá số lần thử, vui lòng gửi OTP mới" });
     }
 
     if (!(await compareString(otp, user.otp_hash))) {
@@ -423,7 +476,9 @@ const softDeleteUser = async (req, res) => {
     //check xem có phải role manager đang thao tác không
     const manager = await User.findById(userId);
     if (!manager || manager.role !== "MANAGER") {
-      return res.status(403).json({ message: "Chỉ manager mới được xóa nhân viên" });
+      return res
+        .status(403)
+        .json({ message: "Chỉ manager mới được xóa nhân viên" });
     }
     //check nhân viên trong chính store đó
     const targetUser = await User.findById(targetUserId);
@@ -432,11 +487,15 @@ const softDeleteUser = async (req, res) => {
     }
     //check nhân viên đã bị xoá từ trước hay chưa
     if (targetUser.isDeleted) {
-      return res.status(400).json({ message: "Tài khoản nhân viên này đã bị xoá trước đó rồi!" });
+      return res
+        .status(400)
+        .json({ message: "Tài khoản nhân viên này đã bị xoá trước đó rồi!" });
     }
     // Check quyền: Manager chỉ xóa staff bind store hiện tại (current_store match)
     if (String(manager.current_store) !== String(targetUser.current_store)) {
-      return res.status(403).json({ message: "Bạn chỉ xóa được nhân viên ở cửa hàng hiện tại" });
+      return res
+        .status(403)
+        .json({ message: "Bạn chỉ xóa được nhân viên ở cửa hàng hiện tại" });
     }
     // Xóa mềm: đặt isDeleted=true, deletedAt=now
     targetUser.isDeleted = true;
@@ -471,7 +530,9 @@ const restoreUser = async (req, res) => {
 
     const manager = await User.findById(userId);
     if (!manager || manager.role !== "MANAGER") {
-      return res.status(403).json({ message: "Chỉ manager mới được khôi phục nhân viên" });
+      return res
+        .status(403)
+        .json({ message: "Chỉ manager mới được khôi phục nhân viên" });
     }
 
     const targetUser = await User.findById(targetUserId);
@@ -485,7 +546,9 @@ const restoreUser = async (req, res) => {
 
     // Check quyền: Manager chỉ khôi phục staff bind store hiện tại (current_store match)
     if (String(manager.current_store) !== String(targetUser.current_store)) {
-      return res.status(403).json({ message: "Bạn chỉ khôi phục được nhân viên ở cửa hàng hiện tại" });
+      return res.status(403).json({
+        message: "Bạn chỉ khôi phục được nhân viên ở cửa hàng hiện tại",
+      });
     }
 
     // Khôi phục: set isDeleted=false, restoredAt=now

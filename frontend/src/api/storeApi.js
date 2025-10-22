@@ -1,90 +1,99 @@
 // src/api/storeApi.js
-import axios from "axios";
+// Sử dụng apiClient chung (src/api/apiClient.js)
+import apiClient from "./apiClient";
 
-const API_URL = import.meta.env.VITE_API_URL;
+/*
+  STORE API
+  - Tất cả request đều dùng apiClient (baseURL + interceptor đã cấu hình ở apiClient)
+  - Các hàm trả về `.data` để component dùng trực tiếp
+  - Nếu backend path khác, chỉnh BASE_PATH / route tương ứng
+*/
 
-//  Tạo 1 instance axios duy nhất
-const storeApi = axios.create({
-  baseURL: API_URL,
-  withCredentials: true, // cho phép gửi cookie nếu cần
-});
-
-// ✅ Interceptor: tự động thêm token vào header
-storeApi.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem("token");
-    if (token) config.headers.Authorization = `Bearer ${token}`;
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
-
-// ------------------------- STORE ROUTES -------------------------
+// ========================= STORE CRUD =========================
 
 // Tạo store mới (MANAGER)
 export const createStore = async (data) =>
-  (await storeApi.post("api/stores", data)).data;
+  (await apiClient.post("/stores", data)).data;
 
-// Lấy danh sách store thuộc người quản lý
-export const getStoresByManager = async () =>
-  (await storeApi.get("/stores")).data;
+// Lấy danh sách store của manager hiện tại
+export const getStoresByManager = async (params) =>
+  // params optional: { page, limit, q, ... }
+  (await apiClient.get("/stores", { params })).data;
 
-// Lấy chi tiết 1 store cụ thể
+// Lấy chi tiết 1 store
 export const getStoreById = async (storeId) =>
-  (await storeApi.get(`/stores/${storeId}`)).data;
+  (await apiClient.get(`/stores/${storeId}`)).data;
 
 // Cập nhật store
 export const updateStore = async (storeId, data) =>
-  (await storeApi.put(`/stores/${storeId}`, data)).data;
+  (await apiClient.put(`/stores/${storeId}`, data)).data;
 
-// Xóa (hoặc soft-delete) store
+// Xóa store (soft/hard tuỳ backend)
 export const deleteStore = async (storeId) =>
-  (await storeApi.delete(`/stores/${storeId}`)).data;
+  (await apiClient.delete(`/stores/${storeId}`)).data;
 
-// ------------------------- SELECT / DASHBOARD -------------------------
+// ========================= SELECT / DASHBOARD =========================
 
-// Đảm bảo có store mặc định
+// Đảm bảo có store mặc định (create if not exists)
 export const ensureStore = async () =>
-  (await storeApi.post("/stores/ensure-store")).data;
+  (await apiClient.post("/stores/ensure-store")).data;
 
-// Chọn store hiện tại (lưu vào session)
+// Chọn store hiện tại (lưu session/server-side)
 export const selectStore = async (storeId) =>
-  (await storeApi.post(`/stores/select/${storeId}`)).data;
+  (await apiClient.post(`/stores/select/${storeId}`)).data;
 
-// Lấy dữ liệu dashboard của 1 store
-export const getStoreDashboard = async (storeId) =>
-  (await storeApi.get(`/stores/${storeId}/dashboard`)).data;
+// Lấy dữ liệu dashboard cho store
+export const getStoreDashboard = async (storeId, params) =>
+  (await apiClient.get(`/stores/${storeId}/dashboard`, { params })).data;
 
-// ------------------------- STAFF ASSIGNMENT -------------------------
+// ========================= STAFF / EMPLOYEE =========================
 
 // Gán nhân viên vào store
 export const assignStaffToStore = async (storeId, staffId) =>
   (
-    await storeApi.post(`/stores/${storeId}/assign-staff`, {
+    await apiClient.post(`/stores/${storeId}/assign-staff`, {
       staffId,
     })
   ).data;
 
-// ------------------------- EMPLOYEE ROUTES -------------------------
-
 // Tạo nhân viên mới trong store
 export const createEmployee = async (storeId, data) =>
-  (await storeApi.post(`/stores/${storeId}/employees`, data)).data;
+  (await apiClient.post(`/stores/${storeId}/employees`, data)).data;
 
 // Lấy danh sách nhân viên của store
-export const getEmployeesByStore = async (storeId) =>
-  (await storeApi.get(`/stores/${storeId}/employees`)).data;
+export const getEmployeesByStore = async (storeId, params) =>
+  (await apiClient.get(`/stores/${storeId}/employees`, { params })).data;
 
-// Lấy thông tin chi tiết 1 nhân viên
+// Lấy chi tiết 1 nhân viên
 export const getEmployeeById = async (storeId, employeeId) =>
-  (await storeApi.get(`/stores/${storeId}/employees/${employeeId}`)).data;
+  (await apiClient.get(`/stores/${storeId}/employees/${employeeId}`)).data;
 
-// Cập nhật thông tin nhân viên
+// Cập nhật nhân viên
 export const updateEmployee = async (storeId, employeeId, data) =>
-  (await storeApi.put(`/stores/${storeId}/employees/${employeeId}`, data)).data;
+  (await apiClient.put(`/stores/${storeId}/employees/${employeeId}`, data))
+    .data;
 
-//  Nếu muốn có API xóa nhân viên (soft-delete hoặc hard-delete), bật dòng sau:
-// export const deleteEmployee = async (storeId, employeeId) =>
-//   (await storeApi.delete(`/stores/${storeId}/employees/${employeeId}`)).data;
+// (Tuỳ backend) Xóa nhân viên
+export const deleteEmployee = async (storeId, employeeId) =>
+  (await apiClient.delete(`/stores/${storeId}/employees/${employeeId}`)).data;
 
-export default storeApi;
+// ========================= EXPORT =========================
+
+// Không cần tạo lại instance — chỉ export các hàm.
+// Nếu bạn vẫn muốn export instance cho mục đích đặc biệt, import apiClient từ "@/api"
+export default {
+  createStore,
+  getStoresByManager,
+  getStoreById,
+  updateStore,
+  deleteStore,
+  ensureStore,
+  selectStore,
+  getStoreDashboard,
+  assignStaffToStore,
+  createEmployee,
+  getEmployeesByStore,
+  getEmployeeById,
+  updateEmployee,
+  deleteEmployee,
+};
