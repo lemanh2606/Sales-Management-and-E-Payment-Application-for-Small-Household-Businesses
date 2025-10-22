@@ -1,7 +1,11 @@
 // routes/customerRouters.js (mới: routes search/update/soft delete khách hàng, middleware verifyToken - paste full file)
 const express = require("express");
 const router = express.Router();
-const { searchCustomers, updateCustomer, softDeleteCustomer } = require("../controllers/customerController");
+const {
+  searchCustomers,
+  updateCustomer,
+  softDeleteCustomer,
+} = require("../controllers/customer/customerController");
 const { verifyToken } = require("../middlewares/authMiddleware"); // Middleware xác thực
 
 // Áp dụng verifyToken cho tất cả routes (chỉ logged in user access)
