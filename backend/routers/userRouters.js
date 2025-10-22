@@ -4,6 +4,7 @@ const {
   registerManager,
   verifyOtp,
   login,
+  refreshToken,
   updateProfile,
   sendPasswordOTP,
   changePassword,
@@ -29,6 +30,9 @@ router.post("/login", login);
 router.post("/forgot-password/send-otp", sendForgotPasswordOTP); // Nhập email, nhận OTP
 router.post("/forgot-password/change", forgotChangePassword); // Nhập email + OTP + pass mới
 
+// Refresh token route (dùng cookie refreshToken)
+router.get("/refresh-token", refreshToken);
+
 // -------------------------
 // Protected routes (cần login)
 // -------------------------
@@ -37,8 +41,8 @@ router.post("/password/send-otp", verifyToken, sendPasswordOTP); // Gửi OTP đ
 router.post("/password/change", verifyToken, changePassword); // Verify OTP + đổi pass
 
 // Manager routes
-router.post("/delete-staff", verifyToken, isManager, softDeleteUser); // Xóa mềm staff theo store hiện tại
-router.post("/restore-staff", verifyToken, isManager, restoreUser); // Khôi phục staff theo store hiện tại
+router.post("/staff/soft-delete", verifyToken, isManager, softDeleteUser); // Xóa mềm staff theo store hiện tại
+router.post("/staff/restore", verifyToken, isManager, restoreUser); // Khôi phục staff theo store hiện tại
 
 // Dashboard routes
 router.get("/manager-dashboard", verifyToken, isManager, (req, res) => {
