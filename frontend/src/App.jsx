@@ -7,6 +7,7 @@ import DashboardPage from "./pages/DashboardPage";
 import SelectStorePage from "./pages/store/SelectStorePage";
 import SupplierListPage from "./pages/supplier/SupplierListPage";
 import ProductListPage from "./pages/product/ProductListPage";
+import ForgotPassword from "./pages/auth/ForgotPassword";
 import { useAuth } from "./context/AuthContext"; // Import để dùng cho ProtectedRoute
 
 // ProtectedRoute component (gộp inline từ ProtectedRoute.jsx)
@@ -68,6 +69,7 @@ function App() {
 
       {/* Default */}
       <Route path="*" element={<Navigate to="/login" replace />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
     </Routes>
   );
 }

@@ -29,12 +29,12 @@ connectDB();
 ].forEach((model) => require(`./models/${model}`));
 
 const app = express();
-const server = http.createServer(app); // 👈 Tạo server http để gắn socket.io
+const server = http.createServer(app); //  Tạo server http để gắn socket.io
 
 // ⚡ Khởi tạo Socket.io
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:3000", // 👈 FE React
+    origin: "http://localhost:3000", //  FE React
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: [
       "Content-Type",

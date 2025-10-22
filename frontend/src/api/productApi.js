@@ -1,41 +1,40 @@
-import axios from "axios";
+// src/api/productApi.js
+// Sử dụng apiClient chung để gọi API sản phẩm
+import apiClient from "./apiClient";
 
-const API_URL = import.meta.env.VITE_API_URL;
+/*
+  PRODUCT API
+  - Dùng chung instance apiClient (có sẵn baseURL + token interceptor)
+  - Các hàm trả về .data để component gọi trực tiếp
+*/
 
-//  Tạo 1 instance axios duy nhất
-const productApi = axios.create({
-  baseURL: API_URL,
-  withCredentials: true, // cho phép gửi cookie
-});
-
-//  Interceptor để tự động thêm token từ localStorage
-productApi.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
-
-// ------------------ PRODUCT API ------------------
+// ========================= PRODUCT CRUD =========================
 
 //  Tạo sản phẩm mới trong cửa hàng
 export const createProduct = async (storeId, data) =>
-  (await productApi.post(`/products/store/${storeId}`, data)).data;
+  (await apiClient.post(`/products/store/${storeId}`, data)).data;
 
-//  Cập nhật sản phẩm
+//  Cập nhật thông tin sản phẩm
 export const updateProduct = async (productId, data) =>
-  (await productApi.put(`/products/${productId}`, data)).data;
+  (await apiClient.put(`/products/${productId}`, data)).data;
 
-//  Xoá sản phẩm
+//  Xóa sản phẩm khỏi cửa hàng
 export const deleteProduct = async (productId) =>
-  (await productApi.delete(`/products/${productId}`)).data;
+  (await apiClient.delete(`/products/${productId}`)).data;
 
 //  Lấy danh sách sản phẩm của cửa hàng
-export const getProductsByStore = async (storeId) =>
-  (await productApi.get(`/products/store/${storeId}`)).data;
+export const getProductsByStore = async (storeId, params) =>
+  (await apiClient.get(`/products/store/${storeId}`, { params })).data;
 
-export default productApi;
+//  Lấy chi tiết 1 sản phẩm cụ thể
+export const getProductById = async (productId) =>
+  (await apiClient.get(`/products/${productId}`)).data;
+
+// ========================= EXPORT =========================
+export default {
+  createProduct,
+  updateProduct,
+  deleteProduct,
+  getProductsByStore,
+  getProductById,
+};
