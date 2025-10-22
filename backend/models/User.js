@@ -49,13 +49,14 @@ const userSchema = new mongoose.Schema(
     // Other
     last_login: { type: Date, default: null },
     isDeleted: {type: Boolean, default: false},
+    deletedAt: { type: Date, default: null },
+    restoredAt: { type: Date, default: null },
   },
   {
     timestamps: true, // createdAt, updatedAt tự động
   }
 );
 
-// Nếu cần, bạn có thể thêm index hoặc pre-save hook ở đây
-// ví dụ: userSchema.index({ email: 1 });
+userSchema.index({ current_store: 1, role: 1, isDeleted: 1 });
 
 module.exports = mongoose.model("User", userSchema);

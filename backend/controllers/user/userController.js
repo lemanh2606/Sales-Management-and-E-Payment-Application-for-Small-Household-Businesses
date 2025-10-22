@@ -1,10 +1,9 @@
 // controllers/userController.js (fix changePassword: thêm confirmPassword check khớp, fix compareString scope - paste thay file)
 const User = require("../../models/User");
 const Employee = require("../../models/Employee");
-
+const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { sendVerificationEmail } = require("../../services/emailService");
-const bcrypt = require("bcryptjs");
 
 const IS_PROD = process.env.NODE_ENV === "production";
 
@@ -264,6 +263,102 @@ const login = async (req, res) => {
 };
 
 /* ------------------------- 
+   Controller public: gửi OTP khi quên mật khẩu (không cần login)
+   ------------------------- */
+const sendForgotPasswordOTP = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ message: "Vui lòng nhập email" });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    if (!user) {
+      return res
+        .status(404)
+        .json({ message: "Email không tồn tại trong hệ thống" });
+    }
+
+    const otp = generateOTP();
+    const otp_hash = await hashString(otp);
+    const otp_expires = new Date(Date.now() + OTP_EXPIRE_MINUTES * 60 * 1000);
+
+    user.otp_hash = otp_hash;
+    user.otp_expires = otp_expires;
+    user.otp_attempts = 0;
+    await user.save();
+
+    await sendVerificationEmail(
+      user.email,
+      user.username,
+      otp,
+      OTP_EXPIRE_MINUTES,
+      "forgot-password"
+    );
+
+    res.json({ message: "OTP đã gửi tới email, hết hạn sau 5 phút" });
+  } catch (err) {
+    console.error("Lỗi gửi OTP quên mật khẩu:", err.message);
+    res.status(500).json({ message: "Lỗi server khi gửi OTP" });
+  }
+};
+
+/* ------------------------- 
+   Controller public: đổi mật khẩu khi quên mật khẩu (không cần login)
+   ------------------------- */
+const forgotChangePassword = async (req, res) => {
+  try {
+    const { email, otp, password, confirmPassword } = req.body;
+
+    if (!email || !otp || !password || !confirmPassword) {
+      return res
+        .status(400)
+        .json({ message: "Thiếu thông tin email, OTP hoặc mật khẩu" });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ message: "Mật khẩu phải ít nhất 6 ký tự" });
+    }
+    if (password !== confirmPassword) {
+      return res
+        .status(400)
+        .json({ message: "Mật khẩu và xác nhận không khớp" });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    if (!user || !user.otp_hash || user.otp_expires < new Date()) {
+      return res
+        .status(400)
+        .json({ message: "OTP không hợp lệ hoặc đã hết hạn" });
+    }
+
+    if (user.otp_attempts >= OTP_MAX_ATTEMPTS) {
+      return res
+        .status(400)
+        .json({ message: "Quá số lần thử, vui lòng gửi OTP mới" });
+    }
+
+    if (!(await compareString(otp, user.otp_hash))) {
+      user.otp_attempts += 1;
+      await user.save();
+      return res.status(400).json({ message: "OTP không đúng, thử lại" });
+    }
+
+    const password_hash = await hashString(password);
+    user.password_hash = password_hash;
+    user.otp_hash = null;
+    user.otp_expires = null;
+    user.otp_attempts = 0;
+    await user.save();
+
+    res.json({ message: "Đổi mật khẩu thành công" });
+  } catch (err) {
+    console.error("Lỗi đổi mật khẩu quên:", err.message);
+    res.status(500).json({ message: "Lỗi server khi đổi mật khẩu" });
+  }
+};
+
+/* ------------------------- 
    Controller: refreshToken (tùy chọn)
    - Đọc cookie refreshToken, verify, tạo access token mới
    ------------------------- */
@@ -465,12 +560,125 @@ const changePassword = async (req, res) => {
   }
 };
 
+//Chỉ manager xóa staff khác, check store match current_store, set isDeleted=true + deletedAt=now
+const softDeleteUser = async (req, res) => {
+  try {
+    const userId = req.user.id; // Manager ID từ verifyToken
+    const { targetUserId } = req.body; // Target staff ID để xóa
+
+    if (!targetUserId) {
+      return res.status(400).json({ message: "Thiếu targetUserId" });
+    }
+    //check xem có phải role manager đang thao tác không
+    const manager = await User.findById(userId);
+    if (!manager || manager.role !== "MANAGER") {
+      return res
+        .status(403)
+        .json({ message: "Chỉ manager mới được xóa nhân viên" });
+    }
+    //check nhân viên trong chính store đó
+    const targetUser = await User.findById(targetUserId);
+    if (!targetUser || targetUser.role !== "STAFF") {
+      return res.status(404).json({ message: "Nhân viên không tồn tại" });
+    }
+    //check nhân viên đã bị xoá từ trước hay chưa
+    if (targetUser.isDeleted) {
+      return res
+        .status(400)
+        .json({ message: "Tài khoản nhân viên này đã bị xoá trước đó rồi!" });
+    }
+    // Check quyền: Manager chỉ xóa staff bind store hiện tại (current_store match)
+    if (String(manager.current_store) !== String(targetUser.current_store)) {
+      return res
+        .status(403)
+        .json({ message: "Bạn chỉ xóa được nhân viên ở cửa hàng hiện tại" });
+    }
+    // Xóa mềm: đặt isDeleted=true, deletedAt=now
+    targetUser.isDeleted = true;
+    targetUser.deletedAt = new Date();
+    await targetUser.save();
+
+    // Optional: Xóa Employee bind (set isDeleted=true nếu Employee có field)
+    const employee = await Employee.findOne({ user_id: targetUserId });
+    if (employee) {
+      employee.isDeleted = true; //đặt isDeleted = true ở models/Employee.js để không bị mất dữ liệu
+      await employee.save();
+    }
+    console.log(
+      `Manager ${manager.username} xóa mềm nhân viên ${targetUser.username} ở store ${manager.current_store}`
+    );
+    res.json({ message: "Xóa mềm nhân viên thành công" });
+  } catch (err) {
+    console.error("Lỗi xóa mềm nhân viên:", err.message);
+    res.status(500).json({ message: "Lỗi server khi xóa nhân viên" });
+  }
+};
+
+// khôi phục lại tài khoản của nhân viên
+const restoreUser = async (req, res) => {
+  try {
+    const userId = req.user.id; // Manager ID từ verifyToken
+    const { targetUserId } = req.body; // Target staff ID để khôi phục
+
+    if (!targetUserId) {
+      return res.status(400).json({ message: "Thiếu targetUserId" });
+    }
+
+    const manager = await User.findById(userId);
+    if (!manager || manager.role !== "MANAGER") {
+      return res
+        .status(403)
+        .json({ message: "Chỉ manager mới được khôi phục nhân viên" });
+    }
+
+    const targetUser = await User.findById(targetUserId);
+    if (!targetUser || targetUser.role !== "STAFF") {
+      return res.status(404).json({ message: "Nhân viên không tồn tại" });
+    }
+
+    if (!targetUser.isDeleted) {
+      return res.status(400).json({ message: "Nhân viên chưa bị xóa mềm" });
+    }
+
+    // Check quyền: Manager chỉ khôi phục staff bind store hiện tại (current_store match)
+    if (String(manager.current_store) !== String(targetUser.current_store)) {
+      return res.status(403).json({
+        message: "Bạn chỉ khôi phục được nhân viên ở cửa hàng hiện tại",
+      });
+    }
+
+    // Khôi phục: set isDeleted=false, restoredAt=now
+    targetUser.isDeleted = false;
+    targetUser.restoredAt = new Date();
+    await targetUser.save();
+
+    // Optional: Khôi phục Employee bind (set isDeleted=false)
+    const employee = await Employee.findOne({ user_id: targetUserId });
+    if (employee) {
+      employee.isDeleted = false;
+      await employee.save();
+    }
+
+    console.log(
+      `Manager ${manager.username} khôi phục nhân viên ${targetUser.username} ở store ${manager.current_store}`
+    );
+    res.json({ message: "Khôi phục nhân viên thành công" });
+  } catch (err) {
+    console.error("Lỗi khôi phục nhân viên:", err.message);
+    res.status(500).json({ message: "Lỗi server khi khôi phục nhân viên" });
+  }
+};
+
 module.exports = {
   registerManager,
   verifyOtp,
   login,
+  sendForgotPasswordOTP,
+  forgotChangePassword,
   refreshToken,
   updateProfile,
   sendPasswordOTP,
   changePassword,
+  softDeleteUser,
+  restoreUser,
 };

@@ -29,12 +29,12 @@ connectDB();
 ].forEach((model) => require(`./models/${model}`));
 
 const app = express();
-const server = http.createServer(app); // 👈 Tạo server http để gắn socket.io
+const server = http.createServer(app); //  Tạo server http để gắn socket.io
 
 // ⚡ Khởi tạo Socket.io
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:3000", // 👈 FE React
+    origin: "http://localhost:3000", //  FE React
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: [
       "Content-Type",
@@ -97,6 +97,8 @@ const purchaseReturnRouters = require("./routers/purchaseReturnRouters");
 const orderRouters = require("./routers/orderRouters");
 const taxRouters = require("./routers/taxRouters");
 const revenueRouters = require("./routers/revenueRouters");
+const customerRouters = require("./routers/customerRouters");
+const loyaltyRouters = require("./routers/loyaltyRouters");
 
 // --- MOUNT ROUTERS ---
 app.use("/api/stores", storeRouters);
@@ -109,8 +111,10 @@ app.use("/api/suppliers", supplierRouters);
 app.use("/api/purchase-orders", purchaseOrderRouters);
 app.use("/api/purchase-returns", purchaseReturnRouters);
 app.use("/api/orders", orderRouters);
-app.use("/api/tax", taxRouters);
-app.use("/api/revenue", revenueRouters);
+app.use("/api/taxs", taxRouters);
+app.use("/api/revenues", revenueRouters);
+app.use("/api/customers", customerRouters);
+app.use("/api/loyaltys", loyaltyRouters);
 
 // --- ROOT ---
 app.get("/", (req, res) => {
