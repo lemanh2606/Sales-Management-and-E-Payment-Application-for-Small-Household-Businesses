@@ -9,9 +9,24 @@ const bcrypt = require("bcryptjs");
  * Tạo store mới (MANAGER)
  * Body: { name, address, phone }
  */
+/**
+ * Tạo store (Manager)
+ * Body có thể chứa: { name, address, phone, description, imageUrl, tags, staff_ids, location, openingHours, isDefault }
+ */
 const createStore = async (req, res) => {
   try {
-    const { name, address, phone } = req.body;
+    const {
+      name,
+      address,
+      phone,
+      description,
+      imageUrl,
+      tags,
+      staff_ids,
+      location,
+      openingHours,
+      isDefault,
+    } = req.body;
     const userId = req.user.id;
 
     const user = await User.findById(userId);
@@ -28,25 +43,47 @@ const createStore = async (req, res) => {
       name: name.trim(),
       address: (address || "").trim(),
       phone: (phone || "").trim(),
+      description: (description || "").trim(),
+      imageUrl: imageUrl || "",
+      tags: Array.isArray(tags) ? tags.map((t) => String(t).trim()) : [],
+      staff_ids: Array.isArray(staff_ids) ? staff_ids : [],
+      location: location || {},
+      openingHours: openingHours || {},
+      isDefault: !!isDefault,
       owner_id: userId,
-      isDefault: false,
+      deleted: false,
     });
 
     await newStore.save();
 
-    // Thêm store vào danh sách owner của user
+    // Cập nhật user: thêm store vào danh sách, gán current_store và role OWNER
     user.stores = user.stores || [];
-    user.stores.push(newStore._id);
+    if (!user.stores.find((s) => s.toString() === newStore._id.toString())) {
+      user.stores.push(newStore._id);
+    }
+
     // Option: set current_store tự động sau tạo store mới
     user.current_store = newStore._id;
-    // Gán store_roles cho owner
+
     user.store_roles = user.store_roles || [];
-    user.store_roles.push({ store: newStore._id, role: "OWNER" });
+    if (
+      !user.store_roles.find(
+        (r) => r.store.toString() === newStore._id.toString()
+      )
+    ) {
+      user.store_roles.push({ store: newStore._id, role: "OWNER" });
+    }
+
     await user.save();
+
+    // Populate before trả về để front-end có thể dùng ngay
+    const populatedStore = await Store.findById(newStore._id)
+      .populate("owner_id", "_id name email")
+      .populate("staff_ids", "_id name email");
 
     return res
       .status(201)
-      .json({ message: "Tạo cửa hàng thành công", store: newStore });
+      .json({ message: "Tạo cửa hàng thành công", store: populatedStore });
   } catch (err) {
     console.error("createStore error:", err);
     return res.status(500).json({ message: "Lỗi server" });
@@ -59,24 +96,40 @@ const createStore = async (req, res) => {
 const getStoreById = async (req, res) => {
   try {
     const { storeId } = req.params;
-    const store = await Store.findOne({ _id: storeId, deleted: false });
+    // trả về cả khi owner xem store bị deleted? Ở đây ta chỉ lấy khi deleted: false
+    const store = await Store.findOne({ _id: storeId, deleted: false })
+      .populate("owner_id", "_id name email")
+      .populate("staff_ids", "_id name email");
+
     if (!store)
       return res.status(404).json({ message: "Không tìm thấy cửa hàng" });
-    res.json({ store });
+
+    return res.json({ store });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Lỗi server khi lấy store" });
+    console.error("getStoreById error:", err);
+    return res.status(500).json({ message: "Lỗi server khi lấy store" });
   }
 };
 
 /**
- * Cập nhật thông tin store (MANAGER)
- * Body: { name, address, phone }
+ * Cập nhật thông tin store (MANAGER / owner)
+ * Body: { name, address, phone, description, imageUrl, tags, staff_ids, location, openingHours, isDefault }
  */
 const updateStore = async (req, res) => {
   try {
     const { storeId } = req.params;
-    const { name, address, phone } = req.body;
+    const {
+      name,
+      address,
+      phone,
+      description,
+      imageUrl,
+      tags,
+      staff_ids,
+      location,
+      openingHours,
+      isDefault,
+    } = req.body;
     const userId = req.user.id;
 
     const store = await Store.findById(storeId);
@@ -85,20 +138,35 @@ const updateStore = async (req, res) => {
     if (store.owner_id.toString() !== userId)
       return res.status(403).json({ message: "Chỉ owner mới được chỉnh sửa" });
 
-    if (name) store.name = name.trim();
-    if (address) store.address = address.trim();
-    if (phone) store.phone = phone.trim();
+    if (name !== undefined) store.name = String(name).trim();
+    if (address !== undefined) store.address = String(address).trim();
+    if (phone !== undefined) store.phone = String(phone).trim();
+    if (description !== undefined)
+      store.description = String(description).trim();
+    if (imageUrl !== undefined) store.imageUrl = imageUrl;
+    if (tags !== undefined)
+      store.tags = Array.isArray(tags) ? tags.map((t) => String(t).trim()) : [];
+    if (staff_ids !== undefined)
+      store.staff_ids = Array.isArray(staff_ids) ? staff_ids : [];
+    if (location !== undefined) store.location = location;
+    if (openingHours !== undefined) store.openingHours = openingHours;
+    if (isDefault !== undefined) store.isDefault = !!isDefault;
 
     await store.save();
-    res.json({ store });
+
+    const populatedStore = await Store.findById(store._id)
+      .populate("owner_id", "_id name email")
+      .populate("staff_ids", "_id name email");
+
+    return res.json({ message: "Cập nhật thành công", store: populatedStore });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Lỗi server khi cập nhật store" });
+    console.error("updateStore error:", err);
+    return res.status(500).json({ message: "Lỗi server khi cập nhật store" });
   }
 };
 
 /**
- * Xóa store (soft delete) - chỉ ẩn
+ * Xóa store (soft delete) - chỉ ẩn (deleted = true)
  */
 const deleteStore = async (req, res) => {
   try {
@@ -113,14 +181,35 @@ const deleteStore = async (req, res) => {
 
     store.deleted = true;
     await store.save();
-    res.json({ message: "Đã xóa cửa hàng (soft delete)" });
+
+    // (Option) Xóa tham chiếu trong User.stores nếu bạn muốn -> comment nếu không cần
+    try {
+      await User.updateOne(
+        { _id: userId },
+        { $pull: { stores: store._id, store_roles: { store: store._id } } }
+      );
+    } catch (e) {
+      // không bắt lỗi lớn, chỉ log để không block flow
+      console.warn("Failed to pull store ref from user:", e);
+    }
+
+    const populatedStore = await Store.findById(store._id)
+      .populate("owner_id", "_id name email")
+      .populate("staff_ids", "_id name email");
+
+    return res.json({
+      message: "Đã xóa cửa hàng (soft delete)",
+      store: populatedStore,
+    });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Lỗi server khi xóa store" });
+    console.error("deleteStore error:", err);
+    return res.status(500).json({ message: "Lỗi server khi xóa store" });
   }
 };
+
 /**
  * Lấy danh sách store của Manager (owner)
+ * optional query params: ?page=1&limit=20&q=search
  */
 const getStoresByManager = async (req, res) => {
   try {
@@ -132,10 +221,36 @@ const getStoresByManager = async (req, res) => {
         .json({ message: "Chỉ Manager mới xem được danh sách store" });
     }
 
-    const stores = await Store.find({ owner_id: userId }).sort({
-      createdAt: -1,
+    // Basic paging & search support
+    const page = Math.max(1, parseInt(req.query.page || "1", 10));
+    const limit = Math.min(
+      100,
+      Math.max(1, parseInt(req.query.limit || "50", 10))
+    );
+    const q = (req.query.q || "").trim();
+
+    const filter = { owner_id: userId, deleted: false };
+    if (q) {
+      // tìm theo name / address / tags
+      filter.$or = [
+        { name: { $regex: q, $options: "i" } },
+        { address: { $regex: q, $options: "i" } },
+        { tags: { $regex: q, $options: "i" } },
+      ];
+    }
+
+    const total = await Store.countDocuments(filter);
+    const stores = await Store.find(filter)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .populate("owner_id", "_id name email")
+      .populate("staff_ids", "_id name email");
+
+    return res.json({
+      meta: { total, page, limit, pages: Math.ceil(total / limit) },
+      stores,
     });
-    return res.json({ stores });
   } catch (err) {
     console.error("getStoresByManager error:", err);
     return res.status(500).json({ message: "Lỗi server" });
