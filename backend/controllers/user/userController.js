@@ -197,8 +197,15 @@ const login = async (req, res) => {
       return res.status(400).json({ message: "Thiếu username hoặc password" });
     }
 
-    const user = await User.findOne({ username: username.trim() });
+    const identifier = username.trim();
+
+    // Tìm user bằng username hoặc email (email được chuẩn hóa thành lowercase)
+    const user = await User.findOne({
+      $or: [{ username: identifier }, { email: identifier.toLowerCase() }],
+    });
+
     if (!user) {
+      // Không tiết lộ là username hay email không đúng — giữ message chung
       return res
         .status(401)
         .json({ message: "Username hoặc password không đúng" });
@@ -209,12 +216,12 @@ const login = async (req, res) => {
     }
 
     // Kiểm tra lock
-    if (user.lockUntil > new Date()) {
+    if (user.lockUntil && user.lockUntil > new Date()) {
       return res.status(423).json({ message: "Tài khoản bị khóa tạm thời" });
     }
 
     if (!(await compareString(password, user.password_hash))) {
-      user.loginAttempts += 1;
+      user.loginAttempts = (user.loginAttempts || 0) + 1;
       if (user.loginAttempts >= LOGIN_MAX_ATTEMPTS) {
         user.lockUntil = new Date(Date.now() + LOGIN_LOCK_MINUTES * 60 * 1000);
       }

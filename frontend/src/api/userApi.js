@@ -14,6 +14,18 @@ export const verifyOtp = async (data) =>
 export const loginUser = async (data) =>
   (await apiClient.post("/users/login", data)).data;
 
+// Refresh access token bằng refresh token cookie
+export const refreshToken = async () =>
+  (await apiClient.get("/users/refresh-token")).data;
+
+// Forgot password - gửi OTP
+export const sendForgotPasswordOTP = async (data) =>
+  (await apiClient.post("/users/forgot-password/send-otp", data)).data;
+
+// Forgot password - đổi mật khẩu
+export const forgotChangePassword = async (data) =>
+  (await apiClient.post("/users/forgot-password/change", data)).data;
+
 // =============== PROTECTED ROUTES ===============
 
 // Lấy thông tin cá nhân (profile)
@@ -36,11 +48,11 @@ export const changePassword = async (data) =>
 
 // Xóa mềm nhân viên theo store hiện tại
 export const softDeleteUser = async (data) =>
-  (await apiClient.post("/users/delete-staff", data)).data;
+  (await apiClient.post("/users/staff/soft-delete", data)).data;
 
 // Khôi phục nhân viên theo store hiện tại
 export const restoreUser = async (data) =>
-  (await apiClient.post("/users/restore-staff", data)).data;
+  (await apiClient.post("/users/staff/restore", data)).data;
 
 // =============== DEMO ROLE TEST ===============
 

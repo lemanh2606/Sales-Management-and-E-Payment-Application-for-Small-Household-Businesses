@@ -1,14 +1,7 @@
-// src/context/AuthContext.jsx
 import React, { createContext, useContext, useEffect, useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
-
-// IMPORT CHÍNH XÁC TỪ src/api/index.js
-// index.js export { default as apiClient } và export * as userApi ...
-// => import theo named exports
-import { apiClient, userApi } from "../api"; // sửa import cho đúng
-
-// Bạn vẫn có thể import ensureStore trực tiếp từ file nếu muốn
+import { apiClient, userApi } from "../api";
 import { ensureStore } from "../api/storeApi";
 
 const AuthContext = createContext();
@@ -25,22 +18,7 @@ export const AuthProvider = ({ children }) => {
         return s ? JSON.parse(s) : null;
     });
 
-    // Set bearer header when token changes (both global axios and apiClient)
-    useEffect(() => {
-        if (token) {
-            axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-            if (apiClient && apiClient.defaults) {
-                apiClient.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-            }
-        } else {
-            delete axios.defaults.headers.common["Authorization"];
-            if (apiClient && apiClient.defaults) {
-                delete apiClient.defaults.headers.common["Authorization"];
-            }
-        }
-    }, [token]);
-
-    // Helper: save auth to storage
+    // Persist auth state
     const persist = (u, t, store) => {
         if (u) localStorage.setItem("user", JSON.stringify(u));
         else localStorage.removeItem("user");
@@ -52,54 +30,82 @@ export const AuthProvider = ({ children }) => {
         else localStorage.removeItem("currentStore");
     };
 
-    /**
-     * login: lưu user + token, then call ensureStore to decide where to go next
-     * - Nếu user.role === "STAFF": try to read current_store from backend via ensureStore or from user (backend may return)
-     * - Nếu user.role === "MANAGER": call ensureStore(), backend will create default store if none, or return stores/currentStore.
-     */
+    // Set bearer header for axios & apiClient
+    useEffect(() => {
+        const setAuthHeader = (t) => {
+            if (t) {
+                axios.defaults.headers.common["Authorization"] = `Bearer ${t}`;
+                if (apiClient && apiClient.defaults) {
+                    apiClient.defaults.headers.common["Authorization"] = `Bearer ${t}`;
+                }
+            } else {
+                delete axios.defaults.headers.common["Authorization"];
+                if (apiClient && apiClient.defaults) {
+                    delete apiClient.defaults.headers.common["Authorization"];
+                }
+            }
+        };
+        setAuthHeader(token);
+
+        // Axios interceptor for automatic refresh token
+        const interceptor = apiClient.interceptors.response.use(
+            (response) => response,
+            async (error) => {
+                const originalRequest = error.config;
+                if (
+                    error.response &&
+                    error.response.status === 401 &&
+                    !originalRequest._retry
+                ) {
+                    originalRequest._retry = true;
+                    try {
+                        const data = await userApi.refreshToken();
+                        setToken(data.token);
+                        persist(user, data.token, currentStore);
+                        // Update header and retry original request
+                        apiClient.defaults.headers.common["Authorization"] = `Bearer ${data.token}`;
+                        originalRequest.headers["Authorization"] = `Bearer ${data.token}`;
+                        return apiClient(originalRequest);
+                    } catch (e) {
+                        console.error("Refresh token failed:", e);
+                        logout(); // nếu refresh không được thì logout
+                    }
+                }
+                return Promise.reject(error);
+            }
+        );
+
+        return () => {
+            apiClient.interceptors.response.eject(interceptor);
+        };
+    }, [token, user, currentStore]);
+
     const login = async (userData, tokenData) => {
         setUser(userData);
         setToken(tokenData);
         persist(userData, tokenData, null);
 
-        // Set header for subsequent calls (both global axios and apiClient)
-        axios.defaults.headers.common["Authorization"] = `Bearer ${tokenData}`;
-        if (apiClient && apiClient.defaults) {
-            apiClient.defaults.headers.common["Authorization"] = `Bearer ${tokenData}`;
-        }
-
-        // Call ensureStore to let backend prepare stores/currentStore
+        // Call ensureStore to prepare store
         try {
             const res = await ensureStore();
-            // Backend may return various shapes; handle flexibly
-            // Examples:
-            // { created: true, store: {...} }
-            // { created: false, stores: [...], currentStore: {...} }
-            // Or simple { store: {...} }
             const store = res?.store || res?.currentStore || (res?.stores && res.stores[0]) || null;
             if (store) {
                 setCurrentStore(store);
                 persist(userData, tokenData, store);
             }
-            // Decide navigation:
+            // Navigate based on role
             if (userData?.role === "STAFF") {
-                // Staff: go straight to dashboard of assigned store (if provided)
                 if (store) navigate("/dashboard");
                 else navigate("/select-store");
             } else if (userData?.role === "MANAGER") {
-                // Manager: if multiple stores, let frontend show selection page.
-                if (res?.stores && res.stores.length > 1) {
-                    navigate("/select-store");
-                } else {
-                    if (store) navigate("/dashboard");
-                    else navigate("/select-store");
-                }
+                if (res?.stores && res.stores.length >= 1) navigate("/select-store");
+                else if (store) navigate("/dashboard");
+                else navigate("/select-store");
             } else {
                 navigate("/dashboard");
             }
         } catch (err) {
             console.error("ensureStore error in login:", err);
-            // Fallback: go to select-store page
             navigate("/select-store");
         }
     };
@@ -115,16 +121,11 @@ export const AuthProvider = ({ children }) => {
         if (apiClient && apiClient.defaults) {
             delete apiClient.defaults.headers.common["Authorization"];
         }
-
-        // optional: call backend logout to clear refresh cookie
         try {
-            // apiClient is the shared axios instance exported from src/api/apiClient
             await apiClient.post("/users/logout");
         } catch (e) {
-            // ignore network/errors during logout
             console.warn("Logout API failed (ignored):", e?.message || e);
         }
-
         navigate("/login");
     };
 
