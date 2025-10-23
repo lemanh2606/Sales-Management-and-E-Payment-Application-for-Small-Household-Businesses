@@ -1,3 +1,4 @@
+// src/App.jsx
 import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import RegisterPage from "./pages/auth/RegisterPage";
@@ -8,6 +9,8 @@ import SelectStorePage from "./pages/store/SelectStorePage";
 import SupplierListPage from "./pages/supplier/SupplierListPage";
 import ProductListPage from "./pages/product/ProductListPage";
 import ForgotPassword from "./pages/auth/ForgotPassword";
+import Profile from "./pages/user/Profile";
+import LoyaltySetting from "./pages/loyalty/LoyaltySetting"; // 👈 Import mới cho Loyalty
 import { useAuth } from "./context/AuthContext"; // Import để dùng cho ProtectedRoute
 
 // ProtectedRoute component (gộp inline từ ProtectedRoute.jsx)
@@ -35,7 +38,7 @@ function App() {
         path="/dashboard"
         element={
           <ProtectedRoute>
-            <DashboardPage />{" "}
+            <DashboardPage />
           </ProtectedRoute>
         }
       />
@@ -44,6 +47,15 @@ function App() {
         element={
           <ProtectedRoute>
             <SelectStorePage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/profile"
+        element={
+          <ProtectedRoute>
+            <Profile />
           </ProtectedRoute>
         }
       />
@@ -67,7 +79,16 @@ function App() {
         }
       />
 
-      {/* Default */}
+      <Route
+        path="/loyalty/config"
+        element={
+          <ProtectedRoute allowedRoles={["MANAGER", "STAFF"]}>
+            <LoyaltySetting />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Mặc định */}
       <Route path="*" element={<Navigate to="/login" replace />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
     </Routes>
