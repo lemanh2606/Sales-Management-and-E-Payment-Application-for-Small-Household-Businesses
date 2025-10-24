@@ -213,8 +213,9 @@ const deleteStore = async (req, res) => {
  */
 const getStoresByManager = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id; // fallback
     const user = await User.findById(userId);
+
     if (!user || user.role !== "MANAGER") {
       return res
         .status(403)

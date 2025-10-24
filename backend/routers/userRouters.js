@@ -1,22 +1,28 @@
+// routes/userRouters.js
 const express = require("express");
 const router = express.Router();
+
 const {
   registerManager,
   verifyOtp,
   login,
   refreshToken,
   updateProfile,
+  updateUser,
   sendPasswordOTP,
   changePassword,
   softDeleteUser,
   restoreUser,
-  sendForgotPasswordOTP, // public forgot password
-  forgotChangePassword, //  public forgot password
+  sendForgotPasswordOTP,
+  forgotChangePassword,
 } = require("../controllers/user/userController");
+
 const {
   verifyToken,
   isManager,
   isStaff,
+  checkStoreAccess,
+  requirePermission,
 } = require("../middlewares/authMiddleware");
 
 // -------------------------
@@ -26,28 +32,36 @@ router.post("/register", registerManager);
 router.post("/verify-otp", verifyOtp);
 router.post("/login", login);
 
-// Public Forgot Password routes (không cần login)
-router.post("/forgot-password/send-otp", sendForgotPasswordOTP); // Nhập email, nhận OTP
-router.post("/forgot-password/change", forgotChangePassword); // Nhập email + OTP + pass mới
-
-// Refresh token route (dùng cookie refreshToken)
+router.post("/forgot-password/send-otp", sendForgotPasswordOTP);
+router.post("/forgot-password/change", forgotChangePassword);
 router.get("/refresh-token", refreshToken);
 
 // -------------------------
-// Protected routes (cần login)
+// Protected routes
 // -------------------------
-router.put("/profile", verifyToken, updateProfile); // Thay đổi thông tin cá nhân
-router.post("/password/send-otp", verifyToken, sendPasswordOTP); // Gửi OTP đổi pass
-router.post("/password/change", verifyToken, changePassword); // Verify OTP + đổi pass
+router.put("/profile", verifyToken, updateProfile);
+router.post("/password/send-otp", verifyToken, sendPasswordOTP);
+router.post("/password/change", verifyToken, changePassword);
 
-// Manager routes
-router.post("/staff/soft-delete", verifyToken, isManager, softDeleteUser); // Xóa mềm staff theo store hiện tại
-router.post("/staff/restore", verifyToken, isManager, restoreUser); // Khôi phục staff theo store hiện tại
+// -------------------------
+// Manager / Staff routes
+// -------------------------
+router.post("/staff/soft-delete", verifyToken, isManager, softDeleteUser);
+router.post("/staff/restore", verifyToken, isManager, restoreUser);
 
-// Dashboard routes
+// Update User (Manager hoặc có quyền users:update)
+router.put(
+  "/:id",
+  verifyToken,
+  checkStoreAccess,
+  requirePermission("users:update"),
+  updateUser
+);
+
 router.get("/manager-dashboard", verifyToken, isManager, (req, res) => {
   res.json({ message: `Welcome Manager ${req.user.id}` });
 });
+
 router.get("/staff-dashboard", verifyToken, isStaff, (req, res) => {
   res.json({ message: `Welcome Staff ${req.user.id}` });
 });
