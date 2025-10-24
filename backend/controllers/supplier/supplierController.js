@@ -8,14 +8,13 @@ const createSupplier = async (req, res) => {
   try {
     if (!req.body || Object.keys(req.body).length === 0) {
       return res.status(400).json({
-        message:
-          "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json",
+        message: "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json",
       });
     }
 
     const { name, phone, email, address, status } = req.body;
     const { storeId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
     // Kiểm tra dữ liệu đầu vào
     if (!name || name.trim() === "") {
@@ -24,20 +23,15 @@ const createSupplier = async (req, res) => {
 
     // Kiểm tra status hợp lệ nếu có
     if (status && !["đang hoạt động", "ngừng hoạt động"].includes(status)) {
-      return res
-        .status(400)
-        .json({
-          message:
-            "Trạng thái không hợp lệ. Chỉ chấp nhận 'đang hoạt động' hoặc 'ngừng hoạt động'",
-        });
+      return res.status(400).json({
+        message: "Trạng thái không hợp lệ. Chỉ chấp nhận 'đang hoạt động' hoặc 'ngừng hoạt động'",
+      });
     }
 
     // Kiểm tra user là manager
     const user = await User.findById(userId);
     if (!user || user.role !== "MANAGER") {
-      return res
-        .status(403)
-        .json({ message: "Chỉ Manager mới được tạo nhà cung cấp" });
+      return res.status(403).json({ message: "Chỉ Manager mới được tạo nhà cung cấp" });
     }
 
     // Kiểm tra store có tồn tại và thuộc quyền quản lý
@@ -46,12 +40,10 @@ const createSupplier = async (req, res) => {
       return res.status(404).json({ message: "Cửa hàng không tồn tại" });
     }
 
-    if (store.owner_id.toString() !== userId) {
-      return res
-        .status(403)
-        .json({
-          message: "Bạn chỉ có thể tạo nhà cung cấp trong cửa hàng của mình",
-        });
+    if (!store.owner_id.equals(userId)) {
+      return res.status(403).json({
+        message: "Bạn chỉ có thể tạo nhà cung cấp trong cửa hàng của mình",
+      });
     }
 
     // Kiểm tra trùng tên nhà cung cấp trong cửa hàng (chỉ kiểm tra nhà cung cấp chưa bị xóa)
@@ -62,9 +54,7 @@ const createSupplier = async (req, res) => {
     });
 
     if (existingSupplier) {
-      return res
-        .status(400)
-        .json({ message: "Nhà cung cấp này đã tồn tại trong cửa hàng" });
+      return res.status(400).json({ message: "Nhà cung cấp này đã tồn tại trong cửa hàng" });
     }
 
     // Kiểm tra email hợp lệ nếu có
@@ -113,7 +103,7 @@ const createSupplier = async (req, res) => {
 const getSuppliersByStore = async (req, res) => {
   try {
     const { storeId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
     // Kiểm tra user có quyền truy cập store này không
     const user = await User.findById(userId);
@@ -128,23 +118,18 @@ const getSuppliersByStore = async (req, res) => {
     }
 
     // Kiểm tra quyền truy cập
-    if (user.role === "MANAGER" && store.owner_id.toString() !== userId) {
-      return res
-        .status(403)
-        .json({ message: "Bạn không có quyền truy cập cửa hàng này" });
+    if (user.role === "MANAGER" && !store.owner_id.equals(user._id)) {
+      // để so sánh cái string này bị ngáo rồi, không ra đâu, đổi thành !store.owner_id.equals(user._id)) lại ra
+      return res.status(403).json({ message: "Bạn không có quyền truy cập cửa hàng này" });
     }
 
     if (user.role === "STAFF") {
       const employee = await Employee.findOne({ user_id: userId });
       if (!employee) {
-        return res
-          .status(404)
-          .json({ message: "Không tìm thấy thông tin nhân viên" });
+        return res.status(404).json({ message: "Không tìm thấy thông tin nhân viên" });
       }
       if (employee.store_id.toString() !== storeId) {
-        return res
-          .status(403)
-          .json({ message: "Bạn không có quyền truy cập cửa hàng này" });
+        return res.status(403).json({ message: "Bạn không có quyền truy cập cửa hàng này" });
       }
     }
 
@@ -184,7 +169,7 @@ const getSuppliersByStore = async (req, res) => {
 const getSupplierById = async (req, res) => {
   try {
     const { supplierId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
     const supplier = await Supplier.findOne({
       _id: supplierId,
@@ -197,26 +182,17 @@ const getSupplierById = async (req, res) => {
 
     // Kiểm tra quyền truy cập
     const user = await User.findById(userId);
-    if (
-      user.role === "MANAGER" &&
-      supplier.store_id.owner_id.toString() !== userId
-    ) {
-      return res
-        .status(403)
-        .json({ message: "Bạn không có quyền truy cập nhà cung cấp này" });
+    if (user.role === "MANAGER" && !supplier.store_id.owner_id.equals(user._id)) {
+      return res.status(403).json({ message: "Bạn không có quyền truy cập nhà cung cấp này" });
     }
 
     if (user.role === "STAFF") {
       const employee = await Employee.findOne({ user_id: userId });
       if (!employee) {
-        return res
-          .status(404)
-          .json({ message: "Không tìm thấy thông tin nhân viên" });
+        return res.status(404).json({ message: "Không tìm thấy thông tin nhân viên" });
       }
       if (employee.store_id.toString() !== supplier.store_id._id.toString()) {
-        return res
-          .status(403)
-          .json({ message: "Bạn không có quyền truy cập nhà cung cấp này" });
+        return res.status(403).json({ message: "Bạn không có quyền truy cập nhà cung cấp này" });
       }
     }
 
@@ -245,21 +221,18 @@ const updateSupplier = async (req, res) => {
   try {
     if (!req.body || Object.keys(req.body).length === 0) {
       return res.status(400).json({
-        message:
-          "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json",
+        message: "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json",
       });
     }
 
     const { supplierId } = req.params;
     const { name, phone, email, address, status } = req.body;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
     // Kiểm tra user là manager
     const user = await User.findById(userId);
     if (!user || user.role !== "MANAGER") {
-      return res
-        .status(403)
-        .json({ message: "Chỉ Manager mới được cập nhật nhà cung cấp" });
+      return res.status(403).json({ message: "Chỉ Manager mới được cập nhật nhà cung cấp" });
     }
 
     // Tìm nhà cung cấp và kiểm tra quyền (chỉ tìm nhà cung cấp chưa bị xóa)
@@ -271,22 +244,17 @@ const updateSupplier = async (req, res) => {
       return res.status(404).json({ message: "Nhà cung cấp không tồn tại" });
     }
 
-    if (supplier.store_id.owner_id.toString() !== userId) {
-      return res
-        .status(403)
-        .json({
-          message:
-            "Bạn chỉ có thể cập nhật nhà cung cấp trong cửa hàng của mình",
-        });
+    if (!supplier.store_id.owner_id.equals(user._id)) {
+      return res.status(403).json({
+        message: "Bạn chỉ có thể cập nhật nhà cung cấp trong cửa hàng của mình",
+      });
     }
 
     // Chuẩn bị dữ liệu cập nhật
     const updateData = {};
     if (name !== undefined) {
       if (!name || name.trim() === "") {
-        return res
-          .status(400)
-          .json({ message: "Tên nhà cung cấp không được để trống" });
+        return res.status(400).json({ message: "Tên nhà cung cấp không được để trống" });
       }
 
       // Kiểm tra trùng tên (trừ chính nó, chỉ kiểm tra nhà cung cấp chưa bị xóa)
@@ -298,17 +266,14 @@ const updateSupplier = async (req, res) => {
       });
 
       if (existingSupplier) {
-        return res
-          .status(400)
-          .json({ message: "Tên nhà cung cấp này đã tồn tại trong cửa hàng" });
+        return res.status(400).json({ message: "Tên nhà cung cấp này đã tồn tại trong cửa hàng" });
       }
 
       updateData.name = name.trim();
     }
 
     if (phone !== undefined) updateData.phone = phone ? phone.trim() : "";
-    if (address !== undefined)
-      updateData.address = address ? address.trim() : "";
+    if (address !== undefined) updateData.address = address ? address.trim() : "";
 
     if (email !== undefined) {
       if (email && email.trim() !== "") {
@@ -325,19 +290,17 @@ const updateSupplier = async (req, res) => {
     if (status !== undefined) {
       if (!["đang hoạt động", "ngừng hoạt động"].includes(status)) {
         return res.status(400).json({
-          message:
-            "Trạng thái không hợp lệ. Chỉ chấp nhận: 'đang hoạt động', 'ngừng hoạt động'",
+          message: "Trạng thái không hợp lệ. Chỉ chấp nhận: 'đang hoạt động', 'ngừng hoạt động'",
         });
       }
       updateData.status = status;
     }
 
     // Cập nhật nhà cung cấp
-    const updatedSupplier = await Supplier.findByIdAndUpdate(
-      supplierId,
-      updateData,
-      { new: true }
-    ).populate("store_id", "name address");
+    const updatedSupplier = await Supplier.findByIdAndUpdate(supplierId, updateData, { new: true }).populate(
+      "store_id",
+      "name address"
+    );
 
     res.status(200).json({
       message: "Cập nhật nhà cung cấp thành công",
@@ -363,14 +326,12 @@ const updateSupplier = async (req, res) => {
 const deleteSupplier = async (req, res) => {
   try {
     const { supplierId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
     // Kiểm tra user là manager
     const user = await User.findById(userId);
     if (!user || user.role !== "MANAGER") {
-      return res
-        .status(403)
-        .json({ message: "Chỉ Manager mới được xóa nhà cung cấp" });
+      return res.status(403).json({ message: "Chỉ Manager mới được xóa nhà cung cấp" });
     }
 
     // Tìm nhà cung cấp và kiểm tra quyền (chỉ tìm nhà cung cấp chưa bị xóa)
@@ -382,12 +343,10 @@ const deleteSupplier = async (req, res) => {
       return res.status(404).json({ message: "Nhà cung cấp không tồn tại" });
     }
 
-    if (supplier.store_id.owner_id.toString() !== userId) {
-      return res
-        .status(403)
-        .json({
-          message: "Bạn chỉ có thể xóa nhà cung cấp trong cửa hàng của mình",
-        });
+    if (!supplier.store_id.owner_id.equals(user._id)) {
+      return res.status(403).json({
+        message: "Bạn chỉ có thể xóa nhà cung cấp trong cửa hàng của mình",
+      });
     }
 
     // Kiểm tra xem có sản phẩm nào đang sử dụng nhà cung cấp này không (chỉ kiểm tra sản phẩm chưa bị xóa)

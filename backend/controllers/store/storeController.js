@@ -27,7 +27,7 @@ const createStore = async (req, res) => {
       openingHours,
       isDefault,
     } = req.body;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
     const user = await User.findById(userId);
     if (!user || user.role !== "MANAGER") {
@@ -130,12 +130,12 @@ const updateStore = async (req, res) => {
       openingHours,
       isDefault,
     } = req.body;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
     const store = await Store.findById(storeId);
     if (!store || store.deleted)
       return res.status(404).json({ message: "Không tìm thấy cửa hàng" });
-    if (store.owner_id.toString() !== userId)
+    if (!store.owner_id.equals(userId))
       return res.status(403).json({ message: "Chỉ owner mới được chỉnh sửa" });
 
     if (name !== undefined) store.name = String(name).trim();
@@ -171,12 +171,12 @@ const updateStore = async (req, res) => {
 const deleteStore = async (req, res) => {
   try {
     const { storeId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
     const store = await Store.findById(storeId);
     if (!store || store.deleted)
       return res.status(404).json({ message: "Không tìm thấy cửa hàng" });
-    if (store.owner_id.toString() !== userId)
+    if (!store.owner_id.equals(userId))
       return res.status(403).json({ message: "Chỉ owner mới được xóa" });
 
     store.deleted = true;
@@ -265,7 +265,7 @@ const getStoresByManager = async (req, res) => {
 const selectStore = async (req, res) => {
   try {
     const { storeId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id; //đừng nhầm .id và ._id nhé ko check toàn sai thôi
 
     if (!mongoose.Types.ObjectId.isValid(storeId))
       return res.status(400).json({ message: "storeId không hợp lệ" });
@@ -305,7 +305,7 @@ const selectStore = async (req, res) => {
  */
 const ensureStore = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
     const user = await User.findById(userId);
 
     if (!user) return res.status(404).json({ message: "User không tìm thấy" });
@@ -389,7 +389,7 @@ const getStoreDashboard = async (req, res) => {
  */
 const assignStaffToStore = async (req, res) => {
   try {
-    const userId = req.user.id; // caller
+    const userId = req.user.id || req.user._id; // caller
     const { storeId } = req.params;
     const { staffUserId, role = "STAFF" } = req.body;
 

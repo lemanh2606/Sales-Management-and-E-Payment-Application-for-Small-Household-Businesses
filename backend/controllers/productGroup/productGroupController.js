@@ -10,14 +10,13 @@ const createProductGroup = async (req, res) => {
     // Kiểm tra xem request body có tồn tại không
     if (!req.body || Object.keys(req.body).length === 0) {
       return res.status(400).json({
-        message:
-          "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json",
+        message: "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json",
       });
     }
 
     const { name, description } = req.body;
     const { storeId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
     // Kiểm tra và xác thực dữ liệu đầu vào
     if (!name || name.trim() === "") {
@@ -27,9 +26,7 @@ const createProductGroup = async (req, res) => {
     // Kiểm tra user là manager
     const user = await User.findById(userId);
     if (!user || user.role !== "MANAGER") {
-      return res
-        .status(403)
-        .json({ message: "Chỉ Manager mới được tạo nhóm sản phẩm" });
+      return res.status(403).json({ message: "Chỉ Manager mới được tạo nhóm sản phẩm" });
     }
 
     // Kiểm tra store có tồn tại và thuộc quyền quản lý
@@ -38,7 +35,7 @@ const createProductGroup = async (req, res) => {
       return res.status(404).json({ message: "Cửa hàng không tồn tại" });
     }
 
-    if (store.owner_id.toString() !== userId) {
+    if (!store.owner_id.equals(userId)) {
       return res.status(403).json({
         message: "Bạn chỉ có thể tạo nhóm sản phẩm trong cửa hàng của mình",
       });
@@ -94,7 +91,7 @@ const createProductGroup = async (req, res) => {
 const getProductGroupsByStore = async (req, res) => {
   try {
     const { storeId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
     // Kiểm tra user có quyền truy cập store này không
     const user = await User.findById(userId);
@@ -109,24 +106,18 @@ const getProductGroupsByStore = async (req, res) => {
     }
 
     // Kiểm tra quyền truy cập: owner của store hoặc employee thuộc store đó
-    if (user.role === "MANAGER" && store.owner_id.toString() !== userId) {
-      return res
-        .status(403)
-        .json({ message: "Bạn không có quyền truy cập cửa hàng này" });
+    if (user.role === "MANAGER" && !store.owner_id.equals(user._id)) {
+      return res.status(403).json({ message: "Bạn không có quyền truy cập cửa hàng này" });
     }
 
     if (user.role === "STAFF") {
       // Tìm thông tin employee để lấy store_id
       const employee = await Employee.findOne({ user_id: userId });
       if (!employee) {
-        return res
-          .status(404)
-          .json({ message: "Không tìm thấy thông tin nhân viên" });
+        return res.status(404).json({ message: "Không tìm thấy thông tin nhân viên" });
       }
       if (employee.store_id.toString() !== storeId) {
-        return res
-          .status(403)
-          .json({ message: "Bạn không có quyền truy cập cửa hàng này" });
+        return res.status(403).json({ message: "Bạn không có quyền truy cập cửa hàng này" });
       }
     }
 
@@ -172,7 +163,7 @@ const getProductGroupsByStore = async (req, res) => {
 const getProductGroupById = async (req, res) => {
   try {
     const { groupId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
     const productGroup = await ProductGroup.findOne({
       _id: groupId,
@@ -185,29 +176,18 @@ const getProductGroupById = async (req, res) => {
 
     // Kiểm tra quyền truy cập
     const user = await User.findById(userId);
-    if (
-      user.role === "MANAGER" &&
-      productGroup.storeId.owner_id.toString() !== userId
-    ) {
-      return res
-        .status(403)
-        .json({ message: "Bạn không có quyền truy cập nhóm sản phẩm này" });
+    if (user.role === "MANAGER" && !productGroup.storeId.owner_id.equals(user._id)) {
+      return res.status(403).json({ message: "Bạn không có quyền truy cập nhóm sản phẩm này" });
     }
 
     if (user.role === "STAFF") {
       // Tìm thông tin employee để lấy store_id
       const employee = await Employee.findOne({ user_id: userId });
       if (!employee) {
-        return res
-          .status(404)
-          .json({ message: "Không tìm thấy thông tin nhân viên" });
+        return res.status(404).json({ message: "Không tìm thấy thông tin nhân viên" });
       }
-      if (
-        employee.store_id.toString() !== productGroup.storeId._id.toString()
-      ) {
-        return res
-          .status(403)
-          .json({ message: "Bạn không có quyền truy cập nhóm sản phẩm này" });
+      if (employee.store_id.toString() !== productGroup.storeId._id.toString()) {
+        return res.status(403).json({ message: "Bạn không có quyền truy cập nhóm sản phẩm này" });
       }
     }
 
@@ -244,28 +224,23 @@ const updateProductGroup = async (req, res) => {
     // Kiểm tra xem request body có tồn tại không
     if (!req.body || Object.keys(req.body).length === 0) {
       return res.status(400).json({
-        message:
-          "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json",
+        message: "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json",
       });
     }
 
     const { groupId } = req.params;
     const { name, description } = req.body;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
     // Kiểm tra và xác thực dữ liệu đầu vào
     if (name !== undefined && (!name || name.trim() === "")) {
-      return res
-        .status(400)
-        .json({ message: "Tên nhóm sản phẩm không được để trống" });
+      return res.status(400).json({ message: "Tên nhóm sản phẩm không được để trống" });
     }
 
     // Kiểm tra user là manager
     const user = await User.findById(userId);
     if (!user || user.role !== "MANAGER") {
-      return res
-        .status(403)
-        .json({ message: "Chỉ Manager mới được cập nhật nhóm sản phẩm" });
+      return res.status(403).json({ message: "Chỉ Manager mới được cập nhật nhóm sản phẩm" });
     }
 
     // Tìm nhóm sản phẩm và kiểm tra quyền (chỉ tìm nhóm chưa bị xóa)
@@ -277,10 +252,9 @@ const updateProductGroup = async (req, res) => {
       return res.status(404).json({ message: "Nhóm sản phẩm không tồn tại" });
     }
 
-    if (productGroup.storeId.owner_id.toString() !== userId) {
+    if (!productGroup.storeId.owner_id.equals(user._id)) {
       return res.status(403).json({
-        message:
-          "Bạn chỉ có thể cập nhật nhóm sản phẩm trong cửa hàng của mình",
+        message: "Bạn chỉ có thể cập nhật nhóm sản phẩm trong cửa hàng của mình",
       });
     }
 
@@ -302,15 +276,13 @@ const updateProductGroup = async (req, res) => {
     // Chuẩn bị dữ liệu cập nhật
     const updateData = {};
     if (name !== undefined) updateData.name = name.trim();
-    if (description !== undefined)
-      updateData.description = description ? description.trim() : "";
+    if (description !== undefined) updateData.description = description ? description.trim() : "";
 
     // Cập nhật nhóm sản phẩm
-    const updatedGroup = await ProductGroup.findByIdAndUpdate(
-      groupId,
-      updateData,
-      { new: true }
-    ).populate("storeId", "name address phone");
+    const updatedGroup = await ProductGroup.findByIdAndUpdate(groupId, updateData, { new: true }).populate(
+      "storeId",
+      "name address phone"
+    );
 
     // Đếm số sản phẩm trong nhóm (chỉ đếm sản phẩm chưa bị xóa)
     const productCount = await Product.countDocuments({
@@ -343,14 +315,12 @@ const updateProductGroup = async (req, res) => {
 const deleteProductGroup = async (req, res) => {
   try {
     const { groupId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
     // Kiểm tra user là manager
     const user = await User.findById(userId);
     if (!user || user.role !== "MANAGER") {
-      return res
-        .status(403)
-        .json({ message: "Chỉ Manager mới được xóa nhóm sản phẩm" });
+      return res.status(403).json({ message: "Chỉ Manager mới được xóa nhóm sản phẩm" });
     }
 
     // Tìm nhóm sản phẩm và kiểm tra quyền (chỉ tìm nhóm chưa bị xóa)
@@ -362,7 +332,7 @@ const deleteProductGroup = async (req, res) => {
       return res.status(404).json({ message: "Nhóm sản phẩm không tồn tại" });
     }
 
-    if (productGroup.storeId.owner_id.toString() !== userId) {
+    if (!productGroup.storeId.owner_id.equals(user._id)) {
       return res.status(403).json({
         message: "Bạn chỉ có thể xóa nhóm sản phẩm trong cửa hàng của mình",
       });

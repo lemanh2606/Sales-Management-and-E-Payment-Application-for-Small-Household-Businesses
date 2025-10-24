@@ -48,7 +48,7 @@ const createStockCheck = async (req, res) => {
 
     const { check_date, notes, status, items } = req.body;
     const { storeId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
     // Kiểm tra và xác thực dữ liệu đầu vào
     if (!check_date) {
@@ -77,7 +77,7 @@ const createStockCheck = async (req, res) => {
       return res.status(404).json({ message: "Cửa hàng không tồn tại" });
     }
 
-    if (store.owner_id.toString() !== userId) {
+    if (!store.owner_id.equals(userId)) {
       return res
         .status(403)
         .json({
@@ -221,7 +221,7 @@ const createStockCheck = async (req, res) => {
 const getStockChecksByStore = async (req, res) => {
   try {
     const { storeId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
     // Kiểm tra user có quyền truy cập store này không
     const user = await User.findById(userId);
@@ -236,7 +236,8 @@ const getStockChecksByStore = async (req, res) => {
     }
 
     // Kiểm tra quyền truy cập
-    if (user.role === "MANAGER" && store.owner_id.toString() !== userId) {
+    if (user.role === "MANAGER" && 
+!store.owner_id.equals(user._id)) {
       return res
         .status(403)
         .json({ message: "Bạn không có quyền truy cập cửa hàng này" });
@@ -308,7 +309,7 @@ const getStockChecksByStore = async (req, res) => {
 const getStockCheckById = async (req, res) => {
   try {
     const { checkId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
     const stockCheck = await StockCheck.findOne({
       _id: checkId,
@@ -326,7 +327,7 @@ const getStockCheckById = async (req, res) => {
     const user = await User.findById(userId);
     if (
       user.role === "MANAGER" &&
-      stockCheck.store_id.owner_id.toString() !== userId
+      !stockCheck.store_id.owner_id.equals(user._id)
     ) {
       return res
         .status(403)
@@ -410,7 +411,7 @@ const updateStockCheck = async (req, res) => {
 
     const { checkId } = req.params;
     const { check_date, notes, status, items } = req.body;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
     // Kiểm tra user là manager
     const user = await User.findById(userId);
@@ -429,7 +430,7 @@ const updateStockCheck = async (req, res) => {
       return res.status(404).json({ message: "Phiếu kiểm kho không tồn tại" });
     }
 
-    if (stockCheck.store_id.owner_id.toString() !== userId) {
+    if (!stockCheck.store_id.owner_id.equals(user._id)) {
       return res
         .status(403)
         .json({
@@ -584,7 +585,7 @@ const updateStockCheck = async (req, res) => {
 const deleteStockCheck = async (req, res) => {
   try {
     const { checkId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
     // Kiểm tra user là manager
     const user = await User.findById(userId);
@@ -603,7 +604,7 @@ const deleteStockCheck = async (req, res) => {
       return res.status(404).json({ message: "Phiếu kiểm kho không tồn tại" });
     }
 
-    if (stockCheck.store_id.owner_id.toString() !== userId) {
+    if (!stockCheck.store_id.owner_id.equals(user._id)) {
       return res
         .status(403)
         .json({

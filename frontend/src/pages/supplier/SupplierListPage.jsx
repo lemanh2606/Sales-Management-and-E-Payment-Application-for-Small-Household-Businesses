@@ -9,6 +9,7 @@ import { MdVisibility, MdModeEditOutline, MdDeleteForever, MdAdd } from "react-i
 
 import SupplierFormModal from "../../components/supplier/SupplierFormModal";
 import ConfirmDeleteModal from "../../components/supplier/ConfirmDeleteModal";
+import SupplierDetailModal from "../../components/supplier/SupplierDetailModal";
 
 export default function SupplierListPage() {
   const { token } = useAuth();
@@ -23,6 +24,13 @@ export default function SupplierListPage() {
 
   const [deleteModal, setDeleteModal] = useState({ open: false, id: null, name: "" });
   const [deleting, setDeleting] = useState(false);
+
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [detailSupplierId, setDetailSupplierId] = useState(null);
+  const openDetail = (supplierId) => {
+    setDetailSupplierId(supplierId);
+    setDetailModalOpen(true);
+  };
 
   const fetchSuppliers = async () => {
     if (!storeId || !token) return;
@@ -54,7 +62,7 @@ export default function SupplierListPage() {
     setDeleting(true);
     try {
       await deleteSupplier(deleteModal.id);
-      setSuppliers(prev => prev.filter(s => s._id !== deleteModal.id));
+      setSuppliers((prev) => prev.filter((s) => s._id !== deleteModal.id));
       toast.success(`Đã xóa ${deleteModal.name}`);
       setDeleteModal({ open: false, id: null, name: "" });
     } catch (err) {
@@ -67,11 +75,9 @@ export default function SupplierListPage() {
 
   return (
     <Layout>
-      <div className="p-4 sm:p-6 mx-auto max-w-7xl">
+      <div className="p-4 sm:p-6 mx-auto max-w-8xl">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 sm:mb-8 gap-4">
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 tracking-tight">
-            Danh sách nhà cung cấp
-          </h1>
+          <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 tracking-tight">Danh sách nhà cung cấp</h1>
           <Button
             className="flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-2xl shadow-md hover:shadow-lg transition-all duration-200"
             onClick={() => openFormModal(null)}
@@ -80,14 +86,10 @@ export default function SupplierListPage() {
           </Button>
         </div>
 
-        {loading && (
-          <p className="text-center mt-6 text-gray-400 animate-pulse">
-            ⏳ Đang tải...
-          </p>
-        )}
+        {loading && <p className="text-center mt-6 text-gray-400 animate-pulse">⏳ Đang tải...</p>}
 
         {!loading && suppliers.length > 0 && (
-          <div className="overflow-x-auto rounded-2xl shadow-lg border border-gray-200 bg-white">
+          <div className=" rounded-2xl shadow-lg border border-gray-200 bg-white">
             <table className="min-w-full text-gray-700 text-sm sm:text-base">
               <thead className="bg-gray-50 uppercase font-medium text-gray-600">
                 <tr>
@@ -103,8 +105,9 @@ export default function SupplierListPage() {
                 {suppliers.map((s, i) => (
                   <tr
                     key={s._id}
-                    className={`transition-transform duration-200 hover:scale-[1.02] hover:shadow-lg ${i % 2 === 0 ? "bg-white" : "bg-green-50"
-                      }`}
+                    className={`transition-transform duration-200 hover:scale-[1.02] hover:shadow-lg ${
+                      i % 2 === 0 ? "bg-white" : "bg-green-50"
+                    }`}
                   >
                     <td className="py-3 px-4 font-medium text-gray-900">{s.name}</td>
                     <td className="py-3 px-4 hidden sm:table-cell">{s.phone || "-"}</td>
@@ -112,20 +115,27 @@ export default function SupplierListPage() {
                     <td className="py-3 px-4">{s.address || "-"}</td>
                     <td className="py-3 px-4">
                       <span
-                        className={`font-semibold ${s.status === "đang hoạt động" ? "text-green-600" : "text-red-500"
-                          }`}
+                        className={`font-semibold ${s.status === "đang hoạt động" ? "text-green-600" : "text-red-500"}`}
                       >
                         {s.status || "-"}
                       </span>
                     </td>
                     <td className="py-3 px-4 flex justify-center items-center gap-3">
-                      <Link
+                      {/* <Link
                         to={`/stores/${storeId}/suppliers/${s._id}`}
                         className="text-blue-500 hover:text-blue-700 hover:scale-110 transition transform"
                         title="Xem"
                       >
                         <MdVisibility size={22} />
-                      </Link>
+                      </Link> */}
+                      <button
+                        onClick={() => openDetail(s._id)}
+                        className="text-blue-500 hover:text-blue-700 hover:scale-110 transition transform"
+                        title="Xem chi tiết"
+                        aria-label={`Xem chi tiết ${s.name}`}
+                      >
+                        <MdVisibility size={22} />
+                      </button>
                       <button
                         onClick={() => openFormModal(s._id)}
                         className="text-yellow-500 hover:text-yellow-700 hover:scale-110 transition transform"
@@ -149,10 +159,10 @@ export default function SupplierListPage() {
         )}
 
         {!loading && suppliers.length === 0 && (
-          <div className="mt-8 text-center text-gray-400 italic text-base sm:text-lg">
-            Không có nhà cung cấp nào
-          </div>
+          <div className="mt-8 text-center text-gray-400 italic text-base sm:text-lg">Không có nhà cung cấp nào</div>
         )}
+
+        <SupplierDetailModal open={detailModalOpen} onOpenChange={setDetailModalOpen} supplierId={detailSupplierId} />
 
         {/* Modal Form */}
         <SupplierFormModal
@@ -166,7 +176,7 @@ export default function SupplierListPage() {
         {/* Modal Confirm Delete */}
         <ConfirmDeleteModal
           open={deleteModal.open}
-          onOpenChange={(open) => setDeleteModal(prev => ({ ...prev, open }))}
+          onOpenChange={(open) => setDeleteModal((prev) => ({ ...prev, open }))}
           itemName={deleteModal.name}
           onConfirm={handleDelete}
           loading={deleting}
