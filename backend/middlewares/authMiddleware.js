@@ -128,7 +128,7 @@ function isStaff(req, res, next) {
 */
 async function checkStoreAccess(req, res, next) {
   try {
-    // userId có thể ở req.user.id (payload trước) hoặc req.user._id (object DB)
+    // userId có thể ở req.user.id || req.user._id (payload trước) hoặc req.user._id (object DB)
     const userId = req.user?.id || req.user?._id;
     if (!userId) {
       return res.status(401).json({ message: "User chưa xác thực" });

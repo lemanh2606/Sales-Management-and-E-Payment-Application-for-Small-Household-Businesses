@@ -59,11 +59,11 @@ router.put(
 );
 
 router.get("/manager-dashboard", verifyToken, isManager, (req, res) => {
-  res.json({ message: `Welcome Manager ${req.user.id}` });
+  res.json({ message: `Welcome Manager ${req.user.id || req.user._id}` });
 });
 
 router.get("/staff-dashboard", verifyToken, isStaff, (req, res) => {
-  res.json({ message: `Welcome Staff ${req.user.id}` });
+  res.json({ message: `Welcome Staff ${req.user.id || req.user._id}` });
 });
 
 module.exports = router;

@@ -374,6 +374,10 @@ const login = async (req, res) => {
         id: user._id,
         username: user.username,
         role: user.role,
+        email: user.email,
+        phone: user.phone,
+        isDeleted: user.isDeleted,
+        isVerified: user.isVerified,
         menu: Array.isArray(user.menu) ? user.menu : [],
       },
     });
@@ -808,7 +812,7 @@ const updateUser = async (req, res) => {
    ------------------------- */
 const updateProfile = async (req, res) => {
   try {
-    const userId = req.user.id; // Từ middleware verifyToken
+    const userId = req.user.id || req.user._id; // Từ middleware verifyToken
     const { username, email, phone, fullName } = req.body;
 
     const user = await User.findById(userId);
@@ -865,7 +869,7 @@ const updateProfile = async (req, res) => {
    ------------------------- */
 const sendPasswordOTP = async (req, res) => {
   try {
-    const userId = req.user.id; // Từ middleware verifyToken
+    const userId = req.user.id || req.user._id; // Từ middleware verifyToken
     const { email } = req.body; // Email (optional, dùng email user nếu ko input)
 
     const user = await User.findById(userId);
@@ -915,7 +919,7 @@ const sendPasswordOTP = async (req, res) => {
    ------------------------- */
 const changePassword = async (req, res) => {
   try {
-    const userId = req.user.id; // Từ middleware verifyToken
+    const userId = req.user.id || req.user._id; // Từ middleware verifyToken
     const { password, confirmPassword, otp } = req.body; // Password mới + confirmPassword + OTP
 
     if (!password || !confirmPassword || !otp) {
@@ -975,7 +979,7 @@ const changePassword = async (req, res) => {
 //Chỉ manager xóa staff khác, check store match current_store, set isDeleted=true + deletedAt=now
 const softDeleteUser = async (req, res) => {
   try {
-    const userId = req.user.id; // Manager ID từ verifyToken
+    const userId = req.user.id || req.user._id; // Manager ID từ verifyToken
     const { targetUserId } = req.body; // Target staff ID để xóa
 
     if (!targetUserId) {
@@ -1029,7 +1033,7 @@ const softDeleteUser = async (req, res) => {
 // khôi phục lại tài khoản của nhân viên
 const restoreUser = async (req, res) => {
   try {
-    const userId = req.user.id; // Manager ID từ verifyToken
+    const userId = req.user.id || req.user._id; // Manager ID từ verifyToken
     const { targetUserId } = req.body; // Target staff ID để khôi phục
 
     if (!targetUserId) {
