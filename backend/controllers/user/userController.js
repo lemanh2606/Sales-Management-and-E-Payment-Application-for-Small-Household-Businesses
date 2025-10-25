@@ -380,6 +380,7 @@ const login = async (req, res) => {
         isVerified: user.isVerified,
         menu: Array.isArray(user.menu) ? user.menu : [],
       },
+      store: user.current_store || null,
     });
   } catch (err) {
     console.error("Lỗi đăng nhập:", err.message);

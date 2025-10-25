@@ -105,9 +105,8 @@ export default function SupplierListPage() {
                 {suppliers.map((s, i) => (
                   <tr
                     key={s._id}
-                    className={`transition-transform duration-200 hover:scale-[1.02] hover:shadow-lg ${
-                      i % 2 === 0 ? "bg-white" : "bg-green-50"
-                    }`}
+                    className={`transition-transform duration-200 hover:scale-[1.02] hover:shadow-lg ${i % 2 === 0 ? "bg-white" : "bg-green-50"
+                      }`}
                   >
                     <td className="py-3 px-4 font-medium text-gray-900">{s.name}</td>
                     <td className="py-3 px-4 hidden sm:table-cell">{s.phone || "-"}</td>
