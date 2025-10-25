@@ -245,7 +245,7 @@ const createPurchaseOrder = async (req, res) => {
 
     // Populate và trả về
     const populatedOrder = await PurchaseOrder.findById(newPurchaseOrder._id)
-      .populate("supplier_id", "name phone email")
+      .populate("supplier_id", "name phone email taxcode")
       .populate("store_id", "name")
       .populate("created_by", "name email")
       .populate("items.product_id", "name sku cost_price");
@@ -301,7 +301,7 @@ const getPurchaseOrdersByStore = async (req, res) => {
 
     // Lấy danh sách đơn nhập hàng
     const purchaseOrders = await PurchaseOrder.find({ store_id: storeId })
-      .populate("supplier_id", "name phone email")
+      .populate("supplier_id", "name phone email taxcode")
       .populate("store_id", "name")
       .populate("created_by", "name email")
       .sort({ createdAt: -1 });
@@ -324,7 +324,7 @@ const getPurchaseOrderById = async (req, res) => {
     const userId = req.user.id || req.user._id;
 
     const purchaseOrder = await PurchaseOrder.findById(orderId)
-      .populate("supplier_id", "name phone email address")
+      .populate("supplier_id", "name phone email address taxcode")
       .populate("store_id", "name address phone owner_id")
       .populate("created_by", "name email")
       .populate("items.product_id", "name sku cost_price");
@@ -535,7 +535,7 @@ const updatePurchaseOrder = async (req, res) => {
       updateData,
       { new: true }
     )
-      .populate("supplier_id", "name phone email")
+      .populate("supplier_id", "name phone email taxcode")
       .populate("store_id", "name")
       .populate("created_by", "name email")
       .populate("items.product_id", "name sku cost_price");

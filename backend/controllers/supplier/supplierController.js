@@ -14,7 +14,7 @@ const createSupplier = async (req, res) => {
       });
     }
 
-    const { name, phone, email, address, status } = req.body;
+    const { name, phone, email, address, status, taxcode, notes } = req.body;
     const { storeId } = req.params;
     const userId = req.user?.id || req.user?._id; // giữ để audit nếu bạn cần
 
@@ -117,6 +117,8 @@ const createSupplier = async (req, res) => {
       phone: phone ? phone.trim() : "",
       email: email ? email.trim() : "",
       address: address ? address.trim() : "",
+      taxcode: taxcode ? taxcode.trim() : "",
+      notes: notes ? notes.trim() : "",
       status: status || "đang hoạt động",
       store_id: storeId,
       created_by: userId, // nếu schema có trường này; nếu không thì bỏ
@@ -145,6 +147,8 @@ const createSupplier = async (req, res) => {
         phone: newSupplier.phone,
         email: newSupplier.email,
         address: newSupplier.address,
+        taxcode: newSupplier.taxcode,
+        notes: newSupplier.notes,
         status: newSupplier.status,
         store: newSupplier.store_id,
         createdAt: newSupplier.createdAt,
@@ -179,7 +183,7 @@ const getSuppliersByStore = async (req, res) => {
       store_id: new mongoose.Types.ObjectId(storeId),
       isDeleted: false,
     })
-      .select("name phone email address status createdAt updatedAt store_id")
+      .select("name phone email address taxcode notes status createdAt updatedAt store_id")
       .populate("store_id", "name") // có thể comment nếu lỗi populate
       .sort({ name: 1 })
       .lean();
@@ -254,6 +258,8 @@ const getSupplierById = async (req, res) => {
         phone: supplier.phone,
         email: supplier.email,
         address: supplier.address,
+        taxcode: supplier.taxcode,
+        notes: supplier.notes,
         status: supplier.status,
         store: supplier.store_id,
         createdAt: supplier.createdAt,
@@ -277,7 +283,7 @@ const updateSupplier = async (req, res) => {
     }
 
     const { supplierId } = req.params;
-    const { name, phone, email, address, status } = req.body;
+    const { name, phone, email, address, status, taxcode, notes } = req.body;
     const userId = req.user.id || req.user._id;
 
     // Kiểm tra user là manager
@@ -332,6 +338,8 @@ const updateSupplier = async (req, res) => {
     if (phone !== undefined) updateData.phone = phone ? phone.trim() : "";
     if (address !== undefined)
       updateData.address = address ? address.trim() : "";
+    if (taxcode !== undefined) updateData.taxcode = taxcode ? taxcode.trim() : "";
+    if (notes !== undefined) updateData.notes = notes ? notes.trim() : "";
 
     if (email !== undefined) {
       if (email && email.trim() !== "") {
@@ -370,6 +378,8 @@ const updateSupplier = async (req, res) => {
         phone: updatedSupplier.phone,
         email: updatedSupplier.email,
         address: updatedSupplier.address,
+        taxcode: updatedSupplier.taxcode,
+        notes: updatedSupplier.notes,
         status: updatedSupplier.status,
         store: updatedSupplier.store_id,
         createdAt: updatedSupplier.createdAt,
