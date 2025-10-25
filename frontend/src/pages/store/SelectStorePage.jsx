@@ -95,16 +95,71 @@ export default function SelectStorePage() {
   const handleSelect = async (store) => {
     try {
       setBusy(true);
-      await selectStore(store._id);
-      setCurrentStore(store);
+
+      // Gọi API selectStore (backend trả về full store object)
+      // selectStore helper có thể trả shapes khác nhau -> normalize
+      const res = await selectStore(store._id);
+
+      // Lấy store từ nhiều shape có thể xảy ra
+      let returnedStore =
+        (res && (res.store || res.data?.store || res.data)) ||
+        // axios wrapper có thể trả res.data trực tiếp
+        (res && res._id ? res : null) ||
+        store;
+
+      // nếu vẫn null, fallback store từ list
+      if (!returnedStore) returnedStore = store;
+
+      // --- Backup cửa hàng cũ (nếu có) ---
+      try {
+        const prev = localStorage.getItem("currentStore");
+        if (prev) {
+          // lưu bản cũ vào previousStore (ghi đè)
+          localStorage.setItem("previousStore", prev);
+        }
+      } catch (e) {
+        console.warn("Không thể backup previousStore:", e);
+      }
+
+      // --- Lưu currentStore mới vào localStorage ---
+      try {
+        localStorage.setItem("currentStore", JSON.stringify(returnedStore));
+      } catch (e) {
+        console.warn("Lưu currentStore vào localStorage thất bại:", e);
+      }
+
+      // --- Cập nhật context / auth nếu có hàm setCurrentStore ---
+      try {
+        if (typeof setCurrentStore === "function") {
+          // thử gọi với object trước; nếu hàm của bạn chờ id thì thử pass id
+          // (vì project bạn có nhiều biến thể)
+          try {
+            // Một số impl setCurrentStore có thể là async và mong storeId,
+            // nên không cần await bắt buộc ở đây, nhưng dùng await để chặn nav nếu cần.
+            await setCurrentStore(returnedStore);
+          } catch (errInner) {
+            // fallback: thử truyền id nếu object không hợp
+            try {
+              await setCurrentStore(returnedStore._id || returnedStore.id);
+            } catch (err2) {
+              console.warn("setCurrentStore failed with both object and id", errInner, err2);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("Không thể cập nhật context hiện tại:", e);
+      }
+
+      // navigate tới dashboard
       navigate("/dashboard");
     } catch (e) {
       console.error("select store error", e);
-      setErr(e?.response?.data?.message || "Không thể chọn cửa hàng");
+      setErr(e?.response?.data?.message || e?.message || "Không thể chọn cửa hàng");
     } finally {
       setBusy(false);
     }
   };
+
 
   // --- handleAdd: open modal with clean nested shape ---
   const handleAdd = () => {
