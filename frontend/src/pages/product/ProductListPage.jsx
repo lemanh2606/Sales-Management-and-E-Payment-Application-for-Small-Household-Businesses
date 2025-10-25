@@ -32,6 +32,7 @@ export default function ProductListPage() {
     } catch (err) {
       console.error(err);
       toast.error("Không thể tải danh sách sản phẩm");
+      //console.error("getProduct error:", err.response?.status, err.response?.data); //hết lỗi rồi nhé, toàn lỗi 403 ko có quyền
     } finally {
       setLoading(false);
     }

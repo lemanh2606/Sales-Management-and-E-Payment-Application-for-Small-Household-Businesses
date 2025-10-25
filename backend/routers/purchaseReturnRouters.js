@@ -1,7 +1,14 @@
+// routes/purchaseReturnRouters.js
 const express = require("express");
 const router = express.Router();
 
-const { verifyToken, isManager } = require("../middlewares/authMiddleware");
+const {
+  verifyToken,
+  checkStoreAccess,
+  requirePermission,
+  isManager, // vẫn giữ để fallback khi cần
+} = require("../middlewares/authMiddleware");
+
 const {
   createPurchaseReturn,
   getPurchaseReturnsByStore,
@@ -10,21 +17,65 @@ const {
   deletePurchaseReturn,
 } = require("../controllers/purchase/purchaseReturnController");
 
-// Routes cho quản lý phiếu trả hàng nhập
+/*
+  PHÂN QUYỀN CHUẨN CHO PURCHASE RETURN:
 
-// Tạo phiếu trả hàng mới
-router.post("/store/:storeId", verifyToken, isManager, createPurchaseReturn);
+  - verifyToken: xác thực đăng nhập
+  - checkStoreAccess: đảm bảo user thuộc store đang thao tác, gán req.store và req.storeRole
+  - requirePermission("purchase-returns:<action>"): kiểm tra user.menu có quyền tương ứng
+    * purchase-returns:create
+    * purchase-returns:view
+    * purchase-returns:update
+    * purchase-returns:delete
 
-// Lấy tất cả phiếu trả hàng của cửa hàng
-router.get("/store/:storeId", verifyToken, getPurchaseReturnsByStore);
+  - Nếu muốn ép manager/owner mới được thực hiện thao tác nào đó → thêm `isManager`
+*/
 
-// Lấy chi tiết phiếu trả hàng
-router.get("/:returnId", verifyToken, getPurchaseReturnById);
+// TẠO phiếu trả hàng nhập mới (thường manager mới được)
+router.post(
+  "/store/:storeId",
+  verifyToken,
+  checkStoreAccess,
+  requirePermission("purchase-returns:create"),
+  createPurchaseReturn
+);
 
-// Cập nhật phiếu trả hàng
-router.put("/:returnId", verifyToken, isManager, updatePurchaseReturn);
+// LẤY danh sách phiếu trả hàng trong 1 store
+router.get(
+  "/store/:storeId",
+  verifyToken,
+  checkStoreAccess,
+  requirePermission("purchase-returns:view"),
+  getPurchaseReturnsByStore
+);
 
-// Hủy phiếu trả hàng
-router.delete("/:returnId", verifyToken, isManager, deletePurchaseReturn);
+// LẤY chi tiết phiếu trả hàng theo ID
+// Quy tắc "get by ID" -> đặt cuối nhóm GET
+router.get(
+  "/:returnId",
+  verifyToken,
+  checkStoreAccess,
+  requirePermission("purchase-returns:view"),
+  getPurchaseReturnById
+);
+
+// CẬP NHẬT phiếu trả hàng
+router.put(
+  "/:returnId",
+  verifyToken,
+  checkStoreAccess,
+  requirePermission("purchase-returns:update"),
+  updatePurchaseReturn
+);
+
+// XOÁ phiếu trả hàng (hoặc hủy)
+// Có thể thay requirePermission bằng isManager nếu muốn giới hạn quyền cứng
+router.delete(
+  "/:returnId",
+  verifyToken,
+  checkStoreAccess,
+  requirePermission("purchase-returns:delete"),
+  deletePurchaseReturn
+);
 
 module.exports = router;

@@ -92,7 +92,7 @@ const createPurchaseOrder = async (req, res) => {
       purchase_order_date,
       status,
     } = req.body;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
     // Validation
     if (!supplier_id) {
@@ -119,7 +119,7 @@ const createPurchaseOrder = async (req, res) => {
       return res.status(404).json({ message: "Cửa hàng không tồn tại" });
     }
 
-    if (store.owner_id.toString() !== userId) {
+    if (!store.owner_id.equals(userId)) {
       return res.status(403).json({
         message: "Bạn chỉ có thể tạo đơn nhập hàng cho cửa hàng của mình",
       });
@@ -264,7 +264,7 @@ const createPurchaseOrder = async (req, res) => {
 const getPurchaseOrdersByStore = async (req, res) => {
   try {
     const { storeId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
     // Kiểm tra quyền truy cập
     const user = await User.findById(userId);
@@ -278,7 +278,8 @@ const getPurchaseOrdersByStore = async (req, res) => {
     }
 
     // Kiểm tra quyền truy cập store
-    if (user.role === "MANAGER" && store.owner_id.toString() !== userId) {
+    if (user.role === "MANAGER" && 
+!store.owner_id.equals(user._id)) {
       return res
         .status(403)
         .json({ message: "Bạn không có quyền truy cập cửa hàng này" });
@@ -320,7 +321,7 @@ const getPurchaseOrdersByStore = async (req, res) => {
 const getPurchaseOrderById = async (req, res) => {
   try {
     const { orderId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
     const purchaseOrder = await PurchaseOrder.findById(orderId)
       .populate("supplier_id", "name phone email address")
@@ -336,7 +337,8 @@ const getPurchaseOrderById = async (req, res) => {
     const user = await User.findById(userId);
     if (
       user.role === "MANAGER" &&
-      purchaseOrder.store_id.owner_id.toString() !== userId
+      !purchaseOrder.store_id.owner_id.equals(user._id)
+
     ) {
       return res
         .status(403)
@@ -388,7 +390,7 @@ const updatePurchaseOrder = async (req, res) => {
       status,
       paid_amount,
     } = req.body;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
     // Kiểm tra user là manager
     const user = await User.findById(userId);
@@ -407,7 +409,8 @@ const updatePurchaseOrder = async (req, res) => {
       return res.status(404).json({ message: "Đơn nhập hàng không tồn tại" });
     }
 
-    if (purchaseOrder.store_id.owner_id.toString() !== userId) {
+    if (!purchaseOrder.store_id.owner_id.equals(user._id)
+) {
       return res.status(403).json({
         message:
           "Bạn chỉ có thể cập nhật đơn nhập hàng trong cửa hàng của mình",
@@ -557,7 +560,7 @@ const updatePurchaseOrder = async (req, res) => {
 const deletePurchaseOrder = async (req, res) => {
   try {
     const { orderId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
     // Kiểm tra user là manager
     const user = await User.findById(userId);
@@ -576,7 +579,8 @@ const deletePurchaseOrder = async (req, res) => {
       return res.status(404).json({ message: "Đơn nhập hàng không tồn tại" });
     }
 
-    if (purchaseOrder.store_id.owner_id.toString() !== userId) {
+    if (!purchaseOrder.store_id.owner_id.equals(user._id)
+) {
       return res.status(403).json({
         message: "Bạn chỉ có thể xóa đơn nhập hàng trong cửa hàng của mình",
       });

@@ -1,10 +1,13 @@
 // backend/models/User.js
 const mongoose = require("mongoose");
 
-// Schema nhỏ để map quyền theo từng store (không cần _id riêng)
 const storeRoleSchema = new mongoose.Schema(
   {
-    store: { type: mongoose.Schema.Types.ObjectId, ref: "Store", required: true },
+    store: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Store",
+      required: true,
+    },
     role: { type: String, enum: ["OWNER", "STAFF"], required: true },
   },
   { _id: false }
@@ -16,25 +19,40 @@ const userSchema = new mongoose.Schema(
     password_hash: { type: String, required: true },
 
     // role global (MANAGER: có thể tạo store; STAFF: nhân viên)
-    role: { type: String, enum: ["MANAGER", "STAFF"], required: true, default: "MANAGER" },
+    role: {
+      type: String,
+      enum: ["MANAGER", "STAFF"],
+      required: true,
+      default: "MANAGER",
+    },
 
-    email: { 
-      type: String, 
-      unique: true, 
-      lowercase: true, 
+    email: {
+      type: String,
+      unique: true,
+      lowercase: true,
       trim: true,
-      required: function() {  // 👈 Tweak: Conditional required - chỉ bắt buộc cho MANAGER (register cần OTP email), STAFF optional null/empty
+      required: function () {
         return this.role === "MANAGER";
-      }
+      },
     },
     phone: { type: String, default: "" },
 
-    // Store-related fields
-    stores: [{ type: mongoose.Schema.Types.ObjectId, ref: "Store" }], // stores owner sở hữu (Manager)
-    current_store: { type: mongoose.Schema.Types.ObjectId, ref: "Store", default: null }, // store đang active
-    store_roles: { type: [storeRoleSchema], default: [] }, // mapping per-store roles (OWNER/STAFF)
+    // Store-related
+    stores: [{ type: mongoose.Schema.Types.ObjectId, ref: "Store" }],
+    current_store: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Store",
+      default: null,
+    },
+    store_roles: { type: [storeRoleSchema], default: [] },
 
-    // OTP / verification (nếu bạn dùng cơ chế hash OTP trong DB)
+    // Menu permissions (phân quyền chức năng)
+    menu: {
+      type: [String], // ví dụ: ["dashboard", "orders", "products", "staff"]
+      default: [],
+    },
+
+    // OTP / verification
     otp_hash: { type: String, default: null },
     otp_expires: { type: Date, default: null },
     otp_attempts: { type: Number, default: 0 },
@@ -46,14 +64,16 @@ const userSchema = new mongoose.Schema(
     loginAttempts: { type: Number, default: 0 },
     lockUntil: { type: Date, default: null },
     alertCount: { type: Number, default: 0 },
+
     // Other
     last_login: { type: Date, default: null },
-    isDeleted: {type: Boolean, default: false},
+    isDeleted: { type: Boolean, default: false },
     deletedAt: { type: Date, default: null },
     restoredAt: { type: Date, default: null },
   },
   {
-    timestamps: true, // createdAt, updatedAt tự động
+    timestamps: true,
+    collection: "users",
   }
 );
 

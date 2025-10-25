@@ -39,8 +39,7 @@ const createProduct = async (req, res) => {
     // Kiểm tra xem request body có tồn tại không
     if (!req.body || Object.keys(req.body).length === 0) {
       return res.status(400).json({
-        message:
-          "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json",
+        message: "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json",
       });
     }
 
@@ -59,13 +58,11 @@ const createProduct = async (req, res) => {
       group_id,
     } = req.body;
     const { storeId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
     // Kiểm tra và xác thực dữ liệu đầu vào
     if (!name || !price || !cost_price) {
-      return res
-        .status(400)
-        .json({ message: "Tên sản phẩm, giá bán và giá vốn là bắt buộc" });
+      return res.status(400).json({ message: "Tên sản phẩm, giá bán và giá vốn là bắt buộc" });
     }
 
     if (isNaN(price) || price < 0) {
@@ -76,52 +73,32 @@ const createProduct = async (req, res) => {
       return res.status(400).json({ message: "Giá vốn phải là số dương" });
     }
 
-    if (
-      stock_quantity !== undefined &&
-      (isNaN(stock_quantity) || stock_quantity < 0)
-    ) {
-      return res
-        .status(400)
-        .json({ message: "Số lượng tồn kho phải là số không âm" });
+    if (stock_quantity !== undefined && (isNaN(stock_quantity) || stock_quantity < 0)) {
+      return res.status(400).json({ message: "Số lượng tồn kho phải là số không âm" });
     }
 
     if (min_stock !== undefined && (isNaN(min_stock) || min_stock < 0)) {
-      return res
-        .status(400)
-        .json({ message: "Tồn kho tối thiểu phải là số không âm" });
+      return res.status(400).json({ message: "Tồn kho tối thiểu phải là số không âm" });
     }
 
     if (max_stock !== undefined && (isNaN(max_stock) || max_stock < 0)) {
-      return res
-        .status(400)
-        .json({ message: "Tồn kho tối đa phải là số không âm" });
+      return res.status(400).json({ message: "Tồn kho tối đa phải là số không âm" });
     }
 
-    if (
-      min_stock !== undefined &&
-      max_stock !== undefined &&
-      min_stock > max_stock
-    ) {
+    if (min_stock !== undefined && max_stock !== undefined && min_stock > max_stock) {
       return res.status(400).json({
         message: "Tồn kho tối thiểu không thể lớn hơn tồn kho tối đa",
       });
     }
 
-    if (
-      status &&
-      !["Đang kinh doanh", "Ngừng kinh doanh", "Ngừng bán"].includes(status)
-    ) {
-      return res
-        .status(400)
-        .json({ message: "Trạng thái sản phẩm không hợp lệ" });
+    if (status && !["Đang kinh doanh", "Ngừng kinh doanh", "Ngừng bán"].includes(status)) {
+      return res.status(400).json({ message: "Trạng thái sản phẩm không hợp lệ" });
     }
 
     // Kiểm tra user là manager
     const user = await User.findById(userId);
     if (!user || user.role !== "MANAGER") {
-      return res
-        .status(403)
-        .json({ message: "Chỉ Manager mới được tạo sản phẩm" });
+      return res.status(403).json({ message: "Chỉ Manager mới được tạo sản phẩm" });
     }
 
     // Kiểm tra store có tồn tại và thuộc quyền quản lý
@@ -130,7 +107,7 @@ const createProduct = async (req, res) => {
       return res.status(404).json({ message: "Cửa hàng không tồn tại" });
     }
 
-    if (store.owner_id.toString() !== userId) {
+    if (!store.owner_id.equals(userId)) {
       return res.status(403).json({
         message: "Bạn chỉ có thể tạo sản phẩm trong cửa hàng của mình",
       });
@@ -146,9 +123,7 @@ const createProduct = async (req, res) => {
         return res.status(404).json({ message: "Nhóm sản phẩm không tồn tại" });
       }
       if (productGroup.storeId.toString() !== storeId) {
-        return res
-          .status(400)
-          .json({ message: "Nhóm sản phẩm không thuộc cửa hàng này" });
+        return res.status(400).json({ message: "Nhóm sản phẩm không thuộc cửa hàng này" });
       }
     }
 
@@ -162,9 +137,7 @@ const createProduct = async (req, res) => {
         return res.status(404).json({ message: "Nhà cung cấp không tồn tại" });
       }
       if (supplier.store_id.toString() !== storeId) {
-        return res
-          .status(400)
-          .json({ message: "Nhà cung cấp không thuộc cửa hàng này" });
+        return res.status(400).json({ message: "Nhà cung cấp không thuộc cửa hàng này" });
       }
     }
 
@@ -176,9 +149,7 @@ const createProduct = async (req, res) => {
         isDeleted: false,
       });
       if (existingProduct) {
-        return res
-          .status(409)
-          .json({ message: "Mã SKU này đã tồn tại trong cửa hàng" });
+        return res.status(409).json({ message: "Mã SKU này đã tồn tại trong cửa hàng" });
       }
     }
 
@@ -274,8 +245,7 @@ const updateProduct = async (req, res) => {
     // Kiểm tra xem request body có tồn tại không
     if (!req.body || Object.keys(req.body).length === 0) {
       return res.status(400).json({
-        message:
-          "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json",
+        message: "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json",
       });
     }
 
@@ -294,7 +264,7 @@ const updateProduct = async (req, res) => {
       supplier_id,
       group_id,
     } = req.body;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
     // Kiểm tra và xác thực dữ liệu đầu vào
     if (price !== undefined && (isNaN(price) || price < 0)) {
@@ -305,52 +275,32 @@ const updateProduct = async (req, res) => {
       return res.status(400).json({ message: "Giá vốn phải là số dương" });
     }
 
-    if (
-      stock_quantity !== undefined &&
-      (isNaN(stock_quantity) || stock_quantity < 0)
-    ) {
-      return res
-        .status(400)
-        .json({ message: "Số lượng tồn kho phải là số không âm" });
+    if (stock_quantity !== undefined && (isNaN(stock_quantity) || stock_quantity < 0)) {
+      return res.status(400).json({ message: "Số lượng tồn kho phải là số không âm" });
     }
 
     if (min_stock !== undefined && (isNaN(min_stock) || min_stock < 0)) {
-      return res
-        .status(400)
-        .json({ message: "Tồn kho tối thiểu phải là số không âm" });
+      return res.status(400).json({ message: "Tồn kho tối thiểu phải là số không âm" });
     }
 
     if (max_stock !== undefined && (isNaN(max_stock) || max_stock < 0)) {
-      return res
-        .status(400)
-        .json({ message: "Tồn kho tối đa phải là số không âm" });
+      return res.status(400).json({ message: "Tồn kho tối đa phải là số không âm" });
     }
 
-    if (
-      min_stock !== undefined &&
-      max_stock !== undefined &&
-      min_stock > max_stock
-    ) {
+    if (min_stock !== undefined && max_stock !== undefined && min_stock > max_stock) {
       return res.status(400).json({
         message: "Tồn kho tối thiểu không thể lớn hơn tồn kho tối đa",
       });
     }
 
-    if (
-      status &&
-      !["Đang kinh doanh", "Ngừng kinh doanh", "Ngừng bán"].includes(status)
-    ) {
-      return res
-        .status(400)
-        .json({ message: "Trạng thái sản phẩm không hợp lệ" });
+    if (status && !["Đang kinh doanh", "Ngừng kinh doanh", "Ngừng bán"].includes(status)) {
+      return res.status(400).json({ message: "Trạng thái sản phẩm không hợp lệ" });
     }
 
     // Kiểm tra user là manager
     const user = await User.findById(userId);
     if (!user || user.role !== "MANAGER") {
-      return res
-        .status(403)
-        .json({ message: "Chỉ Manager mới được cập nhật sản phẩm" });
+      return res.status(403).json({ message: "Chỉ Manager mới được cập nhật sản phẩm" });
     }
 
     // Tìm sản phẩm và kiểm tra quyền (chỉ tìm sản phẩm chưa bị xóa)
@@ -362,7 +312,8 @@ const updateProduct = async (req, res) => {
       return res.status(404).json({ message: "Sản phẩm không tồn tại" });
     }
 
-    if (product.store_id.owner_id.toString() !== userId) {
+    if (!product.store_id.owner_id.equals(user._id)
+) {
       return res.status(403).json({
         message: "Bạn chỉ có thể cập nhật sản phẩm trong cửa hàng của mình",
       });
@@ -378,9 +329,7 @@ const updateProduct = async (req, res) => {
         return res.status(404).json({ message: "Nhóm sản phẩm không tồn tại" });
       }
       if (productGroup.storeId.toString() !== product.store_id._id.toString()) {
-        return res
-          .status(400)
-          .json({ message: "Nhóm sản phẩm không thuộc cửa hàng này" });
+        return res.status(400).json({ message: "Nhóm sản phẩm không thuộc cửa hàng này" });
       }
     }
 
@@ -394,9 +343,7 @@ const updateProduct = async (req, res) => {
         return res.status(404).json({ message: "Nhà cung cấp không tồn tại" });
       }
       if (supplier.store_id.toString() !== product.store_id._id.toString()) {
-        return res
-          .status(400)
-          .json({ message: "Nhà cung cấp không thuộc cửa hàng này" });
+        return res.status(400).json({ message: "Nhà cung cấp không thuộc cửa hàng này" });
       }
     }
 
@@ -409,9 +356,7 @@ const updateProduct = async (req, res) => {
         isDeleted: false,
       });
       if (existingProduct) {
-        return res
-          .status(409)
-          .json({ message: "Mã SKU này đã tồn tại trong cửa hàng" });
+        return res.status(409).json({ message: "Mã SKU này đã tồn tại trong cửa hàng" });
       }
     }
 
@@ -422,8 +367,7 @@ const updateProduct = async (req, res) => {
     if (sku !== undefined) updateData.sku = sku;
     if (price !== undefined) updateData.price = price;
     if (cost_price !== undefined) updateData.cost_price = cost_price;
-    if (stock_quantity !== undefined)
-      updateData.stock_quantity = stock_quantity;
+    if (stock_quantity !== undefined) updateData.stock_quantity = stock_quantity;
     if (min_stock !== undefined) updateData.min_stock = min_stock;
     if (max_stock !== undefined) updateData.max_stock = max_stock;
     if (unit !== undefined) updateData.unit = unit;
@@ -458,11 +402,7 @@ const updateProduct = async (req, res) => {
     }
 
     // Cập nhật sản phẩm
-    const updatedProduct = await Product.findByIdAndUpdate(
-      productId,
-      updateData,
-      { new: true }
-    )
+    const updatedProduct = await Product.findByIdAndUpdate(productId, updateData, { new: true })
       .populate("supplier_id", "name")
       .populate("store_id", "name")
       .populate("group_id", "name");
@@ -502,14 +442,12 @@ const updateProduct = async (req, res) => {
 const deleteProduct = async (req, res) => {
   try {
     const { productId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
     // Kiểm tra user là manager
     const user = await User.findById(userId);
     if (!user || user.role !== "MANAGER") {
-      return res
-        .status(403)
-        .json({ message: "Chỉ Manager mới được xóa sản phẩm" });
+      return res.status(403).json({ message: "Chỉ Manager mới được xóa sản phẩm" });
     }
 
     // Tìm sản phẩm và kiểm tra quyền (chỉ tìm sản phẩm chưa bị xóa)
@@ -521,7 +459,8 @@ const deleteProduct = async (req, res) => {
       return res.status(404).json({ message: "Sản phẩm không tồn tại" });
     }
 
-    if (product.store_id.owner_id.toString() !== userId) {
+    if (!product.store_id.owner_id.equals(user._id)
+) {
       return res.status(403).json({
         message: "Bạn chỉ có thể xóa sản phẩm trong cửa hàng của mình",
       });
@@ -545,7 +484,7 @@ const deleteProduct = async (req, res) => {
 const getProductsByStore = async (req, res) => {
   try {
     const { storeId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
     // Kiểm tra user có quyền truy cập store này không
     const user = await User.findById(userId);
@@ -560,24 +499,18 @@ const getProductsByStore = async (req, res) => {
     }
 
     // Kiểm tra quyền truy cập: owner của store hoặc employee thuộc store đó
-    if (user.role === "MANAGER" && store.owner_id.toString() !== userId) {
-      return res
-        .status(403)
-        .json({ message: "Bạn không có quyền truy cập cửa hàng này" });
+    if (user.role === "MANAGER" && !store.owner_id.equals(user._id)) {
+      return res.status(403).json({ message: "Bạn không có quyền truy cập cửa hàng này" });
     }
 
     if (user.role === "STAFF") {
       // Tìm thông tin employee để lấy store_id
       const employee = await Employee.findOne({ user_id: userId });
       if (!employee) {
-        return res
-          .status(404)
-          .json({ message: "Không tìm thấy thông tin nhân viên" });
+        return res.status(404).json({ message: "Không tìm thấy thông tin nhân viên" });
       }
       if (employee.store_id.toString() !== storeId) {
-        return res
-          .status(403)
-          .json({ message: "Bạn không có quyền truy cập cửa hàng này" });
+        return res.status(403).json({ message: "Bạn không có quyền truy cập cửa hàng này" });
       }
     }
 
@@ -624,7 +557,7 @@ const getProductsByStore = async (req, res) => {
 const getProductById = async (req, res) => {
   try {
     const { productId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
     const product = await Product.findOne({ _id: productId, isDeleted: false })
       .populate("supplier_id", "name")
@@ -637,27 +570,18 @@ const getProductById = async (req, res) => {
 
     // Kiểm tra quyền truy cập
     const user = await User.findById(userId);
-    if (
-      user.role === "MANAGER" &&
-      product.store_id.owner_id.toString() !== userId
-    ) {
-      return res
-        .status(403)
-        .json({ message: "Bạn không có quyền truy cập sản phẩm này" });
+    if (user.role === "MANAGER" && !product.store_id.owner_id.equals(user._id)) {
+      return res.status(403).json({ message: "Bạn không có quyền truy cập sản phẩm này" });
     }
 
     if (user.role === "STAFF") {
       // Tìm thông tin employee để lấy store_id
       const employee = await Employee.findOne({ user_id: userId });
       if (!employee) {
-        return res
-          .status(404)
-          .json({ message: "Không tìm thấy thông tin nhân viên" });
+        return res.status(404).json({ message: "Không tìm thấy thông tin nhân viên" });
       }
       if (employee.store_id.toString() !== product.store_id._id.toString()) {
-        return res
-          .status(403)
-          .json({ message: "Bạn không có quyền truy cập sản phẩm này" });
+        return res.status(403).json({ message: "Bạn không có quyền truy cập sản phẩm này" });
       }
     }
 
@@ -698,14 +622,13 @@ const updateProductPrice = async (req, res) => {
     // Kiểm tra xem request body có tồn tại không
     if (!req.body || Object.keys(req.body).length === 0) {
       return res.status(400).json({
-        message:
-          "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json",
+        message: "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json",
       });
     }
 
     const { productId } = req.params;
     const { price } = req.body;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
     // Kiểm tra và xác thực dữ liệu đầu vào
     if (!price) {
@@ -719,9 +642,7 @@ const updateProductPrice = async (req, res) => {
     // Kiểm tra user là manager
     const user = await User.findById(userId);
     if (!user || user.role !== "MANAGER") {
-      return res
-        .status(403)
-        .json({ message: "Chỉ Manager mới được cập nhật giá sản phẩm" });
+      return res.status(403).json({ message: "Chỉ Manager mới được cập nhật giá sản phẩm" });
     }
 
     // Tìm sản phẩm và populate store để kiểm tra quyền (chỉ tìm sản phẩm chưa bị xóa)
@@ -734,18 +655,15 @@ const updateProductPrice = async (req, res) => {
     }
 
     // Kiểm tra quyền: chỉ owner của store mới được cập nhật giá
-    if (product.store_id.owner_id.toString() !== userId) {
+    if (!product.store_id.owner_id.equals(user._id)
+) {
       return res.status(403).json({
         message: "Bạn chỉ có thể cập nhật giá sản phẩm trong cửa hàng của mình",
       });
     }
 
     // Cập nhật giá bán sản phẩm
-    const updatedProduct = await Product.findByIdAndUpdate(
-      productId,
-      { price: price },
-      { new: true }
-    )
+    const updatedProduct = await Product.findByIdAndUpdate(productId, { price: price }, { new: true })
       .populate("supplier_id", "name")
       .populate("store_id", "name")
       .populate("group_id", "name");
@@ -791,9 +709,7 @@ const getLowStockProducts = async (req, res) => {
       status: "Đang kinh doanh", // Chỉ sản phẩm đang bán
       min_stock: { $gt: 0 }, // Min stock > 0 tránh cảnh báo ảo
       lowStockAlerted: false, // Chưa cảnh báo
-      store_id: storeId
-        ? new mongoose.Types.ObjectId(storeId)
-        : { $exists: true }, // Filter store nếu có
+      store_id: storeId ? new mongoose.Types.ObjectId(storeId) : { $exists: true }, // Filter store nếu có
       isDeleted: false, // Chỉ lấy sản phẩm chưa bị xóa
     };
 
@@ -804,9 +720,7 @@ const getLowStockProducts = async (req, res) => {
       .lean(); // Lean cho nhanh
 
     console.log(
-      `Query low stock thành công, số lượng: ${
-        lowStockProds.length
-      } sản phẩm cho store ${storeId || "tất cả"}`
+      `Query low stock thành công, số lượng: ${lowStockProds.length} sản phẩm cho store ${storeId || "tất cả"}`
     );
     res.json({
       message: "Lấy danh sách tồn kho thấp thành công",
@@ -824,9 +738,7 @@ const searchProducts = async (req, res) => {
     const { query, storeId, limit = 10 } = req.query; // Params: query (tên/SKU), storeId, limit (default 10)
 
     if (!query || query.trim().length === 0) {
-      return res
-        .status(400)
-        .json({ message: "Query tìm kiếm không được để trống" });
+      return res.status(400).json({ message: "Query tìm kiếm không được để trống" });
     }
 
     const searchQuery = {
@@ -859,14 +771,12 @@ const searchProducts = async (req, res) => {
 const deleteProductImage = async (req, res) => {
   try {
     const { productId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
     // Kiểm tra user là manager
     const user = await User.findById(userId);
     if (!user || user.role !== "MANAGER") {
-      return res
-        .status(403)
-        .json({ message: "Chỉ Manager mới được xóa ảnh sản phẩm" });
+      return res.status(403).json({ message: "Chỉ Manager mới được xóa ảnh sản phẩm" });
     }
 
     // Tìm sản phẩm và kiểm tra quyền (chỉ tìm sản phẩm chưa bị xóa)
@@ -878,7 +788,8 @@ const deleteProductImage = async (req, res) => {
       return res.status(404).json({ message: "Sản phẩm không tồn tại" });
     }
 
-    if (product.store_id.owner_id.toString() !== userId) {
+    if (!product.store_id.owner_id.equals(user._id)
+) {
       return res.status(403).json({
         message: "Bạn chỉ có thể xóa ảnh sản phẩm trong cửa hàng của mình",
       });
