@@ -14,13 +14,14 @@ import LoyaltySetting from "./pages/loyalty/LoyaltySetting";
 
 // 👉 Customer page bạn đã tạo
 import CustomerListPage from "./pages/customer/CustomerListPage";
-
 import { useAuth } from "./context/AuthContext";
-
 import Unauthorized from "./pages/misc/Unauthorized";
-
 import NotFound from "./pages/misc/NotFound";
 
+// Hiệu ứng Design
+import { Spin } from "antd";
+import { LoadingOutlined } from "@ant-design/icons";
+const loadingIcon = <LoadingOutlined style={{ fontSize: 40 }} spin />;
 
 /** Utility: đọc user từ localStorage (fallback) */
 function getStoredUser() {
@@ -41,32 +42,31 @@ function hasPermission(menu = [], required) {
   return reqs.some((r) => menu.includes(r));
 }
 
-/**
- * ProtectedRoute
- * - Props:
- *    allowedRoles: array of roles (optional)
- *    allowedPermissions: string or array of permissions (optional)
- *
- * Logic:
- * - If loading -> show loading
- * - If not authenticated (no token && no stored user) -> redirect /login
- * - If role mismatch -> redirect /unauthorized
- * - If permissions provided and user.menu không chứa -> redirect /unauthorized
- */
+// 👉 FIX: Tweak ProtectedRoute - ưu tiên ctxUser hơn storedUser, và chỉ check role/permission nếu !loading
+// (nhưng vì loading đã handle ở đầu, nên an toàn hơn, tránh flicker nếu state lag)
 const ProtectedRoute = ({ children, allowedRoles = [], allowedPermissions = null }) => {
   const { token, user: ctxUser, loading } = useAuth();
 
-  if (loading) return <div className="text-center mt-20 text-gray-500">Đang kiểm tra quyền...</div>;
+  if (loading) {
+    return (
+      <Spin spinning size="large" indicator={loadingIcon} tip="Đang xác thực quyền truy cập...">
+        <div className="flex justify-center items-center min-h-screen">
+          <div className="text-center p-4"></div>
+        </div>
+      </Spin>
+    );
+  }
 
-  // prefer context user, fallback to localStorage
+  // 👉 FIX: Prefer context user FIRST, fallback to localStorage (vì sau login, ctxUser set trước)
   const storedUser = getStoredUser();
-  const user = ctxUser || storedUser || null;
+  const user = ctxUser || storedUser || null; // Đã tốt, nhưng comment rõ
 
   const isAuthenticated = Boolean(token) || Boolean(user);
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 
+  // 👉 FIX: Chỉ check role/permission nếu user đầy đủ (có role/menu), tránh null crash
   // Role check if provided
   if (allowedRoles.length > 0) {
     const role = (user && user.role) || null;
@@ -95,8 +95,17 @@ const ProtectedRoute = ({ children, allowedRoles = [], allowedPermissions = null
 const PublicRoute = ({ children, allowWhenAuth = false }) => {
   const { token, user: ctxUser, loading } = useAuth();
 
-  if (loading) return <div className="text-center mt-20 text-gray-500">Đang kiểm tra...</div>;
+  if (loading) {
+    return (
+      <Spin spinning size="large" indicator={loadingIcon} tip="Vui lòng đợi, đang vào hệ thống...">
+        <div className="flex justify-center items-center min-h-screen">
+          <div className="text-center p-4"></div>
+        </div>
+      </Spin>
+    );
+  }
 
+  // 👉 FIX: Tương tự, prefer ctxUser
   const storedUser = getStoredUser();
   const user = ctxUser || storedUser || null;
 

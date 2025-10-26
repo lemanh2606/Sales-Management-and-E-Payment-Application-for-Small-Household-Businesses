@@ -7,12 +7,10 @@ import Swal from "sweetalert2"; // 👈 Thêm: Import sweetalert2 cho toast đ�
 import { useAuth } from "../../context/AuthContext";
 import Layout from "../../components/Layout";
 
-const { useForm } = Form;
-
 export default function LoyaltySetting() {
   const { token, currentStore } = useAuth(); // 👈 Lấy token và storeId từ context (giả sử có currentStore)
-  const [form] = useForm();
   const [isActive, setIsActive] = useState(false); // 👈 Trạng thái bật/tắt
+  const [config, setConfig] = useState(null); // 👉 FIX: State để lưu config từ API (dynamic, không static default)
   const [loading, setLoading] = useState(true); // 👈 Loading khi fetch config
   const [saving, setSaving] = useState(false); // 👈 Loading khi save
   const [error, setError] = useState(null); // 👈 Lỗi nếu có
@@ -41,17 +39,14 @@ export default function LoyaltySetting() {
   const fetchConfig = async () => {
     try {
       setLoading(true);
+      setError(null); // Clear error trước fetch
       const response = await axios.get(`http://localhost:9999/api/loyaltys/config/${storeId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const config = response.data.config || defaultConfig;
-      setIsActive(config.isActive);
-      form.setFieldsValue({
-        pointsPerVND: config.pointsPerVND,
-        vndPerPoint: config.vndPerPoint,
-        minOrderValue: config.minOrderValue,
-      });
-      console.log("Lấy config tích điểm thành công cho cửa hàng:", storeId);
+      const apiConfig = response.data.config || defaultConfig; // 👉 FIX: Lưu config từ API
+      setConfig(apiConfig);
+      setIsActive(apiConfig.isActive);
+      console.log("Lấy config tích điểm thành công cho cửa hàng:", storeId, apiConfig);
     } catch (err) {
       console.error("Lỗi lấy config tích điểm:", err.response?.data?.message || err.message);
       if (err.response?.status === 404) {
@@ -67,11 +62,13 @@ export default function LoyaltySetting() {
           position: "top-end", // Vị trí góc phải trên
         });
         // Set defaultConfig để form sẵn sàng setup
+        setConfig(defaultConfig); // 👉 FIX: Set config = default cho 404
         setIsActive(defaultConfig.isActive);
-        form.setFieldsValue(defaultConfig);
       } else {
         // Lỗi khác (500, 403...) → setError red Alert
         setError(err.response?.data?.message || "Lỗi lấy cấu hình");
+        setConfig(defaultConfig); // 👉 FIX: Fallback default nếu lỗi
+        setIsActive(defaultConfig.isActive);
       }
     } finally {
       setLoading(false);
@@ -88,6 +85,8 @@ export default function LoyaltySetting() {
         headers: { Authorization: `Bearer ${token}` },
       });
       console.log("Toggle isActive thành công:", response.data.config.isActive);
+      // 👉 FIX: Refresh config sau toggle để sync data (nếu BE trả config full)
+      if (response.data.config) setConfig(response.data.config);
       Swal.fire({
         title: "Cập nhật trạng thái",
         text: checked ? "Hệ thống tích điểm đã được bật!" : "Hệ thống tích điểm đã được tắt!",
@@ -147,8 +146,12 @@ export default function LoyaltySetting() {
         confirmButtonText: "OK",
         timer: 3000, // Tự đóng sau 3s
       });
-      // Refresh form sau save (load config mới)
-      fetchConfig();
+      // 👉 FIX: Refresh config từ BE để form sync giá trị mới
+      if (response.data.config) {
+        setConfig(response.data.config);
+      } else {
+        fetchConfig(); // Fallback nếu BE không trả config full
+      }
     } catch (err) {
       console.error("Lỗi lưu config tích điểm:", err.response?.data?.message || err.message);
       setError(err.response?.data?.message || "Lỗi lưu cấu hình");
@@ -180,9 +183,15 @@ export default function LoyaltySetting() {
         className="shadow-xl border-0 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-100"
       >
         {loading ? (
-          <div className="flex justify-center items-center h-48">
-            <Spin size="large" tip="Đang tải dữ liệu..." />
-          </div>
+          <Spin spinning size="large" tip="Đang tải dữ liệu...">
+            {/* Wrap placeholder div (nested mode) - tip hiện bên dưới spin */}
+            <div className="flex justify-center items-center h-48">
+              <div className="text-center p-4">
+                {" "}
+                {/* Không cần text ở đây, chỉ để nested */}
+              </div>
+            </div>
+          </Spin>
         ) : (
           <>
             {/* 👈 Bật/tắt hệ thống */}
@@ -219,112 +228,16 @@ export default function LoyaltySetting() {
               />
             )}
 
-            {/* 👈 Form cấu hình */}
-            {isActive && (
-              <Form
-                form={form}
-                name="loyalty-form"
+            {/* 👉 FIX: Render Form khi isActive, truyền config dynamic */}
+            {isActive && !loading && config && (
+              <FormComponent
+                formData={config} // 👉 FIX: Truyền config từ state (API hoặc default)
+                storeId={storeId}
+                token={token}
                 onFinish={onFinish}
-                layout="vertical"
-                initialValues={defaultConfig}
-                className="space-y-4"
-              >
-                <Card
-                  title={
-                    <div className="flex items-center gap-2">
-                      <InfoCircleOutlined className="text-blue-600" />
-                      <span className="font-semibold">Cài Đặt Chi Tiết</span>
-                    </div>
-                  }
-                  className="shadow-lg border-0 rounded-xl bg-white"
-                >
-                  {/* 👇 Input rộng + format dấu chấm kiểu Việt Nam */}
-                  <Form.Item
-                    name="pointsPerVND"
-                    label={
-                      <span className="font-medium text-gray-700">
-                        Tỉ lệ tích điểm <span className="text-red-500">*</span> (VD: 1/20000 = 0,00005 = 20.000 VNĐ = 1
-                        điểm)
-                      </span>
-                    }
-                    rules={[
-                      { required: true, message: "Vui lòng nhập tỉ lệ tích điểm" },
-                      { type: "number", min: 0.000001, message: "Phải lớn hơn 0" },
-                    ]}
-                    tooltip="Số tiền này tương ứng 1 điểm. Ví dụ nhập 20.000 thì đơn 200.000 được 10 điểm."
-                  >
-                    <InputNumber
-                      min={0.000001}
-                      max={1}
-                      step={0.000001}
-                      precision={6}
-                      placeholder="Nhập tỉ lệ (VD: 0.00005 cho 20.000 = 1đ)"
-                      className="!w-full !py-2 !px-3 !text-lg rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-300"
-                    />
-                  </Form.Item>
-
-                  <Form.Item
-                    name="vndPerPoint"
-                    label={
-                      <span className="font-medium text-gray-700">
-                        Giá trị 1 điểm <span className="text-red-500">*</span> (VD: 100 VNĐ)
-                      </span>
-                    }
-                    rules={[
-                      { required: true, message: "Vui lòng nhập giá trị điểm" },
-                      { type: "number", min: 0, message: "Phải lớn hơn hoặc bằng 0" },
-                    ]}
-                    tooltip="Mỗi điểm khách dùng sẽ giảm số tiền tương ứng"
-                  >
-                    <InputNumber
-                      min={0}
-                      step={10}
-                      placeholder="Nhập giá trị (VD: 100)"
-                      suffix=" VNĐ"
-                      className="!w-full !py-2 !px-3 !text-lg rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-300"
-                      formatter={(value) => (value ? value.replace(/\B(?=(\d{3})+(?!\d))/g, ".") : "")}
-                      parser={(value) => value.replace(/\./g, "")}
-                    />
-                  </Form.Item>
-
-                  <Form.Item
-                    name="minOrderValue"
-                    label={
-                      <span className="font-medium text-gray-700">
-                        Đơn hàng tối thiểu <span className="text-red-500">*</span> để được tích điểm (VD: 50.000 VNĐ)
-                      </span>
-                    }
-                    rules={[
-                      { required: true, message: "Vui lòng nhập giá trị" },
-                      { type: "number", min: 0, message: "Phải lớn hơn hoặc bằng 0" },
-                    ]}
-                    tooltip="Đơn hàng dưới mức này sẽ không được tích điểm"
-                  >
-                    <InputNumber
-                      min={0}
-                      step={1000}
-                      placeholder="Nhập số tiền (VD: 50.000)"
-                      suffix=" VNĐ"
-                      className="!w-full !py-2 !px-3 !text-lg rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-300"
-                      formatter={(value) => (value ? value.replace(/\B(?=(\d{3})+(?!\d))/g, ".") : "")}
-                      parser={(value) => value.replace(/\./g, "")}
-                    />
-                  </Form.Item>
-                </Card>
-
-                <div className="flex justify-end pt-4">
-                  <Button
-                    type="primary"
-                    htmlType="submit"
-                    icon={<SaveOutlined />}
-                    size="large"
-                    loading={saving}
-                    className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold px-8 py-2 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 min-w-[120px]"
-                  >
-                    Lưu Cấu Hình
-                  </Button>
-                </div>
-              </Form>
+                saving={saving}
+                setError={setError}
+              />
             )}
 
             {!isActive && !loading && (
@@ -340,5 +253,127 @@ export default function LoyaltySetting() {
         )}
       </Card>
     </Layout>
+  );
+}
+
+// 👉 FIX: Sub-component Form (giữ nguyên, nhưng formData giờ dynamic)
+function FormComponent({ formData, storeId, token, onFinish, saving, setError }) {
+  const [form] = Form.useForm(); // Init useForm() ở đây - chỉ khi Form render
+
+  // 👉 FIX: useEffect để setFieldsValue từ formData dynamic (API config)
+  useEffect(() => {
+    if (formData) {
+      form.setFieldsValue({
+        pointsPerVND: formData.pointsPerVND,
+        vndPerPoint: formData.vndPerPoint,
+        minOrderValue: formData.minOrderValue,
+      });
+    }
+  }, [form, formData]); // Deps: formData thay đổi → re-set fields
+
+  return (
+    <Form
+      key={storeId} // Key để re-mount nếu storeId thay đổi
+      form={form}
+      name="loyalty-form"
+      onFinish={onFinish}
+      layout="vertical"
+      className="space-y-4"
+    >
+      <Card
+        title={
+          <div className="flex items-center gap-2">
+            <InfoCircleOutlined className="text-blue-600" />
+            <span className="font-semibold">Cài Đặt Chi Tiết</span>
+          </div>
+        }
+        className="shadow-lg border-0 rounded-xl bg-white"
+      >
+        {/* 👇 Input rộng + format dấu chấm kiểu Việt Nam */}
+        <Form.Item
+          name="pointsPerVND"
+          label={
+            <span className="font-medium text-gray-700">
+              Tỉ lệ tích điểm <span className="text-red-500">*</span> (VD: 1/20000 = 0,00005 = 20.000 VNĐ = 1 điểm)
+            </span>
+          }
+          rules={[
+            { required: true, message: "Vui lòng nhập tỉ lệ tích điểm" },
+            { type: "number", min: 0.000001, message: "Phải lớn hơn 0" },
+          ]}
+          tooltip="Số tiền này tương ứng 1 điểm. Ví dụ nhập 20.000 thì đơn 200.000 được 10 điểm."
+        >
+          <InputNumber
+            min={0.000001}
+            max={1}
+            step={0.000001}
+            precision={6}
+            placeholder="Nhập tỉ lệ (VD: 0.00005 cho 20.000 = 1đ)"
+            className="!w-full !py-2 !px-3 !text-lg rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-300"
+          />
+        </Form.Item>
+
+        <Form.Item
+          name="vndPerPoint"
+          label={
+            <span className="font-medium text-gray-700">
+              Giá trị 1 điểm <span className="text-red-500">*</span> (VD: 100 VNĐ)
+            </span>
+          }
+          rules={[
+            { required: true, message: "Vui lòng nhập giá trị điểm" },
+            { type: "number", min: 0, message: "Phải lớn hơn hoặc bằng 0" },
+          ]}
+          tooltip="Mỗi điểm khách dùng sẽ giảm số tiền tương ứng"
+        >
+          <InputNumber
+            min={0}
+            step={10}
+            placeholder="Nhập giá trị (VD: 100)"
+            suffix=" VNĐ"
+            className="!w-full !py-2 !px-3 !text-lg rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-300"
+            formatter={(value) => (value ? value.replace(/\B(?=(\d{3})+(?!\d))/g, ".") : "")}
+            parser={(value) => value.replace(/\./g, "")}
+          />
+        </Form.Item>
+
+        <Form.Item
+          name="minOrderValue"
+          label={
+            <span className="font-medium text-gray-700">
+              Đơn hàng tối thiểu <span className="text-red-500">*</span> để được tích điểm (VD: 50.000 VNĐ)
+            </span>
+          }
+          rules={[
+            { required: true, message: "Vui lòng nhập giá trị" },
+            { type: "number", min: 0, message: "Phải lớn hơn hoặc bằng 0" },
+          ]}
+          tooltip="Đơn hàng dưới mức này sẽ không được tích điểm"
+        >
+          <InputNumber
+            min={0}
+            step={1000}
+            placeholder="Nhập số tiền (VD: 50.000)"
+            suffix=" VNĐ"
+            className="!w-full !py-2 !px-3 !text-lg rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-300"
+            formatter={(value) => (value ? value.replace(/\B(?=(\d{3})+(?!\d))/g, ".") : "")}
+            parser={(value) => value.replace(/\./g, "")}
+          />
+        </Form.Item>
+      </Card>
+
+      <div className="flex justify-end pt-4">
+        <Button
+          type="primary"
+          htmlType="submit"
+          icon={<SaveOutlined />}
+          size="large"
+          loading={saving}
+          className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold px-8 py-2 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 min-w-[120px]"
+        >
+          Lưu Cấu Hình
+        </Button>
+      </div>
+    </Form>
   );
 }

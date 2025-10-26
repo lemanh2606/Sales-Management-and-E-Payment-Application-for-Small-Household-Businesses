@@ -26,12 +26,14 @@ export default function LoginPage() {
     const handleChange = (e) =>
         setForm((s) => ({ ...s, [e.target.name]: e.target.value }));
 
-    const handleSubmit = async (e) => {
+   const handleSubmit = async (e) => {
         e.preventDefault();
         setError("");
         setLoading(true);
         try {
+            console.log('👉 LoginPage: Calling API loginUser'); // DEBUG
             const data = await userApi.loginUser(form);
+            console.log('👉 LoginPage: API success, data=', { role: data?.user?.role, hasStore: !!data?.store }); // DEBUG
 
             if (!data?.token || !data?.user) {
                 setError("Server trả thiếu token hoặc user");
@@ -40,6 +42,7 @@ export default function LoginPage() {
             }
 
             // Lưu vào context
+            console.log('👉 LoginPage: Calling AuthContext.login'); // DEBUG
             await login(data.user, data.token);
 
             // Nếu muốn nhớ token lâu dài: lưu thêm vào localStorage khi remember=true
@@ -50,8 +53,10 @@ export default function LoginPage() {
                 localStorage.removeItem("remember_session");
             }
 
+            console.log('👉 LoginPage: login() done, setLoading(false)'); // DEBUG
             setLoading(false);
         } catch (err) {
+            console.error('👉 LoginPage ERROR:', err); // DEBUG
             console.error(err);
             setError(err?.response?.data?.message || err?.message || "Lỗi server");
             setLoading(false);
