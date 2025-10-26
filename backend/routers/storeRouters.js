@@ -34,7 +34,7 @@ const { verifyToken, isManager, checkStoreAccess, requirePermission } = auth;
 router.post(
   "/ensure-store",
   verifyToken,
-  requirePermission("store:view"),
+  requirePermission("store:dashboard:view"),
   storeController.ensureStore
 );
 

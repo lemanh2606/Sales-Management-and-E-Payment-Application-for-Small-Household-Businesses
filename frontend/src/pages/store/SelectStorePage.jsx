@@ -1,5 +1,5 @@
-// src/pages/SelectStorePage.jsx
 import React, { useEffect, useState } from "react";
+// --- THAY ĐỔI: Thêm 'user' từ context ---
 import { useAuth } from "../../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 
@@ -49,7 +49,8 @@ export default function SelectStorePage() {
   });
 
 
-  const { setCurrentStore } = useAuth();
+  // --- THAY ĐỔI: Lấy 'user' từ useAuth ---
+  const { setCurrentStore, user } = useAuth();
   const navigate = useNavigate();
 
   const loadStores = async () => {
@@ -70,10 +71,35 @@ export default function SelectStorePage() {
     }
   };
 
+  // --- THAY ĐỔI: Thêm useEffect mới để xử lý logic xóa store ---
   useEffect(() => {
+    // Nếu user tồn tại VÀ role KHÔNG PHẢI là 'STAFF' (ví dụ: 'MANAGER')
+    // thì xóa currentStore để buộc họ chọn lại.
+    if (user && user.role !== "STAFF") {
+      console.log("Xóa currentStore vì user không phải là STAFF.");
+
+      // 1. Xóa khỏi Context
+      if (typeof setCurrentStore === "function") {
+        setCurrentStore(null);
+      }
+
+      // 2. Xóa khỏi Local Storage
+      try {
+        localStorage.removeItem("currentStore");
+      } catch (e) {
+        console.warn("Không thể xóa currentStore khỏi localStorage", e);
+      }
+    }
+    // Nếu user.role === 'STAFF', không làm gì cả, giữ nguyên store của họ.
+  }, [user, setCurrentStore]); // Chạy lại khi user context thay đổi
+
+  // --- HẾT THAY ĐỔI ---
+
+  useEffect(() => {
+    // Logic tải store cũ, giữ nguyên
     loadStores();
-    // eslint-disable-next-line
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Giữ nguyên dependency rỗng để chỉ chạy 1 lần khi mount
 
   useEffect(() => {
     if (!search) {
@@ -292,6 +318,7 @@ export default function SelectStorePage() {
             <div className="rounded-2xl p-6 bg-gradient-to-br from-green-600 to-green-500 text-white shadow-2xl">
               <h2 className="text-2xl font-bold">Xin chào, Quản lý!</h2>
               <p className="mt-2 text-sm text-green-100/90">
+                Dòng này có thể cần thay đổi động
                 Chọn một cửa hàng để bắt đầu theo dõi doanh thu, tồn kho, và báo cáo.
               </p>
             </div>

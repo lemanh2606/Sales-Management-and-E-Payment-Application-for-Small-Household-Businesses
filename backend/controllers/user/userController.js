@@ -46,6 +46,7 @@ const ALL_PERMISSIONS = [
   "store:employee:delete",
 
   // customers
+  "customers:create",
   "customers:search",
   "customers:update",
   "customers:delete",

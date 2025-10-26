@@ -78,36 +78,68 @@ export const AuthProvider = ({ children }) => {
         return () => {
             apiClient.interceptors.response.eject(interceptor);
         };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [token, user, currentStore]);
 
     const login = async (userData, tokenData) => {
+        // set immediate auth state
         setUser(userData);
         setToken(tokenData);
-        persist(userData, tokenData, null);
 
-        // Call ensureStore to prepare store
+        // --- BẮT ĐẦU THAY ĐỔI ---
+        // Nếu user là STAFF và có currentStore (từ state/localStorage), 
+        // thì giữ lại store đó khi persist.
+        // Các role khác (Manager) sẽ bị xóa (null) và phải chọn lại.
+        const initialStore = (userData?.role === "STAFF" && currentStore) ? currentStore : null;
+        persist(userData, tokenData, initialStore);
+        // --- KẾT THÚC THAY ĐỔI ---
+
+
+        // Try to prepare store info but do NOT block redirect for STAFF
+        let resolvedStore = null;
         try {
             const res = await ensureStore();
-            const store = res?.store || res?.currentStore || (res?.stores && res.stores[0]) || null;
-            if (store) {
-                setCurrentStore(store);
-                persist(userData, tokenData, store);
-            }
-            // Navigate based on role
-            if (userData?.role === "STAFF") {
-                if (store) navigate("/dashboard");
-                else navigate("/select-store");
-            } else if (userData?.role === "MANAGER") {
-                if (res?.stores && res.stores.length >= 1) navigate("/select-store");
-                else if (store) navigate("/dashboard");
-                else navigate("/select-store");
-            } else {
-                navigate("/dashboard");
+            resolvedStore =
+                res?.store || res?.currentStore || (res?.stores && res.stores[0]) || null;
+
+            if (resolvedStore) {
+                setCurrentStore(resolvedStore);
+                // Dù là role nào, nếu ensureStore() tìm thấy store,
+                // ta sẽ cập nhật lại localStorage với store mới/chuẩn.
+                persist(userData, tokenData, resolvedStore);
             }
         } catch (err) {
-            console.error("ensureStore error in login:", err);
-            navigate("/select-store");
+            // Không crash app nếu ensureStore lỗi — chỉ log để debug
+            console.warn("ensureStore error in login (ignored):", err);
         }
+
+        // Navigate based on role
+        // Yêu cầu: nếu là STAFF -> luôn nhảy về /dashboard ngay lập tức
+        if (userData?.role === "STAFF") {
+            navigate("/dashboard");
+            return;
+        }
+
+        // Manager và các role khác giữ hành vi cũ
+        if (userData?.role === "MANAGER") {
+            // Nếu manager có nhiều store, đưa tới chọn cửa hàng để quản lý
+            try {
+                const res = await ensureStore(); // gọi lại để lấy danh sách stores nếu cần
+                if (res?.stores && Array.isArray(res.stores) && res.stores.length > 0) {
+                    navigate("/select-store");
+                    return;
+                }
+            } catch (e) {
+                // ignore
+            }
+
+            if (resolvedStore) navigate("/dashboard");
+            else navigate("/select-store");
+            return;
+        }
+
+        // Default for other roles
+        navigate("/dashboard");
     };
 
     const logout = async () => {
