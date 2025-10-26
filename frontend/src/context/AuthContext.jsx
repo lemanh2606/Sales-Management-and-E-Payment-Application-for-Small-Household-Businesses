@@ -1,3 +1,4 @@
+// src/context/AuthContext.jsx
 import React, { createContext, useContext, useEffect, useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
@@ -8,6 +9,7 @@ const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
     const navigate = useNavigate();
+    const [loading, setLoading] = useState(true);
     const [user, setUser] = useState(() => {
         const u = localStorage.getItem("user");
         return u ? JSON.parse(u) : null;
@@ -17,6 +19,22 @@ export const AuthProvider = ({ children }) => {
         const s = localStorage.getItem("currentStore");
         return s ? JSON.parse(s) : null;
     });
+
+    useEffect(() => {
+        const initAuth = async () => {
+            const storedToken = localStorage.getItem("token");
+            const storedUser = localStorage.getItem("user");
+
+            if (storedToken && storedUser) {
+                setUser(JSON.parse(storedUser));
+                setToken(storedToken);
+            }
+
+            setLoading(false); // ✅ Chỉ khi init xong mới check quyền
+        };
+
+        initAuth();
+    }, []);
 
     // Persist auth state
     const persist = (u, t, store) => {
@@ -81,65 +99,94 @@ export const AuthProvider = ({ children }) => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [token, user, currentStore]);
 
+    // 👉 FIX CẬP NHẬT: Giảm block từ ensureStore(), navigate sớm hơn cho MANAGER nếu chưa có store
+    // Thêm log để debug (xóa sau)
     const login = async (userData, tokenData) => {
-        // set immediate auth state
-        setUser(userData);
-        setToken(tokenData);
+        console.log('👉 LOGIN START: role=', userData?.role, 'currentStore=', currentStore); // DEBUG
+        setLoading(true); // 👉 Bật loading ngay để block ProtectedRoute check auth
 
-        // --- BẮT ĐẦU THAY ĐỔI ---
-        // Nếu user là STAFF và có currentStore (từ state/localStorage), 
-        // thì giữ lại store đó khi persist.
-        // Các role khác (Manager) sẽ bị xóa (null) và phải chọn lại.
-        const initialStore = (userData?.role === "STAFF" && currentStore) ? currentStore : null;
-        persist(userData, tokenData, initialStore);
-        // --- KẾT THÚC THAY ĐỔI ---
-
-
-        // Try to prepare store info but do NOT block redirect for STAFF
-        let resolvedStore = null;
         try {
-            const res = await ensureStore();
-            resolvedStore =
-                res?.store || res?.currentStore || (res?.stores && res.stores[0]) || null;
+            // Set immediate auth state (nhưng loading=true sẽ block check)
+            setUser(userData);
+            setToken(tokenData);
 
-            if (resolvedStore) {
-                setCurrentStore(resolvedStore);
-                // Dù là role nào, nếu ensureStore() tìm thấy store,
-                // ta sẽ cập nhật lại localStorage với store mới/chuẩn.
-                persist(userData, tokenData, resolvedStore);
-            }
-        } catch (err) {
-            // Không crash app nếu ensureStore lỗi — chỉ log để debug
-            console.warn("ensureStore error in login (ignored):", err);
-        }
+            // --- BẮT ĐẦU THAY ĐỔI ---
+            // Nếu user là STAFF và có currentStore (từ state/localStorage), 
+            // thì giữ lại store đó khi persist.
+            // Các role khác (Manager) sẽ bị xóa (null) và phải chọn lại.
+            const initialStore = (userData?.role === "STAFF" && currentStore) ? currentStore : null;
+            persist(userData, tokenData, initialStore);
+            // --- KẾT THÚC THAY ĐỔI ---
 
-        // Navigate based on role
-        // Yêu cầu: nếu là STAFF -> luôn nhảy về /dashboard ngay lập tức
-        if (userData?.role === "STAFF") {
-            navigate("/dashboard");
-            return;
-        }
-
-        // Manager và các role khác giữ hành vi cũ
-        if (userData?.role === "MANAGER") {
-            // Nếu manager có nhiều store, đưa tới chọn cửa hàng để quản lý
+            // Try to prepare store info but do NOT block redirect for STAFF
+            let resolvedStore = null;
+            let hasMultipleStores = false; // 👉 THÊM: Cache kết quả để tránh double call
             try {
-                const res = await ensureStore(); // gọi lại để lấy danh sách stores nếu cần
-                if (res?.stores && Array.isArray(res.stores) && res.stores.length > 0) {
+                const res = await ensureStore();
+                console.log('👉 ensureStore RESULT:', res); // DEBUG: Check res.stores, res.store
+                resolvedStore =
+                    res?.store || res?.currentStore || (res?.stores && res.stores[0]) || null;
+                hasMultipleStores = res?.stores && Array.isArray(res.stores) && res.stores.length > 1; // >1 vì nếu =1 thì resolvedStore đã có
+
+                if (resolvedStore) {
+                    setCurrentStore(resolvedStore);
+                    // Dù là role nào, nếu ensureStore() tìm thấy store,
+                    // ta sẽ cập nhật lại localStorage với store mới/chuẩn.
+                    persist(userData, tokenData, resolvedStore);
+                }
+            } catch (err) {
+                // Không crash app nếu ensureStore lỗi — chỉ log để debug
+                console.warn("ensureStore error in login (ignored):", err);
+            }
+
+            // 👉 FIX: Chờ 1 tick để state update (React batch) trước khi navigate
+            await new Promise(resolve => setTimeout(resolve, 100)); // TĂNG LÊN 100ms để settle tốt hơn (test 0 nếu nhanh quá)
+
+            // Navigate based on role
+            // Yêu cầu: nếu là STAFF -> luôn nhảy về /dashboard ngay lập tức
+            if (userData?.role === "STAFF") {
+                console.log('👉 STAFF: Navigate to /dashboard'); // DEBUG
+                navigate("/dashboard");
+                return;
+            }
+
+            // Manager và các role khác giữ hành vi cũ
+            if (userData?.role === "MANAGER") {
+                // 👉 FIX: SỬ DỤNG CACHE từ lần 1, KHÔNG GỌI LẠI ensureStore() để tránh chậm
+                if (hasMultipleStores) { // Nếu >1 stores
+                    console.log('👉 MANAGER: Multiple stores -> /select-store'); // DEBUG
                     navigate("/select-store");
                     return;
                 }
-            } catch (e) {
-                // ignore
+
+                if (resolvedStore) {
+                    console.log('👉 MANAGER: Has resolvedStore -> /dashboard'); // DEBUG
+                    navigate("/dashboard");
+                } else {
+                    console.log('👉 MANAGER: No store -> /select-store'); // DEBUG
+                    navigate("/select-store");
+                }
+                return;
             }
 
-            if (resolvedStore) navigate("/dashboard");
-            else navigate("/select-store");
-            return;
+            // Default for other roles
+            console.log('👉 DEFAULT: Navigate to /dashboard'); // DEBUG
+            navigate("/dashboard");
+        } catch (error) {
+            console.error("Login failed:", error); // DEBUG
+            // Rollback nếu lỗi
+            setUser(null);
+            setToken(null);
+            persist(null, null, null);
+            // 👉 THÊM: Navigate về /login nếu fail
+            navigate("/login");
+        } finally {
+            // 👉 FIX: Tắt loading SAU navigate, nhưng delay nhẹ để Spin flash mượt
+            setTimeout(() => {
+                setLoading(false);
+                console.log('👉 LOGIN END: loading=false'); // DEBUG
+            }, 200); // 200ms để user thấy Spin tắt sau navigate
         }
-
-        // Default for other roles
-        navigate("/dashboard");
     };
 
     const logout = async () => {
@@ -153,16 +200,17 @@ export const AuthProvider = ({ children }) => {
         if (apiClient && apiClient.defaults) {
             delete apiClient.defaults.headers.common["Authorization"];
         }
-        try {
-            await apiClient.post("/users/logout");
-        } catch (e) {
-            console.warn("Logout API failed (ignored):", e?.message || e);
-        }
+        // (nếu sau cần invalidate server, thêm lại sau)
+        // try {
+        //     await apiClient.post("/users/logout");
+        // } catch (e) {
+        //     console.warn("Logout API failed (ignored):", e?.message || e);
+        // }
         navigate("/login");
     };
 
     return (
-        <AuthContext.Provider value={{ user, token, currentStore, setCurrentStore, login, logout }}>
+        <AuthContext.Provider value={{ user, token, currentStore, setCurrentStore, login, logout, loading }}>
             {children}
         </AuthContext.Provider>
     );
