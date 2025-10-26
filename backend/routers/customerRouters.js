@@ -3,9 +3,11 @@ const express = require("express");
 const router = express.Router();
 
 const {
+  createCustomer,
   searchCustomers,
   updateCustomer,
   softDeleteCustomer,
+  getCustomersByStore,
 } = require("../controllers/customer/customerController");
 
 const {
@@ -16,6 +18,7 @@ const {
 
 /*
   Quy ước permission strings:
+  - customers:create     -> tạo khách hàng
   - customers:search     -> tìm/tra cứu khách hàng
   - customers:update     -> sửa thông tin khách hàng
   - customers:delete     -> xóa (soft delete) khách hàng
@@ -24,13 +27,28 @@ const {
 */
 
 /*
-  Route: GET /api/customers/search
-  - Mục đích: tìm kiếm khách theo phone/name/...
+  Route: POST /api/customers
+  - Mục đích: tạo khách hàng mới
   - Middleware:
-    1) verifyToken - phải đăng nhập
-    2) checkStoreAccess - xác định store (nếu request gửi storeId hoặc dùng current_store)
-       -> checkStoreAccess sẽ gán req.store để middleware permission có thể dùng (nếu cần)
-    3) requirePermission("customers:search") - kiểm tra user.menu (hỗ trợ cả scoped store:<id>:customers:search)
+    1) verifyToken - yêu cầu đăng nhập
+    2) checkStoreAccess - xác định cửa hàng hiện tại (nếu cần)
+    3) requirePermission("customers:create") - quyền tạo khách hàng
+*/
+router.post(
+  "/",
+  verifyToken,
+  checkStoreAccess,
+  requirePermission("customers:create"),
+  createCustomer
+);
+
+/*
+  Route: GET /api/customers/search
+  - Mục đích: tìm kiếm khách hàng theo phone/name
+  - Middleware:
+    1) verifyToken
+    2) checkStoreAccess
+    3) requirePermission("customers:search")
 */
 router.get(
   "/search",
@@ -45,8 +63,8 @@ router.get(
   - Mục đích: cập nhật thông tin khách hàng
   - Middleware:
     1) verifyToken
-    2) checkStoreAccess - bắt buộc để biết store hiện hành (vì update thường liên quan store)
-    3) requirePermission("customers:update") - có thể là global hoặc scoped (store:<id>:customers:update)
+    2) checkStoreAccess
+    3) requirePermission("customers:update")
 */
 router.put(
   "/:id",
@@ -61,8 +79,8 @@ router.put(
   - Mục đích: xóa mềm khách hàng
   - Middleware:
     1) verifyToken
-    2) checkStoreAccess - xác định store context
-    3) requirePermission("customers:delete") - kiểm tra quyền xóa
+    2) checkStoreAccess
+    3) requirePermission("customers:delete")
 */
 router.delete(
   "/:id",
@@ -70,6 +88,22 @@ router.delete(
   checkStoreAccess,
   requirePermission("customers:delete"),
   softDeleteCustomer
+);
+
+/*
+  Route: GET /api/customers/store/:storeId
+  - Mục đích: Lấy toàn bộ khách hàng của 1 cửa hàng
+  - Middleware:
+    1) verifyToken - yêu cầu đăng nhập
+    2) checkStoreAccess - kiểm tra quyền truy cập store
+    3) requirePermission("customers:search") - quyền xem danh sách khách hàng
+*/
+router.get(
+  "/store/:storeId",
+  verifyToken,
+  checkStoreAccess,
+  requirePermission("customers:search"),
+  getCustomersByStore
 );
 
 module.exports = router;

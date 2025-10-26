@@ -1,5 +1,5 @@
-// src/pages/SelectStorePage.jsx
 import React, { useEffect, useState } from "react";
+// --- THAY ĐỔI: Thêm 'user' từ context ---
 import { useAuth } from "../../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 
@@ -49,7 +49,8 @@ export default function SelectStorePage() {
   });
 
 
-  const { setCurrentStore } = useAuth();
+  // --- THAY ĐỔI: Lấy 'user' từ useAuth ---
+  const { setCurrentStore, user } = useAuth();
   const navigate = useNavigate();
 
   const loadStores = async () => {
@@ -70,10 +71,35 @@ export default function SelectStorePage() {
     }
   };
 
+  // --- THAY ĐỔI: Thêm useEffect mới để xử lý logic xóa store ---
   useEffect(() => {
+    // Nếu user tồn tại VÀ role KHÔNG PHẢI là 'STAFF' (ví dụ: 'MANAGER')
+    // thì xóa currentStore để buộc họ chọn lại.
+    if (user && user.role !== "STAFF") {
+      console.log("Xóa currentStore vì user không phải là STAFF.");
+
+      // 1. Xóa khỏi Context
+      if (typeof setCurrentStore === "function") {
+        setCurrentStore(null);
+      }
+
+      // 2. Xóa khỏi Local Storage
+      try {
+        localStorage.removeItem("currentStore");
+      } catch (e) {
+        console.warn("Không thể xóa currentStore khỏi localStorage", e);
+      }
+    }
+    // Nếu user.role === 'STAFF', không làm gì cả, giữ nguyên store của họ.
+  }, [user, setCurrentStore]); // Chạy lại khi user context thay đổi
+
+  // --- HẾT THAY ĐỔI ---
+
+  useEffect(() => {
+    // Logic tải store cũ, giữ nguyên
     loadStores();
-    // eslint-disable-next-line
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Giữ nguyên dependency rỗng để chỉ chạy 1 lần khi mount
 
   useEffect(() => {
     if (!search) {
@@ -95,16 +121,71 @@ export default function SelectStorePage() {
   const handleSelect = async (store) => {
     try {
       setBusy(true);
-      await selectStore(store._id);
-      setCurrentStore(store);
+
+      // Gọi API selectStore (backend trả về full store object)
+      // selectStore helper có thể trả shapes khác nhau -> normalize
+      const res = await selectStore(store._id);
+
+      // Lấy store từ nhiều shape có thể xảy ra
+      let returnedStore =
+        (res && (res.store || res.data?.store || res.data)) ||
+        // axios wrapper có thể trả res.data trực tiếp
+        (res && res._id ? res : null) ||
+        store;
+
+      // nếu vẫn null, fallback store từ list
+      if (!returnedStore) returnedStore = store;
+
+      // --- Backup cửa hàng cũ (nếu có) ---
+      try {
+        const prev = localStorage.getItem("currentStore");
+        if (prev) {
+          // lưu bản cũ vào previousStore (ghi đè)
+          localStorage.setItem("previousStore", prev);
+        }
+      } catch (e) {
+        console.warn("Không thể backup previousStore:", e);
+      }
+
+      // --- Lưu currentStore mới vào localStorage ---
+      try {
+        localStorage.setItem("currentStore", JSON.stringify(returnedStore));
+      } catch (e) {
+        console.warn("Lưu currentStore vào localStorage thất bại:", e);
+      }
+
+      // --- Cập nhật context / auth nếu có hàm setCurrentStore ---
+      try {
+        if (typeof setCurrentStore === "function") {
+          // thử gọi với object trước; nếu hàm của bạn chờ id thì thử pass id
+          // (vì project bạn có nhiều biến thể)
+          try {
+            // Một số impl setCurrentStore có thể là async và mong storeId,
+            // nên không cần await bắt buộc ở đây, nhưng dùng await để chặn nav nếu cần.
+            await setCurrentStore(returnedStore);
+          } catch (errInner) {
+            // fallback: thử truyền id nếu object không hợp
+            try {
+              await setCurrentStore(returnedStore._id || returnedStore.id);
+            } catch (err2) {
+              console.warn("setCurrentStore failed with both object and id", errInner, err2);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("Không thể cập nhật context hiện tại:", e);
+      }
+
+      // navigate tới dashboard
       navigate("/dashboard");
     } catch (e) {
       console.error("select store error", e);
-      setErr(e?.response?.data?.message || "Không thể chọn cửa hàng");
+      setErr(e?.response?.data?.message || e?.message || "Không thể chọn cửa hàng");
     } finally {
       setBusy(false);
     }
   };
+
 
   // --- handleAdd: open modal with clean nested shape ---
   const handleAdd = () => {
@@ -237,6 +318,7 @@ export default function SelectStorePage() {
             <div className="rounded-2xl p-6 bg-gradient-to-br from-green-600 to-green-500 text-white shadow-2xl">
               <h2 className="text-2xl font-bold">Xin chào, Quản lý!</h2>
               <p className="mt-2 text-sm text-green-100/90">
+                Dòng này có thể cần thay đổi động
                 Chọn một cửa hàng để bắt đầu theo dõi doanh thu, tồn kho, và báo cáo.
               </p>
             </div>

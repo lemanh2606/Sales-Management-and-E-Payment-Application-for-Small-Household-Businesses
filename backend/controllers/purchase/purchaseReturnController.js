@@ -223,7 +223,7 @@ const getPurchaseReturnsByStore = async (req, res) => {
     const { storeId } = req.params;
     // Kiểm tra quyền truy cập tương tự như các controller khác
     const purchaseReturns = await PurchaseReturn.find({ store_id: storeId })
-      .populate("supplier_id", "name")
+      .populate("supplier_id", "name taxcode")
       .populate("created_by", "username email")
       .sort({ createdAt: -1 });
 
@@ -238,7 +238,7 @@ const getPurchaseReturnById = async (req, res) => {
   try {
     const { returnId } = req.params;
     const purchaseReturn = await PurchaseReturn.findById(returnId)
-      .populate("supplier_id", "name phone email")
+      .populate("supplier_id", "name phone email taxcode")
       .populate("created_by", "username email")
       .populate("store_id", "name address")
       .populate("purchase_order_id", "purchase_order_code");
