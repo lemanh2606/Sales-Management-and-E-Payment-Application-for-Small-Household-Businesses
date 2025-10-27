@@ -21,6 +21,7 @@ import NotFound from "./pages/misc/NotFound";
 // Hiệu ứng Design
 import { Spin } from "antd";
 import { LoadingOutlined } from "@ant-design/icons";
+import ProductGroupsPage from "./pages/productGroup/ProductGroupsPage";
 const loadingIcon = <LoadingOutlined style={{ fontSize: 40 }} spin />;
 
 /** Utility: đọc user từ localStorage (fallback) */
@@ -204,6 +205,15 @@ function App() {
         element={
           <ProtectedRoute allowedPermissions="customers:search">
             <CustomerListPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/product-groups"
+        element={
+          <ProtectedRoute allowedPermissions="products:view">
+            <ProductGroupsPage />
           </ProtectedRoute>
         }
       />

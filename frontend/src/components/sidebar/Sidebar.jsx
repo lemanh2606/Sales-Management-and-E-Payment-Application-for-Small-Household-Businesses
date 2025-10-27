@@ -66,7 +66,7 @@ export default function Sidebar() {
           children: [{ name: "Danh sách nhà cung cấp", path: "/suppliers", permission: "supplier:view" }],
         },
         { name: "Quản lý nhập/xuất/hủy hàng", path: "/inventory", permission: "purchase-orders:view" },
-        { name: "Nhóm sản phẩm", path: "/product-groups", permission: "product-groups:view" },
+        { name: "Nhóm sản phẩm", path: "/product-groups", permission: "products:view" },
       ],
     },
     {

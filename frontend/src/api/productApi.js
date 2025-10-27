@@ -22,9 +22,21 @@ export const updateProduct = async (productId, data) =>
 export const deleteProduct = async (productId) =>
   (await apiClient.delete(`/products/${productId}`)).data;
 
-//  Lấy danh sách sản phẩm của cửa hàng
-export const getProductsByStore = async (storeId, params) =>
-  (await apiClient.get(`/products/store/${storeId}`, { params })).data;
+// Lấy danh sách sản phẩm của cửa hàng với phân trang
+export const getProductsByStore = async (
+  storeId,
+  { page = 1, limit = 10 } = {}
+) => {
+  try {
+    const response = await apiClient.get(`/products/store/${storeId}`, {
+      params: { page, limit },
+    });
+    return response.data; // trả về object chứa total, page, limit, products
+  } catch (error) {
+    console.error("❌ Lỗi khi lấy sản phẩm:", error);
+    throw error;
+  }
+};
 
 //  Lấy chi tiết 1 sản phẩm cụ thể
 export const getProductById = async (productId) =>
