@@ -1,3 +1,4 @@
+// src/components/sidebar/SidebarItem.jsx
 import React, { useState } from "react";
 import { NavLink } from "react-router-dom";
 import { FiChevronDown, FiChevronRight } from "react-icons/fi";
@@ -7,10 +8,11 @@ export default function SidebarItem({ item, collapsed = false }) {
     const hasChildren = item.children && item.children.length > 0;
 
     const handleClick = (e) => {
+        // 👉 FIX: Toggle !open để mở/đóng (không chỉ mở one-way)
         if (hasChildren && !collapsed) {
             e.preventDefault();
-            // Chỉ mở, không bao giờ đóng lại
-            if (!open) setOpen(true);
+            e.stopPropagation(); // 👉 FIX: Ngăn bubble lên parent nếu nested
+            setOpen(!open);
         }
     };
 
@@ -34,8 +36,9 @@ export default function SidebarItem({ item, collapsed = false }) {
 
                 {!collapsed && hasChildren && (
                     <span className="ml-2">
+                        {/* 👉 FIX: Rotate chevron khi open (FiChevronDown rotate-180) */}
                         {open ? (
-                            <FiChevronDown size={18} className="text-green-600 transition-transform duration-300" />
+                            <FiChevronDown size={18} className="text-green-600 transition-transform duration-300 rotate-180" />
                         ) : (
                             <FiChevronRight size={18} className="text-green-600 transition-transform duration-300" />
                         )}
@@ -45,7 +48,7 @@ export default function SidebarItem({ item, collapsed = false }) {
 
             {/* submenu chỉ hiện khi open */}
             {!collapsed && hasChildren && open && (
-                <div className="pl-6 mt-1">
+                <div className="pl-6 mt-1 space-y-1"> {/* 👉 FIX: Thêm space-y-1 cho khoảng cách submenu mượt */}
                     {item.children.map((child) => (
                         <NavLink
                             key={child.name}

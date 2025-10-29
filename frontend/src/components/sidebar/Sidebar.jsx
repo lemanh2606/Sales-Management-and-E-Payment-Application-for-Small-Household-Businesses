@@ -262,24 +262,27 @@ export default function Sidebar() {
 
       {/* Mobile overlay */}
       <div
-        className={`fixed inset-0 bg-black bg-opacity-40 z-40 transition-opacity duration-300 ${openMobile ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
-          }`}
+        className={`fixed inset-0 bg-black bg-opacity-40 z-40 transition-opacity duration-300 ${
+          openMobile ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        }`}
         onClick={() => setOpenMobile(false)}
       />
 
       {/* Sidebar */}
       <aside
         // width changes when collapsed (desktop). On mobile it's full behavior via translate-x
-        className={`bg-white h-full shadow-2xl fixed top-0 left-0 z-50 transform transition-all duration-300 ${openMobile ? "translate-x-0" : "-translate-x-full"
-          } md:translate-x-0 ${collapsed ? "w-20" : "w-64"}`}
+        className={`bg-white h-full shadow-2xl fixed top-0 left-0 z-50 transform transition-all duration-300 ${
+          openMobile ? "translate-x-0" : "-translate-x-full"
+        } md:translate-x-0 ${collapsed ? "w-20" : "w-64"}`}
         aria-hidden={openMobile ? "false" : "true"}
       >
         <div className="p-4 flex flex-col h-full relative">
           <div className="flex items-center justify-between mb-4">
             {/* Brand: if collapsed show small (initials), else full title */}
             <div className="flex items-center gap-2">
-
-              {!collapsed && <h2 className="text-2xl font-extrabold text-green-700 tracking-wide drop-shadow-lg">Smallbiz-Sales</h2>}
+              {!collapsed && (
+                <h2 className="text-2xl font-extrabold text-green-700 tracking-wide drop-shadow-lg">Smallbiz-Sales</h2>
+              )}
             </div>
 
             {/* Mobile close button */}
@@ -304,7 +307,6 @@ export default function Sidebar() {
                 <FiChevronLeft size={20} className="text-gray-700 transition-transform duration-200" />
               )}
             </button>
-
           </div>
 
           {/* nav */}
@@ -318,25 +320,27 @@ export default function Sidebar() {
             ))}
           </nav>
 
-          {/* Round button fixed to sidebar (won't move with nav content) */}
+          {/* Nút này cố định với sidebar (nó ko di chuyển với nội dung) - thêm border và BG để đỡ overlap text với text */}
           {canScrollDown && (
             <button
               onClick={handleScrollDownClick}
               aria-label="Xem thêm"
               title="Xem thêm"
-              className="absolute left-1/2 transform -translate-x-1/2 bottom-20 z-40 text-[black] flex items-center justify-center shadow-2xl hover:scale-105 transition-transform"
+              className="absolute left-1/2 transform -translate-x-1/2 bottom-20 z-50 text-black flex items-center justify-center bg-white rounded-full p-3 shadow-xl border border-gray-300 hover:shadow-2xl hover:bg-gray-50 hover:scale-105 transition-all duration-300"
               style={{ touchAction: "manipulation" }}
             >
               <div className="flex flex-col items-center">
                 <FiChevronDown size={20} />
-                {!collapsed && <span className="text-xs leading-none -mt-1">Xem thêm</span>}
+                {!collapsed && <span className="text-xs font-medium leading-none -mt-1">Xem thêm</span>}
               </div>
             </button>
           )}
 
           <button
             onClick={handleLogout}
-            className={`mt-4 w-full flex items-center justify-center gap-2 bg-[#ffffffa2] text-[black] py-3 rounded-xl hover:bg-[#000000cc] hover:text-[white] transition-all duration-300 transform hover:scale-105 shadow-lg ${collapsed ? "px-1 py-2" : ""}`}
+            className={`mt-4 w-full flex items-center justify-center gap-2 bg-[#ffffffa2] text-[black] py-3 rounded-xl hover:bg-[#000000cc] hover:text-[white] transition-all duration-300 transform hover:scale-105 shadow-lg ${
+              collapsed ? "px-1 py-2" : ""
+            }`}
           >
             <FiLogOut size={18} /> {!collapsed && `Đăng xuất (${user?.username || "Manager"})`}
           </button>
