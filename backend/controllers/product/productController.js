@@ -6,7 +6,14 @@ const Store = require("../../models/Store");
 const User = require("../../models/User");
 const Employee = require("../../models/Employee");
 const Supplier = require("../../models/Supplier");
+const path = require("path");
 const { cloudinary, deleteFromCloudinary } = require("../../utils/cloudinary");
+const {
+  parseExcelToJSON,
+  validateRequiredFields,
+  validateNumericField,
+  sanitizeData,
+} = require("../../utils/fileImport");
 
 // ============= HELPER FUNCTIONS =============
 const generateSKU = async (storeId) => {
@@ -775,6 +782,180 @@ const deleteProductImage = async (req, res) => {
   }
 };
 
+// Import Products from Excel/CSV
+const importProducts = async (req, res) => {
+  try {
+    const { storeId } = req.params;
+    const userId = req.user.id || req.user._id;
+
+    if (!req.file) {
+      return res.status(400).json({ message: "Vui lòng tải lên file" });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "Người dùng không tồn tại" });
+    }
+
+    const store = await Store.findById(storeId);
+    if (!store) {
+      return res.status(404).json({ message: "Cửa hàng không tồn tại" });
+    }
+
+    if (!store.owner_id.equals(userId)) {
+      if (user.role === "STAFF") {
+        const employee = await Employee.findOne({ user_id: userId });
+        if (!employee || employee.store_id.toString() !== storeId) {
+          return res.status(403).json({ message: "Bạn không có quyền import" });
+        }
+      } else {
+        return res.status(403).json({ message: "Bạn không có quyền import" });
+      }
+    }
+
+    const data = await parseExcelToJSON(req.file.buffer);
+
+    if (data.length === 0) {
+      return res.status(400).json({ message: "File không chứa dữ liệu hợp lệ" });
+    }
+
+    const results = { success: [], failed: [], total: data.length };
+    const suppliers = await Supplier.find({ store_id: storeId, isDeleted: false }).lean();
+    const productGroups = await ProductGroup.find({ storeId: storeId, isDeleted: false }).lean();
+    
+    const supplierMap = new Map(suppliers.map((s) => [s.name.toLowerCase().trim(), s._id]));
+    const groupMap = new Map(productGroups.map((g) => [g.name.toLowerCase().trim(), g._id]));
+
+    for (let i = 0; i < data.length; i++) {
+      const row = sanitizeData(data[i]);
+      const rowNumber = i + 2;
+
+      try {
+        const validation = validateRequiredFields(row, ["Tên sản phẩm", "Giá bán", "Giá vốn"]);
+        if (!validation.isValid) {
+          results.failed.push({
+            row: rowNumber,
+            data: row,
+            error: `Thiếu: ${validation.missingFields.join(", ")}`,
+          });
+          continue;
+        }
+
+        const priceVal = validateNumericField(row["Giá bán"], { min: 0 });
+        if (!priceVal.isValid) {
+          results.failed.push({ row: rowNumber, data: row, error: `Giá bán: ${priceVal.error}` });
+          continue;
+        }
+
+        const costVal = validateNumericField(row["Giá vốn"], { min: 0 });
+        if (!costVal.isValid) {
+          results.failed.push({ row: rowNumber, data: row, error: `Giá vốn: ${costVal.error}` });
+          continue;
+        }
+
+        const stockVal = validateNumericField(row["Tồn kho"] || 0, { min: 0, allowDecimal: false });
+        if (!stockVal.isValid) {
+          results.failed.push({ row: rowNumber, data: row, error: `Tồn kho: ${stockVal.error}` });
+          continue;
+        }
+
+        const minStockVal = validateNumericField(row["Tồn kho tối thiểu"] || 0, { min: 0, allowDecimal: false });
+        const maxStockVal = validateNumericField(row["Tồn kho tối đa"] || null, { min: 0, allowDecimal: false });
+
+        const status = row["Trạng thái"] || "Đang kinh doanh";
+        if (!["Đang kinh doanh", "Ngừng kinh doanh", "Ngừng bán"].includes(status)) {
+          results.failed.push({ row: rowNumber, data: row, error: `Trạng thái không hợp lệ: ${status}` });
+          continue;
+        }
+
+        let supplierId = null;
+        if (row["Nhà cung cấp"]) {
+          supplierId = supplierMap.get(row["Nhà cung cấp"].toLowerCase().trim());
+          if (!supplierId) {
+            results.failed.push({ row: rowNumber, data: row, error: `Nhà cung cấp không tồn tại: ${row["Nhà cung cấp"]}` });
+            continue;
+          }
+        }
+
+        let groupId = null;
+        if (row["Nhóm sản phẩm"]) {
+          groupId = groupMap.get(row["Nhóm sản phẩm"].toLowerCase().trim());
+          if (!groupId) {
+            results.failed.push({ row: rowNumber, data: row, error: `Nhóm sản phẩm không tồn tại: ${row["Nhóm sản phẩm"]}` });
+            continue;
+          }
+        }
+
+        let sku = row["Mã SKU"] || null;
+        if (sku) {
+          const existingProduct = await Product.findOne({ sku: sku, store_id: storeId, isDeleted: false });
+          if (existingProduct) {
+            results.failed.push({ row: rowNumber, data: row, error: `Mã SKU đã tồn tại: ${sku}` });
+            continue;
+          }
+        } else {
+          sku = await generateSKU(storeId);
+        }
+
+        const newProduct = new Product({
+          name: row["Tên sản phẩm"],
+          description: row["Mô tả"] || "",
+          sku: sku,
+          price: priceVal.value,
+          cost_price: costVal.value,
+          stock_quantity: stockVal.value,
+          min_stock: minStockVal.value,
+          max_stock: maxStockVal.value || null,
+          unit: row["Đơn vị"] || "",
+          status: status,
+          store_id: storeId,
+          supplier_id: supplierId,
+          group_id: groupId,
+        });
+
+        await newProduct.save();
+        results.success.push({ row: rowNumber, product: { _id: newProduct._id, name: newProduct.name, sku: newProduct.sku } });
+      } catch (error) {
+        results.failed.push({ row: rowNumber, data: row, error: error.message });
+      }
+    }
+
+    res.status(200).json({ message: "Import hoàn tất", results });
+  } catch (error) {
+    console.error("Lỗi importProducts:", error);
+    res.status(500).json({ message: "Lỗi server", error: error.message });
+  }
+};
+
+// Download Product Template
+const downloadProductTemplate = (req, res) => {
+  const filePath = path.resolve(
+    __dirname,
+    "../../templates/product_template.xlsx"
+  );
+
+  return res.sendFile(
+    filePath,
+    {
+      headers: {
+        "Content-Type":
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": "attachment; filename=product_template.xlsx",
+      },
+    },
+    (err) => {
+      if (err) {
+        console.error("Lỗi downloadProductTemplate:", err);
+        if (!res.headersSent) {
+          res
+            .status(500)
+            .json({ message: "Lỗi server", error: err.message });
+        }
+      }
+    }
+  );
+};
+
 module.exports = {
   // CUD
   createProduct,
@@ -789,4 +970,7 @@ module.exports = {
   updateProductPrice,
   // thông báo, cảnh báo
   getLowStockProducts,
+  // Import/Export
+  importProducts,
+  downloadProductTemplate,
 };

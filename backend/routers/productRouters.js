@@ -18,7 +18,10 @@ const {
   deleteProductImage,
   getProductById,
   getLowStockProducts,
+  importProducts,
+  downloadProductTemplate,
 } = require("../controllers/product/productController");
+const upload = require("../middlewares/upload");
 
 /*
   GHI CHÚ CHUNG VỀ PHÂN QUYỀN CHO SẢN PHẨM:
@@ -55,6 +58,13 @@ const handleMulterError = (err, req, res, next) => {
 };
 
 /*
+  ROUTE: GET /api/products/template/download
+  - Tải template import Excel/CSV
+  - Query: ?format=excel hoặc ?format=csv
+*/
+router.get("/template/download", verifyToken, downloadProductTemplate);
+
+/*
   ROUTE: GET /api/products/search
   - Tìm kiếm sản phẩm theo tên / SKU / barcode...
   - Middleware: verifyToken -> checkStoreAccess -> requirePermission("products:search")
@@ -74,6 +84,21 @@ router.get(
   - Hiện tại giới hạn cho Manager (isManager). Nếu muốn granular, thay bằng requirePermission("products:low-stock")
 */
 router.get("/low-stock", verifyToken, isManager, getLowStockProducts);
+
+/*
+  ROUTE: POST /api/products/store/:storeId/import
+  - Import sản phẩm từ Excel/CSV
+  - Middleware: verifyToken -> checkStoreAccess -> upload.single("file") -> requirePermission("products:create")
+*/
+router.post(
+  "/store/:storeId/import",
+  verifyToken,
+  checkStoreAccess,
+  upload.single("file"),
+  handleMulterError,
+  requirePermission("products:create"),
+  importProducts
+);
 
 /*
   ROUTE: POST /api/products/store/:storeId

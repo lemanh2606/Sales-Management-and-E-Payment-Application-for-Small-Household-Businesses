@@ -1,6 +1,15 @@
 // controllers/customerController.js
 const Customer = require("../../models/Customer");
 const Order = require("../../models/Order"); // Để check Order ref trước xóa mềm
+const User = require("../../models/User");
+const Employee = require("../../models/Employee");
+const Store = require("../../models/Store");
+const path = require("path");
+const {
+  parseExcelToJSON,
+  validateRequiredFields,
+  sanitizeData,
+} = require("../../utils/fileImport");
 
 // POST /api/customers - Tạo mới khách hàng
 // Body: { name, phone, address?, note?, storeId? }
@@ -265,10 +274,135 @@ const getCustomersByStore = async (req, res) => {
   }
 };
 
+// Import Customers from Excel/CSV
+const importCustomers = async (req, res) => {
+  try {
+    const { storeId } = req.params;
+    const userId = req.user.id || req.user._id;
+
+    if (!req.file) {
+      return res.status(400).json({ message: "Vui lòng tải lên file" });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "Người dùng không tồn tại" });
+    }
+
+    const store = await Store.findById(storeId);
+    if (!store) {
+      return res.status(404).json({ message: "Cửa hàng không tồn tại" });
+    }
+
+    if (!store.owner_id.equals(userId)) {
+      if (user.role === "STAFF") {
+        const employee = await Employee.findOne({ user_id: userId });
+        if (!employee || employee.store_id.toString() !== storeId) {
+          return res.status(403).json({ message: "Bạn không có quyền import" });
+        }
+      } else {
+        return res.status(403).json({ message: "Bạn không có quyền import" });
+      }
+    }
+
+    const data = await parseExcelToJSON(req.file.buffer);
+
+    if (data.length === 0) {
+      return res.status(400).json({ message: "File không chứa dữ liệu hợp lệ" });
+    }
+
+    const results = { success: [], failed: [], total: data.length };
+
+    for (let i = 0; i < data.length; i++) {
+      const row = sanitizeData(data[i]);
+      const rowNumber = i + 2;
+
+      try {
+        const validation = validateRequiredFields(row, ["Tên khách hàng", "Số điện thoại"]);
+        if (!validation.isValid) {
+          results.failed.push({
+            row: rowNumber,
+            data: row,
+            error: `Thiếu: ${validation.missingFields.join(", ")}`,
+          });
+          continue;
+        }
+
+        const phone = row["Số điện thoại"].trim();
+        
+        if (!/^\d{10,11}$/.test(phone)) {
+          results.failed.push({ row: rowNumber, data: row, error: "Số điện thoại không hợp lệ (10-11 chữ số)" });
+          continue;
+        }
+
+        const existingCustomer = await Customer.findOne({ 
+          phone: phone, 
+          storeId: storeId, 
+          isDeleted: false 
+        });
+        
+        if (existingCustomer) {
+          results.failed.push({ row: rowNumber, data: row, error: `Số điện thoại đã tồn tại: ${phone}` });
+          continue;
+        }
+
+        const newCustomer = new Customer({
+          name: row["Tên khách hàng"],
+          phone: phone,
+          address: row["Địa chỉ"] || "",
+          note: row["Ghi chú"] || "",
+          storeId: storeId,
+        });
+
+        await newCustomer.save();
+        results.success.push({ row: rowNumber, customer: { _id: newCustomer._id, name: newCustomer.name, phone: newCustomer.phone } });
+      } catch (error) {
+        results.failed.push({ row: rowNumber, data: row, error: error.message });
+      }
+    }
+
+    res.status(200).json({ message: "Import hoàn tất", results });
+  } catch (error) {
+    console.error("Lỗi importCustomers:", error);
+    res.status(500).json({ message: "Lỗi server", error: error.message });
+  }
+};
+
+// Download Customer Template
+const downloadCustomerTemplate = (req, res) => {
+  const filePath = path.resolve(
+    __dirname,
+    "../../templates/customer_template.xlsx"
+  );
+
+  return res.sendFile(
+    filePath,
+    {
+      headers: {
+        "Content-Type":
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": "attachment; filename=customer_template.xlsx",
+      },
+    },
+    (err) => {
+      if (err) {
+        console.error("Lỗi downloadCustomerTemplate:", err);
+        if (!res.headersSent) {
+          res
+            .status(500)
+            .json({ message: "Lỗi server", error: err.message });
+        }
+      }
+    }
+  );
+};
+
 module.exports = {
   searchCustomers,
   updateCustomer,
   softDeleteCustomer,
   createCustomer,
-  getCustomersByStore, // 👈 thêm dòng này
+  getCustomersByStore,
+  importCustomers,
+  downloadCustomerTemplate,
 };
