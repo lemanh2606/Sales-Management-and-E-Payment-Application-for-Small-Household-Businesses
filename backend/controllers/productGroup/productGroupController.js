@@ -3,12 +3,9 @@ const Store = require("../../models/Store");
 const User = require("../../models/User");
 const Employee = require("../../models/Employee");
 const Product = require("../../models/Product");
+const logActivity = require("../../utils/logActivity");
 const path = require("path");
-const {
-  parseExcelToJSON,
-  validateRequiredFields,
-  sanitizeData,
-} = require("../../utils/fileImport");
+const { parseExcelToJSON, validateRequiredFields, sanitizeData } = require("../../utils/fileImport");
 
 // ============= CREATE =============
 const createProductGroup = async (req, res) => {
@@ -64,6 +61,18 @@ const createProductGroup = async (req, res) => {
       store: populatedGroup.storeId,
     };
 
+    // log hoạt động
+    await logActivity({
+      user: req.user,
+      store: { _id: storeId },
+      action: "create",
+      entity: "ProductGroup",
+      entityId: newProductGroup._id,
+      entityName: newProductGroup.name,
+      req,
+      description: `Tạo nhóm sản phẩm "${newProductGroup.name}" trong cửa hàng`,
+    });
+
     res.status(201).json({
       message: "Tạo nhóm sản phẩm thành công",
       productGroup: formattedGroup,
@@ -80,8 +89,7 @@ const getProductGroupsByStore = async (req, res) => {
     const { storeId } = req.params;
 
     const store = await Store.findById(storeId);
-    if (!store)
-      return res.status(404).json({ message: "Cửa hàng không tồn tại" });
+    if (!store) return res.status(404).json({ message: "Cửa hàng không tồn tại" });
 
     const productGroups = await ProductGroup.find({ storeId, isDeleted: false })
       .populate("storeId", "name address phone")
@@ -126,8 +134,7 @@ const getProductGroupById = async (req, res) => {
       isDeleted: false,
     }).populate("storeId", "name address phone");
 
-    if (!productGroup)
-      return res.status(404).json({ message: "Nhóm sản phẩm không tồn tại" });
+    if (!productGroup) return res.status(404).json({ message: "Nhóm sản phẩm không tồn tại" });
 
     const productCount = await Product.countDocuments({
       group_id: groupId,
@@ -166,8 +173,7 @@ const updateProductGroup = async (req, res) => {
       _id: groupId,
       isDeleted: false,
     });
-    if (!productGroup)
-      return res.status(404).json({ message: "Nhóm sản phẩm không tồn tại" });
+    if (!productGroup) return res.status(404).json({ message: "Nhóm sản phẩm không tồn tại" });
 
     if (name && name.trim() !== productGroup.name) {
       const existingGroup = await ProductGroup.findOne({
@@ -177,26 +183,34 @@ const updateProductGroup = async (req, res) => {
         isDeleted: false,
       });
       if (existingGroup) {
-        return res
-          .status(409)
-          .json({ message: "Nhóm sản phẩm với tên này đã tồn tại" });
+        return res.status(409).json({ message: "Nhóm sản phẩm với tên này đã tồn tại" });
       }
     }
 
     const updateData = {};
     if (name !== undefined) updateData.name = name.trim();
-    if (description !== undefined)
-      updateData.description = description ? description.trim() : "";
+    if (description !== undefined) updateData.description = description ? description.trim() : "";
 
-    const updatedGroup = await ProductGroup.findByIdAndUpdate(
-      groupId,
-      updateData,
-      { new: true }
-    ).populate("storeId", "name address phone");
+    const updatedGroup = await ProductGroup.findByIdAndUpdate(groupId, updateData, { new: true }).populate(
+      "storeId",
+      "name address phone"
+    );
 
     const productCount = await Product.countDocuments({
       group_id: groupId,
       isDeleted: false,
+    });
+
+    // log hoạt động
+    await logActivity({
+      user: req.user,
+      store: { _id: productGroup.storeId._id },
+      action: "update",
+      entity: "ProductGroup",
+      entityId: productGroup._id,
+      entityName: updatedGroup.name,
+      req,
+      description: `Cập nhật nhóm sản phẩm "${updatedGroup.name}"`,
     });
 
     res.status(200).json({
@@ -226,8 +240,7 @@ const deleteProductGroup = async (req, res) => {
       _id: groupId,
       isDeleted: false,
     });
-    if (!productGroup)
-      return res.status(404).json({ message: "Nhóm sản phẩm không tồn tại" });
+    if (!productGroup) return res.status(404).json({ message: "Nhóm sản phẩm không tồn tại" });
 
     const productsInGroup = await Product.countDocuments({
       group_id: groupId,
@@ -241,6 +254,17 @@ const deleteProductGroup = async (req, res) => {
 
     productGroup.isDeleted = true;
     await productGroup.save();
+    //log hoạt động
+    await logActivity({
+      user: req.user,
+      store: { _id: productGroup.storeId._id },
+      action: "delete",
+      entity: "ProductGroup",
+      entityId: productGroup._id,
+      entityName: productGroup.name,
+      req,
+      description: `Xóa nhóm sản phẩm "${productGroup.name}"`,
+    });
 
     res.status(200).json({
       message: "Xóa nhóm sản phẩm thành công",
@@ -308,12 +332,12 @@ const importProductGroups = async (req, res) => {
 
         const name = row["Tên nhóm sản phẩm"].trim();
 
-        const existingGroup = await ProductGroup.findOne({ 
-          name: name, 
-          storeId: storeId, 
-          isDeleted: false 
+        const existingGroup = await ProductGroup.findOne({
+          name: name,
+          storeId: storeId,
+          isDeleted: false,
         });
-        
+
         if (existingGroup) {
           results.failed.push({ row: rowNumber, data: row, error: `Nhóm sản phẩm đã tồn tại: ${name}` });
           continue;
@@ -341,17 +365,13 @@ const importProductGroups = async (req, res) => {
 
 // Download Product Group Template
 const downloadProductGroupTemplate = (req, res) => {
-  const filePath = path.resolve(
-    __dirname,
-    "../../templates/product_group_template.xlsx"
-  );
+  const filePath = path.resolve(__dirname, "../../templates/product_group_template.xlsx");
 
   return res.sendFile(
     filePath,
     {
       headers: {
-        "Content-Type":
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "Content-Disposition": "attachment; filename=product_group_template.xlsx",
       },
     },
@@ -359,9 +379,7 @@ const downloadProductGroupTemplate = (req, res) => {
       if (err) {
         console.error("Lỗi downloadProductGroupTemplate:", err);
         if (!res.headersSent) {
-          res
-            .status(500)
-            .json({ message: "Lỗi server", error: err.message });
+          res.status(500).json({ message: "Lỗi server", error: err.message });
         }
       }
     }

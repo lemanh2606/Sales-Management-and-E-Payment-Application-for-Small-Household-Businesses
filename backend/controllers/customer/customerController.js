@@ -4,12 +4,9 @@ const Order = require("../../models/Order"); // Để check Order ref trước x
 const User = require("../../models/User");
 const Employee = require("../../models/Employee");
 const Store = require("../../models/Store");
+const logActivity = require("../../utils/logActivity");
 const path = require("path");
-const {
-  parseExcelToJSON,
-  validateRequiredFields,
-  sanitizeData,
-} = require("../../utils/fileImport");
+const { parseExcelToJSON, validateRequiredFields, sanitizeData } = require("../../utils/fileImport");
 
 // POST /api/customers - Tạo mới khách hàng
 // Body: { name, phone, address?, note?, storeId? }
@@ -21,24 +18,17 @@ const createCustomer = async (req, res) => {
     // 1) req.store (set by checkStoreAccess middleware)
     // 2) req.body.storeId (frontend provided)
     // 3) req.user.currentStore (if you store it on user)
-    const storeFromReq =
-      req.store && (req.store._id || req.store.id)
-        ? req.store._id || req.store.id
-        : null;
+    const storeFromReq = req.store && (req.store._id || req.store.id) ? req.store._id || req.store.id : null;
     const storeFromBody = req.body.storeId || null;
     const storeFromUser =
-      req.user && (req.user.currentStore || req.user.storeId)
-        ? req.user.currentStore || req.user.storeId
-        : null;
+      req.user && (req.user.currentStore || req.user.storeId) ? req.user.currentStore || req.user.storeId : null;
 
     const storeId = storeFromReq || storeFromBody || storeFromUser || null;
 
     // Debug log to help trace problems
     console.log(
       "createCustomer - req.user:",
-      req.user
-        ? { id: req.user._id || req.user.id, username: req.user.username }
-        : null
+      req.user ? { id: req.user._id || req.user.id, username: req.user.username } : null
     );
 
     // Basic validation
@@ -49,9 +39,7 @@ const createCustomer = async (req, res) => {
       return res.status(400).json({ message: "Thiếu số điện thoại" });
     }
     if (!storeId) {
-      return res
-        .status(400)
-        .json({ message: "Thiếu storeId (không xác định cửa hàng hiện hành)" });
+      return res.status(400).json({ message: "Thiếu storeId (không xác định cửa hàng hiện hành)" });
     }
 
     const trimmedPhone = phone.trim();
@@ -63,9 +51,7 @@ const createCustomer = async (req, res) => {
       isDeleted: { $ne: true },
     });
     if (existing) {
-      return res
-        .status(400)
-        .json({ message: "Số điện thoại đã tồn tại trong cửa hàng này" });
+      return res.status(400).json({ message: "Số điện thoại đã tồn tại trong cửa hàng này" });
     }
 
     // Tạo object mới, gắn storeId và creator nếu cần
@@ -80,15 +66,22 @@ const createCustomer = async (req, res) => {
     });
 
     await newCustomer.save();
+    // Log hoạt động tạo khách hàng
+    await logActivity({
+      user: req.user,
+      store: { _id: storeId },
+      action: "create",
+      entity: "Customer",
+      entityId: newCustomer._id,
+      entityName: newCustomer.name,
+      req,
+      description: `Tạo mới khách hàng ${newCustomer.name} (${newCustomer.phone}) tại cửa hàng ${storeId}`,
+    });
 
     const created = await Customer.findById(newCustomer._id).lean();
 
-    console.log(
-      `Tạo mới khách hàng thành công: ${created.name} (${created.phone}), storeId=${storeId}`
-    );
-    return res
-      .status(201)
-      .json({ message: "Tạo khách hàng thành công", customer: created });
+    console.log(`Tạo mới khách hàng thành công: ${created.name} (${created.phone}), storeId=${storeId}`);
+    return res.status(201).json({ message: "Tạo khách hàng thành công", customer: created });
   } catch (err) {
     console.error("Lỗi khi tạo khách hàng:", err);
     return res.status(500).json({ message: "Lỗi server khi tạo khách hàng" });
@@ -177,6 +170,17 @@ const updateCustomer = async (req, res) => {
     if (note !== undefined) customer.note = (note || "").trim();
 
     await customer.save();
+    // Log hoạt động cập nhật khách hàng
+    await logActivity({
+      user: req.user,
+      store: { _id: customer.storeId },
+      action: "update",
+      entity: "Customer",
+      entityId: customer._id,
+      entityName: customer.name,
+      req,
+      description: `Cập nhật thông tin khách hàng ${customer.name} (${customer.phone})`,
+    });
 
     // Populate để return full
     const updatedCustomer = await Customer.findById(id).lean();
@@ -204,13 +208,22 @@ const softDeleteCustomer = async (req, res) => {
       status: { $in: ["pending", "refunded"] },
     });
     if (activeOrders.length > 0) {
-      return res
-        .status(400)
-        .json({ message: "Không thể xóa khách hàng có đơn hàng đang xử lý" });
+      return res.status(400).json({ message: "Không thể xóa khách hàng có đơn hàng đang xử lý" });
     }
 
     customer.isDeleted = true; // Xóa mềm
     await customer.save();
+    // log nhật ký hoạt động
+    await logActivity({
+      user: req.user,
+      store: { _id: customer.storeId },
+      action: "delete",
+      entity: "Customer",
+      entityId: customer._id,
+      entityName: customer.name,
+      req,
+      description: `Xóa mềm khách hàng ${customer.name} (${customer.phone})`,
+    });
 
     console.log(`Xóa mềm khách hàng thành công: ${customer.name}`);
     res.json({ message: "Xóa khách hàng thành công" });
@@ -268,9 +281,7 @@ const getCustomersByStore = async (req, res) => {
     });
   } catch (err) {
     console.error("❌ Lỗi khi lấy danh sách khách hàng theo store:", err);
-    res
-      .status(500)
-      .json({ message: "Lỗi server khi lấy danh sách khách hàng" });
+    res.status(500).json({ message: "Lỗi server khi lấy danh sách khách hàng" });
   }
 };
 
@@ -329,18 +340,18 @@ const importCustomers = async (req, res) => {
         }
 
         const phone = row["Số điện thoại"].trim();
-        
+
         if (!/^\d{10,11}$/.test(phone)) {
           results.failed.push({ row: rowNumber, data: row, error: "Số điện thoại không hợp lệ (10-11 chữ số)" });
           continue;
         }
 
-        const existingCustomer = await Customer.findOne({ 
-          phone: phone, 
-          storeId: storeId, 
-          isDeleted: false 
+        const existingCustomer = await Customer.findOne({
+          phone: phone,
+          storeId: storeId,
+          isDeleted: false,
         });
-        
+
         if (existingCustomer) {
           results.failed.push({ row: rowNumber, data: row, error: `Số điện thoại đã tồn tại: ${phone}` });
           continue;
@@ -355,7 +366,10 @@ const importCustomers = async (req, res) => {
         });
 
         await newCustomer.save();
-        results.success.push({ row: rowNumber, customer: { _id: newCustomer._id, name: newCustomer.name, phone: newCustomer.phone } });
+        results.success.push({
+          row: rowNumber,
+          customer: { _id: newCustomer._id, name: newCustomer.name, phone: newCustomer.phone },
+        });
       } catch (error) {
         results.failed.push({ row: rowNumber, data: row, error: error.message });
       }
@@ -370,17 +384,13 @@ const importCustomers = async (req, res) => {
 
 // Download Customer Template
 const downloadCustomerTemplate = (req, res) => {
-  const filePath = path.resolve(
-    __dirname,
-    "../../templates/customer_template.xlsx"
-  );
+  const filePath = path.resolve(__dirname, "../../templates/customer_template.xlsx");
 
   return res.sendFile(
     filePath,
     {
       headers: {
-        "Content-Type":
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "Content-Disposition": "attachment; filename=customer_template.xlsx",
       },
     },
@@ -388,9 +398,7 @@ const downloadCustomerTemplate = (req, res) => {
       if (err) {
         console.error("Lỗi downloadCustomerTemplate:", err);
         if (!res.headersSent) {
-          res
-            .status(500)
-            .json({ message: "Lỗi server", error: err.message });
+          res.status(500).json({ message: "Lỗi server", error: err.message });
         }
       }
     }
@@ -399,9 +407,9 @@ const downloadCustomerTemplate = (req, res) => {
 
 module.exports = {
   searchCustomers,
+  createCustomer,
   updateCustomer,
   softDeleteCustomer,
-  createCustomer,
   getCustomersByStore,
   importCustomers,
   downloadCustomerTemplate,
