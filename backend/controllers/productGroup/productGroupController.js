@@ -3,6 +3,12 @@ const Store = require("../../models/Store");
 const User = require("../../models/User");
 const Employee = require("../../models/Employee");
 const Product = require("../../models/Product");
+const path = require("path");
+const {
+  parseExcelToJSON,
+  validateRequiredFields,
+  sanitizeData,
+} = require("../../utils/fileImport");
 
 // ============= CREATE =============
 const createProductGroup = async (req, res) => {
@@ -246,10 +252,128 @@ const deleteProductGroup = async (req, res) => {
   }
 };
 
+// Import Product Groups from Excel/CSV
+const importProductGroups = async (req, res) => {
+  try {
+    const { storeId } = req.params;
+    const userId = req.user.id || req.user._id;
+
+    if (!req.file) {
+      return res.status(400).json({ message: "Vui lòng tải lên file" });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "Người dùng không tồn tại" });
+    }
+
+    const store = await Store.findById(storeId);
+    if (!store) {
+      return res.status(404).json({ message: "Cửa hàng không tồn tại" });
+    }
+
+    if (!store.owner_id.equals(userId)) {
+      if (user.role === "STAFF") {
+        const employee = await Employee.findOne({ user_id: userId });
+        if (!employee || employee.store_id.toString() !== storeId) {
+          return res.status(403).json({ message: "Bạn không có quyền import" });
+        }
+      } else {
+        return res.status(403).json({ message: "Bạn không có quyền import" });
+      }
+    }
+
+    const data = await parseExcelToJSON(req.file.buffer);
+
+    if (data.length === 0) {
+      return res.status(400).json({ message: "File không chứa dữ liệu hợp lệ" });
+    }
+
+    const results = { success: [], failed: [], total: data.length };
+
+    for (let i = 0; i < data.length; i++) {
+      const row = sanitizeData(data[i]);
+      const rowNumber = i + 2;
+
+      try {
+        const validation = validateRequiredFields(row, ["Tên nhóm sản phẩm"]);
+        if (!validation.isValid) {
+          results.failed.push({
+            row: rowNumber,
+            data: row,
+            error: `Thiếu: ${validation.missingFields.join(", ")}`,
+          });
+          continue;
+        }
+
+        const name = row["Tên nhóm sản phẩm"].trim();
+
+        const existingGroup = await ProductGroup.findOne({ 
+          name: name, 
+          storeId: storeId, 
+          isDeleted: false 
+        });
+        
+        if (existingGroup) {
+          results.failed.push({ row: rowNumber, data: row, error: `Nhóm sản phẩm đã tồn tại: ${name}` });
+          continue;
+        }
+
+        const newGroup = new ProductGroup({
+          name: name,
+          description: row["Mô tả"] || "",
+          storeId: storeId,
+        });
+
+        await newGroup.save();
+        results.success.push({ row: rowNumber, group: { _id: newGroup._id, name: newGroup.name } });
+      } catch (error) {
+        results.failed.push({ row: rowNumber, data: row, error: error.message });
+      }
+    }
+
+    res.status(200).json({ message: "Import hoàn tất", results });
+  } catch (error) {
+    console.error("Lỗi importProductGroups:", error);
+    res.status(500).json({ message: "Lỗi server", error: error.message });
+  }
+};
+
+// Download Product Group Template
+const downloadProductGroupTemplate = (req, res) => {
+  const filePath = path.resolve(
+    __dirname,
+    "../../templates/product_group_template.xlsx"
+  );
+
+  return res.sendFile(
+    filePath,
+    {
+      headers: {
+        "Content-Type":
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": "attachment; filename=product_group_template.xlsx",
+      },
+    },
+    (err) => {
+      if (err) {
+        console.error("Lỗi downloadProductGroupTemplate:", err);
+        if (!res.headersSent) {
+          res
+            .status(500)
+            .json({ message: "Lỗi server", error: err.message });
+        }
+      }
+    }
+  );
+};
+
 module.exports = {
   createProductGroup,
   getProductGroupsByStore,
   getProductGroupById,
   updateProductGroup,
   deleteProductGroup,
+  importProductGroups,
+  downloadProductGroupTemplate,
 };

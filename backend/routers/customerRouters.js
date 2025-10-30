@@ -8,6 +8,8 @@ const {
   updateCustomer,
   softDeleteCustomer,
   getCustomersByStore,
+  importCustomers,
+  downloadCustomerTemplate,
 } = require("../controllers/customer/customerController");
 
 const {
@@ -15,6 +17,8 @@ const {
   checkStoreAccess,
   requirePermission,
 } = require("../middlewares/authMiddleware");
+
+const upload = require("../middlewares/upload");
 
 /*
   Quy ước permission strings:
@@ -25,6 +29,25 @@ const {
   - Hỗ trợ wildcard: customers:*  hoặc store:<storeId>:customers:*
   - Manager mặc định được override (allow) trừ khi gọi requirePermission(..., { allowManager: false })
 */
+
+/*
+  Route: GET /api/customers/template/download
+  - Tải template import Excel/CSV
+*/
+router.get("/template/download", verifyToken, downloadCustomerTemplate);
+
+/*
+  Route: POST /api/customers/store/:storeId/import
+  - Import khách hàng từ Excel/CSV
+*/
+router.post(
+  "/store/:storeId/import",
+  verifyToken,
+  checkStoreAccess,
+  upload.single("file"),
+  requirePermission("customers:create"),
+  importCustomers
+);
 
 /*
   Route: POST /api/customers
