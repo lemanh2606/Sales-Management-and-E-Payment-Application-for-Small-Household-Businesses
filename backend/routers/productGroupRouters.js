@@ -8,6 +8,7 @@ const {
   checkStoreAccess,
   requirePermission,
 } = require("../middlewares/authMiddleware");
+const upload = require("../middlewares/upload");
 
 /*
   GHI CHÚ CHUNG:
@@ -23,6 +24,25 @@ const {
       * product-groups:delete
   - Nếu bạn lưu menu theo store scope (store:<storeId>:...), middleware requirePermission() đã hỗ trợ sẵn.
 */
+
+/*
+  GET /api/product-groups/template/download
+  - Tải template import Excel/CSV
+*/
+router.get("/template/download", verifyToken, productGroupController.downloadProductGroupTemplate);
+
+/*
+  POST /api/product-groups/store/:storeId/import
+  - Import nhóm sản phẩm từ Excel/CSV
+*/
+router.post(
+  "/store/:storeId/import",
+  verifyToken,
+  checkStoreAccess,
+  upload.single("file"),
+  requirePermission("product-groups:create"),
+  productGroupController.importProductGroups
+);
 
 /*
   POST /api/product-groups/store/:storeId
