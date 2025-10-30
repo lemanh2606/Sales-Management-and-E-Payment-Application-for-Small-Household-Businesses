@@ -40,7 +40,10 @@ export default function Sidebar() {
       name: "Cửa hàng",
       path: "/auth",
       icon: <AiOutlineDashboard size={20} />,
-      children: [{ name: "Chọn cửa hàng (Manager)", path: "/select-store", permission: "store:view" }],
+      children: [
+        { name: "Chọn cửa hàng (Manager)", path: "/select-store", permission: "store:view" },
+        { name: "Tổng quan", path: "/dashboard", permission: "store:dashboard:view" },
+      ],
     },
     {
       key: "users",
@@ -54,7 +57,7 @@ export default function Sidebar() {
     },
     {
       key: "products",
-      name: "Hàng hóa",
+      name: "Quản lý kho",
       path: "/products",
       icon: <BsBoxSeam size={20} />,
       children: [
@@ -66,7 +69,7 @@ export default function Sidebar() {
           children: [{ name: "Danh sách nhà cung cấp", path: "/suppliers", permission: "supplier:view" }],
         },
         { name: "Quản lý nhập/xuất/hủy hàng", path: "/inventory", permission: "purchase-orders:view" },
-        { name: "Nhóm sản phẩm", path: "/product-groups", permission: "products:view" },
+        { name: "Nhóm hàng hoá", path: "/product-groups", permission: "products:view" },
       ],
     },
     {
@@ -124,7 +127,7 @@ export default function Sidebar() {
       path: "/reports",
       icon: <AiOutlineDashboard size={20} />,
       children: [
-        { name: "Dashboard tổng quan", path: "/reports/dashboard", permission: "reports:revenue:view" },
+        { name: "Tổng quan báo cáo", path: "/reports/dashboard", permission: "reports:revenue:view" },
         { name: "Báo cáo tài chính", path: "/reports/financial", permission: "reports:revenue:export" },
       ],
     },
