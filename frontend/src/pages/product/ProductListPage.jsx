@@ -38,15 +38,31 @@ export default function ProductListPage() {
     { key: "updatedAt", label: "Cập nhật", default: false },
   ];
 
-  const [visibleColumns, setVisibleColumns] = useState(
-    allColumns.filter(col => col.default).map(col => col.key)
-  );
+  // 👉 FIX: Load visibleColumns từ localStorage, fallback default
+  const [visibleColumns, setVisibleColumns] = useState(() => {
+    try {
+      const saved = localStorage.getItem("productVisibleColumns");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Ensure status always included if default
+        if (!parsed.includes("status")) parsed.push("status");
+        return parsed;
+      }
+    } catch (err) {
+      console.warn("Lỗi load visibleColumns:", err);
+    }
+    return allColumns.filter(col => col.default).map(col => col.key);
+  });
 
   const fetchProducts = async () => {
     if (!storeId) return;
     try {
       setLoading(true);
-      const data = await getProductsByStore(storeId, { page: currentPage, limit: itemsPerPage });
+      const data = await getProductsByStore(storeId, { 
+        page: currentPage, 
+        limit: itemsPerPage,
+        search: searchTerm || undefined
+      });
       setProducts(Array.isArray(data?.products) ? data.products : []);
     } catch (err) {
       console.error(err);
@@ -57,21 +73,23 @@ export default function ProductListPage() {
   };
 
   useEffect(() => {
+    setCurrentPage(1);
     fetchProducts();
-  }, [storeId, currentPage]);
+  }, [storeId, currentPage, searchTerm]);
 
-  const filteredProducts = products.filter(p =>
-    p.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const currentProducts = filteredProducts.slice(startIndex, startIndex + itemsPerPage);
+  const currentProducts = products;
 
   const toggleColumn = (key) => {
-    setVisibleColumns(prev =>
-      prev.includes(key) ? prev.filter(c => c !== key) : [...prev, key]
-    );
+    setVisibleColumns(prev => {
+      const newVisible = prev.includes(key) ? prev.filter(c => c !== key) : [...prev, key];
+      // 👉 FIX: Luôn giữ status nếu toggle off (optional, hoặc remove nếu muốn toggle được)
+      if (!newVisible.includes("status") && allColumns.find(col => col.key === "status")?.default) {
+        newVisible.push("status");
+      }
+      // 👉 FIX: Save to localStorage sau toggle
+      localStorage.setItem("productVisibleColumns", JSON.stringify(newVisible));
+      return newVisible;
+    });
   };
 
   const openCreateModal = () => {
@@ -105,9 +123,60 @@ export default function ProductListPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // 👉 FIX: Dynamic columns excluding status/actions, status always right if visible, actions last
+  const dynamicColumns = allColumns.filter(col => visibleColumns.includes(col.key) && col.key !== "status" && col.key !== "name" && col.key !== "sku" && col.key !== "price" && col.key !== "stock_quantity");
+
+  const renderColumnHeader = (col) => <th key={col.key} className="py-3 px-2 text-left font-semibold text-gray-700 border-b border-gray-200 min-w-[80px] max-w-[120px] w-[8%]">{col.label}</th>; // 👉 FIX: Giảm max-w, w-[8%] để fit 14+ columns
+
+  const renderColumnCell = (product, col) => {
+    const value = product[col.key];
+    switch (col.key) {
+      case "name":
+        return <td key={col.key} className="py-3 px-2 font-medium text-gray-900 border-b border-gray-100 min-w-[80px] max-w-[120px] w-[8%] truncate">{value || "-"}</td>;
+      case "sku":
+        return <td key={col.key} className="py-3 px-2 border-b border-gray-100 min-w-[80px] max-w-[120px] w-[8%]">{value || "-"}</td>;
+      case "price":
+        return <td key={col.key} className="py-3 px-2 text-left border-b border-gray-100 min-w-[80px] max-w-[120px] w-[8%] truncate">{value ? `${value.toLocaleString()}₫` : "-"}</td>;
+      case "stock_quantity":
+        return <td key={col.key} className="py-3 px-2 text-left border-b border-gray-100 min-w-[80px] max-w-[120px] w-[8%]">{value || 0}</td>;
+      case "cost_price":
+        return <td key={col.key} className="py-3 px-2 text-left border-b border-gray-100 min-w-[80px] max-w-[120px] w-[8%] truncate">{value ? `${value.toLocaleString()}₫` : "-"}</td>;
+      case "supplier":
+        return <td key={col.key} className="py-3 px-2 border-b border-gray-100 min-w-[80px] max-w-[120px] w-[8%] truncate">{value?.name || "-"}</td>;
+      case "group":
+        return <td key={col.key} className="py-3 px-2 border-b border-gray-100 min-w-[80px] max-w-[120px] w-[8%] truncate">{value?.name || "-"}</td>;
+      case "unit":
+        return <td key={col.key} className="py-3 px-2 text-left border-b border-gray-100 min-w-[80px] max-w-[120px] w-[8%]">{value || "-"}</td>;
+      case "min_stock":
+        return <td key={col.key} className="py-3 px-2 text-left border-b border-gray-100 min-w-[80px] max-w-[120px] w-[8%]">{value || 0}</td>;
+      case "max_stock":
+        return <td key={col.key} className="py-3 px-2 text-left border-b border-gray-100 min-w-[80px] max-w-[120px] w-[8%]">{value || 0}</td>;
+      case "image":
+        return (
+          <td key={col.key} className="py-3 px-2 border-b border-gray-100 text-left min-w-[80px] max-w-[120px] w-[8%]">
+            {value ? <img src={value} alt={product.name} className="w-8 h-8 object-cover rounded" /> : "-"}
+          </td>
+        );
+      case "createdAt":
+        return <td key={col.key} className="py-3 px-2 border-b border-gray-100 min-w-[80px] max-w-[120px] w-[8%] truncate">{value ? new Date(value).toLocaleDateString('vi-VN') : "-"}</td>;
+      case "updatedAt":
+        return <td key={col.key} className="py-3 px-2 border-b border-gray-100 min-w-[80px] max-w-[120px] w-[8%] truncate">{value ? new Date(value).toLocaleDateString('vi-VN') : "-"}</td>;
+      case "status":
+        return (
+          <td key={col.key} className="py-3 px-2 border-b border-gray-100 min-w-[80px] max-w-[120px] w-[8%]">
+            <span className={value === "Đang kinh doanh" ? "text-green-600 font-semibold" : "text-red-500 font-semibold"}>
+              {value || "Chưa xác định"}
+            </span>
+          </td>
+        );
+      default:
+        return <td key={col.key} className="py-3 px-2 border-b border-gray-100 min-w-[80px] max-w-[120px] w-[8%]">{"-"}</td>;
+    }
+  };
+
   return (
     <Layout>
-      <div className="p-6 mx-auto bg-white rounded-2xl  transition-all duration-300">
+      <div className="p-6 mx-auto bg-white rounded-2xl transition-all duration-300">
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
           <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight">Danh sách sản phẩm</h1>
@@ -125,7 +194,7 @@ export default function ProductListPage() {
             type="text"
             placeholder="Tìm kiếm sản phẩm..."
             value={searchTerm}
-            onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+            onChange={(e) => setSearchTerm(e.target.value)}
             className="border border-gray-300 rounded-lg px-4 py-2 w-full md:w-1/3 focus:ring-2 focus:ring-green-400 outline-none transition-all duration-200"
           />
 
@@ -134,13 +203,13 @@ export default function ProductListPage() {
               onClick={() => setColumnDropdownOpen(!columnDropdownOpen)}
               className="flex items-center gap-2 bg-gray-200 text-gray-700 px-3 py-2 rounded-xl shadow-sm hover:bg-gray-300 transition-all"
             >
-              <MdViewColumn size={20} /> Cột hiển thị
+              <MdViewColumn size={20} /> Cài đặt các cột để hiển thị
             </Button>
 
             {columnDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-xl shadow-lg z-50 p-4 flex flex-col gap-2 max-h-72 overflow-auto scroll-hidden">
+              <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-xl shadow-lg z-50 p-4 flex flex-col gap-2 max-h-72 overflow-y-auto">
                 {allColumns.map(col => (
-                  <label key={col.key} className="flex items-center gap-2 text-sm hover:bg-gray-100 p-1 rounded">
+                  <label key={col.key} className="flex items-center gap-2 text-sm hover:bg-gray-100 p-1 rounded cursor-pointer">
                     <input
                       type="checkbox"
                       checked={visibleColumns.includes(col.key)}
@@ -157,17 +226,20 @@ export default function ProductListPage() {
         {/* Table */}
         {loading ? (
           <p className="text-center mt-10 text-gray-400 animate-pulse text-lg">⏳ Đang tải...</p>
-        ) : filteredProducts.length === 0 ? (
+        ) : currentProducts.length === 0 ? (
           <p className="mt-10 text-center text-gray-400 italic text-lg">Không có sản phẩm nào</p>
         ) : (
-          <div className="overflow-x-auto rounded-2xl shadow-lg border border-gray-200 bg-white transition-all duration-300 scroll-hidden">
-            <table className="min-w-full text-gray-700">
+          <div className="overflow-x-auto rounded-2xl shadow-lg border border-gray-200 bg-white transition-all duration-300 max-w-full">
+            <table className="min-w-full text-gray-700 table-fixed">
               <thead className="bg-gray-50 uppercase text-sm sm:text-base font-medium">
                 <tr>
-                  {allColumns.filter(col => visibleColumns.includes(col.key)).map(col => (
-                    <th key={col.key} className="py-4 px-6 text-left">{col.label}</th>
-                  ))}
-                  <th className="py-4 px-6 text-center">Hành động</th>
+                  {/* 👉 FIX: Default columns (name, sku, price, stock_quantity) always first */}
+                  {allColumns.filter(col => ["name", "sku", "price", "stock_quantity"].includes(col.key)).map(renderColumnHeader)}
+                  {/* 👉 FIX: Dynamic columns (newly added) before status */}
+                  {dynamicColumns.map(renderColumnHeader)}
+                  {/* 👉 FIX: Status and Actions always right */}
+                  {visibleColumns.includes("status") && renderColumnHeader(allColumns.find(col => col.key === "status"))}
+                  <th className="py-3 px-2 text-left font-semibold text-gray-700 border-b border-gray-200 min-w-[80px] max-w-[80px] w-[8%]">Hành động</th>
                 </tr>
               </thead>
               <tbody>
@@ -176,34 +248,19 @@ export default function ProductListPage() {
                     key={product._id}
                     className={`transition-transform duration-200 hover:scale-[1.02] hover:shadow-lg ${i % 2 === 0 ? "bg-white" : "bg-green-50"}`}
                   >
-                    {visibleColumns.includes("name") && <td className="py-4 px-6 font-medium text-gray-900">{product.name}</td>}
-                    {visibleColumns.includes("sku") && <td className="py-4 px-6">{product.sku || "-"}</td>}
-                    {visibleColumns.includes("price") && <td className="py-4 px-6 text-right">{product.price?.toLocaleString()}₫</td>}
-                    {visibleColumns.includes("cost_price") && <td className="py-4 px-6 text-right">{product.cost_price?.toLocaleString()}₫</td>}
-                    {visibleColumns.includes("stock_quantity") && <td className="py-4 px-6 text-center">{product.stock_quantity}</td>}
-                    {visibleColumns.includes("min_stock") && <td className="py-4 px-6 text-center">{product.min_stock}</td>}
-                    {visibleColumns.includes("max_stock") && <td className="py-4 px-6 text-center">{product.max_stock}</td>}
-                    {visibleColumns.includes("unit") && <td className="py-4 px-6 text-center">{product.unit}</td>}
-                    {visibleColumns.includes("status") && (
-                      <td className="py-4 px-6">
-                        <span className={product.status === "Đang kinh doanh" ? "text-green-600 font-semibold" : "text-red-500 font-semibold"}>
-                          {product.status}
-                        </span>
-                      </td>
-                    )}
-                    {visibleColumns.includes("supplier") && <td className="py-4 px-6">{product.supplier?.name || "-"}</td>}
-                    {visibleColumns.includes("group") && <td className="py-4 px-6">{product.group?.name || "-"}</td>}
-                    {visibleColumns.includes("image") && (
-                      <td className="py-4 px-6">
-                        {product.image ? <img src={product.image} alt={product.name} className="w-12 h-12 object-cover rounded" /> : "-"}
-                      </td>
-                    )}
-                    {visibleColumns.includes("createdAt") && <td className="py-4 px-6">{new Date(product.createdAt).toLocaleDateString()}</td>}
-                    {visibleColumns.includes("updatedAt") && <td className="py-4 px-6">{new Date(product.updatedAt).toLocaleDateString()}</td>}
-
-                    <td className="py-4 px-6 flex justify-center items-center gap-4">
-                      <button onClick={() => openEditModal(product)} className="text-yellow-500 hover:text-yellow-700 hover:scale-110 transition transform" title="Sửa">
-                        <MdModeEditOutline size={22} />
+                    {/* 👉 FIX: Default columns first */}
+                    {allColumns.filter(col => ["name", "sku", "price", "stock_quantity"].includes(col.key)).map(col => renderColumnCell(product, col))}
+                    {/* 👉 FIX: Dynamic columns before status */}
+                    {dynamicColumns.map(col => renderColumnCell(product, col))}
+                    {/* 👉 FIX: Status and Actions always right */}
+                    {visibleColumns.includes("status") && renderColumnCell(product, allColumns.find(col => col.key === "status"))}
+                    <td className="py-3 px-2 flex justify-center items-center gap-2 border-b border-gray-100 min-w-[80px] max-w-[80px] w-[8%]">
+                      <button 
+                        onClick={() => openEditModal(product)} 
+                        className="text-yellow-500 hover:text-yellow-700 hover:scale-110 transition transform" 
+                        title="Sửa"
+                      >
+                        <MdModeEditOutline size={18} />
                       </button>
                     </td>
                   </tr>
@@ -213,8 +270,7 @@ export default function ProductListPage() {
           </div>
         )}
 
-        {/* Pagination */}
-        {totalPages > 1 && (
+        {products.length >= itemsPerPage && (
           <div className="flex flex-wrap justify-center mt-6 gap-2">
             <button
               disabled={currentPage === 1}
@@ -223,7 +279,7 @@ export default function ProductListPage() {
             >
               ← Trước
             </button>
-            {[...Array(totalPages)].map((_, i) => (
+            {[...Array(Math.ceil(products.length / itemsPerPage))].map((_, i) => (
               <button
                 key={i}
                 onClick={() => setCurrentPage(i + 1)}
@@ -233,7 +289,7 @@ export default function ProductListPage() {
               </button>
             ))}
             <button
-              disabled={currentPage === totalPages}
+              disabled={currentPage === Math.ceil(products.length / itemsPerPage)}
               onClick={() => setCurrentPage(currentPage + 1)}
               className="px-4 py-2 border rounded-lg disabled:opacity-50 hover:bg-gray-100 transition"
             >
@@ -242,7 +298,6 @@ export default function ProductListPage() {
           </div>
         )}
 
-        {/* Modal Create/Edit */}
         <Modal
           isOpen={isModalOpen}
           onRequestClose={closeModal}

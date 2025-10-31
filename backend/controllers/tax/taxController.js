@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const PDFDocument = require("pdfkit");
 const Order = require("../../models/Order");
 const TaxDeclaration = require("../../models/TaxDeclaration");
+const logActivity = require("../../utils/logActivity");
 const { periodToRange } = require("../../utils/period");
 const { Parser } = require("json2csv");
 
@@ -11,8 +12,7 @@ const { Parser } = require("json2csv");
  * - parseDecimal: trả về Decimal128 từ number/string
  * - decimalToString: trả về string từ Decimal128 (an toàn để trả về FE)
  */
-const parseDecimal = (v) =>
-  mongoose.Types.Decimal128.fromString(Number(v || 0).toFixed(2));
+const parseDecimal = (v) => mongoose.Types.Decimal128.fromString(Number(v || 0).toFixed(2));
 const decimalToString = (d) => (d ? d.toString() : "0.00");
 
 /**
@@ -22,8 +22,7 @@ const decimalToString = (d) => (d ? d.toString() : "0.00");
 function isManagerUser(user) {
   if (!user) return false;
   if (user.isManager) return true;
-  if (typeof user.role === "string" && user.role.toLowerCase() === "manager")
-    return true;
+  if (typeof user.role === "string" && user.role.toLowerCase() === "manager") return true;
   if (Array.isArray(user.roles) && user.roles.includes("manager")) return true;
   return false;
 }
@@ -37,11 +36,7 @@ function hasAccessToStore(user, storeId) {
   if (!user) return false;
   if (!storeId) return true;
   if (user.storeId && String(user.storeId) === String(storeId)) return true;
-  if (
-    Array.isArray(user.storeIds) &&
-    user.storeIds.map(String).includes(String(storeId))
-  )
-    return true;
+  if (Array.isArray(user.storeIds) && user.storeIds.map(String).includes(String(storeId))) return true;
   return false;
 }
 
@@ -67,35 +62,24 @@ const previewSystemRevenue = async (req, res) => {
     ); // Log debug tiếng Việt params
 
     if (!periodType || !shopId) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Thiếu params: periodType, shopId" });
+      return res.status(400).json({ success: false, message: "Thiếu params: periodType, shopId" });
     }
 
     if (periodType !== "custom" && !periodKey) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Thiếu periodKey cho periodType không phải custom",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Thiếu periodKey cho periodType không phải custom",
+      });
     }
 
     if (periodType === "custom" && (!monthFrom || !monthTo)) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Thiếu monthFrom/monthTo cho periodType custom",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Thiếu monthFrom/monthTo cho periodType custom",
+      });
     }
 
-    const { start, end } = periodToRange(
-      periodType,
-      periodKey,
-      monthFrom,
-      monthTo
-    ); // Gọi utils với params tùy type
+    const { start, end } = periodToRange(periodType, periodKey, monthFrom, monthTo); // Gọi utils với params tùy type
 
     // Aggregate: chỉ cộng orders đã in (printDate != null) và status = "paid", filter storeId nếu có
     const agg = await Order.aggregate([
@@ -127,9 +111,7 @@ const previewSystemRevenue = async (req, res) => {
     });
   } catch (err) {
     console.error("previewSystemRevenue error:", err); // Log debug tiếng Việt error
-    res
-      .status(500)
-      .json({ success: false, message: "Lỗi server khi preview doanh thu" });
+    res.status(500).json({ success: false, message: "Lỗi server khi preview doanh thu" });
   }
 };
 /**
@@ -138,7 +120,7 @@ const previewSystemRevenue = async (req, res) => {
  * Body: { shopId, periodType, periodKey, declaredRevenue, createdBy }
  * - Nếu đã có bản gốc cùng (shopId + periodType + periodKey + isClone:false) => trả 409
  */
-async function createTaxDeclaration(req, res) {
+const createTaxDeclaration = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
@@ -148,21 +130,17 @@ async function createTaxDeclaration(req, res) {
     if (!shopId || !periodType || !periodKey || declaredRevenue == null) {
       await session.abortTransaction();
       session.endSession();
-      return res
-        .status(400)
-        .json({ success: false, message: "Missing required fields" });
+      return res.status(400).json({ success: false, message: "Missing required fields" });
     }
 
     // Quyền: người dùng phải có access cửa hàng; route nên có verifyToken + checkStoreAccess
     if (!hasAccessToStore(req.user, shopId)) {
       await session.abortTransaction();
       session.endSession();
-      return res
-        .status(403)
-        .json({
-          success: false,
-          message: "Không có quyền truy cập cửa hàng này",
-        });
+      return res.status(403).json({
+        success: false,
+        message: "Không có quyền truy cập cửa hàng này",
+      });
     }
 
     // Check tồn tại 'bản gốc' cùng kỳ: nếu có -> block (409)
@@ -178,8 +156,7 @@ async function createTaxDeclaration(req, res) {
       session.endSession();
       return res.status(409).json({
         success: false,
-        message:
-          "Đã tồn tại tờ khai cho kỳ này. Vui lòng cập nhật tờ khai hiện có hoặc tạo bản sao.",
+        message: "Đã tồn tại tờ khai cho kỳ này. Vui lòng cập nhật tờ khai hiện có hoặc tạo bản sao.",
       });
     }
 
@@ -201,9 +178,7 @@ async function createTaxDeclaration(req, res) {
       },
     ]).session(session);
 
-    const systemRevenueDecimal = agg[0]?.total
-      ? agg[0].total
-      : mongoose.Types.Decimal128.fromString("0.00");
+    const systemRevenueDecimal = agg[0]?.total ? agg[0].total : mongoose.Types.Decimal128.fromString("0.00");
 
     // Thuế suất mặc định (có thể config per-store sau này)
     const gtgtRate = 1.0; // %
@@ -242,74 +217,71 @@ async function createTaxDeclaration(req, res) {
     await session.commitTransaction();
     session.endSession();
 
-    return res
-      .status(201)
-      .json({
-        success: true,
-        message: "Tạo tờ khai thành công",
-        declaration: doc[0],
-      });
+    // 📘 Ghi log sau khi tạo thành công
+    await logActivity({
+      user: req.user,
+      store: { _id: shopId },
+      action: "create",
+      entity: "TaxDeclaration",
+      entityId: doc[0]._id,
+      entityName: `${periodType}-${periodKey}`,
+      req,
+      description: `Tạo tờ khai thuế kỳ ${periodType} ${periodKey} cho cửa hàng ${shopId}`,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Tạo tờ khai thành công",
+      declaration: doc[0],
+    });
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
     console.error("createTaxDeclaration error:", err);
-    return res
-      .status(500)
-      .json({ success: false, message: "Lỗi server khi tạo tờ khai" });
+    return res.status(500).json({ success: false, message: "Lỗi server khi tạo tờ khai" });
   }
-}
+};
 
 /**
  * UPDATE tax declaration
  * PUT /api/tax/:id
  * Body: { declaredRevenue } (chỉ cho edit declaredRevenue khi status = saved)
  */
-async function updateTaxDeclaration(req, res) {
+const updateTaxDeclaration = async (req, res) => {
   try {
     const { id } = req.params;
     const { declaredRevenue } = req.body;
 
     if (declaredRevenue == null) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Thiếu declaredRevenue" });
+      return res.status(400).json({ success: false, message: "Thiếu declaredRevenue" });
     }
 
     const doc = await TaxDeclaration.findById(id);
-    if (!doc)
-      return res
-        .status(404)
-        .json({ success: false, message: "Không tìm thấy tờ khai" });
+    if (!doc) return res.status(404).json({ success: false, message: "Không tìm thấy tờ khai" });
 
     // Quyền: phải có access đến shop
     if (!hasAccessToStore(req.user, doc.shopId)) {
-      return res
-        .status(403)
-        .json({
-          success: false,
-          message: "Không có quyền thao tác trên tờ khai này",
-        });
+      return res.status(403).json({
+        success: false,
+        message: "Không có quyền thao tác trên tờ khai này",
+      });
     }
 
     // Chỉ cho phép chỉnh sửa khi status = 'saved'
     if (doc.status !== "saved") {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Chỉ tờ khai trạng thái 'saved' mới được chỉnh sửa",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Chỉ tờ khai trạng thái 'saved' mới được chỉnh sửa",
+      });
     }
 
     // Quyền: chỉ creator hoặc manager mới update (để an toàn)
     const userId = req.user?._id;
     if (!isManagerUser(req.user) && String(doc.createdBy) !== String(userId)) {
-      return res
-        .status(403)
-        .json({
-          success: false,
-          message: "Chỉ người tạo hoặc manager mới được cập nhật",
-        });
+      return res.status(403).json({
+        success: false,
+        message: "Chỉ người tạo hoặc manager mới được cập nhật",
+      });
     }
 
     // Recompute tax amounts based on new declaredRevenue
@@ -326,6 +298,18 @@ async function updateTaxDeclaration(req, res) {
 
     await doc.save();
 
+    // 📘 Ghi log sau khi cập nhật thành công
+    await logActivity({
+      user: req.user,
+      store: { _id: doc.shopId },
+      action: "update",
+      entity: "TaxDeclaration",
+      entityId: doc._id,
+      entityName: `${doc.periodType}-${doc.periodKey}`,
+      req,
+      description: `Cập nhật doanh thu kê khai của tờ khai thuế kỳ ${doc.periodType} ${doc.periodKey} cho cửa hàng ${doc.shopId}`,
+    });
+
     return res.json({
       success: true,
       message: "Cập nhật tờ khai thành công",
@@ -333,11 +317,9 @@ async function updateTaxDeclaration(req, res) {
     });
   } catch (err) {
     console.error("updateTaxDeclaration error:", err);
-    return res
-      .status(500)
-      .json({ success: false, message: "Lỗi server khi cập nhật tờ khai" });
+    return res.status(500).json({ success: false, message: "Lỗi server khi cập nhật tờ khai" });
   }
-}
+};
 
 /**
  * CLONE tax declaration
@@ -345,7 +327,7 @@ async function updateTaxDeclaration(req, res) {
  * Tạo bản sao (isClone=true) từ bản gốc hoặc từ 1 bản bất kỳ.
  * - version sẽ được set = max(version of same period/shop) + 1
  */
-async function cloneTaxDeclaration(req, res) {
+const cloneTaxDeclaration = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
@@ -354,18 +336,14 @@ async function cloneTaxDeclaration(req, res) {
     if (!source) {
       await session.abortTransaction();
       session.endSession();
-      return res
-        .status(404)
-        .json({ success: false, message: "Nguồn để sao chép không tồn tại" });
+      return res.status(404).json({ success: false, message: "Nguồn để sao chép không tồn tại" });
     }
 
     // Quyền: phải có access cửa hàng
     if (!hasAccessToStore(req.user, source.shopId)) {
       await session.abortTransaction();
       session.endSession();
-      return res
-        .status(403)
-        .json({ success: false, message: "Không có quyền thao tác" });
+      return res.status(403).json({ success: false, message: "Không có quyền thao tác" });
     }
 
     // Tính version mới: lấy MAX(version) cùng shop+period + 1
@@ -403,22 +381,30 @@ async function cloneTaxDeclaration(req, res) {
     await session.commitTransaction();
     session.endSession();
 
-    return res
-      .status(201)
-      .json({
-        success: true,
-        message: "Tạo bản sao thành công",
-        declaration: cloneDoc[0],
-      });
+    // 📘 Ghi log sau khi tạo thành công
+    await logActivity({
+      user: req.user,
+      store: { _id: source.shopId },
+      action: "create",
+      entity: "TaxDeclaration",
+      entityId: cloneDoc[0]._id,
+      entityName: `${source.periodType}-${source.periodKey}`,
+      req,
+      description: `Tạo bản sao tờ khai thuế kỳ ${source.periodType} ${source.periodKey} từ bản gốc ${source._id}`,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Tạo bản sao thành công",
+      declaration: cloneDoc[0],
+    });
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
     console.error("cloneTaxDeclaration error:", err);
-    return res
-      .status(500)
-      .json({ success: false, message: "Lỗi server khi clone tờ khai" });
+    return res.status(500).json({ success: false, message: "Lỗi server khi clone tờ khai" });
   }
-}
+};
 
 /**
  * DELETE tax declaration
@@ -426,7 +412,7 @@ async function cloneTaxDeclaration(req, res) {
  * Chỉ Manager được xóa
  * Nếu xóa bản gốc mà tồn tại bản sao -> nâng 1 bản sao thành bản gốc (originalId null, isClone false)
  */
-async function deleteTaxDeclaration(req, res) {
+const deleteTaxDeclaration = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
@@ -435,27 +421,21 @@ async function deleteTaxDeclaration(req, res) {
     if (!doc) {
       await session.abortTransaction();
       session.endSession();
-      return res
-        .status(404)
-        .json({ success: false, message: "Không tìm thấy tờ khai" });
+      return res.status(404).json({ success: false, message: "Không tìm thấy tờ khai" });
     }
 
     // Quyền: chỉ manager được xóa
     if (!isManagerUser(req.user)) {
       await session.abortTransaction();
       session.endSession();
-      return res
-        .status(403)
-        .json({ success: false, message: "Chỉ Manager mới được xóa tờ khai" });
+      return res.status(403).json({ success: false, message: "Chỉ Manager mới được xóa tờ khai" });
     }
 
     // Kiểm tra access store
     if (!hasAccessToStore(req.user, doc.shopId)) {
       await session.abortTransaction();
       session.endSession();
-      return res
-        .status(403)
-        .json({ success: false, message: "Không có quyền thao tác" });
+      return res.status(403).json({ success: false, message: "Không có quyền thao tác" });
     }
 
     // Nếu xóa bản gốc (isClone == false), tìm 1 bản sao cùng kỳ và nâng lên làm gốc
@@ -476,6 +456,17 @@ async function deleteTaxDeclaration(req, res) {
         clone.isClone = false;
         // giữ version như cũ hoặc reset? Chúng ta giữ version value
         await clone.save({ session });
+        // ghi log nhật ký hoạt động
+        await logActivity({
+          user: req.user,
+          store: { _id: doc.shopId },
+          action: "restore",
+          entity: "TaxDeclaration",
+          entityId: clone._id,
+          entityName: `${clone.periodType}-${clone.periodKey}`,
+          req,
+          description: `Tự động nâng bản sao tờ khai thuế phiên bản ${clone.version} lên làm bản gốc sau khi xóa bản gốc`,
+        });
       }
     }
 
@@ -484,35 +475,42 @@ async function deleteTaxDeclaration(req, res) {
     await session.commitTransaction();
     session.endSession();
 
+    // 📘 Ghi log sau khi xóa thành công
+    await logActivity({
+      user: req.user,
+      store: { _id: doc.shopId },
+      action: "delete",
+      entity: "TaxDeclaration",
+      entityId: doc._id,
+      entityName: `${doc.periodType}-${doc.periodKey}`,
+      req,
+      description: `Xóa tờ khai thuế kỳ ${doc.periodType} ${doc.periodKey} của cửa hàng ${doc.shopId}`,
+    });
+
     return res.json({ success: true, message: "Xóa tờ khai thành công" });
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
     console.error("deleteTaxDeclaration error:", err);
-    return res
-      .status(500)
-      .json({ success: false, message: "Lỗi server khi xóa tờ khai" });
+    return res.status(500).json({ success: false, message: "Lỗi server khi xóa tờ khai" });
   }
-}
+};
 
 /**
  * LIST tax declarations
  * GET /api/tax?shopId=...&page=1&limit=20
  * Có thể filter theo periodType/periodKey nếu muốn
  */
-async function listDeclarations(req, res) {
+const listDeclarations = async (req, res) => {
   try {
     const { shopId, periodType, periodKey, page = 1, limit = 20 } = req.query;
-    if (!shopId)
-      return res.status(400).json({ success: false, message: "Thiếu shopId" });
+    if (!shopId) return res.status(400).json({ success: false, message: "Thiếu shopId" });
 
     if (!hasAccessToStore(req.user, shopId)) {
-      return res
-        .status(403)
-        .json({
-          success: false,
-          message: "Không có quyền truy cập cửa hàng này",
-        });
+      return res.status(403).json({
+        success: false,
+        message: "Không có quyền truy cập cửa hàng này",
+      });
     }
 
     const q = { shopId: mongoose.Types.ObjectId(shopId) };
@@ -541,39 +539,30 @@ async function listDeclarations(req, res) {
     return res.json({ success: true, data });
   } catch (err) {
     console.error("listDeclarations error:", err);
-    return res
-      .status(500)
-      .json({
-        success: false,
-        message: "Lỗi server khi lấy danh sách tờ khai",
-      });
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi server khi lấy danh sách tờ khai",
+    });
   }
-}
+};
 
 /**
  * EXPORT tax declaration -> CSV or PDF
  * GET /api/tax/:id/export?format=csv
  */
-async function exportDeclaration(req, res) {
+const exportDeclaration = async (req, res) => {
   try {
     const { id } = req.params;
     const format = (req.query.format || "pdf").toLowerCase();
 
-    const doc = await TaxDeclaration.findById(id)
-      .populate("createdBy", "fullName email")
-      .lean();
-    if (!doc)
-      return res
-        .status(404)
-        .json({ success: false, message: "Không tìm thấy tờ khai" });
+    const doc = await TaxDeclaration.findById(id).populate("createdBy", "fullName email").lean();
+    if (!doc) return res.status(404).json({ success: false, message: "Không tìm thấy tờ khai" });
 
     if (!hasAccessToStore(req.user, doc.shopId)) {
-      return res
-        .status(403)
-        .json({
-          success: false,
-          message: "Không có quyền truy cập tờ khai này",
-        });
+      return res.status(403).json({
+        success: false,
+        message: "Không có quyền truy cập tờ khai này",
+      });
     }
 
     const payload = {
@@ -606,10 +595,7 @@ async function exportDeclaration(req, res) {
       // PDF
       const pdf = new PDFDocument({ margin: 40 });
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader(
-        "Content-Disposition",
-        `attachment; filename=tax-declaration-${doc.periodKey}-v${doc.version}.pdf`
-      );
+      res.setHeader("Content-Disposition", `attachment; filename=tax-declaration-${doc.periodKey}-v${doc.version}.pdf`);
       pdf.pipe(res);
 
       pdf.fontSize(18).text("TỜ KHAI THUẾ - SmartRetail", { align: "center" });
@@ -619,9 +605,7 @@ async function exportDeclaration(req, res) {
       pdf.text(`Bản sao: ${doc.isClone ? "Có" : "Không"}`);
       pdf.text(`Trạng thái: ${doc.status}`);
       pdf.text(`Người lập: ${payload.createdBy}`);
-      pdf.text(
-        `Ngày lập: ${new Date(payload.createdAt).toLocaleString("vi-VN")}`
-      );
+      pdf.text(`Ngày lập: ${new Date(payload.createdAt).toLocaleString("vi-VN")}`);
       pdf.moveDown();
 
       pdf.text(`Doanh thu hệ thống: ${payload.systemRevenue} VND`);
@@ -629,19 +613,15 @@ async function exportDeclaration(req, res) {
       pdf.text(`Thuế GTGT (${payload.gtgtRate}%): ${payload.gtgtAmount} VND`);
       pdf.text(`Thuế TNCN (${payload.tncnRate}%): ${payload.tncnAmount} VND`);
       pdf.moveDown();
-      pdf
-        .fontSize(14)
-        .text(`TỔNG THUẾ PHẢI NỘP: ${payload.totalTax} VND`, { align: "left" });
+      pdf.fontSize(14).text(`TỔNG THUẾ PHẢI NỘP: ${payload.totalTax} VND`, { align: "left" });
 
       pdf.end();
     }
   } catch (err) {
     console.error("exportDeclaration error:", err);
-    return res
-      .status(500)
-      .json({ success: false, message: "Lỗi server khi export tờ khai" });
+    return res.status(500).json({ success: false, message: "Lỗi server khi export tờ khai" });
   }
-}
+};
 
 module.exports = {
   previewSystemRevenue,

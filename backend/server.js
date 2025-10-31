@@ -99,6 +99,7 @@ const taxRouters = require("./routers/taxRouters");
 const revenueRouters = require("./routers/revenueRouters");
 const customerRouters = require("./routers/customerRouters");
 const loyaltyRouters = require("./routers/loyaltyRouters");
+const financialRouters = require("./routers/financialRouters");
 
 // --- MOUNT ROUTERS ---
 app.use("/api/stores", storeRouters);
@@ -115,6 +116,7 @@ app.use("/api/taxs", taxRouters);
 app.use("/api/revenues", revenueRouters);
 app.use("/api/customers", customerRouters);
 app.use("/api/loyaltys", loyaltyRouters);
+app.use("/api/financials", financialRouters);
 
 // --- ROOT ---
 app.get("/", (req, res) => {

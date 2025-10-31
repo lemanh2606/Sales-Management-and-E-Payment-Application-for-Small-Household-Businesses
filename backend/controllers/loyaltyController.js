@@ -1,5 +1,6 @@
 // controllers/loyaltyController.js
 const LoyaltySetting = require("../models/LoyaltySetting");
+const logActivity = require("../utils/logActivity");
 
 // POST /api/loyalty/config - Manager setup config tích điểm cho store (pointsPerVND, vndPerPoint, minOrderValue, isActive)
 const setupLoyaltyConfig = async (req, res) => {
@@ -43,6 +44,21 @@ const setupLoyaltyConfig = async (req, res) => {
     }
 
     await loyalty.save();
+
+    // thêm nhật ký hoạt động
+    await logActivity({
+      user: req.user,
+      store: { _id: storeId },
+      action: loyalty.isNew ? "create" : "update",
+      entity: "LoyaltySetting",
+      entityId: loyalty._id,
+      entityName: `Cấu hình tích điểm`,
+      req,
+      description: loyalty.isNew
+        ? `Tạo mới cấu hình tích điểm cho cửa hàng`
+        : `Cập nhật cấu hình tích điểm cho cửa hàng`,
+    });
+    // trả về json
     res.status(200).json({
       message: "Cập nhật cấu hình tích điểm thành công",
       config: {

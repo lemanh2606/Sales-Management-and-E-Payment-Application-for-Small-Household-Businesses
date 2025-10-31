@@ -196,7 +196,7 @@ export default function Profile() {
             <span className="text-3xl font-bold text-gray-800">Hồ Sơ Cá Nhân</span>
           </div>
         }
-        className="shadow-xl border-0 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-100"
+        style={{border: "none"}}
       >
         {loading ? (
           <div className="flex justify-center items-center h-64">
@@ -221,7 +221,7 @@ export default function Profile() {
             <Form form={form} name="profile-form" onFinish={onFinishInfo} layout="vertical" className="space-y-4 mb-8">
               <Card
                 title={<span className="font-semibold text-gray-800">Thông Tin Cá Nhân</span>}
-                className="shadow-lg border-0 rounded-xl bg-white"
+                className="bg-white"
               >
                 <Row gutter={24}>
                   {/* Username */}
@@ -337,9 +337,10 @@ export default function Profile() {
                 <div className="flex items-center gap-2">
                   <LockOutlined className="text-red-600" />
                   <span className="font-semibold text-gray-800">Đổi Mật Khẩu</span>
+                  <small className="text-blue-500 font-normal">(Yêu cầu gửi OTP qua email)</small>
                 </div>
               }
-              className="shadow-lg border-0 rounded-xl bg-white"
+              style={{ marginTop: "30px", backgroundColor: "white" }}
             >
               <div className="space-y-4">
                 <Button
@@ -359,7 +360,7 @@ export default function Profile() {
                     ? `Chờ gửi lại (${formatTime(timer)})`
                     : otpSent
                     ? "Gửi OTP mới"
-                    : "Gửi OTP qua email"}
+                    : "Gửi OTP đến Email"}
                 </Button>
 
                 {otpSent && (
