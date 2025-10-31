@@ -67,6 +67,8 @@ const ALL_PERMISSIONS = [
   "reports:revenue:view",
   "reports:revenue:employee",
   "reports:revenue:export",
+  "reports:financial:view",
+  "reports:financial:export",
 
   // products
   "products:create",

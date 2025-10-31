@@ -1,3 +1,4 @@
+// backend/models/StockDisposal.js
 const mongoose = require('mongoose');
 
 // Schema cho item trong phiếu xuất hủy

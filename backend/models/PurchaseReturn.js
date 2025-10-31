@@ -1,3 +1,4 @@
+// backend/models/PurchaseReturn.js
 const mongoose = require("mongoose");
 
 // Schema for items within a purchase return
