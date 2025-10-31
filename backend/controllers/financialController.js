@@ -24,15 +24,19 @@ const toNumber = (val) => {
 // 📆 Helper: tháng trong kỳ
 function getMonthsInPeriod(periodType) {
   switch (periodType) {
-    case "month": return 1;
-    case "quarter": return 3;
-    case "year": return 12;
-    default: return 1;
+    case "month":
+      return 1;
+    case "quarter":
+      return 3;
+    case "year":
+      return 12;
+    default:
+      return 1;
   }
 }
 
 // =====================================================================
-const calcFinancialSummary = async ({ storeId, periodType, periodKey }) => {
+const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpense = 0 }) => {
   const { start, end } = periodToRange(periodType, periodKey);
   const objectStoreId = new mongoose.Types.ObjectId(storeId);
 
@@ -61,27 +65,62 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey }) => {
   // 4️⃣ Lợi nhuận gộp
   let grossProfit = totalRevenue - totalCOGS;
 
-  // 5️⃣ Chi phí vận hành
+  // 5️⃣ Chi phí vận hành (Operating Cost)
   const months = getMonthsInPeriod(periodType);
+
   const employees = await Employee.find({ store_id: objectStoreId })
     .populate("user_id", "role")
     .select("salary commission_rate user_id");
-  const filteredEmployees = employees.filter(e =>
+
+  const filteredEmployees = employees.filter((e) =>
     ["MANAGER", "STAFF"].includes(e.user_id?.role)
   );
 
-  const totalSalary = filteredEmployees.reduce((sum, e) => sum + toNumber(e.salary) * months, 0);
-  const empRevenue = await calcRevenueByPeriod({ storeId, periodType, periodKey, type: "employee" });
+  const totalSalary = filteredEmployees.reduce(
+    (sum, e) => sum + toNumber(e.salary) * months,
+    0
+  );
+
+  const empRevenue = await calcRevenueByPeriod({
+    storeId,
+    periodType,
+    periodKey,
+    type: "employee",
+  });
+
   const totalCommission = empRevenue.reduce((sum, r) => {
-    const emp = filteredEmployees.find(e => e._id.toString() === r._id.toString());
+    const emp = filteredEmployees.find((e) => e._id.toString() === r._id.toString());
     return sum + toNumber(r.totalRevenue) * (toNumber(emp?.commission_rate) / 100);
   }, 0);
+
+  // 👉 FE gửi: ?extraExpense=1000000,2000000
+  if (typeof extraExpense === "string" && extraExpense.includes(",")) {
+    extraExpense = extraExpense.split(",").map(Number);
+  } else if (Array.isArray(extraExpense)) {
+    extraExpense = extraExpense.map(Number);
+  } else {
+    extraExpense = [Number(extraExpense)];
+  }
+
+  const totalExtraExpense = extraExpense.reduce((sum, val) => sum + (val || 0), 0);
+
+  // ✅ Tổng chi phí vận hành trước khi cộng thêm phần điều chỉnh và hủy hàng
+  let operatingCost = totalSalary + totalCommission + totalExtraExpense;
 
   // 9️⃣ Điều chỉnh tồn kho
   const adj = await StockCheck.aggregate([
     { $match: { store_id: objectStoreId, status: "Đã cân bằng", check_date: { $gte: start, $lte: end } } },
     { $unwind: "$items" },
-    { $group: { _id: null, total: { $sum: { $multiply: [{ $subtract: ["$items.actual_quantity", "$items.book_quantity"] }, "$items.cost_price"] } } } },
+    {
+      $group: {
+        _id: null,
+        total: {
+          $sum: {
+            $multiply: [{ $subtract: ["$items.actual_quantity", "$items.book_quantity"] }, "$items.cost_price"],
+          },
+        },
+      },
+    },
   ]);
   let stockAdjustmentValue = toNumber(adj[0]?.total);
 
@@ -93,7 +132,8 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey }) => {
   ]);
   let stockDisposalCost = toNumber(disp[0]?.total);
 
-  let operatingCost = totalSalary + totalCommission + stockDisposalCost;
+  // ✅ Cập nhật operatingCost cuối cùng
+  operatingCost += stockDisposalCost;
   if (stockAdjustmentValue < 0) operatingCost += Math.abs(stockAdjustmentValue);
   if (stockAdjustmentValue > 0) grossProfit += stockAdjustmentValue;
 
@@ -107,7 +147,17 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey }) => {
   ]);
   let stockValue = toNumber(stock[0]?.total);
 
-  return { totalRevenue, totalVAT, totalCOGS, grossProfit, operatingCost, netProfit, stockValue, stockAdjustmentValue, stockDisposalCost };
+  return {
+    totalRevenue,
+    totalVAT,
+    totalCOGS,
+    grossProfit,
+    operatingCost,
+    netProfit,
+    stockValue,
+    stockAdjustmentValue,
+    stockDisposalCost,
+  };
 };
 
 // =====================================================================
@@ -142,7 +192,7 @@ const exportFinancial = async (req, res) => {
       const doc = new PDFDocument({ margin: 50 });
       doc.pipe(res);
       doc.fontSize(18).text("BÁO CÁO TÀI CHÍNH", { align: "center", underline: true }).moveDown();
-      rows.forEach(r => doc.text(`${r.metric}: ${r.value.toLocaleString("vi-VN")} VND`));
+      rows.forEach((r) => doc.text(`${r.metric}: ${r.value.toLocaleString("vi-VN")} VND`));
       doc.end();
       return;
     }
@@ -155,7 +205,6 @@ const exportFinancial = async (req, res) => {
 };
 
 module.exports = { getFinancialSummary, exportFinancial };
-
 
 /*
 Mẫu JSON trả về từ API như sau: period theo YEAR
