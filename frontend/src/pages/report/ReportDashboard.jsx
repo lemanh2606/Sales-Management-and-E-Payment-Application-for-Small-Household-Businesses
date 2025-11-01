@@ -1,6 +1,7 @@
 // src/pages/report/ReportDashboard.jsx
 import React, { useState, useEffect } from "react";
-import { Card, Col, Row, Select, DatePicker, Statistic, Spin, Alert, Space, InputNumber, Button } from "antd";
+import { Card, Col, Row, Select, DatePicker, Statistic, Spin, Alert, Space, InputNumber, Button, Popover } from "antd";
+import { InfoCircleOutlined } from "@ant-design/icons";
 import {
   BarChart,
   Bar,
@@ -45,6 +46,14 @@ const COLORS = {
   operatingCost: "#fa8c16",
   vat: "#f5222d",
   stockValue: "#13c2c2",
+};
+
+// helper: trả về màu dựa vào giá trị profit (VND)
+const getProfitColorByValue = (value) => {
+  if (value == null) return "#fa8c16"; // cam cho unknown
+  if (Number(value) > 0) return "#52c41a"; // xanh lá
+  if (Number(value) < 0) return "#f5222d"; // đỏ
+  return "#fa8c16"; // =0 => cam
 };
 
 const ReportDashboard = () => {
@@ -178,10 +187,12 @@ const ReportDashboard = () => {
       <div>
         <Space direction="vertical" size="large" style={{ width: "100%" }}>
           {/* HEADER */}
-          <Card>
+          <Card style={{ border: "1px solid #8c8c8c" }}>
             <Row gutter={16} align="middle">
               <Col span={6}>
-                <span style={{ color: "#1890ff", fontWeight: "bold", fontSize:"20px" }}>{currentStore.name || "Đang tải..."}</span>
+                <span style={{ color: "#1890ff", fontWeight: "bold", fontSize: "20px" }}>
+                  {currentStore.name || "Đang tải..."}
+                </span>
               </Col>
               <Col span={5}>
                 <label>Kỳ báo cáo:</label>
@@ -194,9 +205,7 @@ const ReportDashboard = () => {
               </Col>
               <Col span={5}>
                 <label>Chọn kỳ:</label>
-                {!periodType && (
-                  <Alert message="Hãy chọn kỳ báo cáo trước" type="warning" style={{ marginTop: 8 }} />
-                )}
+                {!periodType && <Alert message="Hãy chọn kỳ báo cáo trước" type="warning" style={{ marginTop: 8 }} />}
                 {periodType && (
                   <DatePicker
                     style={{ width: "100%", marginTop: 8 }}
@@ -312,7 +321,7 @@ const ReportDashboard = () => {
               {/* CHỈ SỐ */}
               <Row gutter={[16, 16]}>
                 <Col xs={24} sm={12} lg={6}>
-                  <Card>
+                  <Card style={{ border: "1px solid #8c8c8c" }}>
                     <Statistic
                       title="Doanh thu"
                       value={data.totalRevenue}
@@ -322,7 +331,7 @@ const ReportDashboard = () => {
                   </Card>
                 </Col>
                 <Col xs={24} sm={12} lg={6}>
-                  <Card>
+                  <Card style={{ border: "1px solid #8c8c8c" }}>
                     <Statistic
                       title="Lợi nhuận gộp"
                       value={data.grossProfit}
@@ -332,7 +341,7 @@ const ReportDashboard = () => {
                   </Card>
                 </Col>
                 <Col xs={24} sm={12} lg={6}>
-                  <Card>
+                  <Card style={{ border: "1px solid #8c8c8c" }}>
                     <Statistic
                       title="Chi phí vận hành"
                       value={data.operatingCost}
@@ -342,7 +351,7 @@ const ReportDashboard = () => {
                   </Card>
                 </Col>
                 <Col xs={24} sm={12} lg={6}>
-                  <Card>
+                  <Card style={{ border: "1px solid #8c8c8c" }}>
                     <Statistic
                       title="Lợi nhuận ròng"
                       value={data.netProfit}
@@ -356,7 +365,7 @@ const ReportDashboard = () => {
               {/* BIỂU ĐỒ */}
               <Row gutter={[16, 16]}>
                 <Col xs={24} lg={24}>
-                  <Card title="Cơ cấu tài chính">
+                  <Card style={{ border: "1px solid #8c8c8c" }} title="Cơ cấu tài chính">
                     <ResponsiveContainer width="100%" height={320}>
                       <BarChart data={generateBarData()}>
                         <CartesianGrid strokeDasharray="3 3" />
@@ -372,7 +381,7 @@ const ReportDashboard = () => {
 
               <Row gutter={[16, 16]}>
                 <Col xs={24} lg={24}>
-                  <Card title="Thuế & Tồn kho">
+                  <Card style={{ border: "1px solid #8c8c8c" }} title="Thuế & Tồn kho">
                     <ResponsiveContainer width="100%" height={320}>
                       <PieChart>
                         <Pie
@@ -418,30 +427,74 @@ const ReportDashboard = () => {
               {/* CHI TIẾT */}
               <Row gutter={[16, 16]}>
                 <Col span={12}>
-                  <Card title="Chi tiết">
+                  <Card style={{ border: "1px solid #8c8c8c" }} title="Chi tiết">
                     <p>
-                      <strong>COGS:</strong> {formatVND(data.totalCOGS)}
+                      <strong>Chi phí nhập hàng (COGS):</strong> {formatVND(data.totalCOGS)}
                     </p>
                     <p>
-                      <strong>Điều chỉnh:</strong> {formatVND(data.stockAdjustmentValue)}
+                      <strong>Điều chỉnh tồn kho:</strong> {formatVND(data.stockAdjustmentValue)}
                     </p>
                     <p>
-                      <strong>Hủy hàng:</strong> {formatVND(data.stockDisposalCost)}
+                      <strong>Chi phí hàng hoá huỷ:</strong> {formatVND(data.stockDisposalCost)}
                     </p>
                   </Card>
                 </Col>
                 <Col span={12}>
-                  <Card title="Hiệu suất">
+                  <Card style={{ border: "1px solid #8c8c8c" }} title="Hiệu suất">
                     <p>
-                      <strong>Lợi nhuận gộp:</strong>{" "}
-                      {data.totalRevenue ? ((data.grossProfit / data.totalRevenue) * 100).toFixed(1) : 0}%
+                      <Popover
+                        content={
+                          <>
+                            <strong>Lợi nhuận gộp</strong> = Doanh thu - Giá vốn hàng bán.
+                            <br />
+                            Cho biết bạn lời bao nhiêu sau khi trừ chi phí nhập hàng.
+                          </>
+                        }
+                      >
+                        <strong style={{ cursor: "help" }}>
+                          Lợi nhuận gộp <InfoCircleOutlined style={{ fontSize: 14, marginLeft: 4 }} />
+                        </strong>
+                      </Popover>
+                      :{" "}
+                      <span
+                        style={{
+                          color: getProfitColorByValue(data?.grossProfit),
+                          fontWeight: "bold",
+                          transition: "color 0.4s ease",
+                        }}
+                      >
+                        {data?.totalRevenue ? ((data.grossProfit / data.totalRevenue) * 100).toFixed(1) : 0}%
+                      </span>
                     </p>
+
                     <p>
-                      <strong>Lợi nhuận ròng:</strong>{" "}
-                      {data.totalRevenue ? ((data.netProfit / data.totalRevenue) * 100).toFixed(1) : 0}%
+                      <Popover
+                        content={
+                          <>
+                            <strong>Lợi nhuận ròng</strong> = Lợi nhuận gộp - Chi phí vận hành - Thuế.
+                            <br />
+                            Đây là phần tiền bạn thực sự lãi sau khi trừ hết mọi chi phí.
+                          </>
+                        }
+                      >
+                        <strong style={{ cursor: "help" }}>
+                          Lợi nhuận ròng <InfoCircleOutlined style={{ fontSize: 14, marginLeft: 4 }} />
+                        </strong>
+                      </Popover>
+                      :{" "}
+                      <span
+                        style={{
+                          color: getProfitColorByValue(data?.netProfit),
+                          fontWeight: "bold",
+                          transition: "color 0.4s ease",
+                        }}
+                      >
+                        {data?.totalRevenue ? ((data.netProfit / data.totalRevenue) * 100).toFixed(1) : 0}%
+                      </span>
                     </p>
                   </Card>
                 </Col>
+                {/* Hết */}
               </Row>
             </>
           )}

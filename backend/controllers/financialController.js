@@ -67,19 +67,16 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
 
   // 5️⃣ Chi phí vận hành (Operating Cost)
   const months = getMonthsInPeriod(periodType);
-
-  const employees = await Employee.find({ store_id: objectStoreId })
+  // cho dù là năm trong tương lai chưa bán hàng, vẫn tính lương cho nhân viên, nếu xoá nhân viên đi thì coi như mọi thứ là 0 vnđ, 
+  // còn nếu không thì kể cả là năm 2030 vẫn luôn cộng chi phí lương cho nhân viên, 
+  // ví dụ 5 triệu 1 tháng thì 1 year là 60 triệu chi phí vận hành, lợi nhuận ròng là âm 60 triệu
+  const employees = await Employee.find({ store_id: objectStoreId, isDeleted: false })
     .populate("user_id", "role")
-    .select("salary commission_rate user_id");
+    .select("salary commission_rate user_id"); //lương và hoa hồng
 
-  const filteredEmployees = employees.filter((e) =>
-    ["MANAGER", "STAFF"].includes(e.user_id?.role)
-  );
+  const filteredEmployees = employees.filter((e) => ["MANAGER", "STAFF"].includes(e.user_id?.role));
 
-  const totalSalary = filteredEmployees.reduce(
-    (sum, e) => sum + toNumber(e.salary) * months,
-    0
-  );
+  const totalSalary = filteredEmployees.reduce((sum, e) => sum + toNumber(e.salary) * months, 0);
 
   const empRevenue = await calcRevenueByPeriod({
     storeId,
