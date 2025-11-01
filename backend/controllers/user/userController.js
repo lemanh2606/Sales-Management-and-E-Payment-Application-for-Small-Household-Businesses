@@ -49,6 +49,7 @@ const ALL_PERMISSIONS = [
   "customers:search",
   "customers:update",
   "customers:delete",
+  "customers:top-customers",
 
   // loyalty
   "loyalty:view",
@@ -63,7 +64,6 @@ const ALL_PERMISSIONS = [
 
   // reports
   "reports:top-products",
-  "reports:top-customers",
   "reports:revenue:view",
   "reports:revenue:employee",
   "reports:revenue:export",

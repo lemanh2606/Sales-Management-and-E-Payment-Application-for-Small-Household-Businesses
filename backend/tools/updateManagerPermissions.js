@@ -7,9 +7,8 @@ dotenv.config();
 
 // Các quyền mới cần thêm
 const NEW_REPORT_PERMISSIONS = [
-  "reports:financial:view",
-  "reports:financial:export",
-  "reports:financial:list",
+  "customers:top-customers",
+  //thêm nếu có cái mới hoặc nghĩ ra cái mới
 ];
 
 async function updateManagerPermissions() {

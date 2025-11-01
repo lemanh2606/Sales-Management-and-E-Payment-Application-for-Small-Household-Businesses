@@ -89,7 +89,8 @@ export default function Sidebar() {
       path: "/customers",
       icon: <BsPeople size={20} />,
       children: [
-        { name: "Danh sách khách hàng", path: "/customers", permission: "customers:search" },
+        { name: "Danh sách khách hàng", path: "/customers-list", permission: "customers:search" },
+        { name: "Khách hàng thân thiết", path: "/customers/top-customers", permission: "customers:top-customers" },
         { name: "Lịch sử mua hàng", path: "/customers/history", permission: "customers:view" },
       ],
     },
@@ -102,16 +103,6 @@ export default function Sidebar() {
         { name: "Danh sách nhân viên", path: "/staff", permission: "store:employee:view" },
         { name: "Lịch làm việc / bảng chấm công", path: "/staff/schedule", permission: "store:staff:assign" },
         { name: "Lương + hoa hồng", path: "/staff/salary", permission: "users:assign-role" },
-      ],
-    },
-    {
-      key: "finance",
-      name: "Sổ quỹ",
-      path: "/finance",
-      icon: <FiFileText size={20} />,
-      children: [
-        { name: "Phiếu thu chi", path: "/finance/receipt", permission: "finance:view" },
-        { name: "Công nợ khách hàng / NCC", path: "/finance/debt", permission: "finance:debt" },
       ],
     },
     {
@@ -128,10 +119,9 @@ export default function Sidebar() {
       icon: <AiOutlineDashboard size={20} />,
       children: [
         { name: "Tổng quan báo cáo", path: "/reports/dashboard", permission: "reports:financial:view" },
-        { name: "Báo cáo tài chính", path: "/reports/financials", permission: "reports:financial:list" }, // Báo cáo tài chính tổng hợp
-        { name: "Báo cáo doanh thu", path: "/reports/revenue", permission: "reports:revenue:view" }, // Báo cáo doanh thu chi tiết
+        { name: "Báo cáo doanh thu chi tiết", path: "/reports/revenue", permission: "reports:revenue:view" }, // Báo cáo doanh thu chi tiết
+        { name: "Kê khai thuế", path: "/reports/tax", permission: "tax:preview" }, //TaxDeclaration
         { name: "Sản phẩm bán chạy", path: "/reports/top-products", permission: "reports:top-products" },
-        { name: "Khách hàng thân thiết", path: "/reports/top-customers", permission: "reports:top-customers" },
       ],
     },
     {
