@@ -18,6 +18,13 @@ import { useAuth } from "./context/AuthContext";
 import Unauthorized from "./pages/misc/Unauthorized";
 import NotFound from "./pages/misc/NotFound";
 
+// 👉 Report page
+import ReportDashboard from "./pages/report/ReportDashboard";
+import FinancialReport from "./pages/report/FinancialReport";
+import RevenueReport from "./pages/report/RevenueReport";
+import TopProductsReport from "./pages/report/TopProductsReport";
+import TopCustomersReport from "./pages/report/TopCustomersReport";
+
 // Hiệu ứng Design
 import { Spin } from "antd";
 import { LoadingOutlined } from "@ant-design/icons";
@@ -227,7 +234,53 @@ function App() {
           </ProtectedRoute>
         }
       />
+      {/* ======================================================================= */}
+      {/* ====================== Báo cáo - Routes ====================== */}
+      <Route
+        path="/reports/dashboard"
+        element={
+          <ProtectedRoute allowedPermissions="reports:financial:view">
+            <ReportDashboard />
+          </ProtectedRoute>
+        }
+      />
 
+      <Route
+        path="/reports/financials"
+        element={
+          <ProtectedRoute allowedPermissions="reports:financial:list">
+            <FinancialReport />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/reports/revenue"
+        element={
+          <ProtectedRoute allowedPermissions="reports:revenue:view">
+            <RevenueReport />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/reports/top-products"
+        element={
+          <ProtectedRoute allowedPermissions="reports:top-products">
+            <TopProductsReport />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/reports/top-customers"
+        element={
+          <ProtectedRoute allowedPermissions="reports:top-customers">
+            <TopCustomersReport />
+          </ProtectedRoute>
+        }
+      />
+      {/* ======================================================================= */}
       {/* Unauthorized */}
       <Route path="/unauthorized" element={<Unauthorized />} />
 

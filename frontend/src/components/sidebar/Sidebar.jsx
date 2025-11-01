@@ -127,8 +127,11 @@ export default function Sidebar() {
       path: "/reports",
       icon: <AiOutlineDashboard size={20} />,
       children: [
-        { name: "Tổng quan báo cáo", path: "/reports/dashboard", permission: "reports:revenue:view" },
-        { name: "Báo cáo tài chính", path: "/reports/financial", permission: "reports:revenue:export" },
+        { name: "Tổng quan báo cáo", path: "/reports/dashboard", permission: "reports:financial:view" },
+        { name: "Báo cáo tài chính", path: "/reports/financials", permission: "reports:financial:list" }, // Báo cáo tài chính tổng hợp
+        { name: "Báo cáo doanh thu", path: "/reports/revenue", permission: "reports:revenue:view" }, // Báo cáo doanh thu chi tiết
+        { name: "Sản phẩm bán chạy", path: "/reports/top-products", permission: "reports:top-products" },
+        { name: "Khách hàng thân thiết", path: "/reports/top-customers", permission: "reports:top-customers" },
       ],
     },
     {

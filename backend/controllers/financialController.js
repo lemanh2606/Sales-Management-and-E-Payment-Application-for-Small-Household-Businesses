@@ -24,11 +24,11 @@ const toNumber = (val) => {
 // 📆 Helper: tháng trong kỳ
 function getMonthsInPeriod(periodType) {
   switch (periodType) {
-    case "month":
+    case "month": //tháng
       return 1;
-    case "quarter":
+    case "quarter": //quý
       return 3;
-    case "year":
+    case "year": //năm
       return 12;
     default:
       return 1;
@@ -93,7 +93,7 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
     return sum + toNumber(r.totalRevenue) * (toNumber(emp?.commission_rate) / 100);
   }, 0);
 
-  // 👉 FE gửi: ?extraExpense=1000000,2000000
+  // 👉 FE gửi: ?extraExpense=1000000,2000000 (có thể nhiều hơn hoặc ít hơn)
   if (typeof extraExpense === "string" && extraExpense.includes(",")) {
     extraExpense = extraExpense.split(",").map(Number);
   } else if (Array.isArray(extraExpense)) {
