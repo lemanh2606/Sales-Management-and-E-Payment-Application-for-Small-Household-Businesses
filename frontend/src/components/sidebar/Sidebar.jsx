@@ -89,7 +89,8 @@ export default function Sidebar() {
       path: "/customers",
       icon: <BsPeople size={20} />,
       children: [
-        { name: "Danh sách khách hàng", path: "/customers", permission: "customers:search" },
+        { name: "Danh sách khách hàng", path: "/customers-list", permission: "customers:search" },
+        { name: "Khách hàng thân thiết", path: "/customers/top-customers", permission: "customers:top-customers" },
         { name: "Lịch sử mua hàng", path: "/customers/history", permission: "customers:view" },
       ],
     },
@@ -105,16 +106,6 @@ export default function Sidebar() {
       ],
     },
     {
-      key: "finance",
-      name: "Sổ quỹ",
-      path: "/finance",
-      icon: <FiFileText size={20} />,
-      children: [
-        { name: "Phiếu thu chi", path: "/finance/receipt", permission: "finance:view" },
-        { name: "Công nợ khách hàng / NCC", path: "/finance/debt", permission: "finance:debt" },
-      ],
-    },
-    {
       key: "loyalty",
       name: "Tích điểm",
       path: "/loyalty",
@@ -127,8 +118,10 @@ export default function Sidebar() {
       path: "/reports",
       icon: <AiOutlineDashboard size={20} />,
       children: [
-        { name: "Tổng quan báo cáo", path: "/reports/dashboard", permission: "reports:revenue:view" },
-        { name: "Báo cáo tài chính", path: "/reports/financial", permission: "reports:revenue:export" },
+        { name: "Tổng quan báo cáo", path: "/reports/dashboard", permission: "reports:financial:view" },
+        { name: "Báo cáo doanh thu chi tiết", path: "/reports/revenue", permission: "reports:revenue:view" }, // Báo cáo doanh thu chi tiết
+        { name: "Kê khai thuế", path: "/reports/tax", permission: "tax:preview" }, //TaxDeclaration
+        { name: "Sản phẩm bán chạy", path: "/reports/top-products", permission: "reports:top-products" },
       ],
     },
     {

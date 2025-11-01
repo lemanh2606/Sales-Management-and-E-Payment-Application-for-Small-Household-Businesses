@@ -14,14 +14,22 @@ import LoyaltySetting from "./pages/loyalty/LoyaltySetting";
 
 // 👉 Customer page bạn đã tạo
 import CustomerListPage from "./pages/customer/CustomerListPage";
+import TopCustomer from "./pages/customer/TopCustomer";
 import { useAuth } from "./context/AuthContext";
 import Unauthorized from "./pages/misc/Unauthorized";
 import NotFound from "./pages/misc/NotFound";
+
+// 👉 Report page
+import ReportDashboard from "./pages/report/ReportDashboard";
+import RevenueReport from "./pages/report/RevenueReport";
+import TaxDeclaration from "./pages/report/TaxDeclaration";
+import TopProductsReport from "./pages/report/TopProductsReport";
 
 // Hiệu ứng Design
 import { Spin } from "antd";
 import { LoadingOutlined } from "@ant-design/icons";
 import ProductGroupsPage from "./pages/productGroup/ProductGroupsPage";
+
 const loadingIcon = <LoadingOutlined style={{ fontSize: 40 }} spin />;
 
 /** Utility: đọc user từ localStorage (fallback) */
@@ -201,10 +209,18 @@ function App() {
 
       {/* Customer page (ví dụ yêu cầu permission customers:search) */}
       <Route
-        path="/customers"
+        path="/customers-list"
         element={
           <ProtectedRoute allowedPermissions="customers:search">
             <CustomerListPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/customers/top-customers"
+        element={
+          <ProtectedRoute allowedPermissions="customers:search">
+            <TopCustomer/>
           </ProtectedRoute>
         }
       />
@@ -227,7 +243,41 @@ function App() {
           </ProtectedRoute>
         }
       />
-
+      {/* ======================================================================= */}
+      {/* ====================== Báo cáo - Routes ====================== */}
+      <Route
+        path="/reports/dashboard"
+        element={
+          <ProtectedRoute allowedPermissions="reports:financial:view">
+            <ReportDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/reports/revenue"
+        element={
+          <ProtectedRoute allowedPermissions="reports:revenue:view">
+            <RevenueReport />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/reports/tax"
+        element={
+          <ProtectedRoute allowedPermissions="tax:preview">
+            <TaxDeclaration />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/reports/top-products"
+        element={
+          <ProtectedRoute allowedPermissions="reports:top-products">
+            <TopProductsReport />
+          </ProtectedRoute>
+        }
+      />
+      {/* ======================================================================= */}
       {/* Unauthorized */}
       <Route path="/unauthorized" element={<Unauthorized />} />
 
