@@ -32,6 +32,8 @@ const RevenueReport = () => {
   const [summary, setSummary] = useState(null);
   const [employeeData, setEmployeeData] = useState([]);
   const [pagination, setPagination] = useState({ current: 1, pageSize: 10, total: 0 });
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   // Lấy từ localStorage
   const currentStore = JSON.parse(localStorage.getItem("currentStore") || "{}");
@@ -187,10 +189,10 @@ const RevenueReport = () => {
 
   return (
     <Layout>
-      <div style={{ padding: 24, background: "#f9f9f9", minHeight: "100vh" }}>
+      <div>
         <Space direction="vertical" size="large" style={{ width: "100%" }}>
           {/* HEADER */}
-          <Card>
+          <Card style={{ border: "1px solid #8c8c8c" }}>
             <Row gutter={16} align="middle">
               <Col span={6}>
                 <span style={{ color: "#1890ff", fontWeight: "bold", fontSize: "20px" }}>
@@ -284,7 +286,7 @@ const RevenueReport = () => {
               {/* TỔNG DOANH THU */}
               <Row gutter={[16, 16]}>
                 <Col xs={24} sm={12} lg={8}>
-                  <Card>
+                  <Card style={{ border: "1px solid #8c8c8c" }}>
                     <Statistic
                       title="Tổng doanh thu"
                       value={summary.totalRevenue?.$numberDecimal || summary.totalRevenue}
@@ -294,7 +296,7 @@ const RevenueReport = () => {
                   </Card>
                 </Col>
                 <Col xs={24} sm={12} lg={8}>
-                  <Card>
+                  <Card style={{ border: "1px solid #8c8c8c" }}>
                     <Statistic
                       title="Số hóa đơn"
                       value={summary.countOrders}
@@ -305,7 +307,10 @@ const RevenueReport = () => {
               </Row>
 
               {/* DOANH THU NHÂN VIÊN */}
-              <Card  title={<span style={{ fontSize: "20px"}}>Doanh thu theo nhân viên</span>} style={{ marginTop: 24 }}>
+              <Card
+                title={<span style={{ fontSize: "20px" }}>Doanh thu theo nhân viên</span>}
+                style={{ marginTop: 24, border: "1px solid #8c8c8c" }}
+              >
                 <Table
                   columns={columns}
                   dataSource={employeeData}
@@ -315,6 +320,25 @@ const RevenueReport = () => {
                     showSizeChanger: true,
                     showQuickJumper: true,
                     pageSizeOptions: ["10", "20", "50", "100"],
+                    showTotal: (total, range) => (
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          width: "100%",
+                          fontSize: 14,
+                          color: "#595959",
+                        }}
+                      >
+                        <div>
+                          Đang xem{" "}
+                          <span style={{ color: "#1677ff", fontWeight: 600 }}>
+                            {range[0]} – {range[1]}
+                          </span>{" "}
+                          trên tổng số <span style={{ color: "#fa541c", fontWeight: 600 }}>{total}</span> nhân viên
+                        </div>
+                      </div>
+                    ),
                   }}
                   onChange={(p) => setPagination(p)}
                   scroll={{ x: 600 }}

@@ -4,7 +4,7 @@ const mongoose = require("mongoose");
 const TaxDeclarationSchema = new mongoose.Schema(
   {
     shopId: { type: mongoose.Schema.Types.ObjectId, ref: "Store", required: true }, // nếu multi-store
-    periodType: { type: String, enum: ["month", "quarter", "year"], required: true },
+    periodType: { type: String, enum: ["month", "quarter", "year", "custom"], required: true },
     periodKey: { type: String, required: true }, // e.g. "2025-01" or "2025-Q1" or "2025"
     systemRevenue: { type: mongoose.Types.Decimal128, required: true, default: "0.00" }, // từ các Bill đã in
     declaredRevenue: { type: mongoose.Types.Decimal128, required: true }, // người dùng có thể EDIT
