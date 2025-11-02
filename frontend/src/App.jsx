@@ -11,6 +11,7 @@ import ProductListPage from "./pages/product/ProductListPage";
 import ForgotPassword from "./pages/auth/ForgotPassword";
 import Profile from "./pages/user/Profile";
 import LoyaltySetting from "./pages/loyalty/LoyaltySetting";
+import EmployeesPage from "./pages/store/EmployeesPage";
 
 // 👉 Customer page bạn đã tạo
 import CustomerListPage from "./pages/customer/CustomerListPage";
@@ -166,7 +167,7 @@ function App() {
 
       {/* Protected routes */}
       <Route
-        path="/dashboard"
+        path="/dashboard/:storeId"
         element={
           <ProtectedRoute>
             <DashboardPage />
@@ -181,6 +182,24 @@ function App() {
           </ProtectedRoute>
         }
       />
+    
+    {/* <Route
+        path="/stores/:storeId/employees"
+        element={
+          <ProtectedRoute allowedPermissions="employees:view">
+            <EmployeesPage />
+          </ProtectedRoute>
+        }
+      /> */}
+<Route
+  path="/stores/:storeId/employees"
+  element={
+    <ProtectedRoute>
+      <EmployeesPage />
+    </ProtectedRoute>
+  }
+/>
+
       <Route
         path="/profile"
         element={

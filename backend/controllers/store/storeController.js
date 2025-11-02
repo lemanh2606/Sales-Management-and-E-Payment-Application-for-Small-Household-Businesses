@@ -545,11 +545,15 @@ const getEmployeesByStore = async (req, res) => {
     }
 
     // Lấy list employee của store, populate user_id nếu cần (name từ User)
-    const employees = await Employee.find({ store_id: storeId })
-      .populate("user_id", "name email") // Populate info user (tên, email)
-      .populate("store_id", "name") // Tên store
-      .sort({ createdAt: -1 }) // Mới nhất trước
-      .lean();
+    const employees = (await Employee.find({ store_id: storeId })
+  .populate("user_id", "username email phone role")
+  .populate("store_id", "name")
+  .lean())
+  .map(emp => ({
+    ...emp,
+    salary: emp.salary ? Number(emp.salary.toString()) : 0,
+    commission_rate: emp.commission_rate ? Number(emp.commission_rate.toString()) : 0,
+  }));
 
     console.log(`Lấy danh sách nhân viên thành công cho cửa hàng ${store.name}`);
     res.json({ message: "Lấy danh sách nhân viên thành công", employees });
@@ -565,7 +569,7 @@ const getEmployeeById = async (req, res) => {
     const { id, storeId } = req.params; // 👈 Add storeId từ params
 
     const employee = await Employee.findById(id)
-      .populate("user_id", "name email role") // Populate user info
+      .populate("user_id", "name username email phone role") // Populate user info
       .populate("store_id", "name") // Store name
       .lean();
 
@@ -597,39 +601,40 @@ const getEmployeeById = async (req, res) => {
 };
 
 // PUT /api/stores/:storeId/employees/:id - Update nhân viên (ko đổi store_id/user_id, validate quyền)
+
 const updateEmployee = async (req, res) => {
   try {
-    const { id, storeId } = req.params; // 👈 Add storeId từ params
-    const { fullName, salary, shift, commission_rate } = req.body; // Ko cho update store_id/user_id (cố định)
+    const { id, storeId } = req.params;
+    const { fullName, salary, shift, commission_rate, email, phone } = req.body; // thêm email + phone
 
     const employee = await Employee.findById(id);
-    if (!employee) {
-      console.log("Lỗi: Không tìm thấy nhân viên để update:", id);
-      return res.status(404).json({ message: "Nhân viên không tồn tại" });
-    }
+    if (!employee) return res.status(404).json({ message: "Nhân viên không tồn tại" });
 
-    // Check employee thuộc storeId này
     if (String(employee.store_id) !== String(storeId)) {
-      console.log("Lỗi: Nhân viên không thuộc cửa hàng này:", employee.fullName);
-      return res.status(403).json({
-        message: `Nhân viên ${employee.fullName} không thuộc cửa hàng này`,
-      });
+      return res.status(403).json({ message: "Nhân viên không thuộc cửa hàng này" });
     }
 
-    // Validate quyền store (dùng req.storeRole từ middleware)
     if (req.storeRole !== "OWNER") {
-      console.log("Lỗi: Bạn không có quyền update nhân viên này");
       return res.status(403).json({ message: "Bạn không có quyền update nhân viên này" });
     }
 
-    // Update fields cho phép (ko chạm store_id/user_id)
+    // Update Employee fields
     if (fullName) employee.fullName = fullName;
     if (salary) employee.salary = salary.toString();
     if (shift !== undefined) employee.shift = shift;
     if (commission_rate !== undefined) employee.commission_rate = commission_rate ? commission_rate.toString() : null;
 
     await employee.save();
-    //log hoạt động
+
+    // Update User fields (email, phone)
+    const user = await User.findById(employee.user_id);
+    if (user) {
+      if (email !== undefined) user.email = email.trim().toLowerCase();
+      if (phone !== undefined) user.phone = phone.trim();
+      await user.save();
+    }
+
+    // log hoạt động
     await logActivity({
       user: req.user,
       store: { _id: employee.store_id },
@@ -641,8 +646,7 @@ const updateEmployee = async (req, res) => {
       description: `Cập nhật thông tin nhân viên "${employee.fullName}"`,
     });
 
-    console.log(`Update nhân viên thành công: ${employee.fullName}`);
-    res.json({ message: "Update nhân viên thành công", employee });
+    res.json({ message: "Cập nhật nhân viên thành công", employee });
   } catch (err) {
     console.error("Lỗi update nhân viên:", err.message);
     res.status(500).json({ message: "Lỗi server khi update nhân viên" });

@@ -7,8 +7,14 @@ import { MdShoppingCart } from "react-icons/md";
 import { FiFileText, FiBell, FiStar } from "react-icons/fi";
 import { useAuth } from "../../context/AuthContext";
 import { useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
 
 export default function Sidebar() {
+  const { storeId } = useParams();
+  console.log("Store ID:", storeId);
+  // const storeId = localStorage.getItem("storeId");
+
+  
   const navigate = useNavigate();
   const { logout, user: authUser } = useAuth();
 
@@ -94,17 +100,36 @@ export default function Sidebar() {
         { name: "Lịch sử mua hàng", path: "/customers/history", permission: "customers:view" },
       ],
     },
-    {
-      key: "staff",
-      name: "Nhân viên",
-      path: "/staff",
-      icon: <BsPeople size={20} />,
-      children: [
-        { name: "Danh sách nhân viên", path: "/staff", permission: "store:employee:view" },
-        { name: "Lịch làm việc / bảng chấm công", path: "/staff/schedule", permission: "store:staff:assign" },
-        { name: "Lương + hoa hồng", path: "/staff/salary", permission: "users:assign-role" },
-      ],
-    },
+    
+      // {
+      //   key: "staff",
+      //   name: "Nhân viên",
+      //   path: "/employees",
+      //   icon: <BsPeople size={20} />,
+      //   children: [
+      //     { name: "Danh sách nhân viên", path: "/employees", permission: "store:employee:view" },
+      //     { name: "Lịch làm việc / bảng chấm công", path: "/staff/schedule", permission: "store:staff:assign" },
+      //     { name: "Lương + hoa hồng", path: "/staff/salary", permission: "users:assign-role" },
+      //   ],
+      // },
+      {
+        key: "employees",
+        name: "Nhân viên",
+        path: `/stores/${storeId}/employees`,
+        icon: <BsPeople size={20} />,
+        children: [
+          {
+            name: "Danh sách nhân viên",
+            path: `/stores/${storeId}/employees`,
+            permission: "employees:view",
+          },
+          {
+            name: "Lịch làm việc / bảng chấm công",
+            path: `/stores/${storeId}/employees/schedule`,
+            permission: "employees:assign",
+          },
+        ],
+      },
     {
       key: "loyalty",
       name: "Tích điểm",

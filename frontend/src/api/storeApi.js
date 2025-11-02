@@ -70,8 +70,7 @@ export const getEmployeeById = async (storeId, employeeId) =>
 
 // Cập nhật nhân viên
 export const updateEmployee = async (storeId, employeeId, data) =>
-  (await apiClient.put(`/stores/${storeId}/employees/${employeeId}`, data))
-    .data;
+  (await apiClient.put(`/stores/${storeId}/employees/${employeeId}`, data)).data;
 
 // (Tuỳ backend) Xóa nhân viên
 export const deleteEmployee = async (storeId, employeeId) =>
