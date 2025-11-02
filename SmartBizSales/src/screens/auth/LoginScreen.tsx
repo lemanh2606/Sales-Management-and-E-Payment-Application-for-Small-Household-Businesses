@@ -1,11 +1,4 @@
 // src/screens/auth/LoginScreen.tsx
-/**
- * Trang: Login screen (TypeScript)
- * - Gọi userApi.loginUser
- * - Gọi AuthContext.login để persist + điều hướng
- * - Lưu flag "remember_session" lên AsyncStorage (không lưu token ở client)
- */
-
 import React, { useEffect, useRef, useState } from "react";
 import {
   View,
@@ -17,14 +10,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert,
   TextInput as RNTextInput,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "../../context/AuthContext";
-import { userApi } from "../../api"; // hub export: export * as userApi from './userApi'
+import { userApi } from "../../api";
 import { useNavigation } from "@react-navigation/native";
-import type { AuthResponse } from "../../type/user";
+import { Ionicons } from "@expo/vector-icons";
 
 type LoginForm = {
   username: string;
@@ -33,40 +25,29 @@ type LoginForm = {
 
 export default function LoginScreen() {
   const { login } = useAuth();
-  const navigation = useNavigation<any>(); // nếu bạn có RootStackParamList, thay any bằng NativeStackNavigationProp<RootStackParamList>
-
+  const navigation = useNavigation<any>();
   const [form, setForm] = useState<LoginForm>({ username: "", password: "" });
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState(false);
-
   const userRef = useRef<RNTextInput | null>(null);
 
-  // Nếu trước đó user bật "remember", restore flag (không restore token)
   useEffect(() => {
     (async () => {
-      try {
-        const v = await AsyncStorage.getItem("remember_session");
-        setRemember(!!v);
-      } catch (e) {
-        // ignore
-      }
+      const v = await AsyncStorage.getItem("remember_session");
+      setRemember(!!v);
     })();
   }, []);
 
   useEffect(() => {
-    // autofocus
-    if (userRef.current && typeof userRef.current.focus === "function") {
-      userRef.current.focus();
-    }
+    userRef.current?.focus();
   }, []);
 
   const handleChange = (key: keyof LoginForm, value: string) =>
     setForm((s) => ({ ...s, [key]: value }));
 
   const handleSubmit = async () => {
-    // Basic validation quick check
     if (!form.username.trim() || !form.password) {
       setError("Vui lòng nhập username và mật khẩu.");
       return;
@@ -76,33 +57,20 @@ export default function LoginScreen() {
     setLoading(true);
 
     try {
-      // gọi API login
-      const data = (await userApi.loginUser(form)) as AuthResponse;
-
+      const data = await userApi.loginUser(form);
       if (!data?.token || !data?.user) {
         setError("Server phản hồi thiếu token hoặc user.");
         setLoading(false);
         return;
       }
 
-      // gọi AuthContext.login — nó sẽ persist token/user và điều hướng (Dashboard / SelectStore)
       await login(data.user, data.token);
 
-      // lưu flag remember (chỉ cờ, không lưu token ở client)
-      try {
-        if (remember) {
-          await AsyncStorage.setItem("remember_session", "1");
-        } else {
-          await AsyncStorage.removeItem("remember_session");
-        }
-      } catch (e) {
-        console.warn("remember flag write failed:", e);
-      }
+      if (remember) await AsyncStorage.setItem("remember_session", "1");
+      else await AsyncStorage.removeItem("remember_session");
 
       setLoading(false);
-      // AuthContext sẽ điều hướng; ở đây không cần làm gì thêm
     } catch (err: any) {
-      console.error("Login error:", err);
       const message =
         err?.response?.data?.message ||
         err?.message ||
@@ -114,15 +82,20 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
       style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <ScrollView
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.card}>
-          <Text style={styles.brand}>Smallbiz-Sales</Text>
+          {/* Logo / Brand */}
+          <View style={styles.logoContainer}>
+            <Ionicons name="business" size={60} color="#0b84ff" />
+            <Text style={styles.brand}>Smallbiz-Sales</Text>
+          </View>
+
           <Text style={styles.title}>Chào mừng trở lại</Text>
           <Text style={styles.subtitle}>
             Đăng nhập để quản lý cửa hàng của bạn.
@@ -130,6 +103,7 @@ export default function LoginScreen() {
 
           {error ? <Text style={styles.errorBox}>{error}</Text> : null}
 
+          {/* Username */}
           <View style={styles.field}>
             <Text style={styles.label}>Tên đăng nhập</Text>
             <TextInput
@@ -142,12 +116,10 @@ export default function LoginScreen() {
               returnKeyType="next"
               style={styles.input}
               editable={!loading}
-              onSubmitEditing={() => {
-                // nếu muốn focus password, bạn có thể thêm ref cho password input
-              }}
             />
           </View>
 
+          {/* Password */}
           <View style={styles.field}>
             <Text style={styles.label}>Mật khẩu</Text>
             <View style={styles.passwordRow}>
@@ -165,13 +137,16 @@ export default function LoginScreen() {
                 style={styles.toggleBtn}
                 disabled={loading}
               >
-                <Text style={styles.toggleText}>
-                  {showPassword ? "Ẩn" : "Hiện"}
-                </Text>
+                <Ionicons
+                  name={showPassword ? "eye-off" : "eye"}
+                  size={22}
+                  color="#0b84ff"
+                />
               </TouchableOpacity>
             </View>
           </View>
 
+          {/* Remember + Forgot */}
           <View style={styles.rowBetween}>
             <TouchableOpacity
               onPress={() => setRemember((r) => !r)}
@@ -181,7 +156,7 @@ export default function LoginScreen() {
               <View
                 style={[styles.checkbox, remember && styles.checkboxChecked]}
               >
-                {remember ? <Text style={styles.checkboxMark}>✓</Text> : null}
+                {remember && <Text style={styles.checkboxMark}>✓</Text>}
               </View>
               <Text style={styles.rememberText}>Ghi nhớ đăng nhập</Text>
             </TouchableOpacity>
@@ -194,19 +169,20 @@ export default function LoginScreen() {
             </TouchableOpacity>
           </View>
 
+          {/* Submit */}
           <TouchableOpacity
             onPress={handleSubmit}
             style={[styles.primaryBtn, loading && styles.btnDisabled]}
             disabled={loading}
-            accessibilityRole="button"
           >
             {loading ? (
-              <ActivityIndicator />
+              <ActivityIndicator color="#fff" />
             ) : (
               <Text style={styles.primaryText}>Đăng nhập</Text>
             )}
           </TouchableOpacity>
 
+          {/* Register */}
           <View style={styles.bottom}>
             <Text style={styles.small}>Chưa có tài khoản? </Text>
             <TouchableOpacity
@@ -225,56 +201,64 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0f172a" },
+  container: { flex: 1, backgroundColor: "#ffffff" }, // nền trắng
   scroll: { flexGrow: 1, justifyContent: "center", padding: 20 },
   card: {
-    backgroundColor: "#ffffff",
-    borderRadius: 14,
-    padding: 20,
-    elevation: 6,
+    backgroundColor: "#f8fafc", // để card vẫn nổi trên nền trắng
+    borderRadius: 20,
+    padding: 24,
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 10,
   },
-  brand: { fontSize: 18, fontWeight: "800", color: "#0b84ff", marginBottom: 6 },
-  title: { fontSize: 22, fontWeight: "800", color: "#0f172a" },
-  subtitle: { color: "#6b7280", marginBottom: 12 },
+  logoContainer: {
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  brand: { fontSize: 20, fontWeight: "900", color: "#0b84ff", marginTop: 6 },
+  title: { fontSize: 24, fontWeight: "800", color: "#0f172a", marginBottom: 6 },
+  subtitle: { color: "#6b7280", marginBottom: 16, textAlign: "center" },
   errorBox: {
     backgroundColor: "#fee2e2",
     color: "#991b1b",
-    padding: 8,
-    borderRadius: 8,
-    marginBottom: 10,
-    fontSize: 13,
-  },
-  field: { marginBottom: 12 },
-  label: { fontSize: 13, color: "#374151", marginBottom: 6 },
-  input: {
-    backgroundColor: "#f8fafc",
+    padding: 10,
     borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: Platform.OS === "ios" ? 12 : 8,
+    marginBottom: 12,
+    fontSize: 14,
+    textAlign: "center",
+  },
+  field: { marginBottom: 16 },
+  label: { fontSize: 14, color: "#374151", marginBottom: 6, fontWeight: "600" },
+  input: {
+    backgroundColor: "#ffffff", // input nền trắng
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: Platform.OS === "ios" ? 14 : 10,
     borderWidth: 1,
-    borderColor: "#e6eef8",
+    borderColor: "#e2e8f0",
+    fontSize: 15,
   },
   passwordRow: { flexDirection: "row", alignItems: "center" },
   inputPassword: { flex: 1 },
   toggleBtn: {
     marginLeft: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: "#f1f5f9",
+    padding: 6,
+    borderRadius: 10,
+    backgroundColor: "#e0f2fe",
   },
-  toggleText: { color: "#374151", fontWeight: "600" },
   rowBetween: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 16,
   },
   rememberRow: { flexDirection: "row", alignItems: "center" },
   checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
+    width: 22,
+    height: 22,
+    borderRadius: 6,
     borderWidth: 1,
     borderColor: "#cbd5e1",
     marginRight: 8,
@@ -283,22 +267,23 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
   checkboxChecked: { backgroundColor: "#0b84ff", borderColor: "#0b84ff" },
-  checkboxMark: { color: "#fff", fontSize: 12, fontWeight: "700" },
+  checkboxMark: { color: "#fff", fontSize: 14, fontWeight: "700" },
   rememberText: { color: "#374151" },
-  forgot: { color: "#0b844f", fontWeight: "700" },
+  forgot: { color: "#0b84ff", fontWeight: "700" },
   primaryBtn: {
     backgroundColor: "#0b84ff",
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingVertical: 14,
+    borderRadius: 14,
     alignItems: "center",
+    marginBottom: 16,
   },
   btnDisabled: { opacity: 0.7 },
-  primaryText: { color: "#fff", fontWeight: "800" },
+  primaryText: { color: "#fff", fontWeight: "800", fontSize: 16 },
   bottom: {
-    marginTop: 12,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
+    marginBottom: 12,
   },
   small: { color: "#6b7280" },
   link: { color: "#0b84ff", fontWeight: "700" },
