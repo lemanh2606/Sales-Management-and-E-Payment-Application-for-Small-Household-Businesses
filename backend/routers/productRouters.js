@@ -20,6 +20,7 @@ const {
   getLowStockProducts,
   importProducts,
   downloadProductTemplate,
+  exportProducts,
 } = require("../controllers/product/productController");
 const upload = require("../middlewares/upload");
 
@@ -63,6 +64,19 @@ const handleMulterError = (err, req, res, next) => {
   - Query: ?format=excel hoặc ?format=csv
 */
 router.get("/template/download", verifyToken, downloadProductTemplate);
+
+/*
+  ROUTE: GET /api/products/store/:storeId/export
+  - Export tất cả sản phẩm của store ra file Excel
+  - Middleware: verifyToken -> checkStoreAccess -> requirePermission("products:view")
+*/
+router.get(
+  "/store/:storeId/export",
+  verifyToken,
+  checkStoreAccess,
+  requirePermission("products:view"),
+  exportProducts
+);
 
 /*
   ROUTE: GET /api/products/search

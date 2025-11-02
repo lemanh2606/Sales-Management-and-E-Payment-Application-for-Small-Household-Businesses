@@ -907,6 +907,71 @@ const downloadProductTemplate = (req, res) => {
   );
 };
 
+/**
+ * Export products từ store ra file Excel
+ * GET /api/products/store/:storeId/export
+ */
+const {
+  toNumber,
+  createWorkbook,
+  sendWorkbook,
+  withExportErrorHandler,
+} = require("../../utils/excelExport");
+
+const exportProducts = withExportErrorHandler(async (req, res) => {
+  const { storeId } = req.params;
+
+  // Kiểm tra store tồn tại
+  const store = await Store.findById(storeId);
+  if (!store) {
+    return res.status(404).json({ message: "Không tìm thấy cửa hàng" });
+  }
+
+  // Lấy tất cả products của store
+  const products = await Product.find({
+    store_id: storeId,
+    isDeleted: false,
+  })
+    .populate("group_id", "name")
+    .populate("supplier_id", "name")
+    .sort({ createdAt: -1 });
+
+  // Tạo workbook với columns định nghĩa
+  const { workbook, worksheet } = createWorkbook("Products", [
+    { header: "Tên sản phẩm", key: "name", width: 30 },
+    { header: "Mô tả", key: "description", width: 40 },
+    { header: "SKU", key: "sku", width: 15 },
+    { header: "Giá bán", key: "price", width: 15 },
+    { header: "Giá nhập", key: "cost", width: 15 },
+    { header: "Tồn kho", key: "stock", width: 12 },
+    { header: "Tồn tối thiểu", key: "minStock", width: 15 },
+    { header: "Tồn tối đa", key: "maxStock", width: 15 },
+    { header: "Nhóm sản phẩm", key: "group", width: 20 },
+    { header: "Nhà cung cấp", key: "supplier", width: 20 },
+    { header: "Trạng thái", key: "status", width: 15 },
+  ]);
+
+  // Thêm dữ liệu - sử dụng toNumber helper
+  products.forEach((product) => {
+    worksheet.addRow({
+      name: product.name || "",
+      description: product.description || "",
+      sku: product.sku || "",
+      price: toNumber(product.price),
+      cost: toNumber(product.cost),
+      stock: toNumber(product.stock),
+      minStock: toNumber(product.minStock),
+      maxStock: toNumber(product.maxStock),
+      group: product.group_id?.name || "",
+      supplier: product.supplier_id?.name || "",
+      status: product.status || "active",
+    });
+  });
+
+  // Gửi file về client
+  await sendWorkbook(res, workbook, "products_export");
+});
+
 module.exports = {
   // CUD
   createProduct,
@@ -924,4 +989,5 @@ module.exports = {
   // Import/Export
   importProducts,
   downloadProductTemplate,
+  exportProducts,
 };
