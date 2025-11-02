@@ -32,6 +32,7 @@ import { LoadingOutlined } from "@ant-design/icons";
 import ProductGroupsPage from "./pages/productGroup/ProductGroupsPage";
 import { ConfigProvider } from "antd";
 import viVN from "antd/locale/vi_VN";
+import ActivityLog from "./pages/ActivityLog";
 
 const loadingIcon = <LoadingOutlined style={{ fontSize: 40 }} spin />;
 
@@ -300,6 +301,15 @@ function App() {
         }
       />
       {/* ======================================================================= */}
+      {/* ====================== Cấu hình - Routes ====================== */}
+      <Route
+        path="/settings/activity-log"
+        element={
+          <ProtectedRoute allowedPermissions="settings:activity-log">
+            <ActivityLog />
+          </ProtectedRoute>
+        }
+        />
       {/* Unauthorized */}
       <Route path="/unauthorized" element={<Unauthorized />} />
 

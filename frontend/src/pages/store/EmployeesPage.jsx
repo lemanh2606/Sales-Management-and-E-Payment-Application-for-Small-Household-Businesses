@@ -40,26 +40,7 @@ export default function EmployeesPage() {
     setCurrent(record);
     setOpen(true);
   };
-
-  // const handleSubmit = async (values) => {
-  //   setLoading(true);
-  //   try {
-  //     if (mode === "create") {
-  //       await createEmployee(storeId, values);
-  //       message.success("Tạo nhân viên thành công!");
-  //     } else {
-  //       await updateEmployee(storeId, current._id, values);
-  //       message.success("Cập nhật nhân viên thành công!");
-  //     }
-  //     setOpen(false);
-  //     loadEmployees();
-  //   } catch (err) {
-  //     console.error(err);
-  //     message.error("Lỗi khi lưu nhân viên!");
-  //   } finally {
-  //     setLoading(false);
-  //   }
-  // };
+  
   const handleSubmit = async (payload) => {
     setLoading(true);
     try {

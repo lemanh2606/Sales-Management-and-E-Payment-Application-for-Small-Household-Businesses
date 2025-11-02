@@ -7,7 +7,7 @@ dotenv.config();
 
 // Các quyền mới cần thêm
 const NEW_REPORT_PERMISSIONS = [
-  "customers:top-customers",
+  "settings:activity-log",
   //thêm nếu có cái mới hoặc nghĩ ra cái mới
 ];
 

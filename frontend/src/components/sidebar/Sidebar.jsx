@@ -4,7 +4,7 @@ import { FiLogOut, FiMenu, FiX, FiChevronDown, FiChevronLeft, FiChevronRight } f
 import { AiOutlineDashboard } from "react-icons/ai";
 import { BsBoxSeam, BsPeople } from "react-icons/bs";
 import { MdShoppingCart } from "react-icons/md";
-import { FiFileText, FiBell, FiStar } from "react-icons/fi";
+import { FiFileText, FiBell, FiStar, FiSettings } from "react-icons/fi";
 import { useAuth } from "../../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 
@@ -95,7 +95,6 @@ export default function Sidebar() {
       children: [
         { name: "Danh sách khách hàng", path: "/customers-list", permission: "customers:search" },
         { name: "Khách hàng thân thiết", path: "/customers/top-customers", permission: "customers:top-customers" },
-        { name: "Lịch sử mua hàng", path: "/customers/history", permission: "customers:view" },
       ],
     },
     {
@@ -143,6 +142,16 @@ export default function Sidebar() {
       children: [
         { name: "Thông báo thanh toán", path: "/notifications/payment", permission: "notifications:payment" },
         { name: "Cảnh báo tồn kho thấp", path: "/notifications/stock", permission: "notifications:stock" },
+      ],
+    },
+    {
+      key: "settings",
+      name: "Cấu hình",
+      path: "/settings",
+      icon: <FiSettings size={20} />,
+      children: [
+        { name: "Nhật ký hoạt động", path: "/settings/activity-log", permission: "settings:activity-log" },
+        { name: "Thiết lập thanh toán", path: "/settings/payment-method", permission: "settings:payment-method" },
       ],
     },
   ];
