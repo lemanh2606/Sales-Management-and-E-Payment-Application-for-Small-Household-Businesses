@@ -174,8 +174,6 @@ async function checkStoreAccess(req, res, next) {
     // CASE: MANAGER -> chỉ được truy cập nếu là owner của store
     if (req.user.role === "MANAGER") {
       if (String(store.owner_id) === String(userId)) {
-        // Cho phép: gán store và storeRole rồi next
-        console.log("MANAGER đã vào được store của mình");
         req.store = store;
         req.storeRole = "OWNER";
         return next();

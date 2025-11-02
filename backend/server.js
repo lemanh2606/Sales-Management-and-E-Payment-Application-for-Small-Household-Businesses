@@ -100,6 +100,7 @@ const revenueRouters = require("./routers/revenueRouters");
 const customerRouters = require("./routers/customerRouters");
 const loyaltyRouters = require("./routers/loyaltyRouters");
 const financialRouters = require("./routers/financialRouters");
+const activityLogRouters = require("./routers/activityLogRouters");
 
 // --- MOUNT ROUTERS ---
 app.use("/api/stores", storeRouters);
@@ -117,6 +118,7 @@ app.use("/api/revenues", revenueRouters);
 app.use("/api/customers", customerRouters);
 app.use("/api/loyaltys", loyaltyRouters);
 app.use("/api/financials", financialRouters);
+app.use("/api/activity-logs", activityLogRouters);
 
 // --- ROOT ---
 app.get("/", (req, res) => {

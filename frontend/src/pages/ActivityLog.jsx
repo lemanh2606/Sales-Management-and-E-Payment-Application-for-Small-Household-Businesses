@@ -1,0 +1,612 @@
+// src/pages/ActivityLog.jsx
+import React, { useState, useEffect } from "react";
+import { Card, Col, Row, Select, Input, Button, Table, DatePicker, Statistic, Spin, Space, Modal, Typography, Switch, Timeline, Tag, Descriptions, Tooltip} from "antd";
+import { SearchOutlined, QuestionCircleOutlined, InfoCircleOutlined, AppstoreOutlined, UnorderedListOutlined, DownOutlined} from "@ant-design/icons";
+import axios from "axios";
+import dayjs from "dayjs";
+import "dayjs/locale/vi";
+import Layout from "../components/Layout";
+
+dayjs.locale("vi");
+
+const { Option } = Select;
+const { RangePicker } = DatePicker;
+const { Text } = Typography;
+
+const ActivityLog = () => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [logs, setLogs] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [users, setUsers] = useState([]);
+  const [entities, setEntities] = useState([]);
+  const [actions] = useState(["create", "update", "delete", "restore", "other"]);
+  const [detailVisible, setDetailVisible] = useState(false);
+  const [selectedLog, setSelectedLog] = useState(null);
+  const [filterApplied, setFilterApplied] = useState(false);
+  const [viewMode, setViewMode] = useState("table"); // table / timeline
+  const [statsCollapsed, setStatsCollapsed] = useState(false);
+
+  // state phân trang
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [totalLogs, setTotalLogs] = useState(0);
+
+  const currentStore = JSON.parse(localStorage.getItem("currentStore") || "{}");
+
+  const [filters, setFilters] = useState({
+    userName: "",
+    action: "",
+    entity: "",
+    fromDate: "",
+    toDate: "",
+    keyword: "",
+    page: 1,
+    limit: 20,
+    sort: "-createdAt",
+  });
+
+  const formatDate = (date) => dayjs(date).format("DD/MM/YYYY HH:mm:ss");
+  const formatVND = (value) => {
+    if (!value) return "₫0";
+    return new Intl.NumberFormat("vi-VN", {
+      style: "currency",
+      currency: "VND",
+      minimumFractionDigits: 0,
+    }).format(value);
+  };
+
+  // LOAD USERS & ENTITIES (unique từ logs) - giữ cách bạn sẵn có
+  useEffect(() => {
+    const fetchLogsForFilters = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const url = `http://localhost:9999/api/activity-logs?storeId=${currentStore._id}&limit=1000`;
+        const res = await axios.get(url, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        const logsData = res.data.data.logs || [];
+
+        // Unique entities
+        const uniqueEntities = [...new Set(logsData.map((l) => l.entity).filter(Boolean))];
+        setEntities(uniqueEntities);
+
+        // Unique users (dựa vào userName)
+        const uniqueUsers = [...new Set(logsData.map((l) => l.userName).filter(Boolean))];
+        setUsers(uniqueUsers);
+      } catch (err) {
+        console.error("Lỗi load filter data:", err);
+      }
+    };
+
+    if (currentStore._id) fetchLogsForFilters();
+  }, [currentStore._id]);
+
+  // LOAD STATS
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const url = `http://localhost:9999/api/activity-logs/stats?storeId=${currentStore._id}`;
+        const res = await axios.get(url, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setStats(res.data.data.stats || null);
+      } catch (err) {
+        console.error("Lỗi load stats:", err);
+      }
+    };
+    if (currentStore._id) fetchStats();
+  }, [currentStore._id]);
+
+  // BUILD params helper: chỉ append khi có giá trị (non-empty)
+  const buildParamsFromFilters = (f) => {
+    const params = new URLSearchParams();
+    Object.entries(f).forEach(([k, v]) => {
+      if (v === undefined || v === null) return;
+      // treat empty string as skip
+      if (typeof v === "string" && v.trim() === "") return;
+      params.append(k, v);
+    });
+    return params;
+  };
+
+  // FETCH LOGS
+  const fetchLogs = async (overrideFilters = null) => {
+    if (!currentStore?._id) {
+      setError("Vui lòng chọn cửa hàng");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      // if overrideFilters passed, merge it
+      const mergedFilters = overrideFilters ? { ...filters, ...overrideFilters } : filters;
+      // ensure page/limit reflect current pagination state
+      mergedFilters.page = mergedFilters.page || currentPage || 1;
+      mergedFilters.limit = mergedFilters.limit || pageSize || 20;
+
+      const token = localStorage.getItem("token");
+      const params = buildParamsFromFilters({
+        ...mergedFilters, // 👈 giải phẳng object ra
+        storeId: currentStore._id, // 👈 thêm storeId vào cùng cấp
+      });
+      if (currentStore?._id);
+      const url = `http://localhost:9999/api/activity-logs?${params.toString()}`;
+      const res = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } });
+
+      const respLogs = res.data.data.logs || [];
+      const pagination = res.data.data.pagination || {};
+
+      setLogs(respLogs);
+      // set pagination states from backend (fallbacks)
+      setCurrentPage(pagination.current || mergedFilters.page || 1);
+      setPageSize(pagination.pageSize || pagination.limit || mergedFilters.limit || 20);
+      setTotalLogs(pagination.total || 0);
+      // also reflect into filters so next requests use correct page/limit
+      setFilters((prev) => ({
+        ...prev,
+        page: pagination.current || mergedFilters.page || 1,
+        limit: pagination.limit || mergedFilters.limit || 20,
+      }));
+    } catch (err) {
+      setError(err.response?.data?.message || "Lỗi tải nhật ký");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // FETCH DETAIL
+  const fetchLogDetail = async (id) => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem("token");
+      const url = `http://localhost:9999/api/activity-logs/${id}?storeId=${currentStore._id}`;
+      const res = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } });
+      setSelectedLog(res.data.data);
+      setDetailVisible(true);
+    } catch (err) {
+      // use console since message might not be imported in this scope
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // helper: when user changes filters in UI
+  const handleFilterChange = (key, value) => {
+    // if user chose the "Tất cả" option (value === ""), we want to clear that filter
+    const val = value === "" ? "" : value;
+    setFilters((prev) => ({ ...prev, [key]: val, page: 1 }));
+  };
+  // hàm chọn ngày tháng đến ngày tháng
+  const handleDateRange = (dates) => {
+    if (dates) {
+      setFilters((prev) => ({
+        ...prev,
+        fromDate: dates[0].format("YYYY-MM-DD"),
+        toDate: dates[1].format("YYYY-MM-DD"),
+        page: 1,
+      }));
+    } else {
+      setFilters((prev) => ({ ...prev, fromDate: "", toDate: "", page: 1 }));
+    }
+  };
+  //hàm đổi timeline và bảng
+  const handleViewMode = (checked) => {
+    setViewMode(checked ? "timeline" : "table");
+  };
+  // Table columns same như bạn
+  const columns = [
+    {
+      title: "Thời gian",
+      dataIndex: "createdAt",
+      key: "createdAt",
+      width: 130,
+      sorter: (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
+      render: (date) => dayjs(date).format("DD/MM/YYYY HH:mm:ss"),
+      onCell: () => ({
+        style: { cursor: "pointer" }, // cursor pointer cho body cell
+      }),
+    },
+    {
+      title: "Người dùng",
+      dataIndex: "userName",
+      key: "userName",
+      width: 180,
+      render: (name) => <Text strong>{name}</Text>,
+      onCell: () => ({
+        style: { cursor: "pointer" }, // cursor pointer cho body cell
+      }),
+    },
+    {
+      title: "Vai trò",
+      dataIndex: "userRole",
+      key: "userRole",
+      width: 85,
+      render: (role) => <Tag color={role === "MANAGER" ? "blue" : "green"}>{role}</Tag>,
+      onCell: () => ({
+        style: { cursor: "pointer" }, // cursor pointer cho body cell
+      }),
+    },
+    {
+      title: "Hành động",
+      dataIndex: "action",
+      key: "action",
+      width: 85,
+      render: (action) => <Tag color="volcano">{action.toUpperCase()}</Tag>,
+      onCell: () => ({
+        style: { cursor: "pointer" }, // cursor pointer cho body cell
+      }),
+    },
+    {
+      title: "Đối tượng",
+      dataIndex: "entity",
+      key: "entity",
+      width: 95,
+      render: (entity) => <Tag color="cyan">{entity}</Tag>,
+      onCell: () => ({
+        style: { cursor: "pointer" }, // cursor pointer cho body cell
+      }),
+    },
+    {
+      title: "Tên đối tượng",
+      dataIndex: "entityName",
+      key: "entityName",
+      width: 180,
+      ellipsis: { showTitle: false },
+      onCell: () => ({
+        style: { cursor: "pointer" }, // cursor pointer cho body cell
+      }),
+    },
+    {
+      title: "Mô tả",
+      dataIndex: "description",
+      key: "description",
+      width: 280,
+      ellipsis: { showTitle: false },
+      onCell: () => ({
+        style: { cursor: "pointer" }, // cursor pointer cho body cell
+      }),
+    },
+    {
+      title: "Hành động",
+      key: "actions",
+      width: 50,
+      fixed: "right",
+      render: (_, record) => (
+        <Tooltip title="Nhấp để xem chi tiết log này">
+          <Button type="link" icon={<InfoCircleOutlined />} onClick={() => fetchLogDetail(record._id)} />
+        </Tooltip>
+      ),
+      onCell: () => ({
+        style: { cursor: "pointer" }, // cursor pointer cho body cell
+      }),
+    },
+  ];
+  //hàm tạo cách hiển thị timeline
+  const timelineItems = logs.map((log) => ({
+    label: formatDate(log.createdAt),
+    color:
+      log.action === "create" ? "green" : log.action === "update" ? "blue" : log.action === "delete" ? "red" : "gray",
+    children: (
+      <div>
+        <Text strong>{log.userName}</Text>
+        <Tag color={log.userRole === "MANAGER" ? "blue" : "green"} style={{ marginLeft: 6 }}>
+          {log.userRole}
+        </Tag>
+        đã
+        <Tag color="volcano" style={{ margin: "0 4px" }}>
+          {log.action.toUpperCase()}
+        </Tag>
+        <Tag color="cyan" style={{ marginLeft: 4 }}>
+          {log.entity}
+        </Tag>
+        :
+        <Text code style={{ marginLeft: 4 }}>
+          {log.entityName}
+        </Text>
+        <br />
+        <Text italic type="secondary">
+          {log.description || "Không có mô tả"}
+        </Text>
+      </div>
+    ),
+  }));
+
+  // Callbacks lại cho các điều khiển phân trang (Table)
+  const handleTableChange = (page, size) => {
+    // cập nhật trạng thái phân trang cục bộ và bộ lọc, sau đó lấy trang mới
+    setFilterApplied(true);
+    setCurrentPage(page);
+    setPageSize(size);
+    // cập nhật bộ lọc và chạy fetch
+    const newFilters = { ...filters, page, limit: size };
+    setFilters(newFilters);
+    fetchLogs(newFilters);
+  };
+
+  return (
+    <Layout>
+      <div>
+        <Space direction="vertical" size="large" style={{ width: "100%" }}>
+          {/* HEADER + FILTERS */}
+          <Card style={{ border: "1px solid #8c8c8c" }}>
+            <Row gutter={16} align="middle">
+              <Col span={4}>
+                <Text strong style={{ fontSize: 22, color: "#1890ff" }}>
+                  {currentStore.name || "Đang tải..."}
+                </Text>
+              </Col>
+              <Col span={4}>
+                <Select
+                  style={{ width: "100%" }}
+                  placeholder="Lọc theo user"
+                  value={filters.userName || ""}
+                  onChange={(v) => handleFilterChange("userName", v)}
+                  allowClear
+                >
+                  <Option value="">
+                    <AppstoreOutlined /> Tất cả người dùng
+                  </Option>
+                  {users.map((u) => (
+                    <Option key={u} value={u}>
+                      {u}
+                    </Option>
+                  ))}
+                </Select>
+              </Col>
+              <Col span={4}>
+                <Select
+                  style={{ width: "100%" }}
+                  placeholder="Lọc theo hành động"
+                  value={filters.action || ""}
+                  onChange={(v) => handleFilterChange("action", v)}
+                  allowClear
+                >
+                  <Option value="">
+                    <AppstoreOutlined /> Tất cả hành động
+                  </Option>
+                  {actions.map((a) => (
+                    <Option key={a} value={a}>
+                      {a.toUpperCase()}
+                    </Option>
+                  ))}
+                </Select>
+              </Col>
+              <Col span={4}>
+                <Select
+                  style={{ width: "100%" }}
+                  placeholder="Lọc theo đối tượng"
+                  value={filters.entity || ""}
+                  onChange={(v) => handleFilterChange("entity", v)}
+                  allowClear
+                >
+                  <Option value="">
+                    <AppstoreOutlined /> Tất cả đối tượng
+                  </Option>
+                  {entities.map((e) => (
+                    <Option key={e} value={e}>
+                      {e}
+                    </Option>
+                  ))}
+                </Select>
+              </Col>
+              <Col span={4}>
+                <RangePicker
+                  style={{ width: "100%" }}
+                  onChange={handleDateRange}
+                  format="YYYY-MM-DD"
+                  placeholder={["Từ ngày", "Đến ngày"]}
+                />
+              </Col>
+              <Col span={4}>
+                <Input
+                  placeholder="Tìm kiếm keyword"
+                  onChange={(e) => handleFilterChange("keyword", e.target.value)}
+                  style={{ width: "100%" }}
+                />
+              </Col>
+            </Row>
+            <Row gutter={16} style={{ marginTop: 16 }}>
+              <Col span={12}>
+                <Button
+                  type="primary"
+                  icon={<SearchOutlined />}
+                  onClick={() => {
+                    setFilterApplied(true);
+                    fetchLogs();
+                  }}
+                >
+                  Xem nhật ký
+                </Button>
+              </Col>
+              <Col span={12} style={{ textAlign: "right" }}>
+                <Space>
+                  <Tooltip title="Chọn để xem nhật ký dạng timeline hoặc Bảng">
+                    <QuestionCircleOutlined style={{ color: "#1890ff", marginRight: 4 }} />
+                  </Tooltip>
+                  <Text>Chế độ xem:</Text>
+                  <Switch
+                    checkedChildren={<UnorderedListOutlined />}
+                    unCheckedChildren={<AppstoreOutlined />}
+                    checked={viewMode === "timeline"}
+                    onChange={handleViewMode}
+                  />
+                </Space>
+              </Col>
+            </Row>
+          </Card>
+
+          {/* STATS */}
+          {stats && (
+            <Card
+              title={
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span>Thống kê tổng quan</span>
+                  <Tooltip title={statsCollapsed ? "Mở thống kê" : "Thu gọn thống kê"}>
+                    <Button
+                      type="text"
+                      icon={<DownOutlined rotate={statsCollapsed ? 0 : 180} />}
+                      onClick={() => setStatsCollapsed(!statsCollapsed)}
+                    />
+                  </Tooltip>
+                </div>
+              }
+              style={{ border: "1px solid #8c8c8c" }}
+            >
+              {!statsCollapsed && (
+                <Row gutter={16}>
+                  <Col span={6}>
+                    <Statistic title="Tổng nhật ký hoạt động" value={stats.totalLogs} />
+                  </Col>
+                  <Col span={6}>
+                    <Statistic title="Người dùng hoạt động" value={stats.uniqueUsers} />
+                  </Col>
+                  <Col span={6}>
+                    <Statistic
+                      title="Hành động phổ biến"
+                      value={Object.keys(stats.actionCounts)[0] || "N/A"}
+                      formatter={(val) => (
+                        <Tag color="volcano" style={{ fontSize: 20, padding: "0 8px" }}>
+                          {(val || "N/A").toUpperCase()}
+                        </Tag>
+                      )}
+                    />
+                  </Col>
+                  <Col span={6}>
+                    <Statistic
+                      title="Đối tượng phổ biến"
+                      value={Object.keys(stats.entityCounts)[0] || "N/A"}
+                      formatter={(val) => (
+                        <Tag color="cyan" style={{ fontSize: 20, padding: "0 8px" }}>
+                          {(val || "N/A").toUpperCase()}
+                        </Tag>
+                      )}
+                    />
+                  </Col>
+                </Row>
+              )}
+            </Card>
+          )}
+
+          {loading && <Spin tip="Đang tải nhật ký..." style={{ width: "100%", margin: "20px 0" }} />}
+          {error && <div style={{ color: "red" }}>{error}</div>}
+
+          {/* VIEW MODE */}
+          {viewMode === "table" ? (
+            <Card title="Danh sách nhật ký chi tiết" style={{ border: "1px solid #8c8c8c" }}>
+              <Table
+                columns={columns}
+                dataSource={logs}
+                rowKey="_id"
+                pagination={{
+                  current: currentPage,
+                  pageSize,
+                  total: totalLogs,
+                  showSizeChanger: true,
+                  onChange: handleTableChange,
+                  onShowSizeChange: (current, size) => handleTableChange(1, size),
+                  showTotal: (total, range) => (
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        width: "100%",
+                        fontSize: 14,
+                        color: "#555",
+                      }}
+                    >
+                      <div>
+                        Đang xem{" "}
+                        <span style={{ color: "#1890ff", fontWeight: 600 }}>
+                          {range[0]} – {range[1]}
+                        </span>
+                        trên tổng số <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> nhật ký
+                      </div>
+                    </div>
+                  ),
+                }}
+                scroll={{ x: 1200 }}
+                locale={{
+                  emptyText:
+                    logs.length === 0 ? (
+                      <div style={{ color: "#f45a07f7" }}>
+                        {filterApplied ? "Phần này chưa có nhật ký" : "Chưa có nhật ký. Hãy lọc và xem!"}
+                      </div>
+                    ) : null,
+                }}
+                onRow={(record) => ({ onClick: () => fetchLogDetail(record._id) })}
+              />
+            </Card>
+          ) : (
+            <Card title="Timeline nhật ký" style={{ border: "1px solid #8c8c8c" }}>
+              <Timeline mode="alternate" items={timelineItems} />
+              {totalLogs > logs.length && (
+                <div style={{ textAlign: "center", marginTop: 16 }}>
+                  <Button
+                    onClick={async () => {
+                      const nextPage = currentPage + 1;
+                      const newFilters = { ...filters, page: nextPage, limit: pageSize };
+                      setLoading(true);
+                      try {
+                        const token = localStorage.getItem("token");
+                        const params = new URLSearchParams({ ...newFilters, storeId: currentStore._id });
+                        const res = await axios.get(`http://localhost:9999/api/activity-logs?${params.toString()}`, {
+                          headers: { Authorization: `Bearer ${token}` },
+                        });
+                        const newLogs = res.data.data.logs || [];
+                        setLogs((prev) => [...prev, ...newLogs]); // nối dài timeline
+                        setCurrentPage(nextPage);
+                      } catch (err) {
+                        console.error(err);
+                      } finally {
+                        setLoading(false);
+                      }
+                    }}
+                  >
+                    Xem thêm
+                  </Button>
+                </div>
+              )}
+            </Card>
+          )}
+        </Space>
+
+        {/* DETAIL MODAL */}
+        <Modal
+          open={detailVisible}
+          title={<div style={{ textAlign: "center", fontSize: 30, fontWeight: 600 }}>Chi tiết nhật ký</div>}
+          footer={null}
+          onCancel={() => setDetailVisible(false)}
+          width={1000}
+        >
+          {selectedLog ? (
+            <Descriptions bordered column={1} size="small">
+              <Descriptions.Item label="Người dùng">{selectedLog.userName}</Descriptions.Item>
+              <Descriptions.Item label="Vai trò">
+                <Tag color={selectedLog.userRole === "MANAGER" ? "blue" : "green"}>{selectedLog.userRole}</Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="Hành động">
+                <Tag color="volcano">{selectedLog.action.toUpperCase()}</Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="Đối tượng">
+                <Tag color="cyan">{selectedLog.entity}</Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="Tên đối tượng">{selectedLog.entityName}</Descriptions.Item>
+              <Descriptions.Item label="Mô tả">{selectedLog.description}</Descriptions.Item>
+              <Descriptions.Item label="Địa chỉ IP">{selectedLog.ip}</Descriptions.Item>
+              <Descriptions.Item label="Thiết bị & Trình duyệt">{selectedLog.userAgent}</Descriptions.Item>
+              <Descriptions.Item label="Thời gian">{formatDate(selectedLog.createdAt)}</Descriptions.Item>
+            </Descriptions>
+          ) : (
+            <Spin />
+          )}
+        </Modal>
+      </div>
+    </Layout>
+  );
+};
+
+export default ActivityLog;

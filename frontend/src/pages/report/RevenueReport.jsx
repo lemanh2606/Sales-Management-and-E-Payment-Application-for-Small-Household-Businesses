@@ -176,6 +176,7 @@ const RevenueReport = () => {
       key: "orders",
       align: "center",
       width: 150,
+      sorter: (a, b) => a.countOrders - b.countOrders,
       render: (value) => <span style={{ fontSize: "16px" }}>{value}</span>,
     },
     {
@@ -183,6 +184,7 @@ const RevenueReport = () => {
       dataIndex: "totalRevenue",
       key: "revenue",
       align: "right",
+      sorter: (a, b) => Number(a.totalRevenue) - Number(b.totalRevenue),
       render: (value) => <span style={{ fontSize: "16px" }}>{formatVND(value)}</span>,
     },
   ];
@@ -298,7 +300,7 @@ const RevenueReport = () => {
                 <Col xs={24} sm={12} lg={8}>
                   <Card style={{ border: "1px solid #8c8c8c" }}>
                     <Statistic
-                      title="Số hóa đơn"
+                      title="Số hóa đơn đã bán của cửa hàng"
                       value={summary.countOrders}
                       valueStyle={{ color: "#52c41a", fontSize: 28 }}
                     />

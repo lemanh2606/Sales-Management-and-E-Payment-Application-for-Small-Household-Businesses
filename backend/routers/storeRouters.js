@@ -163,6 +163,24 @@ router.put(
   storeController.updateEmployee
 );
 
-// router.delete("/:storeId/employees/:id", verifyToken, checkStoreAccess, isManager, requirePermission("store:employee:delete"), storeController.deleteEmployee);
+// Xóa mềm nhân viên
+router.delete(
+  "/:storeId/employees/:id/soft",
+  verifyToken,
+  checkStoreAccess,
+  isManager,
+  requirePermission("store:employee:softDelete"),
+  storeController.softDeleteEmployee
+);
+
+// Khôi phục nhân viên bị xóa mềm
+router.put(
+  "/:storeId/employees/:id/restore",
+  verifyToken,
+  checkStoreAccess,
+  isManager,
+  requirePermission("store:employee:restore"),
+  storeController.restoreEmployee
+);
 
 module.exports = router;

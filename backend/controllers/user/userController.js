@@ -43,6 +43,8 @@ const ALL_PERMISSIONS = [
   "store:employee:view",
   "store:employee:update",
   "store:employee:delete",
+  "store:employee:softDelete",
+  "store:employee:restore",
 
   // customers
   "customers:create",
@@ -135,6 +137,8 @@ const ALL_PERMISSIONS = [
 
   // purchase/supplier related reports/exports
   "reports:export",
+  "reports:activity-log:view",
+  "settings:activity-log",
 ];
 /* ------------------------- 
    Helper functions
