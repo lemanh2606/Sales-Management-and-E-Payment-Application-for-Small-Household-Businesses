@@ -564,10 +564,29 @@ const refundOrder = async (req, res) => {
   }
 };
 
-// GET /api/orders/top-products - Top sản phẩm bán chạy (sum quantity/sales từ OrderItem, filter paid + range/date/store)
+// GET http://localhost:9999/api/orders/top-products?limit=5&range=thisYear&storeId=68f8f19a4d723cad0bda9fa5
+//  Top sản phẩm bán chạy (sum quantity/sales từ OrderItem, filter paid + range/date/store)
 const getTopSellingProducts = async (req, res) => {
   try {
-    const { limit = 10, storeId, range, dateFrom, dateTo } = req.query; // Params: limit, storeId, range quick/custom date
+    const { limit = 10, storeId, range, dateFrom, dateTo } = req.query; // nếu ko có limit thì mặc định lấy top 10 sản phẩm
+    // Nếu không có range và không có dateFrom/dateTo thì báo lỗi
+    if (!range && !dateFrom && !dateTo) {
+      return res.status(400).json({
+        success: false,
+        message: "Thiếu tham số range hoặc khoảng thời gian (today/yesterday/thisWeek/thisMonth/thisYear)",
+      });
+    }
+    // Tự lấy storeId từ user nếu không truyền query
+    let finalStoreId = storeId;
+    if (!finalStoreId && req.user?.storeId) {
+      finalStoreId = req.user.storeId;
+    }
+    // Nếu vẫn không có storeId thì báo lỗi (tránh leak toàn bộ data)
+    if (!finalStoreId) {
+      return res.status(400).json({
+        message: "Thiếu storeId, không thể lấy top sản phẩm.",
+      });
+    }
     // Xử lý date range
     let matchDate = {};
     const now = new Date();
