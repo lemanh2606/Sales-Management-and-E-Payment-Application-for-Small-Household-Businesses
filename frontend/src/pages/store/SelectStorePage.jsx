@@ -177,7 +177,7 @@ export default function SelectStorePage() {
       }
 
       // navigate tới dashboard
-      navigate("/dashboard");
+      navigate(`/dashboard/${store._id}`);
     } catch (e) {
       console.error("select store error", e);
       setErr(e?.response?.data?.message || e?.message || "Không thể chọn cửa hàng");
