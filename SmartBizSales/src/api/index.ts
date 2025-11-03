@@ -14,3 +14,5 @@ export { default as apiClient } from './apiClient';
 // Tạm thời chỉ giữ 2 module bạn đang dùng
 export * as userApi from './userApi';
 export * as storeApi from './storeApi';
+export * as productApi from './productApi';
+export * as productGroupApi from './productGroupApi';

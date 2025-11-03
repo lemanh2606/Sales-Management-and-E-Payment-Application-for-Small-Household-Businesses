@@ -248,8 +248,8 @@ export default function Profile() {
                     >
                       <Input
                         placeholder="Họ và tên"
-                        value={profile.fullname ?? ""}
-                        onChangeText={(text) => setProfile({ ...profile, fullname: text })}
+                        className="!py-2 !px-3 !text-lg rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-300"
+
                       />
                     </Form.Item>
                   </Col>

@@ -20,6 +20,7 @@ import DashboardScreen from "../screens/home/DashboardScreen";
 import SelectStoreScreen from "../screens/store/SelectStoreScreen";
 import Unauthorized from "../screens/misc/Unauthorized"; // màn tạm thời
 import Profile from "../screens/user/Profile";
+import ProductListScreen from "../screens/product/ProductListScreen";
 
 const Drawer = createDrawerNavigator();
 
@@ -141,6 +142,16 @@ export default function AppNavigator(): JSX.Element {
           title: "Hồ sơ cá nhân",
           drawerIcon: ({ color, size }) => (
             <Ionicons name="person-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Drawer.Screen
+        name="ProductList"
+        component={ProtectedScreen(<ProductListScreen />)}
+        options={{
+          title: "Hàng hóa",
+          drawerIcon: ({ color, size }) => (
+            <Ionicons name="list-outline" size={size} color={color} />
           ),
         }}
       />

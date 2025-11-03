@@ -75,12 +75,6 @@ export default function SelectStoreScreen() {
   };
 
   useEffect(() => {
-    if (user && user.role !== "STAFF") {
-      setCurrentStore && setCurrentStore(null);
-      try {
-        localStorage.removeItem("currentStore");
-      } catch {}
-    }
     loadStores();
   }, [user]);
 
@@ -104,7 +98,7 @@ export default function SelectStoreScreen() {
     try {
       setBusy(true);
       const res = await selectStore(store._id);
-      let returnedStore: Store = res?.store || res?.data?.store || res || store;
+      const returnedStore: Store = res?.store ?? store; // fallback chắc chắn
 
       // Backup previous
       try {
@@ -114,18 +108,13 @@ export default function SelectStoreScreen() {
       } catch {}
 
       // Update context
-      if (setCurrentStore) {
-        try {
-          await setCurrentStore(returnedStore);
-        } catch {
-          await setCurrentStore(returnedStore);
-        }
-      }
+      setCurrentStore && setCurrentStore(returnedStore);
 
       Alert.alert(
         "Chọn cửa hàng",
         `Bạn đã chọn cửa hàng: ${returnedStore.name}`
       );
+      console.log("Selected store:", returnedStore);
     } catch (e: any) {
       console.error(e);
       setErr(
