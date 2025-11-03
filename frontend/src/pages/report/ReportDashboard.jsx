@@ -262,7 +262,7 @@ const ReportDashboard = () => {
                 )}
               </Col>
               <Col span={8}>
-                <label>Chi phí ngoài:</label>
+                <label>Chi phí ngoài:{" "}</label>
                 <Space style={{ marginTop: 8 }}>
                   <InputNumber
                     min={0}
@@ -272,8 +272,21 @@ const ReportDashboard = () => {
                     parser={(v) => v.replace(/\$\s?|(,*)/g, "")}
                     style={{ width: 120 }}
                     placeholder="VD: 1000000"
+                    onKeyPress={(e) => {
+                      if (/[a-zA-Z]/.test(e.key)) {
+                        e.preventDefault(); // ⛔ chặn nhập chữ cái
+                      }
+                    }}
+                    onPaste={(e) => {
+                      e.preventDefault();
+                      const pastedText = e.clipboardData.getData("text"); // lấy nội dung vừa paste
+                      const numericOnly = pastedText.replace(/[^0-9]/g, ""); // chỉ giữ lại số
+                      const value = Number(numericOnly || 0);
+                      setNewExpense(value); // cập nhật lại state
+                    }}
                   />
-                  <Button type="primary" onClick={addExtraExpense}>
+
+                  <Button type="primary" onClick={addExtraExpense} disabled={!newExpense || isNaN(newExpense)}>
                     Thêm
                   </Button>
                 </Space>

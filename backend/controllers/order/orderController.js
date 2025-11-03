@@ -564,10 +564,29 @@ const refundOrder = async (req, res) => {
   }
 };
 
-// GET /api/orders/top-products - Top sản phẩm bán chạy (sum quantity/sales từ OrderItem, filter paid + range/date/store)
+// GET http://localhost:9999/api/orders/top-products?limit=5&range=thisYear&storeId=68f8f19a4d723cad0bda9fa5
+//  Top sản phẩm bán chạy (sum quantity/sales từ OrderItem, filter paid + range/date/store)
 const getTopSellingProducts = async (req, res) => {
   try {
-    const { limit = 10, storeId, range, dateFrom, dateTo } = req.query; // Params: limit, storeId, range quick/custom date
+    const { limit = 10, storeId, range, dateFrom, dateTo } = req.query; // nếu ko có limit thì mặc định lấy top 10 sản phẩm
+    // Nếu không có range và không có dateFrom/dateTo thì báo lỗi
+    if (!range && !dateFrom && !dateTo) {
+      return res.status(400).json({
+        success: false,
+        message: "Thiếu tham số range hoặc khoảng thời gian (today/yesterday/thisWeek/thisMonth/thisYear)",
+      });
+    }
+    // Tự lấy storeId từ user nếu không truyền query
+    let finalStoreId = storeId;
+    if (!finalStoreId && req.user?.storeId) {
+      finalStoreId = req.user.storeId;
+    }
+    // Nếu vẫn không có storeId thì báo lỗi (tránh leak toàn bộ data)
+    if (!finalStoreId) {
+      return res.status(400).json({
+        message: "Thiếu storeId, không thể lấy top sản phẩm.",
+      });
+    }
     // Xử lý date range
     let matchDate = {};
     const now = new Date();
@@ -685,46 +704,100 @@ const getTopSellingProducts = async (req, res) => {
 //api/orders/top-customers?limit=5&range=thisMonth&storeId=68e81dbffae46c6d9fe2e895
 const getTopFrequentCustomers = async (req, res) => {
   try {
-    const { limit = 10 } = req.query;
+    const { limit = 10, storeId, range } = req.query;
 
-    // Aggregate top khách hàng theo tổng tiền và số đơn (group by customer ref)
+    if (!storeId) {
+      return res.status(400).json({ message: "Thiếu storeId" });
+    }
+
+    // 🔹 Xác định khoảng thời gian theo range
+    const now = new Date();
+    let matchDate = {};
+
+    switch (range) {
+      case "thisWeek": {
+        const currentDay = now.getDay(); // 0 (CN) -> 6 (T7)
+        const diffToMonday = currentDay === 0 ? 6 : currentDay - 1;
+        const monday = new Date(now);
+        monday.setDate(now.getDate() - diffToMonday);
+        matchDate = { $gte: new Date(monday.setHours(0, 0, 0, 0)) };
+        break;
+      }
+
+      case "thisYear": {
+        const yearStart = new Date(now.getFullYear(), 0, 1);
+        matchDate = { $gte: new Date(yearStart.setHours(0, 0, 0, 0)) };
+        break;
+      }
+
+      case "thisMonth":
+      default: {
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        matchDate = { $gte: new Date(monthStart.setHours(0, 0, 0, 0)) };
+        break;
+      }
+    }
+
+    // 🔹 Lọc theo cửa hàng + đơn đã thanh toán + thời gian
+    const matchStage = {
+      status: "paid",
+      storeId: new mongoose.Types.ObjectId(storeId),
+      createdAt: matchDate,
+    };
+
+    // 🔹 Aggregate pipeline
     const topCustomers = await Order.aggregate([
-      { $match: { status: "paid" } }, // Chỉ order đã thanh toán
+      { $match: matchStage },
+
+      // Gom nhóm theo customer ref
       {
         $group: {
-          _id: "$customer", // Group by customer ref thay customerInfo.phone
-          totalAmount: { $sum: "$totalAmount" }, // Tổng tiền (Decimal128 sum)
-          orderCount: { $sum: 1 }, // Số đơn hàng
-          latestOrder: { $max: "$createdAt" }, // Order mới nhất
+          _id: "$customer",
+          totalAmount: { $sum: "$totalAmount" },
+          orderCount: { $sum: 1 },
+          latestOrder: { $max: "$createdAt" },
         },
       },
-      { $sort: { totalAmount: -1 } }, // Sắp xếp theo tổng tiền giảm dần
-      { $limit: parseInt(limit) }, // Limit số lượng
+
+      { $sort: { totalAmount: -1 } },
+      { $limit: parseInt(limit) },
+
+      // Join sang bảng customers
       {
         $lookup: {
-          // Populate customer info từ ref
           from: "customers",
           localField: "_id",
           foreignField: "_id",
           as: "customer",
         },
       },
-      { $unwind: "$customer" }, // Unwind array customer
-      { $match: { "customer.isDeleted": { $ne: true } } }, // Lọc customer active
+      { $unwind: "$customer" },
+
+      // Lọc khách đã xóa
+      { $match: { "customer.isDeleted": { $ne: true } } },
+
+      // 🔸 Trả nhiều field hơn để FE dùng
       {
         $project: {
-          // Project fields cần
+          customerId: "$customer._id",
           customerName: "$customer.name",
           customerPhone: "$customer.phone",
-          totalAmount: 1,
-          orderCount: 1,
+          address: "$customer.address",
+          note: "$customer.note",
+          loyaltyPoints: "$customer.loyaltyPoints",
+          totalSpentAllTime: "$customer.totalSpent",
+          totalOrdersAllTime: "$customer.totalOrders",
+          totalAmount: 1, // trong khoảng range được chọn
+          orderCount: 1, // trong khoảng range được chọn
           latestOrder: 1,
         },
       },
     ]);
 
-    console.log("Lấy top khách hàng thành công, limit:", limit);
-    res.json({ message: "Top khách hàng thường xuyên", data: topCustomers });
+    res.json({
+      message: `Top khách hàng thường xuyên (${range || "thisMonth"})`,
+      data: topCustomers,
+    });
   } catch (err) {
     console.error("Lỗi top khách hàng:", err.message);
     res.status(500).json({ message: "Lỗi server khi lấy top khách hàng" });

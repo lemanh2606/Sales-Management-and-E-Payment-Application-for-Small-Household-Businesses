@@ -11,6 +11,7 @@ import ProductListPage from "./pages/product/ProductListPage";
 import ForgotPassword from "./pages/auth/ForgotPassword";
 import Profile from "./pages/user/Profile";
 import LoyaltySetting from "./pages/loyalty/LoyaltySetting";
+import EmployeesPage from "./pages/store/EmployeesPage";
 
 // 👉 Customer page bạn đã tạo
 import CustomerListPage from "./pages/customer/CustomerListPage";
@@ -29,6 +30,9 @@ import TopProductsReport from "./pages/report/TopProductsReport";
 import { Spin } from "antd";
 import { LoadingOutlined } from "@ant-design/icons";
 import ProductGroupsPage from "./pages/productGroup/ProductGroupsPage";
+import { ConfigProvider } from "antd";
+import viVN from "antd/locale/vi_VN";
+import ActivityLog from "./pages/ActivityLog";
 
 const loadingIcon = <LoadingOutlined style={{ fontSize: 40 }} spin />;
 
@@ -129,6 +133,7 @@ const PublicRoute = ({ children, allowWhenAuth = false }) => {
 
 function App() {
   return (
+    <ConfigProvider locale={viVN}>
     <Routes>
       {/* Public (Auth) routes - bọc PublicRoute */}
       <Route
@@ -166,7 +171,7 @@ function App() {
 
       {/* Protected routes */}
       <Route
-        path="/dashboard"
+        path="/dashboard/:storeId"
         element={
           <ProtectedRoute>
             <DashboardPage />
@@ -181,6 +186,24 @@ function App() {
           </ProtectedRoute>
         }
       />
+    
+    {/* <Route
+        path="/stores/:storeId/employees"
+        element={
+          <ProtectedRoute allowedPermissions="employees:view">
+            <EmployeesPage />
+          </ProtectedRoute>
+        }
+      /> */}
+<Route
+  path="/stores/:storeId/employees"
+  element={
+    <ProtectedRoute>
+      <EmployeesPage />
+    </ProtectedRoute>
+  }
+/>
+
       <Route
         path="/profile"
         element={
@@ -278,12 +301,22 @@ function App() {
         }
       />
       {/* ======================================================================= */}
+      {/* ====================== Cấu hình - Routes ====================== */}
+      <Route
+        path="/settings/activity-log"
+        element={
+          <ProtectedRoute allowedPermissions="settings:activity-log">
+            <ActivityLog />
+          </ProtectedRoute>
+        }
+        />
       {/* Unauthorized */}
       <Route path="/unauthorized" element={<Unauthorized />} />
 
       {/* Default: điều hướng tới dashboard (ProtectedRoute sẽ xử lý redirect tới /login nếu chưa auth) */}
       <Route path="*" element={<NotFound />} />
     </Routes>
+    </ConfigProvider>
   );
 }
 

@@ -148,9 +148,9 @@ const createTaxDeclaration = async (req, res) => {
 
     const systemRevenueDecimal = agg[0]?.total ? agg[0].total : mongoose.Types.Decimal128.fromString("0.00");
 
-    // Thuế suất mặc định (có thể config per-store sau này)
-    const gtgtRate = 1.0; // %
-    const tncnRate = 0.5; // %
+    // Thuế suất — lấy từ body nếu có, fallback mặc định là 1.0% GTGT và 0.5% TNCN
+    const gtgtRate = req.body.gtgtRate !== undefined ? Number(req.body.gtgtRate) : 1.0;
+    const tncnRate = req.body.tncnRate !== undefined ? Number(req.body.tncnRate) : 0.5;
 
     const declaredNum = Number(declaredRevenue);
     const gtgtAmount = (declaredNum * gtgtRate) / 100;
@@ -244,12 +244,19 @@ const updateTaxDeclaration = async (req, res) => {
         message: "Chỉ người tạo hoặc manager mới được cập nhật",
       });
     }
-
-    // Recompute tax amounts based on new declaredRevenue
+    // Tính lại số thuế dựa trên doanh thu kê khai mới
     const declaredNum = Number(declaredRevenue);
-    const gtgtAmount = (declaredNum * (doc.taxRates.gtgt || 1.0)) / 100;
-    const tncnAmount = (declaredNum * (doc.taxRates.tncn || 0.5)) / 100;
+    // ✅ Lấy thuế suất mới nếu có gửi từ body.taxRates
+    const gtgtRate = req.body.taxRates?.gtgt !== undefined ? Number(req.body.taxRates.gtgt) : doc.taxRates.gtgt ?? 1.0;
+    const tncnRate = req.body.taxRates?.tncn !== undefined ? Number(req.body.taxRates.tncn) : doc.taxRates.tncn ?? 0.5;
+
+    const gtgtAmount = (declaredNum * gtgtRate) / 100;
+    const tncnAmount = (declaredNum * tncnRate) / 100;
     const totalTax = gtgtAmount + tncnAmount;
+
+    // ✅ Cập nhật lại thuế suất mới luôn
+    doc.taxRates.gtgt = gtgtRate;
+    doc.taxRates.tncn = tncnRate;
 
     doc.declaredRevenue = parseDecimal(declaredNum);
     doc.taxAmounts.gtgt = parseDecimal(gtgtAmount);

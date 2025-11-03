@@ -32,6 +32,8 @@ activityLogSchema.index({ user: 1, store: 1, createdAt: -1 });
 activityLogSchema.index({ store: 1, createdAt: -1 });
 activityLogSchema.index({ entity: 1, entityId: 1 });
 activityLogSchema.index({ action: 1 });
+activityLogSchema.index({ action: 1, entity: 1 });
 activityLogSchema.index({ createdAt: -1 });
+activityLogSchema.index({ entity: 1, store: 1, createdAt: -1 });
 
 module.exports = mongoose.model("ActivityLog", activityLogSchema);
