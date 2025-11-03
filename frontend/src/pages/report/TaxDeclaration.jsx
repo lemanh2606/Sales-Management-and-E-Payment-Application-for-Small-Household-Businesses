@@ -19,6 +19,7 @@ import {
   Menu,
   Statistic,
   Typography,
+  Divider,
   Tooltip,
 } from "antd";
 import {
@@ -28,18 +29,20 @@ import {
   DownloadOutlined,
   FileExcelOutlined,
   FilePdfOutlined,
+  InfoCircleOutlined,
   SyncOutlined,
 } from "@ant-design/icons";
 import axios from "axios";
 import dayjs from "dayjs";
 import "dayjs/locale/vi";
+import readVietnameseNumber from "read-vietnamese-number";
 import Layout from "../../components/Layout";
 
 dayjs.locale("vi");
 
 const { Option } = Select;
 const { RangePicker } = DatePicker;
-const { Text } = Typography;
+const { Title, Paragraph, Text } = Typography;
 
 const TaxDeclaration = () => {
   const [loading, setLoading] = useState(false);
@@ -55,6 +58,8 @@ const TaxDeclaration = () => {
   const [deletingId, setDeletingId] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [calculatedTax, setCalculatedTax] = useState(null);
+  const [showGuide, setShowGuide] = useState(false);
 
   // Lấy từ localStorage
   const currentStore = JSON.parse(localStorage.getItem("currentStore") || "{}");
@@ -152,8 +157,8 @@ const TaxDeclaration = () => {
   // TÍNH TOÁN THUẾ
   const calculateTax = (values) => {
     const declared = Number(values.declaredRevenue) || 0;
-    const gtgtRate = Number(values.gtgtRate) || 1.0;
-    const tncnRate = Number(values.tncnRate) || 0.5;
+    const gtgtRate = values.gtgtRate !== undefined && values.gtgtRate !== null ? Number(values.gtgtRate) : 1.0;
+    const tncnRate = values.tncnRate !== undefined && values.tncnRate !== null ? Number(values.tncnRate) : 0.5;
 
     const gtgt = (declared * gtgtRate) / 100;
     const tncn = (declared * tncnRate) / 100;
@@ -226,12 +231,25 @@ const TaxDeclaration = () => {
     const record = declarations.find((d) => d._id === id);
     if (!record) return;
 
+    // 🧮 Tính lại tổng thuế dự kiến từ dữ liệu của record (nếu có)
+    const declared = Number(record.declaredRevenue.$numberDecimal) || Number(record.declaredRevenue);
+    const gtgtRate = record.taxRates.gtgt ?? 1.0;
+    const tncnRate = record.taxRates.tncn ?? 0.5;
+
+    const gtgt = (declared * gtgtRate) / 100;
+    const tncn = (declared * tncnRate) / 100;
+    const total = gtgt + tncn;
+
+    // 🧹 Reset và gán lại cho modal form + calculatedTax đúng với tờ hiện tại
+    setCalculatedTax({ gtgt, tncn, total });
+
     setEditingId(id);
     modalForm.setFieldsValue({
-      declaredRevenue: Number(record.declaredRevenue.$numberDecimal) || Number(record.declaredRevenue),
-      gtgtRate: record.taxRates.gtgt,
-      tncnRate: record.taxRates.tncn,
+      declaredRevenue: declared,
+      gtgtRate,
+      tncnRate,
     });
+
     setModalVisible(true);
   };
 
@@ -312,9 +330,34 @@ const TaxDeclaration = () => {
 
   // TABLE COLUMNS
   const columns = [
-    { title: "Kỳ", dataIndex: "periodKey", key: "periodKey", width: 150 },
-    { title: "Loại kỳ", dataIndex: "periodType", key: "periodType", width: 100 },
-    { title: "Phiên bản", dataIndex: "version", key: "version", width: 100 },
+    {
+      title: "Kỳ",
+      dataIndex: "periodKey",
+      key: "periodKey",
+      width: 150,
+      sorter: (a, b) => a.periodKey.localeCompare(b.periodKey),
+    },
+    {
+      title: "Loại kỳ",
+      dataIndex: "periodType",
+      key: "periodType",
+      width: 100,
+      render: (value) => {
+        const map = {
+          custom: "Tùy chỉnh",
+          quarter: "Quý",
+          month: "Tháng",
+          year: "Năm",
+        };
+        return map[value] || value;
+      },
+    },
+    {
+      title: "Phiên bản",
+      dataIndex: "version",
+      key: "version",
+      width: 100,
+    },
     {
       title: "Doanh thu khai",
       dataIndex: "declaredRevenue",
@@ -337,6 +380,11 @@ const TaxDeclaration = () => {
       title: "Tổng thuế",
       dataIndex: ["taxAmounts", "total"],
       key: "total",
+      sorter: (a, b) => {
+        const aVal = Number(a.taxAmounts.total?.$numberDecimal || a.taxAmounts.total || 0);
+        const bVal = Number(b.taxAmounts.total?.$numberDecimal || b.taxAmounts.total || 0);
+        return aVal - bVal;
+      },
       render: (v) => formatVND(v?.$numberDecimal || v),
     },
     {
@@ -345,7 +393,7 @@ const TaxDeclaration = () => {
       key: "status",
       width: 100,
       render: (status) => {
-        const colorMap = { saved: "#faad14", submitted: "#1890ff" };
+        const colorMap = { saved: "#05cf5dff", submitted: "#1890ff" };
         const textMap = { saved: "Đã lưu", submitted: "Đã nộp" };
         return (
           <Text strong style={{ color: colorMap[status] || "#000" }}>
@@ -354,7 +402,13 @@ const TaxDeclaration = () => {
         );
       },
     },
-    { title: "Ngày lập", dataIndex: "createdAt", key: "createdAt", render: (t) => dayjs(t).format("DD/MM/YYYY") },
+    {
+      title: "Ngày lập",
+      dataIndex: "createdAt",
+      key: "createdAt",
+      sorter: (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
+      render: (t) => dayjs(t).format("DD/MM/YYYY"),
+    },
     {
       title: "Hành động",
       key: "actions",
@@ -387,11 +441,12 @@ const TaxDeclaration = () => {
     <Layout>
       <div>
         <Space direction="vertical" size="large" style={{ width: "100%" }}>
-          <Card>
+          <Card style={{ border: "1px solid #8c8c8c" }}>
             <Row gutter={16} align="middle">
               <Col span={6}>
-                <strong>Cửa hàng:</strong>{" "}
-                <span style={{ color: "#1890ff", fontWeight: "bold" }}>{currentStore.name || "Đang tải..."}</span>
+                <span style={{ color: "#1890ff", fontWeight: "bold", fontSize: "20px" }}>
+                  {currentStore.name || "Đang tải..."}
+                </span>
               </Col>
               <Col span={5}>
                 <label>Kỳ kê khai:</label>
@@ -438,7 +493,7 @@ const TaxDeclaration = () => {
                   }
                   style={{ marginTop: 32 }}
                 >
-                  Preview doanh thu hệ thống
+                  Xem trước doanh thu hệ thống
                 </Button>
               </Col>
             </Row>
@@ -449,10 +504,21 @@ const TaxDeclaration = () => {
 
           {/* KÊ KHAI */}
           {systemRevenue !== null && (
-            <Card title="Kê khai thuế">
+            <Card title="Kê khai thuế" style={{ border: "1px solid #8c8c8c" }}>
               <Row gutter={16}>
                 <Col span={12}>
-                  <Statistic title="Doanh thu hệ thống (tham khảo)" value={systemRevenue} formatter={formatVND} />
+                  <Statistic
+                    title={
+                      <span>
+                        Doanh thu hệ thống (tham khảo)&nbsp;
+                        <Tooltip title="Được tính dựa trên các giao dịch bán hàng có trạng thái đã thanh toán (bằng tất cả phương thức) và có in hoá đơn">
+                          <InfoCircleOutlined style={{ fontSize: 14, color: "#1890ff" }} />
+                        </Tooltip>
+                      </span>
+                    }
+                    value={systemRevenue}
+                    formatter={formatVND}
+                  />
                 </Col>
                 <Col span={12} style={{ textAlign: "right", paddingTop: 32 }}>
                   <Button icon={<SyncOutlined />} onClick={useSystemRevenue}>
@@ -463,7 +529,7 @@ const TaxDeclaration = () => {
 
               <Form form={form} onFinish={handleSubmit} style={{ marginTop: 24 }}>
                 <Row gutter={16}>
-                  <Col span={12}>
+                  <Col span={10}>
                     <Form.Item name="declaredRevenue" label="Doanh thu khai báo" initialValue={systemRevenue}>
                       <InputNumber
                         style={{ width: "100%" }}
@@ -472,33 +538,185 @@ const TaxDeclaration = () => {
                       />
                     </Form.Item>
                   </Col>
-                  <Col span={6}>
-                    <Form.Item name="gtgtRate" label="Thuế GTGT (%)" initialValue={1.0}>
+                  <Col span={7}>
+                    <Form.Item name="gtgtRate" label="Thuế giá trị gia tăng (GTGT) (%)" initialValue={1.0}>
                       <InputNumber min={0} max={100} style={{ width: "100%" }} />
                     </Form.Item>
                   </Col>
-                  <Col span={6}>
-                    <Form.Item name="tncnRate" label="Thuế TNCN (%)" initialValue={0.5}>
+                  <Col span={7}>
+                    <Form.Item name="tncnRate" label="Thuế thu nhập cá nhân (TNCN) (%)" initialValue={0.5}>
                       <InputNumber min={0} max={100} style={{ width: "100%" }} />
                     </Form.Item>
                   </Col>
                 </Row>
+                <Tooltip title="Nhấp để xem hướng dẫn chi tiết">
+                  <Button
+                    icon={<InfoCircleOutlined />}
+                    type="link"
+                    onClick={() => setShowGuide(!showGuide)}
+                    style={{ marginBottom: 20 }}
+                  >
+                    Giải thích thêm về thuế GTGT & TNCN
+                  </Button>
+                </Tooltip>
+
+                {showGuide && (
+                  <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+                    <Col span={24}>
+                      <Card
+                        bordered={false}
+                        style={{
+                          background: "#f7f5f5ff",
+                          borderLeft: "4px solid #1890ff",
+                          boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+                        }}
+                      >
+                        <Title level={5} style={{ color: "#1890ff" }}>
+                          Hướng dẫn về thuế đối với hộ kinh doanh, cá nhân kinh doanh
+                        </Title>
+
+                        <Paragraph>
+                          Căn cứ theo <Text strong>Luật Quản lý thuế 2019</Text>,
+                          <Text strong>Thông tư 40/2021/TT-BTC</Text> và các văn bản sửa đổi bổ sung đến hiện tại, hộ
+                          kinh doanh, cá nhân kinh doanh được xác định nghĩa vụ thuế dựa trên doanh thu thực tế.
+                        </Paragraph>
+
+                        <Divider />
+
+                        <Paragraph>
+                          <Text strong>1. Ngưỡng doanh thu miễn thuế:</Text>
+                          Nếu doanh thu trong năm dương lịch từ <Text strong>100 triệu đồng/năm</Text> trở xuống thì
+                          <Text strong> không phải nộp</Text> thuế Giá trị gia tăng (GTGT) và thuế Thu nhập cá nhân
+                          (TNCN).
+                        </Paragraph>
+
+                        <Paragraph>
+                          <Text strong>2. Doanh thu tính thuế:</Text> là tổng tiền bán hàng hóa, tiền cung ứng dịch vụ,
+                          hoa hồng, phụ thu, phụ trội mà hộ kinh doanh được hưởng, không phân biệt đã thu được tiền hay
+                          chưa.
+                        </Paragraph>
+
+                        <Paragraph>
+                          <Text strong>3. Mức thuế theo phương pháp khoán (tỷ lệ trên doanh thu):</Text>
+                        </Paragraph>
+
+                        <ul style={{ marginLeft: 24, marginBottom: 16 }}>
+                          <li>
+                            <Text strong>Phân phối, cung cấp hàng hóa:</Text> GTGT <Text code>1%</Text> – TNCN{" "}
+                            <Text code>0,5%</Text>
+                          </li>
+                          <li>
+                            <Text strong>Dịch vụ, xây dựng không bao thầu nguyên vật liệu:</Text> GTGT{" "}
+                            <Text code>5%</Text> – TNCN <Text code>2%</Text>
+                          </li>
+                          <li>
+                            <Text strong>Sản xuất, vận tải, dịch vụ có gắn hàng hóa:</Text> GTGT <Text code>3%</Text> –
+                            TNCN <Text code>1,5%</Text>
+                          </li>
+                          <li>
+                            <Text strong>Hoạt động cho thuê tài sản (nhà, xe, máy móc...):</Text> GTGT{" "}
+                            <Text code>5%</Text> – TNCN <Text code>5%</Text>
+                          </li>
+                          <li>
+                            <Text strong>Ngành nghề khác:</Text> áp dụng theo tỷ lệ tương ứng do cơ quan thuế thông báo.
+                          </li>
+                        </ul>
+
+                        <Divider />
+
+                        <Paragraph>
+                          <Text strong>4. Cách xác định kỳ kê khai thuế:</Text>
+                          Hộ kinh doanh nộp thuế theo <Text underline>tháng, quý hoặc năm</Text> tùy quy mô và yêu cầu
+                          của cơ quan thuế. Trường hợp hộ kinh doanh nộp thuế khoán thì chỉ cần kê khai định kỳ hàng
+                          năm, trừ khi có thay đổi lớn về doanh thu.
+                        </Paragraph>
+
+                        <Paragraph>
+                          <Text strong>5. Nghĩa vụ khác:</Text>
+                          <ul style={{ marginLeft: 24 }}>
+                            <li>Phải có sổ theo dõi doanh thu, hóa đơn (nếu có sử dụng).</li>
+                            <li>Phải đăng ký mã số thuế cá nhân hoặc hộ kinh doanh.</li>
+                            <li>Khi tạm ngừng kinh doanh trên 15 ngày phải thông báo với cơ quan thuế.</li>
+                          </ul>
+                        </Paragraph>
+
+                        <Divider />
+
+                        <Paragraph type="secondary">
+                          <Text italic>
+                            *Lưu ý:* Các mức tỷ lệ thuế có thể thay đổi theo quy định mới của Bộ Tài chính. Cơ quan thuế
+                            sẽ căn cứ tình hình thực tế để ấn định hoặc điều chỉnh tỷ lệ thuế phù hợp.
+                          </Text>
+                        </Paragraph>
+                      </Card>
+                    </Col>
+                  </Row>
+                )}
 
                 <Form.Item>
-                  <Button type="primary" htmlType="submit">
-                    Tính toán & Lưu
-                  </Button>
+                  <Space>
+                    <Button
+                      type="default"
+                      style={{
+                        backgroundColor: "#faad14",
+                        color: "#fff",
+                        border: "none",
+                      }}
+                      onClick={() => {
+                        const values = form.getFieldsValue();
+                        const result = calculateTax(values);
+                        setCalculatedTax(result);
+                        message.success("Đã tính toán xong, bạn có thể tham khảo trước khi lưu");
+                      }}
+                    >
+                      Tính toán
+                    </Button>
+
+                    <Button type="primary" onClick={() => form.submit()}>
+                      Lưu
+                    </Button>
+                  </Space>
                 </Form.Item>
               </Form>
+              <div
+                style={{
+                  marginTop: 24,
+                  fontSize: 16,
+                  fontWeight: "bold",
+                  color: "#d4380d",
+                  display: "flex",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: 8,
+                }}
+              >
+                <span>
+                  Tổng thuế phải nộp:{" "}
+                  {calculatedTax ? `${Number(calculatedTax.total).toLocaleString("vi-VN")} đ` : "0 đ"}
+                </span>
 
-              <div style={{ marginTop: 24, fontSize: 16, fontWeight: "bold", color: "#d4380d" }}>
-                Tổng thuế phải nộp: {formatVND(calculateTax(form.getFieldsValue()).total)}
+                {calculatedTax && (
+                  <span
+                    style={{
+                      fontSize: 15,
+                      fontWeight: 500,
+                      color: "#8c8c8c",
+                      fontStyle: "italic",
+                    }}
+                  >
+                    (
+                    {readVietnameseNumber(String(Math.round(calculatedTax.total)))
+                      .replace("đơn vị", "")
+                      .trim()}{" "}
+                    đồng)
+                  </span>
+                )}
               </div>
             </Card>
           )}
 
           {/* LỊCH SỬ */}
-          <Card title="Lịch sử kê khai thuế">
+          <Card title="Lịch sử kê khai thuế" style={{ border: "1px solid #8c8c8c" }}>
             <Table
               columns={columns}
               dataSource={declarations}
@@ -581,8 +799,36 @@ const TaxDeclaration = () => {
               <InputNumber min={0} max={100} style={{ width: "100%" }} />
             </Form.Item>
 
+            {calculatedTax && (
+              <div
+                style={{
+                  marginBottom: 16,
+                  fontWeight: "bold",
+                  color: "#d4380d",
+                  textAlign: "center",
+                }}
+              >
+                Tổng thuế: {formatVND(calculatedTax.total)}
+              </div>
+            )}
+
             <Form.Item style={{ textAlign: "right" }}>
               <Space>
+                <Button
+                  style={{
+                    backgroundColor: "#faad14",
+                    color: "#fff",
+                    border: "none",
+                  }}
+                  onClick={() => {
+                    const values = modalForm.getFieldsValue();
+                    const result = calculateTax(values);
+                    setCalculatedTax(result);
+                    message.success("Đã tính toán thử xong!");
+                  }}
+                >
+                  Tính toán
+                </Button>
                 <Button onClick={() => setModalVisible(false)}>Hủy</Button>
                 <Button type="primary" htmlType="submit" loading={loading}>
                   {editingId ? "Cập nhật" : "Tạo mới"}

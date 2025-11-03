@@ -3,12 +3,7 @@ const express = require("express");
 const router = express.Router();
 const upload = require("../middlewares/upload");
 
-const {
-  verifyToken,
-  isManager,
-  checkStoreAccess,
-  requirePermission,
-} = require("../middlewares/authMiddleware");
+const { verifyToken, isManager, checkStoreAccess, requirePermission } = require("../middlewares/authMiddleware");
 
 const {
   createOrder,
@@ -50,13 +45,7 @@ const {
   - Middleware: verifyToken -> checkStoreAccess -> requirePermission("orders:create")
   - Nếu bạn muốn cho phép tạo hoá đơn không login, bỏ verifyToken/checkStoreAccess/requirePermission
 */
-router.post(
-  "/",
-  verifyToken,
-  checkStoreAccess,
-  requirePermission("orders:create"),
-  createOrder
-);
+router.post("/", verifyToken, checkStoreAccess, requirePermission("orders:create"), createOrder);
 
 /*
   POST /api/orders/:orderId/set-paid-cash
@@ -64,13 +53,7 @@ router.post(
   - Middleware: verifyToken -> checkStoreAccess -> requirePermission("orders:pay")
   - Controller sẽ set paid, cập nhật trạng thái, ghi log giao dịch
 */
-router.post(
-  "/:orderId/set-paid-cash",
-  verifyToken,
-  checkStoreAccess,
-  requirePermission("orders:pay"),
-  setPaidCash
-);
+router.post("/:orderId/set-paid-cash", verifyToken, checkStoreAccess, requirePermission("orders:pay"), setPaidCash);
 
 /*
   POST /api/orders/:orderId/print-bill
@@ -78,13 +61,7 @@ router.post(
   - Middleware: verifyToken -> checkStoreAccess -> requirePermission("orders:print")
   - Nếu bạn muốn cho phép in bill cho cả MANAGER và STAFF có quyền, cấp tương ứng trong user.menu
 */
-router.post(
-  "/:orderId/print-bill",
-  verifyToken,
-  checkStoreAccess,
-  requirePermission("orders:print"),
-  printBill
-);
+router.post("/:orderId/print-bill", verifyToken, checkStoreAccess, requirePermission("orders:print"), printBill);
 
 /*
   GET /api/orders/payments/vietqr_return
@@ -123,24 +100,9 @@ router.post(
   refundOrder
 );
 
-/*
-  GET /api/orders/top-products
-  - Thống kê top sản phẩm bán chạy (chỉ Manager theo logic cũ)
-  - Middleware: verifyToken, isManager
-  - Nếu muốn granular, đổi sang requirePermission("reports:top-products")
-*/
-router.get("/top-products", verifyToken, isManager, getTopSellingProducts);
+router.get("/top-products", verifyToken, isManager, checkStoreAccess, getTopSellingProducts);
 
-/*
-  GET /api/orders/top-products/export
-  - Xuất CSV top sản phẩm (chỉ Manager theo logic cũ)
-*/
-router.get(
-  "/top-products/export",
-  verifyToken,
-  isManager,
-  exportTopSellingProducts
-);
+router.get("/top-products/export", verifyToken, isManager, exportTopSellingProducts);
 
 /*
   GET /api/orders/:orderId
@@ -148,12 +110,6 @@ router.get(
   - Middleware: verifyToken -> checkStoreAccess -> requirePermission("orders:view")
   - Đặt cuối cùng theo quy tắc của bạn (routes 'by ID' nên ở cuối)
 */
-router.get(
-  "/:orderId",
-  verifyToken,
-  checkStoreAccess,
-  requirePermission("orders:view"),
-  getOrderById
-);
+router.get("/:orderId", verifyToken, checkStoreAccess, requirePermission("orders:view"), getOrderById);
 
 module.exports = router;

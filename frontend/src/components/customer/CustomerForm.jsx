@@ -5,14 +5,6 @@ import { motion } from "framer-motion";
 import { MdSave, MdClose, MdPerson, MdPhone, MdLocationOn, MdNote } from "react-icons/md";
 import { createCustomer, updateCustomer } from "../../api/customerApi";
 
-/**
- * CustomerForm hỗ trợ create + update
- * Props:
- *  - customer: object | null (null => create)
- *  - onSuccess: fn(createdOrUpdatedCustomer) => parent refresh/close modal
- *  - onCancel: fn()
- */
-
 export default function CustomerForm({ customer, onSuccess, onCancel }) {
     const [name, setName] = useState("");
     const [phone, setPhone] = useState("");
@@ -20,6 +12,7 @@ export default function CustomerForm({ customer, onSuccess, onCancel }) {
     const [note, setNote] = useState("");
     const [saving, setSaving] = useState(false);
     const [errors, setErrors] = useState({});
+    const storeObj = JSON.parse(localStorage.getItem("currentStore")) || {};
 
     useEffect(() => {
         if (customer) {
@@ -71,6 +64,7 @@ export default function CustomerForm({ customer, onSuccess, onCancel }) {
             } else {
                 // Create flow
                 const res = await createCustomer({
+                    storeId: storeObj._id,
                     name: name.trim(),
                     phone: phone.trim(),
                     address: address.trim(),
@@ -107,7 +101,7 @@ export default function CustomerForm({ customer, onSuccess, onCancel }) {
 
                     <button
                         onClick={onCancel}
-                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border hover:bg-gray-50 transition text-gray-700"
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border hover:bg-gray-50 transition text-gray-700 cursor-pointer"
                         aria-label="Hủy"
                         title="Hủy"
                     >
@@ -183,7 +177,7 @@ export default function CustomerForm({ customer, onSuccess, onCancel }) {
                 <div className="mt-6 flex items-center justify-end gap-3">
                     <button
                         onClick={onCancel}
-                        className="px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition"
+                        className="px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition cursor-pointer"
                         disabled={saving}
                     >
                         Hủy
@@ -191,7 +185,7 @@ export default function CustomerForm({ customer, onSuccess, onCancel }) {
 
                     <button
                         onClick={handleSave}
-                        className={`inline-flex items-center gap-2 px-5 py-2 rounded-lg shadow-md text-white ${saving ? "bg-emerald-400 cursor-wait" : "bg-emerald-600 hover:bg-emerald-700"}`}
+                        className={`inline-flex cursor-pointer items-center gap-2 px-5 py-2 rounded-lg shadow-md text-white ${saving ? "bg-emerald-400 cursor-wait" : "bg-emerald-600 hover:bg-emerald-700"}`}
                         disabled={saving}
                     >
                         {saving ? (

@@ -13,11 +13,6 @@ const { parseExcelToJSON, validateRequiredFields, sanitizeData } = require("../.
 const createCustomer = async (req, res) => {
   try {
     const { name, phone, address = "", note = "" } = req.body;
-
-    // Try to get storeId in this order:
-    // 1) req.store (set by checkStoreAccess middleware)
-    // 2) req.body.storeId (frontend provided)
-    // 3) req.user.currentStore (if you store it on user)
     const storeFromReq = req.store && (req.store._id || req.store.id) ? req.store._id || req.store.id : null;
     const storeFromBody = req.body.storeId || null;
     const storeFromUser =
