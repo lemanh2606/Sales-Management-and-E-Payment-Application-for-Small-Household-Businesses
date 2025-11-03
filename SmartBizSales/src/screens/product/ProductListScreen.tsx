@@ -13,6 +13,11 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import apiClient from "../../api/apiClient";
 import { Product, ProductStatus, ProductGroupRef } from "../../type/product";
+import Modal from "react-native-modal";
+import { Ionicons } from "@expo/vector-icons";
+
+// import modal form của bạn
+import ProductFormModal from "../../components/product/ProductFormModal";
 
 interface ProductGroup {
   _id: string;
@@ -32,6 +37,10 @@ const ProductListScreen: React.FC = () => {
   );
   const [searchText, setSearchText] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const [groupDropdownVisible, setGroupDropdownVisible] = useState(false);
+  const [statusDropdownVisible, setStatusDropdownVisible] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
   // ================= FETCH PRODUCT GROUPS =================
   const fetchProductGroups = useCallback(async () => {
@@ -109,11 +118,21 @@ const ProductListScreen: React.FC = () => {
 
   const renderProduct = ({ item }: { item: Product }) => (
     <View style={styles.productCard}>
-      <Text style={styles.productName}>{item.name}</Text>
-      <Text style={styles.productSKU}>SKU: {item.sku}</Text>
-      <Text>Status: {item.status}</Text>
-      <Text>Stock: {item.stock_quantity}</Text>
-      {item.group && <Text>Nhóm: {item.group.name}</Text>}
+      <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+        <View>
+          <Text style={styles.productName}>{item.name}</Text>
+          <Text style={styles.productSKU}>SKU: {item.sku}</Text>
+          <Text>Status: {item.status}</Text>
+          <Text>Stock: {item.stock_quantity}</Text>
+          {item.group && <Text>Nhóm: {item.group.name}</Text>}
+        </View>
+        <TouchableOpacity
+          style={styles.editButton}
+          onPress={() => setEditingProduct(item)}
+        >
+          <Text style={{ color: "#fff" }}>Sửa</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 
@@ -135,48 +154,78 @@ const ProductListScreen: React.FC = () => {
         onChangeText={setSearchText}
       />
 
-      {/* Filters */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.filters}
-      >
-        {/* Product Groups */}
-        {productGroups.map((g) => (
-          <TouchableOpacity
-            key={g._id}
-            style={[
-              styles.filterButton,
-              selectedGroupIds.includes(g._id) && styles.filterButtonActive,
-            ]}
-            onPress={() => toggleGroup(g._id)}
-          >
-            <Text
-              style={selectedGroupIds.includes(g._id) ? { color: "#fff" } : {}}
-            >
-              {g.name}
-            </Text>
-          </TouchableOpacity>
-        ))}
+      {/* Filter dropdowns */}
+      <View style={styles.dropdownContainer}>
+        {/* Group Filter */}
+        <TouchableOpacity
+          style={styles.dropdownHeader}
+          onPress={() => setGroupDropdownVisible(!groupDropdownVisible)}
+        >
+          <Text>
+            Nhóm:{" "}
+            {selectedGroupIds.length > 0 ? selectedGroupIds.length : "Tất cả"}
+          </Text>
+          <Ionicons
+            name={groupDropdownVisible ? "chevron-up" : "chevron-down"}
+            size={20}
+          />
+        </TouchableOpacity>
+        <Modal
+          isVisible={groupDropdownVisible}
+          onBackdropPress={() => setGroupDropdownVisible(false)}
+        >
+          <View style={styles.dropdownModal}>
+            <ScrollView>
+              {productGroups.map((g) => (
+                <TouchableOpacity
+                  key={g._id}
+                  style={styles.dropdownItem}
+                  onPress={() => toggleGroup(g._id)}
+                >
+                  <Text>{g.name}</Text>
+                  {selectedGroupIds.includes(g._id) && <Text>✓</Text>}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </Modal>
 
-        {/* Status Filters */}
-        {["all", "Đang kinh doanh", "Ngừng kinh doanh", "Ngừng bán"].map(
-          (status) => (
-            <TouchableOpacity
-              key={status}
-              style={[
-                styles.filterButton,
-                statusFilter === status && styles.filterButtonActive,
-              ]}
-              onPress={() => setStatusFilter(status as any)}
-            >
-              <Text style={statusFilter === status ? { color: "#fff" } : {}}>
-                {status === "all" ? "Tất cả" : status}
-              </Text>
-            </TouchableOpacity>
-          )
-        )}
-      </ScrollView>
+        {/* Status Filter */}
+        <TouchableOpacity
+          style={styles.dropdownHeader}
+          onPress={() => setStatusDropdownVisible(!statusDropdownVisible)}
+        >
+          <Text>
+            Status: {statusFilter === "all" ? "Tất cả" : statusFilter}
+          </Text>
+          <Ionicons
+            name={statusDropdownVisible ? "chevron-up" : "chevron-down"}
+            size={20}
+          />
+        </TouchableOpacity>
+        <Modal
+          isVisible={statusDropdownVisible}
+          onBackdropPress={() => setStatusDropdownVisible(false)}
+        >
+          <View style={styles.dropdownModal}>
+            {["all", "Đang kinh doanh", "Ngừng kinh doanh", "Ngừng bán"].map(
+              (status) => (
+                <TouchableOpacity
+                  key={status}
+                  style={styles.dropdownItem}
+                  onPress={() => {
+                    setStatusFilter(status as any);
+                    setStatusDropdownVisible(false);
+                  }}
+                >
+                  <Text>{status === "all" ? "Tất cả" : status}</Text>
+                  {statusFilter === status && <Text>✓</Text>}
+                </TouchableOpacity>
+              )
+            )}
+          </View>
+        </Modal>
+      </View>
 
       {/* Product List */}
       {loading ? (
@@ -191,6 +240,18 @@ const ProductListScreen: React.FC = () => {
           keyExtractor={(item) => item._id.toString()}
           renderItem={renderProduct}
           contentContainerStyle={{ paddingBottom: 80 }}
+        />
+      )}
+
+      {/* Product edit modal */}
+      {editingProduct && (
+        <ProductFormModal
+          product={editingProduct}
+          onClose={() => setEditingProduct(null)}
+          onSaved={() => {
+            setEditingProduct(null);
+            fetchProducts();
+          }}
         />
       )}
     </View>
@@ -210,22 +271,31 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     backgroundColor: "#fff",
   },
-  filters: {
-    flexDirection: "row",
+  dropdownContainer: {
     marginBottom: 10,
   },
-  filterButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+  dropdownHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    padding: 10,
     borderWidth: 1,
     borderColor: "#ccc",
-    borderRadius: 20,
-    marginRight: 8,
+    borderRadius: 8,
     backgroundColor: "#fff",
+    marginBottom: 6,
   },
-  filterButtonActive: {
-    backgroundColor: "#007bff",
-    borderColor: "#007bff",
+  dropdownModal: {
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    padding: 10,
+    maxHeight: 300,
+  },
+  dropdownItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 8,
+    borderBottomWidth: 0.5,
+    borderColor: "#ccc",
   },
   productCard: {
     padding: 12,
@@ -237,4 +307,11 @@ const styles = StyleSheet.create({
   },
   productName: { fontWeight: "bold", fontSize: 16 },
   productSKU: { color: "#666" },
+  editButton: {
+    backgroundColor: "#007bff",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    alignSelf: "flex-start",
+  },
 });
