@@ -11,6 +11,7 @@ export default function RegisterPage() {
   const navigate = useNavigate();
   const [form, setForm] = useState({
     username: "",
+    fullname: "",
     email: "",
     phone: "",
     password: "",
@@ -24,6 +25,7 @@ export default function RegisterPage() {
 
   const validate = () => {
     if (!form.username.trim()) return "Vui lòng nhập tên đăng nhập";
+    if (!form.fullname.trim()) return "Vui lòng nhập họ và tên";
     if (!form.email.trim()) return "Vui lòng nhập email";
     // simple email regex
     if (!/^\S+@\S+\.\S+$/.test(form.email.trim())) return "Email không hợp lệ";
@@ -49,6 +51,7 @@ export default function RegisterPage() {
         email: form.email.trim().toLowerCase(),
         phone: form.phone.trim() || undefined,
         password: form.password,
+        fullname: form.fullname.trim(),
       };
       const res = await registerManager(payload);
 
@@ -142,6 +145,14 @@ export default function RegisterPage() {
                   value={form.username}
                   onChange={handleChange}
                   placeholder="ví dụ: nguyenvana123"
+                  className="rounded-lg"
+                />
+                <InputField
+                  label="Họ và tên"
+                  name="fullname"
+                  value={form.fullname}
+                  onChange={handleChange}
+                  placeholder="Nguyễn Văn A"
                   className="rounded-lg"
                 />
 

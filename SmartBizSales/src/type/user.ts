@@ -21,6 +21,7 @@ export interface StoreRoleItem {
 export interface UserPublic {
     id: string; // _id
     username: string;
+    fullname?: string | null;
     email?: string | null;
     phone?: string | null;
     role: Role;
@@ -112,8 +113,8 @@ export interface UpdateUserDto {
 export interface UpdateProfileDto {
     username?: string;
     email?: string;
-    phone?: string | null;
-    fullName?: string; // optional, used to sync Employee.fullName for STAFF
+    phone?: string;
+    fullname?: string; // optional, used to sync Employee.fullname for STAFF
 }
 
 export interface SendPasswordOtpDto {

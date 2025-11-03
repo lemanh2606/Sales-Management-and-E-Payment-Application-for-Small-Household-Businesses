@@ -23,6 +23,7 @@ import { userApi } from "../../api"; // hub export: export * as userApi from './
 
 type RegisterForm = {
   username: string;
+  fullname: string;
   email: string;
   phone: string;
   password: string;
@@ -34,6 +35,7 @@ export default function RegisterScreen(): JSX.Element {
 
   const [form, setForm] = useState<RegisterForm>({
     username: "",
+    fullname: "",
     email: "",
     phone: "",
     password: "",
@@ -68,6 +70,7 @@ export default function RegisterScreen(): JSX.Element {
     try {
       const payload = {
         username: form.username.trim(),
+        fullname: form.fullname.trim(),
         email: form.email.trim().toLowerCase(),
         phone: form.phone.trim(),
         password: form.password,
@@ -131,6 +134,16 @@ export default function RegisterScreen(): JSX.Element {
               onChangeText={(t) => handleChange("username", t)}
               placeholder="ví dụ: nguyenvana123"
               autoCapitalize="none"
+              style={styles.input}
+              editable={!isLoading}
+            />
+          </View>
+          <View style={styles.field}>
+            <Text style={styles.label}>Họ và tên (tùy chọn)</Text>
+            <TextInput
+              value={form.fullname}
+              onChangeText={(t) => handleChange("fullname", t)}
+              placeholder="ví dụ: Nguyễn Văn A"
               style={styles.input}
               editable={!isLoading}
             />

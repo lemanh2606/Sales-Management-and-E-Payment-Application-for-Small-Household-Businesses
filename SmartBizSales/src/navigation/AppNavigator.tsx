@@ -1,10 +1,3 @@
-// src/navigation/AppNavigator.tsx
-/**
- * Trình điều hướng chính (Drawer) của app.
- * - Drawer có header show user info, list screens và nút logout ở dưới.
- * - File đã chuyển sang TypeScript, dùng typing của @react-navigation/drawer.
- */
-
 import React, { JSX } from "react";
 import {
   View,
@@ -12,7 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   Alert,
-  Image,
+  ActivityIndicator,
 } from "react-native";
 import {
   createDrawerNavigator,
@@ -20,18 +13,23 @@ import {
   DrawerItemList,
   DrawerContentComponentProps,
 } from "@react-navigation/drawer";
-import DashboardScreen from "../screens/home/DashboardScreen";
+import { Ionicons } from "@expo/vector-icons";
 
 import { useAuth } from "../context/AuthContext";
-import { Ionicons } from "@expo/vector-icons";
-import { User } from "../type/user";
+import DashboardScreen from "../screens/home/DashboardScreen";
 import SelectStoreScreen from "../screens/store/SelectStoreScreen";
+import Unauthorized from "../screens/misc/Unauthorized"; // màn tạm thời
+import Profile from "../screens/user/Profile";
 
 const Drawer = createDrawerNavigator();
 
-/**
- * Tùy chỉnh nội dung drawer (header user, list, logout...)
- */
+// --- Check quyền menu chuẩn ---
+function hasPermission(menu: string[] = [], required?: string | string[]) {
+  if (!required) return true;
+  const reqs = Array.isArray(required) ? required : [required];
+  return reqs.some((r) => menu.includes(r));
+}
+
 function CustomDrawerContent(props: DrawerContentComponentProps) {
   const { logout, user } = useAuth();
 
@@ -41,32 +39,25 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
       "Bạn có chắc muốn đăng xuất không?",
       [
         { text: "Hủy", style: "cancel" },
-        {
-          text: "Đăng xuất",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await logout();
-            } catch (e) {
-              console.warn("Logout failed", e);
-            }
-          },
-        },
+        { text: "Đăng xuất", style: "destructive", onPress: logout },
       ],
       { cancelable: true }
     );
   };
 
-  // Lấy hiển thị tên (ưu tiên fullName/username)
-  const nameLabel =
-    (user && ((user as User).username || (user as any).name)) || "Người dùng";
-  const roleLabel = (user && (user as User).role) || "—";
+  const nameLabel = user?.username || "Người dùng";
+  const roleLabel = user?.role || "—";
+
+  // Chỉ filter SelectStore theo role (như trước)
+  const filteredRoutes = props.state.routes.filter((r) => {
+    if (r.name === "SelectStore" && user?.role !== "MANAGER") return false;
+    return true;
+  });
 
   return (
     <DrawerContentScrollView {...props} contentContainerStyle={{ flex: 1 }}>
       <View style={styles.header}>
         <View style={styles.avatar}>
-          {/* Nếu có avatar url, bạn có thể thay bằng <Image source={{ uri: avatar }} /> */}
           <Ionicons name="person" size={32} color="#fff" />
         </View>
         <View style={{ marginLeft: 12 }}>
@@ -76,7 +67,10 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
       </View>
 
       <View style={styles.menu}>
-        <DrawerItemList {...props} />
+        <DrawerItemList
+          {...props}
+          state={{ ...props.state, routes: filteredRoutes }}
+        />
       </View>
 
       <View style={styles.bottom}>
@@ -95,10 +89,29 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
   );
 }
 
-/**
- * App navigator (Drawer)
- */
 export default function AppNavigator(): JSX.Element {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#0b84ff" />
+        <Text style={{ marginTop: 10 }}>Đang tải dữ liệu người dùng...</Text>
+      </View>
+    );
+  }
+
+  const menu = user?.menu || [];
+
+  // Wrapper kiểm tra quyền menu
+  const ProtectedScreen =
+    (Screen: JSX.Element, requiredPermission?: string | string[]) => () => {
+      if (!hasPermission(menu, requiredPermission)) {
+        return <Unauthorized />; // nếu không có quyền -> màn tạm thời
+      }
+      return Screen;
+    };
+
   return (
     <Drawer.Navigator
       initialRouteName="Dashboard"
@@ -112,7 +125,7 @@ export default function AppNavigator(): JSX.Element {
     >
       <Drawer.Screen
         name="Dashboard"
-        component={DashboardScreen}
+        component={ProtectedScreen(<DashboardScreen />)}
         options={{
           title: "Dashboard",
           drawerIcon: ({ color, size }) => (
@@ -121,15 +134,28 @@ export default function AppNavigator(): JSX.Element {
         }}
       />
       <Drawer.Screen
-        name="SelectStore"
-        component={SelectStoreScreen}
+        name="Profile"
+        component={ProtectedScreen(<Profile />)}
         options={{
-          title: "Chọn cửa hàng",
+          title: "Hồ sơ cá nhân",
           drawerIcon: ({ color, size }) => (
-            <Ionicons name="storefront-outline" size={size} color={color} />
+            <Ionicons name="person-outline" size={size} color={color} />
           ),
         }}
       />
+
+      {user?.role === "MANAGER" && (
+        <Drawer.Screen
+          name="SelectStore"
+          component={ProtectedScreen(<SelectStoreScreen />)}
+          options={{
+            title: "Chọn cửa hàng",
+            drawerIcon: ({ color, size }) => (
+              <Ionicons name="storefront-outline" size={size} color={color} />
+            ),
+          }}
+        />
+      )}
     </Drawer.Navigator>
   );
 }
@@ -163,4 +189,9 @@ const styles = StyleSheet.create({
   },
   logoutText: { color: "#ef4444", fontWeight: "700" },
   copy: { marginTop: 12, fontSize: 12, color: "#9ca3af" },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
 });

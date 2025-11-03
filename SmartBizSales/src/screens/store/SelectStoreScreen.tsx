@@ -1,4 +1,3 @@
-// src/screens/app/SelectStoreScreen.tsx
 import React, { useEffect, useState } from "react";
 import {
   View,
@@ -9,9 +8,10 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
-  SafeAreaView,
+  Image,
 } from "react-native";
 import { useAuth } from "../../context/AuthContext";
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
   selectStore,
   createStore,
@@ -163,6 +163,7 @@ export default function SelectStoreScreen() {
     setShowModal(true);
   };
 
+  // --- Save store: update nếu editingStore, tạo mới nếu không ---
   const handleSave = async (payloadFromModal?: Partial<Store>) => {
     const final = payloadFromModal || storeForm;
     if (!final.name || !final.address) {
@@ -171,8 +172,13 @@ export default function SelectStoreScreen() {
     }
     try {
       setBusy(true);
-      if (editingStore) await updateStore(editingStore._id, final);
-      await createStore(final as StoreCreateDto);
+      if (editingStore && editingStore._id) {
+        // Update
+        await updateStore(editingStore._id, final);
+      } else {
+        // Create mới
+        await createStore(final as StoreCreateDto);
+      }
       setShowModal(false);
       setEditingStore(null);
       await loadStores();
@@ -233,7 +239,18 @@ export default function SelectStoreScreen() {
     <TouchableOpacity
       style={styles.storeCard}
       onPress={() => handleSelect(item)}
+      activeOpacity={0.8}
     >
+      {/* Ảnh cửa hàng */}
+      <Image
+        source={
+          item.imageUrl
+            ? { uri: item.imageUrl }
+            : require("../../../assets/store-placeholder.png")
+        }
+        style={styles.storeImage}
+        resizeMode="cover"
+      />
       <Text style={styles.storeName}>{item.name}</Text>
       {item.address && <Text style={styles.storeAddress}>{item.address}</Text>}
       <View style={styles.cardActions}>
@@ -317,6 +334,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+  },
+  storeImage: {
+    width: "100%",
+    height: 140,
+    borderRadius: 10,
+    marginBottom: 8,
   },
   storeName: { fontWeight: "700", fontSize: 16, color: "#0b84ff" },
   storeAddress: { color: "#374151", marginTop: 4 },

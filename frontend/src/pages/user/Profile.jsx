@@ -27,6 +27,7 @@ export default function Profile() {
     if (user) {
       form.setFieldsValue({
         username: user.username || "",
+        fullname: user.fullname || "",
         email: user.email || "",
         phone: user.phone || "",
         role: user.role || "",
@@ -196,7 +197,7 @@ export default function Profile() {
             <span className="text-3xl font-bold text-gray-800">Hồ Sơ Cá Nhân</span>
           </div>
         }
-        style={{border: "none"}}
+        style={{ border: "none" }}
       >
         {loading ? (
           <div className="flex justify-center items-center h-64">
@@ -238,7 +239,20 @@ export default function Profile() {
                       />
                     </Form.Item>
                   </Col>
-
+                  {/* Fullname */}
+                  <Col span={8}>
+                    <Form.Item
+                      name="fullname"
+                      label="Họ và tên"
+                      rules={[{ required: false, message: "Vui lòng nhập họ và tên" }]}
+                    >
+                      <Input
+                        placeholder="Họ và tên"
+                        value={profile.fullname ?? ""}
+                        onChangeText={(text) => setProfile({ ...profile, fullname: text })}
+                      />
+                    </Form.Item>
+                  </Col>
                   {/* Email */}
                   <Col span={8}>
                     <Form.Item name="email" label="Email" rules={[{ type: "email", message: "Email không hợp lệ" }]}>
@@ -275,17 +289,15 @@ export default function Profile() {
                   <Col span={8}>
                     <Form.Item name="isVerified" label="Xác thực Email">
                       <div
-                        className={`py-2 px-3 rounded-lg inline-flex items-center gap-2 shadow-sm ${
-                          user?.isVerified ? "bg-green-100" : "bg-yellow-100"
-                        }`}
+                        className={`py-2 px-3 rounded-lg inline-flex items-center gap-2 shadow-sm ${user?.isVerified ? "bg-green-100" : "bg-yellow-100"
+                          }`}
                       >
                         <span
                           className={`w-3 h-3 rounded-full ${user?.isVerified ? "bg-green-500" : "bg-yellow-500"}`}
                         ></span>
                         <span
-                          className={`text-lg font-semibold tracking-wide ${
-                            user?.isVerified ? "text-green-700" : "text-yellow-700"
-                          }`}
+                          className={`text-lg font-semibold tracking-wide ${user?.isVerified ? "text-green-700" : "text-yellow-700"
+                            }`}
                         >
                           {user?.isVerified ? "Đã xác thực" : "Chưa xác thực"}
                         </span>
@@ -297,17 +309,15 @@ export default function Profile() {
                   <Col span={8}>
                     <Form.Item name="isDeleted" label="Trạng thái tài khoản">
                       <div
-                        className={`py-2 px-3 rounded-lg inline-flex items-center gap-2 shadow-sm ${
-                          user?.isDeleted ? "bg-red-100" : "bg-green-100"
-                        }`}
+                        className={`py-2 px-3 rounded-lg inline-flex items-center gap-2 shadow-sm ${user?.isDeleted ? "bg-red-100" : "bg-green-100"
+                          }`}
                       >
                         <span
                           className={`w-3 h-3 rounded-full ${user?.isDeleted ? "bg-red-500" : "bg-green-500"}`}
                         ></span>
                         <span
-                          className={`text-lg font-semibold tracking-wide ${
-                            user?.isDeleted ? "text-red-700" : "text-green-700"
-                          }`}
+                          className={`text-lg font-semibold tracking-wide ${user?.isDeleted ? "text-red-700" : "text-green-700"
+                            }`}
                         >
                           {user?.isDeleted ? "Đã bị khóa" : "Đang hoạt động"}
                         </span>
@@ -350,17 +360,16 @@ export default function Profile() {
                   size="large"
                   disabled={timer > 0 || savingPass}
                   loading={savingPass && !otpSent}
-                  className={`w-full py-3 text-lg rounded-lg border-dashed border-gray-300 ${
-                    timer > 0 ? "opacity-60 cursor-not-allowed" : "hover:border-blue-500 hover:bg-blue-50"
-                  }`}
+                  className={`w-full py-3 text-lg rounded-lg border-dashed border-gray-300 ${timer > 0 ? "opacity-60 cursor-not-allowed" : "hover:border-blue-500 hover:bg-blue-50"
+                    }`}
                 >
                   {savingPass
                     ? "Đang gửi..."
                     : timer > 0
-                    ? `Chờ gửi lại (${formatTime(timer)})`
-                    : otpSent
-                    ? "Gửi OTP mới"
-                    : "Gửi OTP đến Email"}
+                      ? `Chờ gửi lại (${formatTime(timer)})`
+                      : otpSent
+                        ? "Gửi OTP mới"
+                        : "Gửi OTP đến Email"}
                 </Button>
 
                 {otpSent && (

@@ -1,40 +1,51 @@
+import axios from "axios";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import Constants from "expo-constants";
+
 /**
- * 📁 File: src/api/apiClient.ts
- * ------------------------------------------------------
- * Cấu hình Axios client dùng trong toàn bộ dự án React Native (Expo)
- * - Tự động thêm token từ AsyncStorage vào header Authorization
- * - Có thể mở rộng để xử lý refresh token khi gặp 401
- * ------------------------------------------------------
+ * Lấy host động cho API:
+ * - Trên Expo Go (LAN hoặc tunnel)
+ * - Trên Emulator Android/iOS
+ * - Fallback localhost
  */
+function getDevHost(): string {
+    // EAS Build / Expo Go mới
+    const hostUri = Constants.expoConfig?.hostUri;
+    if (hostUri) return hostUri.split(":")[0];
 
-import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import Constants from 'expo-constants';
+    // Legacy Expo CLI
+    const debuggerHost = Constants.manifest?.debuggerHost;
+    if (debuggerHost) return debuggerHost.split(":")[0];
 
-const API_URL =
-    process.env.API_URL ||
-    'http://192.168.1.104:9999/api';
+    // Fallback localhost (chỉ chạy trên dev machine)
+    return "localhost";
+}
+
+const API_PORT = 9999;
+const API_URL = `http://${getDevHost()}:${API_PORT}/api`;
+
+console.log("🔥 API_URL động:", API_URL);
 
 const apiClient = axios.create({
     baseURL: API_URL,
     timeout: 15000,
 });
 
-// Gắn token vào header cho mọi request
-(apiClient.interceptors.request as any).use(async (config: any) => {
+// Gắn token cho mọi request
+apiClient.interceptors.request.use(async (config: any) => {
     try {
-        const token = await AsyncStorage.getItem('token');
+        const token = await AsyncStorage.getItem("token");
         if (token) {
             config.headers = config.headers || {};
             config.headers.Authorization = `Bearer ${token}`;
         }
-    } catch (err) {
-        console.warn('⚠️ Lỗi khi đọc token từ AsyncStorage:', (err as any)?.message || err);
+    } catch (err: any) {
+        console.warn("⚠️ Lỗi khi đọc token từ AsyncStorage:", err?.message || err);
     }
     return config;
 });
 
-// Xử lý lỗi response chung (ví dụ: 401, 403)
+// Xử lý lỗi response
 apiClient.interceptors.response.use(
     (res) => res,
     (err) => Promise.reject(err)
