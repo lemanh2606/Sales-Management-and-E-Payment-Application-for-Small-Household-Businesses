@@ -117,10 +117,11 @@ export default function AppNavigator(): JSX.Element {
       initialRouteName="Dashboard"
       drawerContent={(props) => <CustomDrawerContent {...props} />}
       screenOptions={{
-        headerShown: true,
-        drawerType: "front",
-        drawerActiveTintColor: "#0b84ff",
-        drawerLabelStyle: { fontSize: 15 },
+        headerStyle: { backgroundColor: "#10b981" }, // header xanh lá
+        headerTintColor: "#ffffff",
+        drawerActiveTintColor: "#10b981", // highlight menu
+        drawerInactiveTintColor: "#374151",
+        drawerLabelStyle: { fontSize: 15, fontWeight: "600" },
       }}
     >
       <Drawer.Screen
@@ -165,23 +166,27 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     padding: 16,
-    backgroundColor: "#0b84ff",
-    borderBottomLeftRadius: 12,
-    borderBottomRightRadius: 12,
+    backgroundColor: "#10b981", // xanh lá tươi
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
     marginBottom: 8,
   },
   avatar: {
     width: 56,
     height: 56,
-    borderRadius: 12,
-    backgroundColor: "#0b6fe0",
+    borderRadius: 14,
+    backgroundColor: "#059669", // xanh lá đậm
     alignItems: "center",
     justifyContent: "center",
   },
-  name: { color: "#fff", fontWeight: "700", fontSize: 16 },
-  role: { color: "#e6f2ff", fontSize: 12, marginTop: 2 },
+  name: { color: "#ffffff", fontWeight: "800", fontSize: 16 },
+  role: { color: "#d1fae5", fontSize: 12, marginTop: 2 },
   menu: { flex: 1, paddingTop: 8 },
-  bottom: { padding: 16, borderTopWidth: 1, borderColor: "#f0f0f0" },
+  bottom: {
+    padding: 16,
+    borderTopWidth: 1,
+    borderColor: "#e5e7eb",
+  },
   logoutBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -193,5 +198,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: "#ffffff", // nền trắng
   },
 });

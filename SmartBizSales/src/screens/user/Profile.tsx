@@ -219,19 +219,31 @@ export default function Profile() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: "#fff" },
+  container: { flex: 1, padding: 16, backgroundColor: "#f0fdf4" }, // nền sáng xanh lá nhạt
   card: {
     marginBottom: 16,
     borderRadius: 16,
     elevation: 4,
-    paddingVertical: 8,
+    paddingVertical: 12,
+    backgroundColor: "#ffffff", // card trắng nổi bật
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
   },
-  input: { marginBottom: 12, backgroundColor: "#fff" },
-  button: { marginTop: 8, borderRadius: 12 },
+  input: {
+    marginBottom: 12,
+    backgroundColor: "#f8fafc", // nền input nhạt
+    borderRadius: 10,
+  },
+  button: {
+    marginTop: 8,
+    borderRadius: 12,
+  },
   title: {
     fontSize: 20,
-    fontWeight: "700",
+    fontWeight: "800",
     marginBottom: 12,
-    color: "#2e7d32",
+    color: "#10b981", // xanh lá tươi
   },
 });

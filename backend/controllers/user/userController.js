@@ -203,7 +203,7 @@ const signRefreshToken = (payload) =>
    ------------------------- */
 const registerManager = async (req, res) => {
   try {
-    const { username, email, password } = req.body;
+    const { username, email, password, fullname } = req.body;
 
     // Validate input cơ bản
     if (!username || !email || !password || fullname === undefined) {

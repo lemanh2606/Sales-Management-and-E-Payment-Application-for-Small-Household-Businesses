@@ -18,10 +18,7 @@ import { userApi } from "../../api";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 
-type LoginForm = {
-  username: string;
-  password: string;
-};
+type LoginForm = { username: string; password: string };
 
 export default function LoginScreen() {
   const { login } = useAuth();
@@ -92,7 +89,7 @@ export default function LoginScreen() {
         <View style={styles.card}>
           {/* Logo / Brand */}
           <View style={styles.logoContainer}>
-            <Ionicons name="business" size={60} color="#0b84ff" />
+            <Ionicons name="business" size={60} color="#2e7d32" />
             <Text style={styles.brand}>Smallbiz-Sales</Text>
           </View>
 
@@ -140,7 +137,7 @@ export default function LoginScreen() {
                 <Ionicons
                   name={showPassword ? "eye-off" : "eye"}
                   size={22}
-                  color="#0b84ff"
+                  color="#2e7d32"
                 />
               </TouchableOpacity>
             </View>
@@ -201,10 +198,10 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#ffffff" }, // nền trắng
+  container: { flex: 1, backgroundColor: "#ffffff" },
   scroll: { flexGrow: 1, justifyContent: "center", padding: 20 },
   card: {
-    backgroundColor: "#f8fafc", // để card vẫn nổi trên nền trắng
+    backgroundColor: "#ffffff",
     borderRadius: 20,
     padding: 24,
     shadowColor: "#000",
@@ -217,11 +214,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 20,
   },
-  brand: { fontSize: 20, fontWeight: "900", color: "#0b84ff", marginTop: 6 },
-  title: { fontSize: 24, fontWeight: "800", color: "#0f172a", marginBottom: 6 },
-  subtitle: { color: "#6b7280", marginBottom: 16, textAlign: "center" },
+  brand: { fontSize: 20, fontWeight: "900", color: "#2e7d32", marginTop: 6 },
+  title: { fontSize: 24, fontWeight: "800", color: "#2e7d32", marginBottom: 6 },
+  subtitle: { color: "#4b5563", marginBottom: 16, textAlign: "center" },
   errorBox: {
-    backgroundColor: "#fee2e2",
+    backgroundColor: "#fdecea",
     color: "#991b1b",
     padding: 10,
     borderRadius: 10,
@@ -232,12 +229,12 @@ const styles = StyleSheet.create({
   field: { marginBottom: 16 },
   label: { fontSize: 14, color: "#374151", marginBottom: 6, fontWeight: "600" },
   input: {
-    backgroundColor: "#ffffff", // input nền trắng
+    backgroundColor: "#ffffff",
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: Platform.OS === "ios" ? 14 : 10,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: "#a5d6a7",
     fontSize: 15,
   },
   passwordRow: { flexDirection: "row", alignItems: "center" },
@@ -246,7 +243,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     padding: 6,
     borderRadius: 10,
-    backgroundColor: "#e0f2fe",
+    backgroundColor: "#d9f7be",
   },
   rowBetween: {
     flexDirection: "row",
@@ -260,18 +257,18 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: "#cbd5e1",
+    borderColor: "#c8e6c9",
     marginRight: 8,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#fff",
   },
-  checkboxChecked: { backgroundColor: "#0b84ff", borderColor: "#0b84ff" },
+  checkboxChecked: { backgroundColor: "#2e7d32", borderColor: "#2e7d32" },
   checkboxMark: { color: "#fff", fontSize: 14, fontWeight: "700" },
   rememberText: { color: "#374151" },
-  forgot: { color: "#0b84ff", fontWeight: "700" },
+  forgot: { color: "#2e7d32", fontWeight: "700" },
   primaryBtn: {
-    backgroundColor: "#0b84ff",
+    backgroundColor: "#2e7d32",
     paddingVertical: 14,
     borderRadius: 14,
     alignItems: "center",
@@ -285,8 +282,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 12,
   },
-  small: { color: "#6b7280" },
-  link: { color: "#0b84ff", fontWeight: "700" },
+  small: { color: "#4b5563" },
+  link: { color: "#2e7d32", fontWeight: "700" },
   copyright: {
     textAlign: "center",
     marginTop: 14,

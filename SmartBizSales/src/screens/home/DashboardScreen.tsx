@@ -8,7 +8,7 @@ export default function DashboardScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.text}>
-        Xin chào, {user?.username || "Người dùng"} 👋
+        Xin chào, {user?.fullname || "Người dùng"} 👋
       </Text>
       <TouchableOpacity onPress={logout} style={styles.btn}>
         <Text style={styles.btnText}>Đăng xuất</Text>

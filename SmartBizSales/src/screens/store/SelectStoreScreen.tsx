@@ -272,6 +272,10 @@ export default function SelectStoreScreen() {
         onChangeText={setSearch}
         style={styles.searchInput}
       />
+      <TouchableOpacity style={styles.addStoreBtn} onPress={handleAdd}>
+        <Text style={styles.addStoreText}>+ Thêm cửa hàng mới</Text>
+      </TouchableOpacity>
+
       {loading ? (
         <ActivityIndicator
           size="large"
@@ -314,39 +318,58 @@ export default function SelectStoreScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: "#f8fafc" },
+  container: { flex: 1, padding: 16, backgroundColor: "#f0fdf4" }, // nền xanh nhạt đồng bộ
   searchInput: {
     borderWidth: 1,
     borderColor: "#e5e7eb",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginBottom: 12,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 16,
     backgroundColor: "#fff",
   },
+  addStoreBtn: {
+    backgroundColor: "#0b84ff",
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  addStoreText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+
   storeCard: {
     backgroundColor: "#fff",
     padding: 12,
-    borderRadius: 10,
-    marginBottom: 12,
+    borderRadius: 16,
+    marginBottom: 16,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowRadius: 6,
+    elevation: 4,
   },
   storeImage: {
     width: "100%",
     height: 140,
-    borderRadius: 10,
-    marginBottom: 8,
+    borderRadius: 12,
+    marginBottom: 10,
   },
-  storeName: { fontWeight: "700", fontSize: 16, color: "#0b84ff" },
-  storeAddress: { color: "#374151", marginTop: 4 },
+  storeName: { fontWeight: "800", fontSize: 18, color: "#0b84ff" },
+  storeAddress: { color: "#374151", marginTop: 4, fontSize: 14 },
+
   cardActions: {
     flexDirection: "row",
-    marginTop: 8,
+    marginTop: 12,
     justifyContent: "flex-end",
   },
-  link: { color: "#0b84ff", fontWeight: "600", marginLeft: 12 },
+  link: {
+    color: "#0b84ff",
+    fontWeight: "700",
+    marginLeft: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "#e0f2ff",
+    overflow: "hidden",
+  },
 });

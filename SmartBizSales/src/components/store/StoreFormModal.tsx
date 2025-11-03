@@ -1,4 +1,3 @@
-// src/components/store/StoreFormModal.tsx
 import React, { useState, useEffect } from "react";
 import {
   Modal,
@@ -12,7 +11,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
+  Alert,
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
+import * as Location from "expo-location";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import type { Store } from "../../type/store";
 
 interface StoreFormModalProps {
@@ -36,6 +39,9 @@ export default function StoreFormModal({
 }: StoreFormModalProps) {
   const [localForm, setLocalForm] = useState<Partial<Store>>(form);
 
+  const [showOpenPicker, setShowOpenPicker] = useState(false);
+  const [showClosePicker, setShowClosePicker] = useState(false);
+
   useEffect(() => {
     setLocalForm(form);
   }, [form, open]);
@@ -58,6 +64,54 @@ export default function StoreFormModal({
 
   const handleSave = async () => {
     await onSave(localForm);
+  };
+
+  // Chọn ảnh từ thư viện
+  const pickImage = async () => {
+    const permissionResult =
+      await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permissionResult.granted) {
+      alert("Cần quyền truy cập ảnh để chọn ảnh!");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      quality: 0.7,
+    });
+    if (!result.canceled && result.assets?.[0]?.uri) {
+      updateField("imageUrl", result.assets[0].uri);
+    }
+  };
+
+  // Lấy vị trí hiện tại
+  const getCurrentLocation = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Lỗi", "Cần quyền truy cập vị trí!");
+        return;
+      }
+      const location = await Location.getCurrentPositionAsync({});
+      updateNested("location", "lat", location.coords.latitude);
+      updateNested("location", "lng", location.coords.longitude);
+      Alert.alert("Thành công", "Đã lấy vị trí hiện tại!");
+    } catch (err) {
+      console.error(err);
+      Alert.alert("Lỗi", "Không thể lấy vị trí!");
+    }
+  };
+
+  const handleTimeChange = (
+    event: any,
+    date: Date | undefined,
+    type: "open" | "close"
+  ) => {
+    setShowOpenPicker(false);
+    setShowClosePicker(false);
+    if (!date) return;
+    const hours = date.getHours().toString().padStart(2, "0");
+    const minutes = date.getMinutes().toString().padStart(2, "0");
+    updateNested("openingHours", type, `${hours}:${minutes}`);
   };
 
   return (
@@ -117,15 +171,12 @@ export default function StoreFormModal({
               />
             </View>
 
-            {/* Image URL */}
+            {/* Image */}
             <View style={styles.field}>
-              <Text style={styles.label}>URL ảnh cửa hàng</Text>
-              <TextInput
-                value={localForm.imageUrl}
-                onChangeText={(t) => updateField("imageUrl", t)}
-                style={styles.input}
-                placeholder="https://..."
-              />
+              <Text style={styles.label}>Ảnh cửa hàng</Text>
+              <TouchableOpacity style={styles.imageBtn} onPress={pickImage}>
+                <Text style={styles.imageBtnText}>Chọn ảnh</Text>
+              </TouchableOpacity>
               {localForm.imageUrl ? (
                 <Image
                   source={{ uri: localForm.imageUrl }}
@@ -158,21 +209,41 @@ export default function StoreFormModal({
             <View style={styles.row}>
               <View style={styles.fieldHalf}>
                 <Text style={styles.label}>Giờ mở cửa</Text>
-                <TextInput
-                  value={localForm.openingHours?.open}
-                  onChangeText={(t) => updateNested("openingHours", "open", t)}
+                <TouchableOpacity
                   style={styles.input}
-                  placeholder="08:00"
-                />
+                  onPress={() => setShowOpenPicker(true)}
+                >
+                  <Text style={{ color: "#111827" }}>
+                    {localForm.openingHours?.open || "Chọn giờ"}
+                  </Text>
+                </TouchableOpacity>
+                {showOpenPicker && (
+                  <DateTimePicker
+                    value={new Date()}
+                    mode="time"
+                    display="spinner"
+                    onChange={(e, d) => handleTimeChange(e, d, "open")}
+                  />
+                )}
               </View>
               <View style={styles.fieldHalf}>
                 <Text style={styles.label}>Giờ đóng cửa</Text>
-                <TextInput
-                  value={localForm.openingHours?.close}
-                  onChangeText={(t) => updateNested("openingHours", "close", t)}
+                <TouchableOpacity
                   style={styles.input}
-                  placeholder="22:00"
-                />
+                  onPress={() => setShowClosePicker(true)}
+                >
+                  <Text style={{ color: "#111827" }}>
+                    {localForm.openingHours?.close || "Chọn giờ"}
+                  </Text>
+                </TouchableOpacity>
+                {showClosePicker && (
+                  <DateTimePicker
+                    value={new Date()}
+                    mode="time"
+                    display="spinner"
+                    onChange={(e, d) => handleTimeChange(e, d, "close")}
+                  />
+                )}
               </View>
             </View>
 
@@ -203,6 +274,13 @@ export default function StoreFormModal({
                 />
               </View>
             </View>
+
+            <TouchableOpacity
+              style={styles.locationBtn}
+              onPress={getCurrentLocation}
+            >
+              <Text style={styles.locationBtnText}>Lấy vị trí hiện tại</Text>
+            </TouchableOpacity>
 
             {/* Is Default */}
             <View style={styles.field}>
@@ -282,11 +360,19 @@ const styles = StyleSheet.create({
     borderColor: "#d1d5db",
     borderRadius: 10,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 12,
     backgroundColor: "#f0f4f8",
     fontSize: 14,
     color: "#111827",
   },
+  imageBtn: {
+    backgroundColor: "#0b84ff",
+    paddingVertical: 10,
+    borderRadius: 10,
+    marginBottom: 8,
+    alignItems: "center",
+  },
+  imageBtnText: { color: "#fff", fontWeight: "700" },
   imagePreview: {
     width: "100%",
     height: 140,
@@ -294,6 +380,14 @@ const styles = StyleSheet.create({
     marginTop: 8,
     backgroundColor: "#e5e7eb",
   },
+  locationBtn: {
+    backgroundColor: "#34d399",
+    paddingVertical: 12,
+    borderRadius: 10,
+    marginBottom: 14,
+    alignItems: "center",
+  },
+  locationBtnText: { color: "#fff", fontWeight: "700", fontSize: 16 },
   toggleBtn: {
     padding: 12,
     borderRadius: 10,
@@ -301,10 +395,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   toggleActive: { backgroundColor: "#0b84ff" },
-  toggleText: { color: "#111827", fontWeight: "700" },
+  toggleText: { color: "#fff", fontWeight: "700" },
   btn: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderRadius: 12,
     marginLeft: 8,
     alignItems: "center",
