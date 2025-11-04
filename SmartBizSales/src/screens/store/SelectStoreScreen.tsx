@@ -114,7 +114,6 @@ export default function SelectStoreScreen() {
         "Chọn cửa hàng",
         `Bạn đã chọn cửa hàng: ${returnedStore.name}`
       );
-      console.log("Selected store:", returnedStore);
     } catch (e: any) {
       console.error(e);
       setErr(

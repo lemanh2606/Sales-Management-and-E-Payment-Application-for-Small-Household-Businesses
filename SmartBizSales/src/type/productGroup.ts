@@ -7,17 +7,28 @@ export interface Store {
     address?: string;
     phone?: string;
 }
+export interface StoreRef {
+    _id: string;
+    name: string;
+    address: string;
+    phone: string;
+}
 // --------------------- TYPES ---------------------
 export interface ProductGroup {
-    _id: Types.ObjectId | string;
+    _id: string;
+    name: string;
+    description: string;
+    productCount: number;
+    store: StoreRef;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface ProductGroupRef {
+    _id: string;
     name: string;
     description?: string;
-    storeId: Types.ObjectId | string; // tham chiếu gốc đến Store
-    store?: Store; // populated store info
-    productCount?: number; // số lượng sản phẩm trong nhóm
-    isDeleted?: boolean;
-    createdAt?: Date | string;
-    updatedAt?: Date | string;
+    productCount?: number;
 }
 
 export interface PaginatedProductGroups {
