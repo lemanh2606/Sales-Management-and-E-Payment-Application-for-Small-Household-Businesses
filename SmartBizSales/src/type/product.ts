@@ -1,6 +1,6 @@
-
 // src/types/product.ts
 import { ObjectId } from "mongodb";
+import { SupplierRef } from './supplier';
 
 // --------------------- IMAGE ---------------------
 export interface ProductImage {
@@ -15,11 +15,6 @@ export interface StoreRef {
     owner_id?: ObjectId | string;
 }
 
-export interface SupplierRef {
-    _id: ObjectId | string;
-    name?: string;
-}
-
 export interface ProductGroupRef {
     _id: ObjectId | string;
     name?: string;
@@ -27,7 +22,7 @@ export interface ProductGroupRef {
 
 // --------------------- PRODUCT ---------------------
 export type ProductStatus = "Đang kinh doanh" | "Ngừng kinh doanh" | "Ngừng bán";
-// --------------------- TYPES ---------------------
+
 export interface Product {
     _id: ObjectId | string;
     name: string;
@@ -40,7 +35,7 @@ export interface Product {
     max_stock?: number | null;
     unit?: string;
     status: ProductStatus;
-    store_id: ObjectId | string; // storeId lưu trong DB
+    store_id: ObjectId | string;
     supplier_id?: ObjectId | string | null;
     group_id?: ObjectId | string | null;
     image?: ProductImage | null;
@@ -54,6 +49,7 @@ export interface Product {
     supplier?: SupplierRef;
     group?: ProductGroupRef;
 }
+
 export interface PaginatedProducts {
     total: number;
     page: number;
@@ -75,7 +71,96 @@ export interface ProductImportResultRow {
 }
 
 export interface ProductImportResult {
+    error: any;
     success: ProductImportResultRow[];
     failed: ProductImportResultRow[];
     total: number;
+}
+
+// --------------------- SEARCH & FILTER ---------------------
+export interface SearchProduct {
+    _id: string;
+    name: string;
+    sku: string;
+    price: number;
+    stock_quantity: number;
+    unit?: string;
+}
+
+export interface SearchResponse {
+    message: string;
+    products: SearchProduct[];
+}
+
+export interface LowStockProduct {
+    _id: string;
+    name: string;
+    sku: string;
+    stock_quantity: number;
+    min_stock: number;
+    unit?: string;
+}
+
+export interface LowStockResponse {
+    message: string;
+    products: LowStockProduct[];
+}
+
+// --------------------- CREATE/UPDATE DATA ---------------------
+export interface CreateProductData {
+    name: string;
+    description?: string;
+    sku?: string;
+    price: number;
+    cost_price: number;
+    stock_quantity?: number;
+    min_stock?: number;
+    max_stock?: number | null;
+    unit?: string;
+    status?: ProductStatus;
+    supplier_id?: string | null;
+    group_id?: string | null;
+    image?: string;
+    store_id: string;
+}
+
+export interface UpdateProductData {
+    name?: string;
+    description?: string;
+    sku?: string;
+    price?: number;
+    cost_price?: number;
+    stock_quantity?: number;
+    min_stock?: number;
+    max_stock?: number | null;
+    unit?: string;
+    status?: ProductStatus;
+    supplier_id?: string | null;
+    group_id?: string | null;
+    image?: string;
+}
+
+// --------------------- RESPONSE TYPES ---------------------
+export interface ProductResponse {
+    message: string;
+    product: Product;
+}
+
+export interface ProductsResponse {
+    productGroups: never[];
+    message: string;
+    total: number;
+    products: Product[];
+}
+
+export interface DeleteResponse {
+    message: string;
+    deletedProductId: string;
+}
+
+export interface ImportResponse {
+    data: any;
+    importedCount: undefined;
+    message: string;
+    results: ProductImportResult;
 }

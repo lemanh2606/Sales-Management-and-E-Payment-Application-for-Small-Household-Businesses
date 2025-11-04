@@ -53,6 +53,7 @@
     "uuid": "^13.0.0",
     "validator": "^13.15.15",
     "vietqr": "^1.1.9",
+    "xlsx": "^0.18.5",
     "yamljs": "^0.3.0"
   },
   "devDependencies": {
