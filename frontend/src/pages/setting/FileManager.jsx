@@ -57,6 +57,10 @@ const FileManager = () => {
   const [searchText, setSearchText] = useState("");
   const [filterCategory, setFilterCategory] = useState("all");
   const [filterExtension, setFilterExtension] = useState("all");
+  const [pagination, setPagination] = useState({
+    current: 1,
+    pageSize: 10,
+  });
 
   const currentStore = JSON.parse(localStorage.getItem("currentStore") || "{}");
 
@@ -65,11 +69,13 @@ const FileManager = () => {
     const sizes = ["B", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(1024));
     return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${sizes[i]}`;
-  };
+  }; 
 
+  // đặt màu cho icon file mặc định vì ko preview được document
   const getFileIcon = (type, extension) => {
     if (type.includes("image")) return <FileImageOutlined style={{ color: "#1890ff", fontSize: 32 }} />;
-    if (type.includes("video", "audio")) return <FileTextOutlined style={{ color: "#722ed1", fontSize: 32 }} />;
+    if (type.includes("video") || type.includes("audio"))
+      return <FileTextOutlined style={{ color: "#722ed1", fontSize: 32 }} />;
     if (extension === "pdf") return <FilePdfOutlined style={{ color: "#ff4d4f", fontSize: 32 }} />;
     if (["xls", "xlsx", "csv"].includes(extension))
       return <FileExcelOutlined style={{ color: "#52c41a", fontSize: 32 }} />;
@@ -103,6 +109,10 @@ const FileManager = () => {
   useEffect(() => {
     fetchFiles();
   }, [currentStore._id]);
+  //đặt lại phân trang khi danh sách lọc thay đổi
+  useEffect(() => {
+    setPagination((prev) => ({ ...prev, current: 1 }));
+  }, [filteredFiles]);
 
   // REALTIME FILTER
   useEffect(() => {
@@ -517,8 +527,11 @@ const FileManager = () => {
                 dataSource={filteredFiles}
                 rowKey="_id"
                 pagination={{
-                  pageSize: 10,
+                  ...pagination,
                   showSizeChanger: true,
+                  onChange: (page, pageSize) => {
+                    setPagination({ current: page, pageSize });
+                  },
                   showTotal: (total, range) => (
                     <div
                       style={{
