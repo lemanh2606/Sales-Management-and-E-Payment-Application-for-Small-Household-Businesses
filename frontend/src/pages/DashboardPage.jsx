@@ -52,13 +52,6 @@ export default function DashboardPage() {
             <p className="text-3xl font-bold text-green-600">{stats.ordersToday}</p>
           </div>
         </div>
-
-        <button
-          onClick={handleLogout}
-          className="mt-8 px-5 py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white transition"
-        >
-          Đăng xuất
-        </button>
       </div>
     </Layout>
   );

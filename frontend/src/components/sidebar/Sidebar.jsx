@@ -50,16 +50,6 @@ export default function Sidebar() {
       ],
     },
     {
-      key: "users",
-      name: "Người dùng",
-      path: "/users",
-      icon: <BsPeople size={20} />,
-      children: [
-        { name: "Danh sách người dùng", path: "/users", permission: "users:view" },
-        { name: "Hồ sơ cá nhân", path: "/profile", permission: "users:view" },
-      ],
-    },
-    {
       key: "products",
       name: "Quản lý kho",
       path: "/products",
@@ -129,19 +119,9 @@ export default function Sidebar() {
       icon: <AiOutlineDashboard size={20} />,
       children: [
         { name: "Tổng quan báo cáo", path: "/reports/dashboard", permission: "reports:financial:view" },
-        { name: "Báo cáo doanh thu chi tiết", path: "/reports/revenue", permission: "reports:revenue:view" }, // Báo cáo doanh thu chi tiết
-        { name: "Kê khai thuế", path: "/reports/tax", permission: "tax:preview" }, //TaxDeclaration
+        { name: "Báo cáo doanh thu chi tiết", path: "/reports/revenue", permission: "reports:revenue:view" },
+        { name: "Kê khai thuế", path: "/reports/tax", permission: "tax:preview" },
         { name: "Sản phẩm bán chạy", path: "/reports/top-products", permission: "reports:top-products" },
-      ],
-    },
-    {
-      key: "notifications",
-      name: "Thông báo",
-      path: "/notifications",
-      icon: <FiBell size={20} />,
-      children: [
-        { name: "Thông báo thanh toán", path: "/notifications/payment", permission: "notifications:payment" },
-        { name: "Cảnh báo tồn kho thấp", path: "/notifications/stock", permission: "notifications:stock" },
       ],
     },
     {
@@ -152,6 +132,10 @@ export default function Sidebar() {
       children: [
         { name: "Nhật ký hoạt động", path: "/settings/activity-log", permission: "settings:activity-log" },
         { name: "Thiết lập thanh toán", path: "/settings/payment-method", permission: "settings:payment-method" },
+        { name: "Hồ sơ cá nhân", path: "/settings/profile", permission: "users:view" },
+        { name: "Thông báo", path: "/settings/payment", permission: "notifications:view" },
+        { name: "Gói dịch vụ", path: "/settings/subscription", permission: "subscription:view" },
+        { name: "Quản lý file", path: "/settings/file", permission: "file:view" },
       ],
     },
   ];
@@ -354,11 +338,30 @@ export default function Sidebar() {
 
           <button
             onClick={handleLogout}
-            className={`mt-4 w-full flex items-center justify-center gap-2 bg-[#ffffffa2] text-[black] py-3 rounded-xl hover:bg-[#000000cc] hover:text-[white] transition-all duration-300 transform hover:scale-105 shadow-lg ${
-              collapsed ? "px-1 py-2" : ""
-            }`}
+            className={`mt-4 w-full flex items-center justify-center gap-2 
+    bg-gradient-to-r from-rose-500 to-pink-500 
+    text-white font-semibold py-3 rounded-xl 
+    shadow-lg shadow-rose-400/30 
+    hover:from-pink-500 hover:to-rose-600 
+    transition-all duration-300 transform hover:scale-105 
+    relative overflow-hidden group
+    ${collapsed ? "px-1 py-2" : ""}`}
           >
-            <FiLogOut size={18} /> {!collapsed && `Đăng xuất (${user?.username || "Manager"})`}
+            {/* Ánh sáng quét */}
+            <span
+              className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent 
+    translate-x-[-100%] group-hover:animate-[shine_1.8s_linear_infinite]"
+            />
+
+            <FiLogOut size={18} className="relative z-10" />
+            {!collapsed && <span className="relative z-10">Đăng xuất</span>}
+
+            <style>{`
+    @keyframes shine {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+  `}</style>
           </button>
         </div>
       </aside>

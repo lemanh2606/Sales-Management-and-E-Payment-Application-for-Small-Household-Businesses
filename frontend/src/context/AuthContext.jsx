@@ -210,7 +210,8 @@ export const AuthProvider = ({ children }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ user, token, currentStore, setCurrentStore, login, logout, loading }}>
+        // Thêm set user để nó cập nhật thông tin mới nhất nếu có Save gì đó trong Profile.jsx
+        <AuthContext.Provider value={{ user, setUser, token, currentStore, setCurrentStore, login, logout, loading }}> 
             {children}
         </AuthContext.Provider>
     );
