@@ -3,6 +3,7 @@ const fs = require("fs");
 const File = require("../models/File");
 const Store = require("../models/Store");
 const { uploadToCloudinary, deleteFromCloudinary } = require("../utils/cloudinary");
+const logActivity = require("../utils/logActivity");
 
 const uploadFile = async (req, res) => {
   try {
@@ -63,6 +64,19 @@ const uploadFile = async (req, res) => {
       category,
       uploadedBy: userId || null,
     });
+    //ghi log
+    await logActivity({
+      user: req.user,
+      store: { _id: storeId },
+      action: "create",
+      entity: "File",
+      entityId: newFile._id,
+      entityName: newFile.name,
+      req,
+      description: `Người dùng ${req.user.username || req.user.email} đã tải lên tệp mới "${newFile.name}" (${
+        newFile.extension
+      }) cho cửa hàng ${store?.name || "không xác định"}`,
+    });
 
     res.status(201).json({ message: "Upload file thành công!", file: newFile });
   } catch (err) {
@@ -113,6 +127,21 @@ const deleteFile = async (req, res) => {
 
     // Xoá khỏi MongoDB
     await file.deleteOne();
+    const store = await Store.findById(file.storeId).select("name");
+    //ghi log
+    await logActivity({
+      user: req.user,
+      store: { _id: file.storeId },
+      action: "delete",
+      entity: "File",
+      entityId: file._id,
+      entityName: file.name,
+      req,
+      description: `Người dùng ${req.user.username || req.user.email} đã xoá tệp "${file.name}" khỏi cửa hàng ${
+        store?.name || "không xác định"
+      }`,
+    });
+
     console.log("✅ Đã xoá file khỏi MongoDB:", file._id);
 
     res.json({ message: "Đã xóa file thành công" });

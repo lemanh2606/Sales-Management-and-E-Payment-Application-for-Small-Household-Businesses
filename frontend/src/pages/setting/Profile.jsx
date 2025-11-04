@@ -1,7 +1,7 @@
 // src/pages/user/Profile.jsx
 import React, { useState, useEffect } from "react";
 import { Form, Input, Button, Card, Alert, Spin, Row, Col, Badge, Divider } from "antd";
-import { SaveOutlined, LockOutlined, MailOutlined } from "@ant-design/icons";
+import { SaveOutlined, LockOutlined, MailOutlined, UserOutlined } from "@ant-design/icons";
 import axios from "axios";
 import Swal from "sweetalert2";
 import { useAuth } from "../../context/AuthContext";
@@ -199,7 +199,7 @@ export default function Profile() {
       <Card
         title={
           <div className="flex items-center gap-3">
-            <SaveOutlined className="text-green-600 text-xl" />
+            <UserOutlined className="text-green-600 text-xl" />
             <span className="text-3xl font-bold text-gray-800">Hồ Sơ Cá Nhân</span>
           </div>
         }
@@ -265,66 +265,53 @@ export default function Profile() {
                     </Form.Item>
                   </Col>
 
-                  {/* Phone */}
-                  <Col span={8}>
-                    <Form.Item name="phone" label="Số điện thoại">
-                      <Input
-                        placeholder="Số điện thoại"
-                        className="!py-2 !px-3 !text-lg rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-300"
-                      />
+                  {/* Phone - Role - Verified */}
+                  <Col xs={24} md={12} lg={8}>
+                    <Form.Item name="phone" label={<span className="font-medium">Số điện thoại</span>}>
+                      <Input placeholder="Số điện thoại" className="h-11 text-base rounded-lg" />
                     </Form.Item>
                   </Col>
 
-                  {/* Role */}
-                  <Col span={8}>
-                    <Form.Item name="role" label="Vai trò">
-                      <div className="py-2 px-3 bg-blue-100 rounded-lg inline-flex items-center gap-2 shadow-sm">
+                  <Col xs={24} md={12} lg={8}>
+                    <Form.Item label={<span className="font-medium">Vai trò</span>}>
+                      <div className="flex items-center gap-2 h-11 px-3 bg-blue-50 rounded-lg border border-blue-200">
                         <span className="w-3 h-3 bg-blue-500 rounded-full"></span>
-                        <span className="text-lg font-semibold text-blue-700 tracking-wide">
+                        <span className="font-semibold text-blue-700">
                           {user?.role === "MANAGER" ? "Quản lý" : "Nhân viên"}
                         </span>
                       </div>
                     </Form.Item>
                   </Col>
 
-                  {/* Verified */}
-                  <Col span={8}>
-                    <Form.Item name="isVerified" label="Xác thực Email">
+                  <Col xs={24} md={12} lg={8}>
+                    <Form.Item label={<span className="font-medium">Xác thực Email</span>}>
                       <div
-                        className={`py-2 px-3 rounded-lg inline-flex items-center gap-2 shadow-sm ${
-                          user?.isVerified ? "bg-green-100" : "bg-yellow-100"
+                        className={`flex items-center gap-2 h-11 px-3 rounded-lg border ${
+                          user?.isVerified ? "bg-green-50 border-green-200" : "bg-yellow-50 border-yellow-200"
                         }`}
                       >
                         <span
                           className={`w-3 h-3 rounded-full ${user?.isVerified ? "bg-green-500" : "bg-yellow-500"}`}
                         ></span>
-                        <span
-                          className={`text-lg font-semibold tracking-wide ${
-                            user?.isVerified ? "text-green-700" : "text-yellow-700"
-                          }`}
-                        >
+                        <span className={`font-semibold ${user?.isVerified ? "text-green-700" : "text-yellow-700"}`}>
                           {user?.isVerified ? "Đã xác thực" : "Chưa xác thực"}
                         </span>
                       </div>
                     </Form.Item>
                   </Col>
 
-                  {/* Deleted */}
-                  <Col span={8}>
-                    <Form.Item name="isDeleted" label="Trạng thái tài khoản">
+                  {/* Trạng thái tài khoản */}
+                  <Col xs={24} md={12} lg={8}>
+                    <Form.Item label={<span className="font-medium">Trạng thái tài khoản</span>}>
                       <div
-                        className={`py-2 px-3 rounded-lg inline-flex items-center gap-2 shadow-sm ${
-                          user?.isDeleted ? "bg-red-100" : "bg-green-100"
+                        className={`flex items-center gap-2 h-11 px-3 rounded-lg border ${
+                          user?.isDeleted ? "bg-red-50 border-red-200" : "bg-green-50 border-green-200"
                         }`}
                       >
                         <span
                           className={`w-3 h-3 rounded-full ${user?.isDeleted ? "bg-red-500" : "bg-green-500"}`}
                         ></span>
-                        <span
-                          className={`text-lg font-semibold tracking-wide ${
-                            user?.isDeleted ? "text-red-700" : "text-green-700"
-                          }`}
-                        >
+                        <span className={`font-semibold ${user?.isDeleted ? "text-red-700" : "text-green-700"}`}>
                           {user?.isDeleted ? "Đã bị khóa" : "Đang hoạt động"}
                         </span>
                       </div>
