@@ -7,7 +7,10 @@ dotenv.config();
 
 // Các quyền mới cần thêm
 const NEW_REPORT_PERMISSIONS = [
-  "settings:activity-log",
+  "settings:payment-method",
+  "notifications:view",
+  "subscription:view",
+  "file:view",
   //thêm nếu có cái mới hoặc nghĩ ra cái mới
 ];
 

@@ -460,6 +460,7 @@ const TaxDeclaration = () => {
               </Col>
               <Col span={5}>
                 <label>Chọn kỳ:</label>
+                {!periodType && <Alert message="Hãy chọn kỳ kê khai trước" type="warning" style={{ marginTop: 8 }} />}
                 {periodType === "custom" ? (
                   <RangePicker
                     picker="month"

@@ -7,7 +7,9 @@ const morgan = require("morgan");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const listEndpoints = require("express-list-endpoints");
+const multer = require("multer");
 const path = require("path");
+const fs = require("fs");
 const errorHandler = require("./middlewares/errorHandler");
 const notFoundHandler = require("./middlewares/notFoundHandler");
 // Swagger
@@ -29,19 +31,30 @@ connectDB();
 ].forEach((model) => require(`./models/${model}`));
 
 const app = express();
-const server = http.createServer(app); //  Tạo server http để gắn socket.io
 
+// đảm bảo thư mục uploads tồn tại chỉ để đọc tạm
+const uploadDir = path.join(__dirname, "uploads");
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+  console.log("📁 Đã tạo thư mục uploads/");
+}
+// ⚙️ cấu hình Multer storage để giữ nguyên tên file (slug) khi lưu local
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, "uploads/"),
+  filename: (req, file, cb) => {
+    cb(null, file.originalname); // ✅ giữ nguyên tên FE gửi (đã slug)
+  },
+});
+const upload = multer({ storage, limits: { fileSize: 20 * 1024 * 1024 } });
+
+// =====Socket.io=====
+const server = http.createServer(app); //  Tạo server http để gắn socket.io
 // ⚡ Khởi tạo Socket.io
 const io = new Server(server, {
   cors: {
     origin: "http://localhost:3000", //  FE React
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-      "Cache-Control",
-      "Pragma",
-    ],
+    allowedHeaders: ["Content-Type", "Authorization", "Cache-Control", "Pragma"],
   },
 });
 
@@ -59,11 +72,7 @@ require("./services/cronJobs");
 
 // Webhook PayOS phải viết trước express.json()
 const orderWebhookHandler = require("./routers/orderWebhookHandler");
-app.post(
-  "/api/orders/vietqr-webhook",
-  express.raw({ type: "*/*" }),
-  orderWebhookHandler
-);
+app.post("/api/orders/vietqr-webhook", express.raw({ type: "*/*" }), orderWebhookHandler);
 
 // --- MIDDLEWARE ---
 app.use(
@@ -71,12 +80,7 @@ app.use(
     origin: "http://localhost:3000",
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-      "Cache-Control",
-      "Pragma",
-    ],
+    allowedHeaders: ["Content-Type", "Authorization", "Cache-Control", "Pragma"],
   })
 );
 app.use(express.json());
@@ -101,8 +105,10 @@ const customerRouters = require("./routers/customerRouters");
 const loyaltyRouters = require("./routers/loyaltyRouters");
 const financialRouters = require("./routers/financialRouters");
 const activityLogRouters = require("./routers/activityLogRouters");
+const fileRouters = require("./routers/fileRouters");
 
 // --- MOUNT ROUTERS ---
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/api/stores", storeRouters);
 app.use("/api/users", userRouters);
 app.use("/api/products", productRouters);
@@ -119,6 +125,7 @@ app.use("/api/customers", customerRouters);
 app.use("/api/loyaltys", loyaltyRouters);
 app.use("/api/financials", financialRouters);
 app.use("/api/activity-logs", activityLogRouters);
+app.use("/api/files", fileRouters);
 
 // --- ROOT ---
 app.get("/", (req, res) => {

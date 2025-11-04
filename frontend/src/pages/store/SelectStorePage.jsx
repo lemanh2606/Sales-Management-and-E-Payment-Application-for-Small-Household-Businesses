@@ -40,14 +40,13 @@ export default function SelectStorePage() {
     // keep nested objects to match backend:
     openingHours: {
       open: "",
-      close: ""
+      close: "",
     },
     location: {
       lat: null,
-      lng: null
-    }
+      lng: null,
+    },
   });
-
 
   // --- THAY ĐỔI: Lấy 'user' từ useAuth ---
   const { setCurrentStore, user } = useAuth();
@@ -186,7 +185,6 @@ export default function SelectStorePage() {
     }
   };
 
-
   // --- handleAdd: open modal with clean nested shape ---
   const handleAdd = () => {
     setEditingStore(null);
@@ -212,7 +210,7 @@ export default function SelectStorePage() {
       phone: store.phone || "",
       description: store.description || "",
       imageUrl: store.imageUrl || "",
-      tagsCsv: Array.isArray(store.tags) ? store.tags.join(", ") : (store.tags || ""),
+      tagsCsv: Array.isArray(store.tags) ? store.tags.join(", ") : store.tags || "",
       // normalize openingHours & location into nested object (safe)
       openingHours: {
         open: store.openingHours?.open ?? "",
@@ -235,9 +233,18 @@ export default function SelectStorePage() {
       phone: storeForm.phone,
       description: storeForm.description,
       imageUrl: storeForm.imageUrl,
-      tags: typeof storeForm.tags === "string" && !Array.isArray(storeForm.tags)
-        ? (storeForm.tagsCsv || "").split(",").map(t => t.trim()).filter(Boolean)
-        : (Array.isArray(storeForm.tags) ? storeForm.tags : (storeForm.tagsCsv || "").split(",").map(t => t.trim()).filter(Boolean)),
+      tags:
+        typeof storeForm.tags === "string" && !Array.isArray(storeForm.tags)
+          ? (storeForm.tagsCsv || "")
+              .split(",")
+              .map((t) => t.trim())
+              .filter(Boolean)
+          : Array.isArray(storeForm.tags)
+          ? storeForm.tags
+          : (storeForm.tagsCsv || "")
+              .split(",")
+              .map((t) => t.trim())
+              .filter(Boolean),
       openingHours: {
         open: storeForm.openingHours?.open ?? (storeForm.openingOpen || ""),
         close: storeForm.openingHours?.close ?? (storeForm.openingClose || ""),
@@ -245,7 +252,7 @@ export default function SelectStorePage() {
       location: {
         lat: storeForm.location?.lat != null ? Number(storeForm.location.lat) : null,
         lng: storeForm.location?.lng != null ? Number(storeForm.location.lng) : null,
-      }
+      },
     };
 
     setErr("");
@@ -316,11 +323,29 @@ export default function SelectStorePage() {
           {/* Optional left info column can be collapsed on smaller screens */}
           <aside className="hidden lg:block lg:col-span-3 sticky top-20 self-start">
             <div className="rounded-2xl p-6 bg-gradient-to-br from-green-600 to-green-500 text-white shadow-2xl">
-              <h2 className="text-2xl font-bold">Xin chào, Quản lý!</h2>
-              <p className="mt-2 text-sm text-green-100/90">
-                Dòng này có thể cần thay đổi động
-                Chọn một cửa hàng để bắt đầu theo dõi doanh thu, tồn kho, và báo cáo.
-              </p>
+              {/* 👇 H2 có ánh sáng quét */}
+              <div className="relative inline-block overflow-hidden">
+                <h2 className="text-2xl font-bold relative z-10">Xin chào, {user?.fullname || "Quản lý"}!</h2>
+                <span className="absolute inset-0 bg-gradient-to-r from-transparent via-cyan-400/80 to-transparent animate-[shine_2.5s_linear_infinite]" />
+              </div>
+
+              {/* 👇 Đoạn mô tả có hiệu ứng tương tự */}
+              <div className="relative mt-2">
+                <p className="text-sm font-medium text-green-50 relative overflow-hidden">
+                  <span className="relative z-10">
+                    Chọn một cửa hàng để bắt đầu theo dõi doanh thu, tồn kho, và báo cáo.
+                  </span>
+                  <span className="absolute inset-0 bg-gradient-to-r from-transparent via-cyan-400/80 to-transparent animate-[shine_2.5s_linear_infinite]" />
+                </p>
+              </div>
+
+              {/* 👇 Keyframes cho ánh sáng */}
+              <style>{`
+                @keyframes shine {
+                  0% { transform: translateX(-100%); }
+                  100% { transform: translateX(100%); }
+                }
+            `}</style>
             </div>
           </aside>
 

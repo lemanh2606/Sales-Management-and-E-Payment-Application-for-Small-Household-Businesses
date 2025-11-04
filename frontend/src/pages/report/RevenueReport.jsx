@@ -279,7 +279,8 @@ const RevenueReport = () => {
               message="Vui lòng chọn kỳ báo cáo để xem dữ liệu."
               type="info"
               showIcon
-              style={{ marginBottom: 16 }}
+              closable
+              style={{ marginBottom: 16, height: 80 }}
             />
           )}
 
