@@ -668,6 +668,26 @@ paths:
                   total: { type: integer }
         "400": { description: "Invalid file or data" }
 
+  /api/products/store/{storeId}/export:
+    get:
+      tags: [Products]
+      summary: Export all products from store to Excel file
+      parameters:
+        - in: path
+          name: storeId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: Excel file with all products
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        "404": { description: "Store not found" }
+
   # ===== Product Groups =====
   /api/product-groups:
     get:

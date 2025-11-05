@@ -28,6 +28,7 @@
     "react-toastify": "^11.0.5",
     "read-vietnamese-number": "^2.3.0",
     "recharts": "^3.3.0",
+    "socket.io-client": "^4.8.1",
     "sweetalert2": "^11.23.0",
     "tailwindcss": "^4.1.14",
     "web-vitals": "^2.1.4"

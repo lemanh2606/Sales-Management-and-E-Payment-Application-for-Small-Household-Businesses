@@ -158,9 +158,28 @@ export interface DeleteResponse {
     deletedProductId: string;
 }
 
-export interface ImportResponse {
-    data: any;
-    importedCount: undefined;
+// export interface ImportResponse {
+//     data: any;
+//     importedCount: undefined;
+//     message: string;
+//     results: ProductImportResult;
+// }
+
+export type ImportResponse = {
     message: string;
-    results: ProductImportResult;
-}
+    results: {
+        success: Array<{ row: number; product: { _id: string; name: string; sku: string } }>;
+        failed: Array<{ row: number; data: any; error: string; type?: string }>;
+        total: number;
+    };
+    newlyCreated?: {
+        suppliers: number;
+        productGroups: number;
+    };
+};
+export type ImportFile = {
+    uri: string; // required
+    name?: string;
+    mimeType?: string; // optional, DocumentPicker may provide mimeType
+    size?: number;
+};

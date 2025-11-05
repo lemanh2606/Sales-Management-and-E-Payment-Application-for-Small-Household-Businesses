@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 
 import Sidebar from "../components/sidebar/Sidebar";
+import TrialBanner from "./sidebar/TrialBanner";
 
 export default function Layout({ children }) {
     const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -32,6 +33,9 @@ export default function Layout({ children }) {
 
             {/* Main content */}
             <div className="flex-1 flex flex-col transition-all duration-300 md:ml-64">
+                {/* Trial Banner */}
+                <TrialBanner />
+                
                 {/* Top bar mobile */}
                 <header className="md:hidden p-4 shadow-md bg-white flex justify-between items-center sticky top-0 z-20">
                     <button

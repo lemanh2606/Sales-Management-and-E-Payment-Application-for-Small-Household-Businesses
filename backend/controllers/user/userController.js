@@ -1,6 +1,7 @@
 // controllers/userController.js (fix changePassword: thêm confirmPassword check khớp, fix compareString scope - paste thay file)
 const User = require("../../models/User");
 const Employee = require("../../models/Employee");
+const Subscription = require("../../models/Subscription");
 const logActivity = require("../../utils/logActivity");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -222,6 +223,15 @@ const registerManager = async (req, res) => {
     });
 
     await newUser.save();
+
+    // 🎁 Tự động tạo 14-day Trial subscription
+    try {
+      await Subscription.createTrial(newUser._id);
+      console.log(`✅ Đã tạo Trial 14 ngày cho user ${newUser.username}`);
+    } catch (trialErr) {
+      console.error("⚠️ Không thể tạo trial subscription:", trialErr.message);
+      // Không fail registration, chỉ log warning
+    }
 
     // Gửi email OTP
     await sendVerificationEmail(email, username, otp);

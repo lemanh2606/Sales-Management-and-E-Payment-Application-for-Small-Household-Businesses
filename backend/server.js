@@ -72,7 +72,9 @@ require("./services/cronJobs");
 
 // Webhook PayOS phải viết trước express.json()
 const orderWebhookHandler = require("./routers/orderWebhookHandler");
+const subscriptionWebhookHandler = require("./routers/subscriptionWebhookHandler");
 app.post("/api/orders/vietqr-webhook", express.raw({ type: "*/*" }), orderWebhookHandler);
+app.post("/api/subscriptions/webhook", express.raw({ type: "*/*" }), subscriptionWebhookHandler);
 
 // --- MIDDLEWARE ---
 app.use(
@@ -106,6 +108,7 @@ const loyaltyRouters = require("./routers/loyaltyRouters");
 const financialRouters = require("./routers/financialRouters");
 const activityLogRouters = require("./routers/activityLogRouters");
 const fileRouters = require("./routers/fileRouters");
+const subscriptionRouters = require("./routers/subscriptionRouters");
 
 // --- MOUNT ROUTERS ---
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
@@ -126,6 +129,7 @@ app.use("/api/loyaltys", loyaltyRouters);
 app.use("/api/financials", financialRouters);
 app.use("/api/activity-logs", activityLogRouters);
 app.use("/api/files", fileRouters);
+app.use("/api/subscriptions", subscriptionRouters);
 
 // --- ROOT ---
 app.get("/", (req, res) => {

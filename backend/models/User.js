@@ -17,6 +17,7 @@ const userSchema = new mongoose.Schema(
   {
     username: { type: String, required: true, unique: true, trim: true },
     password_hash: { type: String, required: true },
+    image: { type: String, require: false, unique: true, trim: true },
     fullname: { type: String, default: "" },
 
     // role global (MANAGER: có thể tạo store; STAFF: nhân viên)
@@ -65,6 +66,29 @@ const userSchema = new mongoose.Schema(
     loginAttempts: { type: Number, default: 0 },
     lockUntil: { type: Date, default: null },
     alertCount: { type: Number, default: 0 },
+
+    // === SUBSCRIPTION INFO ===
+    subscription_status: {
+      type: String,
+      enum: ["TRIAL", "PREMIUM", "EXPIRED"],
+      default: "TRIAL",
+    },
+    trial_started_at: {
+      type: Date,
+      default: null,
+    },
+    trial_ends_at: {
+      type: Date,
+      default: null,
+    },
+    premium_expires_at: {
+      type: Date,
+      default: null,
+    },
+    is_premium: {
+      type: Boolean,
+      default: false,
+    },
 
     // Other
     last_login: { type: Date, default: null },

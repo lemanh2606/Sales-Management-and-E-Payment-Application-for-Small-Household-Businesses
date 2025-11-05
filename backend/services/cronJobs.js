@@ -162,3 +162,62 @@ cron.schedule("0 2 * * *", async () => {
 });
 
 console.log("✅ Cron job xóa ActivityLog cũ đã được khởi động (2h sáng hàng ngày)!");
+
+// 3. Check subscription expired: mỗi ngày lúc 3h sáng
+const Subscription = require("../models/Subscription");
+
+cron.schedule("0 3 * * *", async () => {
+  try {
+    console.log("Bắt đầu cron check subscription expired");
+
+    const now = new Date();
+
+    // Tìm subscription TRIAL hết hạn
+    const expiredTrials = await Subscription.find({
+      status: "TRIAL",
+      trial_ends_at: { $lt: now },
+    });
+
+    for (const sub of expiredTrials) {
+      sub.status = "EXPIRED";
+      await sub.save();
+
+      // Update User status
+      const user = await User.findById(sub.user_id);
+      if (user) {
+        user.subscription_status = "EXPIRED";
+        user.is_premium = false;
+        await user.save();
+        console.log(`❌ Trial expired for user ${user.username}`);
+      }
+    }
+
+    // Tìm subscription ACTIVE hết hạn
+    const expiredPremiums = await Subscription.find({
+      status: "ACTIVE",
+      expires_at: { $lt: now },
+    });
+
+    for (const sub of expiredPremiums) {
+      sub.status = "EXPIRED";
+      await sub.save();
+
+      // Update User status
+      const user = await User.findById(sub.user_id);
+      if (user) {
+        user.subscription_status = "EXPIRED";
+        user.is_premium = false;
+        await user.save();
+        console.log(`❌ Premium expired for user ${user.username}`);
+      }
+    }
+
+    console.log(
+      `✅ Subscription check completed: ${expiredTrials.length} trials, ${expiredPremiums.length} premiums expired`
+    );
+  } catch (err) {
+    console.error("Lỗi cron check subscription:", err.message);
+  }
+});
+
+console.log("✅ Cron job check subscription expired đã khởi động (3h sáng hàng ngày)!");

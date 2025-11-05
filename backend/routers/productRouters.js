@@ -66,6 +66,19 @@ const handleMulterError = (err, req, res, next) => {
 router.get("/template/download", verifyToken, downloadProductTemplate);
 
 /*
+  ROUTE: GET /api/products/store/:storeId/export
+  - Export tất cả sản phẩm của store ra file Excel
+  - Middleware: verifyToken -> checkStoreAccess -> requirePermission("products:view")
+*/
+router.get(
+  "/store/:storeId/export",
+  verifyToken,
+  checkStoreAccess,
+  requirePermission("products:view"),
+  exportProducts
+);
+
+/*
   ROUTE: GET /api/products/search
   - Tìm kiếm sản phẩm theo tên / SKU / barcode...
   - Middleware: verifyToken -> checkStoreAccess -> requirePermission("products:search")
