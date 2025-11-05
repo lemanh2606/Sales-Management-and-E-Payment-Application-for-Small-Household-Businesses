@@ -21,7 +21,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { apiClient, userApi, storeApi } from "../api";
 import { User } from "../type/user";
 import { Store } from "../type/store";
-import { navigate } from "../navigation/RootNavigation";
+import { navigate, NavigationService } from "../navigation/RootNavigation";
 
 // Tên key để lưu trữ dữ liệu trên thiết bị
 const TOKEN_KEY = "token";
@@ -203,7 +203,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // Hàm đăng nhập
+  // Trong hàm login, thay thế các lần gọi navigate
   const login = async (userData: User, tokenData: string) => {
     // Bắt đầu trạng thái loading
     setIsLoading(true);
@@ -220,7 +220,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         initialStore = currentStore || null;
         setCurrentStore(initialStore);
         await persist(userData, tokenData, initialStore);
-        navigate("Dashboard");
+
+        // Sử dụng NavigationService với retry
+        NavigationService.navigate("Dashboard", undefined, 15);
         return;
       }
 
@@ -248,20 +250,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
 
       // Chờ một chút để đảm bảo animation mượt mà
-      await new Promise((resolve) => setTimeout(resolve, 80));
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // Điều hướng dựa trên vai trò và thông tin cửa hàng
+      // Điều hướng dựa trên vai trò và thông tin cửa hàng với retry
       if (userData.role === "MANAGER") {
         if (!resolvedStore || hasMultipleStores) {
-          navigate("SelectStore");
+          NavigationService.navigate("SelectStore", undefined, 15);
         } else {
-          navigate("Dashboard");
+          NavigationService.navigate("Dashboard", undefined, 15);
         }
         return;
       }
 
-      // Mặc định điều hướng đến Dashboard
-      navigate("Dashboard");
+      // Mặc định điều hướng đến Dashboard với retry
+      NavigationService.navigate("Dashboard", undefined, 15);
     } catch (error) {
       console.error("Lỗi khi đăng nhập:", error);
       // Reset trạng thái nếu có lỗi
@@ -269,15 +271,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setToken(null);
       setCurrentStore(null);
       await persist(null, null, null);
-      navigate("Login");
+
+      // Sử dụng NavigationService cho logout cũng vậy
+      setTimeout(() => {
+        NavigationService.navigate("Login", undefined, 10);
+      }, 500);
     } finally {
       // Kết thúc trạng thái loading
       setIsLoading(false);
-      setTimeout(() => setLoading(false), 160);
+      setTimeout(() => setLoading(false), 200);
     }
   };
 
-  // Hàm đăng xuất
+  // Trong hàm logout, cũng sửa tương tự
   const logout = async () => {
     try {
       // Xóa tất cả thông tin
@@ -302,11 +308,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch (error) {
       console.warn("Lỗi khi đăng xuất:", error);
     } finally {
-      // Luôn điều hướng về màn hình đăng nhập
-      navigate("Login");
+      // Sử dụng NavigationService với retry
+      setTimeout(() => {
+        NavigationService.navigate("Login", undefined, 10);
+      }, 300);
     }
   };
-
   // Cập nhật cửa hàng hiện tại
   const setCurrentStoreAndPersist = async (store: Store | null) => {
     setCurrentStore(store);

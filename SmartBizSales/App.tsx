@@ -4,7 +4,10 @@ import { AuthProvider, useAuth } from "./src/context/AuthContext";
 import AppNavigator from "./src/navigation/AppNavigator";
 import AuthNavigator from "./src/navigation/AuthNavigator";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { navigationRef } from "./src/navigation/RootNavigation";
+import {
+  navigationRef,
+  setNavigationReady,
+} from "./src/navigation/RootNavigation";
 import FlashMessage from "react-native-flash-message";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
 
@@ -35,7 +38,13 @@ export default function App(): React.JSX.Element {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <NavigationContainer ref={navigationRef}>
+        <NavigationContainer
+          ref={navigationRef}
+          onReady={() => {
+            console.log("✅ Navigation is ready");
+            setNavigationReady();
+          }}
+        >
           <RootNavigator />
           <FlashMessage position="top" />
         </NavigationContainer>

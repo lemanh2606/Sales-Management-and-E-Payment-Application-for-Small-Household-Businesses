@@ -151,7 +151,8 @@ export default function AppNavigator(): JSX.Element {
         options={{
           title: "Hàng hóa",
           drawerIcon: ({ color, size }) => (
-            <Ionicons name="list-outline" size={size} color={color} />
+            // 🔥 Lựa chọn 1: Icon hiện đại, đẹp
+            <Ionicons name="cube" size={size} color={color} />
           ),
         }}
       />
