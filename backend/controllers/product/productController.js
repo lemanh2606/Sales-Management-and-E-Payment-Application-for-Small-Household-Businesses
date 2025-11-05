@@ -883,7 +883,17 @@ const importProducts = async (req, res) => {
         .json({ message: "File không chứa dữ liệu hợp lệ" });
     }
 
-    const results = { success: [], failed: [], total: data.length };
+    const results = {
+      success: [],
+      failed: [],
+      total: data.length,
+      debug: {
+        suppliersCreated: 0,
+        groupsCreated: 0,
+        processedRows: 0,
+        skuConflicts: 0,
+      },
+    };
 
     // lấy dữ liệu tham chiếu
     const suppliers = await Supplier.find({
@@ -895,19 +905,218 @@ const importProducts = async (req, res) => {
       isDeleted: false,
     }).lean();
 
+    // Lấy danh sách SKU hiện có TRONG CỬA HÀNG NÀY để tránh trùng lặp
+    const existingProducts = await Product.find({
+      store_id: storeId, // CHỈ kiểm tra trong cửa hàng hiện tại
+      isDeleted: false,
+    })
+      .select("sku")
+      .lean();
+
+    const existingSKUs = new Set(existingProducts.map((p) => p.sku));
+    const usedSKUsInThisImport = new Set(); // Để theo dõi SKU đã dùng trong import này
+
     const supplierMap = new Map(
-      suppliers.map((s) => [String((s.name || "").toLowerCase()).trim(), s._id])
+      suppliers.map((s) => [
+        String((s.name || "").toLowerCase()).trim(),
+        {
+          _id: s._id,
+          exists: true,
+        },
+      ])
     );
     const groupMap = new Map(
       productGroups.map((g) => [
         String((g.name || "").toLowerCase()).trim(),
-        g._id,
+        {
+          _id: g._id,
+          exists: true,
+        },
       ])
     );
 
+    // Hàm generate SKU duy nhất TRONG CỬA HÀNG
+    const generateUniqueSKU = async (storeId, usedSKUs) => {
+      let attempt = 0;
+      const maxAttempts = 100;
+
+      while (attempt < maxAttempts) {
+        // Tìm SKU lớn nhất hiện có TRONG CỬA HÀNG NÀY
+        const lastProduct = await Product.findOne({
+          store_id: storeId, // CHỈ tìm trong cửa hàng hiện tại
+          isDeleted: false,
+        }).sort({ sku: -1 });
+
+        let nextNumber = 1;
+        if (lastProduct && lastProduct.sku) {
+          const match = lastProduct.sku.match(/\d+/);
+          if (match) {
+            nextNumber = parseInt(match[0]) + 1;
+          }
+        }
+
+        const newSKU = `SP${nextNumber.toString().padStart(6, "0")}`;
+
+        // Kiểm tra SKU chưa tồn tại TRONG CỬA HÀNG NÀY và chưa được dùng trong import này
+        if (!existingSKUs.has(newSKU) && !usedSKUs.has(newSKU)) {
+          usedSKUs.add(newSKU);
+          return newSKU;
+        }
+
+        // Nếu trùng, thử số tiếp theo
+        nextNumber++;
+        attempt++;
+      }
+
+      throw new Error(`Không thể tạo SKU duy nhất sau ${maxAttempts} lần thử`);
+    };
+
+    // Hàm tạo nhà cung cấp mới nếu chưa tồn tại TRONG CỬA HÀNG
+    const createSupplierIfNotExists = async (supplierName) => {
+      try {
+        const trimmedName = supplierName.trim();
+        const normalizedName = trimmedName.toLowerCase();
+
+        // Kiểm tra xem đã có trong map chưa
+        if (supplierMap.has(normalizedName)) {
+          return supplierMap.get(normalizedName)._id;
+        }
+
+        // Kiểm tra trong database (tránh race condition) - CHỈ trong cửa hàng này
+        const existingSupplier = await Supplier.findOne({
+          name: { $regex: new RegExp(`^${trimmedName}$`, "i") },
+          store_id: storeId, // CHỈ kiểm tra trong cửa hàng hiện tại
+          isDeleted: false,
+        }).collation({ locale: "vi", strength: 2 });
+
+        if (existingSupplier) {
+          supplierMap.set(normalizedName, {
+            _id: existingSupplier._id,
+            exists: true,
+          });
+          return existingSupplier._id;
+        }
+
+        // Tạo nhà cung cấp mới CHO CỬA HÀNG NÀY
+        const newSupplier = new Supplier({
+          name: trimmedName,
+          phone: "",
+          email: "",
+          address: "",
+          taxcode: "",
+          notes: "",
+          status: "đang hoạt động",
+          store_id: storeId, // Liên kết với cửa hàng hiện tại
+          created_by: userId,
+        });
+
+        await newSupplier.save();
+        results.debug.suppliersCreated++;
+
+        // Log activity
+        await logActivity({
+          user: req.user,
+          store: { _id: storeId },
+          action: "create",
+          entity: "Supplier",
+          entityId: newSupplier._id,
+          entityName: newSupplier.name,
+          req,
+          description: `Tự động tạo nhà cung cấp "${newSupplier.name}" từ import sản phẩm`,
+        });
+
+        supplierMap.set(normalizedName, {
+          _id: newSupplier._id,
+          exists: false, // mới tạo
+        });
+        return newSupplier._id;
+      } catch (error) {
+        console.error(`Lỗi khi tạo nhà cung cấp ${supplierName}:`, error);
+        throw new Error(
+          `Không thể tạo nhà cung cấp: ${supplierName} - ${error.message}`
+        );
+      }
+    };
+
+    // Hàm tạo nhóm sản phẩm mới nếu chưa tồn tại TRONG CỬA HÀNG
+    const createProductGroupIfNotExists = async (groupName) => {
+      try {
+        const trimmedName = groupName.trim();
+        const normalizedName = trimmedName.toLowerCase();
+
+        // Kiểm tra xem đã có trong map chưa
+        if (groupMap.has(normalizedName)) {
+          return groupMap.get(normalizedName)._id;
+        }
+
+        // Kiểm tra trong database (tránh race condition) - CHỈ trong cửa hàng này
+        const existingGroup = await ProductGroup.findOne({
+          name: { $regex: new RegExp(`^${trimmedName}$`, "i") },
+          storeId: storeId, // CHỈ kiểm tra trong cửa hàng hiện tại
+          isDeleted: false,
+        });
+
+        if (existingGroup) {
+          groupMap.set(normalizedName, {
+            _id: existingGroup._id,
+            exists: true,
+          });
+          return existingGroup._id;
+        }
+
+        // Tạo nhóm sản phẩm mới CHO CỬA HÀNG NÀY
+        const newProductGroup = new ProductGroup({
+          name: trimmedName,
+          description: `Nhóm sản phẩm được tạo tự động từ import`,
+          storeId: storeId, // Liên kết với cửa hàng hiện tại
+        });
+
+        await newProductGroup.save();
+        results.debug.groupsCreated++;
+
+        // Log activity
+        await logActivity({
+          user: req.user,
+          store: { _id: storeId },
+          action: "create",
+          entity: "ProductGroup",
+          entityId: newProductGroup._id,
+          entityName: newProductGroup.name,
+          req,
+          description: `Tự động tạo nhóm sản phẩm "${newProductGroup.name}" từ import sản phẩm`,
+        });
+
+        groupMap.set(normalizedName, {
+          _id: newProductGroup._id,
+          exists: false, // mới tạo
+        });
+        return newProductGroup._id;
+      } catch (error) {
+        console.error(`Lỗi khi tạo nhóm sản phẩm ${groupName}:`, error);
+        throw new Error(
+          `Không thể tạo nhóm sản phẩm: ${groupName} - ${error.message}`
+        );
+      }
+    };
+
+    console.log(
+      `🟢 Bắt đầu import ${data.length} sản phẩm cho store: ${storeId}`
+    );
+    console.log(
+      `📊 SKU hiện có trong cửa hàng:`,
+      Array.from(existingSKUs).slice(0, 5)
+    );
+
     for (let i = 0; i < data.length; i++) {
+      results.debug.processedRows++;
       const row = sanitizeData(data[i]);
       const rowNumber = i + 2; // header giả định ở row 1
+
+      console.log(`📝 Xử lý dòng ${rowNumber}:`, {
+        name: row["Tên sản phẩm"],
+        supplier: row["Nhà cung cấp"],
+        group: row["Nhóm sản phẩm"],
+      });
 
       try {
         // required
@@ -917,10 +1126,15 @@ const importProducts = async (req, res) => {
           "Giá vốn",
         ]);
         if (!validation.isValid) {
+          const errorMsg = `Thiếu trường bắt buộc: ${validation.missingFields.join(
+            ", "
+          )}`;
+          console.log(`❌ Dòng ${rowNumber} lỗi:`, errorMsg);
           results.failed.push({
             row: rowNumber,
             data: row,
-            error: `Thiếu: ${validation.missingFields.join(", ")}`,
+            error: errorMsg,
+            type: "VALIDATION_ERROR",
           });
           continue;
         }
@@ -928,20 +1142,24 @@ const importProducts = async (req, res) => {
         // numeric validations
         const priceVal = validateNumericField(row["Giá bán"], { min: 0 });
         if (!priceVal.isValid) {
+          console.log(`❌ Dòng ${rowNumber} lỗi giá bán:`, priceVal.error);
           results.failed.push({
             row: rowNumber,
             data: row,
             error: `Giá bán: ${priceVal.error}`,
+            type: "PRICE_ERROR",
           });
           continue;
         }
 
         const costVal = validateNumericField(row["Giá vốn"], { min: 0 });
         if (!costVal.isValid) {
+          console.log(`❌ Dòng ${rowNumber} lỗi giá vốn:`, costVal.error);
           results.failed.push({
             row: rowNumber,
             data: row,
             error: `Giá vốn: ${costVal.error}`,
+            type: "COST_ERROR",
           });
           continue;
         }
@@ -951,10 +1169,12 @@ const importProducts = async (req, res) => {
           allowDecimal: false,
         });
         if (!stockVal.isValid) {
+          console.log(`❌ Dòng ${rowNumber} lỗi tồn kho:`, stockVal.error);
           results.failed.push({
             row: rowNumber,
             data: row,
             error: `Tồn kho: ${stockVal.error}`,
+            type: "STOCK_ERROR",
           });
           continue;
         }
@@ -964,10 +1184,15 @@ const importProducts = async (req, res) => {
           { min: 0, allowDecimal: false }
         );
         if (!minStockVal.isValid) {
+          console.log(
+            `❌ Dòng ${rowNumber} lỗi tồn kho tối thiểu:`,
+            minStockVal.error
+          );
           results.failed.push({
             row: rowNumber,
             data: row,
             error: `Tồn kho tối thiểu: ${minStockVal.error}`,
+            type: "MIN_STOCK_ERROR",
           });
           continue;
         }
@@ -977,10 +1202,15 @@ const importProducts = async (req, res) => {
           { min: 0, allowDecimal: false }
         );
         if (!maxStockVal.isValid) {
+          console.log(
+            `❌ Dòng ${rowNumber} lỗi tồn kho tối đa:`,
+            maxStockVal.error
+          );
           results.failed.push({
             row: rowNumber,
             data: row,
             error: `Tồn kho tối đa: ${maxStockVal.error}`,
+            type: "MAX_STOCK_ERROR",
           });
           continue;
         }
@@ -990,67 +1220,116 @@ const importProducts = async (req, res) => {
         if (
           !["Đang kinh doanh", "Ngừng kinh doanh", "Ngừng bán"].includes(status)
         ) {
+          const errorMsg = `Trạng thái không hợp lệ: ${status}`;
+          console.log(`❌ Dòng ${rowNumber} lỗi trạng thái:`, errorMsg);
           results.failed.push({
             row: rowNumber,
             data: row,
-            error: `Trạng thái không hợp lệ: ${status}`,
+            error: errorMsg,
+            type: "STATUS_ERROR",
           });
           continue;
         }
 
-        // supplier mapping (optional)
+        // supplier mapping (optional) - TẠO MỚI NẾU CHƯA CÓ
         let supplierId = null;
         if (row["Nhà cung cấp"]) {
-          supplierId = supplierMap.get(
-            String(row["Nhà cung cấp"]).toLowerCase().trim()
-          );
-          if (!supplierId) {
+          try {
+            supplierId = await createSupplierIfNotExists(row["Nhà cung cấp"]);
+            console.log(
+              `✅ Đã xử lý nhà cung cấp "${row["Nhà cung cấp"]}": ${supplierId}`
+            );
+          } catch (supplierError) {
+            console.log(
+              `❌ Dòng ${rowNumber} lỗi nhà cung cấp:`,
+              supplierError.message
+            );
             results.failed.push({
               row: rowNumber,
               data: row,
-              error: `Nhà cung cấp không tồn tại: ${row["Nhà cung cấp"]}`,
+              error: supplierError.message,
+              type: "SUPPLIER_ERROR",
             });
             continue;
           }
         }
 
-        // group mapping (optional)
+        // group mapping (optional) - TẠO MỚI NẾU CHƯA CÓ
         let groupId = null;
         if (row["Nhóm sản phẩm"]) {
-          groupId = groupMap.get(
-            String(row["Nhóm sản phẩm"]).toLowerCase().trim()
-          );
-          if (!groupId) {
+          try {
+            groupId = await createProductGroupIfNotExists(row["Nhóm sản phẩm"]);
+            console.log(
+              `✅ Đã xử lý nhóm sản phẩm "${row["Nhóm sản phẩm"]}": ${groupId}`
+            );
+          } catch (groupError) {
+            console.log(
+              `❌ Dòng ${rowNumber} lỗi nhóm sản phẩm:`,
+              groupError.message
+            );
             results.failed.push({
               row: rowNumber,
               data: row,
-              error: `Nhóm sản phẩm không tồn tại: ${row["Nhóm sản phẩm"]}`,
+              error: groupError.message,
+              type: "GROUP_ERROR",
             });
             continue;
           }
         }
 
-        // SKU: nếu có check trùng, không có thì generate
+        // SKU: xử lý trùng lặp TRONG CÙNG CỬA HÀNG
         let sku = row["Mã SKU"] ? String(row["Mã SKU"]).trim() : null;
+
         if (sku) {
-          const existingProduct = await Product.findOne({
-            sku: sku,
-            store_id: storeId,
-            isDeleted: false,
-          });
-          if (existingProduct) {
+          // Kiểm tra SKU đã tồn tại TRONG CỬA HÀNG NÀY
+          if (existingSKUs.has(sku)) {
+            results.debug.skuConflicts++;
+            const errorMsg = `Mã SKU "${sku}" đã tồn tại trong cửa hàng này`;
+            console.log(`❌ Dòng ${rowNumber} lỗi SKU:`, errorMsg);
             results.failed.push({
               row: rowNumber,
               data: row,
-              error: `Mã SKU đã tồn tại: ${sku}`,
+              error: errorMsg,
+              type: "SKU_DUPLICATE",
             });
             continue;
           }
+
+          // Kiểm tra SKU đã được dùng trong import này
+          if (usedSKUsInThisImport.has(sku)) {
+            results.debug.skuConflicts++;
+            const errorMsg = `Mã SKU "${sku}" trùng trong file import`;
+            console.log(`❌ Dòng ${rowNumber} lỗi SKU:`, errorMsg);
+            results.failed.push({
+              row: rowNumber,
+              data: row,
+              error: errorMsg,
+              type: "SKU_DUPLICATE_IN_FILE",
+            });
+            continue;
+          }
+
+          usedSKUsInThisImport.add(sku);
         } else {
-          sku = await generateSKU(storeId);
+          try {
+            sku = await generateUniqueSKU(storeId, usedSKUsInThisImport);
+            console.log(`✅ Đã generate SKU mới: ${sku}`);
+          } catch (error) {
+            console.log(
+              `❌ Dòng ${rowNumber} lỗi generate SKU:`,
+              error.message
+            );
+            results.failed.push({
+              row: rowNumber,
+              data: row,
+              error: `Lỗi generate SKU: ${error.message}`,
+              type: "SKU_GENERATE_ERROR",
+            });
+            continue;
+          }
         }
 
-        // build và lưu product
+        // build và lưu product CHO CỬA HÀNG NÀY
         const newProduct = new Product({
           name: row["Tên sản phẩm"],
           description: row["Mô tả"] || "",
@@ -1062,36 +1341,134 @@ const importProducts = async (req, res) => {
           max_stock: maxStockVal.value || null,
           unit: row["Đơn vị"] || "",
           status,
-          store_id: storeId,
+          store_id: storeId, // Liên kết với cửa hàng hiện tại
           supplier_id: supplierId,
           group_id: groupId,
         });
 
-        await newProduct.save();
+        try {
+          await newProduct.save();
+          console.log(
+            `✅ Đã tạo sản phẩm thành công: ${newProduct.name} (${newProduct.sku})`
+          );
 
-        results.success.push({
-          row: rowNumber,
-          product: {
-            _id: newProduct._id,
-            name: newProduct.name,
-            sku: newProduct.sku,
-          },
-        });
+          // Thêm SKU vào danh sách đã tồn tại TRONG CỬA HÀNG NÀY để tránh trùng trong tương lai
+          existingSKUs.add(sku);
+
+          // Log activity cho sản phẩm mới
+          await logActivity({
+            user: req.user,
+            store: { _id: storeId },
+            action: "create",
+            entity: "Product",
+            entityId: newProduct._id,
+            entityName: newProduct.name,
+            req,
+            description: `Tạo sản phẩm "${newProduct.name}" từ import file`,
+          });
+
+          results.success.push({
+            row: rowNumber,
+            product: {
+              _id: newProduct._id,
+              name: newProduct.name,
+              sku: newProduct.sku,
+              price: newProduct.price,
+              supplier: supplierId,
+              group: groupId,
+            },
+          });
+        } catch (saveError) {
+          if (saveError.code === 11000) {
+            // Duplicate key error - thêm vào existing SKUs và thử lại với SKU mới
+            existingSKUs.add(sku);
+            results.debug.skuConflicts++;
+
+            console.log(`🔄 SKU ${sku} bị trùng, thử generate SKU mới...`);
+            try {
+              const newSKU = await generateUniqueSKU(
+                storeId,
+                usedSKUsInThisImport
+              );
+              newProduct.sku = newSKU;
+              await newProduct.save();
+
+              console.log(
+                `✅ Đã tạo sản phẩm thành công với SKU mới: ${newProduct.name} (${newSKU})`
+              );
+
+              results.success.push({
+                row: rowNumber,
+                product: {
+                  _id: newProduct._id,
+                  name: newProduct.name,
+                  sku: newSKU,
+                  price: newProduct.price,
+                  supplier: supplierId,
+                  group: groupId,
+                },
+              });
+            } catch (retryError) {
+              console.log(
+                `❌ Lỗi khi thử lại với SKU mới:`,
+                retryError.message
+              );
+              results.failed.push({
+                row: rowNumber,
+                data: row,
+                error: `Lỗi lưu sản phẩm: ${retryError.message}`,
+                type: "SAVE_ERROR",
+              });
+            }
+          } else {
+            throw saveError;
+          }
+        }
       } catch (errRow) {
+        console.error(`💥 Lỗi không xác định tại dòng ${rowNumber}:`, errRow);
         results.failed.push({
           row: rowNumber,
           data: row,
           error: errRow.message || String(errRow),
+          type: "UNKNOWN_ERROR",
+          stack:
+            process.env.NODE_ENV === "development" ? errRow.stack : undefined,
         });
       }
     }
 
-    return res.status(200).json({ message: "Import hoàn tất", results });
+    console.log(`📊 Kết quả import:`, {
+      total: results.total,
+      success: results.success.length,
+      failed: results.failed.length,
+      suppliersCreated: results.debug.suppliersCreated,
+      groupsCreated: results.debug.groupsCreated,
+      skuConflicts: results.debug.skuConflicts,
+    });
+
+    // Thêm thông tin về các đối tượng đã được tạo mới
+    const newlyCreated = {
+      suppliers: results.debug.suppliersCreated,
+      productGroups: results.debug.groupsCreated,
+    };
+
+    return res.status(200).json({
+      message: "Import hoàn tất",
+      results: {
+        success: results.success,
+        failed: results.failed,
+        total: results.total,
+      },
+      newlyCreated,
+      debug: process.env.NODE_ENV === "development" ? results.debug : undefined,
+    });
   } catch (error) {
-    console.error("Lỗi importProducts:", error);
-    return res
-      .status(500)
-      .json({ message: "Lỗi server", error: error.message || String(error) });
+    console.error("💥 Lỗi importProducts:", error);
+    return res.status(500).json({
+      message: "Lỗi server",
+      error: error.message || String(error),
+      stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
+    });
   }
 };
 

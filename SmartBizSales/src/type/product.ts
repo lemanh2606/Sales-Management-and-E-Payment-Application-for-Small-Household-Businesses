@@ -167,16 +167,16 @@ export interface DeleteResponse {
 
 export type ImportResponse = {
     message: string;
-    data: any;
-    importedCount: undefined;
     results: {
         success: Array<{ row: number; product: { _id: string; name: string; sku: string } }>;
-        failed: Array<any>;
+        failed: Array<{ row: number; data: any; error: string; type?: string }>;
         total: number;
-        errors: any
+    };
+    newlyCreated?: {
+        suppliers: number;
+        productGroups: number;
     };
 };
-
 export type ImportFile = {
     uri: string; // required
     name?: string;

@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { useAuth } from "../../context/AuthContext";
 import * as productApi from "../../api/productApi";
-import { Product, ProductStatus } from "../../type/product";
+import { Product, ProductStatus, ImportResponse } from '../../type/product';
 import Modal from "react-native-modal";
 import { Ionicons } from "@expo/vector-icons";
 import { File, Directory, Paths } from "expo-file-system";
@@ -297,46 +297,107 @@ const ProductListScreen: React.FC = () => {
           }
 
           setImportProgress("Đang gửi file đến server...");
-          const response = await productApi.importProducts(storeId, fileObj);
+          const response: ImportResponse = await productApi.importProducts(
+            storeId,
+            fileObj
+          );
 
           console.log("✅ Import thành công:", response);
 
-          const successCount =
-            response.importedCount || response.results?.success?.length || 0;
-          const errorCount = response.results?.errors?.length || 0;
+          // Xử lý kết quả theo cấu trúc response mới
+          const results = response.results || {};
+          const successCount = results.success?.length || 0;
+          const failedCount = results.failed?.length || 0;
+          const totalCount = results.total || successCount + failedCount;
+          const newlyCreated = response.newlyCreated || {
+            suppliers: 0,
+            productGroups: 0,
+          };
 
-          let message = `Import thành công ${successCount} sản phẩm`;
-          if (errorCount > 0) {
-            message += `, ${errorCount} sản phẩm lỗi`;
+          let message = "";
+          let title = "";
 
-            // Hiển thị chi tiết lỗi nếu có
-            if (
-              response.results?.errors &&
-              response.results.errors.length > 0
-            ) {
-              const errorDetails = response.results.errors
-                .slice(0, 3) // Chỉ hiển thị 3 lỗi đầu tiên
-                .map(
-                  (error: any, index: number) =>
-                    `${index + 1}. ${error.message}`
-                )
-                .join("\n");
+          if (successCount > 0 && failedCount === 0) {
+            // Tất cả đều thành công
+            title = "🎉 Thành công";
+            message = `Import thành công ${successCount} sản phẩm`;
 
-              message += `\n\nChi tiết lỗi:\n${errorDetails}`;
-
-              if (response.results.errors.length > 3) {
-                message += `\n...và ${
-                  response.results.errors.length - 3
-                } lỗi khác`;
+            // Thêm thông tin về đối tượng mới được tạo
+            if (newlyCreated.suppliers > 0 || newlyCreated.productGroups > 0) {
+              message += `\n\nĐã tự động tạo mới:`;
+              if (newlyCreated.suppliers > 0) {
+                message += `\n• ${newlyCreated.suppliers} nhà cung cấp`;
+              }
+              if (newlyCreated.productGroups > 0) {
+                message += `\n• ${newlyCreated.productGroups} nhóm sản phẩm`;
               }
             }
+          } else if (successCount > 0 && failedCount > 0) {
+            // Một phần thành công
+            title = "⚠️ Hoàn thành một phần";
+            message = `Import thành công ${successCount}/${totalCount} sản phẩm\n${failedCount} sản phẩm thất bại`;
+
+            // Thêm thông tin về đối tượng mới được tạo
+            if (newlyCreated.suppliers > 0 || newlyCreated.productGroups > 0) {
+              message += `\n\nĐã tự động tạo mới:`;
+              if (newlyCreated.suppliers > 0) {
+                message += `\n• ${newlyCreated.suppliers} nhà cung cấp`;
+              }
+              if (newlyCreated.productGroups > 0) {
+                message += `\n• ${newlyCreated.productGroups} nhóm sản phẩm`;
+              }
+            }
+          } else {
+            // Tất cả đều thất bại
+            title = "❌ Có lỗi xảy ra";
+            message = `Không có sản phẩm nào được import thành công\n${failedCount} sản phẩm thất bại`;
           }
 
-          Alert.alert(
-            successCount > 0 ? "Thành công" : "Có lỗi xảy ra",
-            message,
-            [{ text: "OK" }]
-          );
+          // Hiển thị chi tiết lỗi nếu có sản phẩm thất bại
+          if (failedCount > 0 && results.failed) {
+            const errorDetails = results.failed
+              .slice(0, 5) // Chỉ hiển thị 5 lỗi đầu tiên
+              .map((error: any, index: number) => {
+                // Xử lý các loại lỗi khác nhau
+                const rowInfo = error.row ? `Dòng ${error.row}: ` : "";
+                const errorMsg =
+                  error.error || error.message || "Lỗi không xác định";
+                const productInfo = error.data?.["Tên sản phẩm"]
+                  ? ` (${error.data["Tên sản phẩm"]})`
+                  : "";
+                return `${index + 1}. ${rowInfo}${errorMsg}${productInfo}`;
+              })
+              .join("\n");
+
+            message += `\n\nChi tiết lỗi:\n${errorDetails}`;
+
+            if (failedCount > 5) {
+              message += `\n...và ${failedCount - 5} lỗi khác`;
+            }
+
+            // Thêm gợi ý cho người dùng
+            message += `\n\n💡 Mẹo: Kiểm tra lại định dạng file và đảm bảo dữ liệu đúng cấu trúc`;
+          }
+
+          // Tạo buttons cho alert
+          const alertButtons: any[] = [{ text: "OK", style: "default" }];
+
+          // Thêm nút "Xem chi tiết" nếu có lỗi
+          if (failedCount > 0) {
+            alertButtons.unshift({
+              text: "Xem chi tiết",
+              style: "default",
+              onPress: () => {
+                // Có thể mở modal hiển thị chi tiết kết quả ở đây
+                console.log("Chi tiết kết quả import:", results);
+                // Hoặc hiển thị modal với toàn bộ lỗi
+                showDetailedErrorModal(results.failed);
+              },
+            });
+          }
+
+          // Hiển thị thông báo
+          Alert.alert(title, message, alertButtons);
 
           fetchProducts(); // Refresh danh sách
           setImportProgress("");
@@ -365,29 +426,54 @@ const ProductListScreen: React.FC = () => {
       let userMessage = "Import thất bại";
       if (error.message?.includes("timeout") || error.code === "ECONNABORTED") {
         userMessage =
-          "Server xử lý quá lâu. Vui lòng thử lại với file nhỏ hơn hoặc liên hệ quản trị viên.";
+          "⏰ Server xử lý quá lâu. Vui lòng thử lại với file nhỏ hơn hoặc liên hệ quản trị viên.";
       } else if (error.response?.status === 500) {
-        userMessage = "Server đang quá tải. Vui lòng thử lại sau vài phút.";
+        userMessage = "🔄 Server đang quá tải. Vui lòng thử lại sau vài phút.";
       } else if (error.response?.status === 413) {
         userMessage =
-          "File quá lớn. Vui lòng chia nhỏ file hoặc sử dụng file có kích thước nhỏ hơn.";
+          "📁 File quá lớn. Vui lòng chia nhỏ file hoặc sử dụng file có kích thước nhỏ hơn 10MB.";
       } else if (error.response?.status === 400) {
         userMessage =
-          "Dữ liệu file không hợp lệ. Vui lòng kiểm tra lại định dạng file.";
+          "📝 Dữ liệu file không hợp lệ. Vui lòng kiểm tra lại định dạng file và cấu trúc dữ liệu.";
       } else if (error.response?.status === 401) {
-        userMessage = "Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.";
+        userMessage = "🔐 Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.";
       } else if (error.response?.status === 403) {
-        userMessage = "Bạn không có quyền thực hiện thao tác này.";
+        userMessage = "🚫 Bạn không có quyền thực hiện thao tác này.";
       } else if (error.request) {
         userMessage =
-          "Không thể kết nối đến server. Vui lòng kiểm tra kết nối mạng.";
+          "📡 Không thể kết nối đến server. Vui lòng kiểm tra kết nối mạng.";
+      } else {
+        userMessage = `❌ Lỗi: ${error.message || "Không xác định"}`;
       }
 
-      Alert.alert("Lỗi", userMessage);
+      Alert.alert("Thông báo", userMessage);
     } finally {
       setImporting(false);
       setImportProgress("");
     }
+  };
+
+  // Hàm hiển thị modal chi tiết lỗi (tuỳ chọn)
+  const showDetailedErrorModal = (failedItems: any[]) => {
+    // Bạn có thể implement modal hiển thị chi tiết lỗi ở đây
+    // Ví dụ sử dụng Modal component từ react-native
+    console.log("Hiển thị modal chi tiết lỗi:", failedItems);
+
+    // Tạm thời hiển thị alert với toàn bộ lỗi
+    const detailedMessage = failedItems
+      .map((error, index) => {
+        const rowInfo = error.row ? `Dòng ${error.row}: ` : "";
+        const errorMsg = error.error || error.message || "Lỗi không xác định";
+        const productInfo = error.data?.["Tên sản phẩm"]
+          ? ` (${error.data["Tên sản phẩm"]})`
+          : "";
+        return `${index + 1}. ${rowInfo}${errorMsg}${productInfo}`;
+      })
+      .join("\n\n");
+
+    Alert.alert("Chi tiết lỗi Import", detailedMessage, [
+      { text: "Đóng", style: "cancel" },
+    ]);
   };
 
   // ================= XỬ LÝ XÓA NHIỀU SẢN PHẨM =================

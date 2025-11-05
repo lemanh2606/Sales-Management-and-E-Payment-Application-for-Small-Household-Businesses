@@ -117,13 +117,46 @@ export default function AppNavigator(): JSX.Element {
     <Drawer.Navigator
       initialRouteName="Dashboard"
       drawerContent={(props) => <CustomDrawerContent {...props} />}
-      screenOptions={{
-        headerStyle: { backgroundColor: "#10b981" }, // header xanh lá
+      screenOptions={({ navigation }) => ({
+        headerStyle: {
+          backgroundColor: "#10b981",
+          elevation: 0, // bỏ shadow trên Android
+          shadowOpacity: 0, // bỏ shadow trên iOS
+        },
         headerTintColor: "#ffffff",
-        drawerActiveTintColor: "#10b981", // highlight menu
+        headerTitleStyle: {
+          fontWeight: "700",
+          fontSize: 18,
+        },
+        drawerActiveTintColor: "#10b981",
         drawerInactiveTintColor: "#374151",
         drawerLabelStyle: { fontSize: 15, fontWeight: "600" },
-      }}
+        // QUAN TRỌNG: Tùy chỉnh icon mở drawer
+        headerLeft: ({ tintColor }) => (
+          <TouchableOpacity
+            onPress={() => navigation.toggleDrawer()}
+            style={{
+              marginLeft: 15,
+              padding: 8,
+              borderRadius: 8,
+              backgroundColor: "rgba(255,255,255,0.1)",
+            }}
+          >
+            {/* CÁC LỰA CHỌN ICON ĐẸP HƠN */}
+            {/* Lựa chọn 1: Icon menu hiện đại */}
+            <Ionicons name="grid-outline" size={26} color={tintColor} />
+
+            {/* Lựa chọn 2: Icon menu cổ điển nhưng đẹp */}
+            {/* <Ionicons name="menu-outline" size={28} color={tintColor} /> */}
+
+            {/* Lựa chọn 3: Icon ba chấm dọc */}
+            {/* <Ionicons name="ellipsis-vertical" size={24} color={tintColor} /> */}
+
+            {/* Lựa chọn 4: Icon danh sách */}
+            {/* <Ionicons name="list-outline" size={28} color={tintColor} /> */}
+          </TouchableOpacity>
+        ),
+      })}
     >
       <Drawer.Screen
         name="Dashboard"
@@ -177,11 +210,11 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 16,
+    padding: 5,
     backgroundColor: "#10b981", // xanh lá tươi
     borderBottomLeftRadius: 16,
     borderBottomRightRadius: 16,
-    marginBottom: 8,
+    marginBottom: 0,
   },
   avatar: {
     width: 56,
