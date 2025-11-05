@@ -175,14 +175,34 @@ const TopCustomer = () => {
       title: "Số điện thoại",
       dataIndex: "customerPhone",
       key: "phone",
-      width: 100,
-      render: (phone) => (
-        <Space>
-          <PhoneOutlined style={{ color: "#52c41a" }} />
-          <Text code>{phone}</Text>
-        </Space>
-      ),
+      width: 150,
+      render: (phone) => {
+        // Hàm format kiểu xxxx xxx xxx
+        const formatPhone = (num) => {
+          if (!num) return "—";
+          const cleaned = num.replace(/\D/g, "");
+          if (cleaned.length === 10) {
+            return `${cleaned.slice(0, 4)} ${cleaned.slice(4, 7)} ${cleaned.slice(7)}`;
+          }
+          return num;
+        };
+
+        return (
+          <Space>
+            {phone ? (
+              <Typography.Text code style={{ fontSize: "15px", fontWeight: 600, letterSpacing: "0.5px" }}>
+                {formatPhone(phone)}
+              </Typography.Text>
+            ) : (
+              <Typography.Text type="secondary" style={{ fontSize: "15px" }}>
+                —
+              </Typography.Text>
+            )}
+          </Space>
+        );
+      },
     },
+
     {
       title: "Tổng tiền đã chi",
       dataIndex: "totalAmount",

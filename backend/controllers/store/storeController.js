@@ -532,9 +532,11 @@ const createEmployee = async (req, res) => {
 };
 
 // GET /api/stores/:storeId/employees - Lấy danh sách nhân viên theo store (chỉ manager store xem)
+// Chỉ sửa hàm getEmployeesByStore để hỗ trợ query ?deleted=1 (lấy deleted) hoặc default false (lấy active)
 const getEmployeesByStore = async (req, res) => {
   try {
     const { storeId } = req.params;
+    const { deleted } = req.query;  // Thêm query param ?deleted=1 để lấy nhân viên đã xóa
 
     // Validate store và quyền (đã check qua middleware)
     const store = req.store; // 👈 Dùng req.store từ middleware
@@ -544,9 +546,11 @@ const getEmployeesByStore = async (req, res) => {
       return res.status(403).json({ message: "Bạn không có quyền xem nhân viên cửa hàng này" });
     }
 
-    // Lấy list employee của store, populate user_id nếu cần (name từ User)
+    // Filter với isDeleted dựa trên query (default false)
+    const isDeleted = deleted === "true";
+    
     const employees = (
-      await Employee.find({ store_id: storeId, isDeleted: false })
+      await Employee.find({ store_id: storeId, isDeleted })
         .populate("user_id", "username email phone role")
         .populate("store_id", "name")
         .lean()
@@ -556,7 +560,7 @@ const getEmployeesByStore = async (req, res) => {
       commission_rate: emp.commission_rate ? Number(emp.commission_rate.toString()) : 0,
     }));
 
-    console.log(`Lấy danh sách nhân viên thành công cho cửa hàng ${store.name}`);
+    console.log(`Lấy danh sách nhân viên ${isDeleted ? 'đã xóa' : 'đang làm'} thành công cho cửa hàng ${store.name}`);
     res.json({ message: "Lấy danh sách nhân viên thành công", employees });
   } catch (err) {
     console.error("Lỗi lấy danh sách nhân viên:", err.message);

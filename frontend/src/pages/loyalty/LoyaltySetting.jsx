@@ -180,7 +180,7 @@ export default function LoyaltySetting() {
             <span className="text-3xl font-bold text-gray-800">Cấu Hình Hệ Thống Tích Điểm</span>
           </div>
         }
-        className="shadow-xl border-0 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-100"
+        style={{ border: 0}}
       >
         {loading ? (
           <Spin spinning size="large" tip="Đang tải dữ liệu...">

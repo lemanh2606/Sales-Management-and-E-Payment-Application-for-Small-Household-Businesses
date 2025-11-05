@@ -1,42 +1,14 @@
 // src/pages/report/TaxDeclaration.jsx
 import React, { useState, useEffect } from "react";
-import {
-  Card,
-  Col,
-  Row,
-  Select,
-  DatePicker,
-  InputNumber,
-  Button,
-  Table,
-  Form,
-  Spin,
-  Alert,
-  Space,
-  Modal,
-  message,
-  Dropdown,
-  Menu,
-  Statistic,
-  Typography,
-  Divider,
-  Tooltip,
-} from "antd";
-import {
-  EditOutlined,
-  CopyOutlined,
-  DeleteOutlined,
-  DownloadOutlined,
-  FileExcelOutlined,
-  FilePdfOutlined,
-  InfoCircleOutlined,
-  SyncOutlined,
-} from "@ant-design/icons";
+import { Card, Col, Row,Select, DatePicker, InputNumber, Button, Table, Form, Spin, Alert, Space, Modal, message, Dropdown, Menu, Statistic, Typography, Divider, Tooltip, } from "antd";
+import { EditOutlined, CopyOutlined, DeleteOutlined, DownloadOutlined, FileExcelOutlined, FilePdfOutlined, InfoCircleOutlined, SyncOutlined,} from "@ant-design/icons";
 import axios from "axios";
 import dayjs from "dayjs";
 import "dayjs/locale/vi";
 import readVietnameseNumber from "read-vietnamese-number";
 import Layout from "../../components/Layout";
+import ComponentTaxGuide from "./ComponentTaxGuide";
+import Swal from "sweetalert2";
 
 dayjs.locale("vi");
 
@@ -105,7 +77,12 @@ const TaxDeclaration = () => {
 
       setSystemRevenue(res.data.systemRevenue);
     } catch (err) {
-      setError(err.response?.data?.message || "Lỗi tải preview");
+      Swal.fire({
+        icon: "error",
+        title: "Không xem được bản Xem trước",
+        text: err.response?.data?.message || "Lỗi tải preview.",
+        confirmButtonText: "Ok",
+      });
     } finally {
       setLoading(false);
     }
@@ -120,7 +97,12 @@ const TaxDeclaration = () => {
       const res = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } });
       setDeclarations(res.data.data || []);
     } catch (err) {
-      setError(err.response?.data?.message || "Lỗi tải danh sách tờ khai");
+      Swal.fire({
+        icon: "error",
+        title: "Không thể tải danh sách 😢",
+        text: err.response?.data?.message || "Đã xảy ra lỗi khi tải danh sách tờ khai.",
+        confirmButtonText: "Ok",
+      });
     } finally {
       setLoading(false);
     }
@@ -215,7 +197,12 @@ const TaxDeclaration = () => {
       fetchDeclarations();
     } catch (err) {
       console.error("Lỗi POST/PUT:", err.response?.data);
-      setError(err.response?.data?.message || "Lỗi lưu tờ khai");
+      Swal.fire({
+        icon: "error",
+        title: "Không thể lưu tờ khai",
+        text: err.response?.data?.message || "Đã xảy ra lỗi khi lưu dữ liệu, vui lòng thử lại.",
+        confirmButtonText: "Ok",
+      });
     } finally {
       setLoading(false);
     }
@@ -501,7 +488,6 @@ const TaxDeclaration = () => {
           </Card>
 
           {loading && <Spin tip="Đang xử lý..." style={{ width: "100%", margin: "20px 0" }} />}
-          {error && <Alert message="Lỗi" description={error} type="error" showIcon style={{ marginBottom: 16 }} />}
 
           {/* KÊ KHAI */}
           {systemRevenue !== null && (
@@ -561,98 +547,8 @@ const TaxDeclaration = () => {
                   </Button>
                 </Tooltip>
 
-                {showGuide && (
-                  <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-                    <Col span={24}>
-                      <Card
-                        bordered={false}
-                        style={{
-                          background: "#f7f5f5ff",
-                          borderLeft: "4px solid #1890ff",
-                          boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
-                        }}
-                      >
-                        <Title level={5} style={{ color: "#1890ff" }}>
-                          Hướng dẫn về thuế đối với hộ kinh doanh, cá nhân kinh doanh
-                        </Title>
-
-                        <Paragraph>
-                          Căn cứ theo <Text strong>Luật Quản lý thuế 2019</Text>,
-                          <Text strong>Thông tư 40/2021/TT-BTC</Text> và các văn bản sửa đổi bổ sung đến hiện tại, hộ
-                          kinh doanh, cá nhân kinh doanh được xác định nghĩa vụ thuế dựa trên doanh thu thực tế.
-                        </Paragraph>
-
-                        <Divider />
-
-                        <Paragraph>
-                          <Text strong>1. Ngưỡng doanh thu miễn thuế:</Text>
-                          Nếu doanh thu trong năm dương lịch từ <Text strong>100 triệu đồng/năm</Text> trở xuống thì
-                          <Text strong> không phải nộp</Text> thuế Giá trị gia tăng (GTGT) và thuế Thu nhập cá nhân
-                          (TNCN).
-                        </Paragraph>
-
-                        <Paragraph>
-                          <Text strong>2. Doanh thu tính thuế:</Text> là tổng tiền bán hàng hóa, tiền cung ứng dịch vụ,
-                          hoa hồng, phụ thu, phụ trội mà hộ kinh doanh được hưởng, không phân biệt đã thu được tiền hay
-                          chưa.
-                        </Paragraph>
-
-                        <Paragraph>
-                          <Text strong>3. Mức thuế theo phương pháp khoán (tỷ lệ trên doanh thu):</Text>
-                        </Paragraph>
-
-                        <ul style={{ marginLeft: 24, marginBottom: 16 }}>
-                          <li>
-                            <Text strong>Phân phối, cung cấp hàng hóa:</Text> GTGT <Text code>1%</Text> – TNCN{" "}
-                            <Text code>0,5%</Text>
-                          </li>
-                          <li>
-                            <Text strong>Dịch vụ, xây dựng không bao thầu nguyên vật liệu:</Text> GTGT{" "}
-                            <Text code>5%</Text> – TNCN <Text code>2%</Text>
-                          </li>
-                          <li>
-                            <Text strong>Sản xuất, vận tải, dịch vụ có gắn hàng hóa:</Text> GTGT <Text code>3%</Text> –
-                            TNCN <Text code>1,5%</Text>
-                          </li>
-                          <li>
-                            <Text strong>Hoạt động cho thuê tài sản (nhà, xe, máy móc...):</Text> GTGT{" "}
-                            <Text code>5%</Text> – TNCN <Text code>5%</Text>
-                          </li>
-                          <li>
-                            <Text strong>Ngành nghề khác:</Text> áp dụng theo tỷ lệ tương ứng do cơ quan thuế thông báo.
-                          </li>
-                        </ul>
-
-                        <Divider />
-
-                        <Paragraph>
-                          <Text strong>4. Cách xác định kỳ kê khai thuế:</Text>
-                          Hộ kinh doanh nộp thuế theo <Text underline>tháng, quý hoặc năm</Text> tùy quy mô và yêu cầu
-                          của cơ quan thuế. Trường hợp hộ kinh doanh nộp thuế khoán thì chỉ cần kê khai định kỳ hàng
-                          năm, trừ khi có thay đổi lớn về doanh thu.
-                        </Paragraph>
-
-                        <Paragraph>
-                          <Text strong>5. Nghĩa vụ khác:</Text>
-                          <ul style={{ marginLeft: 24 }}>
-                            <li>Phải có sổ theo dõi doanh thu, hóa đơn (nếu có sử dụng).</li>
-                            <li>Phải đăng ký mã số thuế cá nhân hoặc hộ kinh doanh.</li>
-                            <li>Khi tạm ngừng kinh doanh trên 15 ngày phải thông báo với cơ quan thuế.</li>
-                          </ul>
-                        </Paragraph>
-
-                        <Divider />
-
-                        <Paragraph type="secondary">
-                          <Text italic>
-                            *Lưu ý:* Các mức tỷ lệ thuế có thể thay đổi theo quy định mới của Bộ Tài chính. Cơ quan thuế
-                            sẽ căn cứ tình hình thực tế để ấn định hoặc điều chỉnh tỷ lệ thuế phù hợp.
-                          </Text>
-                        </Paragraph>
-                      </Card>
-                    </Col>
-                  </Row>
-                )}
+                {/* Nút xem thêm về thuế */}
+                {showGuide && <ComponentTaxGuide />}
 
                 <Form.Item>
                   <Space>

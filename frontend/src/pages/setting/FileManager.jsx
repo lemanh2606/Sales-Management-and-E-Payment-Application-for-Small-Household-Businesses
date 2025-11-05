@@ -476,7 +476,7 @@ const FileManager = () => {
               <p className="ant-upload-drag-icon">
                 <InboxOutlined style={{ fontSize: 48, color: "#1890ff" }} />
               </p>
-              <p className="ant-upload-text">Kéo thả file vào đây hoặc nhấn để upload</p>
+              <p className="ant-upload-text">Kéo, thả file vào đây hoặc nhấn để upload</p>
               <p className="ant-upload-hint">Hỗ trợ nhiều file: hình ảnh, PDF, video...</p>
             </Dragger>
           </Card>
