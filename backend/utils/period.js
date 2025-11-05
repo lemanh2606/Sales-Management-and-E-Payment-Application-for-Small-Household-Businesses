@@ -1,4 +1,5 @@
 // utils/period.js (fix periodToRange: thêm case custom với monthFrom/monthTo, tính đầu/cuối tháng UTC)
+//parse theo "YYYY-MM" chứ không phải "MM-YYYY"
 function periodToRange(periodType, periodKey, monthFrom, monthTo) {
   let start, end;
 

@@ -6,6 +6,8 @@ const supplierSchema = new mongoose.Schema(
     phone: { type: String, maxlength: 20 },
     email: { type: String, maxlength: 100 },
     address: { type: String, maxlength: 500 },
+    taxcode: { type: String, maxlength: 50 }, // Mã số thuế
+    notes: { type: String, maxlength: 1000 }, // Ghi chú
     status: { type: String, enum: ["đang hoạt động", "ngừng hoạt động"], default: "đang hoạt động" },
     store_id: { type: mongoose.Schema.Types.ObjectId, ref: "Store", required: true },
     isDeleted: { type: Boolean, default: false } // Xóa mềm

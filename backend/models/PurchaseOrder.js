@@ -1,3 +1,4 @@
+// backend/models/PurchaseOrder.js
 const mongoose = require('mongoose');
 
 const purchaseOrderItemSchema = new mongoose.Schema({

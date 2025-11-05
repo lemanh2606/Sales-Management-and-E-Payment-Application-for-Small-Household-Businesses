@@ -70,17 +70,12 @@ export const getEmployeeById = async (storeId, employeeId) =>
 
 // Cập nhật nhân viên
 export const updateEmployee = async (storeId, employeeId, data) =>
-  (await apiClient.put(`/stores/${storeId}/employees/${employeeId}`, data))
-    .data;
+  (await apiClient.put(`/stores/${storeId}/employees/${employeeId}`, data)).data;
 
 // (Tuỳ backend) Xóa nhân viên
 export const deleteEmployee = async (storeId, employeeId) =>
   (await apiClient.delete(`/stores/${storeId}/employees/${employeeId}`)).data;
 
-// ========================= EXPORT =========================
-
-// Không cần tạo lại instance — chỉ export các hàm.
-// Nếu bạn vẫn muốn export instance cho mục đích đặc biệt, import apiClient từ "@/api"
 export default {
   createStore,
   getStoresByManager,

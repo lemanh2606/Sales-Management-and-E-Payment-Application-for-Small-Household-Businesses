@@ -1,9 +1,11 @@
+// routes/productRouters.js
 const express = require("express");
 const router = express.Router();
 const {
   verifyToken,
   isManager,
   checkStoreAccess,
+  requirePermission,
 } = require("../middlewares/authMiddleware");
 const { uploadProductImage } = require("../utils/cloudinary");
 const {
@@ -16,12 +18,38 @@ const {
   deleteProductImage,
   getProductById,
   getLowStockProducts,
+  importProducts,
+  downloadProductTemplate,
+  exportProducts,
 } = require("../controllers/product/productController");
+const upload = require("../middlewares/upload");
 
-// Multer error handler middleware
+/*
+  GHI CHÚ CHUNG VỀ PHÂN QUYỀN CHO SẢN PHẨM:
+  - Quy ước permission (gợi ý) trong user.menu:
+      * products:create      -> tạo sản phẩm
+      * products:view        -> xem sản phẩm / chi tiết
+      * products:update      -> cập nhật sản phẩm (ngoại trừ giá nếu bạn tách)
+      * products:price       -> cập nhật giá
+      * products:delete      -> xóa sản phẩm
+      * products:image:delete-> xóa ảnh sản phẩm
+      * products:low-stock   -> xem báo cáo tồn (thường manager)
+      * products:search      -> tìm kiếm sản phẩm
+  - Luồng chung khi thao tác theo cửa hàng:
+      1) verifyToken  -> yêu cầu đăng nhập
+      2) checkStoreAccess -> xác định store context (gán req.store, req.storeRole)
+      3) requirePermission(...) -> kiểm tra quyền chi tiết (hỗ trợ cả scoped store:<id>:...)
+  - Một vài route (ví dụ callback công khai của payment) có thể không cần verifyToken. Ở đây tất cả route quản lý sản phẩm yêu cầu verifyToken.
+  - Theo quy tắc: route GET by ID được đặt cuối cùng.
+*/
+
+/*
+  Multer error handler (giữ nguyên)
+  - Nếu Multer gặp lỗi khi upload sẽ trả 400 và message lỗi
+*/
 const handleMulterError = (err, req, res, next) => {
   if (err) {
-    console.error("❌ Multer Error:", err);
+    console.error("Multer Error:", err);
     return res.status(400).json({
       message: "Lỗi upload file",
       error: err.message,
@@ -30,31 +58,158 @@ const handleMulterError = (err, req, res, next) => {
   next();
 };
 
-// ROUTE CỤ THỂ & STATIC TRƯỚC
-router.get("/search", verifyToken, checkStoreAccess, searchProducts); // Search theo tên hoặc SKU
-router.get("/low-stock", verifyToken, isManager, getLowStockProducts); // Low stock (manager only)
-// ROUTE THEO STORE (tiền tố /store)
+/*
+  ROUTE: GET /api/products/template/download
+  - Tải template import Excel/CSV
+  - Query: ?format=excel hoặc ?format=csv
+*/
+router.get("/template/download", verifyToken, downloadProductTemplate);
+
+/*
+  ROUTE: GET /api/products/search
+  - Tìm kiếm sản phẩm theo tên / SKU / barcode...
+  - Middleware: verifyToken -> checkStoreAccess -> requirePermission("products:search")
+  - Lưu ý: checkStoreAccess sẽ dùng query.storeId / query.shopId / req.user.current_store nếu không truyền storeId
+*/
+router.get(
+  "/search",
+  verifyToken,
+  checkStoreAccess,
+  requirePermission("products:search"),
+  searchProducts
+);
+
+/*
+  ROUTE: GET /api/products/low-stock
+  - Lấy danh sách sản phẩm tồn thấp để cảnh báo
+  - Hiện tại giới hạn cho Manager (isManager). Nếu muốn granular, thay bằng requirePermission("products:low-stock")
+*/
+router.get("/low-stock", verifyToken, isManager, getLowStockProducts);
+
+/*
+  ROUTE: POST /api/products/store/:storeId/import
+  - Import sản phẩm từ Excel/CSV
+  - Middleware: verifyToken -> checkStoreAccess -> upload.single("file") -> requirePermission("products:create")
+*/
+router.post(
+  "/store/:storeId/import",
+  verifyToken,
+  checkStoreAccess,
+  upload.single("file"),
+  handleMulterError,
+  requirePermission("products:create"),
+  importProducts
+);
+
+/*
+  ROUTE: POST /api/products/store/:storeId
+  - Tạo sản phẩm mới trong cửa hàng
+  - Middleware: verifyToken -> checkStoreAccess -> requirePermission("products:create")
+  - uploadProductImage.single("image") xử lý upload ảnh (nếu có)
+*/
 router.post(
   "/store/:storeId",
   verifyToken,
+  checkStoreAccess,
   uploadProductImage.single("image"),
   handleMulterError,
+  requirePermission("products:create"),
   createProduct
-); // Tạo sản phẩm trong store
-router.get("/store/:storeId", verifyToken, getProductsByStore); // Lấy sp theo store
-// ROUTE UPDATE CHI TIẾT (có /price trước /:productId)
-router.put("/:productId/price", verifyToken, updateProductPrice); // Update giá
+);
+
+/*
+  ROUTE: GET /api/products/store/:storeId
+  - Lấy danh sách sản phẩm theo store
+  - Middleware: verifyToken -> checkStoreAccess -> requirePermission("products:view")
+*/
+router.get(
+  "/store/:storeId",
+  verifyToken,
+  checkStoreAccess,
+  requirePermission("products:view"),
+  getProductsByStore
+);
+
+/*
+  ROUTE: PUT /api/products/:productId/price
+  - Cập nhật giá sản phẩm
+  - Middleware: verifyToken -> checkStoreAccess -> requirePermission("products:price")
+  - Lưu ý: update giá thường là thao tác nhạy cảm, tách permission riêng cho dễ quản lý
+*/
+router.put(
+  "/:productId/price",
+  verifyToken,
+  checkStoreAccess,
+  requirePermission("products:price"),
+  updateProductPrice
+);
+
+/*
+  ROUTE: PUT /api/products/:productId
+  - Cập nhật thông tin sản phẩm (có thể kèm upload ảnh)
+  - Middleware: verifyToken -> checkStoreAccess -> uploadProductImage -> requirePermission("products:update")
+*/
 router.put(
   "/:productId",
   verifyToken,
+  checkStoreAccess,
   uploadProductImage.single("image"),
   handleMulterError,
+  requirePermission("products:update"),
   updateProduct
-); // Update toàn bộ
-// DELETE
-router.delete("/:productId/image", verifyToken, deleteProductImage); // Xóa ảnh sản phẩm
-router.delete("/:productId", verifyToken, deleteProduct); // Xóa sp
+);
 
-router.get("/:productId", verifyToken, getProductById); // Get by ID RUlE: (LUÔN CUỐI)
+/*
+  ROUTE: DELETE /api/products/:productId/image
+  - Xóa ảnh sản phẩm
+  - Middleware: verifyToken -> checkStoreAccess -> requirePermission("products:image:delete")
+*/
+router.delete(
+  "/:productId/image",
+  verifyToken,
+  checkStoreAccess,
+  requirePermission("products:image:delete"),
+  deleteProductImage
+);
+
+/*
+  ROUTE: DELETE /api/products/:productId
+  - Xóa sản phẩm (soft/hard tùy controller)
+  - Middleware: verifyToken -> checkStoreAccess -> requirePermission("products:delete")
+*/
+router.delete(
+  "/:productId",
+  verifyToken,
+  checkStoreAccess,
+  requirePermission("products:delete"),
+  deleteProduct
+);
+
+/*
+  ROUTE: GET /api/products/:productId
+  - Lấy chi tiết sản phẩm theo ID
+  - Đặt cuối cùng theo rule của bạn
+  - Middleware: verifyToken -> checkStoreAccess -> requirePermission("products:view")
+*/
+router.get(
+  "/:productId",
+  verifyToken,
+  checkStoreAccess,
+  requirePermission("products:view"),
+  getProductById
+);
+
+/*
+  ROUTE: GET /api/products/store/:storeId/export
+  - Export danh sách sản phẩm ra Excel
+  - Middleware: verifyToken -> checkStoreAccess -> requirePermission("products:view")
+*/
+router.get(
+  "/store/:storeId/export",
+  verifyToken,
+  checkStoreAccess,
+  requirePermission("products:view"),
+  exportProducts // Cần implement hàm này trong controller
+);
 
 module.exports = router;

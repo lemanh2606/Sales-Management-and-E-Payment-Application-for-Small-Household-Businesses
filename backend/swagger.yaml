@@ -12,6 +12,7 @@ tags:
   - name: Users
   - name: Stores
   - name: Employees
+  - name: Customers
   - name: Products
   - name: ProductGroups
   - name: Suppliers
@@ -60,6 +61,17 @@ components:
         name: { type: string }
         phone: { type: string }
         role: { type: string }
+
+    Customer:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        phone: { type: string }
+        email: { type: string }
+        address: { type: string }
+        store_id: { type: string }
+        loyaltyPoints: { type: number }
 
     Product:
       type: object
@@ -374,6 +386,138 @@ paths:
               $ref: "#/components/schemas/Employee"
       responses:
         "200": { description: "Updated" }
+
+  # ===== Customers =====
+  /api/customers:
+    post:
+      tags: [Customers]
+      summary: Create new customer
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Customer"
+      responses:
+        "201": { description: "Customer created" }
+
+  /api/customers/search:
+    get:
+      tags: [Customers]
+      summary: Search customers by phone or name
+      parameters:
+        - in: query
+          name: keyword
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: "Search results" }
+
+  /api/customers/store/{storeId}:
+    get:
+      tags: [Customers]
+      summary: Get all customers by store
+      parameters:
+        - in: path
+          name: storeId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: "List of customers" }
+
+  /api/customers/template/download:
+    get:
+      tags: [Customers]
+      summary: Download Excel template for customers import
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: Excel template file
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+
+  /api/customers/store/{storeId}/import:
+    post:
+      tags: [Customers]
+      summary: Import customers from Excel file
+      parameters:
+        - in: path
+          name: storeId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Excel file (.xlsx)
+      responses:
+        "200":
+          description: Import results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        row: { type: integer }
+                        customer: { $ref: "#/components/schemas/Customer" }
+                  failed:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        row: { type: integer }
+                        data: { type: object }
+                        error: { type: string }
+                  total: { type: integer }
+        "400": { description: "Invalid file or data" }
+
+  /api/customers/{id}:
+    put:
+      tags: [Customers]
+      summary: Update customer information
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Customer"
+      responses:
+        "200": { description: "Customer updated" }
+    delete:
+      tags: [Customers]
+      summary: Soft delete customer
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      responses:
+        "204": { description: "Customer deleted" }
+
   # ===== Products =====
   /api/products:
     get:
@@ -463,6 +607,67 @@ paths:
       responses:
         "200": { description: "Low stock products" }
 
+  /api/products/template/download:
+    get:
+      tags: [Products]
+      summary: Download Excel template for products import
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: Excel template file
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+
+  /api/products/store/{storeId}/import:
+    post:
+      tags: [Products]
+      summary: Import products from Excel file
+      parameters:
+        - in: path
+          name: storeId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Excel file (.xlsx)
+      responses:
+        "200":
+          description: Import results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        row: { type: integer }
+                        product: { $ref: "#/components/schemas/Product" }
+                  failed:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        row: { type: integer }
+                        data: { type: object }
+                        error: { type: string }
+                  total: { type: integer }
+        "400": { description: "Invalid file or data" }
+
   # ===== Product Groups =====
   /api/product-groups:
     get:
@@ -528,6 +733,67 @@ paths:
       security: [{ BearerAuth: [] }]
       responses:
         "204": { description: "Deleted" }
+
+  /api/product-groups/template/download:
+    get:
+      tags: [ProductGroups]
+      summary: Download Excel template for product groups import
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: Excel template file
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+
+  /api/product-groups/store/{storeId}/import:
+    post:
+      tags: [ProductGroups]
+      summary: Import product groups from Excel file
+      parameters:
+        - in: path
+          name: storeId
+          required: true
+          schema: { type: string }
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Excel file (.xlsx)
+      responses:
+        "200":
+          description: Import results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        row: { type: integer }
+                        group: { $ref: "#/components/schemas/ProductGroup" }
+                  failed:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        row: { type: integer }
+                        data: { type: object }
+                        error: { type: string }
+                  total: { type: integer }
+        "400": { description: "Invalid file or data" }
 
   # ===== Suppliers =====
   /api/suppliers:

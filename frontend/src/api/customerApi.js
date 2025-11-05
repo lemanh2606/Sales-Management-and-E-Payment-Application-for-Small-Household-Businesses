@@ -1,33 +1,39 @@
-// src/api/customerApi.js
-// Dùng apiClient chung để gọi API khách hàng
 import apiClient from "./apiClient";
 
 /*
   CUSTOMER API
-  - Tìm kiếm, cập nhật, và xóa mềm khách hàng
-  - Tự động thêm token nhờ apiClient interceptor
+  - Tìm kiếm, tạo, cập nhật, xóa mềm khách hàng
+  - apiClient sẽ tự thêm token nếu cấu hình interceptor
 */
 
-// ===================== CUSTOMER ROUTES =====================
+// SEARCH - GET /api/customers/search?query=abc
+export const searchCustomers = async (keyword, limit = 10) =>
+  (
+    await apiClient.get("/customers/search", {
+      params: { query: keyword, limit },
+    })
+  ).data;
 
-//  SEARCH - Tìm kiếm khách hàng theo số điện thoại hoặc tên
-// GET /api/customers/search?keyword=abc
-export const searchCustomers = async (keyword) =>
-  (await apiClient.get("/customers/search", { params: { keyword } })).data;
+// CREATE - POST /api/customers
+export const createCustomer = async (data) =>
+  (await apiClient.post("/customers", data)).data;
 
-//  UPDATE - Cập nhật thông tin khách hàng
-// PUT /api/customers/:id
+// UPDATE - PUT /api/customers/:id
 export const updateCustomer = async (id, data) =>
   (await apiClient.put(`/customers/${id}`, data)).data;
 
-//  SOFT DELETE - Xóa mềm khách hàng (chuyển trạng thái “đã xóa”)
-// DELETE /api/customers/:id
+// SOFT DELETE - DELETE /api/customers/:id
 export const softDeleteCustomer = async (id) =>
   (await apiClient.delete(`/customers/${id}`)).data;
 
-// ===================== EXPORT =====================
+// 🆕 GET BY STORE - GET /api/customers/store/:storeId
+export const getCustomersByStore = async (storeId) =>
+  (await apiClient.get(`/customers/store/${storeId}`)).data;
+
 export default {
   searchCustomers,
+  createCustomer,
   updateCustomer,
   softDeleteCustomer,
+  getCustomersByStore, // 👈 thêm export mới
 };

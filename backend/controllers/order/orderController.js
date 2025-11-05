@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const { Parser } = require("json2csv");
 const { Types } = require("mongoose");
 const PDFDocument = require("pdfkit");
+const logActivity = require("../../utils/logActivity");
 const Order = require("../../models/Order");
 const OrderItem = require("../../models/OrderItem");
 const OrderRefund = require("../../models/OrderRefund");
@@ -15,22 +16,11 @@ const { v2: cloudinary } = require("cloudinary");
 
 const createOrder = async (req, res) => {
   try {
-    const {
-      storeId,
-      employeeId,
-      customerInfo,
-      items,
-      paymentMethod,
-      isVATInvoice,
-      vatInfo,
-      usedPoints,
-    } = req.body; // Thêm usedPoints optional cho giảm giá
+    const { storeId, employeeId, customerInfo, items, paymentMethod, isVATInvoice, vatInfo, usedPoints } = req.body; // Thêm usedPoints optional cho giảm giá
 
     if (!items || items.length === 0) {
       console.log("Lỗi: Không có sản phẩm trong hóa đơn");
-      return res
-        .status(400)
-        .json({ message: "Hóa đơn phải có ít nhất 1 sản phẩm" });
+      return res.status(400).json({ message: "Hóa đơn phải có ít nhất 1 sản phẩm" });
     }
 
     // Validate sản phẩm + tính total (ko trừ stock ở đây, chờ in bill)
@@ -49,11 +39,7 @@ const createOrder = async (req, res) => {
           prod.status !== "Đang kinh doanh"
         ) {
           // Kiểm tra stock đủ trước, nhưng ko trừ - chỉ warn nếu thiếu
-          throw new Error(
-            `Sản phẩm ${
-              prod?.name || "không tồn tại"
-            } hết hàng hoặc không tồn tại trong cửa hàng`
-          );
+          throw new Error(`Sản phẩm ${prod?.name || "không tồn tại"} hết hàng hoặc không tồn tại trong cửa hàng`);
         }
         const priceAtTime = prod.price;
         const subtotal = (parseFloat(priceAtTime) * item.quantity).toFixed(2);
@@ -105,9 +91,7 @@ const createOrder = async (req, res) => {
       }
 
       // Lấy loyalty config store (cho discount usedPoints)
-      const loyalty = await LoyaltySetting.findOne({ storeId }).session(
-        session
-      );
+      const loyalty = await LoyaltySetting.findOne({ storeId }).session(session);
       let discount = 0;
       if (usedPoints && loyalty && loyalty.isActive) {
         // Áp dụng giảm giá nếu active, usedPoints <= loyaltyPoints customer
@@ -117,9 +101,7 @@ const createOrder = async (req, res) => {
           customer.loyaltyPoints -= maxUsed; // Trừ điểm dùng
           await customer.save({ session });
           total -= discount; // Subtract discount từ total
-          console.log(
-            `Giảm giá ${discount} từ ${maxUsed} điểm cho khách ${customer.phone}`
-          );
+          console.log(`Giảm giá ${discount} từ ${maxUsed} điểm cho khách ${customer.phone}`);
         }
       }
 
@@ -161,14 +143,10 @@ const createOrder = async (req, res) => {
         newOrder.paymentRef = paymentRef;
         newOrder.qrExpiry = new Date(Date.now() + 15 * 60 * 1000); // Hết hạn 15 phút
         await newOrder.save({ session });
-        console.log(
-          `Tạo QR pending thành công cho hóa đơn ${newOrder._id}, ref: ${paymentRef}, chờ webhook confirm`
-        );
+        console.log(`Tạo QR pending thành công cho hóa đơn ${newOrder._id}, ref: ${paymentRef}, chờ webhook confirm`);
       } else {
         // Cash: Pending, chờ in bill để paid + trừ stock
-        console.log(
-          `Tạo hóa đơn cash pending thành công cho ${newOrder._id}, chờ in bill`
-        );
+        console.log(`Tạo hóa đơn cash pending thành công cho ${newOrder._id}, chờ in bill`);
       }
 
       await session.commitTransaction(); // Commit tất cả
@@ -183,6 +161,19 @@ const createOrder = async (req, res) => {
           ...orderObj,
           items: validatedItems,
         };
+        // log nhật ký hoạt động
+        await logActivity({
+          user: req.user,
+          store: { _id: storeId },
+          action: "create",
+          entity: "Order",
+          entityId: newOrder._id,
+          entityName: `Đơn hàng #${newOrder._id}`,
+          req,
+          description: `Tạo đơn hàng mới (phương thức ${paymentMethod === "qr" ? "QRCode" : "tiền mặt"}) cho khách ${
+            customerInfo?.name || customerInfo?.phone || "không rõ"
+          }`,
+        });
 
         res.status(201).json({
           message: "Tạo hóa đơn thành công (pending)",
@@ -194,23 +185,17 @@ const createOrder = async (req, res) => {
         });
       } catch (format_err) {
         console.log("Lỗi format response order:", format_err.message); // Log tiếng Việt format error
-        res
-          .status(500)
-          .json({ message: "Lỗi format response: " + format_err.message }); // Return local ko abort
+        res.status(500).json({ message: "Lỗi format response: " + format_err.message }); // Return local ko abort
       }
     } catch (inner_err) {
       await session.abortTransaction(); // Abort chỉ inner error (validate/save)
       session.endSession();
       console.error("Lỗi inner createOrder:", inner_err.message); // Log tiếng Việt inner error
-      res
-        .status(500)
-        .json({ message: "Lỗi tạo hóa đơn nội bộ: " + inner_err.message });
+      res.status(500).json({ message: "Lỗi tạo hóa đơn nội bộ: " + inner_err.message });
     }
   } catch (err) {
     console.error("Lỗi tạo hóa đơn:", err.message); // Log tiếng Việt outer error
-    res
-      .status(500)
-      .json({ message: "Lỗi server khi tạo hóa đơn: " + err.message });
+    res.status(500).json({ message: "Lỗi server khi tạo hóa đơn: " + err.message });
   }
 };
 
@@ -219,14 +204,8 @@ const setPaidCash = async (req, res) => {
   try {
     const { orderId: mongoId } = req.params;
     const order = await Order.findById(mongoId);
-    if (
-      !order ||
-      order.paymentMethod !== "cash" ||
-      order.status !== "pending"
-    ) {
-      return res
-        .status(400)
-        .json({ message: "Hóa đơn cash không hợp lệ cho set paid" });
+    if (!order || order.paymentMethod !== "cash" || order.status !== "pending") {
+      return res.status(400).json({ message: "Hóa đơn cash không hợp lệ cho set paid" });
     }
     order.status = "paid";
     await order.save();
@@ -244,9 +223,19 @@ const setPaidCash = async (req, res) => {
         `🔔 [SOCKET] Gửi thông báo: Thanh toán thành công, số tiền: (${order.totalAmount}đ) - Mã đơn hàng: ${order._id}`
       );
     }
-    console.log(
-      `Set paid cash thành công cho hóa đơn ${mongoId}, sẵn sàng in bill`
-    );
+    // log nhật ký hoạt động
+    await logActivity({
+      user: req.user,
+      store: { _id: order.storeId },
+      action: "update",
+      entity: "Order",
+      entityId: order._id,
+      entityName: `Đơn hàng #${order._id}`,
+      req,
+      description: `Xác nhận thanh toán tiền mặt cho đơn hàng #${order._id}, tổng tiền ${order.totalAmount}đ`,
+    });
+
+    console.log(`Set paid cash thành công cho hóa đơn ${mongoId}, sẵn sàng in bill`);
     res.json({
       message: "Xác nhận thanh toán cash thành công, sẵn sàng in hóa đơn",
     });
@@ -269,9 +258,7 @@ const printBill = async (req, res) => {
 
     if (!order || order.status !== "paid") {
       console.log("Hóa đơn chưa paid, không thể in bill:", mongoId);
-      return res
-        .status(400)
-        .json({ message: "Hóa đơn chưa thanh toán, không thể in" });
+      return res.status(400).json({ message: "Hóa đơn chưa thanh toán, không thể in" });
     }
 
     // Di chuyển items ra ngoài session, populate cho bill (read only, ko cần session)
@@ -285,20 +272,13 @@ const printBill = async (req, res) => {
     // Lấy loyalty config store (cho earnedPoints khi in bill)
     const loyalty = await LoyaltySetting.findOne({ storeId: order.storeId });
     let earnedPoints = 0;
-    if (
-      isFirstPrint &&
-      loyalty &&
-      loyalty.isActive &&
-      order.totalAmount >= loyalty.minOrderValue
-    ) {
+    if (isFirstPrint && loyalty && loyalty.isActive && order.totalAmount >= loyalty.minOrderValue) {
       earnedPoints = parseFloat(order.totalAmount) * loyalty.pointsPerVND; // Tích điểm = total * tỉ lệ
       // Cộng điểm vào customer (atomic session)
       const session = await mongoose.startSession();
       session.startTransaction();
       try {
-        const customer = await Customer.findById(order.customer).session(
-          session
-        );
+        const customer = await Customer.findById(order.customer).session(session);
         if (customer) {
           // 🔢 Chuyển đổi và cộng dồn tổng chi tiêu (Decimal128 → float)
           const prevSpent = parseFloat(customer.totalSpent?.toString() || 0);
@@ -309,19 +289,14 @@ const printBill = async (req, res) => {
           const roundedEarnedPoints = Math.floor(earnedPoints);
 
           // 💾 Cập nhật dữ liệu khách hàng
-          customer.loyaltyPoints =
-            (customer.loyaltyPoints || 0) + roundedEarnedPoints; // 🎁 Cộng điểm mới (làm tròn)
-          customer.totalSpent = mongoose.Types.Decimal128.fromString(
-            newSpent.toFixed(2)
-          ); // 💰 Cập nhật tổng chi tiêu chính xác 2 số lẻ
+          customer.loyaltyPoints = (customer.loyaltyPoints || 0) + roundedEarnedPoints; // 🎁 Cộng điểm mới (làm tròn)
+          customer.totalSpent = mongoose.Types.Decimal128.fromString(newSpent.toFixed(2)); // 💰 Cập nhật tổng chi tiêu chính xác 2 số lẻ
           customer.totalOrders = (customer.totalOrders || 0) + 1; // 🛒 +1 đơn hàng
 
           await customer.save({ session });
 
           console.log(
-            `[LOYALTY] +${roundedEarnedPoints} điểm cho khách ${
-              customer.phone
-            } | Tổng điểm: ${
+            `[LOYALTY] +${roundedEarnedPoints} điểm cho khách ${customer.phone} | Tổng điểm: ${
               customer.loyaltyPoints
             } | Tổng chi tiêu: ${newSpent.toLocaleString()}đ`
           );
@@ -335,11 +310,7 @@ const printBill = async (req, res) => {
         throw new Error("Lỗi cộng điểm khi in bill: " + err.message);
       }
     } else if (isDuplicate) {
-      console.log(
-        `In hóa đơn duplicate lần ${
-          order.printCount + 1
-        }, không trừ stock/cộng điểm cho ${mongoId}`
-      );
+      console.log(`In hóa đơn duplicate lần ${order.printCount + 1}, không trừ stock/cộng điểm cho ${mongoId}`);
     }
 
     // Trừ stock chỉ lần đầu (atomic session)
@@ -349,15 +320,11 @@ const printBill = async (req, res) => {
       try {
         for (let item of items) {
           // Dùng items từ ngoài, chỉ trừ stock
-          const prod = await Product.findById(item.productId._id).session(
-            session
-          ); // Ref _id sau populate
+          const prod = await Product.findById(item.productId._id).session(session); // Ref _id sau populate
           if (prod) {
             prod.stock_quantity -= item.quantity; // Trừ stock thật
             await prod.save({ session });
-            console.log(
-              `Trừ stock khi in bill thành công cho ${prod.name}: -${item.quantity}`
-            );
+            console.log(`Trừ stock khi in bill thành công cho ${prod.name}: -${item.quantity}`);
           }
         }
         await session.commitTransaction();
@@ -374,25 +341,19 @@ const printBill = async (req, res) => {
     bill += `ID Hóa đơn: ${order._id}\n`;
     bill += `Cửa hàng: ${order.storeId?.name || "Cửa hàng mặc định"}\n`;
     bill += `Nhân viên: ${order.employeeId?.fullName || "N/A"}\n`;
-    bill += `Khách hàng: ${order.customer?.name || "N/A"} - ${
-      order.customer?.phone || ""
-    }\n`; // Populate từ customer ref
+    bill += `Khách hàng: ${order.customer?.name || "N/A"} - ${order.customer?.phone || ""}\n`; // Populate từ customer ref
     bill += `Ngày: ${new Date(order.createdAt).toLocaleString("vi-VN")}\n`;
     bill += `Ngày in: ${new Date().toLocaleString("vi-VN")}\n`;
-    if (isDuplicate)
-      bill += `(Bản sao hóa đơn - lần in ${order.printCount + 1})\n`; // Note duplicate
+    if (isDuplicate) bill += `(Bản sao hóa đơn - lần in ${order.printCount + 1})\n`; // Note duplicate
     bill += `\nCHI TIẾT SẢN PHẨM:\n`;
     items.forEach((item) => {
-      bill += `- ${item.productId?.name || "Sản phẩm"} (${
-        item.productId?.sku || "N/A"
-      }): ${item.quantity} x ${item.priceAtTime} = ${item.subtotal} VND\n`;
+      bill += `- ${item.productId?.name || "Sản phẩm"} (${item.productId?.sku || "N/A"}): ${item.quantity} x ${
+        item.priceAtTime
+      } = ${item.subtotal} VND\n`;
     });
     bill += `\nTỔNG TIỀN: ${order.totalAmount.toString()} VND\n`; // toString() cho Decimal128 clean
-    bill += `Phương thức: ${
-      order.paymentMethod === "cash" ? "TIỀN MẶT" : "QR CODE"
-    }\n`; // Rõ ràng hơn cho bill
-    if (earnedPoints > 0)
-      bill += `Điểm tích lũy lần này: ${earnedPoints.toFixed(0)} điểm\n`; // Thêm điểm tích nếu có
+    bill += `Phương thức: ${order.paymentMethod === "cash" ? "TIỀN MẶT" : "QR CODE"}\n`; // Rõ ràng hơn cho bill
+    if (earnedPoints > 0) bill += `Điểm tích lũy lần này: ${earnedPoints.toFixed(0)} điểm\n`; // Thêm điểm tích nếu có
     bill += `Trạng thái: Đã thanh toán\n`;
     bill += `=== CẢM ƠN QUÝ KHÁCH! ===\n`;
 
@@ -406,12 +367,8 @@ const printBill = async (req, res) => {
       { new: true } // Lấy bản mới nhất
     );
 
-    const logMsg = isDuplicate
-      ? "In hóa đơn BẢN SAO thành công"
-      : "In hóa đơn thành công, đã trừ stock";
-    console.log(
-      `${logMsg} cho ${order._id}, Số lần in hiện tại: ${updatedOrder.printCount}`
-    );
+    const logMsg = isDuplicate ? "In hóa đơn BẢN SAO thành công" : "In hóa đơn thành công, đã trừ stock";
+    console.log(`${logMsg} cho ${order._id}, Số lần in hiện tại: ${updatedOrder.printCount}`);
     res.json({
       message: `${logMsg}, printCount: ${updatedOrder.printCount}`,
       bill: bill,
@@ -419,13 +376,23 @@ const printBill = async (req, res) => {
     });
   } catch (err) {
     console.error("Lỗi in hóa đơn:", err.message);
-    res
-      .status(500)
-      .json({ message: "Lỗi server khi in hóa đơn: " + err.message });
+    res.status(500).json({ message: "Lỗi server khi in hóa đơn: " + err.message });
   }
 };
 
-const vietqrReturn = (req, res) => {
+const vietqrReturn = async (req, res) => {
+  // log hoạt động
+  await logActivity({
+    user: req.user || { _id: null, username: "guest" },
+    store: { _id: req.query?.storeId || null },
+    action: "update",
+    entity: "Order",
+    entityId: req.query?.orderCode || null,
+    entityName: `Đơn hàng #${req.query?.orderCode || "unknown"}`,
+    req,
+    description: `Thanh toán VietQR thành công, số tiền ${req.query?.amount || "?"}đ`,
+  });
+
   console.log("✅ Người dùng quay lại sau khi thanh toán thành công");
   return res.status(200).json({
     message: "Thanh toán thành công! Cảm ơn bạn đã mua hàng.",
@@ -433,7 +400,19 @@ const vietqrReturn = (req, res) => {
   });
 };
 
-const vietqrCancel = (req, res) => {
+const vietqrCancel = async (req, res) => {
+  // log hoạt động
+  await logActivity({
+    user: req.user || { _id: null, username: "guest" },
+    store: { _id: req.query?.storeId || null },
+    action: "delete",
+    entity: "Order",
+    entityId: req.query?.orderCode || null,
+    entityName: `Đơn hàng #${req.query?.orderCode || "unknown"}`,
+    req,
+    description: `Hủy thanh toán VietQR cho đơn hàng #${req.query?.orderCode || "unknown"}`,
+  });
+
   console.log("❌ Người dùng hủy thanh toán hoặc lỗi");
   return res.status(400).json({
     message: "Thanh toán bị hủy hoặc không thành công.",
@@ -488,27 +467,19 @@ const refundOrder = async (req, res) => {
 
     // Kiểm tra nhân viên
     const employee = await Employee.findById(employeeId);
-    if (!employee)
-      return res.status(400).json({ message: "Nhân viên không tồn tại" });
+    if (!employee) return res.status(400).json({ message: "Nhân viên không tồn tại" });
 
     // Kiểm tra đơn hàng
-    const order = await Order.findById(mongoId).populate(
-      "employeeId",
-      "fullName"
-    );
-    if (!order)
-      return res.status(404).json({ message: "Không tìm thấy đơn hàng" });
-    if (order.status !== "paid")
-      return res.status(400).json({ message: "Chỉ hoàn đơn đã thanh toán" });
+    const order = await Order.findById(mongoId).populate("employeeId", "fullName");
+    if (!order) return res.status(404).json({ message: "Không tìm thấy đơn hàng" });
+    if (order.status !== "paid") return res.status(400).json({ message: "Chỉ hoàn đơn đã thanh toán" });
 
     const files = req.files || []; // Files từ middleware upload.array("files", 5)
     const evidenceMedia = []; // Mảng media upload Cloudinary
 
     // Upload lần lượt từng file lên Cloudinary (dùng Promise để đợi xong)
     for (const file of files) {
-      const resourceType = file.mimetype.startsWith("video")
-        ? "video"
-        : "image"; // Xác định type image/video
+      const resourceType = file.mimetype.startsWith("video") ? "video" : "image"; // Xác định type image/video
 
       const result = await new Promise((resolve, reject) => {
         const uploadStream = cloudinary.uploader.upload_stream(
@@ -547,24 +518,17 @@ const refundOrder = async (req, res) => {
     await order.save(); // Save DB
 
     // Cộng lại stock từ OrderItem (query items thay vì order.items undefined)
-    const items = await OrderItem.find({ orderId: mongoId }).populate(
-      "productId",
-      "name"
-    ); // Query OrderItem + populate product name cho log
+    const items = await OrderItem.find({ orderId: mongoId }).populate("productId", "name"); // Query OrderItem + populate product name cho log
     const session = await mongoose.startSession(); // Session atomic cộng stock
     session.startTransaction();
     try {
       for (const item of items) {
         // Loop items từ OrderItem
-        const prod = await Product.findById(item.productId._id).session(
-          session
-        ); // Ref productId sau populate
+        const prod = await Product.findById(item.productId._id).session(session); // Ref productId sau populate
         if (prod) {
           prod.stock_quantity += item.quantity; // Cộng stock lại (inc positive)
           await prod.save({ session });
-          console.log(
-            `Cộng stock hoàn hàng thành công cho ${prod.name}: +${item.quantity}`
-          );
+          console.log(`Cộng stock hoàn hàng thành công cho ${prod.name}: +${item.quantity}`);
         }
       }
       await session.commitTransaction(); // Commit atomic
@@ -575,6 +539,19 @@ const refundOrder = async (req, res) => {
       console.error("Lỗi cộng stock hoàn hàng:", stock_err.message);
       throw new Error("Lỗi cộng stock: " + stock_err.message);
     }
+    // log nhật ký hoạt động
+    await logActivity({
+      user: req.user,
+      store: { _id: order.storeId },
+      action: "update",
+      entity: "OrderRefund",
+      entityId: refund._id,
+      entityName: `Hoàn hàng đơn #${order._id}`,
+      req,
+      description: `Hoàn đơn hàng #${order._id} với lý do: "${refundReason}". Tổng số sản phẩm hoàn: ${
+        items?.length || 0
+      }`,
+    });
 
     res.status(200).json({
       message: "Hoàn hàng thành công (nội bộ)",
@@ -587,10 +564,29 @@ const refundOrder = async (req, res) => {
   }
 };
 
-// GET /api/orders/top-products - Top sản phẩm bán chạy (sum quantity/sales từ OrderItem, filter paid + range/date/store)
+// GET http://localhost:9999/api/orders/top-products?limit=5&range=thisYear&storeId=68f8f19a4d723cad0bda9fa5
+//  Top sản phẩm bán chạy (sum quantity/sales từ OrderItem, filter paid + range/date/store)
 const getTopSellingProducts = async (req, res) => {
   try {
-    const { limit = 10, storeId, range, dateFrom, dateTo } = req.query; // Params: limit, storeId, range quick/custom date
+    const { limit = 10, storeId, range, dateFrom, dateTo } = req.query; // nếu ko có limit thì mặc định lấy top 10 sản phẩm
+    // Nếu không có range và không có dateFrom/dateTo thì báo lỗi
+    if (!range && !dateFrom && !dateTo) {
+      return res.status(400).json({
+        success: false,
+        message: "Thiếu tham số range hoặc khoảng thời gian (today/yesterday/thisWeek/thisMonth/thisYear)",
+      });
+    }
+    // Tự lấy storeId từ user nếu không truyền query
+    let finalStoreId = storeId;
+    if (!finalStoreId && req.user?.storeId) {
+      finalStoreId = req.user.storeId;
+    }
+    // Nếu vẫn không có storeId thì báo lỗi (tránh leak toàn bộ data)
+    if (!finalStoreId) {
+      return res.status(400).json({
+        message: "Thiếu storeId, không thể lấy top sản phẩm.",
+      });
+    }
     // Xử lý date range
     let matchDate = {};
     const now = new Date();
@@ -701,55 +697,107 @@ const getTopSellingProducts = async (req, res) => {
     });
   } catch (err) {
     console.error("Lỗi top selling products:", err.message);
-    res
-      .status(500)
-      .json({ message: "Lỗi server khi lấy top sản phẩm bán chạy" });
+    res.status(500).json({ message: "Lỗi server khi lấy top sản phẩm bán chạy" });
   }
 };
 
 //api/orders/top-customers?limit=5&range=thisMonth&storeId=68e81dbffae46c6d9fe2e895
 const getTopFrequentCustomers = async (req, res) => {
   try {
-    const { limit = 10 } = req.query;
+    const { limit = 10, storeId, range } = req.query;
 
-    // Aggregate top khách hàng theo tổng tiền và số đơn (group by customer ref)
+    if (!storeId) {
+      return res.status(400).json({ message: "Thiếu storeId" });
+    }
+
+    // 🔹 Xác định khoảng thời gian theo range
+    const now = new Date();
+    let matchDate = {};
+
+    switch (range) {
+      case "thisWeek": {
+        const currentDay = now.getDay(); // 0 (CN) -> 6 (T7)
+        const diffToMonday = currentDay === 0 ? 6 : currentDay - 1;
+        const monday = new Date(now);
+        monday.setDate(now.getDate() - diffToMonday);
+        matchDate = { $gte: new Date(monday.setHours(0, 0, 0, 0)) };
+        break;
+      }
+
+      case "thisYear": {
+        const yearStart = new Date(now.getFullYear(), 0, 1);
+        matchDate = { $gte: new Date(yearStart.setHours(0, 0, 0, 0)) };
+        break;
+      }
+
+      case "thisMonth":
+      default: {
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        matchDate = { $gte: new Date(monthStart.setHours(0, 0, 0, 0)) };
+        break;
+      }
+    }
+
+    // 🔹 Lọc theo cửa hàng + đơn đã thanh toán + thời gian
+    const matchStage = {
+      status: "paid",
+      storeId: new mongoose.Types.ObjectId(storeId),
+      createdAt: matchDate,
+    };
+
+    // 🔹 Aggregate pipeline
     const topCustomers = await Order.aggregate([
-      { $match: { status: "paid" } }, // Chỉ order đã thanh toán
+      { $match: matchStage },
+
+      // Gom nhóm theo customer ref
       {
         $group: {
-          _id: "$customer", // Group by customer ref thay customerInfo.phone
-          totalAmount: { $sum: "$totalAmount" }, // Tổng tiền (Decimal128 sum)
-          orderCount: { $sum: 1 }, // Số đơn hàng
-          latestOrder: { $max: "$createdAt" }, // Order mới nhất
+          _id: "$customer",
+          totalAmount: { $sum: "$totalAmount" },
+          orderCount: { $sum: 1 },
+          latestOrder: { $max: "$createdAt" },
         },
       },
-      { $sort: { totalAmount: -1 } }, // Sắp xếp theo tổng tiền giảm dần
-      { $limit: parseInt(limit) }, // Limit số lượng
+
+      { $sort: { totalAmount: -1 } },
+      { $limit: parseInt(limit) },
+
+      // Join sang bảng customers
       {
         $lookup: {
-          // Populate customer info từ ref
           from: "customers",
           localField: "_id",
           foreignField: "_id",
           as: "customer",
         },
       },
-      { $unwind: "$customer" }, // Unwind array customer
-      { $match: { "customer.isDeleted": { $ne: true } } }, // Lọc customer active
+      { $unwind: "$customer" },
+
+      // Lọc khách đã xóa
+      { $match: { "customer.isDeleted": { $ne: true } } },
+
+      // 🔸 Trả nhiều field hơn để FE dùng
       {
         $project: {
-          // Project fields cần
+          customerId: "$customer._id",
           customerName: "$customer.name",
           customerPhone: "$customer.phone",
-          totalAmount: 1,
-          orderCount: 1,
+          address: "$customer.address",
+          note: "$customer.note",
+          loyaltyPoints: "$customer.loyaltyPoints",
+          totalSpentAllTime: "$customer.totalSpent",
+          totalOrdersAllTime: "$customer.totalOrders",
+          totalAmount: 1, // trong khoảng range được chọn
+          orderCount: 1, // trong khoảng range được chọn
           latestOrder: 1,
         },
       },
     ]);
 
-    console.log("Lấy top khách hàng thành công, limit:", limit);
-    res.json({ message: "Top khách hàng thường xuyên", data: topCustomers });
+    res.json({
+      message: `Top khách hàng thường xuyên (${range || "thisMonth"})`,
+      data: topCustomers,
+    });
   } catch (err) {
     console.error("Lỗi top khách hàng:", err.message);
     res.status(500).json({ message: "Lỗi server khi lấy top khách hàng" });
@@ -759,14 +807,7 @@ const getTopFrequentCustomers = async (req, res) => {
 // GET /api/orders/top-products/export - Export top sản phẩm bán chạy ra CSV hoặc PDF (params giống getTopSellingProducts + format='csv' or 'pdf')
 const exportTopSellingProducts = async (req, res) => {
   try {
-    const {
-      limit = 10,
-      storeId,
-      range,
-      dateFrom,
-      dateTo,
-      format = "csv",
-    } = req.query;
+    const { limit = 10, storeId, range, dateFrom, dateTo, format = "csv" } = req.query;
     // Xử lý date range (giống getTopSellingProducts)
     let matchDate = {};
     const now = new Date();
@@ -878,13 +919,7 @@ const exportTopSellingProducts = async (req, res) => {
 
     if (format === "csv") {
       // Convert data sang CSV string với json2csv
-      const fields = [
-        "productName",
-        "productSku",
-        "totalQuantity",
-        "totalSales",
-        "countOrders",
-      ]; // Fields CSV
+      const fields = ["productName", "productSku", "totalQuantity", "totalSales", "countOrders"]; // Fields CSV
       const csv = new Parser({ fields }).parse(topProducts); // Parse data sang CSV
       res.header("Content-Type", "text/csv"); // Set header CSV
       res.attachment("top-selling-products.csv"); // Tên file download
@@ -893,20 +928,13 @@ const exportTopSellingProducts = async (req, res) => {
       // Generate PDF với pdfkit (table top products)
       const doc = new PDFDocument();
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader(
-        "Content-Disposition",
-        "attachment; filename=top-selling-products.pdf"
-      );
+      res.setHeader("Content-Disposition", "attachment; filename=top-selling-products.pdf");
       doc.pipe(res); // Pipe PDF stream vào response
 
       // Header PDF
-      doc
-        .fontSize(20)
-        .text("Báo cáo Top Sản phẩm Bán chạy", { align: "center" });
+      doc.fontSize(20).text("Báo cáo Top Sản phẩm Bán chạy", { align: "center" });
       doc.moveDown();
-      doc
-        .fontSize(12)
-        .text(`Thời gian: ${new Date().toLocaleDateString("vi-VN")}`);
+      doc.fontSize(12).text(`Thời gian: ${new Date().toLocaleDateString("vi-VN")}`);
       doc.moveDown(0.5);
 
       // Table header
@@ -939,9 +967,7 @@ const exportTopSellingProducts = async (req, res) => {
     }
   } catch (err) {
     console.error("Lỗi top selling products:", err.message);
-    res
-      .status(500)
-      .json({ message: "Lỗi server khi lấy top sản phẩm bán chạy" });
+    res.status(500).json({ message: "Lỗi server khi lấy top sản phẩm bán chạy" });
   }
 };
 
