@@ -217,88 +217,32 @@ export const uploadProductImage = async (
  */
 export const importProducts = async (
     storeId: string,
-    file: any
+    file: { uri: string; name?: string; type?: string }
 ): Promise<ImportResponse> => {
-    if (!storeId) {
-        throw new Error("Thiếu storeId khi import sản phẩm");
-    }
+    if (!storeId) throw new Error("Thiếu storeId khi import sản phẩm");
+    if (!file?.uri) throw new Error("Vui lòng chọn file để import");
 
-    if (!file || !file.uri) {
-        throw new Error("Vui lòng chọn file để import");
-    }
+    const formData = new FormData();
+    formData.append("file", {
+        uri: file.uri,
+        name: file.name || "products_import.xlsx",
+        type: file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    } as any);
 
-    console.log('📤 importProducts Expo File called:', {
-        storeId,
-        fileUri: file.uri,
-        fileName: file.name
-    });
-
-    try {
-        // Tạo File object từ uri
-        const expoFile = new File(file.uri);
-
-        // Kiểm tra file có tồn tại không - SỬA: exists là property, không phải method
-        if (!expoFile.exists) {
-            throw new Error('File không tồn tại hoặc không thể truy cập');
+    const { data } = await apiClient.post<ImportResponse>(
+        `/products/store/${storeId}/import`,
+        formData,
+        {
+            headers: {
+                "Content-Type": "multipart/form-data",
+            },
+            timeout: 120000, // Tăng timeout lên 2 phút
         }
+    );
 
-        console.log('✅ File exists, using Expo File object');
-
-        // SỬA: Lấy auth token từ apiClient hoặc storage, không dùng hook
-        const token = await getAuthToken(); // Sử dụng hàm helper
-
-
-        // Sử dụng expo/fetch với File object làm body
-        const response = await fetch(
-            `${apiClient.defaults.baseURL}/products/store/${storeId}/import`,
-            {
-                method: 'POST',
-                body: expoFile, // Truyền trực tiếp File object
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': file.mimeType || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                    'X-File-Name': encodeURIComponent(file.name || 'products_import.xlsx'),
-                    'X-Store-ID': storeId,
-                },
-            }
-        );
-
-        console.log('📦 Fetch response status:', response.status);
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error('❌ Server error:', errorText);
-            throw new Error(`Server error: ${response.status} - ${errorText}`);
-        }
-
-        const responseData = await response.json();
-        console.log('✅ importProducts success:', responseData);
-        return responseData;
-
-    } catch (error: any) {
-        console.error('❌ importProducts error:', error);
-        throw error;
-    }
+    return data;
 };
-// Thêm hàm helper để lấy auth token
-const getAuthToken = async (): Promise<string> => {
-    try {
-        // Cách 1: Lấy từ AsyncStorage
-        const AsyncStorage = await import('@react-native-async-storage/async-storage');
-        const token = await AsyncStorage.default.getItem('token');
-        console.log("token:", token)
-        return token || '';
 
-        // Cách 2: Lấy từ apiClient nếu có
-        // return apiClient.defaults.headers.common['Authorization']?.replace('Bearer ', '') || '';
-
-        // Cách 3: Lấy từ global state nếu có
-        // return globalAuthState.token || '';
-    } catch (error) {
-        console.error('Error getting auth token:', error);
-        return '';
-    }
-};
 /**
  * Download template import sản phẩm
  */
