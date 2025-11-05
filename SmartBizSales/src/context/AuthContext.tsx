@@ -1,12 +1,11 @@
 /**
- * 📁 File: src/context/AuthContext.tsx
+ * File: src/context/AuthContext.tsx
  * ------------------------------------------------------
- * Chức năng:
- * - Quản lý trạng thái xác thực: user, token, currentStore
- * - Lưu/đọc token, user, store vào AsyncStorage
- * - Gắn Authorization header cho apiClient khi có token
- * - Tự động refresh token khi gặp 401
- * - Cung cấp login / logout / setCurrentStore / setUser cho toàn app
+ * Quản lý toàn bộ trạng thái đăng nhập và xác thực trong app
+ * - Lưu trữ thông tin user, token, cửa hàng hiện tại
+ * - Tự động lưu và khôi phục trạng thái đăng nhập từ bộ nhớ
+ * - Xử lý tự động làm mới token khi hết hạn
+ * - Cung cấp các hàm đăng nhập, đăng xuất, cập nhật thông tin
  * ------------------------------------------------------
  */
 
@@ -22,79 +21,84 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { apiClient, userApi, storeApi } from "../api";
 import { User } from "../type/user";
 import { Store } from "../type/store";
-import { navigate } from "../navigation/RootNavigation";
+import { navigate, NavigationService } from "../navigation/RootNavigation";
 
-// Keys lưu trên device
+// Tên key để lưu trữ dữ liệu trên thiết bị
 const TOKEN_KEY = "token";
 const USER_KEY = "user";
 const STORE_KEY = "currentStore";
 
-// ------------------------------
-// Kiểu dữ liệu context
-// ------------------------------
+// Định nghĩa kiểu dữ liệu cho context
 export type AuthContextValue = {
   user: User | null;
   token: string | null;
   currentStore: Store | null;
-  loading: boolean;
+  loading: boolean; // Trạng thái loading cho các tác vụ (giữ nguyên để tương thích)
+  isLoading: boolean; // Trạng thái loading khi khởi tạo kiểm tra đăng nhập
   login: (userData: User, tokenData: string) => Promise<void>;
   logout: () => Promise<void>;
   setCurrentStore: (store: Store | null) => Promise<void>;
-  setUser: (user: User | null) => Promise<void>; // <- thêm setUser
+  setUser: (user: User | null) => Promise<void>;
 };
 
-// Tạo context với giá trị mặc định
+// Tạo context với giá trị mặc định ban đầu
 const AuthContext = createContext<AuthContextValue>({
   user: null,
   token: null,
   currentStore: null,
   loading: true,
+  isLoading: true,
   login: async () => {},
   logout: async () => {},
   setCurrentStore: async () => {},
   setUser: async () => {},
 });
 
-// ------------------------------
-// Provider component
-// ------------------------------
+// Component Provider bao bọc toàn bộ app
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, _setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [currentStore, setCurrentStore] = useState<Store | null>(null);
+
+  // Trạng thái loading cho các tác vụ (giữ nguyên để không ảnh hưởng code cũ)
   const [loading, setLoading] = useState<boolean>(true);
+
+  // Trạng thái loading khi khởi tạo - dùng để hiển thị màn hình chờ
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   const isRefreshingRef = useRef<boolean>(false);
 
-  // ------------------------------
-  // Khởi tạo: đọc dữ liệu từ AsyncStorage
-  // ------------------------------
+  // Khởi tạo: kiểm tra thông tin đăng nhập đã lưu trước đó
   useEffect(() => {
     const initAuth = async () => {
       try {
+        // Bắt đầu trạng thái loading
+        setIsLoading(true);
+
+        // Đọc tất cả dữ liệu đã lưu từ thiết bị
         const [storedToken, storedUser, storedStore] = await Promise.all([
           AsyncStorage.getItem(TOKEN_KEY),
           AsyncStorage.getItem(USER_KEY),
           AsyncStorage.getItem(STORE_KEY),
         ]);
+
+        // Khôi phục thông tin nếu có
         if (storedUser) _setUser(JSON.parse(storedUser) as User);
         if (storedToken) setToken(storedToken);
         if (storedStore) setCurrentStore(JSON.parse(storedStore) as Store);
-      } catch (e) {
-        console.warn(
-          "Lỗi khi đọc thông tin đăng nhập:",
-          (e as Error)?.message || e
-        );
+      } catch (error) {
+        console.warn("Lỗi khi đọc thông tin đăng nhập:", error);
       } finally {
+        // Kết thúc trạng thái loading dù có lỗi hay không
+        setIsLoading(false);
         setLoading(false);
       }
     };
+
     initAuth();
   }, []);
 
-  // ------------------------------
-  // Khi token thay đổi: cập nhật header Authorization
-  // ------------------------------
+  // Tự động cập nhật header Authorization khi token thay đổi
   useEffect(() => {
     if (token) {
       apiClient.defaults.headers = apiClient.defaults.headers || {};
@@ -108,9 +112,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [token]);
 
-  // ------------------------------
-  // Interceptor response: tự động refresh token khi gặp 401
-  // ------------------------------
+  // Xử lý tự động làm mới token khi nhận lỗi 401 (Unauthorized)
   useEffect(() => {
     const interceptor = apiClient.interceptors.response.use(
       (res) => res,
@@ -118,6 +120,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const originalRequest = (error?.config ?? {}) as any;
         const status = error?.response?.status;
 
+        // Nếu gặp lỗi 401 và chưa thử refresh token
         if (
           status === 401 &&
           originalRequest &&
@@ -126,26 +129,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         ) {
           originalRequest._retry = true;
           isRefreshingRef.current = true;
+
           try {
             const data = await userApi.refreshToken();
             const newToken = (data as any)?.token;
+
             if (newToken) {
+              // Lưu token mới và thử lại request
               await AsyncStorage.setItem(TOKEN_KEY, newToken);
               setToken(newToken);
               apiClient.defaults.headers.common[
                 "Authorization"
               ] = `Bearer ${newToken}`;
+
               if (originalRequest.headers) {
                 originalRequest.headers["Authorization"] = `Bearer ${newToken}`;
               }
+
               isRefreshingRef.current = false;
               return apiClient(originalRequest);
             } else {
+              // Không có token mới -> đăng xuất
               isRefreshingRef.current = false;
               await logout();
             }
-          } catch (e) {
-            console.warn("Làm mới token thất bại:", (e as Error)?.message || e);
+          } catch (error) {
+            console.warn("Làm mới token thất bại:", error);
             isRefreshingRef.current = false;
             await logout();
           }
@@ -155,158 +164,187 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     );
 
+    // Dọn dẹp interceptor khi component unmount
     return () => {
       try {
         apiClient.interceptors.response.eject(interceptor);
       } catch {
-        // ignore
+        // Bỏ qua lỗi khi eject
       }
     };
   }, [user, token, currentStore]);
 
-  // ------------------------------
-  // Helper: persist trạng thái vào AsyncStorage
-  // ------------------------------
+  // Hàm lưu trạng thái vào bộ nhớ thiết bị
   const persist = async (
-    u: User | null,
-    t: string | null,
+    userData: User | null,
+    tokenData: string | null,
     store: Store | null
   ) => {
     try {
-      if (u) await AsyncStorage.setItem(USER_KEY, JSON.stringify(u));
-      else await AsyncStorage.removeItem(USER_KEY);
+      if (userData) {
+        await AsyncStorage.setItem(USER_KEY, JSON.stringify(userData));
+      } else {
+        await AsyncStorage.removeItem(USER_KEY);
+      }
 
-      if (t) await AsyncStorage.setItem(TOKEN_KEY, t);
-      else await AsyncStorage.removeItem(TOKEN_KEY);
+      if (tokenData) {
+        await AsyncStorage.setItem(TOKEN_KEY, tokenData);
+      } else {
+        await AsyncStorage.removeItem(TOKEN_KEY);
+      }
 
-      if (store) await AsyncStorage.setItem(STORE_KEY, JSON.stringify(store));
-      else await AsyncStorage.removeItem(STORE_KEY);
-    } catch (e) {
-      console.warn(
-        "Lưu thông tin người dùng thất bại:",
-        (e as Error)?.message || e
-      );
+      if (store) {
+        await AsyncStorage.setItem(STORE_KEY, JSON.stringify(store));
+      } else {
+        await AsyncStorage.removeItem(STORE_KEY);
+      }
+    } catch (error) {
+      console.warn("Lưu thông tin người dùng thất bại:", error);
     }
   };
 
-  // ------------------------------
-  // Login
-  // ------------------------------
+  // Trong hàm login, thay thế các lần gọi navigate
   const login = async (userData: User, tokenData: string) => {
+    // Bắt đầu trạng thái loading
+    setIsLoading(true);
     setLoading(true);
+
     try {
       _setUser(userData);
       setToken(tokenData);
 
       let initialStore: Store | null = null;
 
+      // Xử lý riêng cho nhân viên
       if (userData.role === "STAFF") {
         initialStore = currentStore || null;
         setCurrentStore(initialStore);
         await persist(userData, tokenData, initialStore);
-        navigate("Dashboard");
+
+        // Sử dụng NavigationService với retry
+        NavigationService.navigate("Dashboard", undefined, 15);
         return;
       }
 
       let resolvedStore: Store | null = null;
       let hasMultipleStores = false;
 
+      // Lấy thông tin cửa hàng cho quản lý
       try {
         const res = await storeApi.ensureStore();
-        const anyRes = res as any;
+        const responseData = res as any;
         resolvedStore =
-          anyRes?.store ||
-          anyRes?.currentStore ||
-          (Array.isArray(anyRes?.stores) && anyRes.stores[0]) ||
+          responseData?.store ||
+          responseData?.currentStore ||
+          (Array.isArray(responseData?.stores) && responseData.stores[0]) ||
           null;
         hasMultipleStores =
-          Array.isArray(anyRes?.stores) && anyRes.stores.length > 1;
+          Array.isArray(responseData?.stores) && responseData.stores.length > 1;
+
         if (resolvedStore) {
           setCurrentStore(resolvedStore);
           await persist(userData, tokenData, resolvedStore);
         }
-      } catch (err) {
-        console.warn("Không thể lấy cửa hàng:", (err as Error)?.message || err);
+      } catch (error) {
+        console.warn("Không thể lấy thông tin cửa hàng:", error);
       }
 
-      await new Promise((r) => setTimeout(r, 80));
+      // Chờ một chút để đảm bảo animation mượt mà
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
+      // Điều hướng dựa trên vai trò và thông tin cửa hàng với retry
       if (userData.role === "MANAGER") {
         if (!resolvedStore || hasMultipleStores) {
-          navigate("SelectStore");
+          NavigationService.navigate("SelectStore", undefined, 15);
         } else {
-          navigate("Dashboard");
+          NavigationService.navigate("Dashboard", undefined, 15);
         }
         return;
       }
 
-      navigate("Dashboard");
-    } catch (e) {
-      console.error("Lỗi khi đăng nhập:", e);
+      // Mặc định điều hướng đến Dashboard với retry
+      NavigationService.navigate("Dashboard", undefined, 15);
+    } catch (error) {
+      console.error("Lỗi khi đăng nhập:", error);
+      // Reset trạng thái nếu có lỗi
       _setUser(null);
       setToken(null);
       setCurrentStore(null);
       await persist(null, null, null);
-      navigate("Login");
+
+      // Sử dụng NavigationService cho logout cũng vậy
+      setTimeout(() => {
+        NavigationService.navigate("Login", undefined, 10);
+      }, 500);
     } finally {
-      setTimeout(() => setLoading(false), 160);
+      // Kết thúc trạng thái loading
+      setIsLoading(false);
+      setTimeout(() => setLoading(false), 200);
     }
   };
 
-  // ------------------------------
-  // Logout
-  // ------------------------------
+  // Trong hàm logout, cũng sửa tương tự
   const logout = async () => {
     try {
+      // Xóa tất cả thông tin
       _setUser(null);
       setToken(null);
       setCurrentStore(null);
       await AsyncStorage.removeItem(USER_KEY);
       await AsyncStorage.removeItem(TOKEN_KEY);
       await AsyncStorage.removeItem(STORE_KEY);
+
+      // Xóa header authorization
       if (apiClient?.defaults?.headers?.common) {
         delete apiClient.defaults.headers.common["Authorization"];
       }
+
+      // Gọi API đăng xuất (không bắt lỗi)
       try {
         await apiClient.post("/users/logout");
-      } catch {}
-    } catch (e) {
-      console.warn("Lỗi khi đăng xuất:", (e as Error)?.message || e);
+      } catch {
+        // Bỏ qua lỗi khi gọi API logout
+      }
+    } catch (error) {
+      console.warn("Lỗi khi đăng xuất:", error);
     } finally {
-      navigate("Login");
+      // Sử dụng NavigationService với retry
+      setTimeout(() => {
+        NavigationService.navigate("Login", undefined, 10);
+      }, 300);
+    }
+  };
+  // Cập nhật cửa hàng hiện tại
+  const setCurrentStoreAndPersist = async (store: Store | null) => {
+    setCurrentStore(store);
+    if (store) {
+      await AsyncStorage.setItem(STORE_KEY, JSON.stringify(store));
+    } else {
+      await AsyncStorage.removeItem(STORE_KEY);
     }
   };
 
-  // ------------------------------
-  // Cập nhật currentStore
-  // ------------------------------
-  const setCurrentStoreAndPersist = async (store: Store | null) => {
-    setCurrentStore(store);
-    if (store) await AsyncStorage.setItem(STORE_KEY, JSON.stringify(store));
-    else await AsyncStorage.removeItem(STORE_KEY);
+  // Cập nhật thông tin user
+  const setUserAndPersist = async (userData: User | null) => {
+    _setUser(userData);
+    if (userData) {
+      await AsyncStorage.setItem(USER_KEY, JSON.stringify(userData));
+    } else {
+      await AsyncStorage.removeItem(USER_KEY);
+    }
   };
 
-  // ------------------------------
-  // Cập nhật user thủ công
-  // ------------------------------
-  const setUserAndPersist = async (u: User | null) => {
-    _setUser(u);
-    if (u) await AsyncStorage.setItem(USER_KEY, JSON.stringify(u));
-    else await AsyncStorage.removeItem(USER_KEY);
-  };
-
-  // ------------------------------
-  // Context value
-  // ------------------------------
+  // Giá trị cung cấp cho context
   const contextValue: AuthContextValue = {
     user,
     token,
     currentStore,
-    loading,
+    loading, // Giữ nguyên cho tương thích
+    isLoading, // Trạng thái loading khi khởi tạo
     login,
     logout,
     setCurrentStore: setCurrentStoreAndPersist,
-    setUser: setUserAndPersist, // <- expose setUser
+    setUser: setUserAndPersist,
   };
 
   return (
@@ -314,9 +352,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   );
 };
 
-// ------------------------------
-// Hook tiện dụng
-// ------------------------------
+// Hook tiện lợi để sử dụng auth context
 export const useAuth = (): AuthContextValue => useContext(AuthContext);
 
 export default AuthContext;

@@ -212,4 +212,17 @@ router.get(
   getProductById
 );
 
+/*
+  ROUTE: GET /api/products/store/:storeId/export
+  - Export danh sách sản phẩm ra Excel
+  - Middleware: verifyToken -> checkStoreAccess -> requirePermission("products:view")
+*/
+router.get(
+  "/store/:storeId/export",
+  verifyToken,
+  checkStoreAccess,
+  requirePermission("products:view"),
+  exportProducts // Cần implement hàm này trong controller
+);
+
 module.exports = router;

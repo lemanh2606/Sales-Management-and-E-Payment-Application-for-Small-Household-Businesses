@@ -3,20 +3,18 @@ const mongoose = require("mongoose");
 
 const activityLogSchema = new mongoose.Schema(
   {
-    store: { type: mongoose.Schema.Types.ObjectId, ref: "Store", required: true },
+    store: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Store",
+      required: true,
+    },
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     userName: { type: String, required: true, trim: true }, // ở model Employee thì là fullName,
     userRole: { type: String, enum: ["MANAGER", "STAFF"], required: true },
     action: {
       type: String,
       required: true,
-      enum: [
-        "create",
-        "update",
-        "delete",
-        "restore",
-        "other",
-      ],
+      enum: ["create", "update", "delete", "restore", "export", "other"],
     }, //hành động gì
     entity: { type: String, required: true }, // Đối tượng bị tác động Ví dụ: 'Order', 'Product', 'Store', 'Customer', 'Employee',....
     entityId: { type: mongoose.Schema.Types.ObjectId, required: true },

@@ -5,7 +5,7 @@ import { SearchOutlined, QuestionCircleOutlined, InfoCircleOutlined, AppstoreOut
 import axios from "axios";
 import dayjs from "dayjs";
 import "dayjs/locale/vi";
-import Layout from "../components/Layout";
+import Layout from "../../components/Layout";
 
 dayjs.locale("vi");
 
@@ -523,7 +523,7 @@ const ActivityLog = () => {
                         <span style={{ color: "#1890ff", fontWeight: 600 }}>
                           {range[0]} – {range[1]}
                         </span>
-                        trên tổng số <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> nhật ký
+                       {" "} trên tổng số <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> nhật ký
                       </div>
                     </div>
                   ),

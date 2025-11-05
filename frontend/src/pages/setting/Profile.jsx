@@ -1,7 +1,7 @@
 // src/pages/user/Profile.jsx
 import React, { useState, useEffect } from "react";
 import { Form, Input, Button, Card, Alert, Spin, Row, Col, Badge, Divider } from "antd";
-import { SaveOutlined, LockOutlined, MailOutlined } from "@ant-design/icons";
+import { SaveOutlined, LockOutlined, MailOutlined, UserOutlined } from "@ant-design/icons";
 import axios from "axios";
 import Swal from "sweetalert2";
 import { useAuth } from "../../context/AuthContext";
@@ -10,13 +10,15 @@ import Layout from "../../components/Layout";
 const { useForm } = Form;
 
 export default function Profile() {
-  const { token, user } = useAuth(); // 👈 Lấy token/user từ context (user có username/email/role)
+  const { token, user, setUser } = useAuth(); // 👈 Lấy token/user từ context (user có username/email/role)
   const [form] = useForm();
   const [passForm] = useForm(); // 👈 Form riêng cho đổi pass
   const [loading, setLoading] = useState(true); // 👈 Loading chung
   const [savingInfo, setSavingInfo] = useState(false); // 👈 Loading save info
-  const [savingPass, setSavingPass] = useState(false); // 👈 Loading save pass
-  const [error, setError] = useState(null); // 👈 Lỗi chung
+  const [sendingOTP, setSendingOTP] = useState(false); //đã tách
+  const [changingPass, setChangingPass] = useState(false); //đã tách
+  const [infoError, setInfoError] = useState(null); //đã tách
+  const [passError, setPassError] = useState(null); //đã tách
   const [otpSent, setOtpSent] = useState(false); // 👈 Trạng thái gửi OTP thành công
   //đếm ngược gửi lại otp, tránh spam
   const otpExpireMinutes = Number(import.meta.env.VITE_OTP_EXPIRE_MINUTES || 5);
@@ -54,7 +56,7 @@ export default function Profile() {
   // 👈 Xử lý save info cá nhân (POST /profile, validate unique)
   const onFinishInfo = async (values) => {
     setSavingInfo(true);
-    setError(null);
+    setInfoError(null);
     try {
       const response = await axios.put("http://localhost:9999/api/users/profile", values, {
         headers: { Authorization: `Bearer ${token}` },
@@ -68,10 +70,12 @@ export default function Profile() {
         confirmButtonText: "OK",
         timer: 3000, // Tự đóng sau 3s
       });
-      // Reload user từ context nếu cần (giả sử useAuth refetch)
+      // Reload user từ context và đẩy lại lên local cho đồng bộ
+      setUser(response.data.user);
+      localStorage.setItem("user", JSON.stringify(response.data.user));
     } catch (err) {
       console.error("Lỗi cập nhật thông tin:", err.response?.data?.message || err.message);
-      setError(err.response?.data?.message || "Lỗi cập nhật thông tin");
+      setInfoError(err.response?.data?.message || "Lỗi cập nhật thông tin");
       // 👈 Swal.fire error đẹp (icon đỏ, animation)
       Swal.fire({
         title: "Lỗi cập nhật",
@@ -86,12 +90,11 @@ export default function Profile() {
   };
 
   // 👈 Xử lý gửi OTP đổi pass (POST /password/send-otp)
-  // 👈 Xử lý gửi OTP đổi pass (POST /password/send-otp)
   const sendOTP = async () => {
     if (timer > 0) return;
 
-    setSavingPass(true);
-    setError(null);
+    setSendingOTP(true);
+    setPassError(null);
 
     try {
       const email = form.getFieldValue("email");
@@ -102,9 +105,8 @@ export default function Profile() {
         { email },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-
       setOtpSent(true);
-      setTimer(60 * otpExpireMinutes); // bắt đầu countdown
+      setTimer(60 * otpExpireMinutes);
 
       Swal.fire({
         title: "Gửi OTP thành công",
@@ -116,31 +118,35 @@ export default function Profile() {
     } catch (err) {
       console.error("Lỗi gửi OTP:", err.response?.data?.message || err.message);
       setOtpSent(false);
-      setError(err.response?.data?.message || err.message || "Không thể gửi OTP");
+      setPassError(err.response?.data?.message || err.message || "Không thể gửi OTP");
 
       Swal.fire({
-        title: "Lỗi gửi OTP",
+        title: "OTP chưa được gửi",
         text: err.response?.data?.message || "Không thể gửi OTP",
-        icon: "error",
+        icon: "warning",
         confirmButtonText: "OK",
         timer: 4000,
       });
     } finally {
-      setSavingPass(false);
+      setSendingOTP(false);
     }
   };
 
   // 👈 Xử lý đổi pass (POST /password/change, validate OTP + new pass match length 6)
   const onFinishPass = async (values) => {
-    setSavingPass(true);
-    setError(null);
+    setChangingPass(true);
+    setPassError(null);
     try {
       if (values.newPassword !== values.confirmPassword) {
-        setError("Mật khẩu mới không khớp");
+        Swal.fire({
+          icon: "error",
+          title: "Mật khẩu không khớp",
+          text: "Vui lòng nhập lại cho đúng.",
+        });
         return;
       }
       if (values.newPassword.length < 6) {
-        setError("Mật khẩu mới phải ít nhất 6 ký tự");
+        setPassError("Mật khẩu mới phải ít nhất 6 ký tự");
         return;
       }
       const payload = {
@@ -164,7 +170,7 @@ export default function Profile() {
       });
     } catch (err) {
       console.error("Lỗi đổi mật khẩu:", err.response?.data?.message || err.message);
-      setError(err.response?.data?.message || "Lỗi đổi mật khẩu");
+      setPassError(err.response?.data?.message || "Lỗi đổi mật khẩu");
       // 👈 Swal.fire error đổi pass
       Swal.fire({
         title: "Lỗi đổi mật khẩu",
@@ -174,7 +180,7 @@ export default function Profile() {
         timer: 4000,
       });
     } finally {
-      setSavingPass(false);
+      setChangingPass(false);
     }
   };
 
@@ -193,7 +199,7 @@ export default function Profile() {
       <Card
         title={
           <div className="flex items-center gap-3">
-            <SaveOutlined className="text-green-600 text-xl" />
+            <UserOutlined className="text-green-600 text-xl" />
             <span className="text-3xl font-bold text-gray-800">Hồ Sơ Cá Nhân</span>
           </div>
         }
@@ -205,25 +211,22 @@ export default function Profile() {
           </div>
         ) : (
           <>
-            {/* 👈 Thông báo lỗi chung */}
-            {error && (
+            {/* 👈 Lỗi riêng của thông tin, ko còn dùng chung setError */}
+            {infoError && (
               <Alert
                 message="Lỗi"
-                description={error}
+                description={infoError}
                 type="error"
                 showIcon
-                className="mb-6"
+                className="mb-4"
                 closable
-                onClose={() => setError(null)}
+                onClose={() => setInfoError(null)}
               />
             )}
 
             {/* 👈 Form thông tin cá nhân */}
             <Form form={form} name="profile-form" onFinish={onFinishInfo} layout="vertical" className="space-y-4 mb-8">
-              <Card
-                title={<span className="font-semibold text-gray-800">Thông Tin Cá Nhân</span>}
-                className="bg-white"
-              >
+              <Card title={<span className="font-semibold text-gray-800">Thông Tin Cá Nhân</span>} className="bg-white">
                 <Row gutter={24}>
                   {/* Username */}
                   <Col span={8}>
@@ -249,7 +252,6 @@ export default function Profile() {
                       <Input
                         placeholder="Họ và tên"
                         className="!py-2 !px-3 !text-lg rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-300"
-
                       />
                     </Form.Item>
                   </Col>
@@ -263,62 +265,53 @@ export default function Profile() {
                     </Form.Item>
                   </Col>
 
-                  {/* Phone */}
-                  <Col span={8}>
-                    <Form.Item name="phone" label="Số điện thoại">
-                      <Input
-                        placeholder="Số điện thoại"
-                        className="!py-2 !px-3 !text-lg rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-300"
-                      />
+                  {/* Phone - Role - Verified */}
+                  <Col xs={24} md={12} lg={8}>
+                    <Form.Item name="phone" label={<span className="font-medium">Số điện thoại</span>}>
+                      <Input placeholder="Số điện thoại" className="h-11 text-base rounded-lg" />
                     </Form.Item>
                   </Col>
 
-                  {/* Role */}
-                  <Col span={8}>
-                    <Form.Item name="role" label="Vai trò">
-                      <div className="py-2 px-3 bg-blue-100 rounded-lg inline-flex items-center gap-2 shadow-sm">
+                  <Col xs={24} md={12} lg={8}>
+                    <Form.Item label={<span className="font-medium">Vai trò</span>}>
+                      <div className="flex items-center gap-2 h-11 px-3 bg-blue-50 rounded-lg border border-blue-200">
                         <span className="w-3 h-3 bg-blue-500 rounded-full"></span>
-                        <span className="text-lg font-semibold text-blue-700 tracking-wide">
+                        <span className="font-semibold text-blue-700">
                           {user?.role === "MANAGER" ? "Quản lý" : "Nhân viên"}
                         </span>
                       </div>
                     </Form.Item>
                   </Col>
 
-                  {/* Verified */}
-                  <Col span={8}>
-                    <Form.Item name="isVerified" label="Xác thực Email">
+                  <Col xs={24} md={12} lg={8}>
+                    <Form.Item label={<span className="font-medium">Xác thực Email</span>}>
                       <div
-                        className={`py-2 px-3 rounded-lg inline-flex items-center gap-2 shadow-sm ${user?.isVerified ? "bg-green-100" : "bg-yellow-100"
-                          }`}
+                        className={`flex items-center gap-2 h-11 px-3 rounded-lg border ${
+                          user?.isVerified ? "bg-green-50 border-green-200" : "bg-yellow-50 border-yellow-200"
+                        }`}
                       >
                         <span
                           className={`w-3 h-3 rounded-full ${user?.isVerified ? "bg-green-500" : "bg-yellow-500"}`}
                         ></span>
-                        <span
-                          className={`text-lg font-semibold tracking-wide ${user?.isVerified ? "text-green-700" : "text-yellow-700"
-                            }`}
-                        >
+                        <span className={`font-semibold ${user?.isVerified ? "text-green-700" : "text-yellow-700"}`}>
                           {user?.isVerified ? "Đã xác thực" : "Chưa xác thực"}
                         </span>
                       </div>
                     </Form.Item>
                   </Col>
 
-                  {/* Deleted */}
-                  <Col span={8}>
-                    <Form.Item name="isDeleted" label="Trạng thái tài khoản">
+                  {/* Trạng thái tài khoản */}
+                  <Col xs={24} md={12} lg={8}>
+                    <Form.Item label={<span className="font-medium">Trạng thái tài khoản</span>}>
                       <div
-                        className={`py-2 px-3 rounded-lg inline-flex items-center gap-2 shadow-sm ${user?.isDeleted ? "bg-red-100" : "bg-green-100"
-                          }`}
+                        className={`flex items-center gap-2 h-11 px-3 rounded-lg border ${
+                          user?.isDeleted ? "bg-red-50 border-red-200" : "bg-green-50 border-green-200"
+                        }`}
                       >
                         <span
                           className={`w-3 h-3 rounded-full ${user?.isDeleted ? "bg-red-500" : "bg-green-500"}`}
                         ></span>
-                        <span
-                          className={`text-lg font-semibold tracking-wide ${user?.isDeleted ? "text-red-700" : "text-green-700"
-                            }`}
-                        >
+                        <span className={`font-semibold ${user?.isDeleted ? "text-red-700" : "text-green-700"}`}>
                           {user?.isDeleted ? "Đã bị khóa" : "Đang hoạt động"}
                         </span>
                       </div>
@@ -353,23 +346,36 @@ export default function Profile() {
               style={{ marginTop: "30px", backgroundColor: "white" }}
             >
               <div className="space-y-4">
+                {/* Lỗi riêng của pass, không còn dùng chung setError */}
+                {passError && (
+                  <Alert
+                    message="Lỗi"
+                    description={passError}
+                    type="error"
+                    showIcon
+                    className="mb-4"
+                    closable
+                    onClose={() => setPassError(null)}
+                  />
+                )}
                 <Button
                   type="dashed"
                   onClick={sendOTP}
                   icon={<MailOutlined />}
                   size="large"
-                  disabled={timer > 0 || savingPass}
-                  loading={savingPass && !otpSent}
-                  className={`w-full py-3 text-lg rounded-lg border-dashed border-gray-300 ${timer > 0 ? "opacity-60 cursor-not-allowed" : "hover:border-blue-500 hover:bg-blue-50"
-                    }`}
+                  disabled={timer > 0 || sendingOTP || changingPass}
+                  loading={sendingOTP && !otpSent}
+                  className={`w-full py-3 text-lg rounded-lg border-dashed border-gray-300 ${
+                    timer > 0 ? "opacity-60 cursor-not-allowed" : "hover:border-blue-500 hover:bg-blue-50"
+                  }`}
                 >
-                  {savingPass
+                  {sendingOTP
                     ? "Đang gửi..."
                     : timer > 0
-                      ? `Chờ gửi lại (${formatTime(timer)})`
-                      : otpSent
-                        ? "Gửi OTP mới"
-                        : "Gửi OTP đến Email"}
+                    ? `Chờ gửi lại (${formatTime(timer)})`
+                    : otpSent
+                    ? "Gửi OTP mới"
+                    : "Gửi OTP đến Email"}
                 </Button>
 
                 {otpSent && (
@@ -432,7 +438,8 @@ export default function Profile() {
                         htmlType="submit"
                         icon={<SaveOutlined />}
                         size="large"
-                        loading={savingPass}
+                        loading={changingPass}
+                        disabled={sendingOTP}
                         className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold px-8 py-2 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 min-w-[120px]"
                       >
                         Đổi Mật Khẩu
