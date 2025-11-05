@@ -36,8 +36,8 @@ import ActivityLog from "./pages/setting/ActivityLog";
 import FileManager from "./pages/setting/FileManager";
 
 // 👉 Subscription pages
-import PricingPage from "./pages/settings/PricingPage";
-import SubscriptionPage from "./pages/settings/SubscriptionPage";
+import PricingPage from "./pages/setting/PricingPage";
+import SubscriptionPage from "./pages/setting/SubscriptionPage";
 
 const loadingIcon = <LoadingOutlined style={{ fontSize: 40 }} spin />;
 

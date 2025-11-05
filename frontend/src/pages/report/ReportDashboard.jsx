@@ -60,7 +60,6 @@ const ReportDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [data, setData] = useState(null);
-  const user = JSON.parse(localStorage.getItem("user") || "{}"); // Lấy từ localStorage
   const currentStore = JSON.parse(localStorage.getItem("currentStore") || "{}"); // Lấy từ localStorage
 
   // Filter - không có ngày tháng cụ thể để tránh lỗi
