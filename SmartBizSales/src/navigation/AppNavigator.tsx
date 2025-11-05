@@ -21,6 +21,7 @@ import SelectStoreScreen from "../screens/store/SelectStoreScreen";
 import Unauthorized from "../screens/misc/Unauthorized"; // màn tạm thời
 import Profile from "../screens/user/Profile";
 import ProductListScreen from "../screens/product/ProductListScreen";
+import CustomerListScreen from "../screens/customer/CustomerListScreen ";
 
 const Drawer = createDrawerNavigator();
 
@@ -189,7 +190,16 @@ export default function AppNavigator(): JSX.Element {
           ),
         }}
       />
-
+      <Drawer.Screen
+        name="CustomerList"
+        component={ProtectedScreen(<CustomerListScreen />)}
+        options={{
+          title: "Khách hàng",
+          drawerIcon: ({ color, size }) => (
+            <Ionicons name="people-outline" size={size} color={color} />
+          ),
+        }}
+      />
       {user?.role === "MANAGER" && (
         <Drawer.Screen
           name="SelectStore"
