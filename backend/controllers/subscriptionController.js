@@ -123,6 +123,7 @@ const getCurrentSubscription = async (req, res) => {
  * POST /api/subscriptions/checkout
  * Tạo link thanh toán subscription
  * Body: { plan_duration: 1|3|6 }
+ * Cái này chưa dùng vì chưa có key PayOS
  */
 const createCheckout = async (req, res) => {
   try {
