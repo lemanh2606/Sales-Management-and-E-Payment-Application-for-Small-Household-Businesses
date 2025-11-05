@@ -50,16 +50,11 @@ export const getCustomersByStore = async (
     storeId: string
 ): Promise<Customer[]> => {
     const response = await apiClient.get<ApiResponse<CustomersListResponse>>(`/customers/store/${storeId}`);
-    console.log("📊 Full API response:", response);
-    console.log("📦 Response data:", response.data);
-    console.log("👥 Customers data:", response.data.customers);
-
     // Lấy customers từ response.data.data.customers
     if (response.data && Array.isArray(response.data?.customers)) {
         console.log(`✅ Loaded ${response.data.customers.length} customers`);
         return response.data.customers;
     }
-
     console.warn("⚠️ No customers found in response");
     return [];
 };
