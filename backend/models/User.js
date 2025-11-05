@@ -67,6 +67,29 @@ const userSchema = new mongoose.Schema(
     lockUntil: { type: Date, default: null },
     alertCount: { type: Number, default: 0 },
 
+    // === SUBSCRIPTION INFO ===
+    subscription_status: {
+      type: String,
+      enum: ["TRIAL", "PREMIUM", "EXPIRED"],
+      default: "TRIAL",
+    },
+    trial_started_at: {
+      type: Date,
+      default: null,
+    },
+    trial_ends_at: {
+      type: Date,
+      default: null,
+    },
+    premium_expires_at: {
+      type: Date,
+      default: null,
+    },
+    is_premium: {
+      type: Boolean,
+      default: false,
+    },
+
     // Other
     last_login: { type: Date, default: null },
     isDeleted: { type: Boolean, default: false },

@@ -22,3 +22,4 @@ export * as storeApi from "./storeApi";
 export * as supplierApi from "./supplierApi";
 export * as taxApi from "./taxApi";
 export * as userApi from "./userApi";
+export { default as subscriptionApi } from "./subscriptionApi";

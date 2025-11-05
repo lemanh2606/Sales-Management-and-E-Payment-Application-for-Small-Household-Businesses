@@ -35,6 +35,10 @@ import viVN from "antd/locale/vi_VN";
 import ActivityLog from "./pages/setting/ActivityLog";
 import FileManager from "./pages/setting/FileManager";
 
+// 👉 Subscription pages
+import PricingPage from "./pages/settings/PricingPage";
+import SubscriptionPage from "./pages/settings/SubscriptionPage";
+
 const loadingIcon = <LoadingOutlined style={{ fontSize: 40 }} spin />;
 
 /** Utility: đọc user từ localStorage (fallback) */
@@ -319,6 +323,24 @@ function App() {
           element={
             <ProtectedRoute allowedPermissions="file:view">
               <FileManager />
+            </ProtectedRoute>
+          }
+        />
+        {/* ======================================================================= */}
+        {/* ====================== Subscription - Routes ====================== */}
+        <Route
+          path="/settings/subscription/pricing"
+          element={
+            <ProtectedRoute allowedPermissions="subscription:view">
+              <PricingPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings/subscription"
+          element={
+            <ProtectedRoute allowedPermissions="subscription:view">
+              <SubscriptionPage />
             </ProtectedRoute>
           }
         />
