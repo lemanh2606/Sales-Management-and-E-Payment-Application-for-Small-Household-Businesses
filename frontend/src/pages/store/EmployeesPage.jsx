@@ -160,14 +160,14 @@ export default function EmployeesPage() {
       title: "Tên",
       dataIndex: "fullName",
       key: "fullName",
-      width: 370,
+      width: 230,
     },
     { title: "Username", key: "username", width: 210, render: (_, record) => record.user_id?.username || "—" },
-    { title: "Email", key: "email", width: 280, render: (_, record) => record.user_id?.email || "—" },
+    { title: "Email", key: "email", width: 250, render: (_, record) => record.user_id?.email || "—" },
     {
       title: "Số điện thoại",
       key: "phone",
-      width: 180,
+      width: 140,
       render: (_, record) => {
         const phone = record.user_id?.phone || "";
 
@@ -201,7 +201,6 @@ export default function EmployeesPage() {
       key: "salary",
       render: (_, record) => Number(record.salary ?? 0).toLocaleString("vi-VN", { style: "currency", currency: "VND" }),
       sorter: (a, b) => (a.salary ?? 0) - (b.salary ?? 0),
-      width: 140,
     },
     {
       title: "Hoa hồng (%)",

@@ -25,6 +25,7 @@
     "react-modal": "^3.16.3",
     "react-qr-code": "^2.0.18",
     "react-router-dom": "^7.9.3",
+    "react-to-print": "^3.2.0",
     "react-toastify": "^11.0.5",
     "read-vietnamese-number": "^2.3.0",
     "recharts": "^3.3.0",
@@ -43,7 +44,10 @@
     "extends": [
       "react-app",
       "react-app/jest"
-    ]
+    ],
+    "rules": {
+      "react/no-inline-styles": "off"
+    }
   },
   "browserslist": {
     "production": [
@@ -58,7 +62,13 @@
     ]
   },
   "devDependencies": {
+    "@types/moment": "^2.11.29",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@types/react-modal": "^3.16.3",
+    "@types/react-router-dom": "^5.3.3",
     "@vitejs/plugin-react": "^5.0.4",
+    "typescript": "^5.9.3",
     "vite": "^7.1.9"
   }
 }

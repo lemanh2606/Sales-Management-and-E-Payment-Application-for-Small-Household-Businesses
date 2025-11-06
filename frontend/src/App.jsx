@@ -1,43 +1,46 @@
 // src/App.jsx
 import React, { useEffect } from "react";
 import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
+// 🧩 Context
+import { useAuth } from "./context/AuthContext";
+// 🎨 UI & Ant Design
+import { ConfigProvider, Spin } from "antd";
+import { LoadingOutlined } from "@ant-design/icons";
+import viVN from "antd/locale/vi_VN";
+// 🧭 Common Pages
+import NotFound from "./pages/misc/NotFound";
+import Unauthorized from "./pages/misc/Unauthorized";
+import DashboardPage from "./pages/DashboardPage";
+// 👤 Auth Pages
 import RegisterPage from "./pages/auth/RegisterPage";
 import VerifyOtpPage from "./pages/auth/VerifyOtpPage";
 import LoginPage from "./pages/auth/LoginPage";
-import DashboardPage from "./pages/DashboardPage";
-import SelectStorePage from "./pages/store/SelectStorePage";
-import SupplierListPage from "./pages/supplier/SupplierListPage";
-import ProductListPage from "./pages/product/ProductListPage";
 import ForgotPassword from "./pages/auth/ForgotPassword";
-import Profile from "./pages/setting/Profile";
-import LoyaltySetting from "./pages/loyalty/LoyaltySetting";
+// 🏬 Store & Employees
+import SelectStorePage from "./pages/store/SelectStorePage";
 import EmployeesPage from "./pages/store/EmployeesPage";
-
-// 👉 Customer page bạn đã tạo
+// 📦 Product & Supplier
+import ProductListPage from "./pages/product/ProductListPage";
+import ProductGroupsPage from "./pages/productGroup/ProductGroupsPage";
+import SupplierListPage from "./pages/supplier/SupplierListPage";
+// 🧍‍♂️ Customer
 import CustomerListPage from "./pages/customer/CustomerListPage";
 import TopCustomer from "./pages/customer/TopCustomer";
-import { useAuth } from "./context/AuthContext";
-import Unauthorized from "./pages/misc/Unauthorized";
-import NotFound from "./pages/misc/NotFound";
-
-// 👉 Report page
+// 🧾 Reports
 import ReportDashboard from "./pages/report/ReportDashboard";
 import RevenueReport from "./pages/report/RevenueReport";
 import TaxDeclaration from "./pages/report/TaxDeclaration";
 import TopProductsReport from "./pages/report/TopProductsReport";
-
-// Hiệu ứng Design
-import { Spin } from "antd";
-import { LoadingOutlined } from "@ant-design/icons";
-import ProductGroupsPage from "./pages/productGroup/ProductGroupsPage";
-import { ConfigProvider } from "antd";
-import viVN from "antd/locale/vi_VN";
-import ActivityLog from "./pages/setting/ActivityLog";
-import FileManager from "./pages/setting/FileManager";
-
-// 👉 Subscription pages
+// ⚙️ Settings
+import Profile from "./pages/setting/Profile";
 import PricingPage from "./pages/setting/PricingPage";
 import SubscriptionPage from "./pages/setting/SubscriptionPage";
+import ActivityLog from "./pages/setting/ActivityLog";
+import FileManager from "./pages/setting/FileManager";
+import LoyaltySetting from "./pages/loyalty/LoyaltySetting";
+// 🛒 Orders
+import OrderPOSHome from "./pages/order/OrderPOSHome";
+
 
 const loadingIcon = <LoadingOutlined style={{ fontSize: 40 }} spin />;
 
@@ -140,7 +143,7 @@ function AppInit() {
   useEffect(() => {
     if (location.pathname === "/") {
       // ✅ Chỉ chạy khi đang ở root '/'
-      localStorage.clear(); 
+      localStorage.clear();
       navigate("/login", { replace: true });
     }
   }, [location.pathname, navigate]);
@@ -185,8 +188,6 @@ function App() {
             </PublicRoute>
           }
         />
-
-        {/* Protected routes */}
         <Route
           path="/dashboard/:storeId"
           element={
@@ -211,7 +212,6 @@ function App() {
             </ProtectedRoute>
           }
         />
-
         <Route
           path="/settings/profile"
           element={
@@ -220,7 +220,6 @@ function App() {
             </ProtectedRoute>
           }
         />
-
         <Route
           path="/suppliers"
           element={
@@ -237,8 +236,7 @@ function App() {
             </ProtectedRoute>
           }
         />
-
-        {/* Customer page (ví dụ yêu cầu permission customers:search) */}
+        {/* Customer page */}
         <Route
           path="/customers-list"
           element={
@@ -255,7 +253,6 @@ function App() {
             </ProtectedRoute>
           }
         />
-
         <Route
           path="/product-groups"
           element={
@@ -264,7 +261,6 @@ function App() {
             </ProtectedRoute>
           }
         />
-
         {/* Loyalty (ví dụ check role) */}
         <Route
           path="/loyalty/config"
@@ -344,9 +340,18 @@ function App() {
             </ProtectedRoute>
           }
         />
+        {/* ======================================================================= */}
+        {/* ====================== ORDER - Routes ====================== */}
+        <Route
+          path="/orders/pos"
+          element={
+            <ProtectedRoute allowedPermissions="orders:create">
+              <OrderPOSHome />
+            </ProtectedRoute>
+          }
+        />
         {/* Unauthorized */}
         <Route path="/unauthorized" element={<Unauthorized />} />
-
         {/* Default: điều hướng tới dashboard (ProtectedRoute sẽ xử lý redirect tới /login nếu chưa auth) */}
         <Route path="*" element={<NotFound />} />
       </Routes>

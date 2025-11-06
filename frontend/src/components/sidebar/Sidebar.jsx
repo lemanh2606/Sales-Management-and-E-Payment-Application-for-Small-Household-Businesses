@@ -72,7 +72,7 @@ export default function Sidebar() {
       path: "/orders",
       icon: <MdShoppingCart size={20} />,
       children: [
-        { name: "Giao diện đặt hàng (POS)", path: "/orders/pos", permission: "orders:create" },
+        { name: "Bán hàng tại quầy (POS)", path: "/orders/pos", permission: "orders:create", newTab: true },
         { name: "Hóa đơn bán + in hóa đơn", path: "/orders/invoice", permission: "orders:view" },
         { name: "Thanh toán (tiền mặt / QR / ngân hàng)", path: "/orders/payment", permission: "orders:pay" },
       ],
