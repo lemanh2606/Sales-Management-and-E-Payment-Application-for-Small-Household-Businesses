@@ -84,7 +84,7 @@ const createCustomer = async (req, res) => {
 };
 
 // GET /api/customers/search - Tìm kiếm khách hàng theo phone (exact) hoặc name (fuzzy)
-// http://localhost:9999/api/customers/search?query=0987654321&limit=5
+//GET: http://localhost:9999/api/customers/search?query=0987654321&limit=5
 const searchCustomers = async (req, res) => {
   try {
     const { query, limit = 10 } = req.query; // Query string (phone/name), limit default 10

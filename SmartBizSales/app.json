@@ -24,9 +24,6 @@
       "predictiveBackGestureEnabled": false,
       "package": "com.manh2606.SmartBizSales"
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
     "plugins": [
       [
         "expo-document-picker",
