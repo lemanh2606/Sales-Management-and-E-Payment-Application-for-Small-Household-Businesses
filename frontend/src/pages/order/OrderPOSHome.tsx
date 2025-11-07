@@ -38,11 +38,13 @@ import {
 } from "@ant-design/icons";
 import axios from "axios";
 import ModalPrintBill from "./ModalPrintBill";
+import ModalCustomerAdd from "./ModalCustomerAdd";
 import { io, Socket } from "socket.io-client";
 import Swal from "sweetalert2";
 
 const { Title, Text } = Typography;
 const { Option } = Select;
+const { Search } = Input;
 const { TabPane } = Tabs;
 const { Countdown } = Statistic;
 
@@ -98,11 +100,22 @@ interface OrderResponse {
   message: string;
   order: {
     _id: string;
+    storeId?: string;
+    employeeId?: string;
+    customer?: string | null;
+    totalAmount?: any;
     qrExpiry?: string;
     paymentMethod: "cash" | "qr";
+    status?: string;
+    printDate?: string | null;
+    printCount?: number;
+    createdAt?: string;
+    updatedAt?: string;
+    items?: any[];
   };
   qrRef?: number;
   qrDataURL?: string;
+  paymentLinkUrl?: string | null;
 }
 
 const OrderPOSHome: React.FC = () => {
@@ -141,6 +154,13 @@ const OrderPOSHome: React.FC = () => {
   const [qrImageUrl, setQrImageUrl] = useState<string | null>(null);
   const [qrPayload, setQrPayload] = useState<string | null>(null);
   const [qrExpiryTs, setQrExpiryTs] = useState<number | null>(null);
+
+  const [foundCustomers, setFoundCustomers] = useState<Customer[]>([]);
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+
+  const [orderCreatedAt, setOrderCreatedAt] = useState<string>(""); // ngày tạo order
+  const [orderPrintCount, setOrderPrintCount] = useState<number>(0); // số lần in
+  const [orderEarnedPoints, setOrderEarnedPoints] = useState<number>(0); // điểm tích
 
   // Helper - Lấy giá trị số từ price
   const getPriceNumber = (price: any): number => {
@@ -284,39 +304,13 @@ const OrderPOSHome: React.FC = () => {
           params: { query: phone, storeId },
           headers,
         });
-        if (res.data.customers && res.data.customers.length > 0) {
-          const customer = res.data.customers[0];
-          updateOrderTab((tab) => {
-            tab.customer = customer;
-          }, tabKey);
-          setPhoneInput(customer.phone);
-          message.success(`Tìm thấy: ${customer.name}`);
-        } else {
-          setNewCustomerModal(true);
-        }
+        setFoundCustomers(res.data.customers || []); // chỉ lưu danh sách, không mở modal
       } catch (err) {
         setNewCustomerModal(true);
       }
     }, 500),
     [storeId]
   );
-
-  // Tạo khách hàng mới
-  const createNewCustomer = async (values: { name: string }) => {
-    try {
-      const payload = { name: values.name, phone: tempPhone, storeId };
-      const res = await axios.post(`${API_BASE}/customers`, payload, { headers });
-      updateOrderTab((tab) => {
-        tab.customer = res.data.customer;
-      });
-      setPhoneInput(res.data.customer.phone);
-      message.success("Tạo khách hàng mới thành công");
-      setNewCustomerModal(false);
-      form.resetFields();
-    } catch (err) {
-      message.error("Lỗi tạo khách hàng");
-    }
-  };
 
   // Cập nhật thông tin tab đơn hàng
   const updateOrderTab = (updater: (tab: OrderTab) => void, key = activeTab) => {
@@ -380,14 +374,7 @@ const OrderPOSHome: React.FC = () => {
     if (currentTab.cart.length === 0)
       return Swal.fire({
         icon: "warning",
-        title: "Giỏ hàng trống",
-        confirmButtonText: "OK",
-      });
-
-    if (!currentTab.customer)
-      return Swal.fire({
-        icon: "warning",
-        title: "Vui lòng chọn khách hàng",
+        title: "Đơn hàng trống, hãy thêm sản phẩm vào ngay",
         confirmButtonText: "OK",
       });
 
@@ -401,27 +388,50 @@ const OrderPOSHome: React.FC = () => {
     setLoading(true);
     try {
       const items = currentTab.cart.map((item) => ({ productId: item.productId, quantity: item.quantity }));
+
+      // Build payload conditionally
       const payload: any = {
         storeId,
         employeeId: currentTab.employeeId,
-        customerInfo: { phone: currentTab.customer.phone, name: currentTab.customer.name },
         items,
         paymentMethod: currentTab.paymentMethod,
         isVATInvoice: currentTab.isVAT,
-        usedPoints: currentTab.usedPoints || undefined,
       };
 
+      // Nếu có customer được chọn thì gửi customerInfo, ko có thì thôi
+      if (currentTab.customer) {
+        payload.customerInfo = {
+          phone: currentTab.customer.phone,
+          name: currentTab.customer.name,
+        };
+      }
+
+      // Chỉ gửi usedPoints khi user bật tính năng và có điểm > 0
+      if (currentTab.usedPointsEnabled && currentTab.usedPoints && currentTab.usedPoints > 0) {
+        payload.usedPoints = currentTab.usedPoints;
+      }
+
       const res = await axios.post<OrderResponse>(`${API_BASE}/orders`, payload, { headers });
-      const orderId = res.data.order._id;
+      const order = res.data.order;
+      const orderId = order._id;
+
+      // set thông tin cho modal in hóa đơn (an toàn với undefined/null)
+      setOrderCreatedAt(order.createdAt || "");
+      setOrderPrintCount(typeof order.printCount === "number" ? order.printCount : 0);
+      setOrderEarnedPoints((order as any).earnedPoints ?? 0);
+      // set pending order id
+      setPendingOrderId(orderId);
 
       if (currentTab.paymentMethod === "qr" && res.data.qrDataURL) {
         setQrImageUrl(res.data.qrDataURL);
         setQrExpiryTs(res.data.order?.qrExpiry ? new Date(res.data.order.qrExpiry).getTime() : null);
         setPendingOrderId(orderId);
         message.success("QR đã tạo, chờ thanh toán...");
+        setBillModalOpen(true);
       } else {
         setPendingOrderId(orderId);
         message.success("Đơn hàng đã tạo! Vui lòng xác nhận thanh toán tiền mặt.");
+        setBillModalOpen(true);
       }
     } catch (err: any) {
       message.error(err.response?.data?.message || "Lỗi tạo đơn");
@@ -439,6 +449,10 @@ const OrderPOSHome: React.FC = () => {
       message.error("Lỗi in hóa đơn");
     }
   };
+
+  const currentEmployeeName = employees.find((e) => e._id === currentTab.employeeId)?.fullName || "N/A";
+  const currentCustomerName = currentTab?.customer?.name || "Khách vãng lai";
+  const currentCustomerPhone = currentTab?.customer?.phone || "Không có";
 
   return (
     <div
@@ -744,19 +758,128 @@ const OrderPOSHome: React.FC = () => {
             </Title>
 
             {/* Tìm khách hàng */}
-            <Input
-              size="large"
-              placeholder="Nhập SĐT khách hàng (bắt buộc)"
-              prefix={<UserOutlined />}
-              value={phoneInput}
-              onChange={(e) => {
-                const val = e.target.value;
-                setPhoneInput(val);
-                searchCustomerDebounced(val, activeTab);
-              }}
-              style={{ marginBottom: 12, borderRadius: "8px" }}
-            />
+            <div style={{ position: "relative" }}>
+              <div style={{ position: "relative" }}>
+                <Input
+                  size="large"
+                  placeholder="Nhập SĐT khách hàng..."
+                  prefix={<UserOutlined />}
+                  suffix={
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div
+                        style={{
+                          width: 1,
+                          height: 20,
+                          backgroundColor: "#d9d9d9",
+                        }}
+                      />
+                      <PlusOutlined
+                        onClick={() => setNewCustomerModal(true)}
+                        style={{
+                          fontSize: 18,
+                          color: "#1890ff",
+                          cursor: "pointer",
+                        }}
+                      />
+                    </div>
+                  }
+                  value={phoneInput}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setPhoneInput(val);
+                    if (!val.trim()) {
+                      setFoundCustomers([]);
+                      updateOrderTab((tab) => {
+                        tab.customer = null;
+                      }, activeTab);
+                      return;
+                    }
+                    searchCustomerDebounced(val, activeTab);
+                    setShowCustomerDropdown(true);
+                  }}
+                  onFocus={() => setShowCustomerDropdown(true)}
+                  onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 200)}
+                  style={{
+                    marginBottom: 12,
+                    borderRadius: 8,
+                  }}
+                />
+              </div>
+              {/* Dropdown danh sách khách */}
+              {showCustomerDropdown && (foundCustomers.length > 0 || true) && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "100%",
+                    left: 0,
+                    right: 0,
+                    background: "#fff",
+                    border: "1px solid #d9d9d9",
+                    borderRadius: 8,
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+                    zIndex: 1000,
+                    maxHeight: 200,
+                    overflowY: "auto",
+                  }}
+                >
+                  {/* Nút thêm khách hàng */}
+                  <div
+                    onClick={() => {
+                      setNewCustomerModal(true);
+                      setShowCustomerDropdown(false);
+                    }}
+                    style={{
+                      padding: "10px 14px",
+                      cursor: "pointer",
+                      borderBottom: "1px solid #f0f0f0",
+                      fontWeight: 500,
+                      color: "#1890ff",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <UserAddOutlined /> + Thêm khách hàng mới
+                  </div>
 
+                  {/* Danh sách kết quả */}
+                  {foundCustomers.length > 0 ? (
+                    foundCustomers.map((c) => (
+                      <div
+                        key={c._id}
+                        onClick={() => {
+                          updateOrderTab((tab) => {
+                            tab.customer = c;
+                          }, activeTab);
+                          setPhoneInput(c.phone);
+                          setShowCustomerDropdown(false);
+                        }}
+                        style={{
+                          padding: "10px 14px",
+                          cursor: "pointer",
+                          borderBottom: "1px solid #f0f0f0",
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "#f5faff")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
+                      >
+                        <Space direction="vertical" size={0}>
+                          <Text strong>{c.name}</Text>
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            {c.phone}
+                          </Text>
+                        </Space>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ padding: "10px 14px", color: "#999", fontStyle: "italic" }}>
+                      Không tìm thấy khách hàng
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Phần hiển thị đã chọn khách hàng nào */}
             {currentTab.customer && (
               <div
                 style={{
@@ -1046,25 +1169,24 @@ const OrderPOSHome: React.FC = () => {
       </Row>
 
       {/* Modal tạo khách hàng mới */}
-      <Modal
+      <ModalCustomerAdd
         open={newCustomerModal}
         onCancel={() => setNewCustomerModal(false)}
-        onOk={() => form.submit()}
-        okText="Tạo"
-        cancelText="Hủy"
-        title={
-          <span>
-            <UserAddOutlined /> Tạo khách hàng mới
-          </span>
-        }
-      >
-        <Form form={form} onFinish={createNewCustomer} layout="vertical">
-          <Form.Item name="name" label="Tên khách hàng" rules={[{ required: true, message: "Nhập tên khách!" }]}>
-            <Input placeholder="Nhập tên khách hàng" size="large" />
-          </Form.Item>
-          <Text type="secondary">SĐT: {tempPhone}</Text>
-        </Form>
-      </Modal>
+        loading={loading}
+        onCreate={async (values) => {
+          try {
+            const res = await axios.post(`${API_BASE}/customers`, values, { headers });
+            updateOrderTab((tab) => {
+              tab.customer = res.data.customer;
+            });
+            setPhoneInput(res.data.customer.phone);
+            message.success("Tạo khách hàng mới thành công");
+            setNewCustomerModal(false);
+          } catch (err) {
+            message.error("Lỗi tạo khách hàng");
+          }
+        }}
+      />
 
       {/* Modal QR Code */}
       <Modal
@@ -1133,9 +1255,18 @@ const OrderPOSHome: React.FC = () => {
             triggerPrint(pendingOrderId);
           }
         }}
+        orderId={pendingOrderId || undefined}
+        createdAt={orderCreatedAt}
+        printCount={orderPrintCount}
+        earnedPoints={orderEarnedPoints}
         cart={currentTab.cart}
         totalAmount={totalAmount}
         storeName={currentStore.name || "Cửa hàng"}
+        address={currentStore?.address || ""}
+        employeeName={currentEmployeeName}
+        customerName={currentCustomerName}
+        customerPhone={currentCustomerPhone}
+        paymentMethod={currentTab.paymentMethod}
       />
     </div>
   );

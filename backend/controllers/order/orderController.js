@@ -16,7 +16,7 @@ const { v2: cloudinary } = require("cloudinary");
 
 const createOrder = async (req, res) => {
   try {
-    const { storeId, employeeId, customerInfo, items, paymentMethod, isVATInvoice, vatInfo, usedPoints } = req.body; // Thêm usedPoints optional cho giảm giá
+    const { storeId, employeeId, customerInfo, items, paymentMethod, isVATInvoice, vatInfo, usedPoints } = req.body;
 
     if (!items || items.length === 0) {
       console.log("Lỗi: Không có sản phẩm trong hóa đơn");
@@ -87,7 +87,8 @@ const createOrder = async (req, res) => {
           }
         }
       } else {
-        throw new Error("Thiếu thông tin khách hàng (phone bắt buộc)");
+        // Không có thông tin khách, để null (khách vãng lai)
+        customer = null;
       }
 
       // Lấy loyalty config store (cho discount usedPoints)
@@ -109,7 +110,7 @@ const createOrder = async (req, res) => {
       const newOrder = new Order({
         storeId,
         employeeId,
-        customer: customer._id, // Ref customer thay customerInfo
+        customer: customer ? customer._id : null, // Ref customer thay customerInfo
         totalAmount: total.toFixed(2).toString(),
         paymentMethod,
         isVATInvoice,
@@ -171,7 +172,7 @@ const createOrder = async (req, res) => {
           entityName: `Đơn hàng #${newOrder._id}`,
           req,
           description: `Tạo đơn hàng mới (phương thức ${paymentMethod === "qr" ? "QRCode" : "tiền mặt"}) cho khách ${
-            customerInfo?.name || customerInfo?.phone || "không rõ"
+            customerInfo?.name || customerInfo?.phone || "khách vãng lai"
           }`,
         });
 
@@ -272,7 +273,7 @@ const printBill = async (req, res) => {
     // Lấy loyalty config store (cho earnedPoints khi in bill)
     const loyalty = await LoyaltySetting.findOne({ storeId: order.storeId });
     let earnedPoints = 0;
-    if (isFirstPrint && loyalty && loyalty.isActive && order.totalAmount >= loyalty.minOrderValue) {
+    if (isFirstPrint && loyalty && loyalty.isActive && order.totalAmount >= loyalty.minOrderValue, order.customer) {
       earnedPoints = parseFloat(order.totalAmount) * loyalty.pointsPerVND; // Tích điểm = total * tỉ lệ
       // Cộng điểm vào customer (atomic session)
       const session = await mongoose.startSession();
@@ -341,7 +342,7 @@ const printBill = async (req, res) => {
     bill += `ID Hóa đơn: ${order._id}\n`;
     bill += `Cửa hàng: ${order.storeId?.name || "Cửa hàng mặc định"}\n`;
     bill += `Nhân viên: ${order.employeeId?.fullName || "N/A"}\n`;
-    bill += `Khách hàng: ${order.customer?.name || "N/A"} - ${order.customer?.phone || ""}\n`; // Populate từ customer ref
+    bill += `Khách hàng: ${order.customer?.name || "Khách vãng lai"} ${order.customer?.phone ? "- " + order.customer.phone : ""}\n`; // Populate từ customer ref
     bill += `Ngày: ${new Date(order.createdAt).toLocaleString("vi-VN")}\n`;
     bill += `Ngày in: ${new Date().toLocaleString("vi-VN")}\n`;
     if (isDuplicate) bill += `(Bản sao hóa đơn - lần in ${order.printCount + 1})\n`; // Note duplicate

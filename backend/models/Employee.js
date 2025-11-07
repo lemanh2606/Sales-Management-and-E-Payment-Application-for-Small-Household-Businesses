@@ -1,4 +1,4 @@
-// models/Employee.js (update từ file cũ - add fullName cho populate dễ)
+// /backend/models/Employee.js (update từ file cũ - add fullName cho populate dễ)
 const mongoose = require("mongoose");
 
 const employeeSchema = new mongoose.Schema(

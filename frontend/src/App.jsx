@@ -39,8 +39,7 @@ import ActivityLog from "./pages/setting/ActivityLog";
 import FileManager from "./pages/setting/FileManager";
 import LoyaltySetting from "./pages/loyalty/LoyaltySetting";
 // 🛒 Orders
-import OrderPOSHome from "./pages/order/OrderPOSHome";
-
+import SidebarPOS from "./pages/order/SidebarPOS";
 
 const loadingIcon = <LoadingOutlined style={{ fontSize: 40 }} spin />;
 
@@ -346,7 +345,7 @@ function App() {
           path="/orders/pos"
           element={
             <ProtectedRoute allowedPermissions="orders:create">
-              <OrderPOSHome />
+              <SidebarPOS />
             </ProtectedRoute>
           }
         />
