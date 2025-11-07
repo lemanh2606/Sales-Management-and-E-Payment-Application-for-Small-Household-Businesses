@@ -205,6 +205,7 @@ export default function AppNavigator(): JSX.Element {
           name="SelectStore"
           component={ProtectedScreen(<SelectStoreScreen />)}
           options={{
+            headerShown: false,
             title: "Chọn cửa hàng",
             drawerIcon: ({ color, size }) => (
               <Ionicons name="storefront-outline" size={size} color={color} />

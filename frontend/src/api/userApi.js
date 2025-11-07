@@ -33,9 +33,57 @@ export const getProfile = async () =>
   (await apiClient.get("/users/profile")).data;
 
 // Cập nhật thông tin cá nhân
-export const updateProfile = async (data) =>
-  (await apiClient.put("/users/profile", data)).data;
+// export const updateProfile = async (data) =>
+//   (await apiClient.put("/users/profile", data)).data;
+// api/userApi.js
+export const updateProfile = async (data, options = {}) => {
+  try {
+    // Nếu có ảnh, dùng FormData
+    if (options?.imageFile || options?.imageUri) {
+      const formData = new FormData();
 
+      // Thêm các trường dữ liệu
+      Object.keys(data).forEach((key) => {
+        const value = data[key];
+        if (value !== undefined && value !== null && value !== "") {
+          formData.append(key, value);
+        }
+      });
+
+      // Xử lý ảnh từ Web
+      if (options?.imageFile) {
+        formData.append("avatar", options.imageFile);
+      }
+
+      // Xử lý ảnh từ React Native
+      if (options?.imageUri) {
+        const fileType = options.imageUri.split(".").pop();
+        const file = {
+          uri: options.imageUri,
+          type: `image/${fileType}`,
+          name: `avatar-${Date.now()}.${fileType}`,
+        };
+        formData.append("avatar", file);
+      }
+
+      const response = await apiClient.put("/users/profile", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+        timeout: 30000,
+      });
+
+      return response.data;
+    } else {
+      // Không có ảnh, gửi JSON thông thường
+      const response = await apiClient.put("/users/profile", data);
+      return response.data;
+    }
+  } catch (error) {
+    console.error("Update profile error:", error);
+    throw error;
+  }
+};
 // Gửi OTP đổi mật khẩu
 export const sendPasswordOTP = async () =>
   (await apiClient.post("/users/password/send-otp")).data;

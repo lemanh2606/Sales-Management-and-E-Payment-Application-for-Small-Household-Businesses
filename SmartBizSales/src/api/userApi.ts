@@ -36,9 +36,64 @@ export const forgotChangePassword = async (data: ForgotChangePasswordDto): Promi
 export const getProfile = async (): Promise<User> =>
   (await apiClient.get<User>('/users/profile')).data;
 
-export const updateProfile = async (data: UpdateProfileDto): Promise<{ message: string; user: User }> =>
-  (await apiClient.put<{ message: string; user: User }>('/users/profile', data)).data;
+// api/userApi.ts - Sửa lại phần React Native
+export const updateProfile = async (
+  data: UpdateProfileDto,
+  options?: {
+    imageFile?: File; // For web
+    imageUri?: string; // For React Native  
+  }
+): Promise<{ message: string; user: User }> => {
 
+  if (options?.imageFile || options?.imageUri) {
+    const formData = new FormData();
+
+    // Add text fields
+    Object.keys(data).forEach(key => {
+      const value = data[key as keyof UpdateProfileDto];
+      if (value !== undefined && value !== null && value !== '') {
+        formData.append(key, value as string);
+      }
+    });
+
+    // Handle image upload - Web
+    if (options?.imageFile) {
+      formData.append('avatar', options.imageFile);
+    }
+
+    // Handle image upload - React Native - SỬA LẠI
+    if (options?.imageUri) {
+      // Tạo FormData cho React Native đúng cách
+      const uriParts = options.imageUri.split('.');
+      const fileType = uriParts[uriParts.length - 1];
+
+      formData.append('avatar', {
+        uri: options.imageUri,
+        type: `image/${fileType}`,
+        name: `avatar-${Date.now()}.${fileType}`,
+      } as any);
+    }
+
+    const response = await apiClient.put<{ message: string; user: User }>(
+      '/users/profile',
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        timeout: 30000,
+      }
+    );
+
+    return response.data;
+  } else {
+    // Không có ảnh, gửi JSON bình thường
+    return (await apiClient.put<{ message: string; user: User }>(
+      '/users/profile',
+      data
+    )).data;
+  }
+};
 export const sendPasswordOTP = async (data?: SendPasswordOtpDto): Promise<GenericResponse> =>
   (await apiClient.post<GenericResponse>('/users/password/send-otp', data || {})).data;
 

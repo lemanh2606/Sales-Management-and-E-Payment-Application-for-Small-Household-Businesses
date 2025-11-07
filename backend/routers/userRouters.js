@@ -1,6 +1,7 @@
 // routes/userRouters.js
 const express = require("express");
 const router = express.Router();
+const upload = require("../middlewares/upload");
 
 const {
   registerManager,
@@ -39,7 +40,25 @@ router.get("/refresh-token", refreshToken);
 // -------------------------
 // Protected routes
 // -------------------------
-router.put("/profile", verifyToken, updateProfile);
+// Thêm vào userRouters.js tạm thời
+router.put(
+  "/profile",
+  verifyToken,
+  (req, res, next) => {
+    console.log("=== BEFORE MULTER ===");
+    console.log("Headers:", req.headers["content-type"]);
+    console.log("Body before multer:", req.body);
+    next();
+  },
+  upload.single("avatar"),
+  (req, res, next) => {
+    console.log("=== AFTER MULTER ===");
+    console.log("File:", req.file);
+    console.log("Body after multer:", req.body);
+    next();
+  },
+  updateProfile
+);
 router.post("/password/send-otp", verifyToken, sendPasswordOTP);
 router.post("/password/change", verifyToken, changePassword);
 

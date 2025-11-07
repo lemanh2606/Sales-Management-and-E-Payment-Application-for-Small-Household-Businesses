@@ -17,7 +17,11 @@ const userSchema = new mongoose.Schema(
   {
     username: { type: String, required: true, unique: true, trim: true },
     password_hash: { type: String, required: true },
-    image: { type: String, require: false, unique: true, trim: true },
+    image: {
+      type: String,
+      default: "/default-avatar.png", // 👈 Thêm default value
+      trim: true,
+    },
     fullname: { type: String, default: "" },
 
     // role global (MANAGER: có thể tạo store; STAFF: nhân viên)
