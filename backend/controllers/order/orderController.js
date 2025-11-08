@@ -16,7 +16,7 @@ const { v2: cloudinary } = require("cloudinary");
 
 const createOrder = async (req, res) => {
   try {
-    const { storeId, employeeId, customerInfo, items, paymentMethod, isVATInvoice, vatInfo, usedPoints } = req.body; // Thêm usedPoints optional cho giảm giá
+    const { storeId, employeeId, customerInfo, items, paymentMethod, isVATInvoice, vatInfo, usedPoints } = req.body;
 
     if (!items || items.length === 0) {
       console.log("Lỗi: Không có sản phẩm trong hóa đơn");
@@ -87,7 +87,8 @@ const createOrder = async (req, res) => {
           }
         }
       } else {
-        throw new Error("Thiếu thông tin khách hàng (phone bắt buộc)");
+        // Không có thông tin khách, để null (khách vãng lai)
+        customer = null;
       }
 
       // Lấy loyalty config store (cho discount usedPoints)
@@ -109,7 +110,7 @@ const createOrder = async (req, res) => {
       const newOrder = new Order({
         storeId,
         employeeId,
-        customer: customer._id, // Ref customer thay customerInfo
+        customer: customer ? customer._id : null, // Ref customer thay customerInfo
         totalAmount: total.toFixed(2).toString(),
         paymentMethod,
         isVATInvoice,
@@ -171,7 +172,7 @@ const createOrder = async (req, res) => {
           entityName: `Đơn hàng #${newOrder._id}`,
           req,
           description: `Tạo đơn hàng mới (phương thức ${paymentMethod === "qr" ? "QRCode" : "tiền mặt"}) cho khách ${
-            customerInfo?.name || customerInfo?.phone || "không rõ"
+            customerInfo?.name || customerInfo?.phone || "khách vãng lai"
           }`,
         });
 
@@ -272,7 +273,7 @@ const printBill = async (req, res) => {
     // Lấy loyalty config store (cho earnedPoints khi in bill)
     const loyalty = await LoyaltySetting.findOne({ storeId: order.storeId });
     let earnedPoints = 0;
-    if (isFirstPrint && loyalty && loyalty.isActive && order.totalAmount >= loyalty.minOrderValue) {
+    if ((isFirstPrint && loyalty && loyalty.isActive && order.totalAmount >= loyalty.minOrderValue, order.customer)) {
       earnedPoints = parseFloat(order.totalAmount) * loyalty.pointsPerVND; // Tích điểm = total * tỉ lệ
       // Cộng điểm vào customer (atomic session)
       const session = await mongoose.startSession();
@@ -341,7 +342,9 @@ const printBill = async (req, res) => {
     bill += `ID Hóa đơn: ${order._id}\n`;
     bill += `Cửa hàng: ${order.storeId?.name || "Cửa hàng mặc định"}\n`;
     bill += `Nhân viên: ${order.employeeId?.fullName || "N/A"}\n`;
-    bill += `Khách hàng: ${order.customer?.name || "N/A"} - ${order.customer?.phone || ""}\n`; // Populate từ customer ref
+    bill += `Khách hàng: ${order.customer?.name || "Khách vãng lai"} ${
+      order.customer?.phone ? "- " + order.customer.phone : ""
+    }\n`; // Populate từ customer ref
     bill += `Ngày: ${new Date(order.createdAt).toLocaleString("vi-VN")}\n`;
     bill += `Ngày in: ${new Date().toLocaleString("vi-VN")}\n`;
     if (isDuplicate) bill += `(Bản sao hóa đơn - lần in ${order.printCount + 1})\n`; // Note duplicate
@@ -462,105 +465,165 @@ const getOrderById = async (req, res) => {
 // fix refundOrder: query OrderItem để lấy items, loop cộng stock, populate product name cho log
 const refundOrder = async (req, res) => {
   try {
-    const { orderId: mongoId } = req.params; // Lấy _id từ params
-    const { employeeId, refundReason } = req.body; // Body: employeeId + lý do hoàn
+    const { orderId: mongoId } = req.params; // _id từ params
+    const { employeeId, refundReason, items } = req.body; // Body: employeeId + lý do hoàn + danh sách sản phẩm
 
-    // Kiểm tra nhân viên
+    // 1️⃣ Kiểm tra nhân viên
     const employee = await Employee.findById(employeeId);
     if (!employee) return res.status(400).json({ message: "Nhân viên không tồn tại" });
 
-    // Kiểm tra đơn hàng
+    // 2️⃣ Kiểm tra đơn hàng
     const order = await Order.findById(mongoId).populate("employeeId", "fullName");
     if (!order) return res.status(404).json({ message: "Không tìm thấy đơn hàng" });
-    if (order.status !== "paid") return res.status(400).json({ message: "Chỉ hoàn đơn đã thanh toán" });
+    if (order.status !== "paid" && order.status !== "partially_refunded")
+      return res.status(400).json({ message: "Chỉ hoàn đơn đã thanh toán" });
 
-    const files = req.files || []; // Files từ middleware upload.array("files", 5)
-    const evidenceMedia = []; // Mảng media upload Cloudinary
-
-    // Upload lần lượt từng file lên Cloudinary (dùng Promise để đợi xong)
+    // 3️⃣ Upload chứng từ (image/video)
+    const files = req.files || [];
+    const evidenceMedia = [];
     for (const file of files) {
-      const resourceType = file.mimetype.startsWith("video") ? "video" : "image"; // Xác định type image/video
-
+      const resourceType = file.mimetype.startsWith("video") ? "video" : "image";
       const result = await new Promise((resolve, reject) => {
         const uploadStream = cloudinary.uploader.upload_stream(
           {
-            folder: `refunds/${mongoId}`, // Folder Cloudinary theo orderId
-            resource_type: resourceType, // Type image/video
+            folder: `refunds/${mongoId}`,
+            resource_type: resourceType,
           },
           (err, result) => {
-            if (err) reject(err); // Reject nếu upload fail
-            else resolve(result); // Resolve result {secure_url, public_id}
+            if (err) reject(err);
+            else resolve(result);
           }
         );
-        uploadStream.end(file.buffer); // Kết thúc stream với buffer file
+        uploadStream.end(file.buffer);
       });
-
       evidenceMedia.push({
-        url: result.secure_url, // URL an toàn HTTPS
-        public_id: result.public_id, // ID Cloudinary để xóa sau nếu cần
-        type: resourceType, // Type image/video
+        url: result.secure_url,
+        public_id: result.public_id,
+        type: resourceType,
       });
     }
 
-    // Tạo bản ghi refund
-    const refund = await OrderRefund.create({
-      orderId: mongoId,
-      refundedBy: employeeId, // Ref employee hoàn hàng
-      refundedAt: new Date(), // Thời gian hoàn
-      refundTransactionId: null, // Tx ref nếu có (sau thêm)
-      refundReason, // Lý do hoàn từ body
-      evidenceMedia, // Mảng media upload
-    });
-
-    // Cập nhật đơn hàng
-    order.status = "refunded"; // Update status hoàn
-    order.refundId = refund._id; // Ref refund record
-    await order.save(); // Save DB
-
-    // Cộng lại stock từ OrderItem (query items thay vì order.items undefined)
-    const items = await OrderItem.find({ orderId: mongoId }).populate("productId", "name"); // Query OrderItem + populate product name cho log
-    const session = await mongoose.startSession(); // Session atomic cộng stock
-    session.startTransaction();
-    try {
-      for (const item of items) {
-        // Loop items từ OrderItem
-        const prod = await Product.findById(item.productId._id).session(session); // Ref productId sau populate
-        if (prod) {
-          prod.stock_quantity += item.quantity; // Cộng stock lại (inc positive)
-          await prod.save({ session });
-          console.log(`Cộng stock hoàn hàng thành công cho ${prod.name}: +${item.quantity}`);
-        }
-      }
-      await session.commitTransaction(); // Commit atomic
-      session.endSession();
-    } catch (stock_err) {
-      await session.abortTransaction(); // Rollback nếu cộng stock fail
-      session.endSession();
-      console.error("Lỗi cộng stock hoàn hàng:", stock_err.message);
-      throw new Error("Lỗi cộng stock: " + stock_err.message);
+    // 4️⃣ Tính toán số lượng và tiền hoàn
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ message: "Danh sách sản phẩm hoàn không hợp lệ" });
     }
-    // log nhật ký hoạt động
-    await logActivity({
-      user: req.user,
-      store: { _id: order.storeId },
-      action: "update",
-      entity: "OrderRefund",
-      entityId: refund._id,
-      entityName: `Hoàn hàng đơn #${order._id}`,
-      req,
-      description: `Hoàn đơn hàng #${order._id} với lý do: "${refundReason}". Tổng số sản phẩm hoàn: ${
-        items?.length || 0
-      }`,
-    });
 
-    res.status(200).json({
-      message: "Hoàn hàng thành công (nội bộ)",
-      refund, // Refund record
-      order, // Order updated
-    });
+    let refundTotal = 0;
+    const refundItems = [];
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      for (const i of items) {
+        const orderItem = await OrderItem.findOne({
+          orderId: mongoId,
+          productId: i.productId,
+        }).populate("productId", "name stock_quantity");
+
+        if (!orderItem) continue;
+        //check không cho hoàn quá số lượng đã mua, kể cả là đến hoàn hàng lần thứ "n"
+        const totalRefundedBefore = await OrderRefund.aggregate([
+          { $match: { orderId: new mongoose.Types.ObjectId(mongoId) } },
+          { $unwind: "$refundItems" },
+          { $match: { "refundItems.productId": i.productId } },
+          { $group: { _id: null, refundedQty: { $sum: "$refundItems.quantity" } } },
+        ]);
+
+        const refundedQty = totalRefundedBefore[0]?.refundedQty || 0;
+
+        if (i.quantity + refundedQty > orderItem.quantity) {
+          throw new Error(
+            `Tổng số lượng hoàn (${i.quantity + refundedQty}) vượt quá số lượng đã mua (${
+              orderItem.quantity
+            }) cho sản phẩm "${orderItem.productId.name}"`
+          );
+        }
+
+        const refundQty = Math.min(i.quantity, orderItem.quantity);
+        const subtotal = Number(orderItem.priceAtTime || orderItem.subtotal / orderItem.quantity) * refundQty;
+        refundTotal += subtotal;
+
+        refundItems.push({
+          productId: i.productId,
+          quantity: refundQty,
+          priceAtTime: orderItem.priceAtTime || orderItem.subtotal / orderItem.quantity,
+          subtotal,
+        });
+
+        // Cộng lại stock
+        await Product.findByIdAndUpdate(i.productId, { $inc: { stock_quantity: refundQty } }, { session });
+
+        console.log(`➕ Cộng lại tồn kho cho ${orderItem.productId.name}: +${refundQty}`);
+      }
+
+      // 5️⃣ Tạo bản ghi refund
+      const refund = await OrderRefund.create(
+        [
+          {
+            orderId: mongoId,
+            refundedBy: employeeId,
+            refundedAt: new Date(),
+            refundReason,
+            refundAmount: refundTotal,
+            refundItems,
+            evidenceMedia,
+          },
+        ],
+        { session }
+      );
+
+      // 6️⃣ Cập nhật trạng thái đơn
+      const totalItems = await OrderItem.countDocuments({ orderId: mongoId });
+      const totalRefundedQty = refundItems.reduce((sum, i) => sum + i.quantity, 0);
+      const totalOrderQty =
+        (
+          await OrderItem.aggregate([
+            { $match: { orderId: new mongoose.Types.ObjectId(mongoId) } },
+            { $group: { _id: null, totalQty: { $sum: "$quantity" } } },
+          ])
+        )[0]?.totalQty || 0;
+
+      if (totalRefundedQty >= totalOrderQty) {
+        order.status = "refunded";
+      } else {
+        order.status = "partially_refunded";
+      }
+
+      order.refundId = refund[0]._id;
+      await order.save({ session });
+
+      await session.commitTransaction();
+      session.endSession();
+
+      // 7️⃣ Ghi log hoạt động
+      await logActivity({
+        user: req.user,
+        store: { _id: order.storeId },
+        action: "update",
+        entity: "OrderRefund",
+        entityId: refund[0]._id,
+        entityName: `Hoàn hàng đơn #${order._id}`,
+        req,
+        description: `Hoàn ${refundItems.length} sản phẩm trong đơn #${
+          order._id
+        }, tổng tiền hoàn ${refundTotal.toLocaleString()}đ. Lý do: "${refundReason}"`,
+      });
+
+      res.status(200).json({
+        message: "Hoàn hàng thành công",
+        refund: refund[0],
+        order,
+      });
+    } catch (err) {
+      await session.abortTransaction();
+      session.endSession();
+      console.error("❌ Lỗi khi hoàn hàng:", err.message);
+      res.status(500).json({ message: "Lỗi khi hoàn hàng", error: err.message });
+    }
   } catch (err) {
-    console.error("Lỗi refund:", err.message);
-    res.status(500).json({ message: "Lỗi khi hoàn hàng", error: err.message });
+    console.error("🔥 Lỗi refund:", err.message);
+    res.status(500).json({ message: "Lỗi server", error: err.message });
   }
 };
 

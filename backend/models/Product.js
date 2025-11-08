@@ -1,4 +1,4 @@
-// models/Product.js (xóa alertCount không dùng, giữ lowStockAlerted + pre-save hook reset - paste thay schema)
+// backend/models/Product.js
 const mongoose = require("mongoose");
 
 const productSchema = new mongoose.Schema(

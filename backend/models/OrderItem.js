@@ -1,4 +1,4 @@
-// models/OrderItem.js
+// /backend/models/OrderItem.js
 // Model chi tiết từng món trong hóa đơn — dễ report sản phẩm bán chạy 😎
 const mongoose = require("mongoose");
 

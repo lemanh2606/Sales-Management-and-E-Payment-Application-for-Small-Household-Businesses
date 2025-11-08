@@ -1,9 +1,14 @@
-// utils/period.js (fix periodToRange: thêm case custom với monthFrom/monthTo, tính đầu/cuối tháng UTC)
+// backend/utils/period.js
 //parse theo "YYYY-MM" chứ không phải "MM-YYYY"
 function periodToRange(periodType, periodKey, monthFrom, monthTo) {
   let start, end;
 
-  if (periodType === "month") {
+  if (periodType === "day") {
+    // periodKey dạng "YYYY-MM-DD"
+    const [year, month, day] = periodKey.split("-").map(Number);
+    start = new Date(Date.UTC(year, month - 1, day, 0, 0, 0)); // Bắt đầu lúc 00:00 UTC
+    end = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999)); // Kết thúc 23:59:59.999 UTC
+  } else if (periodType === "month") {
     const [year, month] = periodKey.split("-").map(Number); // Parse "2025-10" → year 2025, month 10
     start = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0)); // Ngày đầu tháng UTC
     end = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999)); // Ngày cuối tháng UTC + ms 999 inclusive
@@ -27,15 +32,7 @@ function periodToRange(periodType, periodKey, monthFrom, monthTo) {
     end = new Date(Date.UTC(toYear, toMonth, 0, 23, 59, 59, 999)); // Ngày cuối tháng to UTC + ms 999
   }
 
-  console.log(
-    "Debug khoảng thời gian:",
-    periodType,
-    periodKey,
-    "start",
-    start.toISOString(),
-    "end",
-    end.toISOString()
-  );
+  console.log("Debug khoảng thời gian:", periodType, periodKey, "start", start.toISOString(), "end", end.toISOString());
 
   return { start, end };
 }
