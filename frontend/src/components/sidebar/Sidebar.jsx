@@ -8,8 +8,7 @@ import { FiFileText, FiBell, FiStar, FiSettings } from "react-icons/fi";
 import { useAuth } from "../../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 
-export default function Sidebar() {
-  //không được lấy từ param phải lấy từ currentStore trong localStorage hoặc ở auth/context nhé ae
+export default function Sidebar({ onCollapsedChange }) {
   const currentStore = JSON.parse(localStorage.getItem("currentStore") || "{}");
   const storeId = currentStore?._id || null;
 
@@ -37,6 +36,13 @@ export default function Sidebar() {
   const navRef = useRef(null);
   const [canScrollDown, setCanScrollDown] = useState(false);
   const [scrollProgress, setScrollProgress] = useState(0);
+
+  // Thêm useEffect để thông báo thay đổi collapsed
+  useEffect(() => {
+    if (onCollapsedChange) {
+      onCollapsedChange(collapsed);
+    }
+  }, [collapsed, onCollapsedChange]);
 
   const baseItems = [
     {
@@ -134,9 +140,9 @@ export default function Sidebar() {
         { name: "Thiết lập thanh toán", path: "/settings/payment-method", permission: "settings:payment-method" },
         { name: "Hồ sơ cá nhân", path: "/settings/profile", permission: "users:view" },
         { name: "Thông báo", path: "/settings/payment", permission: "notifications:view" },
-        { 
-          name: "Gói dịch vụ", 
-          path: "/settings/subscription", 
+        {
+          name: "Gói dịch vụ",
+          path: "/settings/subscription",
           permission: "subscription:view",
           children: [
             { name: "Subscription hiện tại", path: "/settings/subscription", permission: "subscription:view" },
@@ -257,6 +263,18 @@ export default function Sidebar() {
     }
   };
 
+  // Sửa hàm toggle collapsed để đồng bộ
+  const handleToggleCollapse = () => {
+    setCollapsed(prev => {
+      const newCollapsed = !prev;
+      // Thông báo ngay lập tức khi state thay đổi
+      if (onCollapsedChange) {
+        onCollapsedChange(newCollapsed);
+      }
+      return newCollapsed;
+    });
+  };
+
   return (
     <>
       {/* Mobile hamburger */}
@@ -270,18 +288,16 @@ export default function Sidebar() {
 
       {/* Mobile overlay */}
       <div
-        className={`fixed inset-0 bg-black bg-opacity-40 z-40 transition-opacity duration-300 ${
-          openMobile ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
-        }`}
+        className={`fixed inset-0 bg-black bg-opacity-40 z-40 transition-opacity duration-300 ${openMobile ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+          }`}
         onClick={() => setOpenMobile(false)}
       />
 
       {/* Sidebar */}
       <aside
         // width changes when collapsed (desktop). On mobile it's full behavior via translate-x
-        className={`bg-white h-full shadow-2xl fixed top-0 left-0 z-50 transform transition-all duration-300 ${
-          openMobile ? "translate-x-0" : "-translate-x-full"
-        } md:translate-x-0 ${collapsed ? "w-20" : "w-64"}`}
+        className={`bg-white h-full shadow-2xl fixed top-0 left-0 z-50 transform transition-all duration-300 ${openMobile ? "translate-x-0" : "-translate-x-full"
+          } md:translate-x-0 ${collapsed ? "w-20" : "w-64"}`}
         aria-hidden={openMobile ? "false" : "true"}
       >
         <div className="p-4 flex flex-col h-full relative">
@@ -291,6 +307,11 @@ export default function Sidebar() {
               {!collapsed && (
                 <h2 className="text-2xl font-extrabold text-green-700 tracking-wide drop-shadow-lg">Smallbiz-Sales</h2>
               )}
+              {collapsed && (
+                <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">SS</span>
+                </div>
+              )}
             </div>
 
             {/* Mobile close button */}
@@ -298,10 +319,9 @@ export default function Sidebar() {
               <FiX size={24} />
             </button>
 
-            {/* NEW: collapse toggle (desktop only) */}
-            {/* NEW: collapse toggle (desktop only) */}
+            {/* NEW: collapse toggle (desktop only) - SỬA THÀNH DÙNG HÀM MỚI */}
             <button
-              onClick={() => setCollapsed((c) => !c)}
+              onClick={handleToggleCollapse}
               className={`hidden md:flex items-center justify-center w-10 h-10 p-2 rounded-md 
               transition-all duration-200
               ${collapsed ? "bg-green-100 hover:bg-green-200" : "bg-gray-100 hover:bg-gray-200"} 

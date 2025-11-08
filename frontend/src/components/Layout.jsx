@@ -1,17 +1,18 @@
 import React, { useState } from "react";
-
 import Sidebar from "../components/sidebar/Sidebar";
 import TrialBanner from "./sidebar/TrialBanner";
 
 export default function Layout({ children }) {
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // 👈 Thêm state này
 
     return (
         <div className="flex min-h-screen bg-[#ffffff]">
-            {/* Sidebar desktop */}
+            {/* Sidebar desktop - truyền callback để nhận trạng thái collapsed */}
             <Sidebar
                 openMobile={sidebarOpen}
                 setOpenMobile={setSidebarOpen}
+                onCollapsedChange={setSidebarCollapsed} // 👈 Thêm prop này
                 className="hidden md:block"
             />
 
@@ -31,11 +32,14 @@ export default function Layout({ children }) {
                 <Sidebar openMobile={sidebarOpen} setOpenMobile={setSidebarOpen} />
             </div>
 
-            {/* Main content */}
-            <div className="flex-1 flex flex-col transition-all duration-300 md:ml-64">
+            {/* Main content - ĐIỀU CHỈNH MARGIN DỰA VÀO collapsed */}
+            <div
+                className={`flex-1 flex flex-col transition-all duration-300 ${sidebarCollapsed ? "md:ml-20" : "md:ml-64" // 👈 Điều chỉnh margin
+                    }`}
+            >
                 {/* Trial Banner */}
                 <TrialBanner />
-                
+
                 {/* Top bar mobile */}
                 <header className="md:hidden p-4 shadow-md bg-white flex justify-between items-center sticky top-0 z-20">
                     <button

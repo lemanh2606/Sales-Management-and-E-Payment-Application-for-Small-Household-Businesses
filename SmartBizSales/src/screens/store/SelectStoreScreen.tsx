@@ -11,7 +11,6 @@ import {
   Image,
   Dimensions,
   StatusBar,
-  ScrollView,
 } from "react-native";
 import { useAuth } from "../../context/AuthContext";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -24,11 +23,10 @@ import {
   getStoreById,
 } from "../../api/storeApi";
 import { Ionicons } from "@expo/vector-icons";
-
-// --- Placeholder components: bạn có thể thay bằng modal thực tế ---
 import StoreFormModal from "../../components/store/StoreFormModal";
 import StoreDetailModal from "../../components/store/StoreDetailModal";
 import type { Store, StoreCreateDto } from "../../type/store";
+import { NavigationService } from "../../navigation/RootNavigation";
 
 const { width } = Dimensions.get("window");
 
@@ -58,7 +56,6 @@ export default function SelectStoreScreen() {
 
   const { setCurrentStore, user } = useAuth();
 
-  // --- Load stores from API ---
   const loadStores = async () => {
     setLoading(true);
     setErr("");
@@ -84,7 +81,6 @@ export default function SelectStoreScreen() {
     loadStores();
   }, [user]);
 
-  // --- Search filter ---
   useEffect(() => {
     if (!search) return setFilteredStores(stores);
     const q = search.trim().toLowerCase();
@@ -99,26 +95,25 @@ export default function SelectStoreScreen() {
     );
   }, [search, stores]);
 
-  // --- Select store ---
   const handleSelect = async (store: Store) => {
     try {
       setBusy(true);
       const res = await selectStore(store._id);
-      const returnedStore: Store = res?.store ?? store; // fallback chắc chắn
+      const returnedStore: Store = res?.store ?? store;
 
-      // Backup previous
-      try {
-        const prev = localStorage.getItem("currentStore");
-        if (prev) localStorage.setItem("previousStore", prev);
-        localStorage.setItem("currentStore", JSON.stringify(returnedStore));
-      } catch {}
-
-      // Update context
       setCurrentStore && setCurrentStore(returnedStore);
 
       Alert.alert(
         "Chọn cửa hàng",
-        `Bạn đã chọn cửa hàng: ${returnedStore.name}`
+        `Bạn đã chọn cửa hàng: ${returnedStore.name}`,
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              NavigationService.navigate("Dashboard", undefined, 15);
+            },
+          },
+        ]
       );
     } catch (e: any) {
       console.error(e);
@@ -130,7 +125,6 @@ export default function SelectStoreScreen() {
     }
   };
 
-  // --- Add / Edit store ---
   const handleAdd = () => {
     setEditingStore(null);
     setStoreForm({
@@ -157,7 +151,6 @@ export default function SelectStoreScreen() {
     setShowModal(true);
   };
 
-  // --- Save store: update nếu editingStore, tạo mới nếu không ---
   const handleSave = async (payloadFromModal?: Partial<Store>) => {
     const final = payloadFromModal || storeForm;
     if (!final.name || !final.address) {
@@ -167,10 +160,8 @@ export default function SelectStoreScreen() {
     try {
       setBusy(true);
       if (editingStore && editingStore._id) {
-        // Update
         await updateStore(editingStore._id, final);
       } else {
-        // Create mới
         await createStore(final as StoreCreateDto);
       }
       setShowModal(false);
@@ -228,15 +219,10 @@ export default function SelectStoreScreen() {
     );
   };
 
-  // --- Render item ---
   const renderItem = ({ item }: { item: Store }) => (
-    <TouchableOpacity
-      style={styles.storeCard}
-      onPress={() => handleSelect(item)}
-      activeOpacity={0.9}
-    >
-      <View style={styles.storeCardContent}>
-        {/* Ảnh cửa hàng */}
+    <View style={styles.storeCard}>
+      {/* Store Image with Overlay */}
+      <View style={styles.imageContainer}>
         <Image
           source={
             item.imageUrl
@@ -246,105 +232,129 @@ export default function SelectStoreScreen() {
           style={styles.storeImage}
           resizeMode="cover"
         />
+        <View style={styles.imageOverlay} />
 
-        {/* Nội dung thông tin */}
-        <View style={styles.storeInfo}>
-          <Text style={styles.storeName} numberOfLines={1}>
-            {item.name}
-          </Text>
-
-          {item.address && (
-            <View style={styles.infoRow}>
-              <Ionicons name="location-outline" size={14} color="#666" />
-              <Text style={styles.storeAddress} numberOfLines={2}>
-                {item.address}
-              </Text>
-            </View>
-          )}
-
-          {item.phone && (
-            <View style={styles.infoRow}>
-              <Ionicons name="call-outline" size={14} color="#666" />
-              <Text style={styles.storePhone}>{item.phone}</Text>
-            </View>
-          )}
-        </View>
-
-        {/* Các nút hành động */}
-        <View style={styles.cardActions}>
+        {/* Quick Actions on Image */}
+        <View style={styles.imageActions}>
           <TouchableOpacity
-            style={[styles.actionBtn, styles.detailBtn]}
+            style={[styles.iconButton, styles.viewButton]}
             onPress={() => handleDetail(item._id)}
           >
-            <Ionicons name="eye-outline" size={16} color="#3b82f6" />
-            <Text style={styles.actionText}>Chi tiết</Text>
+            <Ionicons name="eye" size={16} color="#fff" />
           </TouchableOpacity>
-
           <TouchableOpacity
-            style={[styles.actionBtn, styles.editBtn]}
+            style={[styles.iconButton, styles.editButton]}
             onPress={() => handleEdit(item)}
           >
-            <Ionicons name="create-outline" size={16} color="#10b981" />
-            <Text style={styles.actionText}>Sửa</Text>
+            <Ionicons name="create-outline" size={16} color="#fff" />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Badge chọn nhanh */}
-      <TouchableOpacity
-        style={styles.quickSelectBtn}
-        onPress={() => handleSelect(item)}
-      >
-        <Text style={styles.quickSelectText}>Chọn cửa hàng</Text>
-        <Ionicons name="chevron-forward" size={16} color="#fff" />
-      </TouchableOpacity>
-    </TouchableOpacity>
+      {/* Store Info */}
+      <View style={styles.storeContent}>
+        <View style={styles.storeHeader}>
+          <Text style={styles.storeName} numberOfLines={1}>
+            {item.name}
+          </Text>
+          <View style={styles.statusBadge}>
+            <View style={styles.statusDot} />
+            <Text style={styles.statusText}>Đang hoạt động</Text>
+          </View>
+        </View>
+
+        <View style={styles.storeDetails}>
+          <View style={styles.detailItem}>
+            <Ionicons name="location" size={16} color="#6b7280" />
+            <Text style={styles.detailText} numberOfLines={2}>
+              {item.address}
+            </Text>
+          </View>
+
+          {item.phone && (
+            <View style={styles.detailItem}>
+              <Ionicons name="call" size={16} color="#6b7280" />
+              <Text style={styles.detailText}>{item.phone}</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Action Buttons */}
+        <View style={styles.actionRow}>
+          <TouchableOpacity
+            style={[styles.actionBtn, styles.secondaryBtn]}
+            onPress={() => handleDetail(item._id)}
+          >
+            <Ionicons name="information-circle" size={18} color="#3b82f6" />
+            <Text style={styles.secondaryBtnText}>Chi tiết</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionBtn, styles.primaryBtn]}
+            onPress={() => handleSelect(item)}
+            disabled={busy}
+          >
+            {busy ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <>
+                <Ionicons name="enter-outline" size={18} color="#fff" />
+                <Text style={styles.primaryBtnText}>Vào cửa hàng</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
   );
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" />
+      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
 
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <Ionicons
-          name="search"
-          size={20}
-          color="#94a3b8"
-          style={styles.searchIcon}
-        />
-        <TextInput
-          placeholder="Tìm kiếm cửa hàng theo tên, địa chỉ, số điện thoại..."
-          value={search}
-          onChangeText={setSearch}
-          style={styles.searchInput}
-          placeholderTextColor="#94a3b8"
-        />
-        {search.length > 0 && (
-          <TouchableOpacity onPress={() => setSearch("")}>
-            <Ionicons name="close-circle" size={20} color="#cbd5e1" />
-          </TouchableOpacity>
-        )}
+      {/* Header Section */}
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.title}>Quản lý cửa hàng</Text>
+          <Text style={styles.subtitle}>Chọn cửa hàng để bắt đầu làm việc</Text>
+        </View>
+        <TouchableOpacity style={styles.addBtn} onPress={handleAdd}>
+          <Ionicons name="add" size={20} color="#fff" />
+        </TouchableOpacity>
       </View>
 
-      {/* Add Store Button */}
-      <TouchableOpacity style={styles.addStoreBtn} onPress={handleAdd}>
-        <View style={styles.addStoreContent}>
-          <Ionicons name="add-circle" size={24} color="#fff" />
-          <Text style={styles.addStoreText}>Thêm cửa hàng mới</Text>
+      {/* Search Section */}
+      <View style={styles.searchSection}>
+        <View style={styles.searchContainer}>
+          <Ionicons name="search" size={20} color="#9ca3af" />
+          <TextInput
+            placeholder="Tìm kiếm cửa hàng theo tên, địa chỉ..."
+            value={search}
+            onChangeText={setSearch}
+            style={styles.searchInput}
+            placeholderTextColor="#9ca3af"
+          />
+          {search.length > 0 && (
+            <TouchableOpacity
+              onPress={() => setSearch("")}
+              style={styles.clearButton}
+            >
+              <Ionicons name="close-circle" size={20} color="#d1d5db" />
+            </TouchableOpacity>
+          )}
         </View>
-      </TouchableOpacity>
+      </View>
 
-      {/* Store Count */}
+      {/* Stats Bar */}
       {!loading && (
-        <View style={styles.storeCountContainer}>
-          <Text style={styles.storeCountText}>
-            {filteredStores.length} cửa hàng
-          </Text>
+        <View style={styles.statsBar}>
+          <Text style={styles.statsText}>{filteredStores.length} cửa hàng</Text>
+          <View style={styles.statsDivider} />
+          <Text style={styles.statsText}>{stores.length} tổng số</Text>
         </View>
       )}
 
-      {/* Loading State */}
+      {/* Content */}
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#3b82f6" />
@@ -358,14 +368,16 @@ export default function SelectStoreScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.listContainer}
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Ionicons name="business-outline" size={64} color="#cbd5e1" />
-              <Text style={styles.emptyTitle}>Không có cửa hàng</Text>
-              <Text style={styles.emptySubtitle}>
-                Hãy tạo cửa hàng đầu tiên của bạn
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIcon}>
+                <Ionicons name="storefront-outline" size={64} color="#d1d5db" />
+              </View>
+              <Text style={styles.emptyTitle}>Chưa có cửa hàng</Text>
+              <Text style={styles.emptyDescription}>
+                Tạo cửa hàng đầu tiên để bắt đầu kinh doanh
               </Text>
-              <TouchableOpacity style={styles.emptyBtn} onPress={handleAdd}>
-                <Text style={styles.emptyBtnText}>Tạo cửa hàng mới</Text>
+              <TouchableOpacity style={styles.emptyButton} onPress={handleAdd}>
+                <Text style={styles.emptyButtonText}>Tạo cửa hàng mới</Text>
               </TouchableOpacity>
             </View>
           }
@@ -375,8 +387,11 @@ export default function SelectStoreScreen() {
       {/* Error Message */}
       {err ? (
         <View style={styles.errorContainer}>
-          <Ionicons name="warning-outline" size={20} color="#dc2626" />
+          <Ionicons name="warning" size={20} color="#dc2626" />
           <Text style={styles.errorText}>{err}</Text>
+          <TouchableOpacity onPress={() => setErr("")}>
+            <Ionicons name="close" size={20} color="#dc2626" />
+          </TouchableOpacity>
         </View>
       ) : null}
 
@@ -408,208 +423,272 @@ const styles = StyleSheet.create({
     backgroundColor: "#f8fafc",
   },
   header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 8,
+    backgroundColor: "#ffffff",
   },
-  headerTitle: {
-    fontSize: 28,
+  title: {
+    fontSize: 24,
     fontWeight: "700",
-    color: "#1e293b",
-    marginBottom: 4,
+    color: "#111827",
   },
-  headerSubtitle: {
-    fontSize: 16,
-    color: "#64748b",
-    fontWeight: "500",
+  subtitle: {
+    fontSize: 14,
+    color: "#6b7280",
+    marginTop: 4,
   },
-  searchContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#fff",
-    marginHorizontal: 20,
-    marginVertical: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 5,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 3.84,
-    elevation: 2,
-  },
-  searchIcon: {
-    marginRight: 12,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: "#1e293b",
-  },
-  addStoreBtn: {
+  addBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     backgroundColor: "#3b82f6",
-    marginHorizontal: 20,
-    marginBottom: 16,
-    paddingVertical: 16,
-    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
     shadowColor: "#3b82f6",
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 6,
   },
-  addStoreContent: {
+  searchSection: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: "#ffffff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#f3f4f6",
+  },
+  searchContainer: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    backgroundColor: "#f9fafb",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
   },
-  addStoreText: {
-    color: "#fff",
-    fontWeight: "600",
+  searchInput: {
+    flex: 1,
     fontSize: 16,
-    marginLeft: 8,
+    color: "#111827",
+    marginLeft: 12,
+    marginRight: 8,
   },
-  storeCountContainer: {
+  clearButton: {
+    padding: 4,
+  },
+  statsBar: {
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 20,
-    marginBottom: 8,
+    paddingVertical: 12,
+    backgroundColor: "#ffffff",
   },
-  storeCountText: {
+  statsText: {
     fontSize: 14,
-    color: "#64748b",
+    color: "#6b7280",
     fontWeight: "500",
+  },
+  statsDivider: {
+    width: 1,
+    height: 12,
+    backgroundColor: "#d1d5db",
+    marginHorizontal: 12,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: "#ffffff",
   },
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: "#64748b",
+    color: "#6b7280",
   },
   listContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    padding: 20,
   },
   storeCard: {
-    backgroundColor: "#fff",
-    borderRadius: 20,
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
     marginBottom: 16,
     shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
     shadowRadius: 12,
-    elevation: 8,
+    elevation: 4,
     overflow: "hidden",
   },
-  storeCardContent: {
-    padding: 16,
+  imageContainer: {
+    position: "relative",
   },
   storeImage: {
     width: "100%",
     height: 160,
-    borderRadius: 12,
-    marginBottom: 12,
   },
-  storeInfo: {
+  imageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.1)",
+  },
+  imageActions: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    flexDirection: "row",
+    gap: 8,
+  },
+  iconButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  viewButton: {
+    backgroundColor: "rgba(59, 130, 246, 0.9)",
+  },
+  editButton: {
+    backgroundColor: "rgba(16, 185, 129, 0.9)",
+  },
+  storeContent: {
+    padding: 16,
+  },
+  storeHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
     marginBottom: 12,
   },
   storeName: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "700",
-    color: "#1e293b",
-    marginBottom: 8,
+    color: "#111827",
+    flex: 1,
+    marginRight: 12,
   },
-  infoRow: {
+  statusBadge: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 6,
+    backgroundColor: "#ecfdf5",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
-  storeAddress: {
-    color: "#475569",
-    fontSize: 14,
-    marginLeft: 6,
-    flex: 1,
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#10b981",
+    marginRight: 4,
   },
-  storePhone: {
-    color: "#475569",
-    fontSize: 14,
-    marginLeft: 6,
+  statusText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#065f46",
   },
-  cardActions: {
+  storeDetails: {
+    gap: 8,
+    marginBottom: 16,
+  },
+  detailItem: {
     flexDirection: "row",
-    justifyContent: "flex-start",
+    alignItems: "flex-start",
+  },
+  detailText: {
+    color: "#6b7280",
+    fontSize: 14,
+    marginLeft: 8,
+    flex: 1,
+    lineHeight: 18,
+  },
+  actionRow: {
+    flexDirection: "row",
     gap: 12,
   },
   actionBtn: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    gap: 4,
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    gap: 6,
   },
-  detailBtn: {
-    backgroundColor: "#eff6ff",
+  secondaryBtn: {
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
   },
-  editBtn: {
-    backgroundColor: "#ecfdf5",
+  primaryBtn: {
+    backgroundColor: "#3b82f6",
+    shadowColor: "#3b82f6",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  actionText: {
+  secondaryBtnText: {
+    color: "#374151",
     fontSize: 14,
     fontWeight: "600",
   },
-  quickSelectBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#3b82f6",
-    paddingVertical: 12,
-    gap: 8,
-  },
-  quickSelectText: {
-    color: "#fff",
-    fontSize: 16,
+  primaryBtnText: {
+    color: "#ffffff",
+    fontSize: 14,
     fontWeight: "600",
   },
-  emptyContainer: {
+  emptyState: {
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 60,
+    paddingHorizontal: 20,
+  },
+  emptyIcon: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: "#f9fafb",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 24,
   },
   emptyTitle: {
     fontSize: 20,
-    fontWeight: "600",
-    color: "#475569",
-    marginTop: 16,
+    fontWeight: "700",
+    color: "#374151",
     marginBottom: 8,
   },
-  emptySubtitle: {
+  emptyDescription: {
     fontSize: 16,
-    color: "#64748b",
+    color: "#6b7280",
     textAlign: "center",
     marginBottom: 24,
+    lineHeight: 22,
   },
-  emptyBtn: {
+  emptyButton: {
     backgroundColor: "#3b82f6",
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 12,
+    shadowColor: "#3b82f6",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
-  emptyBtnText: {
-    color: "#fff",
+  emptyButtonText: {
+    color: "#ffffff",
     fontSize: 16,
     fontWeight: "600",
   },
@@ -622,7 +701,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderLeftWidth: 4,
     borderLeftColor: "#dc2626",
-    gap: 8,
+    gap: 12,
   },
   errorText: {
     color: "#dc2626",
