@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { Tooltip } from "antd";
-import { ShoppingCartOutlined, RollbackOutlined, FileTextOutlined, DropboxOutlined } from "@ant-design/icons";
+import { ShoppingCartOutlined, RollbackOutlined, FileTextOutlined, DropboxOutlined, BarChartOutlined } from "@ant-design/icons";
 
 import OrderPOSHome from "./OrderPOSHome";
 import OrderRefund from "./OrderRefund";
 import OrderBill from "./OrderBill";
 import InventoryLookup from "./InventoryLookup";
+import EndOfDayReport from "./EndOfDayReport";
 
-type PageType = "pos" | "refund" | "bill" | "inventory";
+type PageType = "pos" | "refund" | "bill" | "inventory" | "endofdayreport";
 
 const SidebarPOS: React.FC = () => {
   //Láy từ local
@@ -30,6 +31,7 @@ const SidebarPOS: React.FC = () => {
     { key: "refund", icon: <RollbackOutlined />, label: "Hoàn hàng" },
     { key: "inventory", icon: <DropboxOutlined />, label: "Tra cứu tồn kho" },
     { key: "bill", icon: <FileTextOutlined />, label: "Tra cứu hóa đơn" },
+    { key: "endofdayreport", icon: <BarChartOutlined />, label: "Báo cáo cuối ngày" },
   ];
 
   const renderPage = () => {
@@ -42,6 +44,8 @@ const SidebarPOS: React.FC = () => {
         return <OrderBill />;
       case "inventory":
         return <InventoryLookup />;
+      case "endofdayreport":
+        return <EndOfDayReport />;
       default:
         return null;
     }

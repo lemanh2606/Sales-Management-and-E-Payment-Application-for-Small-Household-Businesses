@@ -125,6 +125,7 @@ const ALL_PERMISSIONS = [
   // purchase/supplier related reports/exports
   "reports:export",
   "reports:activity-log:view",
+  "reports:endofday:view",
   // cấu hình
   "settings:activity-log",
   "settings:payment-method",

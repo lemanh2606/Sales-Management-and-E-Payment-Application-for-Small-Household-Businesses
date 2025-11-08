@@ -16,7 +16,7 @@ const ModalCustomerAdd: React.FC<ModalCustomerAddProps> = ({ open, onCancel, onC
   const currentStore = JSON.parse(localStorage.getItem("currentStore") || "{}");
 
   return (
-    <Modal open={open} onCancel={onCancel} footer={null} centered width={520} destroyOnClose>
+    <Modal open={open} onCancel={onCancel} footer={null} centered width={520} destroyOnHidden>
       {/* HEADER TITLE */}
       <div style={{ marginBottom: 8 }}>
         <Title

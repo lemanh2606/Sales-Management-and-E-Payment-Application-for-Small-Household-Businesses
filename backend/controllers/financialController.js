@@ -1,12 +1,16 @@
 // backend/controllers/financialController.js
 const mongoose = require("mongoose");
 const Order = require("../models/Order");
+const OrderItem = mongoose.model("OrderItem");
+const OrderRefund = mongoose.model("OrderRefund");
 const Product = require("../models/Product");
 const PurchaseOrder = require("../models/PurchaseOrder");
 const PurchaseReturn = require("../models/PurchaseReturn");
 const StockCheck = require("../models/StockCheck");
 const StockDisposal = require("../models/StockDisposal");
+const Customer = mongoose.model("Customer");
 const Employee = require("../models/Employee");
+const Store = require("../models/Store");
 const { calcRevenueByPeriod } = require("./revenueController");
 const { periodToRange } = require("../utils/period");
 const { Parser } = require("json2csv");
@@ -67,8 +71,8 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
 
   // 5️⃣ Chi phí vận hành (Operating Cost)
   const months = getMonthsInPeriod(periodType);
-  // cho dù là năm trong tương lai chưa bán hàng, vẫn tính lương cho nhân viên, nếu xoá nhân viên đi thì coi như mọi thứ là 0 vnđ, 
-  // còn nếu không thì kể cả là năm 2030 vẫn luôn cộng chi phí lương cho nhân viên, 
+  // cho dù là năm trong tương lai chưa bán hàng, vẫn tính lương cho nhân viên, nếu xoá nhân viên đi thì coi như mọi thứ là 0 vnđ,
+  // còn nếu không thì kể cả là năm 2030 vẫn luôn cộng chi phí lương cho nhân viên,
   // ví dụ 5 triệu 1 tháng thì 1 year là 60 triệu chi phí vận hành, lợi nhuận ròng là âm 60 triệu
   const employees = await Employee.find({ store_id: objectStoreId, isDeleted: false })
     .populate("user_id", "role")
@@ -201,7 +205,268 @@ const exportFinancial = async (req, res) => {
   }
 };
 
-module.exports = { getFinancialSummary, exportFinancial };
+// Tính toán báo cáo cuối ngày (end-of-day)
+const generateEndOfDayReport = async (req, res) => {
+  try {
+    const { format } = require("date-fns");
+    const { storeId } = req.params;
+    const { periodType = "day", periodKey = new Date().toISOString().split("T")[0] } = req.query; // Default today
+
+    // Lấy khoảng thời gian từ period.js
+    const { start, end } = periodToRange(periodType, periodKey);
+
+    // 1. Tổng doanh thu, đơn hàng, VAT, giảm giá, điểm tích lũy & tiền mặt
+    const ordersAgg = await Order.aggregate([
+      {
+        $match: {
+          storeId: new mongoose.Types.ObjectId(storeId),
+          createdAt: { $gte: start, $lte: end },
+          status: "paid",
+        },
+      },
+      {
+        $lookup: {
+          from: "loyalty_settings", // join để lấy vndPerPoint (nếu cần quy đổi)
+          localField: "storeId",
+          foreignField: "storeId",
+          as: "loyalty",
+        },
+      },
+      {
+        $project: {
+          totalAmount: 1,
+          vatAmount: 1,
+          paymentMethod: 1,
+          usedPoints: 1,
+          earnedPoints: 1,
+          loyalty: { $arrayElemAt: ["$loyalty", 0] },
+        },
+      },
+      {
+        $addFields: {
+          // Giảm giá từ điểm = usedPoints * vndPerPoint (mặc định nếu loyalty null thì 0)
+          discountFromPoints: {
+            $cond: [
+              { $and: ["$usedPoints", "$loyalty.vndPerPoint"] },
+              { $multiply: ["$usedPoints", "$loyalty.vndPerPoint"] },
+              0,
+            ],
+          },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalOrders: { $sum: 1 },
+          totalRevenue: { $sum: "$totalAmount" },
+          totalVAT: { $sum: "$vatAmount" },
+          totalDiscount: { $sum: "$discountFromPoints" }, // tổng giảm giá tích điểm
+          totalLoyaltyUsed: { $sum: "$usedPoints" }, // tổng điểm đã dùng
+          totalLoyaltyEarned: { $sum: "$earnedPoints" }, // tổng điểm cộng thêm
+          cashInDrawer: {
+            $sum: {
+              $cond: [{ $eq: ["$paymentMethod", "cash"] }, "$totalAmount", 0],
+            },
+          },
+        },
+      },
+    ]);
+
+    const orderSummary = ordersAgg[0] || {
+      totalOrders: 0,
+      totalRevenue: 0,
+      totalVAT: 0,
+      totalDiscount: 0,
+      totalLoyaltyUsed: 0,
+      totalLoyaltyEarned: 0,
+      cashInDrawer: 0,
+    };
+
+    // 2. Phân loại theo phương thức thanh toán
+    const byPayment = await Order.aggregate([
+      {
+        $match: {
+          storeId: new mongoose.Types.ObjectId(storeId),
+          createdAt: { $gte: start, $lte: end },
+          status: "paid",
+        },
+      },
+      {
+        $group: {
+          _id: "$paymentMethod",
+          revenue: { $sum: "$totalAmount" },
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    // 3. Phân loại theo nhân viên
+    const byEmployee = await Order.aggregate([
+      {
+        $match: {
+          storeId: new mongoose.Types.ObjectId(storeId),
+          createdAt: { $gte: start, $lte: end },
+          status: "paid",
+        },
+      },
+      {
+        $group: {
+          _id: "$employeeId",
+          revenue: { $sum: "$totalAmount" },
+          orders: { $sum: 1 },
+        },
+      },
+      {
+        $lookup: {
+          from: "employees",
+          localField: "_id",
+          foreignField: "_id",
+          as: "employee",
+        },
+      },
+      {
+        $project: {
+          _id: "$_id",
+          name: { $arrayElemAt: ["$employee.fullName", 0] },
+          revenue: 1,
+          orders: 1,
+          avgOrderValue: { $divide: ["$revenue", "$orders"] },
+        },
+      },
+    ]);
+
+    // 4. Theo sản phẩm (bán chạy, hoàn trả)
+    const byProduct = await OrderItem.aggregate([
+      { $match: { createdAt: { $gte: start, $lte: end } } },
+      {
+        $lookup: {
+          from: "orders",
+          localField: "orderId",
+          foreignField: "_id",
+          as: "order",
+        },
+      },
+      { $match: { "order.storeId": new mongoose.Types.ObjectId(storeId), "order.status": "paid" } },
+      {
+        $group: {
+          _id: "$productId",
+          quantitySold: { $sum: "$quantity" },
+          revenue: { $sum: "$subtotal" },
+        },
+      },
+      {
+        $lookup: {
+          from: "products",
+          localField: "_id",
+          foreignField: "_id",
+          as: "product",
+        },
+      },
+      {
+        $project: {
+          _id: "$_id",
+          name: { $arrayElemAt: ["$product.name", 0] },
+          sku: { $arrayElemAt: ["$product.sku", 0] },
+          quantitySold: 1,
+          revenue: 1,
+          refundQuantity: { $literal: 0 }, // Thêm logic refund nếu có
+          netSold: { $arrayElemAt: ["$product.stock_quantity", 0] },
+        },
+      },
+      { $sort: { revenue: -1 } },
+    ]);
+
+    // 5. Hoàn trả tổng quan
+    const refunds = await OrderRefund.aggregate([
+      { $match: { refundedAt: { $gte: start, $lte: end } } },
+      {
+        $lookup: {
+          from: "orders",
+          localField: "orderId",
+          foreignField: "_id",
+          as: "order",
+        },
+      },
+      { $match: { "order.storeId": new mongoose.Types.ObjectId(storeId) } },
+      {
+        $group: {
+          _id: null,
+          totalRefunds: { $sum: 1 },
+          refundAmount: { $sum: "$refundAmount" },
+        },
+      },
+    ]);
+    const refundSummary = refunds[0] || { totalRefunds: 0, refundAmount: 0 };
+
+    //phân loại hoàn hàng theo nhân viên, ai tiếp khách để hoàn hàng
+    const refundsByEmployee = await OrderRefund.aggregate([
+      { $match: { refundedAt: { $gte: start, $lte: end } } },
+      {
+        $lookup: {
+          from: "employees",
+          localField: "refundedBy",
+          foreignField: "_id",
+          as: "employee",
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          refundedBy: "$refundedBy",
+          name: { $arrayElemAt: ["$employee.fullName", 0] },
+          refundAmount: 1,
+          refundedAt: 1,
+        },
+      },
+    ]);
+
+    // 6. Tồn kho cuối ngày
+    const stockSnapshot = await Product.aggregate([
+      { $match: { store_id: new mongoose.Types.ObjectId(storeId) } },
+      {
+        $project: {
+          productId: "$_id",
+          name: "$name",
+          sku: "$sku",
+          stock: "$stock_quantity",
+        },
+      },
+    ]);
+
+    const storeInfo = await Store.findById(storeId).select("name");
+    // Tổng hợp báo cáo
+    const report = {
+      date: format(end, "dd/MM/yyyy"),
+      store: {
+        _id: storeId,
+        name: storeInfo?.name || "Không xác định",
+      },
+      summary: {
+        totalOrders: toNumber(orderSummary.totalOrders),
+        totalRevenue: toNumber(orderSummary.totalRevenue),
+        vatTotal: toNumber(orderSummary.totalVAT),
+        totalRefunds: toNumber(refundSummary.totalRefunds),
+        refundAmount: toNumber(refundSummary.refundAmount),
+        cashInDrawer: toNumber(orderSummary.cashInDrawer),
+        totalDiscount: toNumber(orderSummary.totalDiscount),
+        totalLoyaltyUsed: toNumber(orderSummary.totalLoyaltyUsed),
+        totalLoyaltyEarned: toNumber(orderSummary.totalLoyaltyEarned),
+      },
+      byPayment,
+      byEmployee,
+      byProduct,
+      stockSnapshot,
+      refundsByEmployee,
+    };
+
+    res.json({ message: "Báo cáo cuối ngày thành công", report });
+  } catch (err) {
+    console.error("Lỗi báo cáo cuối ngày:", err.message);
+    res.status(500).json({ message: "Lỗi server khi tạo báo cáo cuối ngày" });
+  }
+};
+
+module.exports = { getFinancialSummary, exportFinancial, generateEndOfDayReport };
 
 /*
 Mẫu JSON trả về từ API như sau: period theo YEAR
