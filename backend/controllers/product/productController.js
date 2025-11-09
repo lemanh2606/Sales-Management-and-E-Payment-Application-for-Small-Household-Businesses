@@ -112,22 +112,8 @@ const createProduct = async (req, res) => {
     if (!store)
       return res.status(404).json({ message: "Cửa hàng không tồn tại" });
 
-    // Chỉ check quyền theo cửa hàng
-    if (!store.owner_id.equals(userId)) {
-      // Nếu là staff, kiểm tra xem có thuộc store không
-      if (user.role === "STAFF") {
-        const employee = await Employee.findOne({ user_id: userId });
-        if (!employee || employee.store_id.toString() !== storeId) {
-          return res.status(403).json({
-            message: "Bạn không có quyền tạo sản phẩm cho cửa hàng này",
-          });
-        }
-      } else {
-        return res.status(403).json({
-          message: "Bạn không có quyền tạo sản phẩm cho cửa hàng này",
-        });
-      }
-    }
+    // ĐÃ LOẠI BỎ CHECK ROLE - Chỉ kiểm tra user và store tồn tại
+    // Mọi user đã xác thực đều có thể tạo sản phẩm
 
     if (group_id) {
       const productGroup = await ProductGroup.findOne({
@@ -192,6 +178,7 @@ const createProduct = async (req, res) => {
       supplier_id: supplier_id || null,
       group_id: group_id || null,
       image: imageData,
+      createdBy: userId,
     });
 
     await newProduct.save();
@@ -255,28 +242,10 @@ const updateProduct = async (req, res) => {
     if (!product)
       return res.status(404).json({ message: "Sản phẩm không tồn tại" });
 
-    // Check quyền
+    // ĐÃ LOẠI BỎ CHECK ROLE - Chỉ kiểm tra user tồn tại
     const user = await User.findById(userId);
     if (!user)
       return res.status(404).json({ message: "Người dùng không tồn tại" });
-
-    if (!product.store_id.owner_id.equals(userId)) {
-      if (user.role === "STAFF") {
-        const employee = await Employee.findOne({ user_id: userId });
-        if (
-          !employee ||
-          employee.store_id.toString() !== product.store_id._id.toString()
-        ) {
-          return res
-            .status(403)
-            .json({ message: "Bạn không có quyền cập nhật sản phẩm này" });
-        }
-      } else {
-        return res
-          .status(403)
-          .json({ message: "Bạn không có quyền cập nhật sản phẩm này" });
-      }
-    }
 
     // Validate numeric fields
     if (price !== undefined && (isNaN(price) || price < 0))
@@ -425,25 +394,10 @@ const deleteProduct = async (req, res) => {
     if (!product)
       return res.status(404).json({ message: "Sản phẩm không tồn tại" });
 
+    // ĐÃ LOẠI BỎ CHECK ROLE - Chỉ kiểm tra user tồn tại
     const user = await User.findById(userId);
     if (!user)
       return res.status(404).json({ message: "Người dùng không tồn tại" });
-
-    if (!product.store_id.owner_id.equals(userId)) {
-      if (user.role === "STAFF") {
-        const employee = await Employee.findOne({ user_id: userId });
-        if (
-          !employee ||
-          employee.store_id.toString() !== product.store_id._id.toString()
-        )
-          return res
-            .status(403)
-            .json({ message: "Bạn không có quyền xóa sản phẩm này" });
-      } else
-        return res
-          .status(403)
-          .json({ message: "Bạn không có quyền xóa sản phẩm này" });
-    }
 
     product.isDeleted = true;
     await product.save();
@@ -473,7 +427,7 @@ const deleteProduct = async (req, res) => {
 const getProductsByStore = async (req, res) => {
   try {
     const { storeId } = req.params;
-    const { page = 1, limit = 10 } = req.query;
+    const { page = 1, limit = 10, query = "", status } = req.query;
 
     // Kiểm tra store có tồn tại không
     const store = await Store.findById(storeId);
@@ -483,11 +437,26 @@ const getProductsByStore = async (req, res) => {
 
     // Phân trang
     const skip = (Number(page) - 1) * Number(limit);
-    const query = { store_id: storeId, isDeleted: false };
+    const filter = { store_id: storeId, isDeleted: false };
+
+    // Thêm filter theo query tìm kiếm
+    if (query && query.trim() !== "") {
+      const searchRegex = new RegExp(query.trim(), "i");
+      filter.$or = [
+        { name: searchRegex },
+        { sku: searchRegex },
+        { description: searchRegex },
+      ];
+    }
+
+    // Thêm filter theo status
+    if (status && status !== "all") {
+      filter.status = status;
+    }
 
     const [total, products] = await Promise.all([
-      Product.countDocuments(query),
-      Product.find(query)
+      Product.countDocuments(filter),
+      Product.find(filter)
         .populate("supplier_id", "name")
         .populate("store_id", "name")
         .populate("group_id", "name")
@@ -519,6 +488,8 @@ const getProductsByStore = async (req, res) => {
     res.status(200).json({
       message: "Lấy danh sách sản phẩm thành công",
       total,
+      page: Number(page),
+      limit: Number(limit),
       products: formattedProducts,
     });
   } catch (error) {
@@ -531,7 +502,6 @@ const getProductsByStore = async (req, res) => {
 const getProductById = async (req, res) => {
   try {
     const { productId } = req.params;
-    const userId = req.user.id || req.user._id;
 
     const product = await Product.findOne({ _id: productId, isDeleted: false })
       .populate("supplier_id", "name")
@@ -542,31 +512,7 @@ const getProductById = async (req, res) => {
       return res.status(404).json({ message: "Sản phẩm không tồn tại" });
     }
 
-    // Kiểm tra quyền truy cập
-    const user = await User.findById(userId);
-    if (
-      user.role === "MANAGER" &&
-      !product.store_id.owner_id.equals(user._id)
-    ) {
-      return res
-        .status(403)
-        .json({ message: "Bạn không có quyền truy cập sản phẩm này" });
-    }
-
-    if (user.role === "STAFF") {
-      // Tìm thông tin employee để lấy store_id
-      const employee = await Employee.findOne({ user_id: userId });
-      if (!employee) {
-        return res
-          .status(404)
-          .json({ message: "Không tìm thấy thông tin nhân viên" });
-      }
-      if (employee.store_id.toString() !== product.store_id._id.toString()) {
-        return res
-          .status(403)
-          .json({ message: "Bạn không có quyền truy cập sản phẩm này" });
-      }
-    }
+    // ĐÃ LOẠI BỎ CHECK ROLE - Mọi user đã xác thực đều có thể xem
 
     // Định dạng lại dữ liệu trả về
     const formattedProduct = {
@@ -599,7 +545,7 @@ const getProductById = async (req, res) => {
   }
 };
 
-// Cập nhật giá bán sản phẩm (chỉ manager)
+// Cập nhật giá bán sản phẩm
 const updateProductPrice = async (req, res) => {
   try {
     // Kiểm tra xem request body có tồn tại không
@@ -623,13 +569,7 @@ const updateProductPrice = async (req, res) => {
       return res.status(400).json({ message: "Giá bán phải là số dương" });
     }
 
-    // Kiểm tra user là manager
-    const user = await User.findById(userId);
-    if (!user || user.role !== "MANAGER") {
-      return res
-        .status(403)
-        .json({ message: "Chỉ Manager mới được cập nhật giá sản phẩm" });
-    }
+    // ĐÃ LOẠI BỎ CHECK ROLE - Mọi user đã xác thực đều có thể cập nhật giá
 
     // Tìm sản phẩm và populate store để kiểm tra quyền (chỉ tìm sản phẩm chưa bị xóa)
     const product = await Product.findOne({
@@ -638,13 +578,6 @@ const updateProductPrice = async (req, res) => {
     }).populate("store_id", "owner_id");
     if (!product) {
       return res.status(404).json({ message: "Sản phẩm không tồn tại" });
-    }
-
-    // Kiểm tra quyền: chỉ owner của store mới được cập nhật giá
-    if (!product.store_id.owner_id.equals(user._id)) {
-      return res.status(403).json({
-        message: "Bạn chỉ có thể cập nhật giá sản phẩm trong cửa hàng của mình",
-      });
     }
 
     // Cập nhật giá bán sản phẩm
@@ -774,19 +707,13 @@ const searchProducts = async (req, res) => {
   }
 };
 
-// DELETE IMAGE - Xóa ảnh sản phẩm (chỉ manager)
+// DELETE IMAGE - Xóa ảnh sản phẩm
 const deleteProductImage = async (req, res) => {
   try {
     const { productId } = req.params;
     const userId = req.user.id || req.user._id;
 
-    // Kiểm tra user là manager
-    const user = await User.findById(userId);
-    if (!user || user.role !== "MANAGER") {
-      return res
-        .status(403)
-        .json({ message: "Chỉ Manager mới được xóa ảnh sản phẩm" });
-    }
+    // ĐÃ LOẠI BỎ CHECK ROLE - Mọi user đã xác thực đều có thể xóa ảnh
 
     // Tìm sản phẩm và kiểm tra quyền (chỉ tìm sản phẩm chưa bị xóa)
     const product = await Product.findOne({
@@ -795,12 +722,6 @@ const deleteProductImage = async (req, res) => {
     }).populate("store_id", "owner_id");
     if (!product) {
       return res.status(404).json({ message: "Sản phẩm không tồn tại" });
-    }
-
-    if (!product.store_id.owner_id.equals(user._id)) {
-      return res.status(403).json({
-        message: "Bạn chỉ có thể xóa ảnh sản phẩm trong cửa hàng của mình",
-      });
     }
 
     // Kiểm tra có ảnh không
@@ -1471,7 +1392,6 @@ const importProducts = async (req, res) => {
     });
   }
 };
-
 // Download Product Template
 const downloadProductTemplate = (req, res) => {
   const filePath = path.resolve(
@@ -1516,30 +1436,7 @@ const exportProducts = async (req, res) => {
       return res.status(404).json({ message: "Cửa hàng không tồn tại" });
     }
 
-    // Kiểm tra quyền truy cập
-    const user = await User.findById(userId);
-    if (!user) {
-      console.log(`❌ User not found: ${userId}`);
-      return res.status(404).json({ message: "Người dùng không tồn tại" });
-    }
-
-    // Kiểm tra quyền
-    if (!store.owner_id.equals(userId)) {
-      if (user.role === "STAFF") {
-        const employee = await Employee.findOne({ user_id: userId });
-        if (!employee || employee.store_id.toString() !== storeId) {
-          console.log(`❌ Unauthorized access attempt by user: ${userId}`);
-          return res.status(403).json({
-            message: "Bạn không có quyền xuất sản phẩm từ cửa hàng này",
-          });
-        }
-      } else {
-        console.log(`❌ Unauthorized access attempt by user: ${userId}`);
-        return res.status(403).json({
-          message: "Bạn không có quyền xuất sản phẩm từ cửa hàng này",
-        });
-      }
-    }
+    // ĐÃ LOẠI BỎ CHECK ROLE - Mọi user đã xác thực đều có thể export
 
     // Lấy tất cả sản phẩm của cửa hàng
     const products = await Product.find({
@@ -1661,14 +1558,14 @@ const exportProducts = async (req, res) => {
       `✅ Export successful: ${filename}, ${products.length} products`
     );
 
-    // Ghi log hoạt động - SỬA LẠI Ở ĐÂY
+    // Ghi log hoạt động
     try {
       await logActivity({
         user: req.user,
         store: { _id: storeId },
-        action: "export", // Đã được thêm vào enum
+        action: "export",
         entity: "Product",
-        entityId: storeId, // Sử dụng storeId thay vì null
+        entityId: storeId,
         entityName: "Danh sách sản phẩm",
         req,
         description: `Xuất danh sách ${products.length} sản phẩm từ cửa hàng ${store.name}`,
@@ -1679,7 +1576,6 @@ const exportProducts = async (req, res) => {
         "❌ Lỗi ghi Activity Log (không ảnh hưởng export):",
         logError.message
       );
-      // Không throw error để không ảnh hưởng đến export
     }
 
     // Gửi file về client
@@ -1693,6 +1589,70 @@ const exportProducts = async (req, res) => {
   }
 };
 
+// ============= GET ALL PRODUCTS - Lấy tất cả sản phẩm (cho dashboard, reports) =============
+const getAllProducts = async (req, res) => {
+  try {
+    const { storeId, page = 1, limit = 50, status, category } = req.query;
+
+    const filter = { isDeleted: false };
+
+    if (storeId) {
+      filter.store_id = storeId;
+    }
+
+    if (status && status !== "all") {
+      filter.status = status;
+    }
+
+    if (category) {
+      filter.group_id = category;
+    }
+
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const [total, products] = await Promise.all([
+      Product.countDocuments(filter),
+      Product.find(filter)
+        .populate("supplier_id", "name")
+        .populate("group_id", "name")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(Number(limit)),
+    ]);
+
+    const formattedProducts = products.map((p) => ({
+      _id: p._id,
+      name: p.name,
+      sku: p.sku,
+      description: p.description,
+      price: parseFloat(p.price?.toString() || 0),
+      cost_price: parseFloat(p.cost_price?.toString() || 0),
+      stock_quantity: p.stock_quantity,
+      min_stock: p.min_stock,
+      max_stock: p.max_stock,
+      unit: p.unit,
+      status: p.status,
+      image: p.image,
+      store: p.store_id,
+      supplier: p.supplier_id,
+      group: p.group_id,
+      createdAt: p.createdAt,
+      updatedAt: p.updatedAt,
+    }));
+
+    res.status(200).json({
+      message: "Lấy danh sách sản phẩm thành công",
+      total,
+      page: Number(page),
+      limit: Number(limit),
+      products: formattedProducts,
+    });
+  } catch (error) {
+    console.error("❌ Lỗi getAllProducts:", error);
+    res.status(500).json({ message: "Lỗi server", error: error.message });
+  }
+};
+
 module.exports = {
   // CUD
   createProduct,
@@ -1703,6 +1663,7 @@ module.exports = {
   // Reads
   getProductsByStore,
   getProductById,
+  getAllProducts,
   // Updates
   updateProductPrice,
   // thông báo, cảnh báo

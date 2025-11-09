@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { useAuth } from "../../context/AuthContext";
 import * as productApi from "../../api/productApi";
-import { Product, ProductStatus, ImportResponse } from '../../type/product';
+import { Product, ProductStatus, ImportResponse } from "../../type/product";
 import Modal from "react-native-modal";
 import { Ionicons } from "@expo/vector-icons";
 import { File, Directory, Paths } from "expo-file-system";
