@@ -466,7 +466,33 @@ const getOrderById = async (req, res) => {
 const refundOrder = async (req, res) => {
   try {
     const { orderId: mongoId } = req.params; // _id từ params
-    const { employeeId, refundReason, items } = req.body; // Body: employeeId + lý do hoàn + danh sách sản phẩm
+    let { employeeId, refundReason, items } = req.body; // Body: employeeId + lý do hoàn + danh sách sản phẩm
+
+    // 👇 SỬA LẠI ĐOẠN NÀY
+    // Parse items nếu là string
+    if (typeof items === "string") {
+      try {
+        items = JSON.parse(items);
+      } catch (err) {
+        // Nếu parse fail, log ra để debug
+        console.error("❌ Parse items error:", err.message);
+        console.error("📦 Raw items value:", items);
+        return res.status(400).json({
+          message: "items phải là JSON array hợp lệ",
+          receivedValue: items,
+          error: err.message,
+        });
+      }
+    }
+
+    // Kiểm tra items sau khi parse
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({
+        message: "Danh sách sản phẩm hoàn không hợp lệ",
+        receivedValue: items,
+        receivedType: typeof items,
+      });
+    }
 
     // 1️⃣ Kiểm tra nhân viên
     const employee = await Employee.findById(employeeId);
@@ -501,11 +527,6 @@ const refundOrder = async (req, res) => {
         public_id: result.public_id,
         type: resourceType,
       });
-    }
-
-    // 4️⃣ Tính toán số lượng và tiền hoàn
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ message: "Danh sách sản phẩm hoàn không hợp lệ" });
     }
 
     let refundTotal = 0;
@@ -1034,15 +1055,136 @@ const exportTopSellingProducts = async (req, res) => {
   }
 };
 
+// 1) api/orders/list-paid, "getListPaidOrders ", (lấy danh sách các đơn đã thanh toán thành công, status là "paid")
+// 2) api/orders/list-refund, (Xem danh sách các order đã hoàn trả thành công, có 2 trạng thái là refunded và partially_refunded)
+// 3) /api/orders/order-refund/:orderId, ( để xem chi tiết 1 order đã hoàn trả thành công)
+
+const getListPaidOrders = async (req, res) => {
+  const { storeId } = req.query;
+  try {
+    const orders = await Order.find({ status: "paid", storeId })
+      .populate("storeId", "name")
+      .populate("employeeId", "fullName")
+      .populate("customer", "name phone")
+      .select("storeId employeeId customer totalAmount paymentMethod createdAt updatedAt")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.json({
+      message: "Lấy danh sách hóa đơn đã thanh toán thành công",
+      orders,
+    });
+  } catch (err) {
+    console.error("Lỗi khi lấy danh sách hóa đơn đã thanh toán:", err.message);
+    res.status(500).json({ message: "Lỗi server khi lấy danh sách hóa đơn đã thanh toán" });
+  }
+};
+
+const getListRefundOrders = async (req, res) => {
+  const { storeId } = req.query;
+  try {
+    const refundOrders = await Order.find({
+      storeId,
+      status: { $in: ["refunded", "partially_refunded"] },
+    })
+      .populate("storeId", "name")
+      .populate("employeeId", "fullName")
+      .populate("customer", "name phone")
+      .select("storeId employeeId customer totalAmount status createdAt updatedAt refundId")
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    res.json({
+      message: "Lấy danh sách đơn hoàn hàng thành công",
+      orders: refundOrders,
+    });
+  } catch (err) {
+    console.error("Lỗi khi lấy danh sách đơn hoàn hàng:", err.message);
+    res.status(500).json({ message: "Lỗi server khi lấy danh sách đơn hoàn hàng" });
+  }
+};
+
+const getOrderRefundDetail = async (req, res) => {
+  const { storeId } = req.query;
+  const { orderId } = req.params;
+
+  try {
+    // Lấy đơn hàng gốc
+    const order = await Order.findOne({ _id: orderId, storeId })
+      .populate("storeId", "name")
+      .populate("employeeId", "fullName")
+      .populate("customer", "name phone")
+      .lean();
+
+    if (!order) {
+      return res.status(404).json({
+        message: "Không tìm thấy đơn hàng hoặc không thuộc cửa hàng này",
+      });
+    }
+
+    // Nếu đơn có refundId thì lấy thêm chi tiết từ bảng OrderRefund
+    let refundDetail = null;
+    if (order.refundId) {
+      refundDetail = await OrderRefund.findById(order.refundId)
+        .populate("orderId", "totalAmount paymentMethod status")
+        .populate("refundedBy", "fullName")
+        .populate("refundItems.productId", "name price sku")
+        .lean();
+    }
+
+    // Nếu ông có OrderItem thì lấy danh sách sản phẩm của đơn gốc luôn
+    const orderItems = await OrderItem.find({ orderId }).populate("productId", "name price sku").lean();
+
+    return res.status(200).json({
+      message: "Lấy chi tiết đơn hoàn hàng thành công",
+      order,
+      refundDetail,
+      orderItems,
+    });
+  } catch (error) {
+    console.error("getOrderRefundDetail error:", error);
+    res.status(500).json({ message: "Lỗi server khi lấy chi tiết đơn hoàn hàng" });
+  }
+};
+
+// Lấy toàn bộ danh sách đơn hàng (mọi trạng thái)
+const getOrderListAll = async (req, res) => {
+  try {
+    const { storeId } = req.query;
+
+    // Query toàn bộ đơn của cửa hàng hiện tại
+    const orders = await Order.find({ storeId })
+      .populate("storeId", "name") // tên cửa hàng
+      .populate("employeeId", "fullName") // nhân viên
+      .populate("customer", "name phone") // khách hàng
+      .sort({ createdAt: -1 }) // mới nhất lên đầu
+      .lean();
+
+    res.json({
+      message: "Lấy danh sách tất cả đơn hàng thành công",
+      total: orders.length,
+      orders,
+    });
+  } catch (err) {
+    console.error("Lỗi khi lấy danh sách đơn hàng:", err.message);
+    res.status(500).json({ message: "Lỗi server khi lấy danh sách đơn hàng" });
+  }
+};
+
+
 module.exports = {
   createOrder,
   setPaidCash,
   printBill,
   vietqrReturn,
   vietqrCancel,
-  getOrderById,
-  refundOrder,
   getTopSellingProducts,
   getTopFrequentCustomers,
   exportTopSellingProducts,
+  getOrderById,
+  refundOrder,
+  getListPaidOrders,
+  getListRefundOrders,
+  getOrderRefundDetail,
+  getOrderListAll,
 };

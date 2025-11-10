@@ -634,7 +634,7 @@ const OrderPOSHome: React.FC = () => {
                               title: "Tên sản phẩm",
                               dataIndex: "name",
                               ellipsis: true,
-                              width: 350,
+                              width: 300,
                               render: (text) => <Text strong>{text}</Text>,
                             },
                             { title: "Đơn vị", dataIndex: "unit", width: 100, align: "center" },
