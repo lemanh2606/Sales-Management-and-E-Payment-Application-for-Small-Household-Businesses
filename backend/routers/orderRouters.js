@@ -19,9 +19,12 @@ const {
   getListPaidOrders,
   getListRefundOrders,
   getOrderRefundDetail,
+  getOrderListAll,
 } = require("../controllers/order/orderController");
 
 //API CHUNG: http://localhost:9999/api/orders
+
+router.get("/list-all", verifyToken, checkStoreAccess, requirePermission("orders:view"), getOrderListAll);
 
 router.post("/", verifyToken, checkStoreAccess, requirePermission("orders:create"), createOrder);
 
@@ -55,7 +58,7 @@ router.get("/list-paid", verifyToken, checkStoreAccess, requirePermission("order
 router.get("/list-refund", verifyToken, checkStoreAccess, requirePermission("orders:view"), getListRefundOrders);
 //xem chi tiết 1 Order đã hoàn trả thành công
 router.get("/order-refund/:orderId", verifyToken, checkStoreAccess,requirePermission("orders:view"), getOrderRefundDetail);
-
+//xem chi tiết 1 order chung
 router.get("/:orderId", verifyToken, checkStoreAccess, requirePermission("orders:view"), getOrderById);
 
 module.exports = router;

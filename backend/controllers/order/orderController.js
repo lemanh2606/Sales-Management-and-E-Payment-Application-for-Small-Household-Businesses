@@ -1147,6 +1147,31 @@ const getOrderRefundDetail = async (req, res) => {
   }
 };
 
+// Lấy toàn bộ danh sách đơn hàng (mọi trạng thái)
+const getOrderListAll = async (req, res) => {
+  try {
+    const { storeId } = req.query;
+
+    // Query toàn bộ đơn của cửa hàng hiện tại
+    const orders = await Order.find({ storeId })
+      .populate("storeId", "name") // tên cửa hàng
+      .populate("employeeId", "fullName") // nhân viên
+      .populate("customer", "name phone") // khách hàng
+      .sort({ createdAt: -1 }) // mới nhất lên đầu
+      .lean();
+
+    res.json({
+      message: "Lấy danh sách tất cả đơn hàng thành công",
+      total: orders.length,
+      orders,
+    });
+  } catch (err) {
+    console.error("Lỗi khi lấy danh sách đơn hàng:", err.message);
+    res.status(500).json({ message: "Lỗi server khi lấy danh sách đơn hàng" });
+  }
+};
+
+
 module.exports = {
   createOrder,
   setPaidCash,
@@ -1161,4 +1186,5 @@ module.exports = {
   getListPaidOrders,
   getListRefundOrders,
   getOrderRefundDetail,
+  getOrderListAll,
 };

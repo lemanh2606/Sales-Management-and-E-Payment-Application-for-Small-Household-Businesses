@@ -4,11 +4,11 @@ import { ShoppingCartOutlined, RollbackOutlined, FileTextOutlined, DropboxOutlin
 
 import OrderPOSHome from "./OrderPOSHome";
 import OrderRefund from "./OrderRefund";
-import OrderBill from "./OrderBill";
+import OrderTrackingPage from "./OrderTrackingPage";
 import InventoryLookup from "./InventoryLookup";
 import EndOfDayReport from "./EndOfDayReport";
 
-type PageType = "pos" | "refund" | "bill" | "inventory" | "endofdayreport";
+type PageType = "pos" | "refund" | "trackingpage" | "inventory" | "endofdayreport";
 
 const SidebarPOS: React.FC = () => {
   //Láy từ local
@@ -30,22 +30,22 @@ const SidebarPOS: React.FC = () => {
     { key: "pos", icon: <ShoppingCartOutlined />, label: "Bán hàng" },
     { key: "refund", icon: <RollbackOutlined />, label: "Hoàn hàng" },
     { key: "inventory", icon: <DropboxOutlined />, label: "Tra cứu tồn kho" },
-    { key: "bill", icon: <FileTextOutlined />, label: "Tra cứu hóa đơn" },
+    { key: "trackingpage", icon: <FileTextOutlined />, label: "Tra cứu đơn hàng" },
     { key: "endofdayreport", icon: <BarChartOutlined />, label: "Báo cáo cuối ngày" },
   ];
 
   const renderPage = () => {
     switch (activePage) {
       case "pos":
-        return <OrderPOSHome />;
+        return <OrderPOSHome />; //trang bán hàng
       case "refund":
-        return <OrderRefund />;
-      case "bill":
-        return <OrderBill />;
+        return <OrderRefund />; //trang hoàn hàng + chi tiết
+      case "trackingpage":
+        return <OrderTrackingPage />; //trang tra cứu order + chi tiết
       case "inventory":
-        return <InventoryLookup />;
+        return <InventoryLookup />; //tra cứu tồn kho
       case "endofdayreport":
-        return <EndOfDayReport />;
+        return <EndOfDayReport />; //báo cáo cuối ngày + period
       default:
         return null;
     }

@@ -291,14 +291,14 @@ const EndOfDayReport: React.FC = () => {
       >
         <Row justify="space-between" align="middle" gutter={[16, 16]}>
           <Col xs={24} md={12}>
-            <Space direction="vertical" size={0}>
-              <Title level={3} style={{ margin: 0, color: "#1890ff" }}>
+            <div className="flex flex-col sm:flex-row sm:items-center  mb-4 gap-3">
+              <Title level={3} style={{ margin: 0}}>
                 <BarChartOutlined /> Báo Cáo Cuối Ngày
               </Title>
-              <Text type="secondary">
-                <ShopOutlined /> {reportData.store.name}
-              </Text>
-            </Space>
+              <span className="px-4 py-2 text-base font-semibold bg-[#e6f4ff] text-[#1890ff] rounded-xl shadow-sm duration-200">
+                {currentStore?.name}
+              </span>
+            </div>
           </Col>
           <Col xs={24} md={12}>
             <Space size="middle" wrap style={{ justifyContent: "flex-end", width: "100%" }}>
