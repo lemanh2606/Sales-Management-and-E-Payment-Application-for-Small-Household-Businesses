@@ -145,9 +145,9 @@ export default function Sidebar({ onCollapsedChange }) {
           path: "/settings/subscription",
           permission: "subscription:view",
           children: [
-            { name: "Subscription hiện tại", path: "/settings/subscription", permission: "subscription:view" },
+            { name: "Gói đăng ký hiện tại", path: "/settings/subscription", permission: "subscription:view" },
             { name: "Nâng cấp Premium", path: "/settings/subscription/pricing", permission: "subscription:view" },
-          ]
+          ],
         },
         { name: "Quản lý file", path: "/settings/file", permission: "file:view" },
       ],

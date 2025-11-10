@@ -67,7 +67,7 @@ const SubscriptionPage = () => {
       setUsageStats(usageRes?.data || null);
     } catch (error) {
       console.error("Lỗi load subscription:", error);
-      message.error("Không thể tải thông tin subscription");
+      message.error("Không thể tải thông tin gói đăng ký");
     } finally {
       setLoading(false);
     }
@@ -97,9 +97,9 @@ const SubscriptionPage = () => {
 
   const getStatusTag = (status) => {
     const statusConfig = {
-      TRIAL: { color: "blue", text: "Đang dùng thử", icon: <GiftOutlined /> },
-      ACTIVE: { color: "green", text: "Premium Active", icon: <CheckCircleOutlined /> },
-      EXPIRED: { color: "red", text: "Đã hết hạn", icon: <WarningOutlined /> },
+      TRIAL: { color: "blue", text: "Dùng thử", icon: <GiftOutlined /> },
+      ACTIVE: { color: "green", text: "Premium", icon: <CheckCircleOutlined /> },
+      EXPIRED: { color: "red", text: "Hết hạn", icon: <WarningOutlined /> },
       CANCELLED: { color: "default", text: "Đã hủy", icon: <ClockCircleOutlined /> },
     };
 
@@ -163,7 +163,7 @@ const SubscriptionPage = () => {
           <CrownOutlined style={{ fontSize: 48, color: "#faad14" }} />
           <div>
             <Title level={2} style={{ margin: 0 }}>
-              Subscription của bạn
+              Gói đăng ký của bạn
             </Title>
             <Text type="secondary">Quản lý gói và thanh toán</Text>
           </div>

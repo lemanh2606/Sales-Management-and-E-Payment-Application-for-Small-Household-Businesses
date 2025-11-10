@@ -62,31 +62,49 @@ const getCurrentSubscription = async (req, res) => {
 
     console.log("Get current subscription for user:", userId);
 
-    // Lấy user info
-    const user = await User.findById(userId).select(
-      "subscription_status trial_ends_at premium_expires_at is_premium"
-    );
+    // Lấy user info (cần is_premium và role)
+    const user = await User.findById(userId).select("is_premium role");
 
     if (!user) {
       console.log("User not found:", userId);
       return res.status(404).json({ message: "Không tìm thấy user" });
     }
 
-    // Lấy subscription record
-    const subscription = await Subscription.findActiveByUser(userId);
-
-    if (!subscription) {
-      return res.json({
-        status: "EXPIRED",
-        message: "Không có subscription active",
-        user: {
-          subscription_status: user.subscription_status,
-          is_premium: user.is_premium,
-        },
+    // STAFF không có subscription riêng
+    if (user.role === "STAFF") {
+      return res.status(403).json({ 
+        message: "STAFF không có subscription riêng. Subscription do Manager quản lý.",
+        user_role: "STAFF"
       });
     }
 
-    // Build response
+    // Chỉ MANAGER mới có subscription
+    if (user.role !== "MANAGER") {
+      return res.status(403).json({ 
+        message: "Chỉ MANAGER mới có subscription",
+        user_role: user.role
+      });
+    }
+
+    // Tìm subscription active
+    let subscription = await Subscription.findActiveByUser(userId);
+
+    // 🎁 Auto-create trial nếu không tìm thấy subscription (chỉ cho MANAGER)
+    if (!subscription) {
+      console.log("🎁 No subscription found, creating trial for MANAGER:", userId);
+      try {
+        subscription = await Subscription.createTrial(userId);
+        console.log("✅ Trial subscription created:", subscription._id);
+      } catch (trialErr) {
+        console.error("❌ Failed to create trial:", trialErr);
+        return res.status(500).json({ 
+          message: "Không thể tạo trial subscription",
+          error: trialErr.message 
+        });
+      }
+    }
+
+    // Build response từ Subscription model
     const response = {
       subscription_id: subscription._id,
       status: subscription.status,
@@ -129,6 +147,19 @@ const createCheckout = async (req, res) => {
   try {
     const userId = req.user._id;
     const { plan_duration } = req.body;
+
+    // Check role MANAGER
+    const user = await User.findById(userId).select("role");
+    if (!user) {
+      return res.status(404).json({ message: "Không tìm thấy user" });
+    }
+
+    if (user.role !== "MANAGER") {
+      return res.status(403).json({ 
+        message: "Chỉ MANAGER mới có thể mua subscription",
+        user_role: user.role
+      });
+    }
 
     // Validate plan
     if (!PRICING[plan_duration]) {
@@ -200,6 +231,7 @@ const createCheckout = async (req, res) => {
  * POST /api/subscriptions/activate
  * Activate premium (MANUAL - skip PayOS)
  * Body: { plan_duration, amount, transaction_id }
+ * Chỉ cho MANAGER
  */
 const activatePremium = async (req, res) => {
   try {
@@ -212,6 +244,19 @@ const activatePremium = async (req, res) => {
     const { plan_duration, amount, transaction_id } = req.body;
 
     console.log("Activate premium request:", { userId, plan_duration, amount, transaction_id });
+
+    // Check role MANAGER
+    const user = await User.findById(userId).select("role");
+    if (!user) {
+      return res.status(404).json({ message: "Không tìm thấy user" });
+    }
+
+    if (user.role !== "MANAGER") {
+      return res.status(403).json({ 
+        message: "Chỉ MANAGER mới có thể kích hoạt subscription",
+        user_role: user.role
+      });
+    }
 
     if (!plan_duration || !amount || !transaction_id) {
       return res.status(400).json({ message: "Thiếu thông tin plan_duration, amount hoặc transaction_id" });
@@ -267,12 +312,8 @@ const activatePremium = async (req, res) => {
     
     await subscription.save();
 
-    // Update user
-    const user = await User.findById(userId);
-    user.subscription_status = "PREMIUM";
-    user.is_premium = true;
-    user.premium_expires_at = subscription.expires_at;
-    await user.save();
+    // Update user is_premium flag (direct update - không cần load lại document)
+    await User.findByIdAndUpdate(userId, { is_premium: true });
 
     // ✅ Lưu vào lịch sử thanh toán
     const paymentHistory = new PaymentHistory({
@@ -316,6 +357,19 @@ const cancelAutoRenew = async (req, res) => {
   try {
     const userId = req.user._id;
 
+    // Check role MANAGER
+    const user = await User.findById(userId).select("role");
+    if (!user) {
+      return res.status(404).json({ message: "Không tìm thấy user" });
+    }
+
+    if (user.role !== "MANAGER") {
+      return res.status(403).json({ 
+        message: "Chỉ MANAGER mới có thể quản lý subscription",
+        user_role: user.role
+      });
+    }
+
     const subscription = await Subscription.findActiveByUser(userId);
     if (!subscription) {
       return res.status(404).json({ message: "Không tìm thấy subscription" });
@@ -345,6 +399,19 @@ const getPaymentHistory = async (req, res) => {
   try {
     const userId = req.user._id;
     console.log("🔍 getPaymentHistory - userId:", userId, "type:", typeof userId);
+
+    // Check role MANAGER
+    const user = await User.findById(userId).select("role");
+    if (!user) {
+      return res.status(404).json({ message: "Không tìm thấy user" });
+    }
+
+    if (user.role !== "MANAGER") {
+      return res.status(403).json({ 
+        message: "Chỉ MANAGER mới có lịch sử thanh toán",
+        user_role: user.role
+      });
+    }
 
     // Query từ PaymentHistory collection - Mongoose tự cast string sang ObjectId
     const history = await PaymentHistory.find({ user_id: userId })
@@ -382,6 +449,19 @@ const getUsageStats = async (req, res) => {
   try {
     const userId = req.user._id;
     
+    // Check role MANAGER
+    const user = await User.findById(userId).select("role is_premium");
+    if (!user) {
+      return res.status(404).json({ message: "Không tìm thấy user" });
+    }
+
+    if (user.role !== "MANAGER") {
+      return res.status(403).json({ 
+        message: "Chỉ MANAGER mới có thống kê sử dụng",
+        user_role: user.role
+      });
+    }
+
     // Đếm số lượng stores, products, orders của user
     const Store = require("../models/Store");
     const Product = require("../models/Product");
@@ -408,8 +488,7 @@ const getUsageStats = async (req, res) => {
         products,
         orders,
       },
-      subscription_status: req.user.subscription_status,
-      is_premium: req.user.is_premium,
+      is_premium: user.is_premium,
     });
   } catch (error) {
     console.error("Lỗi getUsageStats:", error);
