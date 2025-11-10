@@ -22,7 +22,7 @@ const {
   downloadProductTemplate,
   exportProducts,
 } = require("../controllers/product/productController");
-const upload = require("../middlewares/upload");
+const upload = require("../middlewares/uploadProduct");
 
 /*
   GHI CHÚ CHUNG VỀ PHÂN QUYỀN CHO SẢN PHẨM:

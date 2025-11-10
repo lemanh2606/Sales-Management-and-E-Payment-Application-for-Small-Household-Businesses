@@ -1,7 +1,7 @@
 // routes/userRouters.js
 const express = require("express");
 const router = express.Router();
-const upload = require("../middlewares/upload");
+const uploadAvatar = require("../middlewares/upload");
 
 const {
   registerManager,
@@ -50,7 +50,7 @@ router.put(
     console.log("Body before multer:", req.body);
     next();
   },
-  upload.single("avatar"),
+  uploadAvatar.single("avatar"),
   (req, res, next) => {
     console.log("=== AFTER MULTER ===");
     console.log("File:", req.file);
