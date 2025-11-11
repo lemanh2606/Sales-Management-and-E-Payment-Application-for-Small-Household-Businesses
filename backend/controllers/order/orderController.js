@@ -12,6 +12,7 @@ const Employee = require("../../models/Employee");
 const Customer = require("../../models/Customer");
 const LoyaltySetting = require("../../models/LoyaltySetting");
 const { generateQRWithPayOS } = require("../../services/payOSService");
+const { periodToRange } = require("../../utils/period");
 const { v2: cloudinary } = require("cloudinary");
 
 const createOrder = async (req, res) => {
@@ -1171,6 +1172,68 @@ const getOrderListAll = async (req, res) => {
   }
 };
 
+const getOrderStats = async (req, res) => {
+  try {
+    const { storeId, periodType = "year", periodKey, monthFrom, monthTo } = req.query;
+    const { start, end } = periodToRange(periodType, periodKey, monthFrom, monthTo);
+
+    // Lấy ra danh sách orderId của cửa hàng trong khoảng thời gian
+    const orders = await Order.find({
+      storeId,
+      createdAt: { $gte: start, $lte: end },
+    })
+      .select("_id status")
+      .lean();
+
+    const orderIds = orders.map((o) => o._id);
+
+    // Đếm đơn từng trạng thái
+    const total = orders.length;
+    const pending = orders.filter((o) => o.status === "pending").length;
+    const refunded = orders.filter((o) => ["refunded", "partially_refunded"].includes(o.status)).length;
+    const paid = orders.filter((o) => o.status === "paid").length;
+
+    // ✅ Tổng số lượng sản phẩm bán ra (theo order_items)
+    const orderItems = await OrderItem.find({
+      orderId: { $in: orderIds },
+      createdAt: { $gte: start, $lte: end },
+    })
+      .select("quantity")
+      .lean();
+
+    const totalSoldItems = orderItems.reduce((sum, i) => sum + (i.quantity || 0), 0);
+
+    // ✅ Tổng số lượng sản phẩm bị hoàn trả (theo order_refunds)
+    const refundDocs = await OrderRefund.find({
+      orderId: { $in: orderIds },
+      refundedAt: { $gte: start, $lte: end },
+    })
+      .select("refundItems.quantity")
+      .lean();
+
+    const totalRefundedItems = refundDocs.reduce((sum, refund) => {
+      const refundCount = refund.refundItems?.reduce((a, i) => a + (i.quantity || 0), 0) || 0;
+      return sum + refundCount;
+    }, 0);
+
+    // Số lượng hàng thực bán (sau khi trừ hoàn)
+    const netSoldItems = totalSoldItems - totalRefundedItems;
+
+    res.json({
+      message: "Lấy số liệu thống kê đơn hàng thành công",
+      total,
+      pending,
+      refunded,
+      paid,
+      totalSoldItems,
+      totalRefundedItems,
+      netSoldItems: netSoldItems >= 0 ? netSoldItems : 0, // Đây chính là “Số lượng hàng thực bán”
+    });
+  } catch (err) {
+    console.error("Lỗi khi lấy thống kê đơn:", err.message);
+    res.status(500).json({ message: "Lỗi server khi lấy thống kê đơn hàng" });
+  }
+};
 
 module.exports = {
   createOrder,
@@ -1182,6 +1245,7 @@ module.exports = {
   getTopFrequentCustomers,
   exportTopSellingProducts,
   getOrderById,
+  getOrderStats,
   refundOrder,
   getListPaidOrders,
   getListRefundOrders,

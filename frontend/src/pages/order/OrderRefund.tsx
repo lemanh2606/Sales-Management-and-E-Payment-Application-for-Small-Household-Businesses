@@ -568,7 +568,7 @@ const OrderRefund: React.FC = () => {
                   align: "center",
                   render: (status) => (
                     <Tag color={status === "refunded" ? "red" : "orange"}>
-                      {status === "refunded" ? "Hoàn Toàn" : "Hoàn 1 Phần"}
+                      {status === "refunded" ? "Hoàn Toàn Bộ" : "Hoàn 1 Phần"}
                     </Tag>
                   ),
                 },
@@ -638,7 +638,7 @@ const OrderRefund: React.FC = () => {
                     </Descriptions.Item>
                     <Descriptions.Item label="Trạng Thái">
                       <Tag color={refundDetail.order.status === "refunded" ? "red" : "orange"}>
-                        {refundDetail.order.status === "refunded" ? "Hoàn Toàn" : "Hoàn 1 Phần"}
+                        {refundDetail.order.status === "refunded" ? "Hoàn Toàn Bộ" : "Hoàn 1 Phần"}
                       </Tag>
                     </Descriptions.Item>
                     <Descriptions.Item label="Ngày Tạo" span={2}>

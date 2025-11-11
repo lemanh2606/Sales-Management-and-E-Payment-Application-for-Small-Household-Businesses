@@ -150,7 +150,7 @@ const OrderTrackingPage: React.FC = () => {
     const configs: Record<string, { color: string; icon: React.ReactNode; text: string }> = {
       pending: { color: "orange", icon: <ClockCircleOutlined />, text: "Chờ Thanh Toán" },
       paid: { color: "green", icon: <CheckCircleOutlined />, text: "Đã Thanh Toán" },
-      refunded: { color: "red", icon: <RollbackOutlined />, text: "Hoàn Toàn" },
+      refunded: { color: "red", icon: <RollbackOutlined />, text: "Hoàn Toàn Bộ" },
       partially_refunded: { color: "volcano", icon: <RollbackOutlined />, text: "Hoàn 1 Phần" },
     };
     return configs[status] || configs.pending;
@@ -309,7 +309,7 @@ const OrderTrackingPage: React.FC = () => {
               >
                 <Option value="pending">Chờ Thanh Toán</Option>
                 <Option value="paid">Đã Thanh Toán</Option>
-                <Option value="refunded">Hoàn Toàn</Option>
+                <Option value="refunded">Hoàn Toàn Bộ</Option>
                 <Option value="partially_refunded">Hoàn 1 Phần</Option>
               </Select>
             </Space>

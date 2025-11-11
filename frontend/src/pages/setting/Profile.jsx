@@ -1,7 +1,7 @@
 // src/pages/user/Profile.jsx
 import React, { useState, useEffect } from "react";
 import { Form, Input, Button, Card, Alert, Spin, Row, Col, Badge, Divider, Upload, Avatar } from "antd";
-import { SaveOutlined, LockOutlined, MailOutlined, UserOutlined, UploadOutlined, CameraOutlined } from "@ant-design/icons";
+import { SaveOutlined, LockOutlined, MailOutlined, UserOutlined, UploadOutlined, CameraOutlined, DeleteOutlined } from "@ant-design/icons";
 import axios from "axios";
 import Swal from "sweetalert2";
 import { useAuth } from "../../context/AuthContext";
@@ -355,7 +355,7 @@ export default function Profile() {
                             onClick={removeImage}
                             className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-lg"
                           >
-                            ×
+                            <DeleteOutlined />
                           </Button>
                         )}
                       </div>
@@ -481,7 +481,7 @@ export default function Profile() {
                   </Col>
                 </Row>
 
-                <div className="flex justify-end pt-4">
+                <div className="flex justify-center pt-4">
                   <Button
                     type="primary"
                     htmlType="submit"

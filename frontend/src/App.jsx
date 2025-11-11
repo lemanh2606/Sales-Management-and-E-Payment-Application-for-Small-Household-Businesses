@@ -19,6 +19,7 @@ import ForgotPassword from "./pages/auth/ForgotPassword";
 // 🏬 Store & Employees
 import SelectStorePage from "./pages/store/SelectStorePage";
 import EmployeesPage from "./pages/store/EmployeesPage";
+import InformationStore from "./pages/store/InformationStore";
 // 📦 Product & Supplier
 import ProductListPage from "./pages/product/ProductListPage";
 import ProductGroupsPage from "./pages/productGroup/ProductGroupsPage";
@@ -40,6 +41,8 @@ import FileManager from "./pages/setting/FileManager";
 import LoyaltySetting from "./pages/loyalty/LoyaltySetting";
 // 🛒 Orders
 import SidebarPOS from "./pages/order/SidebarPOS";
+import ListAllOrder from "./pages/order/ListAllOrder";
+import ListPendingOrders from "./pages/order/ListPendingOrders";
 
 const loadingIcon = <LoadingOutlined style={{ fontSize: 40 }} spin />;
 
@@ -204,6 +207,14 @@ function App() {
           }
         />
         <Route
+          path="/update/store"
+          element={
+            <ProtectedRoute>
+              <InformationStore />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/stores/:storeId/employees"
           element={
             <ProtectedRoute>
@@ -346,6 +357,22 @@ function App() {
           element={
             <ProtectedRoute allowedPermissions="orders:create">
               <SidebarPOS />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/orders/list"
+          element={
+            <ProtectedRoute allowedPermissions="orders:view">
+              <ListAllOrder />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/orders/list-pending"
+          element={
+            <ProtectedRoute allowedPermissions="orders:view">
+              <ListPendingOrders />
             </ProtectedRoute>
           }
         />

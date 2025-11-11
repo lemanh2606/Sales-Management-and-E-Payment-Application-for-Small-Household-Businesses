@@ -1,0 +1,13 @@
+@keyframes pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(250, 140, 22, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(250, 140, 22, 0);
+  }
+}
+
+.pulse-animation-dashboard {
+  animation: pulse 5s infinite;
+  position: relative;
+}
