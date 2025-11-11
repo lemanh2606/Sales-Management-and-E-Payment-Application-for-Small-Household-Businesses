@@ -174,6 +174,13 @@ const ActivityLog = () => {
     }
   };
 
+  // Auto-fetch logs on component mount if store exists
+  useEffect(() => {
+    if (currentStore?._id) {
+      fetchLogs();
+    }
+  }, [currentStore?._id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // helper: when user changes filters in UI
   const handleFilterChange = (key, value) => {
     // if user chose the "Tất cả" option (value === ""), we want to clear that filter
@@ -330,7 +337,14 @@ const ActivityLog = () => {
   return (
     <Layout>
       <div>
-        <Space direction="vertical" size="large" style={{ width: "100%" }}>
+        {!currentStore?._id ? (
+          <Card style={{ border: "1px solid #8c8c8c", textAlign: "center", padding: "40px" }}>
+            <Text type="danger" style={{ fontSize: 18 }}>
+              Vui lòng chọn cửa hàng để xem nhật ký hoạt động
+            </Text>
+          </Card>
+        ) : (
+          <Space direction="vertical" size="large" style={{ width: "100%" }}>
           {/* HEADER + FILTERS */}
           <Card style={{ border: "1px solid #8c8c8c" }}>
             <Row gutter={16} align="middle">
@@ -573,6 +587,7 @@ const ActivityLog = () => {
             </Card>
           )}
         </Space>
+        )}
 
         {/* DETAIL MODAL */}
         <Modal

@@ -128,8 +128,8 @@ const SubscriptionPage = () => {
     );
   }
 
-  // Nếu không có subscription hoặc expired
-  if (!subscription || subscription.status === "EXPIRED" || !subscription.status) {
+  // Nếu không có subscription (chưa từng có)
+  if (!subscription || !subscription.status) {
     return (
       <Layout>
         <div style={{ padding: 40, maxWidth: 800, margin: "0 auto" }}>
@@ -150,6 +150,7 @@ const SubscriptionPage = () => {
 
   const isTrial = subscription?.status === "TRIAL";
   const isPremium = subscription?.status === "ACTIVE";
+  const isExpired = subscription?.status === "EXPIRED";
   const daysRemaining = subscription?.days_remaining || 0;
   const totalDays = isTrial ? 14 : (subscription?.premium?.plan_duration || 1) * 30;
   const progressPercent = totalDays > 0 ? Math.round((daysRemaining / totalDays) * 100) : 0;
@@ -193,15 +194,24 @@ const SubscriptionPage = () => {
                     Nâng cấp Premium
                   </Button>
                 )}
-                {(isPremium || subscription?.status === "EXPIRED") && (
+                {isPremium && (
                   <Button 
                     type="primary"
                     icon={<ReloadOutlined />}
                     onClick={handleUpgrade}
                     style={{ background: "#22c55e", borderColor: "#22c55e" }}
-                    danger={subscription?.status === "EXPIRED"}
                   >
-                    {subscription?.status === "EXPIRED" ? "Gia hạn ngay" : "Gia hạn gói"}
+                    Gia hạn gói
+                  </Button>
+                )}
+                {isExpired && (
+                  <Button 
+                    danger
+                    type="primary"
+                    icon={<ReloadOutlined />}
+                    onClick={handleUpgrade}
+                  >
+                    Gia hạn ngay
                   </Button>
                 )}
               </Space>
@@ -316,6 +326,85 @@ const SubscriptionPage = () => {
                     </Space>
                   </Card>
                 )}
+              </div>
+            )}
+
+            {/* EXPIRED Info */}
+            {isExpired && (
+              <div>
+                <div style={{ marginBottom: 24 }}>
+                  <Row gutter={16}>
+                    <Col span={12}>
+                      <Card style={{ background: "#fff1f0", border: "1px solid #ffccc7" }}>
+                        <Statistic
+                          title="Gói đã hết hạn"
+                          value={subscription?.expires_at ? dayjs().diff(dayjs(subscription.expires_at), 'day') : 0}
+                          suffix="ngày trước"
+                          prefix={<ClockCircleOutlined style={{ color: "#ff4d4f" }} />}
+                          valueStyle={{ color: "#ff4d4f" }}
+                        />
+                      </Card>
+                    </Col>
+                    <Col span={12}>
+                      <Card style={{ background: "#fff7e6", border: "1px solid #ffd591" }}>
+                        <Statistic
+                          title="Gói trước đây"
+                          value={subscription?.premium?.plan_duration || subscription?.trial_ends_at ? "Trial" : "N/A"}
+                          suffix={subscription?.premium?.plan_duration ? "tháng" : ""}
+                          prefix={<CrownOutlined style={{ color: "#faad14" }} />}
+                        />
+                      </Card>
+                    </Col>
+                  </Row>
+                </div>
+
+                <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                  {subscription?.premium?.started_at && (
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <Text>Bắt đầu:</Text>
+                      <Text strong>{dayjs(subscription.premium.started_at).format("DD/MM/YYYY")}</Text>
+                    </div>
+                  )}
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <Text>Đã hết hạn:</Text>
+                    <Text strong style={{ color: "#ff4d4f" }}>
+                      {subscription?.expires_at 
+                        ? dayjs(subscription.expires_at).format("DD/MM/YYYY")
+                        : subscription?.trial_ends_at 
+                        ? dayjs(subscription.trial_ends_at).format("DD/MM/YYYY")
+                        : "N/A"}
+                    </Text>
+                  </div>
+                  <Progress
+                    percent={0}
+                    strokeColor="#ff4d4f"
+                    status="exception"
+                    style={{ marginTop: 12 }}
+                  />
+                </Space>
+
+                <Card
+                  style={{
+                    marginTop: 16,
+                    background: "#fff1f0",
+                    border: "1px solid #ffccc7",
+                  }}
+                >
+                  <Space direction="vertical">
+                    <Space>
+                      <WarningOutlined style={{ color: "#ff4d4f" }} />
+                      <Text strong style={{ color: "#ff4d4f" }}>
+                        Gói đăng ký đã hết hạn
+                      </Text>
+                    </Space>
+                    <Text>
+                      Gia hạn ngay để tiếp tục sử dụng đầy đủ tính năng Premium.
+                    </Text>
+                    <Button danger type="primary" icon={<ReloadOutlined />} onClick={handleUpgrade}>
+                      Gia hạn ngay
+                    </Button>
+                  </Space>
+                </Card>
               </div>
             )}
           </Card>

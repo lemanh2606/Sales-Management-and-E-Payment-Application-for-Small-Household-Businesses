@@ -7,6 +7,9 @@ import { useAuth } from "./context/AuthContext";
 import { ConfigProvider, Spin } from "antd";
 import { LoadingOutlined } from "@ant-design/icons";
 import viVN from "antd/locale/vi_VN";
+// 🔔 Subscription Overlay
+import SubscriptionExpiredOverlay from "./components/subscription/SubscriptionExpiredOverlay";
+import ManagerSubscriptionCheck from "./components/subscription/ManagerSubscriptionCheck";
 // 🧭 Common Pages
 import NotFound from "./pages/misc/NotFound";
 import Unauthorized from "./pages/misc/Unauthorized";
@@ -156,6 +159,10 @@ function App() {
   return (
     <ConfigProvider locale={viVN}>
       <AppInit />
+      {/* Check subscription cho MANAGER - redirect + ẩn menu */}
+      <ManagerSubscriptionCheck />
+      {/* Overlay thông báo hết hạn cho STAFF - làm mờ + modal */}
+      <SubscriptionExpiredOverlay />
       <Routes>
         {/* Public (Auth) routes - bọc PublicRoute */}
         <Route

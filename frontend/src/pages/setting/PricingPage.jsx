@@ -6,11 +6,13 @@ import { useNavigate } from "react-router-dom";
 import subscriptionApi from "../../api/subscriptionApi";
 import Layout from "../../components/Layout";
 import Swal from "sweetalert2";
+import { useAuth } from "../../context/AuthContext";
 
 const { Title, Text, Paragraph } = Typography;
 
 const PricingPage = () => {
   const navigate = useNavigate();
+  const { setManagerSubscriptionExpired } = useAuth();
   const [plans, setPlans] = useState([]);
   const [currentSub, setCurrentSub] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -138,15 +140,19 @@ const PricingPage = () => {
 
           console.log("Activate response:", response);
           
+          // Cập nhật trạng thái subscription trong AuthContext
+          setManagerSubscriptionExpired(false);
+          
           await Swal.fire({
             title: 'Thành công!',
-            text: 'Đã kích hoạt gói Premium thành công!',
+            text: 'Đã kích hoạt gói Premium thành công! Menu sẽ được cập nhật ngay lập tức.',
             icon: 'success',
-            timer: 1500,
+            timer: 2000,
             showConfirmButton: false
           });
           
-          // Navigate sang subscription page
+          // Reload data và navigate
+          await fetchData(); // Reload subscription data
           navigate("/settings/subscription");
         } catch (error) {
           console.error("Lỗi kích hoạt premium:", error);
