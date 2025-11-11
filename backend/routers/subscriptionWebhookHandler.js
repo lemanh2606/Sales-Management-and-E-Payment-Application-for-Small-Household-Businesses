@@ -100,12 +100,10 @@ module.exports = async (req, res) => {
     await subscription.save();
     console.log(`✅ Activated premium for user ${userId}, expires at ${expiresAt}`);
 
-    // Update User model
+    // Update User model - chỉ cập nhật is_premium flag
     const user = await User.findById(userId);
     if (user) {
-      user.subscription_status = "PREMIUM";
       user.is_premium = true;
-      user.premium_expires_at = expiresAt;
       await user.save();
       console.log(`✅ Updated User ${user.username} to PREMIUM`);
     }
