@@ -3,7 +3,7 @@ import SidebarItem from "./SidebarItem";
 import { FiLogOut, FiMenu, FiX, FiChevronDown, FiChevronLeft, FiChevronRight } from "react-icons/fi";
 import { AiOutlineDashboard } from "react-icons/ai";
 import { BsBoxSeam, BsPeople } from "react-icons/bs";
-import { MdShoppingCart } from "react-icons/md";
+import { MdShoppingCart, MdStore } from "react-icons/md";
 import { FiFileText, FiBell, FiStar, FiSettings } from "react-icons/fi";
 import { useAuth } from "../../context/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -49,10 +49,11 @@ export default function Sidebar({ onCollapsedChange }) {
       key: "store",
       name: "Cửa hàng",
       path: "/auth",
-      icon: <AiOutlineDashboard size={20} />,
+      icon: <MdStore size={20} />,
       children: [
-        { name: "Chọn cửa hàng (Manager)", path: "/select-store", permission: "store:view" },
         { name: "Tổng quan", path: storeId ? `/dashboard/${storeId}` : "/select-store" },
+        { name: "Chọn cửa hàng khác", path: "/select-store", permission: "store:view" },
+        { name: "Thiết lập cửa hàng", path: "/update/store", permission: "store:update" },
       ],
     },
     {
@@ -79,8 +80,8 @@ export default function Sidebar({ onCollapsedChange }) {
       icon: <MdShoppingCart size={20} />,
       children: [
         { name: "Bán hàng tại quầy (POS)", path: "/orders/pos", permission: "orders:create", newTab: true },
-        { name: "Hóa đơn bán + in hóa đơn", path: "/orders/invoice", permission: "orders:view" },
-        { name: "Thanh toán (tiền mặt / QR / ngân hàng)", path: "/orders/payment", permission: "orders:pay" },
+        { name: "Danh sách đơn hàng", path: "/orders/list", permission: "orders:view" },
+        { name: "Đơn chưa hoàn tất", path: "/orders/list-pending", permission: "orders:view" },
       ],
     },
     {
@@ -265,7 +266,7 @@ export default function Sidebar({ onCollapsedChange }) {
 
   // Sửa hàm toggle collapsed để đồng bộ
   const handleToggleCollapse = () => {
-    setCollapsed(prev => {
+    setCollapsed((prev) => {
       const newCollapsed = !prev;
       // Thông báo ngay lập tức khi state thay đổi
       if (onCollapsedChange) {
@@ -288,16 +289,18 @@ export default function Sidebar({ onCollapsedChange }) {
 
       {/* Mobile overlay */}
       <div
-        className={`fixed inset-0 bg-black bg-opacity-40 z-40 transition-opacity duration-300 ${openMobile ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
-          }`}
+        className={`fixed inset-0 bg-black bg-opacity-40 z-40 transition-opacity duration-300 ${
+          openMobile ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        }`}
         onClick={() => setOpenMobile(false)}
       />
 
       {/* Sidebar */}
       <aside
         // width changes when collapsed (desktop). On mobile it's full behavior via translate-x
-        className={`bg-white h-full shadow-2xl fixed top-0 left-0 z-50 transform transition-all duration-300 ${openMobile ? "translate-x-0" : "-translate-x-full"
-          } md:translate-x-0 ${collapsed ? "w-20" : "w-64"}`}
+        className={`bg-white h-full shadow-2xl fixed top-0 left-0 z-50 transform transition-all duration-300 ${
+          openMobile ? "translate-x-0" : "-translate-x-full"
+        } md:translate-x-0 ${collapsed ? "w-20" : "w-64"}`}
         aria-hidden={openMobile ? "false" : "true"}
       >
         <div className="p-4 flex flex-col h-full relative">

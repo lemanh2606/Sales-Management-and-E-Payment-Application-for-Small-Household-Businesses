@@ -566,7 +566,7 @@ const EndOfDayReport: React.FC = () => {
                   ),
                 },
                 {
-                  title: "Giá Trị TB/Đơn",
+                  title: "Giá Trị Trung bình / Đơn",
                   dataIndex: "avgOrderValue",
                   key: "avgOrderValue",
                   align: "right",
