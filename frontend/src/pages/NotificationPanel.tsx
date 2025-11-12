@@ -402,7 +402,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ storeId, visible,
         }}
       >
         <Link
-          to="/settings/notifications"
+          to="/settings/notification"
           style={{
             color: "#1890ff",
             fontWeight: 600,
