@@ -1,24 +1,29 @@
+// src/components/supplier/SupplierDetailModal.jsx
 import React, { useEffect, useState } from "react";
+import { Modal, Card, Row, Col, Space, Spin, notification, Tag, Divider, Avatar } from "antd";
+import {
+  TeamOutlined,
+  PhoneOutlined,
+  MailOutlined,
+  EnvironmentOutlined,
+  ShopOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  CalendarOutlined,
+  ClockCircleOutlined,
+  LoadingOutlined,
+  UserOutlined,
+} from "@ant-design/icons";
 import { getSupplierById } from "../../api/supplierApi";
-import { motion, AnimatePresence } from "framer-motion";
-import { MdClose } from "react-icons/md";
-import { Loader } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 
+const { Meta } = Card;
+
 export default function SupplierDetailModal({ supplierId, open, onOpenChange }) {
+  const [api, contextHolder] = notification.useNotification();
   const { token } = useAuth();
   const [supplier, setSupplier] = useState(null);
   const [loading, setLoading] = useState(false);
-  const getStatusColor = (status) => {
-    if (!status) return "text-gray-500";
-
-    const normalized = status.toLowerCase().trim();
-
-    if (normalized === "đang hoạt động") return "text-green-600 font-bold";
-    if (normalized === "ngừng hoạt động") return "text-red-600 font-bold";
-
-    return "text-gray-500";
-  };
 
   useEffect(() => {
     if (!open || !supplierId) return;
@@ -30,6 +35,12 @@ export default function SupplierDetailModal({ supplierId, open, onOpenChange }) 
         setSupplier(data.supplier);
       } catch (err) {
         console.error(err);
+        api.error({
+          message: "❌ Lỗi tải dữ liệu",
+          description: "Không thể tải thông tin nhà cung cấp. Vui lòng thử lại.",
+          placement: "topRight",
+          duration: 5,
+        });
       } finally {
         setLoading(false);
       }
@@ -38,65 +49,286 @@ export default function SupplierDetailModal({ supplierId, open, onOpenChange }) 
     fetchSupplier();
   }, [supplierId, open, token]);
 
-  return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm"
-          onClick={() => onOpenChange(false)}
+  const getStatusTag = (status) => {
+    if (!status) return <Tag>Không xác định</Tag>;
+
+    const normalized = status.toLowerCase().trim();
+
+    if (normalized === "đang hoạt động") {
+      return (
+        <Tag
+          icon={<CheckCircleOutlined />}
+          color="success"
+          style={{
+            fontSize: 14,
+            padding: "6px 16px",
+            borderRadius: 20,
+            fontWeight: 500,
+          }}
         >
-          <motion.div
-            initial={{ scale: 0.85, opacity: 0, y: 40 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 140 }}
-            className="relative w-11/12 sm:w-3/4 lg:w-1/2 p-6 rounded-2xl bg-white shadow-2xl border border-gray-100"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-900 transition-transform hover:scale-125"
-              onClick={() => onOpenChange(false)}
+          Đang hoạt động
+        </Tag>
+      );
+    }
+
+    if (normalized === "ngừng hoạt động") {
+      return (
+        <Tag
+          icon={<CloseCircleOutlined />}
+          color="error"
+          style={{
+            fontSize: 14,
+            padding: "6px 16px",
+            borderRadius: 20,
+            fontWeight: 500,
+          }}
+        >
+          Ngừng hoạt động
+        </Tag>
+      );
+    }
+
+    return <Tag>{status}</Tag>;
+  };
+
+  const formatDate = (date) => {
+    if (!date) return "-";
+    return new Date(date).toLocaleString("vi-VN", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  const handleCancel = () => {
+    onOpenChange(false);
+    setSupplier(null);
+  };
+
+  const InfoItem = ({ icon, label, value, color = "#1890ff", href }) => (
+    <div
+      style={{
+        padding: "16px",
+        background: "#fafafa",
+        borderRadius: 12,
+        border: "1px solid #f0f0f0",
+        transition: "all 0.3s ease",
+      }}
+      className="info-item-hover"
+    >
+      <Space align="start" size={12}>
+        <div
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 10,
+            background: `${color}15`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+          }}
+        >
+          {React.cloneElement(icon, { style: { fontSize: 20, color } })}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 12, color: "#8c8c8c", marginBottom: 4 }}>{label}</div>
+          {href ? (
+            <a
+              href={href}
+              style={{
+                fontSize: 15,
+                fontWeight: 500,
+                color: color,
+                wordBreak: "break-word",
+              }}
             >
-              <MdClose size={26} />
-            </button>
+              {value || "-"}
+            </a>
+          ) : (
+            <div
+              style={{
+                fontSize: 15,
+                fontWeight: 500,
+                color: "#262626",
+                wordBreak: "break-word",
+              }}
+            >
+              {value || "-"}
+            </div>
+          )}
+        </div>
+      </Space>
+    </div>
+  );
 
-            <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">Chi tiết nhà cung cấp</h2>
+  return (
+    <>
+      {contextHolder}
+      <Modal
+        open={open}
+        onCancel={handleCancel}
+        footer={null}
+        width={700}
+        styles={{
+          body: {
+            padding: 0,
+            maxHeight: "calc(100vh - 150px)",
+            overflowY: "auto",
+          },
+        }}
+        closeIcon={<CloseCircleOutlined style={{ fontSize: 20, color: "#8c8c8c" }} />}
+      >
+        {loading && (
+          <div style={{ textAlign: "center", padding: "80px 0" }}>
+            <Spin
+              indicator={<LoadingOutlined style={{ fontSize: 48 }} spin />}
+              tip={<div style={{ marginTop: 16, fontSize: 14, color: "#8c8c8c" }}>Đang tải dữ liệu...</div>}
+            />
+          </div>
+        )}
 
-            {loading && (
-              <div className="flex justify-center items-center gap-2 text-gray-500">
-                <Loader className="animate-spin" /> Đang tải dữ liệu...
-              </div>
-            )}
-
-            {!loading && supplier && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                {[
-                  ["Tên", supplier.name],
-                  ["SĐT", supplier.phone],
-                  ["Email", supplier.email],
-                  ["Địa chỉ", supplier.address],
-                  ["Cửa hàng", supplier.store?.name],
-                  ["Trạng thái", <span className={getStatusColor(supplier.status)}>{supplier.status || "-"}</span>],
-                  ["Ngày tạo", new Date(supplier.createdAt).toLocaleString()],
-                  ["Cập nhật gần nhất", new Date(supplier.updatedAt).toLocaleString()],
-                ].map(([label, value], i) => (
-                  <div key={i} className="p-3 bg-gray-50 rounded-xl shadow-sm border border-gray-100">
-                    <span className="text-gray-500 font-medium">{label}:</span>
-                    <p className="text-gray-800 font-semibold mt-1">{value || "-"}</p>
+        {!loading && supplier && (
+          <div>
+            {/* Header Section */}
+            <div
+              style={{
+                background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                padding: "32px 24px",
+                borderRadius: "16px 16px 0 0",
+              }}
+            >
+              <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                <Space size={16}>
+                  <Avatar
+                    size={64}
+                    icon={<TeamOutlined />}
+                    style={{
+                      background: "rgba(255, 255, 255, 0.2)",
+                      border: "3px solid rgba(255, 255, 255, 0.3)",
+                    }}
+                  />
+                  <div>
+                    <div style={{ fontSize: 24, fontWeight: 700, color: "#fff", marginBottom: 8 }}>
+                      {supplier.name}
+                    </div>
+                    {getStatusTag(supplier.status)}
                   </div>
-                ))}
-              </div>
-            )}
+                </Space>
+              </Space>
+            </div>
 
-            {!loading && !supplier && (
-              <p className="text-gray-500 text-center py-4">Không tìm thấy thông tin nhà cung cấp</p>
-            )}
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+            {/* Content Section */}
+            <div style={{ padding: 24 }}>
+              <Row gutter={[16, 16]}>
+                {/* Contact Information */}
+                <Col xs={24} md={12}>
+                  <InfoItem
+                    icon={<PhoneOutlined />}
+                    label="Số điện thoại"
+                    value={supplier.phone}
+                    color="#52c41a"
+                    href={supplier.phone ? `tel:${supplier.phone}` : null}
+                  />
+                </Col>
+
+                <Col xs={24} md={12}>
+                  <InfoItem
+                    icon={<MailOutlined />}
+                    label="Email"
+                    value={supplier.email}
+                    color="#faad14"
+                    href={supplier.email ? `mailto:${supplier.email}` : null}
+                  />
+                </Col>
+
+                <Col xs={24}>
+                  <InfoItem
+                    icon={<EnvironmentOutlined />}
+                    label="Địa chỉ"
+                    value={supplier.address}
+                    color="#f5222d"
+                  />
+                </Col>
+
+                <Col xs={24}>
+                  <InfoItem
+                    icon={<ShopOutlined />}
+                    label="Cửa hàng"
+                    value={supplier.store?.name}
+                    color="#722ed1"
+                  />
+                </Col>
+              </Row>
+
+              <Divider style={{ margin: "24px 0" }} />
+
+              {/* Timestamp Information */}
+              <Row gutter={[16, 16]}>
+                <Col xs={24} md={12}>
+                  <InfoItem
+                    icon={<CalendarOutlined />}
+                    label="Ngày tạo"
+                    value={formatDate(supplier.createdAt)}
+                    color="#13c2c2"
+                  />
+                </Col>
+
+                <Col xs={24} md={12}>
+                  <InfoItem
+                    icon={<ClockCircleOutlined />}
+                    label="Cập nhật gần nhất"
+                    value={formatDate(supplier.updatedAt)}
+                    color="#fa8c16"
+                  />
+                </Col>
+              </Row>
+            </div>
+          </div>
+        )}
+
+        {!loading && !supplier && (
+          <div style={{ textAlign: "center", padding: "80px 24px", color: "#999" }}>
+            <TeamOutlined style={{ fontSize: 72, color: "#d9d9d9", marginBottom: 16 }} />
+            <div style={{ fontSize: 16, color: "#8c8c8c" }}>Không tìm thấy thông tin nhà cung cấp</div>
+          </div>
+        )}
+      </Modal>
+
+      <style jsx global>{`
+        .ant-modal-content {
+          border-radius: 16px !important;
+          overflow: hidden;
+          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12) !important;
+        }
+
+        .ant-modal-close {
+          top: 16px;
+          right: 16px;
+        }
+
+        .ant-modal-body::-webkit-scrollbar {
+          width: 6px;
+        }
+
+        .ant-modal-body::-webkit-scrollbar-track {
+          background: transparent;
+        }
+
+        .ant-modal-body::-webkit-scrollbar-thumb {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          border-radius: 10px;
+        }
+
+        .info-item-hover:hover {
+          background: #f0f5ff !important;
+          border-color: #d6e4ff !important;
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+      `}</style>
+    </>
   );
 }

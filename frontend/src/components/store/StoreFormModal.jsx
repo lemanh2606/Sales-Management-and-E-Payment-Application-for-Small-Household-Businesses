@@ -1,624 +1,629 @@
-// src/components/StoreFormModal.jsx
+// src/components/store/StoreFormModal.jsx
 import React, { useEffect, useRef, useState } from "react";
-import { motion } from "framer-motion";
-import { toast } from "react-hot-toast";
+import {
+  Modal,
+  Form,
+  Input,
+  Button,
+  Upload,
+  Space,
+  Tag,
+  Row,
+  Col,
+  Card,
+  TimePicker,
+  InputNumber,
+  AutoComplete,
+  message,
+  Divider,
+} from "antd";
+import {
+  PlusOutlined,
+  CloseOutlined,
+  UploadOutlined,
+  EnvironmentOutlined,
+  PhoneOutlined,
+  ShopOutlined,
+  ClockCircleOutlined,
+  TagsOutlined,
+  GlobalOutlined,
+  CameraOutlined,
+  DeleteOutlined,
+  CheckCircleOutlined, // ✅ Added this import
+  SaveOutlined,
+} from "@ant-design/icons";
+import dayjs from "dayjs";
 
-/**
- * StoreFormModal
- * - Normalizes nested objects openingHours & location when modal opens
- * - Uses functional updates to setForm so nested fields are not lost
- * - Calls onSave(payload) if parent expects payload, otherwise calls onSave()
- *
- * Props:
- * - open, onClose, form, setForm, onSave, busy, title, fetchAddressSuggestions
- */
+const { TextArea } = Input;
+
 export default function StoreFormModal({
   open,
   onClose,
-  form = {},
+  form: formData = {},
   setForm,
   onSave,
   busy,
   title = "Cửa hàng",
   fetchAddressSuggestions,
 }) {
-  const [localTags, setLocalTags] = useState(
-    form?.tagsCsv
-      ? form.tagsCsv
-          .split(",")
-          .map((t) => t.trim())
-          .filter(Boolean)
-      : Array.isArray(form?.tags)
-      ? form.tags
-      : []
-  );
-  const [addrQuery, setAddrQuery] = useState(form?.address || "");
+  const [form] = Form.useForm();
+  const [localTags, setLocalTags] = useState([]);
+  const [tagInput, setTagInput] = useState("");
+  const [addrQuery, setAddrQuery] = useState("");
   const [suggestions, setSuggestions] = useState([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
   const [imagePreviewError, setImagePreviewError] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [dragOver, setDragOver] = useState(false);
   const debounceRef = useRef(null);
-  const panelRef = useRef(null);
 
-  // When modal opens ensure form has nested defaults so controlled inputs show values
+  // Initialize form values when modal opens
   useEffect(() => {
     if (!open) return;
-    setForm((prev) => {
-      const p = prev || {};
-      const updates = {};
 
-      // openingHours default
-      if (!p.openingHours || typeof p.openingHours !== "object") {
-        updates.openingHours = { open: "", close: "" };
-      } else {
-        updates.openingHours = {
-          open: p.openingHours.open ?? "",
-          close: p.openingHours.close ?? "",
-        };
-      }
-
-      // location default
-      if (!p.location || typeof p.location !== "object") {
-        updates.location = { lat: null, lng: null };
-      } else {
-        updates.location = {
-          lat: p.location.lat ?? null,
-          lng: p.location.lng ?? null,
-        };
-      }
-
-      // tagsCsv sync
-      if (!("tagsCsv" in p)) {
-        if (Array.isArray(p.tags)) updates.tagsCsv = p.tags.join(", ");
-        else updates.tagsCsv = p.tagsCsv || "";
-      }
-
-      // tags array sync
-      if (!("tags" in p) && updates.tagsCsv !== undefined) {
-        updates.tags = updates.tagsCsv
-          ? updates.tagsCsv
-              .split(",")
-              .map((t) => t.trim())
-              .filter(Boolean)
-          : [];
-      }
-
-      // only merge if we created something new (prevent unnecessary set)
-      if (Object.keys(updates).length === 0) return p;
-      return { ...p, ...updates };
-    });
-    // run only when modal opens/closes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-
-  // lock body scroll while modal open
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev || "";
+    const normalized = {
+      ...formData,
+      openingHours: formData.openingHours || { open: "", close: "" },
+      location: formData.location || { lat: null, lng: null },
+      tags: Array.isArray(formData.tags)
+        ? formData.tags
+        : formData.tagsCsv
+          ? formData.tagsCsv.split(",").map((t) => t.trim()).filter(Boolean)
+          : [],
     };
-  }, [open]);
 
+    form.setFieldsValue({
+      name: normalized.name || "",
+      address: normalized.address || "",
+      phone: normalized.phone || "",
+      description: normalized.description || "",
+      imageUrl: normalized.imageUrl || "",
+      openTime: normalized.openingHours.open ? dayjs(normalized.openingHours.open, "HH:mm") : null,
+      closeTime: normalized.openingHours.close ? dayjs(normalized.openingHours.close, "HH:mm") : null,
+      lat: normalized.location.lat,
+      lng: normalized.location.lng,
+    });
+
+    setLocalTags(normalized.tags);
+    setAddrQuery(normalized.address || "");
+    setImagePreviewError(false);
+  }, [open, formData, form]);
+
+  // Address suggestions with debounce
   useEffect(() => {
-    setLocalTags(
-      form?.tagsCsv
-        ? form.tagsCsv
-            .split(",")
-            .map((t) => t.trim())
-            .filter(Boolean)
-        : Array.isArray(form?.tags)
-        ? form.tags
-        : []
-    );
-  }, [form?.tagsCsv, form?.tags]);
-
-  useEffect(() => setAddrQuery(form?.address || ""), [form?.address]);
-
-  // address suggestions (debounced) - optional
-  useEffect(() => {
-    if (!fetchAddressSuggestions) {
+    if (!fetchAddressSuggestions || !addrQuery || addrQuery.trim().length < 2) {
       setSuggestions([]);
       return;
     }
-    if (!addrQuery || addrQuery.trim().length < 2) {
-      setSuggestions([]);
-      return;
-    }
+
     if (debounceRef.current) clearTimeout(debounceRef.current);
+
     debounceRef.current = setTimeout(async () => {
       try {
         const res = await fetchAddressSuggestions(addrQuery.trim());
-        setSuggestions(Array.isArray(res) ? res : []);
-        setShowSuggestions(true);
+        const options = (Array.isArray(res) ? res : []).map((s) => ({
+          value: s.address || s.text || s.place_name || s.description || s,
+          label: s.address || s.text || s.place_name || s.description || s,
+          data: s,
+        }));
+        setSuggestions(options);
       } catch (err) {
         console.warn(err);
         setSuggestions([]);
       }
     }, 300);
+
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [addrQuery, fetchAddressSuggestions]);
 
-  // file helpers
-  const readFileAsDataURL = (file) =>
-    new Promise((res, rej) => {
-      const fr = new FileReader();
-      fr.onload = () => res(fr.result);
-      fr.onerror = rej;
-      fr.readAsDataURL(file);
-    });
-
+  // File upload handler
   const handleFileUpload = async (file) => {
-    if (!file) return;
     const maxMB = 8;
     if (file.size > maxMB * 1024 * 1024) {
-      toast.error(`File quá lớn (tối đa ${maxMB}MB)`);
-      return;
+      message.error(`File quá lớn (tối đa ${maxMB}MB)`);
+      return false;
     }
+
     setUploading(true);
     try {
-      const dataUrl = await readFileAsDataURL(file);
-      setImagePreviewError(false);
-      setForm((prev) => ({ ...(prev || {}), imageUrl: dataUrl }));
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target.result;
+        form.setFieldsValue({ imageUrl: dataUrl });
+        setForm((prev) => ({ ...prev, imageUrl: dataUrl }));
+        setImagePreviewError(false);
+        setUploading(false);
+      };
+      reader.onerror = () => {
+        message.error("Không đọc được file ảnh");
+        setUploading(false);
+      };
+      reader.readAsDataURL(file);
     } catch (err) {
-      console.error(err);
-      toast.error("Không đọc được file ảnh");
-    } finally {
+      message.error("Lỗi upload ảnh");
       setUploading(false);
     }
+    return false; // Prevent auto upload
   };
 
-  const onDrop = async (e) => {
-    e.preventDefault();
-    setDragOver(false);
-    const f = e.dataTransfer?.files?.[0];
-    if (f) await handleFileUpload(f);
-  };
-  const onDragOver = (e) => {
-    e.preventDefault();
-    setDragOver(true);
-  };
-  const onDragLeave = (e) => {
-    e.preventDefault();
-    setDragOver(false);
-  };
+  // Tag handlers
+  const addTag = () => {
+    const tag = tagInput.trim();
+    if (!tag) return;
 
-  const addTag = (tag) => {
-    const t = String(tag || "").trim();
-    if (!t) return;
-    setLocalTags((prev) => {
-      if ((prev || []).includes(t)) return prev;
-      const next = [...(prev || []), t];
-      setForm((prevF) => ({ ...(prevF || {}), tagsCsv: next.join(", "), tags: next }));
-      return next;
-    });
-  };
+    if (localTags.includes(tag)) {
+      message.warning("Tag đã tồn tại");
+      return;
+    }
 
-  const removeTag = (tag) => {
-    setLocalTags((prev) => {
-      const next = (prev || []).filter((p) => p !== tag);
-      setForm((prevF) => ({ ...(prevF || {}), tagsCsv: next.join(", "), tags: next }));
-      return next;
-    });
-  };
-
-  const onAddrSelect = (sug) => {
-    const addressText = sug.address || sug.text || sug.place_name || sug.description || sug;
+    const newTags = [...localTags, tag];
+    setLocalTags(newTags);
+    setTagInput("");
     setForm((prev) => ({
-      ...(prev || {}),
-      address: addressText,
-      location: {
-        ...(prev?.location || {}),
-        lat: sug.lat != null ? Number(sug.lat) : prev?.location?.lat ?? null,
-        lng: sug.lng != null ? Number(sug.lng) : prev?.location?.lng ?? null,
-      },
+      ...prev,
+      tags: newTags,
+      tagsCsv: newTags.join(", "),
     }));
-    setAddrQuery(addressText);
-    setSuggestions([]);
-    setShowSuggestions(false);
   };
 
+  const removeTag = (tagToRemove) => {
+    const newTags = localTags.filter((t) => t !== tagToRemove);
+    setLocalTags(newTags);
+    setForm((prev) => ({
+      ...prev,
+      tags: newTags,
+      tagsCsv: newTags.join(", "),
+    }));
+  };
+
+  // Address selection from suggestions
+  const onAddrSelect = (value, option) => {
+    const sug = option.data;
+    form.setFieldsValue({ address: value });
+    setAddrQuery(value);
+
+    if (sug && (sug.lat != null || sug.lng != null)) {
+      form.setFieldsValue({
+        lat: sug.lat,
+        lng: sug.lng,
+      });
+    }
+
+    setSuggestions([]);
+  };
+
+  // Open Google Maps directions
   const openDirections = () => {
-    const loc = form?.location;
+    const values = form.getFieldsValue();
     let url;
-    if (loc && loc.lat != null && loc.lng != null) {
-      url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${loc.lat},${loc.lng}`)}`;
-    } else if (form?.address) {
-      url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(form.address)}`;
-    } else url = "https://www.google.com/maps";
+    if (values.lat != null && values.lng != null) {
+      url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${values.lat},${values.lng}`)}`;
+    } else if (values.address) {
+      url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(values.address)}`;
+    } else {
+      url = "https://www.google.com/maps";
+    }
     window.open(url, "_blank");
   };
 
-  const validateBeforeSave = (payload) => {
-    if (!payload?.name || !String(payload.name).trim()) return "Tên cửa hàng bắt buộc";
-    if (!payload?.address || !String(payload.address).trim()) return "Địa chỉ bắt buộc";
-    if (payload?.phone && !/^[0-9+\s()-]{6,20}$/.test(payload.phone)) return "Số điện thoại không hợp lệ";
-    return null;
-  };
-
-  // build normalized payload and call onSave
-  const handleSave = async () => {
-    // ensure we read latest 'form' from prop
+  // Form submission
+  const handleFinish = async (values) => {
     const normalized = {
-      ...form,
-      // normalize tags
-      tags: Array.isArray(form?.tags)
-        ? form.tags.filter(Boolean)
-        : Array.isArray(localTags)
-        ? localTags
-        : typeof form?.tagsCsv === "string"
-        ? form.tagsCsv
-            .split(",")
-            .map((t) => t.trim())
-            .filter(Boolean)
-        : [],
-      tagsCsv: Array.isArray(form?.tags)
-        ? form.tags.join(", ")
-        : Array.isArray(localTags)
-        ? localTags.join(", ")
-        : form?.tagsCsv || "",
-      // normalize openingHours to strings
+      name: values.name,
+      address: values.address,
+      phone: values.phone || "",
+      description: values.description || "",
+      imageUrl: values.imageUrl || "",
+      tags: localTags,
+      tagsCsv: localTags.join(", "),
       openingHours: {
-        open: form?.openingHours?.open != null ? String(form.openingHours.open) : "",
-        close: form?.openingHours?.close != null ? String(form.openingHours.close) : "",
+        open: values.openTime ? values.openTime.format("HH:mm") : "",
+        close: values.closeTime ? values.closeTime.format("HH:mm") : "",
       },
-      // normalize location: numeric or null
       location: {
-        lat: form?.location?.lat !== "" && form?.location?.lat != null ? Number(form.location.lat) : null,
-        lng: form?.location?.lng !== "" && form?.location?.lng != null ? Number(form.location.lng) : null,
+        lat: values.lat !== undefined && values.lat !== null && values.lat !== "" ? Number(values.lat) : null,
+        lng: values.lng !== undefined && values.lng !== null && values.lng !== "" ? Number(values.lng) : null,
       },
-      imageUrl: form?.imageUrl || "",
     };
 
-    console.log("normalized payload", form.openingHours);
-    const v = validateBeforeSave(normalized);
-    if (v) {
-      toast.error(v);
-      return;
-    }
-
-    // push normalized back to parent's state so UI reflects
-    setForm((prev) => ({ ...(prev || {}), ...normalized }));
+    // Update parent state
+    setForm((prev) => ({ ...prev, ...normalized }));
 
     try {
       if (typeof onSave === "function") {
-        // if onSave expects a payload param (length >= 1) pass normalized,
-        // otherwise call onSave() (parent will read its own state)
-        const maybe = onSave.length >= 1 ? onSave(normalized) : onSave();
-        if (maybe && typeof maybe.then === "function") await maybe;
+        const result = onSave.length >= 1 ? onSave(normalized) : onSave();
+        if (result && typeof result.then === "function") await result;
       }
     } catch (err) {
       console.error("save error", err);
-      toast.error(err?.message || "Lỗi khi lưu cửa hàng");
+      message.error(err?.message || "Lỗi khi lưu cửa hàng");
     }
   };
 
-  const clearImage = () => {
-    setForm((prev) => ({ ...(prev || {}), imageUrl: "" }));
-    setImagePreviewError(false);
-  };
-
-  const imageSrc = form?.imageUrl || "";
+  const imageSrc = form.getFieldValue("imageUrl") || formData?.imageUrl || "";
   const showImagePreview = !!imageSrc && !imagePreviewError;
 
-  const hiddenScrollbarCss = `
-    .storeform-scroll::-webkit-scrollbar { display: none; }
-    .storeform-scroll { -ms-overflow-style: none; scrollbar-width: none; }
-  `;
-
-  if (!open) return null;
-
   return (
-    <>
-      <style>{hiddenScrollbarCss}</style>
-      <motion.div
-        className="fixed inset-0 z-50 flex items-center justify-center p-4"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-      >
-        <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+    <Modal
+      open={open}
+      onCancel={onClose}
+      title={
+        <Space>
+          <ShopOutlined style={{ color: "#52c41a", fontSize: 24 }} />
+          <span style={{ fontSize: 20, fontWeight: 700 }}>{title}</span>
+        </Space>
+      }
+      width={1000}
+      footer={null}
+      styles={{
+        body: {
+          maxHeight: "calc(100vh - 200px)",
+          overflowY: "auto",
+        },
+      }}
+    >
+      <Form form={form} layout="vertical" onFinish={handleFinish}>
+        <Row gutter={24}>
+          {/* Left Column - Form Fields */}
+          <Col xs={24} md={14}>
+            <Card
+              size="small"
+              style={{
+                background: "#fafafa",
+                border: "none",
+                borderRadius: 12,
+              }}
+            >
+              {/* Store Name */}
+              <Form.Item
+                label={
+                  <Space>
+                    <ShopOutlined style={{ color: "#52c41a" }} />
+                    <span style={{ fontWeight: 600 }}>Tên cửa hàng</span>
+                  </Space>
+                }
+                name="name"
+                rules={[{ required: true, message: "Vui lòng nhập tên cửa hàng" }]}
+              >
+                <Input size="large" placeholder="Nhập tên cửa hàng" style={{ borderRadius: 8 }} />
+              </Form.Item>
 
-        <motion.div
-          ref={panelRef}
-          className="relative z-10 w-full max-w-4xl rounded-3xl bg-white shadow-2xl"
-          initial={{ y: 16, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: 16, opacity: 0 }}
-          style={{ maxHeight: "calc(100vh - 64px)", overflow: "auto" }}
-        >
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1 p-6 storeform-scroll overflow-auto">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="text-2xl font-bold">{title}</h3>
-                  <p className="text-sm text-gray-500 mt-1">Điền thông tin cửa hàng</p>
-                </div>
-                <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-                  ✕
-                </button>
-              </div>
-
-              {/* Name */}
-              <div className="mt-4">
-                <label className="text-sm text-gray-600 block mb-1">Tên cửa hàng</label>
-                <input
-                  value={form?.name || ""}
-                  onChange={(e) => setForm((prev) => ({ ...(prev || {}), name: e.target.value }))}
-                  className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50"
-                />
-              </div>
-
-              {/* Address + directions */}
-              <div className="mt-4 relative">
-                <label className="text-sm text-gray-600 block mb-1">Địa chỉ</label>
-                <div className="flex gap-2">
-                  <input
+              {/* Address with Suggestions */}
+              <Form.Item
+                label={
+                  <Space>
+                    <EnvironmentOutlined style={{ color: "#1890ff" }} />
+                    <span style={{ fontWeight: 600 }}>Địa chỉ</span>
+                  </Space>
+                }
+                name="address"
+                rules={[{ required: true, message: "Vui lòng nhập địa chỉ" }]}
+              >
+                <Space.Compact style={{ width: "100%" }} size="large">
+                  <AutoComplete
                     value={addrQuery}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setAddrQuery(v);
-                      setForm((prev) => ({ ...(prev || {}), address: v }));
+                    options={suggestions}
+                    onSelect={onAddrSelect}
+                    onChange={(value) => {
+                      setAddrQuery(value);
+                      form.setFieldsValue({ address: value });
                     }}
-                    onFocus={() => {
-                      if (suggestions.length) setShowSuggestions(true);
-                    }}
-                    placeholder="Nhập địa chỉ"
-                    className="flex-1 p-3 rounded-xl border border-gray-200 bg-white"
-                  />
-                  <button
+                    placeholder="Nhập địa chỉ cửa hàng"
+                    style={{ flex: 1 }}
+                  >
+                    <Input size="large" style={{ borderRadius: "8px 0 0 8px" }} />
+                  </AutoComplete>
+                  <Button
+                    type="primary"
+                    icon={<EnvironmentOutlined />}
                     onClick={openDirections}
-                    className="px-4 py-2 rounded-xl bg-green-600 text-white cursor-pointer"
+                    style={{
+                      background: "#52c41a",
+                      borderColor: "#52c41a",
+                      borderRadius: "0 8px 8px 0",
+                    }}
                   >
                     Chỉ đường
-                  </button>
-                </div>
+                  </Button>
+                </Space.Compact>
+              </Form.Item>
 
-                {showSuggestions && suggestions.length > 0 && (
-                  <ul className="absolute left-0 right-0 mt-2 z-40 bg-white border rounded max-h-52 overflow-auto">
-                    {suggestions.map((s, idx) => (
-                      <li
-                        key={s.id ?? idx}
-                        onClick={() => onAddrSelect(s)}
-                        className="p-2 hover:bg-gray-50 cursor-pointer"
-                      >
-                        {s.text || s.address || s.place_name}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+              {/* Lat/Lng */}
+              <Row gutter={12}>
+                <Col span={12}>
+                  <Form.Item
+                    label={
+                      <Space>
+                        <GlobalOutlined style={{ color: "#f5222d" }} />
+                        <span style={{ fontWeight: 600 }}>Vĩ độ (Lat)</span>
+                      </Space>
+                    }
+                    name="lat"
+                  >
+                    <InputNumber
+                      size="large"
+                      style={{ width: "100%", borderRadius: 8 }}
+                      placeholder="10.775..."
+                      step={0.000001}
+                    />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item
+                    label={
+                      <Space>
+                        <GlobalOutlined style={{ color: "#f5222d" }} />
+                        <span style={{ fontWeight: 600 }}>Kinh độ (Lng)</span>
+                      </Space>
+                    }
+                    name="lng"
+                  >
+                    <InputNumber
+                      size="large"
+                      style={{ width: "100%", borderRadius: 8 }}
+                      placeholder="106.700..."
+                      step={0.000001}
+                    />
+                  </Form.Item>
+                </Col>
+              </Row>
 
-              {/* Lat / Lng */}
-              <div className="grid grid-cols-2 gap-3 mt-4">
-                <div>
-                  <label className="text-sm text-gray-600 block mb-1">Vĩ độ</label>
-                  <input
-                    value={form?.location?.lat ?? ""}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      const lat = v === "" ? null : Number(v);
-                      setForm((prev) => ({
-                        ...(prev || {}),
-                        location: { ...(prev?.location || {}), lat: Number.isFinite(lat) ? lat : null },
-                      }));
-                    }}
-                    className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50"
-                    placeholder="10.775..."
-                  />
-                </div>
+              {/* Phone */}
+              <Form.Item
+                label={
+                  <Space>
+                    <PhoneOutlined style={{ color: "#faad14" }} />
+                    <span style={{ fontWeight: 600 }}>Số điện thoại</span>
+                  </Space>
+                }
+                name="phone"
+                rules={[
+                  {
+                    pattern: /^[0-9+\s()-]{6,20}$/,
+                    message: "Số điện thoại không hợp lệ",
+                  },
+                ]}
+              >
+                <Input size="large" placeholder="Nhập số điện thoại" style={{ borderRadius: 8 }} />
+              </Form.Item>
 
-                <div>
-                  <label className="text-sm text-gray-600 block mb-1">Kinh độ</label>
-                  <input
-                    value={form?.location?.lng ?? ""}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      const lng = v === "" ? null : Number(v);
-                      setForm((prev) => ({
-                        ...(prev || {}),
-                        location: { ...(prev?.location || {}), lng: Number.isFinite(lng) ? lng : null },
-                      }));
-                    }}
-                    className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50"
-                    placeholder="106.700..."
-                  />
-                </div>
-              </div>
+              {/* Opening Hours */}
+              <Row gutter={12}>
+                <Col span={12}>
+                  <Form.Item
+                    label={
+                      <Space>
+                        <ClockCircleOutlined style={{ color: "#52c41a" }} />
+                        <span style={{ fontWeight: 600 }}>Giờ mở cửa</span>
+                      </Space>
+                    }
+                    name="openTime"
+                  >
+                    <TimePicker
+                      size="large"
+                      format="HH:mm"
+                      style={{ width: "100%", borderRadius: 8 }}
+                      placeholder="Chọn giờ mở"
+                    />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item
+                    label={
+                      <Space>
+                        <ClockCircleOutlined style={{ color: "#52c41a" }} />
+                        <span style={{ fontWeight: 600 }}>Giờ đóng cửa</span>
+                      </Space>
+                    }
+                    name="closeTime"
+                  >
+                    <TimePicker
+                      size="large"
+                      format="HH:mm"
+                      style={{ width: "100%", borderRadius: 8 }}
+                      placeholder="Chọn giờ đóng"
+                    />
+                  </Form.Item>
+                </Col>
+              </Row>
 
-              {/* Phone, Description, Tags */}
-              <div className="mt-4">
-                <label className="text-sm text-gray-600 block mb-1">Số điện thoại</label>
-                <input
-                  value={form?.phone || ""}
-                  onChange={(e) => setForm((prev) => ({ ...(prev || {}), phone: e.target.value }))}
-                  className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50"
-                />
-              </div>
-
-              <div className="mt-4">
-                <label className="text-sm text-gray-600 block mb-1">Mô tả</label>
-                <textarea
-                  value={form?.description || ""}
-                  onChange={(e) => setForm((prev) => ({ ...(prev || {}), description: e.target.value }))}
+              {/* Description */}
+              <Form.Item
+                label={
+                  <Space>
+                    <span style={{ fontWeight: 600 }}>Mô tả</span>
+                  </Space>
+                }
+                name="description"
+              >
+                <TextArea
                   rows={4}
-                  className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50"
+                  placeholder="Nhập mô tả về cửa hàng"
+                  style={{ borderRadius: 8 }}
                 />
-              </div>
+              </Form.Item>
 
-              <div className="mt-4">
-                <label className="text-sm text-gray-600 block mb-1">Tags</label>
-                <div className="flex gap-2">
-                  <input
-                    id="tag-input-field"
+              {/* Tags */}
+              <Form.Item
+                label={
+                  <Space>
+                    <TagsOutlined style={{ color: "#52c41a" }} />
+                    <span style={{ fontWeight: 600 }}>Tags</span>
+                  </Space>
+                }
+              >
+                <Space.Compact style={{ width: "100%" }} size="large">
+                  <Input
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value)}
+                    onPressEnter={addTag}
                     placeholder="Nhập tag và nhấn Enter"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        addTagFromInput(e.target);
-                      }
-                    }}
-                    className="flex-1 p-3 rounded-xl border border-gray-200 bg-white"
+                    style={{ borderRadius: "8px 0 0 8px" }}
                   />
-                  <button
-                    onClick={() => addTagFromInput(document.getElementById("tag-input-field"))}
-                    className="px-4 py-2 rounded-xl bg-gray-100 cursor-pointer hover:bg-gray-200 transition-colors"
+                  <Button
+                    type="primary"
+                    icon={<PlusOutlined />}
+                    onClick={addTag}
+                    style={{
+                      background: "#52c41a",
+                      borderColor: "#52c41a",
+                      borderRadius: "0 8px 8px 0",
+                    }}
                   >
                     Thêm
-                  </button>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {localTags.map((t, i) => (
-                    <div key={i} className="px-3 py-1 bg-gray-100 rounded-full flex items-center gap-2">
-                      <span>{t}</span>
-                      <button onClick={() => removeTag(t)}>×</button>
-                    </div>
+                  </Button>
+                </Space.Compact>
+
+                <Space size={[8, 8]} wrap style={{ marginTop: 12 }}>
+                  {localTags.map((tag, idx) => (
+                    <Tag
+                      key={idx}
+                      closable
+                      onClose={() => removeTag(tag)}
+                      color="green"
+                      style={{
+                        padding: "4px 12px",
+                        borderRadius: 12,
+                        fontSize: 13,
+                      }}
+                    >
+                      {tag}
+                    </Tag>
                   ))}
-                </div>
-              </div>
+                </Space>
+              </Form.Item>
+            </Card>
+          </Col>
 
-              {/* Opening hours */}
-              <div className="grid grid-cols-2 gap-3 mt-4">
-                <div>
-                  <label className="text-sm text-gray-600 block mb-1">Giờ mở</label>
-                  <input
-                    type="time"
-                    value={form?.openingHours?.open ?? ""}
-                    onChange={(e) => {
-                      console.log("openingHours.open changed ->", e.target.value);
-                      setForm((f) => ({
-                        ...f,
-                        openingHours: { ...f.openingHours, open: e.target.value },
-                      }));
-                    }}
-                    className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-sm text-gray-600 block mb-1">Giờ đóng</label>
-                  <input
-                    type="time"
-                    value={form?.openingHours?.close ?? ""}
-                    onChange={(e) => {
-                      console.log("openingHours.close changed ->", e.target.value);
-                      setForm((prev) => ({
-                        ...(prev || {}),
-                        openingHours: { ...(prev?.openingHours || {}), close: e.target.value },
-                      }));
-                    }}
-                    className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50"
-                  />
-                </div>
-              </div>
-
-              <div className="mt-6 flex justify-end gap-3">
-                <button
-                  onClick={onClose}
-                  className="px-4 py-2 rounded-xl bg-gray-100 cursor-pointer hover:bg-gray-200 transition-colors"
-                >
-                  Hủy
-                </button>
-                <button
-                  onClick={handleSave}
-                  disabled={busy || uploading}
-                  className="px-6 py-2 rounded-xl bg-green-600 text-white cursor-pointer"
-                >
-                  {busy || uploading ? "Đang lưu..." : "Lưu"}
-                </button>
-              </div>
-            </div>
-
-            <div
-              className={`w-full md:w-80 p-6 border-l border-gray-100 ${dragOver ? "bg-green-50" : "bg-white"}`}
-              onDrop={onDrop}
-              onDragOver={onDragOver}
-              onDragLeave={onDragLeave}
+          {/* Right Column - Image Upload */}
+          <Col xs={24} md={10}>
+            <Card
+              size="small"
+              title={
+                <Space>
+                  <CameraOutlined style={{ color: "#1890ff" }} />
+                  <span style={{ fontWeight: 600 }}>Ảnh cửa hàng</span>
+                </Space>
+              }
+              style={{ borderRadius: 12 }}
             >
-              <div>
-                <h4 className="text-sm font-semibold">Ảnh cửa hàng</h4>
-                <p className="text-xs text-gray-500">Kéo thả hoặc chọn file / dán URL</p>
-              </div>
-              <div className="w-full h-44 rounded-xl bg-gray-50 border border-dashed flex items-center justify-center overflow-hidden mt-3">
+              {/* Image Preview */}
+              <div
+                style={{
+                  width: "100%",
+                  height: 240,
+                  borderRadius: 12,
+                  background: "#f5f5f5",
+                  border: "2px dashed #d9d9d9",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  overflow: "hidden",
+                  marginBottom: 16,
+                }}
+              >
                 {showImagePreview ? (
                   <img
                     src={imageSrc}
                     alt="preview"
-                    className="w-full h-full object-cover"
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                    }}
                     onError={() => setImagePreviewError(true)}
                   />
                 ) : (
-                  <div className="text-center text-gray-400">
-                    <div className="text-3xl">📷</div>
-                    <div className="text-sm mt-2">{uploading ? "Đang tải..." : "Không có ảnh"}</div>
+                  <div style={{ textAlign: "center", color: "#8c8c8c" }}>
+                    <CameraOutlined style={{ fontSize: 48, marginBottom: 12 }} />
+                    <div>{uploading ? "Đang tải..." : "Chưa có ảnh"}</div>
                   </div>
                 )}
               </div>
 
-              <label className="block mt-3">
-                <input
-                  id="store-image-file-input"
-                  type="file"
+              {/* Upload Buttons */}
+              <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                <Upload
                   accept="image/*"
-                  onChange={async (e) => {
-                    const f = e.target.files?.[0];
-                    if (f) await handleFileUpload(f);
-                    e.currentTarget.value = "";
-                  }}
-                  className="hidden"
-                />
-                <div className="mt-2 flex gap-2">
-                  <button
-                    onClick={() => document.getElementById("store-image-file-input")?.click()}
-                    className="flex-1 px-4 py-2 rounded-xl bg-white border hover:bg-blue-200 transition-colors duration-200 cursor-pointer"
+                  beforeUpload={handleFileUpload}
+                  showUploadList={false}
+                >
+                  <Button
+                    icon={<UploadOutlined />}
+                    block
+                    size="large"
+                    loading={uploading}
+                    style={{ borderRadius: 8 }}
                   >
-                    Chọn file
-                  </button>
-                  <button
-                    onClick={clearImage}
-                    className="px-4 py-2 rounded-xl bg-red-50 text-red-600 hover:bg-red-200 transition-colors duration-200 cursor-pointer"
+                    Chọn file ảnh
+                  </Button>
+                </Upload>
+
+                <Form.Item name="imageUrl" style={{ margin: 0 }}>
+                  <Input
+                    placeholder="Hoặc dán URL ảnh"
+                    prefix={<CameraOutlined style={{ color: "#8c8c8c" }} />}
+                    size="large"
+                    style={{ borderRadius: 8 }}
+                  />
+                </Form.Item>
+
+                {imageSrc && (
+                  <Button
+                    icon={<DeleteOutlined />}
+                    danger
+                    block
+                    onClick={() => {
+                      form.setFieldsValue({ imageUrl: "" });
+                      setForm((prev) => ({ ...prev, imageUrl: "" }));
+                      setImagePreviewError(false);
+                    }}
+                    style={{ borderRadius: 8 }}
                   >
-                    Xóa
-                  </button>
+                    Xóa ảnh
+                  </Button>
+                )}
+
+                <div style={{ fontSize: 12, color: "#8c8c8c", textAlign: "center" }}>
+                  📌 Định dạng: JPG, PNG. Tối đa 8MB
                 </div>
-              </label>
+              </Space>
+            </Card>
+          </Col>
+        </Row>
 
-              <div className="mt-3">
-                <label className="text-xs text-gray-500">Hoặc dán URL</label>
-                <input
-                  value={form?.imageUrl || ""}
-                  onChange={(e) => setForm((prev) => ({ ...(prev || {}), imageUrl: e.target.value }))}
-                  placeholder="https://..."
-                  className="w-full mt-1 p-2 rounded-xl border border-gray-200"
-                />
-              </div>
-              <div className="mt-auto text-xs text-blue-500">Định dạng: JPG, PNG. Tối đa 8MB.</div>
-            </div>
-          </div>
-        </motion.div>
-      </motion.div>
-    </>
+        {/* Footer Actions */}
+        <Divider style={{ margin: "24px 0" }} />
+        <Row justify="end" gutter={12}>
+          <Col>
+            <Button
+              size="large"
+              onClick={onClose}
+              style={{ borderRadius: 8, minWidth: 120 }}
+            >
+              Hủy
+            </Button>
+          </Col>
+          <Col>
+            <Button
+              type="primary"
+              htmlType="submit"
+              size="large"
+              loading={busy || uploading}
+              icon={<SaveOutlined />}
+              style={{
+                background: "linear-gradient(135deg, #52c41a 0%, #73d13d 100%)",
+                border: "none",
+                borderRadius: 8,
+                minWidth: 120,
+                fontWeight: 600,
+              }}
+            >
+              Lưu
+            </Button>
+          </Col>
+        </Row>
+      </Form>
+    </Modal>
   );
-
-  // helper
-  function addTagFromInput(el) {
-    if (!el) return;
-    const v = String(el.value || "").trim();
-    if (!v) return;
-    const parts = v
-      .split(",")
-      .map((p) => p.trim())
-      .filter(Boolean);
-    setLocalTags((prev) => {
-      const next = Array.from(new Set([...(prev || []), ...parts]));
-      setForm((prevForm) => ({ ...(prevForm || {}), tagsCsv: next.join(", "), tags: next }));
-      el.value = "";
-      el.focus();
-      return next;
-    });
-  }
 }

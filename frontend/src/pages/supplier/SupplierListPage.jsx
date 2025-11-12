@@ -1,46 +1,113 @@
-import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+// src/pages/supplier/SupplierListPage.jsx
+import React, { useEffect, useState, useMemo } from "react";
+import {
+  Table,
+  Button,
+  Modal,
+  Space,
+  Typography,
+  Card,
+  Input,
+  Tag,
+  Tooltip,
+  notification,
+  Statistic,
+  Row,
+  Col,
+  Divider,
+  AutoComplete,
+  Popconfirm,
+} from "antd";
+import {
+  PlusOutlined,
+  EditOutlined,
+  SearchOutlined,
+  DeleteOutlined,
+  EyeOutlined,
+  PhoneOutlined,
+  MailOutlined,
+  EnvironmentOutlined,
+  TeamOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  ReloadOutlined,
+  UserOutlined,
+} from "@ant-design/icons";
 import Layout from "../../components/Layout";
-import Button from "../../components/Button";
+import SupplierFormModal from "../../components/supplier/SupplierFormModal";
+import SupplierDetailModal from "../../components/supplier/SupplierDetailModal";
 import { getSuppliers, deleteSupplier } from "../../api/supplierApi";
 import { useAuth } from "../../context/AuthContext";
-import toast from "react-hot-toast";
-import { MdVisibility, MdModeEditOutline, MdDeleteForever, MdAdd } from "react-icons/md";
 
-import SupplierFormModal from "../../components/supplier/SupplierFormModal";
-import ConfirmDeleteModal from "../../components/supplier/ConfirmDeleteModal";
-import SupplierDetailModal from "../../components/supplier/SupplierDetailModal";
+const { Title, Text } = Typography;
 
 export default function SupplierListPage() {
+  const [api, contextHolder] = notification.useNotification();
   const { token } = useAuth();
-  const [suppliers, setSuppliers] = useState([]);
-  const [loading, setLoading] = useState(true);
 
   const storeObj = JSON.parse(localStorage.getItem("currentStore")) || {};
   const storeId = storeObj._id || null;
 
+  const [allSuppliers, setAllSuppliers] = useState([]);
+  const [filteredSuppliers, setFilteredSuppliers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchValue, setSearchValue] = useState("");
+
   const [formModalOpen, setFormModalOpen] = useState(false);
   const [editSupplierId, setEditSupplierId] = useState(null);
 
-  const [deleteModal, setDeleteModal] = useState({ open: false, id: null, name: "" });
-  const [deleting, setDeleting] = useState(false);
-
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [detailSupplierId, setDetailSupplierId] = useState(null);
-  const openDetail = (supplierId) => {
-    setDetailSupplierId(supplierId);
-    setDetailModalOpen(true);
-  };
 
-  const fetchSuppliers = async () => {
-    if (!storeId || !token) return;
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const fetchSuppliers = async (showNotification = false) => {
+    if (!storeId || !token) {
+      api.warning({
+        message: "⚠️ Chưa đăng nhập",
+        description: "Vui lòng đăng nhập để xem danh sách nhà cung cấp",
+        placement: "topRight",
+      });
+      return;
+    }
+
     try {
       setLoading(true);
       const data = await getSuppliers(storeId);
-      setSuppliers(Array.isArray(data?.suppliers) ? data.suppliers : Array.isArray(data) ? data : []);
+      const supplierList = Array.isArray(data?.suppliers)
+        ? data.suppliers
+        : Array.isArray(data)
+          ? data
+          : [];
+
+      setAllSuppliers(supplierList);
+      setFilteredSuppliers(supplierList);
+
+      if (showNotification) {
+        api.success({
+          message: "🎉 Tải dữ liệu thành công",
+          description: `Đã tải ${supplierList.length} nhà cung cấp`,
+          placement: "topRight",
+          duration: 3,
+        });
+      }
     } catch (err) {
       console.error(err);
-      toast.error("Không thể tải danh sách nhà cung cấp.");
+      api.error({
+        message: "❌ Lỗi tải dữ liệu",
+        description: "Không thể tải danh sách nhà cung cấp. Vui lòng thử lại.",
+        placement: "topRight",
+        duration: 5,
+      });
     } finally {
       setLoading(false);
     }
@@ -50,137 +117,499 @@ export default function SupplierListPage() {
     fetchSuppliers();
   }, [storeId, token]);
 
+  // Client-side search filter
+  useEffect(() => {
+    if (!searchValue.trim()) {
+      setFilteredSuppliers(allSuppliers);
+      setCurrentPage(1);
+      return;
+    }
+
+    const searchLower = searchValue.toLowerCase().trim();
+    const filtered = allSuppliers.filter((supplier) => {
+      const name = (supplier.name || "").toLowerCase();
+      const phone = (supplier.phone || "").toLowerCase();
+      const email = (supplier.email || "").toLowerCase();
+      const address = (supplier.address || "").toLowerCase();
+
+      return (
+        name.includes(searchLower) ||
+        phone.includes(searchLower) ||
+        email.includes(searchLower) ||
+        address.includes(searchLower)
+      );
+    });
+
+    setFilteredSuppliers(filtered);
+    setCurrentPage(1);
+
+    if (searchValue.trim()) {
+      api.info({
+        message: `🔍 Kết quả tìm kiếm`,
+        description: `Tìm thấy ${filtered.length} nhà cung cấp phù hợp`,
+        placement: "topRight",
+        duration: 2,
+      });
+    }
+  }, [searchValue, allSuppliers]);
+
+  // AutoComplete options
+  const searchOptions = useMemo(() => {
+    if (!searchValue.trim()) return [];
+
+    const searchLower = searchValue.toLowerCase();
+    const matches = allSuppliers
+      .filter((supplier) => {
+        const name = (supplier.name || "").toLowerCase();
+        const phone = (supplier.phone || "").toLowerCase();
+        return name.includes(searchLower) || phone.includes(searchLower);
+      })
+      .slice(0, 10);
+
+    return matches.map((supplier) => ({
+      value: supplier.name,
+      label: (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <Space>
+            <TeamOutlined style={{ color: "#1890ff" }} />
+            <span>{supplier.name}</span>
+          </Space>
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            {supplier.phone || "No phone"}
+          </Text>
+        </div>
+      ),
+    }));
+  }, [searchValue, allSuppliers]);
+
+  const handleRefresh = async () => {
+    api.info({
+      message: "🔄 Đang làm mới...",
+      description: "Đang tải lại dữ liệu nhà cung cấp",
+      placement: "topRight",
+      duration: 1,
+      key: "refresh",
+    });
+
+    await fetchSuppliers(false);
+    setSearchValue("");
+
+    api.success({
+      message: "✅ Đã làm mới!",
+      description: "Dữ liệu nhà cung cấp đã được cập nhật",
+      placement: "topRight",
+      duration: 2,
+      key: "refresh",
+    });
+  };
+
   const openFormModal = (supplierId = null) => {
     setEditSupplierId(supplierId);
     setFormModalOpen(true);
+
+    api.info({
+      message: supplierId ? "✏️ Chỉnh sửa nhà cung cấp" : "📝 Thêm nhà cung cấp mới",
+      description: supplierId
+        ? "Vui lòng cập nhật thông tin nhà cung cấp"
+        : "Vui lòng điền đầy đủ thông tin nhà cung cấp",
+      placement: "topRight",
+      duration: 2,
+    });
   };
 
-  const openDelete = (id, name) => setDeleteModal({ open: true, id, name });
+  const openDetail = (supplierId) => {
+    setDetailSupplierId(supplierId);
+    setDetailModalOpen(true);
+  };
 
-  const handleDelete = async () => {
-    if (!deleteModal.id) return;
-    setDeleting(true);
+  const handleDelete = async (id, name) => {
     try {
-      await deleteSupplier(deleteModal.id);
-      setSuppliers((prev) => prev.filter((s) => s._id !== deleteModal.id));
-      toast.success(`Đã xóa ${deleteModal.name}`);
-      setDeleteModal({ open: false, id: null, name: "" });
+      await deleteSupplier(id);
+      setAllSuppliers((prev) => prev.filter((s) => s._id !== id));
+      setFilteredSuppliers((prev) => prev.filter((s) => s._id !== id));
+
+      api.success({
+        message: "🗑️ Xóa thành công!",
+        description: `Đã xóa nhà cung cấp "${name}"`,
+        placement: "topRight",
+        duration: 3,
+      });
     } catch (err) {
       console.error(err);
-      toast.error("Không thể xóa nhà cung cấp.");
-    } finally {
-      setDeleting(false);
+      api.error({
+        message: "❌ Lỗi xóa",
+        description: "Không thể xóa nhà cung cấp. Vui lòng thử lại.",
+        placement: "topRight",
+        duration: 5,
+      });
     }
   };
 
+  const onFormSuccess = () => {
+    fetchSuppliers(false);
+    setFormModalOpen(false);
+
+    api.success({
+      message: editSupplierId ? "🎉 Cập nhật thành công!" : "🎉 Tạo mới thành công!",
+      description: editSupplierId
+        ? "Thông tin nhà cung cấp đã được cập nhật"
+        : "Nhà cung cấp mới đã được thêm vào danh sách",
+      placement: "topRight",
+      duration: 4,
+    });
+  };
+
+  // Statistics
+  const activeSuppliers = filteredSuppliers.filter((s) => s.status === "đang hoạt động").length;
+  const inactiveSuppliers = filteredSuppliers.length - activeSuppliers;
+
+  // Table columns
+  const columns = [
+    {
+      title: (
+        <Space>
+          <TeamOutlined style={{ color: "#1890ff" }} />
+          <span>Tên nhà cung cấp</span>
+        </Space>
+      ),
+      dataIndex: "name",
+      key: "name",
+      width: isMobile ? 150 : 200,
+      ellipsis: true,
+      render: (text) => (
+        <Text strong style={{ color: "#1890ff" }}>
+          {text}
+        </Text>
+      ),
+    },
+    {
+      title: (
+        <Space>
+          <PhoneOutlined style={{ color: "#52c41a" }} />
+          <span>SĐT</span>
+        </Space>
+      ),
+      dataIndex: "phone",
+      key: "phone",
+      width: 130,
+      render: (text) => <Tag color="green">{text || "-"}</Tag>,
+    },
+    {
+      title: (
+        <Space>
+          <MailOutlined style={{ color: "#faad14" }} />
+          <span>Email</span>
+        </Space>
+      ),
+      dataIndex: "email",
+      key: "email",
+      width: 200,
+      ellipsis: true,
+      render: (text) => <Text type="secondary">{text || "-"}</Text>,
+    },
+    {
+      title: (
+        <Space>
+          <EnvironmentOutlined style={{ color: "#f5222d" }} />
+          <span>Địa chỉ</span>
+        </Space>
+      ),
+      dataIndex: "address",
+      key: "address",
+      width: 200,
+      ellipsis: true,
+      render: (text) => <Text>{text || "-"}</Text>,
+    },
+    {
+      title: "Trạng thái",
+      dataIndex: "status",
+      key: "status",
+      width: 150,
+      align: "center",
+      render: (status) => (
+        <Tag
+          icon={status === "đang hoạt động" ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
+          color={status === "đang hoạt động" ? "success" : "error"}
+        >
+          {status || "Không xác định"}
+        </Tag>
+      ),
+    },
+    {
+      title: "Hành động",
+      key: "action",
+      width: 150,
+      align: "center",
+      fixed: "right",
+      render: (_, record) => (
+        <Space size="small">
+          <Tooltip title="Xem chi tiết">
+            <Button
+              type="primary"
+              icon={<EyeOutlined />}
+              size="small"
+              onClick={() => openDetail(record._id)}
+              style={{ background: "#1890ff" }}
+            />
+          </Tooltip>
+
+          <Tooltip title="Chỉnh sửa">
+            <Button
+              type="default"
+              icon={<EditOutlined />}
+              size="small"
+              onClick={() => openFormModal(record._id)}
+              style={{ color: "#faad14", borderColor: "#faad14" }}
+            />
+          </Tooltip>
+
+          <Popconfirm
+            title="Xóa nhà cung cấp?"
+            description={`Bạn có chắc muốn xóa "${record.name}"?`}
+            onConfirm={() => handleDelete(record._id, record.name)}
+            okText="Xóa"
+            cancelText="Hủy"
+            okButtonProps={{ danger: true }}
+          >
+            <Tooltip title="Xóa">
+              <Button type="primary" danger icon={<DeleteOutlined />} size="small" />
+            </Tooltip>
+          </Popconfirm>
+        </Space>
+      ),
+    },
+  ];
+
+  const handleTableChange = (pagination) => {
+    setCurrentPage(pagination.current);
+    setItemsPerPage(pagination.pageSize);
+  };
+
+  if (!storeId) {
+    return (
+      <Layout>
+        {contextHolder}
+        <Card style={{ margin: 24, borderRadius: 16 }}>
+          <Title level={2}>Danh sách nhà cung cấp</Title>
+          <Card style={{ background: "#FFF9C4", border: "none", marginTop: 16 }}>
+            <Text strong>⚠️ Không tìm thấy cửa hàng hiện hành.</Text>
+          </Card>
+        </Card>
+      </Layout>
+    );
+  }
+
   return (
     <Layout>
-      <div className="p-4 sm:p-6 mx-auto max-w-8xl">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 sm:mb-8 gap-4">
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 tracking-tight">Danh sách nhà cung cấp</h1>
-          <Button
-            className="flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-2xl shadow-md hover:shadow-lg transition-all duration-200"
-            onClick={() => openFormModal(null)}
-          >
-            <MdAdd size={20} /> Thêm nhà cung cấp
-          </Button>
-        </div>
+      {contextHolder}
 
-        {loading && <p className="text-center mt-6 text-gray-400 animate-pulse">⏳ Đang tải...</p>}
-
-        {!loading && suppliers.length > 0 && (
-          <div className=" rounded-2xl shadow-lg border border-gray-200 bg-white">
-            <table className="min-w-full text-gray-700 text-sm sm:text-base">
-              <thead className="bg-gray-50 uppercase font-medium text-gray-600">
-                <tr>
-                  <th className="py-3 px-4 text-left">Tên</th>
-                  <th className="py-3 px-4 text-left hidden sm:table-cell">SĐT</th>
-                  <th className="py-3 px-4 text-left hidden sm:table-cell">Email</th>
-                  <th className="py-3 px-4 text-left">Địa chỉ</th>
-                  <th className="py-3 px-4 text-left">Trạng thái</th>
-                  <th className="py-3 px-4 text-center">Hành động</th>
-                </tr>
-              </thead>
-              <tbody>
-                {suppliers.map((s, i) => (
-                  <tr
-                    key={s._id}
-                    className={`transition-transform duration-200 hover:scale-[1.02] hover:shadow-lg ${i % 2 === 0 ? "bg-white" : "bg-green-50"
-                      }`}
-                  >
-                    <td className="py-3 px-4 font-medium text-gray-900">{s.name}</td>
-                    <td className="py-3 px-4 hidden sm:table-cell">{s.phone || "-"}</td>
-                    <td className="py-3 px-4 hidden sm:table-cell">{s.email || "-"}</td>
-                    <td className="py-3 px-4">{s.address || "-"}</td>
-                    <td className="py-3 px-4">
-                      <span
-                        className={`font-semibold ${s.status === "đang hoạt động" ? "text-green-600" : "text-red-500"}`}
-                      >
-                        {s.status || "-"}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 flex justify-center items-center gap-3">
-                      {/* <Link
-                        to={`/stores/${storeId}/suppliers/${s._id}`}
-                        className="text-blue-500 hover:text-blue-700 hover:scale-110 transition transform"
-                        title="Xem"
-                      >
-                        <MdVisibility size={22} />
-                      </Link> */}
-                      <button
-                        onClick={() => openDetail(s._id)}
-                        className="text-blue-500 hover:text-blue-700 hover:scale-110 transition transform"
-                        title="Xem chi tiết"
-                        aria-label={`Xem chi tiết ${s.name}`}
-                      >
-                        <MdVisibility size={22} />
-                      </button>
-                      <button
-                        onClick={() => openFormModal(s._id)}
-                        className="text-yellow-500 hover:text-yellow-700 hover:scale-110 transition transform"
-                        title="Sửa"
-                      >
-                        <MdModeEditOutline size={22} />
-                      </button>
-                      <button
-                        onClick={() => openDelete(s._id, s.name)}
-                        className="text-red-500 hover:text-red-700 hover:scale-110 transition transform"
-                        aria-label={`Xóa ${s.name}`}
-                      >
-                        <MdDeleteForever size={22} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <div style={{ padding: isMobile ? 12 : 24, background: "#f0f2f5", minHeight: "100vh" }}>
+        <Card style={{ borderRadius: 16, boxShadow: "0 4px 20px rgba(0,0,0,0.08)", marginBottom: 24 }}>
+          {/* Header */}
+          <div style={{ marginBottom: 24 }}>
+            <Title
+              level={2}
+              style={{
+                margin: 0,
+                background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+                fontSize: isMobile ? 24 : 32,
+                fontWeight: 700,
+              }}
+            >
+              🏢 Quản lý Nhà cung cấp
+            </Title>
+            {!isMobile && <Text type="secondary">Quản lý thông tin và giao dịch với nhà cung cấp</Text>}
           </div>
-        )}
 
-        {!loading && suppliers.length === 0 && (
-          <div className="mt-8 text-center text-gray-400 italic text-base sm:text-lg">Không có nhà cung cấp nào</div>
-        )}
+          {/* Statistics */}
+          <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+            <Col xs={12} sm={12} md={8}>
+              <Card
+                style={{
+                  background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                  border: "none",
+                  borderRadius: 12,
+                }}
+                styles={{ body: { padding: isMobile ? 12 : 24 } }}
+              >
+                <Statistic
+                  title={<span style={{ color: "#fff", fontSize: isMobile ? 11 : 14 }}>Tổng NCC</span>}
+                  value={filteredSuppliers.length}
+                  prefix={<TeamOutlined style={{ fontSize: isMobile ? 16 : 24 }} />}
+                  valueStyle={{ color: "#fff", fontWeight: "bold", fontSize: isMobile ? 18 : 24 }}
+                />
+              </Card>
+            </Col>
 
-        <SupplierDetailModal open={detailModalOpen} onOpenChange={setDetailModalOpen} supplierId={detailSupplierId} />
+            <Col xs={12} sm={12} md={8}>
+              <Card
+                style={{
+                  background: "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",
+                  border: "none",
+                  borderRadius: 12,
+                }}
+                styles={{ body: { padding: isMobile ? 12 : 24 } }}
+              >
+                <Statistic
+                  title={<span style={{ color: "#fff", fontSize: isMobile ? 11 : 14 }}>Đang hoạt động</span>}
+                  value={activeSuppliers}
+                  prefix={<CheckCircleOutlined style={{ fontSize: isMobile ? 16 : 24 }} />}
+                  valueStyle={{ color: "#fff", fontWeight: "bold", fontSize: isMobile ? 18 : 24 }}
+                />
+              </Card>
+            </Col>
 
-        {/* Modal Form */}
+            <Col xs={12} sm={12} md={8}>
+              <Card
+                style={{
+                  background: "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
+                  border: "none",
+                  borderRadius: 12,
+                }}
+                styles={{ body: { padding: isMobile ? 12 : 24 } }}
+              >
+                <Statistic
+                  title={<span style={{ color: "#fff", fontSize: isMobile ? 11 : 14 }}>Ngừng hoạt động</span>}
+                  value={inactiveSuppliers}
+                  prefix={<CloseCircleOutlined style={{ fontSize: isMobile ? 16 : 24 }} />}
+                  valueStyle={{ color: "#fff", fontWeight: "bold", fontSize: isMobile ? 18 : 24 }}
+                />
+              </Card>
+            </Col>
+          </Row>
+
+          {!isMobile && <Divider />}
+
+          {/* Actions */}
+          <Space
+            direction={isMobile ? "vertical" : "horizontal"}
+            style={{ marginBottom: 24, width: "100%", justifyContent: "space-between" }}
+            size={16}
+          >
+            <AutoComplete
+              value={searchValue}
+              options={searchOptions}
+              onChange={(value) => setSearchValue(value)}
+              onSelect={(value) => setSearchValue(value)}
+              style={{ width: isMobile ? "100%" : 400 }}
+              size="large"
+              placeholder={isMobile ? "Tìm kiếm..." : "Tìm kiếm nhà cung cấp..."}
+              allowClear
+              onClear={() => setSearchValue("")}
+            >
+              <Input
+                prefix={<SearchOutlined style={{ color: "#1890ff" }} />}
+                suffix={
+                  searchValue && (
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      {filteredSuppliers.length} kết quả
+                    </Text>
+                  )
+                }
+              />
+            </AutoComplete>
+
+            <Space size={12} wrap>
+              <Button size="large" icon={<ReloadOutlined />} onClick={handleRefresh}>
+                {!isMobile && "Làm mới"}
+              </Button>
+
+              <Button
+                type="primary"
+                size="large"
+                icon={<PlusOutlined />}
+                onClick={() => openFormModal(null)}
+                style={{
+                  background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                  border: "none",
+                  boxShadow: "0 4px 12px rgba(102, 126, 234, 0.4)",
+                }}
+              >
+                {isMobile ? "+" : "Thêm NCC"}
+              </Button>
+            </Space>
+          </Space>
+
+          {/* Table */}
+          <Table
+            columns={columns}
+            dataSource={filteredSuppliers}
+            rowKey="_id"
+            loading={loading}
+            pagination={{
+              current: currentPage,
+              pageSize: itemsPerPage,
+              total: filteredSuppliers.length,
+              showSizeChanger: !isMobile,
+              showTotal: (total, range) => `${range[0]}-${range[1]} của ${total} nhà cung cấp`,
+              pageSizeOptions: ["5", "10", "20", "50"],
+            }}
+            onChange={handleTableChange}
+            scroll={{ x: "max-content" }}
+            size={isMobile ? "small" : "middle"}
+            rowClassName={(_, index) => (index % 2 === 0 ? "table-row-light" : "table-row-dark")}
+            locale={{
+              emptyText: (
+                <div style={{ padding: isMobile ? "24px 0" : "48px 0" }}>
+                  <TeamOutlined style={{ fontSize: isMobile ? 32 : 48, color: "#d9d9d9" }} />
+                  <div style={{ marginTop: 16, color: "#999" }}>
+                    {searchValue ? `Không tìm thấy nhà cung cấp nào với từ khóa "${searchValue}"` : "Không có nhà cung cấp nào"}
+                  </div>
+                </div>
+              ),
+            }}
+          />
+        </Card>
+
+        {/* Modals */}
         <SupplierFormModal
           open={formModalOpen}
           onOpenChange={setFormModalOpen}
           storeId={storeId}
           supplierId={editSupplierId}
-          onSuccess={fetchSuppliers}
+          onSuccess={onFormSuccess}
         />
 
-        {/* Modal Confirm Delete */}
-        <ConfirmDeleteModal
-          open={deleteModal.open}
-          onOpenChange={(open) => setDeleteModal((prev) => ({ ...prev, open }))}
-          itemName={deleteModal.name}
-          onConfirm={handleDelete}
-          loading={deleting}
+        <SupplierDetailModal
+          open={detailModalOpen}
+          onOpenChange={setDetailModalOpen}
+          supplierId={detailSupplierId}
         />
       </div>
+
+      <style jsx>{`
+        :global(.table-row-light) {
+          background-color: #ffffff;
+        }
+        :global(.table-row-dark) {
+          background-color: #fafafa;
+        }
+        :global(.table-row-light:hover),
+        :global(.table-row-dark:hover) {
+          background-color: #e6f7ff !important;
+        }
+
+        :global(.ant-table) :global(.ant-table-content)::-webkit-scrollbar {
+          height: 14px;
+        }
+        :global(.ant-table) :global(.ant-table-content)::-webkit-scrollbar-track {
+          background: #f5f5f5;
+          border-radius: 10px;
+        }
+        :global(.ant-table) :global(.ant-table-content)::-webkit-scrollbar-thumb {
+          background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+          border-radius: 10px;
+          border: 3px solid #f5f5f5;
+        }
+      `}</style>
+
+      <style jsx global>{`
+        .ant-notification-notice {
+          border-radius: 12px !important;
+        }
+      `}</style>
     </Layout>
   );
 }

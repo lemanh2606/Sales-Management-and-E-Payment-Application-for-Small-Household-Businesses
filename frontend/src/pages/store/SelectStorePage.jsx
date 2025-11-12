@@ -1,14 +1,39 @@
-import React, { useEffect, useState } from "react";
-// --- THAY ĐỔI: Thêm 'user' từ context ---
+// src/pages/store/SelectStorePage.jsx
+import React, { useEffect, useState, useMemo } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useNavigate } from "react-router-dom";
-
-import Header from "../../components/store/Header";
-import StoreList from "../../components/store/StoreList";
+import {
+  Layout,
+  Card,
+  Row,
+  Col,
+  Button,
+  Space,
+  Typography,
+  Spin,
+  Empty,
+  Tag,
+  Badge,
+  notification,
+  Pagination,
+  AutoComplete,
+  Input,
+  Statistic,
+} from "antd";
+import {
+  PlusOutlined,
+  SearchOutlined,
+  ShopOutlined,
+  EnvironmentOutlined,
+  PhoneOutlined,
+  ClockCircleOutlined,
+  EditOutlined,
+  EyeOutlined,
+  CheckCircleOutlined,
+  UserOutlined,
+} from "@ant-design/icons";
 import StoreFormModal from "../../components/store/StoreFormModal";
 import StoreDetailModal from "../../components/store/StoreDetailModal";
-import Button from "../../components/Button";
-
 import {
   selectStore,
   createStore,
@@ -18,17 +43,23 @@ import {
   getStoreById,
 } from "../../api/storeApi";
 
+const { Content } = Layout;
+const { Title, Text } = Typography;
+
 export default function SelectStorePage() {
+  const [api, contextHolder] = notification.useNotification();
   const [stores, setStores] = useState([]);
   const [filteredStores, setFilteredStores] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState("");
   const [editingStore, setEditingStore] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedStore, setSelectedStore] = useState(null);
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(12); // Increased from 6 to 12
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   const [storeForm, setStoreForm] = useState({
     name: "",
@@ -37,24 +68,21 @@ export default function SelectStorePage() {
     description: "",
     imageUrl: "",
     tagsCsv: "",
-    // keep nested objects to match backend:
-    openingHours: {
-      open: "",
-      close: "",
-    },
-    location: {
-      lat: null,
-      lng: null,
-    },
+    openingHours: { open: "", close: "" },
+    location: { lat: null, lng: null },
   });
 
-  // --- THAY ĐỔI: Lấy 'user' từ useAuth ---
   const { setCurrentStore, user } = useAuth();
   const navigate = useNavigate();
 
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   const loadStores = async () => {
     setLoading(true);
-    setErr("");
     try {
       const res = await getStoresByManager();
       const list = (res && (res.stores || res.data || res)) || [];
@@ -64,128 +92,122 @@ export default function SelectStorePage() {
       setFilteredStores(activeList);
     } catch (e) {
       console.error(e);
-      setErr(e?.response?.data?.message || "Không lấy được danh sách cửa hàng");
+      api.error({
+        message: "❌ Lỗi tải dữ liệu",
+        description: e?.response?.data?.message || "Không lấy được danh sách cửa hàng",
+        placement: "topRight",
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  // --- THAY ĐỔI: Thêm useEffect mới để xử lý logic xóa store ---
   useEffect(() => {
-    // Nếu user tồn tại VÀ role KHÔNG PHẢI là 'STAFF' (ví dụ: 'MANAGER')
-    // thì xóa currentStore để buộc họ chọn lại.
     if (user && user.role !== "STAFF") {
-      console.log("Xóa currentStore vì user không phải là STAFF.");
-
-      // 1. Xóa khỏi Context
       if (typeof setCurrentStore === "function") {
         setCurrentStore(null);
       }
-
-      // 2. Xóa khỏi Local Storage
       try {
         localStorage.removeItem("currentStore");
       } catch (e) {
-        console.warn("Không thể xóa currentStore khỏi localStorage", e);
+        console.warn("Không thể xóa currentStore", e);
       }
     }
-    // Nếu user.role === 'STAFF', không làm gì cả, giữ nguyên store của họ.
-  }, [user, setCurrentStore]); // Chạy lại khi user context thay đổi
-
-  // --- HẾT THAY ĐỔI ---
+  }, [user, setCurrentStore]);
 
   useEffect(() => {
-    // Logic tải store cũ, giữ nguyên
     loadStores();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Giữ nguyên dependency rỗng để chỉ chạy 1 lần khi mount
+  }, []);
 
   useEffect(() => {
     if (!search) {
       setFilteredStores(stores);
+      setCurrentPage(1);
       return;
     }
     const q = search.trim().toLowerCase();
-    setFilteredStores(
-      stores.filter(
-        (s) =>
-          (s.name || "").toLowerCase().includes(q) ||
-          (s.address || "").toLowerCase().includes(q) ||
-          (s.phone || "").includes(q) ||
-          (s.tags || []).join(" ").toLowerCase().includes(q)
-      )
+    const filtered = stores.filter(
+      (s) =>
+        (s.name || "").toLowerCase().includes(q) ||
+        (s.address || "").toLowerCase().includes(q) ||
+        (s.phone || "").includes(q) ||
+        (s.tags || []).join(" ").toLowerCase().includes(q)
     );
+    setFilteredStores(filtered);
+    setCurrentPage(1);
+  }, [search, stores]);
+
+  const searchOptions = useMemo(() => {
+    if (!search.trim()) return [];
+
+    const searchLower = search.toLowerCase().trim();
+    const matches = stores
+      .filter((store) => {
+        const name = (store.name || "").toLowerCase();
+        const address = (store.address || "").toLowerCase();
+        const phone = (store.phone || "").toLowerCase();
+        return name.includes(searchLower) || address.includes(searchLower) || phone.includes(searchLower);
+      })
+      .slice(0, 6);
+
+    return matches.map((store) => ({
+      value: store.name,
+      label: (
+        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "4px 0" }}>
+          <ShopOutlined style={{ color: "#52c41a", fontSize: 16 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 600, fontSize: 13 }}>{store.name}</div>
+            <Text type="secondary" ellipsis style={{ fontSize: 12 }}>
+              {store.address || "Chưa có địa chỉ"}
+            </Text>
+          </div>
+        </div>
+      ),
+    }));
   }, [search, stores]);
 
   const handleSelect = async (store) => {
     try {
       setBusy(true);
-
-      // Gọi API selectStore (backend trả về full store object)
-      // selectStore helper có thể trả shapes khác nhau -> normalize
       const res = await selectStore(store._id);
+      let returnedStore = (res && (res.store || res.data?.store || res.data)) || (res && res._id ? res : null) || store;
 
-      // Lấy store từ nhiều shape có thể xảy ra
-      let returnedStore =
-        (res && (res.store || res.data?.store || res.data)) ||
-        // axios wrapper có thể trả res.data trực tiếp
-        (res && res._id ? res : null) ||
-        store;
-
-      // nếu vẫn null, fallback store từ list
-      if (!returnedStore) returnedStore = store;
-
-      // --- Backup cửa hàng cũ (nếu có) ---
       try {
         const prev = localStorage.getItem("currentStore");
-        if (prev) {
-          // lưu bản cũ vào previousStore (ghi đè)
-          localStorage.setItem("previousStore", prev);
-        }
-      } catch (e) {
-        console.warn("Không thể backup previousStore:", e);
-      }
-
-      // --- Lưu currentStore mới vào localStorage ---
-      try {
+        if (prev) localStorage.setItem("previousStore", prev);
         localStorage.setItem("currentStore", JSON.stringify(returnedStore));
       } catch (e) {
-        console.warn("Lưu currentStore vào localStorage thất bại:", e);
+        console.warn("Lưu store thất bại:", e);
       }
 
-      // --- Cập nhật context / auth nếu có hàm setCurrentStore ---
       try {
         if (typeof setCurrentStore === "function") {
-          // thử gọi với object trước; nếu hàm của bạn chờ id thì thử pass id
-          // (vì project bạn có nhiều biến thể)
-          try {
-            // Một số impl setCurrentStore có thể là async và mong storeId,
-            // nên không cần await bắt buộc ở đây, nhưng dùng await để chặn nav nếu cần.
-            await setCurrentStore(returnedStore);
-          } catch (errInner) {
-            // fallback: thử truyền id nếu object không hợp
-            try {
-              await setCurrentStore(returnedStore._id || returnedStore.id);
-            } catch (err2) {
-              console.warn("setCurrentStore failed with both object and id", errInner, err2);
-            }
-          }
+          await setCurrentStore(returnedStore);
         }
       } catch (e) {
-        console.warn("Không thể cập nhật context hiện tại:", e);
+        console.warn("Không thể cập nhật context:", e);
       }
 
-      // navigate tới dashboard
+      api.success({
+        message: "✅ Chọn cửa hàng thành công!",
+        description: `Đã chọn "${store.name}"`,
+        placement: "topRight",
+        duration: 2,
+      });
+
       navigate(`/dashboard/${store._id}`);
     } catch (e) {
-      console.error("select store error", e);
-      setErr(e?.response?.data?.message || e?.message || "Không thể chọn cửa hàng");
+      console.error(e);
+      api.error({
+        message: "❌ Lỗi chọn cửa hàng",
+        description: e?.response?.data?.message || e?.message,
+        placement: "topRight",
+      });
     } finally {
       setBusy(false);
     }
   };
 
-  // --- handleAdd: open modal with clean nested shape ---
   const handleAdd = () => {
     setEditingStore(null);
     setStoreForm({
@@ -201,7 +223,6 @@ export default function SelectStorePage() {
     setShowModal(true);
   };
 
-  // --- handleEdit: populate nested fields from existing store ---
   const handleEdit = (store) => {
     setEditingStore(store);
     setStoreForm({
@@ -211,7 +232,6 @@ export default function SelectStorePage() {
       description: store.description || "",
       imageUrl: store.imageUrl || "",
       tagsCsv: Array.isArray(store.tags) ? store.tags.join(", ") : store.tags || "",
-      // normalize openingHours & location into nested object (safe)
       openingHours: {
         open: store.openingHours?.open ?? "",
         close: store.openingHours?.close ?? "",
@@ -224,30 +244,17 @@ export default function SelectStorePage() {
     setShowModal(true);
   };
 
-  // --- handleSave: accept optional payload from modal, otherwise build from storeForm ---
   const handleSave = async (payloadFromModal) => {
-    // prefer payload passed from modal (StoreFormModal normalizes and passes it)
     const final = payloadFromModal || {
       name: storeForm.name,
       address: storeForm.address,
       phone: storeForm.phone,
       description: storeForm.description,
       imageUrl: storeForm.imageUrl,
-      tags:
-        typeof storeForm.tags === "string" && !Array.isArray(storeForm.tags)
-          ? (storeForm.tagsCsv || "")
-              .split(",")
-              .map((t) => t.trim())
-              .filter(Boolean)
-          : Array.isArray(storeForm.tags)
-          ? storeForm.tags
-          : (storeForm.tagsCsv || "")
-              .split(",")
-              .map((t) => t.trim())
-              .filter(Boolean),
+      tags: (storeForm.tagsCsv || "").split(",").map((t) => t.trim()).filter(Boolean),
       openingHours: {
-        open: storeForm.openingHours?.open ?? (storeForm.openingOpen || ""),
-        close: storeForm.openingHours?.close ?? (storeForm.openingClose || ""),
+        open: storeForm.openingHours?.open ?? "",
+        close: storeForm.openingHours?.close ?? "",
       },
       location: {
         lat: storeForm.location?.lat != null ? Number(storeForm.location.lat) : null,
@@ -255,9 +262,12 @@ export default function SelectStorePage() {
       },
     };
 
-    setErr("");
     if (!final.name || !final.address) {
-      setErr("Vui lòng nhập tên và địa chỉ cửa hàng");
+      api.warning({
+        message: "⚠️ Thiếu thông tin",
+        description: "Vui lòng nhập tên và địa chỉ cửa hàng",
+        placement: "topRight",
+      });
       return;
     }
 
@@ -265,15 +275,27 @@ export default function SelectStorePage() {
       setBusy(true);
       if (editingStore) {
         await updateStore(editingStore._id, final);
+        api.success({
+          message: "✅ Cập nhật thành công!",
+          placement: "topRight",
+        });
       } else {
         await createStore(final);
+        api.success({
+          message: "✅ Tạo mới thành công!",
+          placement: "topRight",
+        });
       }
       setShowModal(false);
       setEditingStore(null);
       await loadStores();
     } catch (e) {
       console.error(e);
-      setErr(e?.response?.data?.message || "Lỗi khi lưu cửa hàng");
+      api.error({
+        message: "❌ Lỗi lưu cửa hàng",
+        description: e?.response?.data?.message,
+        placement: "topRight",
+      });
     } finally {
       setBusy(false);
     }
@@ -288,7 +310,6 @@ export default function SelectStorePage() {
       setSelectedStore(detail);
       setShowDetailModal(true);
     } catch (e) {
-      console.warn(e);
       const cached = stores.find((s) => s._id === storeId) || null;
       setSelectedStore(cached);
       setShowDetailModal(true);
@@ -298,72 +319,289 @@ export default function SelectStorePage() {
   };
 
   const handleDelete = async (storeId) => {
-    const ok = window.confirm("Bạn có chắc muốn xóa cửa hàng này? (xóa mềm)");
-    if (!ok) return;
     try {
       setBusy(true);
       await deleteStore(storeId);
       setShowDetailModal(false);
+      api.success({
+        message: "✅ Xóa thành công!",
+        placement: "topRight",
+      });
       await loadStores();
     } catch (e) {
-      console.error(e);
-      setErr(e?.response?.data?.message || "Lỗi khi xóa cửa hàng");
+      api.error({
+        message: "❌ Lỗi xóa cửa hàng",
+        placement: "topRight",
+      });
     } finally {
       setBusy(false);
     }
   };
 
+  const paginatedStores = filteredStores.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
   return (
-    <div className="min-h-screen w-full bg-gradient-to-b from-green-50 to-white text-gray-800">
-      <Header search={search} setSearch={setSearch} onAdd={handleAdd} />
+    <Layout style={{ minHeight: "100vh", background: "#f5f5f5" }}>
+      {contextHolder}
+      <Content style={{ padding: isMobile ? "16px" : "24px" }}>
+        <div style={{ maxWidth: 1600, margin: "0 auto" }}>
+          {/* Compact Top Bar */}
+          <Card
+            style={{
+              marginBottom: 20,
+              borderRadius: 12,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+            }}
+            styles={{ body: { padding: isMobile ? "16px" : "20px" } }}
+          >
+            <Row gutter={[16, 16]} align="middle">
+              <Col xs={24} sm={12} md={8}>
+                <Space size={12}>
+                  <UserOutlined style={{ fontSize: 24, color: "#52c41a" }} />
+                  <div>
+                    <Title level={5} style={{ margin: 0, fontSize: isMobile ? 16 : 18 }}>
+                      {user?.fullname || "Quản lý"}
+                    </Title>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      Chọn cửa hàng để bắt đầu
+                    </Text>
+                  </div>
+                </Space>
+              </Col>
 
-      {/* Full-bleed main area */}
-      <main className="w-full px-4 sm:px-6 lg:px-8 py-6 pb-24">
-        <div className="w-full grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
-          {/* Optional left info column can be collapsed on smaller screens */}
-          <aside className="hidden lg:block lg:col-span-3 sticky top-20 self-start">
-            <div className="rounded-2xl p-6 bg-gradient-to-br from-green-600 to-green-500 text-white shadow-2xl">
-              {/* 👇 H2 có ánh sáng quét */}
-              <div className="relative inline-block overflow-hidden">
-                <h2 className="text-2xl font-bold relative z-10">Xin chào, {user?.fullname || "Quản lý"}!</h2>
-                <span className="absolute inset-0 bg-gradient-to-r from-transparent via-cyan-400/80 to-transparent animate-[shine_2.5s_linear_infinite]" />
-              </div>
+              <Col xs={12} sm={6} md={4}>
+                <Statistic
+                  title="Tổng cửa hàng"
+                  value={stores.length}
+                  prefix={<ShopOutlined />}
+                  valueStyle={{ fontSize: isMobile ? 20 : 24, color: "#52c41a" }}
+                />
+              </Col>
 
-              {/* 👇 Đoạn mô tả có hiệu ứng tương tự */}
-              <div className="relative mt-2">
-                <p className="text-sm font-medium text-green-50 relative overflow-hidden">
-                  <span className="relative z-10">
-                    Chọn một cửa hàng để bắt đầu theo dõi doanh thu, tồn kho, và báo cáo.
-                  </span>
-                  <span className="absolute inset-0 bg-gradient-to-r from-transparent via-cyan-400/80 to-transparent animate-[shine_2.5s_linear_infinite]" />
-                </p>
-              </div>
+              <Col xs={12} sm={6} md={4}>
+                <Statistic
+                  title="Kết quả"
+                  value={filteredStores.length}
+                  prefix={<SearchOutlined />}
+                  valueStyle={{ fontSize: isMobile ? 20 : 24, color: "#1890ff" }}
+                />
+              </Col>
 
-              {/* 👇 Keyframes cho ánh sáng */}
-              <style>{`
-                @keyframes shine {
-                  0% { transform: translateX(-100%); }
-                  100% { transform: translateX(100%); }
+              <Col xs={24} md={8}>
+                <Button
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  onClick={handleAdd}
+                  block
+                  size="large"
+                  style={{
+                    background: "linear-gradient(135deg, #52c41a 0%, #73d13d 100%)",
+                    border: "none",
+                    borderRadius: 8,
+                    fontWeight: 600,
+                    height: 44,
+                  }}
+                >
+                  Thêm cửa hàng
+                </Button>
+              </Col>
+            </Row>
+          </Card>
+
+          {/* Search Bar */}
+          <Card
+            style={{
+              marginBottom: 20,
+              borderRadius: 12,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+            }}
+            styles={{ body: { padding: isMobile ? "12px" : "16px" } }}
+          >
+            <AutoComplete
+              value={search}
+              options={searchOptions}
+              onChange={(value) => setSearch(value)}
+              onSelect={(value) => setSearch(value)}
+              style={{ width: "100%" }}
+              placeholder={isMobile ? "🔍 Tìm kiếm..." : "🔍 Tìm kiếm cửa hàng theo tên, địa chỉ, số điện thoại..."}
+              allowClear
+              popupMatchSelectWidth={isMobile ? true : 400}
+            >
+              <Input
+                size="large"
+                prefix={<SearchOutlined style={{ color: "#52c41a", fontSize: 18 }} />}
+                suffix={
+                  filteredStores.length !== stores.length && (
+                    <Badge count={filteredStores.length} style={{ backgroundColor: "#52c41a" }} />
+                  )
                 }
-            `}</style>
+                style={{
+                  borderRadius: 8,
+                  height: 44,
+                }}
+              />
+            </AutoComplete>
+          </Card>
+
+          {/* Store Grid - Compact */}
+          {loading ? (
+            <div style={{ textAlign: "center", padding: "60px 0" }}>
+              <Spin size="large" />
             </div>
-          </aside>
+          ) : filteredStores.length === 0 ? (
+            <Card style={{ borderRadius: 12, textAlign: "center", padding: "40px 20px" }}>
+              <Empty
+                description={
+                  <Space direction="vertical" size={12}>
+                    <Text type="secondary">{search ? "Không tìm thấy cửa hàng" : "Chưa có cửa hàng"}</Text>
+                    <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+                      Thêm cửa hàng
+                    </Button>
+                  </Space>
+                }
+              />
+            </Card>
+          ) : (
+            <>
+              <Row gutter={[16, 16]}>
+                {paginatedStores.map((store) => (
+                  <Col xs={24} sm={12} md={8} lg={6} key={store._id}>
+                    <Card
+                      hoverable
+                      style={{
+                        borderRadius: 12,
+                        overflow: "hidden",
+                        height: "100%",
+                        border: "1px solid #e8e8e8",
+                      }}
+                      styles={{ body: { padding: 0 } }}
+                      className="store-card-compact"
+                    >
+                      {/* Compact Image */}
+                      <div
+                        style={{
+                          height: 140,
+                          background: store.imageUrl
+                            ? `url(${store.imageUrl}) center/cover`
+                            : "linear-gradient(135deg, #52c41a 0%, #73d13d 100%)",
+                          position: "relative",
+                        }}
+                      >
+                        {!store.imageUrl && (
+                          <ShopOutlined
+                            style={{
+                              position: "absolute",
+                              top: "50%",
+                              left: "50%",
+                              transform: "translate(-50%, -50%)",
+                              fontSize: 48,
+                              color: "rgba(255,255,255,0.3)",
+                            }}
+                          />
+                        )}
+                        <Badge
+                          status="success"
+                          style={{
+                            position: "absolute",
+                            top: 8,
+                            right: 8,
+                            background: "rgba(255,255,255,0.95)",
+                            borderRadius: 12,
+                            padding: "4px 10px",
+                          }}
+                        />
+                      </div>
 
-          <section className="col-span-1 lg:col-span-9">
-            {err && <div className="mb-4 text-center text-sm text-red-600">{err}</div>}
+                      {/* Compact Info */}
+                      <div style={{ padding: 16 }}>
+                        <Space direction="vertical" size={10} style={{ width: "100%" }}>
+                          <Title level={5} ellipsis style={{ margin: 0, fontSize: 15, color: "#1890ff" }}>
+                            {store.name}
+                          </Title>
 
-            <StoreList
-              stores={filteredStores}
-              isLoading={loading}
-              onSelect={handleSelect}
-              onEdit={handleEdit}
-              onDetail={handleDetail}
-              onAdd={handleAdd}
-              itemsPerPage={4} // enforce 2x2
-            />
-          </section>
+                          <Space size={6} align="start" style={{ width: "100%" }}>
+                            <EnvironmentOutlined style={{ color: "#52c41a", fontSize: 14, marginTop: 2 }} />
+                            <Text ellipsis={{ rows: 1 }} type="secondary" style={{ fontSize: 12, flex: 1 }}>
+                              {store.address || "N/A"}
+                            </Text>
+                          </Space>
+
+                          {store.phone && (
+                            <Space size={6}>
+                              <PhoneOutlined style={{ color: "#faad14", fontSize: 14 }} />
+                              <Text style={{ fontSize: 12, fontWeight: 500 }}>{store.phone}</Text>
+                            </Space>
+                          )}
+
+                          {store.tags && store.tags.length > 0 && (
+                            <Space size={4} wrap>
+                              {store.tags.slice(0, 2).map((tag, idx) => (
+                                <Tag key={idx} color="green" style={{ fontSize: 11, padding: "0 6px", margin: 0 }}>
+                                  {tag}
+                                </Tag>
+                              ))}
+                              {store.tags.length > 2 && <Tag style={{ fontSize: 11, padding: "0 6px" }}>+{store.tags.length - 2}</Tag>}
+                            </Space>
+                          )}
+
+                          {/* Compact Actions */}
+                          <Space size={6} style={{ width: "100%", marginTop: 4 }}>
+                            <Button
+                              type="primary"
+                              icon={<CheckCircleOutlined />}
+                              onClick={() => handleSelect(store)}
+                              loading={busy}
+                              size="small"
+                              style={{
+                                flex: 1,
+                                background: "linear-gradient(135deg, #52c41a 0%, #73d13d 100%)",
+                                border: "none",
+                                borderRadius: 6,
+                                fontWeight: 600,
+                                height: 32,
+                                fontSize: 12,
+                              }}
+                            >
+                              Chọn
+                            </Button>
+                            <Button
+                              icon={<EyeOutlined />}
+                              onClick={() => handleDetail(store._id)}
+                              size="small"
+                              style={{ borderRadius: 6, height: 32 }}
+                            />
+                            <Button
+                              icon={<EditOutlined />}
+                              onClick={() => handleEdit(store)}
+                              size="small"
+                              style={{ borderRadius: 6, height: 32 }}
+                            />
+                          </Space>
+                        </Space>
+                      </div>
+                    </Card>
+                  </Col>
+                ))}
+              </Row>
+
+              {/* Compact Pagination */}
+              {filteredStores.length > pageSize && (
+                <div style={{ textAlign: "center", marginTop: 24 }}>
+                  <Pagination
+                    current={currentPage}
+                    total={filteredStores.length}
+                    pageSize={pageSize}
+                    onChange={setCurrentPage}
+                    showSizeChanger={false}
+                    simple={isMobile}
+                    size="small"
+                  />
+                </div>
+              )}
+            </>
+          )}
         </div>
-      </main>
+      </Content>
 
       <StoreFormModal
         open={showModal}
@@ -383,6 +621,14 @@ export default function SelectStorePage() {
         onSelect={(s) => handleSelect(s)}
         onDelete={(id) => handleDelete(id)}
       />
-    </div>
+
+      <style jsx global>{`
+        .store-card-compact:hover {
+          box-shadow: 0 8px 24px rgba(82, 196, 26, 0.2) !important;
+          transform: translateY(-4px);
+          border-color: #52c41a !important;
+        }
+      `}</style>
+    </Layout>
   );
 }

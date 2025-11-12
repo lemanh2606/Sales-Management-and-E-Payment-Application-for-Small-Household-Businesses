@@ -1,31 +1,37 @@
+// src/components/supplier/SupplierFormModal.jsx
 import React, { useEffect, useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../ui/Dialog";
-import Button from "../Button";
+import { Modal, Form, Input, Select, Space, notification } from "antd";
+import {
+    TeamOutlined,
+    PhoneOutlined,
+    MailOutlined,
+    EnvironmentOutlined,
+    CheckCircleOutlined,
+} from "@ant-design/icons";
 import { createSupplier, updateSupplier, getSupplierById } from "../../api/supplierApi";
-import toast from "react-hot-toast";
+
+const { TextArea } = Input;
 
 export default function SupplierFormModal({ open, onOpenChange, storeId, supplierId, onSuccess }) {
-    const [formLoading, setFormLoading] = useState(false);
-    const [formData, setFormData] = useState({
-        name: "",
-        phone: "",
-        email: "",
-        address: "",
-        status: "đang hoạt động",
-    });
+    const [api, contextHolder] = notification.useNotification();
+    const [form] = Form.useForm();
+    const [loading, setLoading] = useState(false);
+    const [fetchLoading, setFetchLoading] = useState(false);
 
+    // Fetch supplier data for edit mode
     useEffect(() => {
         if (!supplierId) {
-            setFormData({ name: "", phone: "", email: "", address: "", status: "đang hoạt động" });
+            form.resetFields();
             return;
         }
 
         const fetchSupplier = async () => {
             try {
-                setFormLoading(true);
+                setFetchLoading(true);
                 const res = await getSupplierById(supplierId);
                 const data = res?.supplier ?? res;
-                setFormData({
+
+                form.setFieldsValue({
                     name: data.name || "",
                     phone: data.phone || "",
                     email: data.email || "",
@@ -34,106 +40,285 @@ export default function SupplierFormModal({ open, onOpenChange, storeId, supplie
                 });
             } catch (err) {
                 console.error(err);
-                toast.error("Không thể tải nhà cung cấp.");
+                api.error({
+                    message: "❌ Lỗi tải dữ liệu",
+                    description: "Không thể tải thông tin nhà cung cấp. Vui lòng thử lại.",
+                    placement: "topRight",
+                    duration: 5,
+                });
             } finally {
-                setFormLoading(false);
+                setFetchLoading(false);
             }
         };
 
         fetchSupplier();
-    }, [supplierId]);
+    }, [supplierId, form]);
 
-    const handleChange = (e) => {
-        const { name, value } = e.target;
-        setFormData((prev) => ({ ...prev, [name]: value }));
-    };
+    const handleSubmit = async (values) => {
+        if (!storeId) {
+            api.warning({
+                message: "⚠️ Chưa chọn cửa hàng",
+                description: "Vui lòng chọn cửa hàng trước khi thao tác",
+                placement: "topRight",
+            });
+            return;
+        }
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (!storeId) return toast.error("Chưa chọn cửa hàng.");
-        setFormLoading(true);
+        setLoading(true);
 
         try {
             if (supplierId) {
-                await updateSupplier(supplierId, formData);
-                toast.success("Cập nhật nhà cung cấp thành công!");
+                await updateSupplier(supplierId, values);
+                api.success({
+                    message: "🎉 Cập nhật thành công!",
+                    description: `Nhà cung cấp "${values.name}" đã được cập nhật`,
+                    placement: "topRight",
+                    duration: 3,
+                });
             } else {
-                await createSupplier(storeId, formData);
-                toast.success("Tạo nhà cung cấp thành công!");
+                await createSupplier(storeId, values);
+                api.success({
+                    message: "🎉 Tạo mới thành công!",
+                    description: `Nhà cung cấp "${values.name}" đã được thêm vào danh sách`,
+                    placement: "topRight",
+                    duration: 3,
+                });
             }
+
             onOpenChange(false);
+            form.resetFields();
             onSuccess();
         } catch (err) {
             console.error(err);
-            toast.error(`Đã xảy ra lỗi!: ${err?.response?.data?.message || err?.message}`);
+            api.error({
+                message: "❌ Đã xảy ra lỗi",
+                description: err?.response?.data?.message || err?.message || "Không thể lưu thông tin. Vui lòng thử lại.",
+                placement: "topRight",
+                duration: 5,
+            });
         } finally {
-            setFormLoading(false);
+            setLoading(false);
         }
     };
 
+    const handleCancel = () => {
+        onOpenChange(false);
+        form.resetFields();
+    };
+
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-lg rounded-3xl p-6 shadow-2xl bg-white animate-fade-in scale-95 origin-center transition-all duration-300">
-                <DialogHeader>
-                    <DialogTitle className="text-2xl font-bold text-gray-800">
-                        {supplierId ? "✏️ Cập nhật nhà cung cấp" : "🧾 Thêm nhà cung cấp mới"}
-                    </DialogTitle>
-                </DialogHeader>
+        <>
+            {contextHolder}
+            <Modal
+                title={
+                    <Space style={{ fontSize: 18, fontWeight: 600 }}>
+                        <TeamOutlined style={{ color: "#1890ff" }} />
+                        <span>{supplierId ? "✏️ Cập nhật nhà cung cấp" : "🧾 Thêm nhà cung cấp mới"}</span>
+                    </Space>
+                }
+                open={open}
+                onCancel={handleCancel}
+                onOk={() => form.submit()}
+                confirmLoading={loading}
+                okText={supplierId ? "Lưu thay đổi" : "Tạo nhà cung cấp"}
+                cancelText="Hủy"
+                width={600}
+                styles={{
+                    body: {
+                        padding: "24px",
+                        maxHeight: "calc(100vh - 200px)",
+                        overflowY: "auto",
+                    },
+                }}
+                okButtonProps={{
+                    style: {
+                        background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                        border: "none",
+                        boxShadow: "0 4px 12px rgba(102, 126, 234, 0.4)",
+                    },
+                }}
+            >
+                <Form
+                    form={form}
+                    layout="vertical"
+                    onFinish={handleSubmit}
+                    initialValues={{
+                        status: "đang hoạt động",
+                    }}
+                    disabled={fetchLoading}
+                >
+                    {/* Tên nhà cung cấp */}
+                    <Form.Item
+                        name="name"
+                        label={
+                            <Space>
+                                <TeamOutlined style={{ color: "#1890ff" }} />
+                                <span style={{ fontWeight: 600 }}>Tên nhà cung cấp</span>
+                            </Space>
+                        }
+                        rules={[
+                            { required: true, message: "Vui lòng nhập tên nhà cung cấp!" },
+                            { min: 2, message: "Tên phải có ít nhất 2 ký tự!" },
+                            { max: 100, message: "Tên không được vượt quá 100 ký tự!" },
+                        ]}
+                    >
+                        <Input
+                            size="large"
+                            placeholder="Nhập tên nhà cung cấp"
+                            prefix={<TeamOutlined style={{ color: "#1890ff" }} />}
+                            style={{ borderRadius: 8 }}
+                        />
+                    </Form.Item>
 
-                <form className="space-y-5 mt-3" onSubmit={handleSubmit}>
-                    {["name", "phone", "email", "address"].map((field) => (
-                        <div key={field}>
-                            <label className="block text-gray-700 mb-1 font-medium capitalize">
-                                {field === "name"
-                                    ? "Tên nhà cung cấp *"
-                                    : field === "phone"
-                                        ? "Số điện thoại"
-                                        : field === "email"
-                                            ? "Email"
-                                            : "Địa chỉ"}
-                            </label>
-                            <input
-                                type={field === "email" ? "email" : "text"}
-                                name={field}
-                                value={formData[field]}
-                                onChange={handleChange}
-                                required={field === "name"}
-                                placeholder={`Nhập ${field}`}
-                                className="w-full border border-gray-300 p-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm hover:shadow-md transition-all duration-200"
-                            />
-                        </div>
-                    ))}
+                    {/* Số điện thoại */}
+                    <Form.Item
+                        name="phone"
+                        label={
+                            <Space>
+                                <PhoneOutlined style={{ color: "#52c41a" }} />
+                                <span style={{ fontWeight: 600 }}>Số điện thoại</span>
+                            </Space>
+                        }
+                        rules={[
+                            { pattern: /^[0-9]{10,11}$/, message: "Số điện thoại phải có 10-11 chữ số!" },
+                        ]}
+                    >
+                        <Input
+                            size="large"
+                            placeholder="Nhập số điện thoại"
+                            prefix={<PhoneOutlined style={{ color: "#52c41a" }} />}
+                            style={{ borderRadius: 8 }}
+                        />
+                    </Form.Item>
 
-                    <div>
-                        <label className="block text-gray-700 mb-1 font-medium">Trạng thái</label>
-                        <select
-                            name="status"
-                            value={formData.status}
-                            onChange={handleChange}
-                            className="w-full border border-gray-300 p-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm hover:shadow-md transition-all duration-200"
-                        >
-                            <option value="đang hoạt động">Đang hoạt động</option>
-                            <option value="ngừng hoạt động">Ngừng hoạt động</option>
-                        </select>
-                    </div>
+                    {/* Email */}
+                    <Form.Item
+                        name="email"
+                        label={
+                            <Space>
+                                <MailOutlined style={{ color: "#faad14" }} />
+                                <span style={{ fontWeight: 600 }}>Email</span>
+                            </Space>
+                        }
+                        rules={[
+                            { type: "email", message: "Email không hợp lệ!" },
+                        ]}
+                    >
+                        <Input
+                            size="large"
+                            type="email"
+                            placeholder="Nhập email"
+                            prefix={<MailOutlined style={{ color: "#faad14" }} />}
+                            style={{ borderRadius: 8 }}
+                        />
+                    </Form.Item>
 
-                    <DialogFooter className="flex justify-end gap-3 mt-4">
-                        <Button
-                            type="button"
-                            className="bg-gray-200 text-gray-700 hover:bg-gray-300 shadow-sm transition-all duration-200"
-                            onClick={() => onOpenChange(false)}
-                        >
-                            Hủy
-                        </Button>
-                        <Button
-                            type="submit"
-                            className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-lg transition-all duration-200"
-                        >
-                            {formLoading ? (supplierId ? "Đang lưu..." : "Đang tạo...") : supplierId ? "Lưu thay đổi" : "Tạo nhà cung cấp"}
-                        </Button>
-                    </DialogFooter>
-                </form>
-            </DialogContent>
-        </Dialog>
+                    {/* Địa chỉ */}
+                    <Form.Item
+                        name="address"
+                        label={
+                            <Space>
+                                <EnvironmentOutlined style={{ color: "#f5222d" }} />
+                                <span style={{ fontWeight: 600 }}>Địa chỉ</span>
+                            </Space>
+                        }
+                    >
+                        <TextArea
+                            size="large"
+                            placeholder="Nhập địa chỉ"
+                            rows={3}
+                            style={{ borderRadius: 8 }}
+                        />
+                    </Form.Item>
+
+                    {/* Trạng thái */}
+                    <Form.Item
+                        name="status"
+                        label={
+                            <Space>
+                                <CheckCircleOutlined style={{ color: "#722ed1" }} />
+                                <span style={{ fontWeight: 600 }}>Trạng thái</span>
+                            </Space>
+                        }
+                        rules={[{ required: true, message: "Vui lòng chọn trạng thái!" }]}
+                    >
+                        <Select
+                            size="large"
+                            placeholder="Chọn trạng thái"
+                            style={{ borderRadius: 8 }}
+                            options={[
+                                {
+                                    value: "đang hoạt động",
+                                    label: (
+                                        <Space>
+                                            <CheckCircleOutlined style={{ color: "#52c41a" }} />
+                                            <span>Đang hoạt động</span>
+                                        </Space>
+                                    ),
+                                },
+                                {
+                                    value: "ngừng hoạt động",
+                                    label: (
+                                        <Space>
+                                            <CheckCircleOutlined style={{ color: "#f5222d" }} />
+                                            <span>Ngừng hoạt động</span>
+                                        </Space>
+                                    ),
+                                },
+                            ]}
+                        />
+                    </Form.Item>
+                </Form>
+            </Modal>
+
+            <style jsx global>{`
+        .ant-modal-content {
+          border-radius: 16px !important;
+          overflow: hidden;
+        }
+
+        .ant-modal-header {
+          border-bottom: 1px solid #f0f0f0;
+          padding: 20px 24px;
+        }
+
+        .ant-modal-body::-webkit-scrollbar {
+          width: 6px;
+        }
+
+        .ant-modal-body::-webkit-scrollbar-track {
+          background: #f0f0f0;
+          border-radius: 10px;
+        }
+
+        .ant-modal-body::-webkit-scrollbar-thumb {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          border-radius: 10px;
+        }
+
+        .ant-form-item-label > label {
+          font-weight: 500;
+        }
+
+        .ant-input:focus,
+        .ant-input:hover,
+        .ant-select-selector:focus,
+        .ant-select-selector:hover {
+          border-color: #667eea !important;
+          box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2) !important;
+        }
+
+        .ant-input,
+        .ant-select-selector,
+        .ant-input-textarea textarea {
+          transition: all 0.3s ease;
+        }
+
+        .ant-input:hover,
+        .ant-select-selector:hover {
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+      `}</style>
+        </>
     );
 }
