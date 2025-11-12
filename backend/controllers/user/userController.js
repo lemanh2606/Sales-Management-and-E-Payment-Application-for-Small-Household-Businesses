@@ -859,354 +859,267 @@ const updateUser = async (req, res) => {
    Controller: updateProfile (thay đổi thông tin cá nhân – username, email, phone, fullname nếu STAFF)
    - Chỉ update chính user, unique username/email, update Employee nếu role STAFF
    ------------------------- */
-// const updateProfile = async (req, res) => {
-//   try {
-//     const userId = req.user.id || req.user._id; // Từ middleware verifyToken
-//     const { username, email, phone, fullname } = req.body;
-
-//     const user = await User.findById(userId);
-//     if (!user) {
-//       return res.status(404).json({ message: "User không tồn tại" });
-//     }
-
-//     // Validate unique username/email nếu thay đổi
-//     const query = {};
-//     if (username && username.trim() !== user.username) {
-//       query.username = username.trim();
-//     }
-//     if (email && email.trim() !== user.email) {
-//       query.email = email.toLowerCase().trim();
-//     }
-//     if (Object.keys(query).length > 0) {
-//       const existing = await User.findOne(query);
-//       if (existing) {
-//         return res
-//           .status(400)
-//           .json({ message: "Username hoặc email đã tồn tại" });
-//       }
-//     }
-
-//     // Update user fields
-//     if (username) user.username = username.trim();
-//     if (email) user.email = email.toLowerCase().trim();
-//     if (phone !== undefined) user.phone = phone.trim();
-//     if (fullname !== undefined) user.fullname = fullname.trim();
-
-//     await user.save();
-
-//     // Nếu role STAFF, update Employee fullname/phone (fullname optional nếu input)
-//     if (user.role === "STAFF") {
-//       const employee = await Employee.findOne({ user_id: userId });
-//       if (employee) {
-//         if (fullname) employee.fullname = fullname.trim(); // Thêm: fullname optional (nếu input, update Employee)
-//         if (phone !== undefined) employee.phone = phone.trim(); // Sync phone vào Employee (optional, default '')
-//         await employee.save();
-//       }
-//     }
-//     //Ghi nhật ký hoạt động
-//     await logActivity({
-//       user, // req.user cũng được, nhưng user đang là document chuẩn
-//       store: { _id: user.current_store },
-//       action: "update",
-//       entity: "User",
-//       entityId: user._id,
-//       entityName: user.username,
-//       req,
-//       description: `Người dùng ${
-//         user.username
-//       } đã cập nhật thông tin cá nhân: ${[
-//         username ? "username" : null,
-//         fullname ? "fullname" : null,
-//         email ? "email" : null,
-//         phone ? "phone" : null,
-//         fullname ? "fullname" : null,
-//       ]
-//         .filter(Boolean)
-//         .join(", ")}`,
-//     });
-//     // Trả user updated (populate nếu cần)
-//     const updatedUser = await User.findById(userId).lean();
-//     res.json({ message: "Cập nhật thông tin thành công", user: updatedUser });
-//   } catch (err) {
-//     console.error("Lỗi cập nhật profile:", err.message);
-//     res.status(500).json({ message: "Lỗi server khi cập nhật profile" });
-//   }
-// };
-// const updateProfile = async (req, res) => {
-//   try {
-//     const userId = req.user.id || req.user._id;
-
-//     console.log("=== UPDATE PROFILE REQUEST ===");
-//     console.log("Content-Type:", req.headers["content-type"]);
-//     console.log("Body:", req.body); // Text fields ở đây
-//     console.log("File:", req.file); // File ở đây
-
-//     // FIX: Kiểm tra req.body có tồn tại không trước khi destructure
-//     if (!req.body) {
-//       console.error(
-//         "ERROR: req.body is undefined - Multer not parsing form data"
-//       );
-//       return res.status(400).json({
-//         message: "Lỗi server: Không nhận được dữ liệu form",
-//       });
-//     }
-
-//     // Text fields từ req.body - với default values để tránh lỗi
-//     const {
-//       username = req.user?.username || "",
-//       email = req.user?.email || "",
-//       phone = req.user?.phone || "",
-//       fullname = req.user?.fullname || "",
-//     } = req.body;
-
-//     const user = await User.findById(userId);
-//     if (!user) {
-//       return res.status(404).json({ message: "User không tồn tại" });
-//     }
-
-//     // Xử lý upload ảnh nếu có file (từ req.file)
-//     if (req.file) {
-//       try {
-//         console.log("Processing image upload as Base64...");
-
-//         // Validate file type
-//         const allowedMimes = [
-//           "image/jpeg",
-//           "image/png",
-//           "image/jpg",
-//           "image/gif",
-//           "image/webp",
-//         ];
-//         if (!allowedMimes.includes(req.file.mimetype)) {
-//           return res.status(400).json({
-//             message:
-//               "Định dạng ảnh không hợp lệ. Chỉ chấp nhận JPEG, PNG, JPG, GIF, WEBP",
-//           });
-//         }
-
-//         // Validate file size
-//         const maxSize = 2 * 1024 * 1024; // 2MB
-//         if (req.file.size > maxSize) {
-//           return res.status(400).json({
-//             message: "Kích thước ảnh quá lớn. Tối đa 2MB",
-//           });
-//         }
-
-//         // Convert to Base64
-//         const base64Image = req.file.buffer.toString("base64");
-//         const mimeType = req.file.mimetype;
-
-//         // Lưu vào trường image của user
-//         user.image = `data:${mimeType};base64,${base64Image}`;
-
-//         console.log(
-//           "Image saved as Base64, size:",
-//           (base64Image.length / 1024).toFixed(2),
-//           "KB"
-//         );
-//       } catch (uploadError) {
-//         console.error("Upload image error:", uploadError);
-//         return res.status(500).json({ message: "Lỗi xử lý ảnh" });
-//       }
-//     }
-
-//     // Validate unique username/email nếu thay đổi
-//     const query = { _id: { $ne: userId } };
-//     let hasUniqueCheck = false;
-
-//     if (username && username.trim() !== user.username) {
-//       query.username = username.trim();
-//       hasUniqueCheck = true;
-//     }
-//     if (email && email.trim() !== user.email) {
-//       query.email = email.toLowerCase().trim();
-//       hasUniqueCheck = true;
-//     }
-
-//     if (hasUniqueCheck) {
-//       const existing = await User.findOne(query);
-//       if (existing) {
-//         return res.status(400).json({
-//           message: "Username hoặc email đã tồn tại",
-//         });
-//       }
-//     }
-
-//     // Update user fields - chỉ update nếu có giá trị
-//     let hasChanges = false;
-
-//     if (username && username.trim() !== user.username) {
-//       user.username = username.trim();
-//       hasChanges = true;
-//     }
-
-//     if (email && email.trim() !== user.email) {
-//       user.email = email.toLowerCase().trim();
-//       hasChanges = true;
-//     }
-
-//     if (phone !== undefined && phone.trim() !== user.phone) {
-//       user.phone = phone.trim();
-//       hasChanges = true;
-//     }
-
-//     if (fullname !== undefined && fullname.trim() !== user.fullname) {
-//       user.fullname = fullname.trim();
-//       hasChanges = true;
-//     }
-
-//     // Nếu không có thay đổi gì và không có ảnh mới
-//     if (!hasChanges && !req.file) {
-//       return res.status(400).json({
-//         message: "Không có thông tin nào thay đổi",
-//       });
-//     }
-
-//     await user.save();
-
-//     // Nếu role STAFF, update Employee fullname/phone/image
-//     if (user.role === "STAFF") {
-//       const employee = await Employee.findOne({ user_id: userId });
-//       if (employee) {
-//         if (fullname && fullname.trim() !== employee.fullname) {
-//           employee.fullname = fullname.trim();
-//         }
-//         if (phone !== undefined && phone.trim() !== employee.phone) {
-//           employee.phone = phone.trim();
-//         }
-//         if (req.file) {
-//           employee.image = user.image; // Đồng bộ ảnh
-//         }
-//         await employee.save();
-//       }
-//     }
-
-//     // Ghi nhật ký hoạt động
-//     const changedFields = [
-//       username && username.trim() !== user.username ? "username" : null,
-//       fullname && fullname.trim() !== user.fullname ? "fullname" : null,
-//       email && email.trim() !== user.email ? "email" : null,
-//       phone !== undefined && phone.trim() !== user.phone ? "phone" : null,
-//       req.file ? "image" : null,
-//     ].filter(Boolean);
-
-//     if (changedFields.length > 0) {
-//       await logActivity({
-//         user,
-//         store: { _id: user.current_store },
-//         action: "update",
-//         entity: "User",
-//         entityId: user._id,
-//         entityName: user.username,
-//         req,
-//         description: `Người dùng ${
-//           user.username
-//         } đã cập nhật: ${changedFields.join(", ")}`,
-//       });
-//     }
-
-//     // Trả user updated với image
-//     const updatedUser = await User.findById(userId)
-//       .select("-password_hash")
-//       .lean();
-
-//     res.json({
-//       message: "Cập nhật thông tin thành công",
-//       user: updatedUser,
-//     });
-//   } catch (err) {
-//     console.error("Lỗi cập nhật profile:", err.message);
-//     console.error("Error stack:", err.stack);
-//     res.status(500).json({ message: "Lỗi server khi cập nhật profile" });
-//   }
-// };
 const updateProfile = async (req, res) => {
   try {
-    console.log("=== UPDATE PROFILE REQUEST ===");
-    console.log("Content-Type:", req.headers["content-type"]);
-    console.log("Body:", req.body);
-    console.log("File:", req.file);
-    console.log("User from token:", req.user);
-
     const userId = req.user.id || req.user._id;
     console.log("User ID for update:", userId);
 
     if (!userId) {
-      return res.status(400).json({ error: "User ID not found in token" });
+      return res.status(400).json({ message: "User ID not found in token" });
     }
 
-    const { username, email, phone, fullname } = req.body;
-
-    // Xử lý ảnh upload
-    let imageUrl = null; // ĐỔI TÊN BIẾN
-
-    if (req.file) {
-      console.log("🔄 Processing image upload from file path...");
-
-      // Tạo URL truy cập ảnh
-      const baseUrl = `${req.protocol}://${req.get("host")}`;
-      imageUrl = `${baseUrl}/${req.file.path.replace(/\\/g, "/")}`; // ĐỔI TÊN BIẾN
-
-      console.log("🖼️ Image URL:", imageUrl);
+    // Validate req.body tồn tại (cho multipart/form-data)
+    if (!req.body && !req.file) {
+      console.error("ERROR: No data received");
+      return res.status(400).json({
+        message: "Không có dữ liệu để cập nhật",
+      });
     }
 
-    // Tạo object cập nhật - SỬA field avatar thành image
-    const updateData = {
-      username,
-      email,
-      phone,
-      fullname,
-    };
+    const { username, email, phone, fullname } = req.body || {};
 
-    if (imageUrl) {
-      updateData.image = imageUrl; // SỬA THÀNH 'image'
-      console.log("🎯 Adding image to update data:", imageUrl);
+    // Tìm user hiện tại
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "Người dùng không tồn tại" });
     }
 
-    console.log("📦 Update data:", updateData);
-
-    // Tìm user trước để kiểm tra
-    const existingUser = await User.findById(userId);
-    console.log("👤 Existing user found:", !!existingUser);
-    if (existingUser) {
-      console.log("📸 Current image in DB:", existingUser.image); // SỬA THÀNH 'image'
-    }
-
-    if (!existingUser) {
-      return res
-        .status(404)
-        .json({ error: "User not found with ID: " + userId });
-    }
-
-    // Cập nhật user
-    console.log("🔄 Updating user in database...");
-    const updatedUser = await User.findByIdAndUpdate(userId, updateData, {
-      new: true,
-      runValidators: true,
-    }).select("-password -refreshToken");
-
-    console.log("✅ Updated user result:", {
-      id: updatedUser?._id,
-      username: updatedUser?.username,
-      image: updatedUser?.image, // SỬA THÀNH 'image'
-      hasImage: !!updatedUser?.image, // SỬA THÀNH 'image'
+    console.log("👤 Current user found:", {
+      id: user._id,
+      username: user.username,
+      email: user.email,
+      phone: user.phone,
+      fullname: user.fullname,
+      image: user.image,
     });
 
-    if (!updatedUser) {
-      return res.status(404).json({ error: "User update failed" });
+    // Validate unique username/email nếu thay đổi
+    if (username || email) {
+      const query = { _id: { $ne: userId } };
+      let needsValidation = false;
+
+      if (username && username.trim() !== user.username) {
+        query.username = username.trim();
+        needsValidation = true;
+      }
+
+      if (email && email.trim().toLowerCase() !== user.email) {
+        query.email = email.trim().toLowerCase();
+        needsValidation = true;
+      }
+
+      // Nếu có thay đổi username hoặc email, kiểm tra duplicate
+      if (needsValidation) {
+        // Tách riêng check username và email để thông báo cụ thể
+        if (username && username.trim() !== user.username) {
+          const existingUsername = await User.findOne({
+            username: username.trim(),
+            _id: { $ne: userId },
+          });
+          if (existingUsername) {
+            return res.status(400).json({ message: "Username đã tồn tại" });
+          }
+        }
+
+        if (email && email.trim().toLowerCase() !== user.email) {
+          const existingEmail = await User.findOne({
+            email: email.trim().toLowerCase(),
+            _id: { $ne: userId },
+          });
+          if (existingEmail) {
+            return res.status(400).json({ message: "Email đã tồn tại" });
+          }
+        }
+      }
     }
 
-    // Kiểm tra lại database sau khi update
-    const finalUser = await User.findById(userId).select("image username"); // SỬA THÀNH 'image'
-    console.log("🔍 Final check - Image in DB:", finalUser?.image); // SỬA THÀNH 'image'
+    // Track các thay đổi
+    const changedFields = [];
+    let hasChanges = false;
+
+    // Xử lý image upload trước (nếu có file)
+    if (req.file) {
+      try {
+        console.log("🔄 Processing image upload...");
+
+        // Validate file type
+        const allowedMimes = [
+          "image/jpeg",
+          "image/png",
+          "image/jpg",
+          "image/gif",
+          "image/webp",
+        ];
+        if (!allowedMimes.includes(req.file.mimetype)) {
+          return res.status(400).json({
+            message:
+              "Định dạng ảnh không hợp lệ. Chỉ chấp nhận JPEG, PNG, JPG, GIF, WEBP",
+          });
+        }
+
+        // Validate file size (2MB)
+        const maxSize = 2 * 1024 * 1024;
+        if (req.file.size > maxSize) {
+          return res.status(400).json({
+            message: "Kích thước ảnh quá lớn. Tối đa 2MB",
+          });
+        }
+
+        // Tạo URL từ file path
+        const baseUrl = `${req.protocol}://${req.get("host")}`;
+        const imageUrl = `${baseUrl}/${req.file.path.replace(/\\/g, "/")}`;
+
+        console.log("🖼️ Image URL:", imageUrl);
+
+        // Update image sử dụng findByIdAndUpdate để có thể chain .select()
+        const updatedUserWithImage = await User.findByIdAndUpdate(
+          userId,
+          { image: imageUrl },
+          { new: true }
+        ).select("-password_hash");
+
+        if (!updatedUserWithImage) {
+          return res.status(404).json({ message: "Người dùng không tồn tại" });
+        }
+
+        console.log("✅ Image updated successfully:", imageUrl);
+        changedFields.push("image");
+        hasChanges = true;
+
+        // Sync image với Employee nếu là STAFF
+        if (updatedUserWithImage.role === "STAFF") {
+          const employee = await Employee.findOne({ user_id: userId });
+          if (employee) {
+            employee.image = imageUrl;
+            await employee.save();
+            console.log("✅ Employee image synced");
+          }
+        }
+
+        // Log activity cho image upload
+        await logActivity({
+          user: updatedUserWithImage,
+          store: { _id: updatedUserWithImage.current_store },
+          action: "update",
+          entity: "User",
+          entityId: updatedUserWithImage._id,
+          entityName: updatedUserWithImage.username,
+          req,
+          description: `Người dùng ${updatedUserWithImage.username} đã cập nhật ảnh đại diện`,
+        });
+
+        // Trả về ngay sau khi upload ảnh thành công
+        return res.json({
+          message: "Profile updated successfully",
+          user: updatedUserWithImage,
+        });
+      } catch (uploadError) {
+        console.error("❌ Upload image error:", uploadError);
+        return res.status(500).json({
+          message: "Lỗi xử lý ảnh: " + uploadError.message,
+        });
+      }
+    }
+
+    // Update các text fields (nếu không có file upload)
+    if (username && username.trim() !== user.username) {
+      user.username = username.trim();
+      changedFields.push("username");
+      hasChanges = true;
+    }
+
+    if (email && email.trim().toLowerCase() !== user.email) {
+      user.email = email.trim().toLowerCase();
+      changedFields.push("email");
+      hasChanges = true;
+    }
+
+    if (phone !== undefined && phone.trim() !== (user.phone || "")) {
+      user.phone = phone.trim();
+      changedFields.push("phone");
+      hasChanges = true;
+    }
+
+    if (fullname !== undefined && fullname.trim() !== (user.fullname || "")) {
+      user.fullname = fullname.trim();
+      changedFields.push("fullname");
+      hasChanges = true;
+    }
+
+    // Nếu không có thay đổi gì
+    if (!hasChanges) {
+      return res.status(400).json({
+        message: "Không có thông tin nào thay đổi",
+      });
+    }
+
+    // Save user
+    await user.save();
+    console.log("✅ User updated successfully");
+
+    // Sync với Employee nếu là STAFF
+    if (user.role === "STAFF") {
+      const employee = await Employee.findOne({ user_id: userId });
+      if (employee) {
+        let employeeChanged = false;
+
+        if (
+          fullname &&
+          fullname.trim() !== (employee.fullname || "") &&
+          changedFields.includes("fullname")
+        ) {
+          employee.fullname = fullname.trim();
+          employeeChanged = true;
+        }
+
+        if (
+          phone !== undefined &&
+          phone.trim() !== (employee.phone || "") &&
+          changedFields.includes("phone")
+        ) {
+          employee.phone = phone.trim();
+          employeeChanged = true;
+        }
+
+        if (employeeChanged) {
+          await employee.save();
+          console.log("✅ Employee data synced");
+        }
+      }
+    }
+
+    // Log activity
+    if (changedFields.length > 0) {
+      await logActivity({
+        user,
+        store: { _id: user.current_store },
+        action: "update",
+        entity: "User",
+        entityId: user._id,
+        entityName: user.username,
+        req,
+        description: `Người dùng ${
+          user.username
+        } đã cập nhật thông tin cá nhân: ${changedFields.join(", ")}`,
+      });
+    }
+
+    // Trả về user updated
+    const updatedUser = await User.findById(userId)
+      .select("-password_hash")
+      .lean();
 
     res.json({
       message: "Profile updated successfully",
       user: updatedUser,
     });
-  } catch (error) {
-    console.error("❌ Update profile error:", error);
-    res.status(500).json({ error: "Internal server error: " + error.message });
+  } catch (err) {
+    console.error("❌ Lỗi cập nhật profile:", err);
+    console.error("Error stack:", err.stack);
+    res.status(500).json({
+      message: "Lỗi server khi cập nhật profile",
+      error: err.message,
+    });
   }
 };
 /* ------------------------- 
