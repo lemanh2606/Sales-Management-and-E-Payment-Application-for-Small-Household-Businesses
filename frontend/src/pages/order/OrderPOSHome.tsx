@@ -177,6 +177,21 @@ const OrderPOSHome: React.FC = () => {
     return num.toLocaleString("vi-VN") + "đ";
   };
 
+  // Hàm reset tab hiện tại sau in thành công
+  const resetCurrentTab = () => {
+    updateOrderTab((tab) => {
+      tab.cart = [];
+      tab.customer = null;
+      tab.usedPoints = 0;
+      tab.usedPointsEnabled = false;
+      tab.isVAT = false;
+      tab.paymentMethod = "cash";
+      tab.cashReceived = 0;
+    });
+    // Optional: Tạo tab mới tự động nếu muốn
+    // addNewOrderTab();
+  };
+
   // Socket - Kết nối socket để nhận thông báo thanh toán
   useEffect(() => {
     const s = io(SOCKET_URL, { auth: { token } });
@@ -185,6 +200,10 @@ const OrderPOSHome: React.FC = () => {
       message.success("Thanh toán QR thành công!");
       setPendingOrderId(data.ref || data.orderId);
       setBillModalOpen(true);
+      // Thêm reset QR ngay lập tức
+      setQrImageUrl(null);
+      setQrPayload(null);
+      setQrExpiryTs(null);
     });
     return () => {
       s.disconnect();
@@ -442,9 +461,28 @@ const OrderPOSHome: React.FC = () => {
   const triggerPrint = async (orderId: string) => {
     try {
       await axios.post(`${API_BASE}/orders/${orderId}/print-bill`, {}, { headers });
-      setBillModalOpen(true);
+      Swal.fire({
+        icon: "success",
+        title: "Thành công!",
+        text: "In hóa đơn thành công!",
+        showConfirmButton: false,
+        timer: 1500,
+      });
+      setBillModalOpen(false); // Đóng modal ngay
+      setPendingOrderId(null); // Reset pending để nút xác nhận biến mất
+      resetCurrentTab(); // Reset tab về trạng thái ban đầu
+      // Reset QR nếu có
+      setQrImageUrl(null);
+      setQrPayload(null);
+      setQrExpiryTs(null);
     } catch (err: any) {
-      message.error("Lỗi in hóa đơn");
+      Swal.fire({
+        icon: "error",
+        title: "Có lỗi!",
+        text: "In hóa đơn không thành công!",
+        showConfirmButton: false,
+        timer: 1500,
+      });
     }
   };
 
@@ -1247,7 +1285,11 @@ const OrderPOSHome: React.FC = () => {
       {/* Modal in hóa đơn */}
       <ModalPrintBill
         open={billModalOpen}
-        onCancel={() => setBillModalOpen(false)}
+        onCancel={() => {
+          setBillModalOpen(false);
+          setPendingOrderId(null); // Reset nếu đóng thủ công
+          resetCurrentTab(); // Optional: Reset tab luôn
+        }}
         onPrint={() => {
           if (pendingOrderId) {
             triggerPrint(pendingOrderId);

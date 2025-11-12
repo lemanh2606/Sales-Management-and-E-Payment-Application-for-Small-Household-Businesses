@@ -4,7 +4,7 @@ import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-
 // 🧩 Context
 import { useAuth } from "./context/AuthContext";
 // 🎨 UI & Ant Design
-import { ConfigProvider, Spin } from "antd";
+import { ConfigProvider, Spin, message } from "antd";
 import { LoadingOutlined } from "@ant-design/icons";
 import viVN from "antd/locale/vi_VN";
 // 🔔 Subscription Overlay
@@ -42,11 +42,13 @@ import SubscriptionPage from "./pages/setting/SubscriptionPage";
 import ActivityLog from "./pages/setting/ActivityLog";
 import FileManager from "./pages/setting/FileManager";
 import LoyaltySetting from "./pages/loyalty/LoyaltySetting";
+import Term from "./pages/setting/Term";
 // 🛒 Orders
 import SidebarPOS from "./pages/order/SidebarPOS";
 import ListAllOrder from "./pages/order/ListAllOrder";
 import ListPendingOrders from "./pages/order/ListPendingOrders";
 import Notification from "./pages/setting/Notification";
+import Privacy from "./pages/setting/Privacy";
 
 const loadingIcon = <LoadingOutlined style={{ fontSize: 40 }} spin />;
 
@@ -157,8 +159,14 @@ function AppInit() {
 }
 
 function App() {
+  // Tạo message holder cho toàn app
+  const [messageApi, contextHolder] = message.useMessage();
+
   return (
     <ConfigProvider locale={viVN}>
+      {/* Đặt contextHolder vào đây để message hiển thị toàn cục */}
+      {contextHolder}
+
       <AppInit />
       {/* Check subscription cho MANAGER - redirect + ẩn menu */}
       <ManagerSubscriptionCheck />
@@ -340,6 +348,22 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/terms"
+          element={
+            <ProtectedRoute>
+              <Term />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/privacy"
+          element={
+            <ProtectedRoute>
+              <Privacy />
+            </ProtectedRoute>
+          }
+        />
         {/* ======================================================================= */}
         {/* ====================== Subscription - Routes ====================== */}
         <Route
@@ -384,7 +408,7 @@ function App() {
             </ProtectedRoute>
           }
         />
-        
+
         <Route
           path="settings/notification"
           element={
