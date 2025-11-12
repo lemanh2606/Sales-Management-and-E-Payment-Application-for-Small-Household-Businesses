@@ -2,10 +2,11 @@
 const crypto = require("crypto");
 const Subscription = require("../models/Subscription");
 const User = require("../models/User");
+const Notification = require("../models/Notification");
 
 /**
  * Webhook handler cho thanh toán Subscription (PayOS)
- * 
+ *
  * Flow:
  * 1. PayOS gọi webhook khi thanh toán thành công
  * 2. Verify signature HMAC-SHA256
@@ -47,10 +48,7 @@ module.exports = async (req, res) => {
     }
 
     // Tính signature: HMAC-SHA256(rawBody, checksumKey)
-    const expectedSignature = crypto
-      .createHmac("sha256", checksumKey)
-      .update(rawBody)
-      .digest("hex");
+    const expectedSignature = crypto.createHmac("sha256", checksumKey).update(rawBody).digest("hex");
 
     if (receivedSignature !== expectedSignature) {
       console.error("❌ Signature không khớp");
@@ -102,6 +100,8 @@ module.exports = async (req, res) => {
 
     // Update User model - chỉ cập nhật is_premium flag
     const user = await User.findById(userId);
+    const displayName = user?.fullname || user?.username || "Người dùng";
+
     if (user) {
       user.is_premium = true;
       await user.save();
@@ -115,9 +115,23 @@ module.exports = async (req, res) => {
         userId,
         duration,
         expiresAt,
-        message: `Gói Premium ${duration} tháng đã được kích hoạt!`,
+        message: `${displayName} đã kích hoạt gói Premium ${duration} tháng 🎉 (hết hạn vào ${expiresAt.toLocaleDateString(
+          "vi-VN"
+        )})`,
       });
-      console.log(`🔔 [SOCKET] Gửi thông báo: Premium ${duration} tháng đã kích hoạt cho user ${userId}`);
+
+      // 🧠 Lưu thông báo vào DB
+      await Notification.create({
+        storeId: null,
+        userId,
+        type: "service",
+        title: "Kích hoạt gói dịch vụ",
+        message: `${displayName} đã kích hoạt gói Premium ${duration} tháng 🎉 (hết hạn vào ${expiresAt.toLocaleDateString(
+          "vi-VN"
+        )})`,
+      });
+
+      console.log(`🔔 [SOCKET + DB] Premium ${duration} tháng kích hoạt cho user ${displayName} (${userId})`);
     }
 
     return res.status(200).json({ message: "Subscription activated" });

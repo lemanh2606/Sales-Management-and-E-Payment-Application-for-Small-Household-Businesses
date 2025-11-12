@@ -43,6 +43,7 @@ import LoyaltySetting from "./pages/loyalty/LoyaltySetting";
 import SidebarPOS from "./pages/order/SidebarPOS";
 import ListAllOrder from "./pages/order/ListAllOrder";
 import ListPendingOrders from "./pages/order/ListPendingOrders";
+import Notification from "./pages/setting/Notification";
 
 const loadingIcon = <LoadingOutlined style={{ fontSize: 40 }} spin />;
 
@@ -373,6 +374,15 @@ function App() {
           element={
             <ProtectedRoute allowedPermissions="orders:view">
               <ListPendingOrders />
+            </ProtectedRoute>
+          }
+        />
+        
+        <Route
+          path="settings/notification"
+          element={
+            <ProtectedRoute>
+              <Notification />
             </ProtectedRoute>
           }
         />

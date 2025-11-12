@@ -11,6 +11,7 @@ const Product = require("../../models/Product");
 const Employee = require("../../models/Employee");
 const Customer = require("../../models/Customer");
 const LoyaltySetting = require("../../models/LoyaltySetting");
+const Notification = require("../../models/Notification");
 const { generateQRWithPayOS } = require("../../services/payOSService");
 const { periodToRange } = require("../../utils/period");
 const { v2: cloudinary } = require("cloudinary");
@@ -201,7 +202,7 @@ const createOrder = async (req, res) => {
   }
 };
 
-// Bonus: POST /api/orders/:orderId/set-paid-cash - Cho cash: Staff confirm giao dịch tay → set paid (trước print)
+//POST /api/orders/:orderId/set-paid-cash - Cho cash: Staff confirm giao dịch tay → set paid (trước print)
 const setPaidCash = async (req, res) => {
   try {
     const { orderId: mongoId } = req.params;
@@ -216,15 +217,23 @@ const setPaidCash = async (req, res) => {
     if (io) {
       io.emit("payment_success", {
         orderId: order._id,
-        ref: order._id.toString(), // Cash ko có paymentRef, dùng _id
+        ref: order._id.toString(),
         amount: order.totalAmount,
         method: order.paymentMethod,
-        message: `Đơn hàng ${order._id} đã thanh toán thành công (TIỀN MẶT)!`,
+        message: `Đơn hàng ${order._id} đã thanh toán thành công, phương thức: TIỀN MẶT!`,
       });
-      console.log(
-        `🔔 [SOCKET] Gửi thông báo: Thanh toán thành công, số tiền: (${order.totalAmount}đ) - Mã đơn hàng: ${order._id}`
-      );
+
+      // 🧠 Lưu thông báo vào DB
+      await Notification.create({
+        storeId: order.storeId,
+        userId: req.user._id,
+        type: "payment",
+        title: "Thanh toán tiền mặt thành công",
+        message: `Đơn hàng #${order._id} đã được thanh toán thành công, số tiền: ${order.totalAmount}đ, phương thức: TIỀN MẶT!`,
+      });
+      console.log(`🔔 [SOCKET + DB] Thanh toán tiền mặt: ${order.totalAmount}đ - ĐH: ${order._id}`);
     }
+
     // log nhật ký hoạt động
     await logActivity({
       user: req.user,

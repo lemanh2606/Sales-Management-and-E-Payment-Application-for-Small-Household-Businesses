@@ -140,7 +140,7 @@ export default function Sidebar({ onCollapsedChange }) {
         { name: "Nhật ký hoạt động", path: "/settings/activity-log", permission: "settings:activity-log" },
         { name: "Thiết lập thanh toán", path: "/settings/payment-method", permission: "settings:payment-method" },
         { name: "Hồ sơ cá nhân", path: "/settings/profile", permission: "users:view" },
-        { name: "Thông báo", path: "/settings/payment", permission: "notifications:view" },
+        { name: "Thông báo", path: "/settings/notification", permission: "notifications:view" },
         {
           name: "Gói dịch vụ",
           path: "/settings/subscription",
