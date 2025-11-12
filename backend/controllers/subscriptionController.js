@@ -62,31 +62,59 @@ const getCurrentSubscription = async (req, res) => {
 
     console.log("Get current subscription for user:", userId);
 
-    // Lấy user info
-    const user = await User.findById(userId).select(
-      "subscription_status trial_ends_at premium_expires_at is_premium"
-    );
+    // Lấy user info (cần is_premium và role)
+    const user = await User.findById(userId).select("is_premium role");
 
     if (!user) {
       console.log("User not found:", userId);
       return res.status(404).json({ message: "Không tìm thấy user" });
     }
 
-    // Lấy subscription record
-    const subscription = await Subscription.findActiveByUser(userId);
-
-    if (!subscription) {
-      return res.json({
-        status: "EXPIRED",
-        message: "Không có subscription active",
-        user: {
-          subscription_status: user.subscription_status,
-          is_premium: user.is_premium,
-        },
+    // STAFF không có subscription riêng
+    if (user.role === "STAFF") {
+      return res.status(403).json({ 
+        message: "STAFF không có subscription riêng. Subscription do Manager quản lý.",
+        user_role: "STAFF"
       });
     }
 
-    // Build response
+    // Chỉ MANAGER mới có subscription
+    if (user.role !== "MANAGER") {
+      return res.status(403).json({ 
+        message: "Chỉ MANAGER mới có subscription",
+        user_role: user.role
+      });
+    }
+
+    // Tìm subscription active
+    let subscription = await Subscription.findActiveByUser(userId);
+
+    // 🎁 Auto-create trial CHỈ nếu CHƯA TỪNG có subscription nào
+    if (!subscription) {
+      // Kiểm tra xem có subscription cũ (EXPIRED/CANCELLED) không
+      const anySubscription = await Subscription.findOne({ user_id: userId });
+      
+      if (!anySubscription) {
+        // Chưa từng có subscription → Tạo trial mới
+        console.log("🎁 No subscription found, creating trial for MANAGER:", userId);
+        try {
+          subscription = await Subscription.createTrial(userId);
+          console.log("✅ Trial subscription created:", subscription._id);
+        } catch (trialErr) {
+          console.error("❌ Failed to create trial:", trialErr);
+          return res.status(500).json({ 
+            message: "Không thể tạo trial subscription",
+            error: trialErr.message 
+          });
+        }
+      } else {
+        // Đã từng có subscription → Trả về subscription cũ (EXPIRED/CANCELLED)
+        subscription = anySubscription;
+        console.log("📋 Found expired/cancelled subscription:", subscription._id, subscription.status);
+      }
+    }
+
+    // Build response từ Subscription model
     const response = {
       subscription_id: subscription._id,
       status: subscription.status,
@@ -129,6 +157,19 @@ const createCheckout = async (req, res) => {
   try {
     const userId = req.user._id;
     const { plan_duration } = req.body;
+
+    // Check role MANAGER
+    const user = await User.findById(userId).select("role");
+    if (!user) {
+      return res.status(404).json({ message: "Không tìm thấy user" });
+    }
+
+    if (user.role !== "MANAGER") {
+      return res.status(403).json({ 
+        message: "Chỉ MANAGER mới có thể mua subscription",
+        user_role: user.role
+      });
+    }
 
     // Validate plan
     if (!PRICING[plan_duration]) {
@@ -200,6 +241,7 @@ const createCheckout = async (req, res) => {
  * POST /api/subscriptions/activate
  * Activate premium (MANUAL - skip PayOS)
  * Body: { plan_duration, amount, transaction_id }
+ * Chỉ cho MANAGER
  */
 const activatePremium = async (req, res) => {
   try {
@@ -213,6 +255,19 @@ const activatePremium = async (req, res) => {
 
     console.log("Activate premium request:", { userId, plan_duration, amount, transaction_id });
 
+    // Check role MANAGER
+    const user = await User.findById(userId).select("role");
+    if (!user) {
+      return res.status(404).json({ message: "Không tìm thấy user" });
+    }
+
+    if (user.role !== "MANAGER") {
+      return res.status(403).json({ 
+        message: "Chỉ MANAGER mới có thể kích hoạt subscription",
+        user_role: user.role
+      });
+    }
+
     if (!plan_duration || !amount || !transaction_id) {
       return res.status(400).json({ message: "Thiếu thông tin plan_duration, amount hoặc transaction_id" });
     }
@@ -222,20 +277,22 @@ const activatePremium = async (req, res) => {
       return res.status(400).json({ message: "Gói không hợp lệ" });
     }
 
-    // Check subscription hiện tại
-    const currentSub = await Subscription.findActiveByUser(userId);
+    // Check subscription hiện tại (bao gồm cả EXPIRED)
+    let subscription = await Subscription.findOne({ user_id: userId });
     
-    // ✅ CHO PHÉP GIA HẠN - Nếu đang ACTIVE thì cộng thêm thời gian
-    const isRenewal = currentSub && currentSub.status === "ACTIVE" && !currentSub.isExpired();
-
-    // Tạo hoặc update subscription
-    let subscription = currentSub;
+    // Nếu chưa có subscription nào -> tạo mới
     if (!subscription) {
+      console.log("Creating new subscription for user:", userId);
       subscription = new Subscription({
         user_id: userId,
-        status: "TRIAL",
+        status: "TRIAL", // Tạm thời set TRIAL, sẽ được update thành ACTIVE
       });
+    } else {
+      console.log("Found existing subscription:", subscription._id, "status:", subscription.status);
     }
+    
+    // Check nếu đang ACTIVE và chưa expired -> Gia hạn
+    const isRenewal = subscription.status === "ACTIVE" && !subscription.isExpired();
 
     if (isRenewal) {
       // ✅ GIA HẠN: Cộng thêm thời gian vào expires_at hiện tại
@@ -247,32 +304,31 @@ const activatePremium = async (req, res) => {
       subscription.expires_at = newExpires;
       subscription.plan_duration = plan_duration; // Update plan duration
       subscription.payment_method = "MANUAL";
+      subscription.transaction_id = transaction_id;
+      subscription.price_paid = amount;
       
-      // Update premium info
-      if (!subscription.premium) {
-        subscription.premium = {};
-      }
-      subscription.premium.plan_duration = plan_duration;
-      subscription.premium.amount_paid = amount;
-      subscription.premium.activated_at = subscription.premium.activated_at || new Date();
-      subscription.premium.is_active = true;
+      // Thêm vào payment_history
+      subscription.payment_history.push({
+        plan_duration: plan_duration,
+        amount: amount,
+        paid_at: new Date(),
+        transaction_id: transaction_id,
+        expires_at: newExpires,
+        payment_method: "MANUAL",
+      });
       
       console.log(`🔄 GIA HẠN: Cộng thêm ${additionalMonths} tháng. Expires: ${currentExpires} → ${newExpires}`);
     } else {
-      // ✅ KÍCH HOẠT MỚI: Dùng method cũ
+      // ✅ KÍCH HOẠT MỚI hoặc KÍCH HOẠT LẠI từ EXPIRED
       subscription.activatePremium(plan_duration, amount, transaction_id);
       subscription.payment_method = "MANUAL";
-      console.log(`✨ KÍCH HOẠT MỚI: ${plan_duration} tháng`);
+      console.log(`✨ KÍCH HOẠT ${subscription._id ? 'LẠI' : 'MỚI'}: ${plan_duration} tháng`);
     }
     
     await subscription.save();
 
-    // Update user
-    const user = await User.findById(userId);
-    user.subscription_status = "PREMIUM";
-    user.is_premium = true;
-    user.premium_expires_at = subscription.expires_at;
-    await user.save();
+    // Update user is_premium flag (direct update - không cần load lại document)
+    await User.findByIdAndUpdate(userId, { is_premium: true });
 
     // ✅ Lưu vào lịch sử thanh toán
     const paymentHistory = new PaymentHistory({
@@ -316,6 +372,19 @@ const cancelAutoRenew = async (req, res) => {
   try {
     const userId = req.user._id;
 
+    // Check role MANAGER
+    const user = await User.findById(userId).select("role");
+    if (!user) {
+      return res.status(404).json({ message: "Không tìm thấy user" });
+    }
+
+    if (user.role !== "MANAGER") {
+      return res.status(403).json({ 
+        message: "Chỉ MANAGER mới có thể quản lý subscription",
+        user_role: user.role
+      });
+    }
+
     const subscription = await Subscription.findActiveByUser(userId);
     if (!subscription) {
       return res.status(404).json({ message: "Không tìm thấy subscription" });
@@ -345,6 +414,19 @@ const getPaymentHistory = async (req, res) => {
   try {
     const userId = req.user._id;
     console.log("🔍 getPaymentHistory - userId:", userId, "type:", typeof userId);
+
+    // Check role MANAGER
+    const user = await User.findById(userId).select("role");
+    if (!user) {
+      return res.status(404).json({ message: "Không tìm thấy user" });
+    }
+
+    if (user.role !== "MANAGER") {
+      return res.status(403).json({ 
+        message: "Chỉ MANAGER mới có lịch sử thanh toán",
+        user_role: user.role
+      });
+    }
 
     // Query từ PaymentHistory collection - Mongoose tự cast string sang ObjectId
     const history = await PaymentHistory.find({ user_id: userId })
@@ -382,6 +464,19 @@ const getUsageStats = async (req, res) => {
   try {
     const userId = req.user._id;
     
+    // Check role MANAGER
+    const user = await User.findById(userId).select("role is_premium");
+    if (!user) {
+      return res.status(404).json({ message: "Không tìm thấy user" });
+    }
+
+    if (user.role !== "MANAGER") {
+      return res.status(403).json({ 
+        message: "Chỉ MANAGER mới có thống kê sử dụng",
+        user_role: user.role
+      });
+    }
+
     // Đếm số lượng stores, products, orders của user
     const Store = require("../models/Store");
     const Product = require("../models/Product");
@@ -408,8 +503,7 @@ const getUsageStats = async (req, res) => {
         products,
         orders,
       },
-      subscription_status: req.user.subscription_status,
-      is_premium: req.user.is_premium,
+      is_premium: user.is_premium,
     });
   } catch (error) {
     console.error("Lỗi getUsageStats:", error);

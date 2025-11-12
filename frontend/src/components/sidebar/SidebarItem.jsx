@@ -1,17 +1,34 @@
 // src/components/sidebar/SidebarItem.jsx
-import React, { useState } from "react";
-import { NavLink } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { NavLink, useLocation } from "react-router-dom";
 import { FiChevronDown, FiChevronRight } from "react-icons/fi";
 
 export default function SidebarItem({ item, collapsed = false }) {
+  const location = useLocation();
   const [open, setOpen] = useState(false);
   const hasChildren = item.children && item.children.length > 0;
 
+  // Auto-open menu nếu path hiện tại match với children
+  useEffect(() => {
+    if (hasChildren && !collapsed) {
+      const isChildActive = item.children.some(child => {
+        // Check if current path matches child path
+        if (location.pathname === child.path) return true;
+        // Check if current path starts with child path (for nested routes)
+        if (location.pathname.startsWith(child.path + '/')) return true;
+        return false;
+      });
+      
+      if (isChildActive) {
+        setOpen(true);
+      }
+    }
+  }, [location.pathname, hasChildren, item.children, collapsed]);
+
   const handleClick = (e) => {
-    // 👉 FIX: Toggle !open để mở/đóng (không chỉ mở one-way)
     if (hasChildren && !collapsed) {
       e.preventDefault();
-      e.stopPropagation(); // 👉 FIX: Ngăn bubble lên parent nếu nested
+      e.stopPropagation();
       setOpen(!open);
     }
   };

@@ -72,23 +72,7 @@ const userSchema = new mongoose.Schema(
     alertCount: { type: Number, default: 0 },
 
     // === SUBSCRIPTION INFO ===
-    subscription_status: {
-      type: String,
-      enum: ["TRIAL", "PREMIUM", "EXPIRED"],
-      default: "TRIAL",
-    },
-    trial_started_at: {
-      type: Date,
-      default: null,
-    },
-    trial_ends_at: {
-      type: Date,
-      default: null,
-    },
-    premium_expires_at: {
-      type: Date,
-      default: null,
-    },
+    // Chỉ giữ is_premium để quick check, các field khác lấy từ Subscription model
     is_premium: {
       type: Boolean,
       default: false,

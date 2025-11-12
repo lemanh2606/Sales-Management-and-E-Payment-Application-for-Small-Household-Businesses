@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
-import { apiClient, userApi } from "../api";
+import { apiClient, userApi, subscriptionApi } from "../api";
 import { ensureStore } from "../api/storeApi";
 
 const AuthContext = createContext();
@@ -19,6 +19,7 @@ export const AuthProvider = ({ children }) => {
         const s = localStorage.getItem("currentStore");
         return s ? JSON.parse(s) : null;
     });
+    const [managerSubscriptionExpired, setManagerSubscriptionExpired] = useState(false);
 
     useEffect(() => {
         const initAuth = async () => {
@@ -102,31 +103,26 @@ export const AuthProvider = ({ children }) => {
     // 👉 FIX CẬP NHẬT: Giảm block từ ensureStore(), navigate sớm hơn cho MANAGER nếu chưa có store
     // Thêm log để debug (xóa sau)
     const login = async (userData, tokenData) => {
-        console.log('👉 LOGIN START: role=', userData?.role, 'currentStore=', currentStore); // DEBUG
-        setLoading(true); // 👉 Bật loading ngay để block ProtectedRoute check auth
+        setLoading(true);
 
         try {
-            // Set immediate auth state (nhưng loading=true sẽ block check)
+            // Set immediate auth state
             setUser(userData);
             setToken(tokenData);
 
-            // --- BẮT ĐẦU THAY ĐỔI ---
-            // Nếu user là STAFF và có currentStore (từ state/localStorage), 
-            // thì giữ lại store đó khi persist.
-            // Các role khác (Manager) sẽ bị xóa (null) và phải chọn lại.
+            // Nếu user là STAFF và có currentStore, giữ lại store đó
+            // Các role khác sẽ phải chọn lại
             const initialStore = (userData?.role === "STAFF" && currentStore) ? currentStore : null;
             persist(userData, tokenData, initialStore);
-            // --- KẾT THÚC THAY ĐỔI ---
 
             // Try to prepare store info but do NOT block redirect for STAFF
             let resolvedStore = null;
-            let hasMultipleStores = false; // 👉 THÊM: Cache kết quả để tránh double call
+            let hasMultipleStores = false;
             try {
                 const res = await ensureStore();
-                console.log('👉 ensureStore RESULT:', res); // DEBUG: Check res.stores, res.store
                 resolvedStore =
                     res?.store || res?.currentStore || (res?.stores && res.stores[0]) || null;
-                hasMultipleStores = res?.stores && Array.isArray(res.stores) && res.stores.length > 1; // >1 vì nếu =1 thì resolvedStore đã có
+                hasMultipleStores = res?.stores && Array.isArray(res.stores) && res.stores.length > 1;
 
                 if (resolvedStore) {
                     setCurrentStore(resolvedStore);
@@ -143,48 +139,78 @@ export const AuthProvider = ({ children }) => {
             await new Promise(resolve => setTimeout(resolve, 100)); // TĂNG LÊN 100ms để settle tốt hơn (test 0 nếu nhanh quá)
 
             // Navigate based on role
-            // Yêu cầu: nếu là STAFF -> luôn nhảy về /dashboard ngay lập tức
+            // Yêu cầu: nếu là STAFF -> check subscription của Manager trước
             if (userData?.role === "STAFF") {
-                console.log('👉 STAFF: Navigate to /dashboard'); // DEBUG
-                navigate("/dashboard");
+                // Check subscription bằng cách gọi một API bất kỳ có middleware
+                try {
+                    // Gọi API để trigger middleware check
+                    const response = await fetch('/api/products?limit=1', {
+                        headers: {
+                            'Authorization': `Bearer ${responseToken}`
+                        }
+                    });
+                    
+                    if (response.status === 403) {
+                        const errorData = await response.json();
+                        
+                        // Check nếu là lỗi Manager expired - component sẽ hiện modal
+                        if (errorData.manager_expired || errorData.is_staff) {
+                            // Vẫn navigate để component được mount
+                            navigate("/dashboard");
+                            return;
+                        }
+                    }
+                    
+                    navigate("/dashboard");
+                } catch (err) {
+                    console.error('STAFF subscription check error:', err);
+                    navigate("/dashboard");
+                }
                 return;
             }
 
             // Manager và các role khác giữ hành vi cũ
             if (userData?.role === "MANAGER") {
-                // 👉 FIX: SỬ DỤNG CACHE từ lần 1, KHÔNG GỌI LẠI ensureStore() để tránh chậm
-                if (hasMultipleStores) { // Nếu >1 stores
-                    console.log('👉 MANAGER: Multiple stores -> /select-store'); // DEBUG
-                    navigate("/select-store");
-                    return;
+                // � CHECK SUBSCRIPTION TRƯỚC KHI REDIRECT
+                try {
+                    const subResponse = await subscriptionApi.getCurrentSubscription();
+                    const subData = subResponse.data || subResponse;
+                    
+                    const isExpired = 
+                        subData.status === "EXPIRED" || 
+                        (subData.status === "TRIAL" && subData.trial && !subData.trial.is_active);
+                    
+                    if (isExpired) {
+                        setManagerSubscriptionExpired(true);
+                    } else {
+                        setManagerSubscriptionExpired(false);
+                    }
+                } catch (subErr) {
+                    console.warn("Subscription check error in login (ignored):", subErr);
+                    // Nếu lỗi 403, coi như expired
+                    if (subErr.response?.status === 403) {
+                        setManagerSubscriptionExpired(true);
+                    }
                 }
-
-                if (resolvedStore) {
-                    console.log('👉 MANAGER: Has resolvedStore -> /dashboard'); // DEBUG
-                    navigate("/dashboard");
-                } else {
-                    console.log('👉 MANAGER: No store -> /select-store'); // DEBUG
-                    navigate("/select-store");
-                }
+                
+                // Manager LUÔN vào select-store để chọn cửa hàng
+                navigate("/select-store");
                 return;
             }
 
             // Default for other roles
-            console.log('👉 DEFAULT: Navigate to /dashboard'); // DEBUG
             navigate("/dashboard");
         } catch (error) {
-            console.error("Login failed:", error); // DEBUG
+            console.error("Login failed:", error);
             // Rollback nếu lỗi
             setUser(null);
             setToken(null);
             persist(null, null, null);
-            // 👉 THÊM: Navigate về /login nếu fail
             navigate("/login");
         } finally {
-            // 👉 FIX: Tắt loading SAU navigate, nhưng delay nhẹ để Spin flash mượt
+            // Tắt loading sau navigate
             setTimeout(() => {
                 setLoading(false);
-                console.log('👉 LOGIN END: loading=false'); // DEBUG
             }, 200); // 200ms để user thấy Spin tắt sau navigate
         }
     };
@@ -211,7 +237,18 @@ export const AuthProvider = ({ children }) => {
 
     return (
         // Thêm set user để nó cập nhật thông tin mới nhất nếu có Save gì đó trong Profile.jsx
-        <AuthContext.Provider value={{ user, setUser, token, currentStore, setCurrentStore, login, logout, loading }}> 
+        <AuthContext.Provider value={{ 
+            user, 
+            setUser, 
+            token, 
+            currentStore, 
+            setCurrentStore, 
+            login, 
+            logout, 
+            loading,
+            managerSubscriptionExpired,
+            setManagerSubscriptionExpired
+        }}> 
             {children}
         </AuthContext.Provider>
     );

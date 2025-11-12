@@ -11,7 +11,9 @@ const Product = require("../../models/Product");
 const Employee = require("../../models/Employee");
 const Customer = require("../../models/Customer");
 const LoyaltySetting = require("../../models/LoyaltySetting");
+const Notification = require("../../models/Notification");
 const { generateQRWithPayOS } = require("../../services/payOSService");
+const { periodToRange } = require("../../utils/period");
 const { v2: cloudinary } = require("cloudinary");
 
 const createOrder = async (req, res) => {
@@ -200,7 +202,7 @@ const createOrder = async (req, res) => {
   }
 };
 
-// Bonus: POST /api/orders/:orderId/set-paid-cash - Cho cash: Staff confirm giao dịch tay → set paid (trước print)
+//POST /api/orders/:orderId/set-paid-cash - Cho cash: Staff confirm giao dịch tay → set paid (trước print)
 const setPaidCash = async (req, res) => {
   try {
     const { orderId: mongoId } = req.params;
@@ -215,15 +217,23 @@ const setPaidCash = async (req, res) => {
     if (io) {
       io.emit("payment_success", {
         orderId: order._id,
-        ref: order._id.toString(), // Cash ko có paymentRef, dùng _id
+        ref: order._id.toString(),
         amount: order.totalAmount,
         method: order.paymentMethod,
-        message: `Đơn hàng ${order._id} đã thanh toán thành công (TIỀN MẶT)!`,
+        message: `Đơn hàng ${order._id} đã thanh toán thành công, phương thức: TIỀN MẶT!`,
       });
-      console.log(
-        `🔔 [SOCKET] Gửi thông báo: Thanh toán thành công, số tiền: (${order.totalAmount}đ) - Mã đơn hàng: ${order._id}`
-      );
+
+      // 🧠 Lưu thông báo vào DB
+      await Notification.create({
+        storeId: order.storeId,
+        userId: req.user._id,
+        type: "payment",
+        title: "Thanh toán tiền mặt thành công",
+        message: `Đơn hàng #${order._id} đã được thanh toán thành công, số tiền: ${order.totalAmount}đ, phương thức: TIỀN MẶT!`,
+      });
+      console.log(`🔔 [SOCKET + DB] Thanh toán tiền mặt: ${order.totalAmount}đ - ĐH: ${order._id}`);
     }
+
     // log nhật ký hoạt động
     await logActivity({
       user: req.user,
@@ -466,7 +476,33 @@ const getOrderById = async (req, res) => {
 const refundOrder = async (req, res) => {
   try {
     const { orderId: mongoId } = req.params; // _id từ params
-    const { employeeId, refundReason, items } = req.body; // Body: employeeId + lý do hoàn + danh sách sản phẩm
+    let { employeeId, refundReason, items } = req.body; // Body: employeeId + lý do hoàn + danh sách sản phẩm
+
+    // 👇 SỬA LẠI ĐOẠN NÀY
+    // Parse items nếu là string
+    if (typeof items === "string") {
+      try {
+        items = JSON.parse(items);
+      } catch (err) {
+        // Nếu parse fail, log ra để debug
+        console.error("❌ Parse items error:", err.message);
+        console.error("📦 Raw items value:", items);
+        return res.status(400).json({
+          message: "items phải là JSON array hợp lệ",
+          receivedValue: items,
+          error: err.message,
+        });
+      }
+    }
+
+    // Kiểm tra items sau khi parse
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({
+        message: "Danh sách sản phẩm hoàn không hợp lệ",
+        receivedValue: items,
+        receivedType: typeof items,
+      });
+    }
 
     // 1️⃣ Kiểm tra nhân viên
     const employee = await Employee.findById(employeeId);
@@ -501,11 +537,6 @@ const refundOrder = async (req, res) => {
         public_id: result.public_id,
         type: resourceType,
       });
-    }
-
-    // 4️⃣ Tính toán số lượng và tiền hoàn
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ message: "Danh sách sản phẩm hoàn không hợp lệ" });
     }
 
     let refundTotal = 0;
@@ -1034,15 +1065,199 @@ const exportTopSellingProducts = async (req, res) => {
   }
 };
 
+// 1) api/orders/list-paid, "getListPaidOrders ", (lấy danh sách các đơn đã thanh toán thành công, status là "paid")
+// 2) api/orders/list-refund, (Xem danh sách các order đã hoàn trả thành công, có 2 trạng thái là refunded và partially_refunded)
+// 3) /api/orders/order-refund/:orderId, ( để xem chi tiết 1 order đã hoàn trả thành công)
+
+const getListPaidOrders = async (req, res) => {
+  const { storeId } = req.query;
+  try {
+    const orders = await Order.find({ status: "paid", storeId })
+      .populate("storeId", "name")
+      .populate("employeeId", "fullName")
+      .populate("customer", "name phone")
+      .select("storeId employeeId customer totalAmount paymentMethod createdAt updatedAt")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.json({
+      message: "Lấy danh sách hóa đơn đã thanh toán thành công",
+      orders,
+    });
+  } catch (err) {
+    console.error("Lỗi khi lấy danh sách hóa đơn đã thanh toán:", err.message);
+    res.status(500).json({ message: "Lỗi server khi lấy danh sách hóa đơn đã thanh toán" });
+  }
+};
+
+const getListRefundOrders = async (req, res) => {
+  const { storeId } = req.query;
+  try {
+    const refundOrders = await Order.find({
+      storeId,
+      status: { $in: ["refunded", "partially_refunded"] },
+    })
+      .populate("storeId", "name")
+      .populate("employeeId", "fullName")
+      .populate("customer", "name phone")
+      .select("storeId employeeId customer totalAmount status createdAt updatedAt refundId")
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    res.json({
+      message: "Lấy danh sách đơn hoàn hàng thành công",
+      orders: refundOrders,
+    });
+  } catch (err) {
+    console.error("Lỗi khi lấy danh sách đơn hoàn hàng:", err.message);
+    res.status(500).json({ message: "Lỗi server khi lấy danh sách đơn hoàn hàng" });
+  }
+};
+
+const getOrderRefundDetail = async (req, res) => {
+  const { storeId } = req.query;
+  const { orderId } = req.params;
+
+  try {
+    // Lấy đơn hàng gốc
+    const order = await Order.findOne({ _id: orderId, storeId })
+      .populate("storeId", "name")
+      .populate("employeeId", "fullName")
+      .populate("customer", "name phone")
+      .lean();
+
+    if (!order) {
+      return res.status(404).json({
+        message: "Không tìm thấy đơn hàng hoặc không thuộc cửa hàng này",
+      });
+    }
+
+    // Nếu đơn có refundId thì lấy thêm chi tiết từ bảng OrderRefund
+    let refundDetail = null;
+    if (order.refundId) {
+      refundDetail = await OrderRefund.findById(order.refundId)
+        .populate("orderId", "totalAmount paymentMethod status")
+        .populate("refundedBy", "fullName")
+        .populate("refundItems.productId", "name price sku")
+        .lean();
+    }
+
+    // Nếu ông có OrderItem thì lấy danh sách sản phẩm của đơn gốc luôn
+    const orderItems = await OrderItem.find({ orderId }).populate("productId", "name price sku").lean();
+
+    return res.status(200).json({
+      message: "Lấy chi tiết đơn hoàn hàng thành công",
+      order,
+      refundDetail,
+      orderItems,
+    });
+  } catch (error) {
+    console.error("getOrderRefundDetail error:", error);
+    res.status(500).json({ message: "Lỗi server khi lấy chi tiết đơn hoàn hàng" });
+  }
+};
+
+// Lấy toàn bộ danh sách đơn hàng (mọi trạng thái)
+const getOrderListAll = async (req, res) => {
+  try {
+    const { storeId } = req.query;
+
+    // Query toàn bộ đơn của cửa hàng hiện tại
+    const orders = await Order.find({ storeId })
+      .populate("storeId", "name") // tên cửa hàng
+      .populate("employeeId", "fullName") // nhân viên
+      .populate("customer", "name phone") // khách hàng
+      .sort({ createdAt: -1 }) // mới nhất lên đầu
+      .lean();
+
+    res.json({
+      message: "Lấy danh sách tất cả đơn hàng thành công",
+      total: orders.length,
+      orders,
+    });
+  } catch (err) {
+    console.error("Lỗi khi lấy danh sách đơn hàng:", err.message);
+    res.status(500).json({ message: "Lỗi server khi lấy danh sách đơn hàng" });
+  }
+};
+
+const getOrderStats = async (req, res) => {
+  try {
+    const { storeId, periodType = "year", periodKey, monthFrom, monthTo } = req.query;
+    const { start, end } = periodToRange(periodType, periodKey, monthFrom, monthTo);
+
+    // Lấy ra danh sách orderId của cửa hàng trong khoảng thời gian
+    const orders = await Order.find({
+      storeId,
+      createdAt: { $gte: start, $lte: end },
+    })
+      .select("_id status")
+      .lean();
+
+    const orderIds = orders.map((o) => o._id);
+
+    // Đếm đơn từng trạng thái
+    const total = orders.length;
+    const pending = orders.filter((o) => o.status === "pending").length;
+    const refunded = orders.filter((o) => ["refunded", "partially_refunded"].includes(o.status)).length;
+    const paid = orders.filter((o) => o.status === "paid").length;
+
+    // ✅ Tổng số lượng sản phẩm bán ra (theo order_items)
+    const orderItems = await OrderItem.find({
+      orderId: { $in: orderIds },
+      createdAt: { $gte: start, $lte: end },
+    })
+      .select("quantity")
+      .lean();
+
+    const totalSoldItems = orderItems.reduce((sum, i) => sum + (i.quantity || 0), 0);
+
+    // ✅ Tổng số lượng sản phẩm bị hoàn trả (theo order_refunds)
+    const refundDocs = await OrderRefund.find({
+      orderId: { $in: orderIds },
+      refundedAt: { $gte: start, $lte: end },
+    })
+      .select("refundItems.quantity")
+      .lean();
+
+    const totalRefundedItems = refundDocs.reduce((sum, refund) => {
+      const refundCount = refund.refundItems?.reduce((a, i) => a + (i.quantity || 0), 0) || 0;
+      return sum + refundCount;
+    }, 0);
+
+    // Số lượng hàng thực bán (sau khi trừ hoàn)
+    const netSoldItems = totalSoldItems - totalRefundedItems;
+
+    res.json({
+      message: "Lấy số liệu thống kê đơn hàng thành công",
+      total,
+      pending,
+      refunded,
+      paid,
+      totalSoldItems,
+      totalRefundedItems,
+      netSoldItems: netSoldItems >= 0 ? netSoldItems : 0, // Đây chính là “Số lượng hàng thực bán”
+    });
+  } catch (err) {
+    console.error("Lỗi khi lấy thống kê đơn:", err.message);
+    res.status(500).json({ message: "Lỗi server khi lấy thống kê đơn hàng" });
+  }
+};
+
 module.exports = {
   createOrder,
   setPaidCash,
   printBill,
   vietqrReturn,
   vietqrCancel,
-  getOrderById,
-  refundOrder,
   getTopSellingProducts,
   getTopFrequentCustomers,
   exportTopSellingProducts,
+  getOrderById,
+  getOrderStats,
+  refundOrder,
+  getListPaidOrders,
+  getListRefundOrders,
+  getOrderRefundDetail,
+  getOrderListAll,
 };

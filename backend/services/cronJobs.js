@@ -182,10 +182,9 @@ cron.schedule("0 3 * * *", async () => {
       sub.status = "EXPIRED";
       await sub.save();
 
-      // Update User status
+      // Update User is_premium flag
       const user = await User.findById(sub.user_id);
       if (user) {
-        user.subscription_status = "EXPIRED";
         user.is_premium = false;
         await user.save();
         console.log(`❌ Trial expired for user ${user.username}`);
@@ -202,10 +201,9 @@ cron.schedule("0 3 * * *", async () => {
       sub.status = "EXPIRED";
       await sub.save();
 
-      // Update User status
+      // Update User is_premium flag
       const user = await User.findById(sub.user_id);
       if (user) {
-        user.subscription_status = "EXPIRED";
         user.is_premium = false;
         await user.save();
         console.log(`❌ Premium expired for user ${user.username}`);

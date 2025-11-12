@@ -3,6 +3,7 @@ const express = require("express");
 const router = express.Router();
 
 const auth = require("../middlewares/authMiddleware");
+const { checkSubscriptionExpiry } = require("../middlewares/subscriptionMiddleware");
 const storeController = require("../controllers/store/storeController");
 
 const { verifyToken, isManager, checkStoreAccess, requirePermission } = auth;
@@ -34,6 +35,7 @@ const { verifyToken, isManager, checkStoreAccess, requirePermission } = auth;
 router.post(
   "/ensure-store",
   verifyToken,
+  checkSubscriptionExpiry,
   requirePermission("store:dashboard:view"),
   storeController.ensureStore
 );
@@ -42,6 +44,7 @@ router.post(
 router.post(
   "/",
   verifyToken,
+  checkSubscriptionExpiry,
   requirePermission("store:create"),
   isManager,
   storeController.createStore
@@ -51,6 +54,7 @@ router.post(
 router.get(
   "/",
   verifyToken,
+  checkSubscriptionExpiry,
   requirePermission("store:view"),
   isManager,
   storeController.getStoresByManager
@@ -60,6 +64,7 @@ router.get(
 router.get(
   "/:storeId",
   verifyToken,
+  checkSubscriptionExpiry,
   checkStoreAccess,
   requirePermission("store:view"),
   storeController.getStoreById
@@ -69,6 +74,7 @@ router.get(
 router.put(
   "/:storeId",
   verifyToken,
+  checkSubscriptionExpiry,
   checkStoreAccess,
   isManager,
   requirePermission("store:update"),
@@ -79,6 +85,7 @@ router.put(
 router.delete(
   "/:storeId",
   verifyToken,
+  checkSubscriptionExpiry,
   checkStoreAccess,
   isManager,
   requirePermission("store:delete"),
@@ -93,6 +100,7 @@ router.delete(
 router.post(
   "/select/:storeId",
   verifyToken,
+  checkSubscriptionExpiry,
   requirePermission("store:view"),
   storeController.selectStore
 );
@@ -101,6 +109,7 @@ router.post(
 router.get(
   "/:storeId/dashboard",
   verifyToken,
+  checkSubscriptionExpiry,
   checkStoreAccess,
   requirePermission("store:dashboard:view"),
   storeController.getStoreDashboard
@@ -114,6 +123,7 @@ router.get(
 router.post(
   "/:storeId/assign-staff",
   verifyToken,
+  checkSubscriptionExpiry,
   checkStoreAccess,
   requirePermission("store:staff:assign"),
   storeController.assignStaffToStore
@@ -127,6 +137,7 @@ router.post(
 router.post(
   "/:storeId/employees",
   verifyToken,
+  checkSubscriptionExpiry,
   checkStoreAccess,
   isManager,
   requirePermission("store:employee:create"),
@@ -137,6 +148,7 @@ router.post(
 router.get(
   "/:storeId/employees",
   verifyToken,
+  checkSubscriptionExpiry,
   checkStoreAccess,
   isManager,
   requirePermission("store:employee:view"),
@@ -147,6 +159,7 @@ router.get(
 router.get(
   "/:storeId/employees/:id",
   verifyToken,
+  checkSubscriptionExpiry,
   checkStoreAccess,
   isManager,
   requirePermission("store:employee:view"),
@@ -157,6 +170,7 @@ router.get(
 router.put(
   "/:storeId/employees/:id",
   verifyToken,
+  checkSubscriptionExpiry,
   checkStoreAccess,
   isManager,
   requirePermission("store:employee:update"),
@@ -167,6 +181,7 @@ router.put(
 router.delete(
   "/:storeId/employees/:id/soft",
   verifyToken,
+  checkSubscriptionExpiry,
   checkStoreAccess,
   isManager,
   requirePermission("store:employee:softDelete"),
@@ -177,6 +192,7 @@ router.delete(
 router.put(
   "/:storeId/employees/:id/restore",
   verifyToken,
+  checkSubscriptionExpiry,
   checkStoreAccess,
   isManager,
   requirePermission("store:employee:restore"),

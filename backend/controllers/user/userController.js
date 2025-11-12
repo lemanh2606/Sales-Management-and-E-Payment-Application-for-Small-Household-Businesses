@@ -134,7 +134,12 @@ const ALL_PERMISSIONS = [
   "settings:activity-log",
   "settings:payment-method",
   "notifications:view",
+  // subscription
   "subscription:view",
+  "subscription:manage",
+  "subscription:activate",
+  "subscription:cancel",
+  "subscription:history",
   "file:view",
 ];
 /* ------------------------- 
@@ -243,13 +248,13 @@ const registerManager = async (req, res) => {
 
     await newUser.save();
 
-    // 🎁 Tự động tạo 14-day Trial subscription
+    // 🎁 Tự động tạo Trial 14 ngày cho user mới
     try {
       await Subscription.createTrial(newUser._id);
-      console.log(`✅ Đã tạo Trial 14 ngày cho user ${newUser.username}`);
+      console.log(`✅ Đã tạo Trial 14 ngày cho user mới ${newUser.username}`);
     } catch (trialErr) {
       console.error("⚠️ Không thể tạo trial subscription:", trialErr.message);
-      // Không fail registration, chỉ log warning
+      // Không fail registration, user cũ sẽ auto-create khi access lần đầu
     }
 
     // Gửi email OTP

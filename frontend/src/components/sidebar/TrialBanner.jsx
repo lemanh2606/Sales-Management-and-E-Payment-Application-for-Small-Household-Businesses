@@ -3,16 +3,21 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { X, Sparkles, Clock, ArrowRight } from "lucide-react";
 import subscriptionApi from "../../api/subscriptionApi";
+import { useAuth } from "../../context/AuthContext";
 
 const TrialBanner = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [visible, setVisible] = useState(false);
   const [subscription, setSubscription] = useState(null);
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    checkSubscription();
-  }, []);
+    // Chỉ check subscription nếu user là MANAGER
+    if (user?.role === "MANAGER") {
+      checkSubscription();
+    }
+  }, [user]);
 
   const checkSubscription = async () => {
     try {
@@ -34,6 +39,11 @@ const TrialBanner = () => {
         setVisible(true);
       }
     } catch (error) {
+      // Nếu là STAFF hoặc không có quyền → Không hiện banner (silent fail)
+      if (error.response?.status === 403) {
+        console.log("User không có subscription (STAFF hoặc không đủ quyền)");
+        return;
+      }
       console.error("Error checking subscription:", error);
     }
   };

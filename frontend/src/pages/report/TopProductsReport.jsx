@@ -1,20 +1,6 @@
 // src/pages/report/TopProductsReport.jsx
 import React, { useState, useEffect } from "react";
-import {
-  Card,
-  Col,
-  Row,
-  Select,
-  InputNumber,
-  Button,
-  Table,
-  Space,
-  Typography,
-  Spin,
-  Alert,
-  Dropdown,
-  Menu,
-} from "antd";
+import { Card, Col, Row, Select, InputNumber, Button, Table, Space, Typography, Spin, Alert, Dropdown, Menu } from "antd";
 import { SearchOutlined, FileExcelOutlined, FilePdfOutlined, DownloadOutlined } from "@ant-design/icons";
 import axios from "axios";
 import Layout from "../../components/Layout";

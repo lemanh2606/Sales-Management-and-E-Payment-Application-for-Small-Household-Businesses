@@ -1,128 +1,250 @@
 // middlewares/subscriptionMiddleware.js
+const Subscription = require("../models/Subscription");
 
 /**
  * Middleware kiểm tra subscription đã hết hạn chưa
- * Chặn user nếu:
- * - Trial đã hết hạn
- * - Premium đã hết hạn
- * Cho phép nếu:
- * - Trial còn hạn
- * - Premium còn hạn
+ * Check từ Subscription model thay vì User model
+ * Auto-create trial nếu không có subscription (chỉ cho MANAGER)
+ * STAFF kế thừa subscription từ Manager của store
+ * 
+ * Whitelist: Manager được truy cập activity log và profile khi expired
  */
-const checkSubscriptionExpiry = (req, res, next) => {
+const checkSubscriptionExpiry = async (req, res, next) => {
   const user = req.user;
   
   if (!user) {
     return res.status(401).json({ message: "Chưa đăng nhập" });
   }
 
-  const now = new Date();
+  // Whitelist: Các endpoint Manager ĐƯỢC TRUY CẬP khi subscription expired
+  const allowedPaths = [
+    '/api/activity-logs',           // Activity log endpoints
+    '/api/users/profile',            // Profile update
+    '/api/users/password',           // Change password
+    '/api/subscriptions',            // Subscription endpoints (để gia hạn)
+    '/api/stores',                   // Store endpoints (cần để lấy thông tin cửa hàng)
+  ];
 
-  // Case 1: TRIAL
-  if (user.subscription_status === "TRIAL") {
-    if (!user.trial_ends_at || now < user.trial_ends_at) {
-      // Trial còn hạn → OK
-      return next();
-    } else {
-      // Trial hết hạn
-      return res.status(403).json({
-        message: "Bản dùng thử đã hết hạn. Vui lòng nâng cấp lên Premium.",
-        subscription_status: "EXPIRED",
-        trial_ended_at: user.trial_ends_at,
-        upgrade_required: true,
-      });
-    }
+  // Kiểm tra nếu request path nằm trong whitelist
+  const isAllowedPath = allowedPaths.some(path => req.path.startsWith(path) || req.originalUrl.includes(path));
+  
+  // Nếu là Manager và đang ở path được phép, bỏ qua check subscription
+  if (user.role === "MANAGER" && isAllowedPath) {
+    return next();
   }
 
-  // Case 2: PREMIUM
-  if (user.subscription_status === "PREMIUM") {
-    if (user.is_premium && user.premium_expires_at && now < user.premium_expires_at) {
-      // Premium còn hạn → OK
-      return next();
-    } else {
-      // Premium hết hạn
-      return res.status(403).json({
-        message: "Gói Premium đã hết hạn. Vui lòng gia hạn.",
-        subscription_status: "EXPIRED",
-        premium_expired_at: user.premium_expires_at,
-        renew_required: true,
-      });
-    }
-  }
+  try {
+    let subscription;
+    let managerId = user._id;
 
-  // Case 3: EXPIRED hoặc status khác
-  return res.status(403).json({
-    message: "Tài khoản đã hết hạn. Vui lòng nâng cấp hoặc gia hạn.",
-    subscription_status: user.subscription_status,
-    upgrade_required: true,
-  });
+    // STAFF kế thừa subscription từ Manager của store
+    if (user.role === "STAFF") {
+      // Tìm store hiện tại của STAFF
+      const Store = require("../models/Store");
+      const store = await Store.findById(user.current_store);
+      
+      if (!store) {
+        return res.status(403).json({ 
+          message: "Không tìm thấy cửa hàng",
+          subscription_required: true
+        });
+      }
+
+      // Lấy subscription của Manager (owner)
+      managerId = store.owner_id;
+      subscription = await Subscription.findActiveByUser(managerId);
+
+      if (!subscription || subscription.status === "EXPIRED" || 
+          (!subscription.is_trial_active && !subscription.is_premium_active)) {
+        return res.status(403).json({
+          message: "Chủ cửa hàng đã hết hạn gói đăng ký. Vui lòng liên hệ quản lý để gia hạn.",
+          subscription_status: "EXPIRED",
+          is_staff: true,
+          manager_expired: true,
+          upgrade_required: true,
+        });
+      }
+
+      // STAFF pass nếu Manager còn subscription active
+      return next();
+    }
+
+    // MANAGER - Tìm subscription của chính mình
+    subscription = await Subscription.findActiveByUser(user._id);
+
+    // Auto-create trial CHỈ nếu CHƯA TỪNG có subscription (chỉ cho MANAGER)
+    if (!subscription) {
+      if (user.role !== "MANAGER") {
+        return res.status(403).json({ 
+          message: "Chỉ MANAGER mới có subscription",
+          subscription_required: true
+        });
+      }
+      
+      // Kiểm tra xem có subscription cũ (EXPIRED/CANCELLED) không
+      const anySubscription = await Subscription.findOne({ user_id: user._id });
+      
+      if (!anySubscription) {
+        // Chưa từng có → Tạo trial mới
+        console.log("🎁 Auto-creating trial for MANAGER:", user._id);
+        subscription = await Subscription.createTrial(user._id);
+      } else {
+        // Đã từng có → Dùng subscription cũ
+        subscription = anySubscription;
+        console.log("📋 Using existing subscription:", subscription._id, subscription.status);
+      }
+    }
+
+    const now = new Date();
+
+    // Case 1: TRIAL
+    if (subscription.status === "TRIAL") {
+      if (subscription.is_trial_active) {
+        // Trial còn hạn → OK
+        return next();
+      } else {
+        // Trial hết hạn
+        subscription.status = "EXPIRED";
+        await subscription.save();
+        
+        return res.status(403).json({
+          message: "Bản dùng thử đã hết hạn. Vui lòng nâng cấp lên Premium.",
+          subscription_status: "EXPIRED",
+          trial_ended_at: subscription.trial_ends_at,
+          upgrade_required: true,
+        });
+      }
+    }
+
+    // Case 2: ACTIVE (Premium)
+    if (subscription.status === "ACTIVE") {
+      if (subscription.is_premium_active) {
+        // Premium còn hạn → OK
+        return next();
+      } else {
+        // Premium hết hạn
+        subscription.status = "EXPIRED";
+        await subscription.save();
+        
+        // Update user is_premium flag
+        user.is_premium = false;
+        await user.save();
+        
+        return res.status(403).json({
+          message: "Gói Premium đã hết hạn. Vui lòng gia hạn.",
+          subscription_status: "EXPIRED",
+          premium_expired_at: subscription.expires_at,
+          renew_required: true,
+        });
+      }
+    }
+
+    // Case 3: EXPIRED hoặc status khác
+    return res.status(403).json({
+      message: "Tài khoản đã hết hạn. Vui lòng nâng cấp hoặc gia hạn.",
+      subscription_status: subscription.status,
+      upgrade_required: true,
+    });
+    
+  } catch (error) {
+    console.error("Error in checkSubscriptionExpiry:", error);
+    return res.status(500).json({ message: "Lỗi server khi kiểm tra subscription" });
+  }
 };
 
 /**
  * Middleware check premium (nếu cần feature chỉ premium)
- * Hiện tại theo concept "trial dùng hết", có thể không cần
- * Nhưng giữ lại để sau này có thể dùng cho premium-only features
+ * Check từ Subscription model
  */
-const checkPremiumOnly = (req, res, next) => {
+/**
+ * Middleware check chỉ Premium mới dùng được
+ * STAFF kế thừa từ Manager
+ */
+const checkPremiumOnly = async (req, res, next) => {
   const user = req.user;
 
   if (!user) {
     return res.status(401).json({ message: "Chưa đăng nhập" });
   }
 
-  if (user.is_premium && user.subscription_status === "PREMIUM") {
-    const now = new Date();
-    if (user.premium_expires_at && now < user.premium_expires_at) {
+  try {
+    let subscription;
+    let managerId = user._id;
+
+    // STAFF kế thừa subscription từ Manager
+    if (user.role === "STAFF") {
+      const Store = require("../models/Store");
+      const store = await Store.findById(user.current_store);
+      
+      if (!store) {
+        return res.status(403).json({ 
+          message: "Không tìm thấy cửa hàng",
+        });
+      }
+
+      managerId = store.owner_id;
+      subscription = await Subscription.findActiveByUser(managerId);
+    } else {
+      subscription = await Subscription.findActiveByUser(user._id);
+    }
+
+    if (subscription && subscription.status === "ACTIVE" && subscription.is_premium_active) {
       return next();
     }
-  }
 
-  return res.status(403).json({
-    message: "Tính năng này chỉ dành cho Premium",
-    is_premium: user.is_premium,
-    subscription_status: user.subscription_status,
-    upgrade_url: "/pricing",
-  });
+    return res.status(403).json({
+      message: user.role === "STAFF" 
+        ? "Chủ cửa hàng cần nâng cấp Premium để sử dụng tính năng này"
+        : "Tính năng này chỉ dành cho Premium",
+      is_premium: false,
+      subscription_status: subscription?.status || "NONE",
+      upgrade_url: "/settings/subscription/pricing",
+      is_staff: user.role === "STAFF",
+    });
+  } catch (error) {
+    console.error("Error in checkPremiumOnly:", error);
+    return res.status(500).json({ message: "Lỗi server" });
+  }
 };
 
 /**
  * Middleware thêm thông tin subscription vào response
  * Để frontend biết còn bao nhiêu ngày
  */
-const attachSubscriptionInfo = (req, res, next) => {
+const attachSubscriptionInfo = async (req, res, next) => {
   const user = req.user;
   
   if (!user) {
     return next();
   }
 
-  // Attach subscription info
-  req.subscription_info = {
-    status: user.subscription_status,
-    is_premium: user.is_premium,
-  };
+  try {
+    const subscription = await Subscription.findActiveByUser(user._id);
 
-  const now = new Date();
+    // Attach subscription info
+    req.subscription_info = {
+      status: subscription?.status || "NONE",
+      is_premium: user.is_premium,
+    };
 
-  if (user.subscription_status === "TRIAL" && user.trial_ends_at) {
-    const daysRemaining = Math.max(
-      0,
-      Math.ceil((user.trial_ends_at - now) / (1000 * 60 * 60 * 24))
-    );
-    req.subscription_info.trial_days_remaining = daysRemaining;
-    req.subscription_info.trial_ends_at = user.trial_ends_at;
+    // Add days remaining
+    if (subscription) {
+      if (subscription.status === "TRIAL" && subscription.trial_ends_at) {
+        req.subscription_info.trial_days_remaining = subscription.days_remaining;
+        req.subscription_info.trial_ends_at = subscription.trial_ends_at;
+      }
+
+      if (subscription.status === "ACTIVE" && subscription.expires_at) {
+        req.subscription_info.premium_days_remaining = subscription.days_remaining;
+        req.subscription_info.premium_expires_at = subscription.expires_at;
+      }
+    }
+
+    next();
+  } catch (error) {
+    console.error("Error in attachSubscriptionInfo:", error);
+    next(); // Continue even if error
   }
-
-  if (user.subscription_status === "PREMIUM" && user.premium_expires_at) {
-    const daysRemaining = Math.max(
-      0,
-      Math.ceil((user.premium_expires_at - now) / (1000 * 60 * 60 * 24))
-    );
-    req.subscription_info.premium_days_remaining = daysRemaining;
-    req.subscription_info.premium_expires_at = user.premium_expires_at;
-  }
-
-  next();
 };
 
 module.exports = {

@@ -109,6 +109,8 @@ const financialRouters = require("./routers/financialRouters");
 const activityLogRouters = require("./routers/activityLogRouters");
 const fileRouters = require("./routers/fileRouters");
 const subscriptionRouters = require("./routers/subscriptionRouters");
+const notificationRouters = require("./routers/notificationRouters");
+
 
 // --- MOUNT ROUTERS ---
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
@@ -130,6 +132,7 @@ app.use("/api/financials", financialRouters);
 app.use("/api/activity-logs", activityLogRouters);
 app.use("/api/files", fileRouters);
 app.use("/api/subscriptions", subscriptionRouters);
+app.use("/api/notifications", notificationRouters);
 
 // --- ROOT ---
 app.get("/", (req, res) => {
