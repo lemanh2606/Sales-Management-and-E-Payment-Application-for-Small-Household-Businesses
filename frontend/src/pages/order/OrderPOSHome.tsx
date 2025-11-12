@@ -181,8 +181,9 @@ const OrderPOSHome: React.FC = () => {
   useEffect(() => {
     const s = io(SOCKET_URL, { auth: { token } });
     setSocket(s);
-    s.on("payment_success", () => {
+    s.on("payment_success", (data) => {
       message.success("Thanh toán QR thành công!");
+      setPendingOrderId(data.ref || data.orderId);
       setBillModalOpen(true);
     });
     return () => {
@@ -416,22 +417,19 @@ const OrderPOSHome: React.FC = () => {
       const orderId = order._id;
 
       // set thông tin cho modal in hóa đơn (an toàn với undefined/null)
+      setPendingOrderId(orderId);
       setOrderCreatedAt(order.createdAt || "");
       setOrderPrintCount(typeof order.printCount === "number" ? order.printCount : 0);
       setOrderEarnedPoints((order as any).earnedPoints ?? 0);
-      // set pending order id
-      setPendingOrderId(orderId);
 
       if (currentTab.paymentMethod === "qr" && res.data.qrDataURL) {
         setQrImageUrl(res.data.qrDataURL);
         setQrExpiryTs(res.data.order?.qrExpiry ? new Date(res.data.order.qrExpiry).getTime() : null);
         setPendingOrderId(orderId);
         message.success("QR đã tạo, chờ thanh toán...");
-        setBillModalOpen(true);
       } else {
         setPendingOrderId(orderId);
         message.success("Đơn hàng đã tạo! Vui lòng xác nhận thanh toán tiền mặt.");
-        setBillModalOpen(true);
       }
     } catch (err: any) {
       message.error(err.response?.data?.message || "Lỗi tạo đơn");

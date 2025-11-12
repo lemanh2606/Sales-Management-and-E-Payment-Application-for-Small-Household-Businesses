@@ -1,5 +1,6 @@
 // routers/orderWebhookHandler.js
 const { verifyPaymentWithPayOS } = require("../services/payOSService");
+const Notification = require("../models/Notification");
 
 module.exports = async (req, res) => {
   try {
@@ -35,7 +36,17 @@ module.exports = async (req, res) => {
           method: "qr",
           message: `Đơn hàng ${parsed.data?.orderCode} (QR) đã thanh toán thành công!`,
         });
-        console.log(`🔔 [SOCKET] Gửi thông báo: Chuyển khoản QR thành công, số tiền (${parsed.data?.amount}đ) - Mã đơn hàng: ${parsed.data?.orderCode}`);
+
+        // 🧠 Lưu thông báo vào DB
+        await Notification.create({
+          storeId: parsed.data?.storeId, // nếu có trong payload, không thì thêm field này từ order lookup sau cũng được
+          userId: null, // webhook thì ko có user trực tiếp, để null
+          type: "payment",
+          title: "Thanh toán QR thành công",
+          message: `Đơn hàng #${parsed.data?.orderCode} đã thanh toán thành công, số tiền: ${parsed.data?.amount}đ, phương thức: QRCode`,
+        });
+
+        console.log(`🔔 [SOCKET + DB] Thanh toán QR: ${parsed.data?.amount}đ - ĐH: ${parsed.data?.orderCode}`);
       }
 
       return res.status(200).json({ message: "Webhook received" });

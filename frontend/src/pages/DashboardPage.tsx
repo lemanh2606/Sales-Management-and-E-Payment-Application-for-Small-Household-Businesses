@@ -1,3 +1,4 @@
+// src/pages/DashboardPage.tsx
 import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import Layout from "../components/Layout";
@@ -36,10 +37,12 @@ import {
 import type { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import axios from "axios";
+// import Swal from "sweetalert2";
 import "./DashboardPage.css";
+import NotificationPanel from "./NotificationPanel";
 import { io } from "socket.io-client";
 
-const socket = io("http://localhost:9999/api"); //làm sau
+const socket = io("http://localhost:9999", { auth: { token: localStorage.getItem("token") } }); // Kết nối socket với token
 
 const { Title, Text } = Typography;
 
@@ -96,7 +99,9 @@ export default function DashboardPage() {
   const currentStore = JSON.parse(localStorage.getItem("currentStore") || "{}");
   const storeId = currentStore?._id;
   const now = dayjs();
-  const [count, setCount] = useState(0); //làm sau
+
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [panelVisible, setPanelVisible] = useState(false);
 
   const [showOnboardingCard, setShowOnboardingCard] = useState(true);
   const [cardVisible, setCardVisible] = useState(true);
@@ -163,12 +168,43 @@ export default function DashboardPage() {
     ];
   });
 
+  useEffect(() => {
+    // 1. Fetch lần đầu
+    const fetchInitialUnreadCount = async () => {
+      if (!storeId) return;
+      try {
+        const token = localStorage.getItem("token");
+        const res = await axios.get(`http://localhost:9999/api/notifications?storeId=${storeId}&read=false&limit=1`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setUnreadCount(res.data.meta.total || 0);
+      } catch (err) {
+        console.error("Lỗi tải số thông báo chưa đọc:", err);
+      }
+    };
+    fetchInitialUnreadCount();
+    // 2. Lắng nghe event từ NotificationPanel
+    const handleNotificationUpdate = (e: Event) => {
+      const event = e as CustomEvent<{ unreadCount: number }>;
+      if (event.detail?.unreadCount !== undefined) {
+        setUnreadCount(event.detail.unreadCount);
+      }
+    };
+    window.addEventListener("notifications:updated", handleNotificationUpdate);
+    // 3. Lắng nghe socket (payment_success)
+    socket.on("payment_success", () => {
+      setUnreadCount((prev) => prev + 1);
+    });
+    return () => {
+      window.removeEventListener("notifications:updated", handleNotificationUpdate);
+      socket.off("payment_success");
+    };
+  }, [storeId]);
+
   const fetchTopProductsDashboard = async () => {
     if (!storeId) return;
-
     setLoadingTopProducts(true);
     setErrorTopProducts(null);
-
     try {
       const token = localStorage.getItem("token");
       const params = new URLSearchParams();
@@ -195,10 +231,8 @@ export default function DashboardPage() {
 
   const fetchRevenueSummary = async () => {
     if (!storeId) return;
-
     setLoadingRevenue(true);
     setErrorRevenue(null);
-
     try {
       const token = localStorage.getItem("token");
       const now = dayjs();
@@ -282,7 +316,6 @@ export default function DashboardPage() {
         headers: { Authorization: `Bearer ${token}` },
       })
       .then((res) => {
-        console.log("API /stats response:", res.data); // Debug
         // Chỉ lấy 4 số liệu, bỏ qua mảng orders
         const { total, pending, refunded, paid, totalSoldItems, totalRefundedItems, netSoldItems } = res.data;
         setOrderStats({ total, pending, refunded, paid, totalSoldItems, totalRefundedItems, netSoldItems });
@@ -475,10 +508,15 @@ export default function DashboardPage() {
             <QuestionCircleOutlined style={{ fontSize: 20, color: "#8c8c8c", cursor: "pointer" }} />
           </Dropdown>
 
-          {/* Icon chuông - chỉ để trang trí, gắn socket sau */}
-          <Badge count={0} showZero>
-            <BellOutlined style={{ fontSize: 20, color: "#8c8c8c" }} />
+          {/* Icon chuông - Dropdown riêng */}
+          <Badge count={unreadCount} overflowCount={99}>
+            <BellOutlined
+              style={{ fontSize: 20, color: "#474646", cursor: "pointer" }}
+              onClick={() => setPanelVisible(true)}
+            />
           </Badge>
+          {/* Phần Panel Chuông  */}
+          <NotificationPanel storeId={storeId} visible={panelVisible} onClose={() => setPanelVisible(false)} />
         </div>
       </div>
 
