@@ -33,13 +33,18 @@ import {
   LaptopOutlined,
   SearchOutlined,
   CustomerServiceOutlined,
+  UserOutlined,
+  CreditCardOutlined,
+  FileTextOutlined,
+  LockOutlined,
+  DownOutlined,
 } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import axios from "axios";
 // import Swal from "sweetalert2";
 import "./DashboardPage.css";
-import NotificationPanel from "./NotificationPanel";
+import NotificationPanel from "../pages/setting/NotificationPanel";
 import { io } from "socket.io-client";
 
 const socket = io("http://localhost:9999", { auth: { token: localStorage.getItem("token") } }); // Kết nối socket với token
@@ -517,6 +522,67 @@ export default function DashboardPage() {
           </Badge>
           {/* Phần Panel Chuông  */}
           <NotificationPanel storeId={storeId} visible={panelVisible} onClose={() => setPanelVisible(false)} />
+
+          {/* Phần avata và dropdown */}
+          <Dropdown
+            placement="bottomRight"
+            trigger={["click"]}
+            overlay={
+              <Menu style={{ width: 220 }}>
+                <Menu.Item key="profile" icon={<UserOutlined />}>
+                  <Link to="/settings/profile" style={{ color: "inherit", textDecoration: "none" }}>
+                    Tài khoản của bạn
+                  </Link>
+                </Menu.Item>
+                <Menu.Item key="package" icon={<CreditCardOutlined />}>
+                  <Link to="/settings/subscription" style={{ color: "inherit", textDecoration: "none" }}>
+                    Thông tin gói dịch vụ
+                  </Link>
+                </Menu.Item>
+                <Menu.Divider />
+                <Menu.Item key="terms" icon={<FileTextOutlined />}>
+                  <Link to="/terms" style={{ color: "inherit", textDecoration: "none" }}>
+                    Điều khoản dịch vụ
+                  </Link>
+                </Menu.Item>
+
+                <Menu.Item key="privacy" icon={<LockOutlined />}>
+                  <Link to="/privacy" style={{ color: "inherit", textDecoration: "none" }}>
+                    Chính sách bảo mật
+                  </Link>
+                </Menu.Item>
+              </Menu>
+            }
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                cursor: "pointer",
+                gap: 8,
+                padding: "4px 8px",
+                borderRadius: 6,
+                transition: "background 0.2s",
+                backgroundColor: "#f5f5f5",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "#ecebebff")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+            >
+              <img
+                src={user?.image || "https://cdn-icons-png.flaticon.com/512/9131/9131529.png"}
+                alt="avatar"
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: "50%",
+                  objectFit: "cover",
+                  border: "2px solid #9a0505ff",
+                }}
+              />
+              <span style={{ fontWeight: 500, color: "#595959" }}>{user?.fullname || "Người dùng"}</span>
+              <DownOutlined style={{ fontSize: 12, color: "#8c8c8c" }} />
+            </div>
+          </Dropdown>
         </div>
       </div>
 

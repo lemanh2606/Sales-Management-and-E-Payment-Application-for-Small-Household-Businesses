@@ -1,6 +1,6 @@
 // src/pages/NotificationPanel.tsx
 import React, { useState, useEffect } from "react";
-import { Drawer, Button, Space, Spin, Empty, message, Dropdown, Menu, Badge } from "antd";
+import { Drawer, Button, Space, Spin, Empty, Dropdown, Menu, Badge } from "antd";
 import { CheckOutlined, MoreOutlined, BellOutlined } from "@ant-design/icons";
 import axios from "axios";
 import dayjs from "dayjs";
@@ -51,7 +51,15 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ storeId, visible,
       setNotifications(res.data.data);
       setUnreadCount(res.data.meta.totalUnread || res.data.data.filter((n: Notification) => !n.read).length);
     } catch (err) {
-      message.error("Lỗi tải thông báo");
+      Swal.fire({
+        icon: "error",
+        title: "Lỗi",
+        text: "Lỗi tải thông báo",
+        confirmButtonText: "Đóng",
+        confirmButtonColor: "#d33",
+        timer: 2000,
+        timerProgressBar: true,
+      });
     } finally {
       setLoading(false);
     }
@@ -98,7 +106,13 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ storeId, visible,
       const newCount = 0;
       setUnreadCount(newCount);
       window.dispatchEvent(new CustomEvent("notifications:updated", { detail: { unreadCount: newCount } }));
-      message.success("Đã đánh dấu tất cả là đã đọc");
+      Swal.fire({
+        icon: "success",
+        title: "Thành công",
+        text: "Đã đánh dấu tất cả là đã đọc",
+        timer: 2000,
+        timerProgressBar: true,
+      });
     } catch (err) {
       Swal.fire({
         icon: "error",
