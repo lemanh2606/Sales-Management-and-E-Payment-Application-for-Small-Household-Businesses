@@ -35,6 +35,7 @@ import ReportDashboard from "./pages/report/ReportDashboard";
 import RevenueReport from "./pages/report/RevenueReport";
 import TaxDeclaration from "./pages/report/TaxDeclaration";
 import TopProductsReport from "./pages/report/TopProductsReport";
+import InventoryReport from "./pages/report/InventoryReport";
 // ⚙️ Settings
 import Profile from "./pages/setting/Profile";
 import PricingPage from "./pages/setting/PricingPage";
@@ -327,6 +328,14 @@ function App() {
           element={
             <ProtectedRoute allowedPermissions="reports:top-products">
               <TopProductsReport />
+            </ProtectedRoute>
+          }
+        /> InventoryReport
+        <Route
+          path="/reports/inventory-reports"
+          element={
+            <ProtectedRoute allowedPermissions="inventory:stock-check:view">
+              <InventoryReport />
             </ProtectedRoute>
           }
         />
