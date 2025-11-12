@@ -1,39 +1,29 @@
-// src/components/StoreDetailModal.jsx
-import React, { useEffect, useRef } from "react";
-import { motion } from "framer-motion";
+// src/components/store/StoreDetailModal.jsx
+import React from "react";
+import { Modal, Card, Row, Col, Space, Button, Tag, Descriptions, Avatar, Divider, Typography } from "antd";
+import {
+    EditOutlined,
+    CheckCircleOutlined,
+    DeleteOutlined,
+    ShopOutlined,
+    PhoneOutlined,
+    EnvironmentOutlined,
+    ClockCircleOutlined,
+    UserOutlined,
+    CalendarOutlined,
+    InfoCircleOutlined,
+    GlobalOutlined,
+    TagsOutlined,
+    DashboardOutlined,
+} from "@ant-design/icons";
 
-/**
- * Safe Store Detail Modal
- * - centered, responsive, never hides behind top bar
- * - pressing Sửa will close modal then call onEdit(store)
- *
- * Props:
- * - open, onClose, store, onEdit, onSelect, onDelete
- */
-export default function StoreDetailModal({
-    open,
-    onClose,
-    store,
-    onEdit,
-    onSelect,
-    onDelete,
-}) {
-    const overlayRef = useRef(null);
+const { Text, Title, Paragraph } = Typography;
 
-    useEffect(() => {
-        if (!open) return;
-
-        const onKey = (e) => {
-            if (e.key === "Escape") onClose && onClose();
-        };
-        window.addEventListener("keydown", onKey);
-        return () => window.removeEventListener("keydown", onKey);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [open]);
-
-    if (!open || !store) return null;
+export default function StoreDetailModal({ open, onClose, store, onEdit, onSelect, onDelete }) {
+    if (!store) return null;
 
     const safeText = (v) => (v === undefined || v === null ? "-" : String(v));
+
     const getOwnerLabel = (owner) => {
         if (!owner) return "-";
         if (typeof owner === "string") return owner;
@@ -67,171 +57,380 @@ export default function StoreDetailModal({
         }
     };
 
-    const imageSrc = store.imageUrl || "";
-    const imgStyle = { maxWidth: "100%", maxHeight: 220, objectFit: "cover", borderRadius: 8 };
-
     const handleEditClick = () => {
-        // Close modal first for smoothness, then call onEdit
-        try {
-            onClose && onClose();
-            // slight delay so exit animation can play
-            setTimeout(() => {
-                try {
-                    onEdit && onEdit(store);
-                } catch (err) {
-                    console.error("onEdit error", err);
-                }
-            }, 140);
-        } catch (err) {
-            console.error(err);
-        }
+        onClose && onClose();
+        setTimeout(() => {
+            try {
+                onEdit && onEdit(store);
+            } catch (err) {
+                console.error("onEdit error", err);
+            }
+        }, 100);
     };
 
-    return (
-        <motion.div
-            key="detail-overlay"
-            ref={overlayRef}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            aria-modal="true"
-            role="dialog"
-        >
-            {/* backdrop */}
-            <div
-                className="absolute inset-0 bg-black/40"
-                onClick={() => onClose && onClose()}
-                aria-hidden="true"
-            />
+    const imageSrc = store.imageUrl || "";
 
-            {/* modal panel: centered, constrained height, scrollable inside */}
-            <motion.div
-                className="relative z-10 w-full max-w-3xl rounded-2xl bg-white shadow-2xl"
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                exit={{ y: 20, opacity: 0 }}
-                style={{ maxHeight: "calc(100vh - 96px)", overflow: "auto" }}
-            >
-                <div className="p-5 md:p-6">
-                    <div className="flex items-start gap-4">
-                        {/* image / initials */}
-                        {imageSrc ? (
-                            <div className="w-20 h-20 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center border border-gray-100">
-                                <img
+    return (
+        <Modal
+            open={open}
+            onCancel={onClose}
+            width={900}
+            footer={null}
+            styles={{
+                body: {
+                    padding: 0,
+                    maxHeight: "calc(100vh - 200px)",
+                    overflowY: "auto",
+                },
+            }}
+            closeIcon={<Text style={{ fontSize: 20 }}>✕</Text>}
+        >
+            <div>
+                {/* Header Section với Image/Avatar */}
+                <div
+                    style={{
+                        background: "linear-gradient(135deg, #52c41a 0%, #73d13d 100%)",
+                        padding: "32px 32px 24px",
+                        position: "relative",
+                        overflow: "hidden",
+                    }}
+                >
+                    {/* Decorative circles */}
+                    <div
+                        style={{
+                            position: "absolute",
+                            top: -40,
+                            right: -40,
+                            width: 120,
+                            height: 120,
+                            borderRadius: "50%",
+                            background: "rgba(255,255,255,0.1)",
+                        }}
+                    />
+                    <div
+                        style={{
+                            position: "absolute",
+                            bottom: -30,
+                            left: -30,
+                            width: 100,
+                            height: 100,
+                            borderRadius: "50%",
+                            background: "rgba(255,255,255,0.08)",
+                        }}
+                    />
+
+                    <Row gutter={24} align="middle" style={{ position: "relative", zIndex: 1 }}>
+                        <Col>
+                            {imageSrc ? (
+                                <Avatar
+                                    size={100}
                                     src={imageSrc}
-                                    alt={safeText(store.name)}
-                                    style={imgStyle}
-                                    loading="lazy"
-                                    onError={(e) => {
-                                        e.currentTarget.style.display = "none";
+                                    style={{
+                                        border: "4px solid rgba(255,255,255,0.3)",
+                                        boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
                                     }}
                                 />
-                            </div>
-                        ) : (
-                            <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-green-50 flex items-center justify-center text-green-700 font-semibold text-lg">
-                                {String(store.name || "-")
-                                    .split(" ")
-                                    .slice(0, 2)
-                                    .map((p) => p[0]?.toUpperCase() || "")
-                                    .join("")}
-                            </div>
+                            ) : (
+                                <Avatar
+                                    size={100}
+                                    icon={<ShopOutlined />}
+                                    style={{
+                                        background: "rgba(255,255,255,0.2)",
+                                        border: "4px solid rgba(255,255,255,0.3)",
+                                        boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
+                                    }}
+                                />
+                            )}
+                        </Col>
+                        <Col flex={1}>
+                            <Space direction="vertical" size={8}>
+                                <Title level={3} style={{ color: "#fff", margin: 0, fontSize: 28, fontWeight: 700 }}>
+                                    {safeText(store.name)}
+                                </Title>
+                                <Space size={8}>
+                                    <EnvironmentOutlined style={{ color: "rgba(255,255,255,0.9)", fontSize: 16 }} />
+                                    <Text style={{ color: "rgba(255,255,255,0.95)", fontSize: 15 }}>
+                                        {safeText(store.address)}
+                                    </Text>
+                                </Space>
+                                <Tag
+                                    color={store.deleted ? "red" : "success"}
+                                    style={{
+                                        padding: "4px 12px",
+                                        borderRadius: 12,
+                                        border: "none",
+                                        fontSize: 13,
+                                        fontWeight: 600,
+                                    }}
+                                >
+                                    {store.deleted ? "Đã xóa" : "✓ Đang hoạt động"}
+                                </Tag>
+                            </Space>
+                        </Col>
+                    </Row>
+                </div>
+
+                {/* Content Section */}
+                <div style={{ padding: "32px" }}>
+                    <Descriptions
+                        bordered
+                        column={{ xs: 1, sm: 2 }}
+                        size="middle"
+                        labelStyle={{
+                            fontWeight: 600,
+                            backgroundColor: "#fafafa",
+                            width: "35%",
+                        }}
+                        contentStyle={{
+                            backgroundColor: "#ffffff",
+                        }}
+                    >
+                        {/* Thông tin cơ bản */}
+                        <Descriptions.Item
+                            label={
+                                <Space>
+                                    <InfoCircleOutlined style={{ color: "#1890ff" }} />
+                                    <span>ID Cửa hàng</span>
+                                </Space>
+                            }
+                            span={2}
+                        >
+                            <Text code copyable style={{ fontSize: 13 }}>
+                                {safeText(store._id)}
+                            </Text>
+                        </Descriptions.Item>
+
+                        <Descriptions.Item
+                            label={
+                                <Space>
+                                    <PhoneOutlined style={{ color: "#faad14" }} />
+                                    <span>Số điện thoại</span>
+                                </Space>
+                            }
+                        >
+                            <Text strong style={{ fontSize: 14 }}>
+                                {safeText(store.phone || "-")}
+                            </Text>
+                        </Descriptions.Item>
+
+                        <Descriptions.Item
+                            label={
+                                <Space>
+                                    <UserOutlined style={{ color: "#722ed1" }} />
+                                    <span>Chủ sở hữu</span>
+                                </Space>
+                            }
+                        >
+                            <Text style={{ fontSize: 14 }}>{getOwnerLabel(store.owner_id)}</Text>
+                        </Descriptions.Item>
+
+                        <Descriptions.Item
+                            label={
+                                <Space>
+                                    <ClockCircleOutlined style={{ color: "#52c41a" }} />
+                                    <span>Giờ hoạt động</span>
+                                </Space>
+                            }
+                        >
+                            <Text style={{ fontSize: 14 }}>
+                                {store.openingHours
+                                    ? `${fmtTime(store.openingHours.open)} - ${fmtTime(store.openingHours.close)}`
+                                    : "--"}
+                            </Text>
+                        </Descriptions.Item>
+
+                        <Descriptions.Item
+                            label={
+                                <Space>
+                                    <CalendarOutlined style={{ color: "#13c2c2" }} />
+                                    <span>Ngày tạo</span>
+                                </Space>
+                            }
+                        >
+                            <Text style={{ fontSize: 14 }}>
+                                {store.createdAt
+                                    ? new Date(store.createdAt).toLocaleString("vi-VN")
+                                    : "-"}
+                            </Text>
+                        </Descriptions.Item>
+
+                        {store.location && (store.location.lat !== null || store.location.lng !== null) && (
+                            <Descriptions.Item
+                                label={
+                                    <Space>
+                                        <GlobalOutlined style={{ color: "#f5222d" }} />
+                                        <span>Toạ độ</span>
+                                    </Space>
+                                }
+                                span={2}
+                            >
+                                <Space>
+                                    <Tag color="blue">Lat: {safeText(store.location.lat)}</Tag>
+                                    <Tag color="blue">Lng: {safeText(store.location.lng)}</Tag>
+                                </Space>
+                            </Descriptions.Item>
                         )}
-
-                        <div className="flex-1 min-w-0">
-                            <h3 className="text-xl font-semibold text-gray-800">{safeText(store.name)}</h3>
-                            <p className="text-sm text-gray-500 mt-1">{safeText(store.address)}</p>
-                            <div className="mt-1 text-xs text-gray-500">ID: {safeText(store._id)}</div>
-                        </div>
-                    </div>
-
-                    <div className="mt-4 grid grid-cols-1 gap-2 text-sm text-gray-700">
-                        <div>
-                            <strong>Số điện thoại:</strong> {safeText(store.phone || "-")}
-                        </div>
-
-                        <div>
-                            <strong>Owner:</strong> {getOwnerLabel(store.owner_id)}
-                        </div>
-
-                        {store.createdAt && (
-                            <div>
-                                <strong>Ngày tạo:</strong>{" "}
-                                {new Date(store.createdAt).toLocaleString ? new Date(store.createdAt).toLocaleString() : String(store.createdAt)}
-                            </div>
-                        )}
-
-                        <div>
-                            <strong>Trạng thái:</strong> {store.deleted ? "Đã xóa (deleted=true)" : "Hoạt động"}
-                        </div>
-
-                        <div>
-                            <strong>Giờ hoạt động:</strong>{" "}
-                            {store.openingHours ? `${fmtTime(store.openingHours.open)} — ${fmtTime(store.openingHours.close)}` : "--"}
-                        </div>
-
-                        <div>
-                            <strong>Toạ độ:</strong>{" "}
-                            {store.location && (store.location.lat !== null || store.location.lng !== null)
-                                ? `${safeText(store.location.lat)} , ${safeText(store.location.lng)}`
-                                : "--"}
-                        </div>
 
                         {Array.isArray(store.tags) && store.tags.length > 0 && (
-                            <div className="flex flex-wrap gap-2 mt-1">
-                                {store.tags.map((t, i) => (
-                                    <span key={i} className="text-xs px-2 py-0.5 rounded bg-gray-100">
-                                        {t}
-                                    </span>
-                                ))}
-                            </div>
-                        )}
-
-                        {store.description && (
-                            <div className="mt-2">
-                                <strong>Mô tả:</strong>
-                                <div className="mt-1 text-sm text-gray-600 max-h-40 overflow-auto p-2 bg-gray-50 rounded">{safeText(store.description)}</div>
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="mt-6 flex items-center justify-end gap-3">
-                        <button onClick={() => onClose && onClose()} className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200">
-                            Đóng
-                        </button>
-
-                        <button onClick={handleEditClick} className="px-4 py-2 rounded-lg bg-yellow-400 hover:bg-yellow-500 text-white">
-                            Sửa
-                        </button>
-
-                        <button
-                            onClick={() => {
-                                try {
-                                    onSelect && onSelect(store);
-                                } catch (err) {
-                                    console.error("onSelect handler error", err);
+                            <Descriptions.Item
+                                label={
+                                    <Space>
+                                        <TagsOutlined style={{ color: "#52c41a" }} />
+                                        <span>Tags</span>
+                                    </Space>
                                 }
-                            }}
-                            className="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700"
-                        >
-                            Vào Dashboard
-                        </button>
+                                span={2}
+                            >
+                                <Space size={[4, 8]} wrap>
+                                    {store.tags.map((tag, idx) => (
+                                        <Tag key={idx} color="green" style={{ borderRadius: 8, fontSize: 12 }}>
+                                            {tag}
+                                        </Tag>
+                                    ))}
+                                </Space>
+                            </Descriptions.Item>
+                        )}
+                    </Descriptions>
 
-                        <button
-                            onClick={() => {
-                                try {
-                                    onDelete && onDelete(store._id);
-                                } catch (err) {
-                                    console.error("onDelete handler error", err);
-                                }
-                            }}
-                            className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white"
-                        >
-                            Xóa (mềm)
-                        </button>
-                    </div>
+                    {/* Mô tả */}
+                    {store.description && (
+                        <>
+                            <Divider orientation="left" style={{ fontSize: 15, fontWeight: 600 }}>
+                                <Space>
+                                    <InfoCircleOutlined style={{ color: "#1890ff" }} />
+                                    <span>Mô tả</span>
+                                </Space>
+                            </Divider>
+                            <Card
+                                size="small"
+                                style={{
+                                    background: "#fafafa",
+                                    borderRadius: 8,
+                                    border: "1px solid #e8e8e8",
+                                }}
+                            >
+                                <Paragraph
+                                    ellipsis={{ rows: 4, expandable: true, symbol: "Xem thêm" }}
+                                    style={{ margin: 0, fontSize: 14, lineHeight: 1.6 }}
+                                >
+                                    {safeText(store.description)}
+                                </Paragraph>
+                            </Card>
+                        </>
+                    )}
+
+                    {/* Action Buttons */}
+                    <Divider style={{ margin: "24px 0 16px" }} />
+                    <Row gutter={12}>
+                        <Col xs={24} sm={6}>
+                            <Button
+                                icon={<DashboardOutlined />}
+                                onClick={() => {
+                                    try {
+                                        onSelect && onSelect(store);
+                                    } catch (err) {
+                                        console.error("onSelect error", err);
+                                    }
+                                }}
+                                type="primary"
+                                block
+                                size="large"
+                                style={{
+                                    background: "linear-gradient(135deg, #52c41a 0%, #73d13d 100%)",
+                                    border: "none",
+                                    borderRadius: 8,
+                                    fontWeight: 600,
+                                    height: 48,
+                                }}
+                            >
+                                Vào Dashboard
+                            </Button>
+                        </Col>
+                        <Col xs={24} sm={6}>
+                            <Button
+                                icon={<EditOutlined />}
+                                onClick={handleEditClick}
+                                size="large"
+                                block
+                                style={{
+                                    borderRadius: 8,
+                                    fontWeight: 600,
+                                    height: 48,
+                                    borderColor: "#faad14",
+                                    color: "#faad14",
+                                }}
+                            >
+                                Sửa
+                            </Button>
+                        </Col>
+                        <Col xs={24} sm={6}>
+                            <Button
+                                icon={<DeleteOutlined />}
+                                onClick={() => {
+                                    try {
+                                        onDelete && onDelete(store._id);
+                                    } catch (err) {
+                                        console.error("onDelete error", err);
+                                    }
+                                }}
+                                danger
+                                size="large"
+                                block
+                                style={{
+                                    borderRadius: 8,
+                                    fontWeight: 600,
+                                    height: 48,
+                                }}
+                            >
+                                Xóa
+                            </Button>
+                        </Col>
+                        <Col xs={24} sm={6}>
+                            <Button
+                                onClick={onClose}
+                                size="large"
+                                block
+                                style={{
+                                    borderRadius: 8,
+                                    fontWeight: 600,
+                                    height: 48,
+                                }}
+                            >
+                                Đóng
+                            </Button>
+                        </Col>
+                    </Row>
                 </div>
-            </motion.div>
-        </motion.div>
+            </div>
+
+            <style jsx global>{`
+        .ant-descriptions-item-label {
+          font-size: 13px !important;
+        }
+
+        .ant-modal-content {
+          border-radius: 16px !important;
+          overflow: hidden;
+        }
+
+        .ant-modal-close {
+          top: 16px;
+          right: 16px;
+        }
+
+        .ant-modal-body::-webkit-scrollbar {
+          width: 6px;
+        }
+
+        .ant-modal-body::-webkit-scrollbar-track {
+          background: transparent;
+        }
+
+        .ant-modal-body::-webkit-scrollbar-thumb {
+          background: linear-gradient(135deg, #52c41a 0%, #73d13d 100%);
+          border-radius: 10px;
+        }
+      `}</style>
+        </Modal>
     );
 }
