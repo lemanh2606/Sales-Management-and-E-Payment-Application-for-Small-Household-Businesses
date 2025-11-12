@@ -1140,7 +1140,7 @@ const OrderPOSHome: React.FC = () => {
                     }}
                   >
                     <Text strong style={{ color: changeAmount >= 0 ? "#52c41a" : "#ff4d4f" }}>
-                      Tiền thừa:
+                      Tiền thừa trả khách:
                     </Text>
                     <Text strong style={{ fontSize: "18px", color: changeAmount >= 0 ? "#52c41a" : "#ff4d4f" }}>
                       {changeAmount >= 0 ? formatPrice(changeAmount) : "0đ"}
