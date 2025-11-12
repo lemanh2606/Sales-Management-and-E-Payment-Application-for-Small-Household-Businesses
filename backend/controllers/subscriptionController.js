@@ -89,18 +89,28 @@ const getCurrentSubscription = async (req, res) => {
     // Tìm subscription active
     let subscription = await Subscription.findActiveByUser(userId);
 
-    // 🎁 Auto-create trial nếu không tìm thấy subscription (chỉ cho MANAGER)
+    // 🎁 Auto-create trial CHỈ nếu CHƯA TỪNG có subscription nào
     if (!subscription) {
-      console.log("🎁 No subscription found, creating trial for MANAGER:", userId);
-      try {
-        subscription = await Subscription.createTrial(userId);
-        console.log("✅ Trial subscription created:", subscription._id);
-      } catch (trialErr) {
-        console.error("❌ Failed to create trial:", trialErr);
-        return res.status(500).json({ 
-          message: "Không thể tạo trial subscription",
-          error: trialErr.message 
-        });
+      // Kiểm tra xem có subscription cũ (EXPIRED/CANCELLED) không
+      const anySubscription = await Subscription.findOne({ user_id: userId });
+      
+      if (!anySubscription) {
+        // Chưa từng có subscription → Tạo trial mới
+        console.log("🎁 No subscription found, creating trial for MANAGER:", userId);
+        try {
+          subscription = await Subscription.createTrial(userId);
+          console.log("✅ Trial subscription created:", subscription._id);
+        } catch (trialErr) {
+          console.error("❌ Failed to create trial:", trialErr);
+          return res.status(500).json({ 
+            message: "Không thể tạo trial subscription",
+            error: trialErr.message 
+          });
+        }
+      } else {
+        // Đã từng có subscription → Trả về subscription cũ (EXPIRED/CANCELLED)
+        subscription = anySubscription;
+        console.log("📋 Found expired/cancelled subscription:", subscription._id, subscription.status);
       }
     }
 
@@ -267,20 +277,22 @@ const activatePremium = async (req, res) => {
       return res.status(400).json({ message: "Gói không hợp lệ" });
     }
 
-    // Check subscription hiện tại
-    const currentSub = await Subscription.findActiveByUser(userId);
+    // Check subscription hiện tại (bao gồm cả EXPIRED)
+    let subscription = await Subscription.findOne({ user_id: userId });
     
-    // ✅ CHO PHÉP GIA HẠN - Nếu đang ACTIVE thì cộng thêm thời gian
-    const isRenewal = currentSub && currentSub.status === "ACTIVE" && !currentSub.isExpired();
-
-    // Tạo hoặc update subscription
-    let subscription = currentSub;
+    // Nếu chưa có subscription nào -> tạo mới
     if (!subscription) {
+      console.log("Creating new subscription for user:", userId);
       subscription = new Subscription({
         user_id: userId,
-        status: "TRIAL",
+        status: "TRIAL", // Tạm thời set TRIAL, sẽ được update thành ACTIVE
       });
+    } else {
+      console.log("Found existing subscription:", subscription._id, "status:", subscription.status);
     }
+    
+    // Check nếu đang ACTIVE và chưa expired -> Gia hạn
+    const isRenewal = subscription.status === "ACTIVE" && !subscription.isExpired();
 
     if (isRenewal) {
       // ✅ GIA HẠN: Cộng thêm thời gian vào expires_at hiện tại
@@ -292,22 +304,25 @@ const activatePremium = async (req, res) => {
       subscription.expires_at = newExpires;
       subscription.plan_duration = plan_duration; // Update plan duration
       subscription.payment_method = "MANUAL";
+      subscription.transaction_id = transaction_id;
+      subscription.price_paid = amount;
       
-      // Update premium info
-      if (!subscription.premium) {
-        subscription.premium = {};
-      }
-      subscription.premium.plan_duration = plan_duration;
-      subscription.premium.amount_paid = amount;
-      subscription.premium.activated_at = subscription.premium.activated_at || new Date();
-      subscription.premium.is_active = true;
+      // Thêm vào payment_history
+      subscription.payment_history.push({
+        plan_duration: plan_duration,
+        amount: amount,
+        paid_at: new Date(),
+        transaction_id: transaction_id,
+        expires_at: newExpires,
+        payment_method: "MANUAL",
+      });
       
       console.log(`🔄 GIA HẠN: Cộng thêm ${additionalMonths} tháng. Expires: ${currentExpires} → ${newExpires}`);
     } else {
-      // ✅ KÍCH HOẠT MỚI: Dùng method cũ
+      // ✅ KÍCH HOẠT MỚI hoặc KÍCH HOẠT LẠI từ EXPIRED
       subscription.activatePremium(plan_duration, amount, transaction_id);
       subscription.payment_method = "MANUAL";
-      console.log(`✨ KÍCH HOẠT MỚI: ${plan_duration} tháng`);
+      console.log(`✨ KÍCH HOẠT ${subscription._id ? 'LẠI' : 'MỚI'}: ${plan_duration} tháng`);
     }
     
     await subscription.save();

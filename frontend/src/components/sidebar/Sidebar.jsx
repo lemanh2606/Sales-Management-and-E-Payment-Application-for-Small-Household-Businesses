@@ -13,7 +13,7 @@ export default function Sidebar({ onCollapsedChange }) {
   const storeId = currentStore?._id || null;
 
   const navigate = useNavigate();
-  const { logout, user: authUser } = useAuth();
+  const { logout, user: authUser, managerSubscriptionExpired } = useAuth();
 
   const localUser = useMemo(() => {
     if (authUser) return authUser;
@@ -172,6 +172,46 @@ export default function Sidebar({ onCollapsedChange }) {
 
   const items = useMemo(() => {
     const isStaff = user && user.role === "STAFF";
+    const isManagerExpired = user && user.role === "MANAGER" && managerSubscriptionExpired;
+
+    // Nếu Manager expired, chỉ hiển thị: Nhật ký hoạt động, Hồ sơ cá nhân, Gói dịch vụ
+    if (isManagerExpired) {
+      return [
+        {
+          key: "settings",
+          name: "Cấu hình",
+          path: "/settings",
+          icon: <FiSettings size={20} />,
+          children: [
+            { name: "Nhật ký hoạt động", path: "/settings/activity-log", permission: "settings:activity-log" },
+            { name: "Hồ sơ cá nhân", path: "/settings/profile", permission: "users:view" },
+            {
+              name: "Gói dịch vụ",
+              path: "/settings/subscription",
+              permission: "subscription:view",
+              children: [
+                { name: "Gói đăng ký hiện tại", path: "/settings/subscription", permission: "subscription:view" },
+                { name: "Nâng cấp Premium", path: "/settings/subscription/pricing", permission: "subscription:view" },
+              ],
+            },
+          ],
+        },
+      ].map((it) => {
+        const copy = { ...it };
+        if (copy.children && copy.children.length > 0) {
+          copy.children = copy.children
+            .map((ch) => {
+              if (ch.children && ch.children.length > 0) {
+                const nested = { ...ch, children: ch.children.filter((sub) => hasPermission(sub.permission)) };
+                return nested.children.length > 0 ? nested : null;
+              }
+              return hasPermission(ch.permission) ? ch : null;
+            })
+            .filter((x) => x !== null);
+        }
+        return copy;
+      });
+    }
 
     return baseItems
       .filter((it) => {
@@ -208,7 +248,7 @@ export default function Sidebar({ onCollapsedChange }) {
         }
         return true;
       });
-  }, [baseItems, hasPermission, user]);
+  }, [baseItems, hasPermission, user, managerSubscriptionExpired]);
 
   const handleLogout = () => {
     logout();

@@ -5,6 +5,9 @@ const Subscription = require("../models/Subscription");
  * Middleware kiểm tra subscription đã hết hạn chưa
  * Check từ Subscription model thay vì User model
  * Auto-create trial nếu không có subscription (chỉ cho MANAGER)
+ * STAFF kế thừa subscription từ Manager của store
+ * 
+ * Whitelist: Manager được truy cập activity log và profile khi expired
  */
 const checkSubscriptionExpiry = async (req, res, next) => {
   const user = req.user;
@@ -13,16 +16,63 @@ const checkSubscriptionExpiry = async (req, res, next) => {
     return res.status(401).json({ message: "Chưa đăng nhập" });
   }
 
-  // STAFF không cần subscription check, kế thừa từ Manager
-  if (user.role === "STAFF") {
+  // Whitelist: Các endpoint Manager ĐƯỢC TRUY CẬP khi subscription expired
+  const allowedPaths = [
+    '/api/activity-logs',           // Activity log endpoints
+    '/api/users/profile',            // Profile update
+    '/api/users/password',           // Change password
+    '/api/subscriptions',            // Subscription endpoints (để gia hạn)
+    '/api/stores',                   // Store endpoints (cần để lấy thông tin cửa hàng)
+  ];
+
+  // Kiểm tra nếu request path nằm trong whitelist
+  const isAllowedPath = allowedPaths.some(path => req.path.startsWith(path) || req.originalUrl.includes(path));
+  
+  // Nếu là Manager và đang ở path được phép, bỏ qua check subscription
+  if (user.role === "MANAGER" && isAllowedPath) {
     return next();
   }
 
   try {
-    // Tìm subscription active
-    let subscription = await Subscription.findActiveByUser(user._id);
+    let subscription;
+    let managerId = user._id;
 
-    // Auto-create trial nếu không có (chỉ cho MANAGER)
+    // STAFF kế thừa subscription từ Manager của store
+    if (user.role === "STAFF") {
+      // Tìm store hiện tại của STAFF
+      const Store = require("../models/Store");
+      const store = await Store.findById(user.current_store);
+      
+      if (!store) {
+        return res.status(403).json({ 
+          message: "Không tìm thấy cửa hàng",
+          subscription_required: true
+        });
+      }
+
+      // Lấy subscription của Manager (owner)
+      managerId = store.owner_id;
+      subscription = await Subscription.findActiveByUser(managerId);
+
+      if (!subscription || subscription.status === "EXPIRED" || 
+          (!subscription.is_trial_active && !subscription.is_premium_active)) {
+        return res.status(403).json({
+          message: "Chủ cửa hàng đã hết hạn gói đăng ký. Vui lòng liên hệ quản lý để gia hạn.",
+          subscription_status: "EXPIRED",
+          is_staff: true,
+          manager_expired: true,
+          upgrade_required: true,
+        });
+      }
+
+      // STAFF pass nếu Manager còn subscription active
+      return next();
+    }
+
+    // MANAGER - Tìm subscription của chính mình
+    subscription = await Subscription.findActiveByUser(user._id);
+
+    // Auto-create trial CHỈ nếu CHƯA TỪNG có subscription (chỉ cho MANAGER)
     if (!subscription) {
       if (user.role !== "MANAGER") {
         return res.status(403).json({ 
@@ -30,8 +80,19 @@ const checkSubscriptionExpiry = async (req, res, next) => {
           subscription_required: true
         });
       }
-      console.log("🎁 Auto-creating trial for MANAGER:", user._id);
-      subscription = await Subscription.createTrial(user._id);
+      
+      // Kiểm tra xem có subscription cũ (EXPIRED/CANCELLED) không
+      const anySubscription = await Subscription.findOne({ user_id: user._id });
+      
+      if (!anySubscription) {
+        // Chưa từng có → Tạo trial mới
+        console.log("🎁 Auto-creating trial for MANAGER:", user._id);
+        subscription = await Subscription.createTrial(user._id);
+      } else {
+        // Đã từng có → Dùng subscription cũ
+        subscription = anySubscription;
+        console.log("📋 Using existing subscription:", subscription._id, subscription.status);
+      }
     }
 
     const now = new Date();
@@ -95,6 +156,10 @@ const checkSubscriptionExpiry = async (req, res, next) => {
  * Middleware check premium (nếu cần feature chỉ premium)
  * Check từ Subscription model
  */
+/**
+ * Middleware check chỉ Premium mới dùng được
+ * STAFF kế thừa từ Manager
+ */
 const checkPremiumOnly = async (req, res, next) => {
   const user = req.user;
 
@@ -103,17 +168,38 @@ const checkPremiumOnly = async (req, res, next) => {
   }
 
   try {
-    const subscription = await Subscription.findActiveByUser(user._id);
+    let subscription;
+    let managerId = user._id;
+
+    // STAFF kế thừa subscription từ Manager
+    if (user.role === "STAFF") {
+      const Store = require("../models/Store");
+      const store = await Store.findById(user.current_store);
+      
+      if (!store) {
+        return res.status(403).json({ 
+          message: "Không tìm thấy cửa hàng",
+        });
+      }
+
+      managerId = store.owner_id;
+      subscription = await Subscription.findActiveByUser(managerId);
+    } else {
+      subscription = await Subscription.findActiveByUser(user._id);
+    }
 
     if (subscription && subscription.status === "ACTIVE" && subscription.is_premium_active) {
       return next();
     }
 
     return res.status(403).json({
-      message: "Tính năng này chỉ dành cho Premium",
-      is_premium: user.is_premium,
+      message: user.role === "STAFF" 
+        ? "Chủ cửa hàng cần nâng cấp Premium để sử dụng tính năng này"
+        : "Tính năng này chỉ dành cho Premium",
+      is_premium: false,
       subscription_status: subscription?.status || "NONE",
       upgrade_url: "/settings/subscription/pricing",
+      is_staff: user.role === "STAFF",
     });
   } catch (error) {
     console.error("Error in checkPremiumOnly:", error);

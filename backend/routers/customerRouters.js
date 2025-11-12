@@ -11,6 +11,7 @@ const {
   downloadCustomerTemplate,
 } = require("../controllers/customer/customerController");
 const { verifyToken, checkStoreAccess, requirePermission } = require("../middlewares/authMiddleware");
+const { checkSubscriptionExpiry } = require("../middlewares/subscriptionMiddleware");
 const upload = require("../middlewares/upload");
 
 /*
@@ -25,6 +26,7 @@ router.get("/template/download", verifyToken, downloadCustomerTemplate);
 router.post(
   "/store/:storeId/import",
   verifyToken,
+  checkSubscriptionExpiry,
   checkStoreAccess,
   upload.single("file"),
   requirePermission("customers:create"),
@@ -32,17 +34,18 @@ router.post(
 );
 
 //Route: POST /api/customers
-router.post("/", verifyToken, checkStoreAccess, requirePermission("customers:create"), createCustomer);
+router.post("/", verifyToken, checkSubscriptionExpiry, checkStoreAccess, requirePermission("customers:create"), createCustomer);
 //Route: GET /api/customers/search
-router.get("/search", verifyToken, checkStoreAccess, requirePermission("customers:search"), searchCustomers);
+router.get("/search", verifyToken, checkSubscriptionExpiry, checkStoreAccess, requirePermission("customers:search"), searchCustomers);
 //Route: PUT /api/customers/:id
-router.put("/:id", verifyToken, checkStoreAccess, requirePermission("customers:update"), updateCustomer);
+router.put("/:id", verifyToken, checkSubscriptionExpiry, checkStoreAccess, requirePermission("customers:update"), updateCustomer);
 //Route: DELETE /api/customers/:id
-router.delete("/:id", verifyToken, checkStoreAccess, requirePermission("customers:delete"), softDeleteCustomer);
+router.delete("/:id", verifyToken, checkSubscriptionExpiry, checkStoreAccess, requirePermission("customers:delete"), softDeleteCustomer);
 //Route: GET /api/customers/store/:storeId
 router.get(
   "/store/:storeId",
   verifyToken,
+  checkSubscriptionExpiry,
   checkStoreAccess,
   requirePermission("customers:search"),
   getCustomersByStore
