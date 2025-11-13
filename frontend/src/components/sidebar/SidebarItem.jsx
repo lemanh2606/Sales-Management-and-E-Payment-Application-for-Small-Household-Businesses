@@ -18,7 +18,7 @@ export default function SidebarItem({ item, collapsed = false }) {
         if (location.pathname.startsWith(child.path + '/')) return true;
         return false;
       });
-      
+
       if (isChildActive) {
         setOpen(true);
       }
@@ -131,8 +131,7 @@ export default function SidebarItem({ item, collapsed = false }) {
                         key={ch.name}
                         to={ch.path}
                         className={({ isActive }) =>
-                          `px-3 py-2 text-base hover:bg-gray-50 block text-green-600 transition-colors ${
-                            isActive ? "bg-green-200 text-green-800 font-semibold" : ""
+                          `px-3 py-2 text-base hover:bg-gray-50 block text-green-600 transition-colors ${isActive ? "bg-green-200 text-green-800 font-semibold" : ""
                           }`
                         }
                       >
