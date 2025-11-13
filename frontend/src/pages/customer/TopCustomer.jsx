@@ -113,7 +113,15 @@ const TopCustomer = () => {
   // XUẤT FILE
   const handleExport = async (format) => {
     if (filtered.length === 0) {
-      message.warning("Chưa có dữ liệu để xuất!");
+      Swal.fire({
+        title: "⚠️ Cảnh báo!",
+        text: "Chưa có dữ liệu đề  xuất!",
+        icon: "warning",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#faad14",
+        timer: 2000,
+      });
+
       return;
     }
 
@@ -135,9 +143,22 @@ const TopCustomer = () => {
       link.href = window.URL.createObjectURL(blob);
       link.download = `top-khach-hang-${range}-${dayjs().format("DD-MM-YYYY")}.${format}`;
       link.click();
-      message.success(`Xuất ${format.toUpperCase()} thành công!`);
+      Swal.fire({
+        title: "🎉 Thành công!",
+        text: `Xuất ${format.toUpperCase()} thành công!`,
+        icon: "success",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#52c41a",
+      });
     } catch (err) {
-      message.error("Lỗi xuất file!");
+      Swal.fire({
+        title: "❌ Lỗi!",
+        text: "Lỗi xuất file",
+        icon: "error",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#ff4d4f",
+        timer: 2000,
+      });
     }
   };
 

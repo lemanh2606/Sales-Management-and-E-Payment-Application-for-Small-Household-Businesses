@@ -1,7 +1,37 @@
 // src/pages/report/TaxDeclaration.jsx
 import React, { useState, useEffect } from "react";
-import { Card, Col, Row,Select, DatePicker, InputNumber, Button, Table, Form, Spin, Alert, Space, Modal, message, Dropdown, Menu, Statistic, Typography, Divider, Tooltip, } from "antd";
-import { EditOutlined, CopyOutlined, DeleteOutlined, DownloadOutlined, FileExcelOutlined, FilePdfOutlined, InfoCircleOutlined, SyncOutlined,} from "@ant-design/icons";
+import {
+  Card,
+  Col,
+  Row,
+  Select,
+  DatePicker,
+  InputNumber,
+  Button,
+  Table,
+  Form,
+  Spin,
+  Alert,
+  Space,
+  Modal,
+  message,
+  Dropdown,
+  Menu,
+  Statistic,
+  Typography,
+  Divider,
+  Tooltip,
+} from "antd";
+import {
+  EditOutlined,
+  CopyOutlined,
+  DeleteOutlined,
+  DownloadOutlined,
+  FileExcelOutlined,
+  FilePdfOutlined,
+  InfoCircleOutlined,
+  SyncOutlined,
+} from "@ant-design/icons";
 import axios from "axios";
 import dayjs from "dayjs";
 import "dayjs/locale/vi";
@@ -152,7 +182,15 @@ const TaxDeclaration = () => {
   // TẠO/UPDATE – GỬI shopId QUA QUERY
   const handleSubmit = async (values) => {
     if (!editingId && !systemRevenue) {
-      message.warning("Vui lòng preview doanh thu trước để tính toán");
+      Swal.fire({
+        title: "⚠️ Cảnh báo!",
+        text: "Vui lòng xem trước doanh thu để tính toán",
+        icon: "warning",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#faad14",
+        timer: 2000,
+      });
+
       return;
     }
     setLoading(true);
@@ -188,7 +226,13 @@ const TaxDeclaration = () => {
       }
 
       await axios[method](url, payload, { headers: { Authorization: `Bearer ${token}` } });
-      message.success(editingId ? "Cập nhật thành công" : "Tạo tờ khai thành công");
+      Swal.fire({
+        title: "🎉 Thành công!",
+        text: editingId ? "Cập nhật thành công" : "Tạo tờ khai thành công",
+        icon: "success",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#52c41a",
+      });
 
       setModalVisible(false);
       form.resetFields();
@@ -247,10 +291,25 @@ const TaxDeclaration = () => {
       const token = localStorage.getItem("token");
       const url = `http://localhost:9999/api/taxs/${id}/clone`;
       await axios.post(url, {}, { headers: { Authorization: `Bearer ${token}` } });
-      message.success("Sao chép thành công");
+
+      Swal.fire({
+        title: "🎉 Thành công!",
+        text: "Sao chép thành công",
+        icon: "success",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#52c41a",
+      });
+
       fetchDeclarations();
     } catch (err) {
-      message.error(err.response?.data?.message || "Lỗi sao chép");
+      Swal.fire({
+        title: "❌ Lỗi!",
+        text: err.response?.data?.message || "Lỗi sao chép",
+        icon: "error",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#ff4d4f",
+        timer: 2000,
+      });
     } finally {
       setLoading(false);
     }
@@ -269,10 +328,24 @@ const TaxDeclaration = () => {
       const token = localStorage.getItem("token");
       const url = `http://localhost:9999/api/taxs/${deletingId}?shopId=${currentStore._id}`;
       await axios.delete(url, { headers: { Authorization: `Bearer ${token}` } });
-      message.success("Xóa thành công");
+      Swal.fire({
+        title: "🎉 Thành công!",
+        text: "Xoá thành công",
+        icon: "success",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#52c41a",
+      });
+
       fetchDeclarations();
     } catch (err) {
-      message.error(err.response?.data?.message || "Lỗi xóa");
+      Swal.fire({
+        title: "❌ Lỗi!",
+        text: err.response?.data?.message || "Lỗi xóa",
+        icon: "error",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#ff4d4f",
+        timer: 2000,
+      });
     } finally {
       setLoading(false);
       setConfirmVisible(false);
@@ -298,9 +371,22 @@ const TaxDeclaration = () => {
       // ✅ Gọi lại list để cập nhật UI đổi status
       await fetchDeclarations();
 
-      message.success("Tải file thành công!");
+      Swal.fire({
+        title: "🎉 Thành công!",
+        text: "Tải file thành công",
+        icon: "success",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#52c41a",
+      });
     } catch (err) {
-      message.error("Lỗi tải file!");
+      Swal.fire({
+        title: "❌ Lỗi!",
+        text: "Lỗi tải file!",
+        icon: "error",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#ff4d4f",
+        timer: 2000,
+      });
     }
   };
 
@@ -563,7 +649,13 @@ const TaxDeclaration = () => {
                         const values = form.getFieldsValue();
                         const result = calculateTax(values);
                         setCalculatedTax(result);
-                        message.success("Đã tính toán xong, bạn có thể tham khảo trước khi lưu");
+                        Swal.fire({
+                          title: "🎉 Thành công!",
+                          text: "Đã tính toán xong, bạn có thể tham khảo trước khi lưu",
+                          icon: "success",
+                          confirmButtonText: "OK",
+                          confirmButtonColor: "#52c41a",
+                        });
                       }}
                     >
                       Tính toán
@@ -721,7 +813,13 @@ const TaxDeclaration = () => {
                     const values = modalForm.getFieldsValue();
                     const result = calculateTax(values);
                     setCalculatedTax(result);
-                    message.success("Đã tính toán thử xong!");
+                    Swal.fire({
+                      title: "🎉 Thành công!",
+                      text: "Đã tính toàn thử xong",
+                      icon: "success",
+                      confirmButtonText: "OK",
+                      confirmButtonColor: "#52c41a",
+                    });
                   }}
                 >
                   Tính toán

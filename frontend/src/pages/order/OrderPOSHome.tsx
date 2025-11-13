@@ -197,7 +197,13 @@ const OrderPOSHome: React.FC = () => {
     const s = io(SOCKET_URL, { auth: { token } });
     setSocket(s);
     s.on("payment_success", (data) => {
-      message.success("Thanh toán QR thành công!");
+      Swal.fire({
+        title: "🎉 Thành công!",
+        text: "Thanh toán QR thành công!",
+        icon: "success",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#52c41a",
+      });
       setPendingOrderId(data.ref || data.orderId);
       setBillModalOpen(true);
       // Thêm reset QR ngay lập tức
@@ -223,7 +229,14 @@ const OrderPOSHome: React.FC = () => {
       const res = await axios.get(`${API_BASE}/stores/${storeId}/employees?deleted=false`, { headers });
       setEmployees(res.data.employees || []);
     } catch (err) {
-      message.error("Không tải được nhân viên");
+      Swal.fire({
+        title: "❌ Lỗi!",
+        text: "Không tải được nhân viên",
+        icon: "error",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#ff4d4f",
+        timer: 2000,
+      });
     }
   };
 
@@ -256,7 +269,14 @@ const OrderPOSHome: React.FC = () => {
         );
         setSearchedProducts(res.data.products || []);
       } catch (err) {
-        message.error("Không tìm thấy sản phẩm");
+        Swal.fire({
+          title: "❌ Lỗi!",
+          text: "Không tìm thấy sản phẩm",
+          icon: "error",
+          confirmButtonText: "OK",
+          confirmButtonColor: "#ff4d4f",
+          timer: 2000,
+        });
       }
     }, 300),
     [storeId]
@@ -445,13 +465,32 @@ const OrderPOSHome: React.FC = () => {
         setQrImageUrl(res.data.qrDataURL);
         setQrExpiryTs(res.data.order?.qrExpiry ? new Date(res.data.order.qrExpiry).getTime() : null);
         setPendingOrderId(orderId);
-        message.success("QR đã tạo, chờ thanh toán...");
+        Swal.fire({
+          title: "🎉 Thành công!",
+          text: "QR đã tạo, chờ thanh toán....",
+          icon: "success",
+          confirmButtonText: "OK",
+          confirmButtonColor: "#52c41a",
+        });
       } else {
         setPendingOrderId(orderId);
-        message.success("Đơn hàng đã tạo! Vui lòng xác nhận thanh toán tiền mặt.");
+        Swal.fire({
+          title: "🎉 Thành công!",
+          text: "Đơn hàng đã tạo! Vui lòng xác nhận thanh toán tiền mặt.",
+          icon: "success",
+          confirmButtonText: "OK",
+          confirmButtonColor: "#52c41a",
+        });
       }
     } catch (err: any) {
-      message.error(err.response?.data?.message || "Lỗi tạo đơn");
+      Swal.fire({
+        title: "❌ Lỗi!",
+        text: err.response?.data?.message || "Lỗi tạo đơn",
+        icon: "error",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#ff4d4f",
+        timer: 2000,
+      });
     } finally {
       setLoading(false);
     }
@@ -1177,9 +1216,22 @@ const OrderPOSHome: React.FC = () => {
                     try {
                       await axios.post(`${API_BASE}/orders/${pendingOrderId}/set-paid-cash`, {}, { headers });
                       setBillModalOpen(true);
-                      message.success("Đã xác nhận thanh toán! Vui lòng in hóa đơn.");
+                      Swal.fire({
+                        title: "🎉 Thành công!",
+                        text: "Đã xác nhận thanh toán! Vui lòng in hóa đơn.",
+                        icon: "success",
+                        confirmButtonText: "OK",
+                        confirmButtonColor: "#52c41a",
+                      });
                     } catch (err: any) {
-                      message.error("Lỗi xác nhận thanh toán");
+                      Swal.fire({
+                        title: "❌ Lỗi!",
+                        text: "Lỗi xác nhận thanh toán",
+                        icon: "error",
+                        confirmButtonText: "OK",
+                        confirmButtonColor: "#ff4d4f",
+                        timer: 2000,
+                      });
                     }
                   }}
                 >
@@ -1216,10 +1268,24 @@ const OrderPOSHome: React.FC = () => {
               tab.customer = res.data.customer;
             });
             setPhoneInput(res.data.customer.phone);
-            message.success("Tạo khách hàng mới thành công");
+            Swal.fire({
+              title: "🎉 Thành công!",
+              text: "Tạo khách hàng mới thành công",
+              icon: "success",
+              confirmButtonText: "OK",
+              confirmButtonColor: "#52c41a",
+            });
+
             setNewCustomerModal(false);
           } catch (err) {
-            message.error("Lỗi tạo khách hàng");
+            Swal.fire({
+              title: "❌ Lỗi!",
+              text: "Lỗi tạo khách hàng",
+              icon: "error",
+              confirmButtonText: "OK",
+              confirmButtonColor: "#ff4d4f",
+              timer: 2000,
+            });
           }
         }}
       />
@@ -1270,7 +1336,15 @@ const OrderPOSHome: React.FC = () => {
                 value={qrExpiryTs}
                 format="mm:ss"
                 onFinish={() => {
-                  message.warning("QR hết hạn");
+                  Swal.fire({
+                    title: "⚠️ Cảnh báo!",
+                    text: "QR đã hết hạnnj",
+                    icon: "warning",
+                    confirmButtonText: "OK",
+                    confirmButtonColor: "#faad14",
+                    timer: 2000,
+                  });
+
                   setQrImageUrl(null);
                   setQrPayload(null);
                   setQrExpiryTs(null);

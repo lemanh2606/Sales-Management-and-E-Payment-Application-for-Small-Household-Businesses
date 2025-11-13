@@ -117,7 +117,15 @@ const RevenueReport = () => {
   // EXPORT
   const handleExport = async (format, type) => {
     if (!periodType || !periodKey) {
-      message.warning("Vui lòng chọn kỳ báo cáo!");
+      Swal.fire({
+        title: "⚠️ Cảnh báo!",
+        text: "Vui lòng chọn kỳ báo cáo",
+        icon: "warning",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#faad14",
+        timer: 2000,
+      });
+
       return;
     }
 
@@ -135,9 +143,22 @@ const RevenueReport = () => {
       link.download =
         res.headers["content-disposition"]?.split("filename=")[1]?.replace(/"/g, "") || `doanh_thu.${format}`;
       link.click();
-      message.success("Tải file thành công!");
+      Swal.fire({
+        title: "🎉 Thành công!",
+        text: "Tải file thành công!",
+        icon: "success",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#52c41a",
+      });
     } catch (err) {
-      message.error("Lỗi tải file!");
+      Swal.fire({
+        title: "❌ Lỗi!",
+        text: "Lỗi tải file",
+        icon: "error",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#ff4d4f",
+        timer: 2000,
+      });
     }
   };
 
