@@ -66,8 +66,11 @@ export default function StoreFormModal({
       tags: Array.isArray(formData.tags)
         ? formData.tags
         : formData.tagsCsv
-          ? formData.tagsCsv.split(",").map((t) => t.trim()).filter(Boolean)
-          : [],
+        ? formData.tagsCsv
+            .split(",")
+            .map((t) => t.trim())
+            .filter(Boolean)
+        : [],
     };
 
     form.setFieldsValue({
@@ -120,7 +123,15 @@ export default function StoreFormModal({
   const handleFileUpload = async (file) => {
     const maxMB = 8;
     if (file.size > maxMB * 1024 * 1024) {
-      message.error(`File quá lớn (tối đa ${maxMB}MB)`);
+      Swal.fire({
+        title: "❌ Lỗi!",
+        text: `File quá lớn (tối đa ${maxMB}MB)`,
+        icon: "error",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#ff4d4f",
+        timer: 2000,
+      });
+
       return false;
     }
 
@@ -135,12 +146,28 @@ export default function StoreFormModal({
         setUploading(false);
       };
       reader.onerror = () => {
-        message.error("Không đọc được file ảnh");
+        Swal.fire({
+          title: "❌ Lỗi!",
+          text: "không đọc được file ảnh",
+          icon: "error",
+          confirmButtonText: "OK",
+          confirmButtonColor: "#ff4d4f",
+          timer: 2000,
+        });
+
         setUploading(false);
       };
       reader.readAsDataURL(file);
     } catch (err) {
-      message.error("Lỗi upload ảnh");
+      Swal.fire({
+        title: "❌ Lỗi!",
+        text: "lỗi upload ảnh",
+        icon: "error",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#ff4d4f",
+        timer: 2000,
+      });
+
       setUploading(false);
     }
     return false; // Prevent auto upload
@@ -152,7 +179,15 @@ export default function StoreFormModal({
     if (!tag) return;
 
     if (localTags.includes(tag)) {
-      message.warning("Tag đã tồn tại");
+      Swal.fire({
+        title: "⚠️ Cảnh báo!",
+        text: "Tag đã tồn tại",
+        icon: "warning",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#faad14",
+        timer: 2000,
+      });
+
       return;
     }
 
@@ -236,7 +271,14 @@ export default function StoreFormModal({
       }
     } catch (err) {
       console.error("save error", err);
-      message.error(err?.message || "Lỗi khi lưu cửa hàng");
+      Swal.fire({
+        title: "❌ Lỗi!",
+        text: err?.message || "Lỗi khi lưu cửa hàng",
+        icon: "error",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#ff4d4f",
+        timer: 2000,
+      });
     }
   };
 
@@ -436,11 +478,7 @@ export default function StoreFormModal({
                 }
                 name="description"
               >
-                <TextArea
-                  rows={4}
-                  placeholder="Nhập mô tả về cửa hàng"
-                  style={{ borderRadius: 8 }}
-                />
+                <TextArea rows={4} placeholder="Nhập mô tả về cửa hàng" style={{ borderRadius: 8 }} />
               </Form.Item>
 
               {/* Tags */}
@@ -543,18 +581,8 @@ export default function StoreFormModal({
 
               {/* Upload Buttons */}
               <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                <Upload
-                  accept="image/*"
-                  beforeUpload={handleFileUpload}
-                  showUploadList={false}
-                >
-                  <Button
-                    icon={<UploadOutlined />}
-                    block
-                    size="large"
-                    loading={uploading}
-                    style={{ borderRadius: 8 }}
-                  >
+                <Upload accept="image/*" beforeUpload={handleFileUpload} showUploadList={false}>
+                  <Button icon={<UploadOutlined />} block size="large" loading={uploading} style={{ borderRadius: 8 }}>
                     Chọn file ảnh
                   </Button>
                 </Upload>
@@ -596,11 +624,7 @@ export default function StoreFormModal({
         <Divider style={{ margin: "24px 0" }} />
         <Row justify="end" gutter={12}>
           <Col>
-            <Button
-              size="large"
-              onClick={onClose}
-              style={{ borderRadius: 8, minWidth: 120 }}
-            >
+            <Button size="large" onClick={onClose} style={{ borderRadius: 8, minWidth: 120 }}>
               Hủy
             </Button>
           </Col>

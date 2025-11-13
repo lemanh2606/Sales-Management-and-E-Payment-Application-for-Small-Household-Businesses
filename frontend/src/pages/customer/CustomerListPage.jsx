@@ -16,7 +16,7 @@ import {
   Row,
   Col,
   Badge,
-  Divider
+  Divider,
 } from "antd";
 import {
   PlusOutlined,
@@ -27,7 +27,7 @@ import {
   UserOutlined,
   PhoneOutlined,
   EnvironmentOutlined,
-  WalletOutlined
+  WalletOutlined,
 } from "@ant-design/icons";
 import Layout from "../../components/Layout";
 import CustomerForm from "../../components/customer/CustomerForm";
@@ -68,7 +68,14 @@ export default function CustomerListPage() {
       setItemsPerPage(res?.limit ? Number(res.limit) : limit);
     } catch (err) {
       console.error("getCustomersByStore error:", err);
-      message.error("Không thể tải danh sách khách hàng của cửa hàng");
+      Swal.fire({
+        title: "❌ Lỗi!",
+        text: "Không thể tải danh sách khách hàng của cửa hàng",
+        icon: "error",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#ff4d4f",
+        timer: 2000,
+      });
     } finally {
       setLoading(false);
     }
@@ -111,12 +118,25 @@ export default function CustomerListPage() {
     try {
       setLoading(true);
       await softDeleteCustomer(id);
-      message.success("Xóa khách hàng thành công!");
+      Swal.fire({
+        title: "🎉 Thành công!",
+        text: "Xoá khách hàng thành công!",
+        icon: "success",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#52c41a",
+      });
       fetchByStore({ sId: storeId, page: currentPage, limit: itemsPerPage, query: searchTerm.trim() });
     } catch (err) {
       console.error("delete error:", err);
       const errorMsg = err?.response?.data?.message || "Lỗi server khi xóa";
-      message.error(errorMsg);
+      Swal.fire({
+        title: "❌ Lỗi!",
+        text: errorMsg,
+        icon: "error",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#ff4d4f",
+        timer: 2000,
+      });
     } finally {
       setLoading(false);
     }
@@ -124,7 +144,13 @@ export default function CustomerListPage() {
 
   const handleRefresh = async () => {
     await fetchByStore({ sId: storeId, page: currentPage, limit: itemsPerPage, query: searchTerm.trim() });
-    message.success("Đã làm mới danh sách!");
+    Swal.fire({
+      title: "🎉 Thành công!",
+      text: "Đã làm mới danh sách!",
+      icon: "success",
+      confirmButtonText: "OK",
+      confirmButtonColor: "#52c41a",
+    });
   };
 
   const handleTableChange = (pagination) => {
@@ -134,7 +160,7 @@ export default function CustomerListPage() {
       sId: storeId,
       page: pagination.current,
       limit: pagination.pageSize,
-      query: searchTerm.trim()
+      query: searchTerm.trim(),
     });
   };
 
@@ -154,10 +180,7 @@ export default function CustomerListPage() {
       width: 70,
       align: "center",
       render: (_, __, index) => (
-        <Badge
-          count={(currentPage - 1) * itemsPerPage + index + 1}
-          style={{ backgroundColor: '#52c41a' }}
-        />
+        <Badge count={(currentPage - 1) * itemsPerPage + index + 1} style={{ backgroundColor: "#52c41a" }} />
       ),
     },
     {
@@ -170,7 +193,7 @@ export default function CustomerListPage() {
       dataIndex: "name",
       key: "name",
       render: (text) => (
-        <Text strong style={{ color: '#1890ff' }}>
+        <Text strong style={{ color: "#1890ff" }}>
           {text}
         </Text>
       ),
@@ -229,7 +252,7 @@ export default function CustomerListPage() {
         const str = typeof v === "object" && v?.$numberDecimal ? v.$numberDecimal : String(v);
         const num = parseFloat(str.replace(/,/g, "")) || 0;
         return (
-          <Text strong style={{ color: '#52c41a' }}>
+          <Text strong style={{ color: "#52c41a" }}>
             {num.toLocaleString("vi-VN", { maximumFractionDigits: 0 })}₫
           </Text>
         );
@@ -240,7 +263,7 @@ export default function CustomerListPage() {
       key: "action",
       align: "center",
       width: 200,
-      fixed: 'right',
+      fixed: "right",
       render: (_, record) => (
         <Space size="small">
           <Tooltip title="Cập nhật thông tin">
@@ -249,8 +272,8 @@ export default function CustomerListPage() {
               icon={<EditOutlined />}
               onClick={() => openEdit(record)}
               style={{
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                border: 'none'
+                background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                border: "none",
               }}
             >
               Sửa
@@ -265,10 +288,7 @@ export default function CustomerListPage() {
             okButtonProps={{ danger: true }}
           >
             <Tooltip title="Xóa khách hàng">
-              <Button
-                danger
-                icon={<DeleteOutlined />}
-              >
+              <Button danger icon={<DeleteOutlined />}>
                 Xóa
               </Button>
             </Tooltip>
@@ -283,20 +303,20 @@ export default function CustomerListPage() {
       <Layout>
         <Card
           style={{
-            margin: '24px',
-            borderRadius: '16px',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
+            margin: "24px",
+            borderRadius: "16px",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
           }}
         >
           <Title level={2}>Danh sách Khách hàng</Title>
           <Card
             style={{
-              background: 'linear-gradient(135deg, #FFF9C4 0%, #FFF59D 100%)',
-              border: 'none',
-              marginTop: '16px'
+              background: "linear-gradient(135deg, #FFF9C4 0%, #FFF59D 100%)",
+              border: "none",
+              marginTop: "16px",
             }}
           >
-            <Text strong style={{ fontSize: '16px' }}>
+            <Text strong style={{ fontSize: "16px" }}>
               ⚠️ Không tìm thấy cửa hàng hiện hành. Vui lòng chọn cửa hàng trước khi xem danh sách khách hàng.
             </Text>
           </Card>
@@ -307,82 +327,82 @@ export default function CustomerListPage() {
 
   return (
     <Layout>
-      <div style={{ padding: '24px', background: '#ffffff', minHeight: '100vh' }}>
+      <div style={{ padding: "24px", background: "#ffffff", minHeight: "100vh" }}>
         <Card
           style={{
-            borderRadius: '16px',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
-            marginBottom: '24px'
+            borderRadius: "16px",
+            boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
+            marginBottom: "24px",
           }}
         >
           {/* Header */}
-          <div style={{ marginBottom: '24px' }}>
+          <div style={{ marginBottom: "24px" }}>
             <Title
               level={2}
               style={{
                 margin: 0,
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                fontSize: '32px',
-                fontWeight: 700
+                background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+                fontSize: "32px",
+                fontWeight: 700,
               }}
             >
               👥 Quản lý Khách hàng
             </Title>
-            <Text type="secondary" style={{ fontSize: '14px' }}>
+            <Text type="secondary" style={{ fontSize: "14px" }}>
               Quản lý thông tin khách hàng - tên, số điện thoại và lịch sử chi tiêu
             </Text>
           </div>
 
           {/* Statistics */}
-          <Row gutter={16} style={{ marginBottom: '24px' }}>
+          <Row gutter={16} style={{ marginBottom: "24px" }}>
             <Col xs={24} sm={12} md={8}>
               <Card
                 style={{
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  border: 'none',
-                  borderRadius: '12px'
+                  background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                  border: "none",
+                  borderRadius: "12px",
                 }}
               >
                 <Statistic
-                  title={<span style={{ color: '#fff' }}>Tổng khách hàng</span>}
+                  title={<span style={{ color: "#fff" }}>Tổng khách hàng</span>}
                   value={totalItems}
                   prefix={<UserOutlined />}
-                  valueStyle={{ color: '#fff', fontWeight: 'bold' }}
+                  valueStyle={{ color: "#fff", fontWeight: "bold" }}
                 />
               </Card>
             </Col>
             <Col xs={24} sm={12} md={8}>
               <Card
                 style={{
-                  background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-                  border: 'none',
-                  borderRadius: '12px'
+                  background: "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
+                  border: "none",
+                  borderRadius: "12px",
                 }}
               >
                 <Statistic
-                  title={<span style={{ color: '#fff' }}>Khách hàng hiện tại</span>}
+                  title={<span style={{ color: "#fff" }}>Khách hàng hiện tại</span>}
                   value={customers.length}
                   prefix={<UserOutlined />}
-                  valueStyle={{ color: '#fff', fontWeight: 'bold' }}
+                  valueStyle={{ color: "#fff", fontWeight: "bold" }}
                 />
               </Card>
             </Col>
             <Col xs={24} sm={24} md={8}>
               <Card
                 style={{
-                  background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-                  border: 'none',
-                  borderRadius: '12px'
+                  background: "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",
+                  border: "none",
+                  borderRadius: "12px",
                 }}
               >
                 <Statistic
-                  title={<span style={{ color: '#fff' }}>Tổng doanh thu</span>}
+                  title={<span style={{ color: "#fff" }}>Tổng doanh thu</span>}
                   value={totalSpending}
                   prefix={<WalletOutlined />}
                   suffix="₫"
-                  valueStyle={{ color: '#fff', fontWeight: 'bold' }}
+                  valueStyle={{ color: "#fff", fontWeight: "bold" }}
                 />
               </Card>
             </Col>
@@ -393,10 +413,10 @@ export default function CustomerListPage() {
           {/* Actions Bar */}
           <Space
             style={{
-              marginBottom: '24px',
-              width: '100%',
-              justifyContent: 'space-between',
-              flexWrap: 'wrap'
+              marginBottom: "24px",
+              width: "100%",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
             }}
           >
             <Search
@@ -406,10 +426,10 @@ export default function CustomerListPage() {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               style={{
-                width: '100%',
-                maxWidth: '400px',
+                width: "100%",
+                maxWidth: "400px",
               }}
-              prefix={<SearchOutlined style={{ color: '#1890ff' }} />}
+              prefix={<SearchOutlined style={{ color: "#1890ff" }} />}
             />
 
             <Space>
@@ -418,8 +438,8 @@ export default function CustomerListPage() {
                 icon={<ReloadOutlined />}
                 onClick={handleRefresh}
                 style={{
-                  borderRadius: '8px',
-                  fontWeight: 500
+                  borderRadius: "8px",
+                  fontWeight: 500,
                 }}
               >
                 Làm mới
@@ -430,11 +450,11 @@ export default function CustomerListPage() {
                 icon={<PlusOutlined />}
                 onClick={openCreate}
                 style={{
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  border: 'none',
-                  borderRadius: '8px',
+                  background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                  border: "none",
+                  borderRadius: "8px",
                   fontWeight: 500,
-                  boxShadow: '0 4px 12px rgba(102, 126, 234, 0.4)'
+                  boxShadow: "0 4px 12px rgba(102, 126, 234, 0.4)",
                 }}
               >
                 Thêm khách hàng
@@ -454,27 +474,23 @@ export default function CustomerListPage() {
               total: totalItems,
               showSizeChanger: true,
               showTotal: (total, range) => `${range[0]}-${range[1]} của ${total} khách hàng`,
-              pageSizeOptions: ['5', '10', '20', '50', '100'],
-              style: { marginTop: '16px' }
+              pageSizeOptions: ["5", "10", "20", "50", "100"],
+              style: { marginTop: "16px" },
             }}
             onChange={handleTableChange}
             scroll={{ x: 1200 }}
             style={{
-              borderRadius: '12px',
-              overflow: 'hidden'
+              borderRadius: "12px",
+              overflow: "hidden",
             }}
-            rowClassName={(record, index) =>
-              index % 2 === 0 ? 'table-row-light' : 'table-row-dark'
-            }
+            rowClassName={(record, index) => (index % 2 === 0 ? "table-row-light" : "table-row-dark")}
             locale={{
               emptyText: (
-                <div style={{ padding: '48px 0' }}>
-                  <UserOutlined style={{ fontSize: '48px', color: '#d9d9d9' }} />
-                  <div style={{ marginTop: '16px', color: '#999' }}>
-                    Không có khách hàng nào
-                  </div>
+                <div style={{ padding: "48px 0" }}>
+                  <UserOutlined style={{ fontSize: "48px", color: "#d9d9d9" }} />
+                  <div style={{ marginTop: "16px", color: "#999" }}>Không có khách hàng nào</div>
                 </div>
-              )
+              ),
             }}
           />
         </Card>
@@ -483,8 +499,8 @@ export default function CustomerListPage() {
         <Modal
           title={
             <Space>
-              <UserOutlined style={{ color: '#1890ff' }} />
-              <span style={{ fontSize: '18px', fontWeight: 600 }}>
+              <UserOutlined style={{ color: "#1890ff" }} />
+              <span style={{ fontSize: "18px", fontWeight: 600 }}>
                 {modalCustomer ? "Cập nhật khách hàng" : "Thêm khách hàng mới"}
               </span>
             </Space>
@@ -495,16 +511,12 @@ export default function CustomerListPage() {
           width={800}
           style={{ top: 20 }}
           bodyStyle={{
-            maxHeight: 'calc(100vh - 200px)',
-            overflowY: 'auto',
-            padding: '24px'
+            maxHeight: "calc(100vh - 200px)",
+            overflowY: "auto",
+            padding: "24px",
           }}
         >
-          <CustomerForm
-            customer={modalCustomer}
-            onSuccess={onFormSuccess}
-            onCancel={closeModal}
-          />
+          <CustomerForm customer={modalCustomer} onSuccess={onFormSuccess} onCancel={closeModal} />
         </Modal>
       </div>
 

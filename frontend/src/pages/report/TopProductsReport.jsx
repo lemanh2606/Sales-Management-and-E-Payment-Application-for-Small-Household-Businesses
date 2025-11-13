@@ -1,6 +1,20 @@
 // src/pages/report/TopProductsReport.jsx
 import React, { useState, useEffect } from "react";
-import { Card, Col, Row, Select, InputNumber, Button, Table, Space, Typography, Spin, Alert, Dropdown, Menu } from "antd";
+import {
+  Card,
+  Col,
+  Row,
+  Select,
+  InputNumber,
+  Button,
+  Table,
+  Space,
+  Typography,
+  Spin,
+  Alert,
+  Dropdown,
+  Menu,
+} from "antd";
 import { SearchOutlined, FileExcelOutlined, FilePdfOutlined, DownloadOutlined } from "@ant-design/icons";
 import axios from "axios";
 import Layout from "../../components/Layout";
@@ -75,7 +89,15 @@ const TopProductsReport = () => {
   // XUẤT FILE
   const handleExport = async (format) => {
     if (products.length === 0) {
-      message.warning("Chưa có dữ liệu để xuất!");
+      Swal.fire({
+        title: "⚠️ Cảnh báo!",
+        text: "Chưa có dữ liệu để xuất file",
+        icon: "warning",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#faad14",
+        timer: 2000,
+      });
+
       return;
     }
 
@@ -98,9 +120,22 @@ const TopProductsReport = () => {
       const fileName = `top-san-pham-${range}-${new Date().toISOString().slice(0, 10)}.${format}`;
       link.download = fileName;
       link.click();
-      message.success("Tải file thành công!");
+      Swal.fire({
+        title: "🎉 Thành công!",
+        text: "Tải file thành công",
+        icon: "success",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#52c41a",
+      });
     } catch (err) {
-      message.error("Lỗi xuất file!");
+      Swal.fire({
+        title: "❌ Lỗi!",
+        text: "Lỗi xuất file",
+        icon: "error",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#ff4d4f",
+        timer: 2000,
+      });
     }
   };
 

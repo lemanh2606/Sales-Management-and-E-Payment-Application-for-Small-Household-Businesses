@@ -4,7 +4,7 @@ import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-
 // 🧩 Context
 import { useAuth } from "./context/AuthContext";
 // 🎨 UI & Ant Design
-import { ConfigProvider, Spin, message } from "antd";
+import { ConfigProvider, Spin } from "antd";
 import { LoadingOutlined } from "@ant-design/icons";
 import viVN from "antd/locale/vi_VN";
 // 🔔 Subscription Overlay
@@ -160,14 +160,8 @@ function AppInit() {
 }
 
 function App() {
-  // Tạo message holder cho toàn app
-  const [messageApi, contextHolder] = message.useMessage();
-
   return (
     <ConfigProvider locale={viVN}>
-      {/* Đặt contextHolder vào đây để message hiển thị toàn cục */}
-      {contextHolder}
-
       <AppInit />
       {/* Check subscription cho MANAGER - redirect + ẩn menu */}
       <ManagerSubscriptionCheck />
@@ -330,7 +324,8 @@ function App() {
               <TopProductsReport />
             </ProtectedRoute>
           }
-        /> InventoryReport
+        />{" "}
+        InventoryReport
         <Route
           path="/reports/inventory-reports"
           element={
@@ -417,7 +412,6 @@ function App() {
             </ProtectedRoute>
           }
         />
-
         <Route
           path="settings/notification"
           element={

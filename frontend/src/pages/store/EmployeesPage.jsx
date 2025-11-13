@@ -47,7 +47,14 @@ export default function EmployeesPage() {
       }
       setLoadedTabs((prev) => ({ ...prev, [deleted ? "deleted" : "active"]: true }));
     } catch (err) {
-      message.error(`Không thể tải danh sách nhân viên ${deleted ? "đã xóa" : "đang làm"}!`);
+      Swal.fire({
+        title: "❌ Lỗi!",
+        text: `Không thể tải danh sách nhân viên ${deleted ? "đã xóa" : "đang làm"}!`,
+        icon: "error",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#ff4d4f",
+        timer: 2000,
+      });
       console.error(err);
     } finally {
       setLoading(false);
@@ -58,7 +65,14 @@ export default function EmployeesPage() {
     if (currentStore._id) {
       loadEmployees(false); // Load active đầu tiên
     } else {
-      message.error("Không tìm thấy storeId! Vui lòng chọn cửa hàng.");
+      Swal.fire({
+        title: "❌ Lỗi!",
+        text: "Không tìm thấy storeId! Vui lòng chọn cửa hàng.",
+        icon: "error",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#ff4d4f",
+        timer: 2000,
+      });
     }
   }, [currentStore._id]);
 
@@ -111,16 +125,38 @@ export default function EmployeesPage() {
     try {
       if (mode === "create") {
         await axios.post(`${API_BASE}/stores/${currentStore._id}/employees`, payload, { headers });
-        message.success("Tạo nhân viên thành công!");
-        loadEmployees(false); // Reload active
+        Swal.fire({
+          title: "🎉 Thành công!",
+          text: `Tạo nhân viên thành công`,
+          icon: "success",
+          timer: 2000,
+          confirmButtonText: "OK",
+          confirmButtonColor: "#52c41a",
+        });
+        await loadEmployees(false, true); // Reload active
       } else {
         await axios.put(`${API_BASE}/stores/${currentStore._id}/employees/${current._id}`, payload, { headers });
-        message.success("Cập nhật nhân viên thành công!");
-        loadEmployees(tabKey === "active" ? false : true); // Reload tab hiện tại
+        Swal.fire({
+          title: "🎉 Thành công!",
+          text: `Cập nhật nhân viên thành công`,
+          icon: "success",
+          timer: 2000,
+          confirmButtonText: "OK",
+          confirmButtonColor: "#52c41a",
+        });
+        await loadEmployees(tabKey === "active" ? false : true, true); // Reload tab hiện tại
       }
+      await loadEmployees();
       setOpen(false);
     } catch (err) {
-      message.error("Lỗi khi lưu nhân viên!");
+      Swal.fire({
+        title: "❌ Lỗi!",
+        text: "Lỗi khi lưu nhân viên.",
+        icon: "error",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#ff4d4f",
+        timer: 2000,
+      });
       console.error(err.response?.data || err);
     } finally {
       setLoading(false);
@@ -131,11 +167,25 @@ export default function EmployeesPage() {
     setLoading(true);
     try {
       await axios.delete(`${API_BASE}/stores/${currentStore._id}/employees/${id}/soft`, { headers });
-      message.success("Xóa mềm nhân viên thành công!");
+      Swal.fire({
+        title: "🎉 Thành công!",
+        text: `Xoá nhân viên thành công`,
+        icon: "success",
+        timer: 2000,
+        confirmButtonText: "OK",
+        confirmButtonColor: "#52c41a",
+      });
       await loadEmployees(false, true); // reload lại tab active
       if (loadedTabs.deleted) await loadEmployees(true, true); // reload deleted nếu đã mở
     } catch (err) {
-      message.error("Lỗi khi xóa!");
+      Swal.fire({
+        title: "❌ Lỗi!",
+        text: "Lỗi khi xoá.",
+        icon: "error",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#ff4d4f",
+        timer: 2000,
+      });
     } finally {
       setLoading(false);
     }
@@ -145,11 +195,25 @@ export default function EmployeesPage() {
     setLoading(true);
     try {
       await axios.put(`${API_BASE}/stores/${currentStore._id}/employees/${id}/restore`, {}, { headers });
-      message.success("Khôi phục thành công!");
+      Swal.fire({
+        title: "🎉 Thành công!",
+        text: `Khôi phuch nhân viên thành công `,
+        icon: "success",
+        timer: 2000,
+        confirmButtonText: "OK",
+        confirmButtonColor: "#52c41a",
+      });
       await loadEmployees(true, true); // 👉 reload deleted
       if (loadedTabs.active) await loadEmployees(false, true); // reload active
     } catch (err) {
-      message.error("Lỗi khi khôi phục!");
+      Swal.fire({
+        title: "❌ Lỗi!",
+        text: "Lỗi khi khôi phục lại.",
+        icon: "error",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#ff4d4f",
+        timer: 2000,
+      });
     } finally {
       setLoading(false);
     }
