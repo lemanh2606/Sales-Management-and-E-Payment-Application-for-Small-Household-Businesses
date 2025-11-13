@@ -69,7 +69,7 @@ const FileManager = () => {
     const sizes = ["B", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(1024));
     return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${sizes[i]}`;
-  }; 
+  };
 
   // đặt màu cho icon file mặc định vì ko preview được document
   const getFileIcon = (type, extension) => {
@@ -162,7 +162,14 @@ const FileManager = () => {
       const formData = new FormData();
       const currentStore = JSON.parse(localStorage.getItem("currentStore") || "{}");
       if (!currentStore?._id) {
-        message.error("Chưa chọn cửa hàng!");
+        Swal.fire({
+          title: "❌ Lỗi!",
+          text: "Chưa chọn cửa hàng!",
+          icon: "error",
+          confirmButtonText: "OK",
+          confirmButtonColor: "#ff4d4f",
+          timer: 2000,
+        });
         onError("Missing storeId");
         setUploading(false);
         return;
@@ -184,7 +191,14 @@ const FileManager = () => {
           setFiles((prev) => [res.data.file, ...prev]);
           setFilteredFiles((prev) => [res.data.file, ...prev]);
         }
-        message.success(`${file.name} uploaded!`);
+        Swal.fire({
+          title: "🎉 Thành công!",
+          text: `${file.name} uploaded!`,
+          icon: "success",
+          timer: 2000,
+          confirmButtonText: "OK",
+          confirmButtonColor: "#52c41a",
+        });
         fetchFiles();
         onSuccess(res.data);
       } catch (err) {
@@ -199,7 +213,14 @@ const FileManager = () => {
           });
         } else {
           // fallback nếu lỗi không từ backend
-          message.error(`${file.name} upload failed!`);
+          Swal.fire({
+            title: "❌ Lỗi!",
+            text: `${file.name} upload failed!`,
+            icon: "error",
+            confirmButtonText: "OK",
+            confirmButtonColor: "#ff4d4f",
+            timer: 2000,
+          });
         }
         onError(err);
       } finally {
@@ -220,7 +241,15 @@ const FileManager = () => {
   // Xoá các lựa chọn tick checkbox
   const deleteSelected = async () => {
     if (selectedKeys.length === 0) {
-      message.warning("Chưa chọn file nào để xoá!");
+      Swal.fire({
+        title: "⚠️ Cảnh báo!",
+        text: "Bạn chưa chọn file nào để xoá",
+        icon: "warning",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#faad14",
+        timer: 2000,
+      });
+
       return;
     }
 
@@ -278,7 +307,14 @@ const FileManager = () => {
       window.URL.revokeObjectURL(blobUrl);
     } catch (err) {
       console.error("Lỗi tải file:", err);
-      message.error("Không thể tải file!");
+      Swal.fire({
+        title: "❌ Lỗi!",
+        text: "Không tải được file ",
+        icon: "error",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#ff4d4f",
+        timer: 2000,
+      });
     }
   };
 
@@ -415,10 +451,24 @@ const FileManager = () => {
                 await axios.delete(`http://localhost:9999/api/files/${record._id}?storeId=${currentStore._id}`, {
                   headers: { Authorization: `Bearer ${token}` },
                 });
-                message.success("Xóa thành công!");
+                Swal.fire({
+                  title: "🎉 Thành công!",
+                  text: `Xoá thành công`,
+                  icon: "success",
+                  timer: 2000,
+                  confirmButtonText: "OK",
+                  confirmButtonColor: "#52c41a",
+                });
                 fetchFiles();
               } catch (err) {
-                message.error("Lỗi xóa!");
+                Swal.fire({
+                  title: "❌ Lỗi!",
+                  text: "Lỗi Xoá không xoá được",
+                  icon: "error",
+                  confirmButtonText: "OK",
+                  confirmButtonColor: "#ff4d4f",
+                  timer: 2000,
+                });
               }
             }}
           >

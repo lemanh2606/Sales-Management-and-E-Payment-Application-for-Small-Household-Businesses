@@ -98,12 +98,7 @@ const ProtectedRoute = ({ children, allowedRoles = [], allowedPermissions = null
           background: "#ffffff",
         }}
       >
-        <LoadingSpinner
-          size="large"
-          iconColor="#52c41a"
-          tip="🔐 Đang xác thực quyền truy cập..."
-          tipColor="#52c41a"
-        />
+        <LoadingSpinner size="large" iconColor="#52c41a" tip="🔐 Đang xác thực quyền truy cập..." tipColor="#52c41a" />
       </div>
     );
   }
@@ -484,6 +479,15 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="settings/notification"
+          element={
+            <ProtectedRoute>
+              <Notification />
+            </ProtectedRoute>
+          }
+        />
+        {/* Unauthorized */}
 
         {/* ==================== Error Pages ==================== */}
         <Route path="/unauthorized" element={<Unauthorized />} />

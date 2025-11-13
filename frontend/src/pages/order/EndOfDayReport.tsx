@@ -36,6 +36,7 @@ import axios from "axios";
 import dayjs, { Dayjs } from "dayjs";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, PieLabelRenderProps } from "recharts";
 import debounce from "../../utils/debounce";
+import Swal from "sweetalert2";
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -180,9 +181,23 @@ const EndOfDayReport: React.FC = () => {
           headers,
         });
         setReportData(res.data.report);
-        message.success("Tải báo cáo thành công!");
+        Swal.fire({
+          title: "🎉 Thành công!",
+          text: "Tải báo cáo thành công!",
+          icon: "success",
+          confirmButtonText: "OK",
+          confirmButtonColor: "#52c41a",
+        });
       } catch (err: any) {
-        message.error(err.response?.data?.message || "Lỗi tải báo cáo");
+        Swal.fire({
+          title: "❌ Lỗi!",
+          text: err.response?.data?.message || "Lỗi tải báo cáo",
+          icon: "error",
+          confirmButtonText: "OK",
+          confirmButtonColor: "#ff4d4f",
+          timer: 2000,
+        });
+
         setReportData(null);
       } finally {
         setLoading(false);
@@ -292,7 +307,7 @@ const EndOfDayReport: React.FC = () => {
         <Row justify="space-between" align="middle" gutter={[16, 16]}>
           <Col xs={24} md={12}>
             <div className="flex flex-col sm:flex-row sm:items-center  mb-4 gap-3">
-              <Title level={3} style={{ margin: 0}}>
+              <Title level={3} style={{ margin: 0 }}>
                 <BarChartOutlined /> Báo Cáo Cuối Ngày
               </Title>
               <span className="px-4 py-2 text-base font-semibold bg-[#e6f4ff] text-[#1890ff] rounded-xl shadow-sm duration-200">
