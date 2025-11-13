@@ -256,7 +256,7 @@ export default function Sidebar({ onCollapsedChange }) {
           },
           {
             key: "/settings/payment-method",
-            label: <span style={{ fontSize: 13.5 }}> Thanh toán</span>,
+            label: <span style={{ fontSize: 13.5 }}>Thiết lập thanh toán</span>,
             permission: "settings:payment-method",
           },
           {
