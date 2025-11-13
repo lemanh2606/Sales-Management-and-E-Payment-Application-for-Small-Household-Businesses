@@ -110,7 +110,7 @@ const activityLogRouters = require("./routers/activityLogRouters");
 const fileRouters = require("./routers/fileRouters");
 const subscriptionRouters = require("./routers/subscriptionRouters");
 const notificationRouters = require("./routers/notificationRouters");
-
+const inventoryReportRouters = require("./routers/inventoryReportRouters");
 
 // --- MOUNT ROUTERS ---
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
@@ -133,6 +133,7 @@ app.use("/api/activity-logs", activityLogRouters);
 app.use("/api/files", fileRouters);
 app.use("/api/subscriptions", subscriptionRouters);
 app.use("/api/notifications", notificationRouters);
+app.use("/api/inventory-reports", inventoryReportRouters);
 
 // --- ROOT ---
 app.get("/", (req, res) => {

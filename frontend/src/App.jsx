@@ -1,7 +1,7 @@
 // src/App.jsx
 import React, { useEffect } from "react";
 import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
-import { ConfigProvider } from "antd";
+import { ConfigProvider, message } from "antd";
 import viVN from "antd/locale/vi_VN";
 
 // Context
@@ -44,6 +44,7 @@ import ReportDashboard from "./pages/report/ReportDashboard";
 import RevenueReport from "./pages/report/RevenueReport";
 import TaxDeclaration from "./pages/report/TaxDeclaration";
 import TopProductsReport from "./pages/report/TopProductsReport";
+import InventoryReport from "./pages/report/InventoryReport";
 
 // Settings
 import Profile from "./pages/setting/Profile";
@@ -51,13 +52,17 @@ import PricingPage from "./pages/setting/PricingPage";
 import SubscriptionPage from "./pages/setting/SubscriptionPage";
 import ActivityLog from "./pages/setting/ActivityLog";
 import FileManager from "./pages/setting/FileManager";
+import Notification from "./pages/setting/Notification";
+import Term from "./pages/setting/Term";
+import Privacy from "./pages/setting/Privacy";
+
+// Loyalty
 import LoyaltySetting from "./pages/loyalty/LoyaltySetting";
 
 // Orders
 import SidebarPOS from "./pages/order/SidebarPOS";
 import ListAllOrder from "./pages/order/ListAllOrder";
 import ListPendingOrders from "./pages/order/ListPendingOrders";
-import Notification from "./pages/setting/Notification";
 
 /** Utility: Read user from localStorage */
 function getStoredUser() {
@@ -180,6 +185,9 @@ function AppInit() {
 }
 
 function App() {
+  // Message API cho toàn app
+  const [messageApi, contextHolder] = message.useMessage();
+
   return (
     <ConfigProvider
       locale={viVN}
@@ -213,12 +221,15 @@ function App() {
         },
       }}
     >
+      {/* Message context holder */}
+      {contextHolder}
+
       <AppInit />
       <ManagerSubscriptionCheck />
       <SubscriptionExpiredOverlay />
 
       <Routes>
-        {/* Auth Routes */}
+        {/* ==================== Auth Routes ==================== */}
         <Route
           path="/login"
           element={
@@ -252,7 +263,7 @@ function App() {
           }
         />
 
-        {/* Dashboard & Store */}
+        {/* ==================== Dashboard & Store ==================== */}
         <Route
           path="/dashboard/:storeId"
           element={
@@ -286,7 +297,103 @@ function App() {
           }
         />
 
-        {/* Settings */}
+        {/* ==================== Products & Suppliers ==================== */}
+        <Route
+          path="/suppliers"
+          element={
+            <ProtectedRoute allowedPermissions="supplier:view">
+              <SupplierListPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/products"
+          element={
+            <ProtectedRoute allowedPermissions="products:view">
+              <ProductListPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/product-groups"
+          element={
+            <ProtectedRoute allowedPermissions="products:view">
+              <ProductGroupsPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ==================== Customers ==================== */}
+        <Route
+          path="/customers-list"
+          element={
+            <ProtectedRoute allowedPermissions="customers:search">
+              <CustomerListPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/customers/top-customers"
+          element={
+            <ProtectedRoute allowedPermissions="customers:search">
+              <TopCustomer />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ==================== Loyalty ==================== */}
+        <Route
+          path="/loyalty/config"
+          element={
+            <ProtectedRoute allowedRoles={["MANAGER", "STAFF"]}>
+              <LoyaltySetting />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ==================== Reports ==================== */}
+        <Route
+          path="/reports/dashboard"
+          element={
+            <ProtectedRoute allowedPermissions="reports:financial:view">
+              <ReportDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/reports/revenue"
+          element={
+            <ProtectedRoute allowedPermissions="reports:revenue:view">
+              <RevenueReport />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/reports/tax"
+          element={
+            <ProtectedRoute allowedPermissions="tax:preview">
+              <TaxDeclaration />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/reports/top-products"
+          element={
+            <ProtectedRoute allowedPermissions="reports:top-products">
+              <TopProductsReport />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/reports/inventory-reports"
+          element={
+            <ProtectedRoute allowedPermissions="inventory:stock-check:view">
+              <InventoryReport />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ==================== Settings ==================== */}
         <Route
           path="/settings/profile"
           element={
@@ -335,96 +442,24 @@ function App() {
             </ProtectedRoute>
           }
         />
-
-        {/* Products & Suppliers */}
         <Route
-          path="/suppliers"
+          path="/terms"
           element={
-            <ProtectedRoute allowedPermissions="supplier:view">
-              <SupplierListPage />
+            <ProtectedRoute>
+              <Term />
             </ProtectedRoute>
           }
         />
         <Route
-          path="/products"
+          path="/privacy"
           element={
-            <ProtectedRoute allowedPermissions="products:view">
-              <ProductListPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/product-groups"
-          element={
-            <ProtectedRoute allowedPermissions="products:view">
-              <ProductGroupsPage />
+            <ProtectedRoute>
+              <Privacy />
             </ProtectedRoute>
           }
         />
 
-        {/* Customers */}
-        <Route
-          path="/customers-list"
-          element={
-            <ProtectedRoute allowedPermissions="customers:search">
-              <CustomerListPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/customers/top-customers"
-          element={
-            <ProtectedRoute allowedPermissions="customers:search">
-              <TopCustomer />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* Loyalty */}
-        <Route
-          path="/loyalty/config"
-          element={
-            <ProtectedRoute allowedRoles={["MANAGER", "STAFF"]}>
-              <LoyaltySetting />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* Reports */}
-        <Route
-          path="/reports/dashboard"
-          element={
-            <ProtectedRoute allowedPermissions="reports:financial:view">
-              <ReportDashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/reports/revenue"
-          element={
-            <ProtectedRoute allowedPermissions="reports:revenue:view">
-              <RevenueReport />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/reports/tax"
-          element={
-            <ProtectedRoute allowedPermissions="tax:preview">
-              <TaxDeclaration />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/reports/top-products"
-          element={
-            <ProtectedRoute allowedPermissions="reports:top-products">
-              <TopProductsReport />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* Orders */}
+        {/* ==================== Orders ==================== */}
         <Route
           path="/orders/pos"
           element={
@@ -450,7 +485,7 @@ function App() {
           }
         />
 
-        {/* Error Pages */}
+        {/* ==================== Error Pages ==================== */}
         <Route path="/unauthorized" element={<Unauthorized />} />
         <Route path="*" element={<NotFound />} />
       </Routes>

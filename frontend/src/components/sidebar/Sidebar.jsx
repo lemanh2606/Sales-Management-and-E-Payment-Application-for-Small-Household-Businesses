@@ -173,7 +173,7 @@ export default function Sidebar({ onCollapsedChange }) {
         children: [
           {
             key: "/customers-list",
-            label: <span style={{ fontSize: 13.5 }}> DS khách hàng</span>,
+            label: <span style={{ fontSize: 13.5 }}> Danh sách khách hàng</span>,
             permission: "customers:search",
           },
           {
@@ -190,7 +190,7 @@ export default function Sidebar({ onCollapsedChange }) {
         children: [
           {
             key: `/stores/${storeId}/employees`,
-            label: <span style={{ fontSize: 13.5 }}>DS nhân viên</span>,
+            label: <span style={{ fontSize: 13.5 }}>Danh sách nhân viên</span>,
             permission: "employees:view",
           },
           {
@@ -207,7 +207,7 @@ export default function Sidebar({ onCollapsedChange }) {
         children: [
           {
             key: "/loyalty/config",
-            label: <span style={{ fontSize: 13.5 }}> Cấu hình</span>,
+            label: <span style={{ fontSize: 13.5 }}> Cấu hình tích điểm</span>,
             permission: "loyalty:manage",
           },
         ],
@@ -219,13 +219,18 @@ export default function Sidebar({ onCollapsedChange }) {
         children: [
           {
             key: "/reports/dashboard",
-            label: <span style={{ fontSize: 13.5 }}> Tổng quan</span>,
+            label: <span style={{ fontSize: 13.5 }}> Báo cáo tổng quan</span>,
             permission: "reports:financial:view",
           },
           {
             key: "/reports/revenue",
-            label: <span style={{ fontSize: 13.5 }}> Doanh thu chi tiết</span>,
+            label: <span style={{ fontSize: 13.5 }}> Báo cáo doanh thu chi tiết</span>,
             permission: "reports:revenue:view",
+          },
+          {
+            key: "/reports/inventory-reports",
+            label: <span style={{ fontSize: 13.5 }}> Báo cáo tồn kho</span>,
+            permission: "inventory:stock-check:view",
           },
           {
             key: "/reports/tax",
@@ -234,7 +239,7 @@ export default function Sidebar({ onCollapsedChange }) {
           },
           {
             key: "/reports/top-products",
-            label: <span style={{ fontSize: 13.5 }}> SP bán chạy</span>,
+            label: <span style={{ fontSize: 13.5 }}> Top sản phẩm bán chạy</span>,
             permission: "reports:top-products",
           },
         ],
@@ -645,7 +650,12 @@ export default function Sidebar({ onCollapsedChange }) {
       <Drawer
         title={
           <Space>
-            <Avatar size={36} src={user?.image} icon={!user?.image && <UserOutlined />} style={{ background: user?.image ? "transparent" : "linear-gradient(135deg, #52c41a 0%, #73d13d 100%)" }} />
+            <Avatar
+              size={36}
+              src={user?.image}
+              icon={!user?.image && <UserOutlined />}
+              style={{ background: user?.image ? "transparent" : "linear-gradient(135deg, #52c41a 0%, #73d13d 100%)" }}
+            />
             <div>
               <div style={{ fontWeight: 700, fontSize: 16 }}>Smallbiz Sales</div>
               <div style={{ fontSize: 12, color: "#8c8c8c" }}>Quản lý bán hàng</div>
@@ -692,123 +702,169 @@ export default function Sidebar({ onCollapsedChange }) {
       </Drawer>
 
       <style jsx global>{`
-  @media (max-width: 768px) {
-    .desktop-sidebar {
-      display: none !important;
-    }
-    .mobile-menu-btn {
-      display: flex !important;
-    }
-  }
+        @media (max-width: 768px) {
+          .desktop-sidebar {
+            display: none !important;
+          }
+          .mobile-menu-btn {
+            display: flex !important;
+          }
+        }
 
-  @media (min-width: 769px) {
-    .mobile-drawer {
-      display: none !important;
-    }
-    .mobile-menu-btn {
-      display: none !important;
-    }
-  }
+        @media (min-width: 769px) {
+          .mobile-drawer {
+            display: none !important;
+          }
+          .mobile-menu-btn {
+            display: none !important;
+          }
+        }
 
-  .menu-container::-webkit-scrollbar {
-    display: none;
-  }
+        .menu-container::-webkit-scrollbar {
+          display: none;
+        }
 
-  .ant-menu-item,
-  .ant-menu-submenu-title {
-    border-radius: 10px !important;
-    margin: 3px 10px !important;
-    padding: 8px 14px !important;
-    height: auto !important;
-    line-height: 1.4 !important;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-  }
+        .ant-menu-item,
+        .ant-menu-submenu-title {
+          border-radius: 10px !important;
+          margin: 3px 10px !important;
+          padding: 8px 14px !important;
+          height: auto !important;
+          line-height: 1.4 !important;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
 
-  /* Hover state - màu nhẹ nhàng */
-  .ant-menu-item:hover,
-  .ant-menu-submenu-title:hover {
-    background: linear-gradient(90deg, #f6ffed 0%, #fafffe 100%) !important;
-    color: #389e0d !important;
-    transform: translateX(3px);
-    border-left: 3px solid #52c41a;
-    padding-left: 11px !important;
-  }
+        /* Hover state - màu nhẹ nhàng */
+        .ant-menu-item:hover,
+        .ant-menu-submenu-title:hover {
+          background: linear-gradient(90deg, #f6ffed 0%, #fafffe 100%) !important;
+          color: #389e0d !important;
+          transform: translateX(3px);
+          border-left: 3px solid #52c41a;
+          padding-left: 11px !important;
+        }
 
-  /* Selected state - xanh nhạt tinh tế */
-  .ant-menu-item-selected {
-    background: linear-gradient(135deg, #f6ffed 0%, #e6ffe6 100%) !important;
-    color: #237804 !important;
-    font-weight: 600 !important;
-    border-left: 4px solid #52c41a !important;
-    padding-left: 10px !important;
-    box-shadow: 0 2px 8px rgba(82, 196, 26, 0.15) !important;
-  }
+        /* Selected state - xanh nhạt tinh tế */
+        .ant-menu-item-selected {
+          background: linear-gradient(135deg, #f6ffed 0%, #e6ffe6 100%) !important;
+          color: #237804 !important;
+          font-weight: 600 !important;
+          border-left: 4px solid #52c41a !important;
+          padding-left: 10px !important;
+          box-shadow: 0 2px 8px rgba(82, 196, 26, 0.15) !important;
+        }
 
-  .ant-menu-item-selected .ant-menu-item-icon,
-  .ant-menu-item-selected span {
-    color: #237804 !important;
-  }
+        .ant-menu-item-selected .ant-menu-item-icon,
+        .ant-menu-item-selected span {
+          color: #237804 !important;
+        }
 
-  /* Submenu items */
-  .ant-menu-sub .ant-menu-item {
-    padding-left: 40px !important;
-  }
+        /* Submenu items */
+        .ant-menu-sub .ant-menu-item {
+          padding-left: 40px !important;
+        }
 
-  .ant-menu-sub .ant-menu-item:hover {
-    padding-left: 37px !important;
-  }
+        .ant-menu-sub .ant-menu-item:hover {
+          padding-left: 37px !important;
+        }
 
-  .ant-menu-sub .ant-menu-item-selected {
-    padding-left: 36px !important;
-  }
+        .ant-menu-sub .ant-menu-item-selected {
+          padding-left: 36px !important;
+        }
 
-  /* Submenu title hover */
-  .ant-menu-submenu-title:hover .ant-menu-submenu-arrow {
-    color: #52c41a !important;
-  }
+        /* Submenu title hover */
+        .ant-menu-submenu-title:hover .ant-menu-submenu-arrow {
+          color: #52c41a !important;
+        }
 
-  /* Active submenu */
-  .ant-menu-submenu-open > .ant-menu-submenu-title {
-    color: #52c41a !important;
-    font-weight: 600;
-  }
+        /* Active submenu */
+        .ant-menu-submenu-open > .ant-menu-submenu-title {
+          color: #52c41a !important;
+          font-weight: 600;
+        }
 
-  .header-collapse-btn:hover {
-    background: #f0f0f0 !important;
-    transform: scale(1.08);
-  }
+        .header-collapse-btn:hover {
+          background: #f0f0f0 !important;
+          transform: scale(1.08);
+        }
 
-  .logout-btn::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: -100%;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
-    transition: left 0.6s;
-  }
+        .logout-btn::before {
+          content: "";
+          position: absolute;
+          top: 0;
+          left: -100%;
+          width: 100%;
+          height: 100%;
+          background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+          transition: left 0.6s;
+        }
 
-  .logout-btn:hover::before {
-    left: 100%;
-  }
+        .logout-btn:hover::before {
+          left: 100%;
+        }
 
-  .logout-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(255, 77, 79, 0.5) !important;
-  }
+        .logout-btn:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 20px rgba(255, 77, 79, 0.5) !important;
+        }
 
-  @keyframes bounce {
-    0%,
-    100% {
-      transform: translateY(0);
-    }
-    50% {
-      transform: translateY(-8px);
-    }
-  }
-`}</style>
+        @keyframes bounce {
+          0%,
+          100% {
+            transform: translateY(0);
+          }
+          50% {
+            transform: translateY(-8px);
+          }
+        }
 
+        /* === Hiệu ứng cây (tree-like) cho menu trong Sidebar === */
+
+        /* Áp dụng đường dọc nối giữa cha–con */
+        .menu-container .ant-menu-submenu .ant-menu {
+          position: relative;
+          margin-left: 14px; /* thụt vào một chút */
+          border-left: 1px solid #d9d9d9; /* đường dọc */
+          padding-left: 8px;
+        }
+
+        /* Tạo đường ngang nối giữa parent và item con */
+        .menu-container .ant-menu-item::before {
+          content: "";
+          position: absolute;
+          left: -14px; /* vị trí nối với border-left */
+          top: 50%;
+          width: 14px;
+          border-bottom: 1px solid #d9d9d9;
+        }
+
+        /* Đảm bảo chữ và icon không đè lên đường */
+        .menu-container .ant-menu-item {
+          position: relative;
+          padding-left: 28px !important;
+        }
+
+        /* Khi hover hoặc selected thì đường cây đổi màu nhẹ */
+        .menu-container .ant-menu-item:hover::before {
+          border-color: #52c41a;
+        }
+        .menu-container .ant-menu-item-selected::before {
+          border-color: #52c41a;
+        }
+
+        /* Đường cây cho submenu cấp sâu (ví dụ "Gói dịch vụ") */
+        .menu-container .ant-menu-submenu .ant-menu-submenu .ant-menu {
+          margin-left: 16px;
+          border-left: 1px dashed #d0d0d0;
+        }
+
+        /* Nếu collapse menu thì ẩn các đường cây đi để đỡ rối */
+        .ant-menu-inline-collapsed .ant-menu-submenu .ant-menu,
+        .ant-menu-inline-collapsed .ant-menu-item::before {
+          border: none !important;
+          content: none !important;
+        }
+      `}</style>
     </>
   );
 }

@@ -182,6 +182,8 @@ const OrderRefund: React.FC = () => {
   const [selectedPaidOrder, setSelectedPaidOrder] = useState<PaidOrder | null>(null);
   const [selectedPaidOrderItems, setSelectedPaidOrderItems] = useState<OrderItem[]>([]);
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
+  const [modalSearchText, setModalSearchText] = useState("");
+  const [modalSelectedEmployee, setModalSelectedEmployee] = useState<string | undefined>(undefined);
 
   //Biến phân trang
   const [paginationOrderRefund, setpaginationOrderRefund] = useState({ current: 1, pageSize: 10 });
@@ -409,7 +411,7 @@ const OrderRefund: React.FC = () => {
     }
   }, [storeId]);
 
-  // Filter refund orders
+  // Filter refund orders ở ngoài
   const filteredOrders = refundOrders.filter((order) => {
     const matchSearch = searchText
       ? order._id.toLowerCase().includes(searchText.toLowerCase()) ||
@@ -427,6 +429,19 @@ const OrderRefund: React.FC = () => {
     }
 
     return matchSearch && matchEmployee && matchDate;
+  });
+
+  // Phần bộ lọc và tìm kiếm trong Modal của các đơn đã paid để tìm và trả nhanh hơn
+  const filteredPaidOrders = paidOrders.filter((order) => {
+    const matchSearch = modalSearchText
+      ? order._id.toLowerCase().includes(modalSearchText.toLowerCase()) ||
+        order.customer?.name.toLowerCase().includes(modalSearchText.toLowerCase()) ||
+        order.customer?.phone.includes(modalSearchText)
+      : true;
+
+    const matchEmployee = modalSelectedEmployee ? order.employeeId._id === modalSelectedEmployee : true;
+
+    return matchSearch && matchEmployee;
   });
 
   //Tính toán và hiển thị thông tin range Phân trang
@@ -779,13 +794,44 @@ const OrderRefund: React.FC = () => {
           </Space>
         }
         open={paidOrdersModalOpen}
-        onCancel={() => setPaidOrdersModalOpen(false)}
+        onCancel={() => {
+          setPaidOrdersModalOpen(false);
+          // Reset search khi đóng modal
+          setModalSearchText("");
+          setModalSelectedEmployee(undefined);
+        }}
         footer={null}
         width={1100}
       >
+        {/* Thêm bộ lọc trong Modal */}
+        <Space direction="vertical" style={{ width: "100%", marginBottom: 16 }}>
+          <Input
+            placeholder="Tìm mã đơn hàng, tên khách, SĐT..."
+            prefix={<SearchOutlined />}
+            value={modalSearchText}
+            onChange={(e) => setModalSearchText(e.target.value)}
+            allowClear
+            style={{ width: "100%" }}
+          />
+          <Select
+            placeholder="Lọc theo nhân viên bán hàng"
+            style={{ width: "100%" }}
+            value={modalSelectedEmployee}
+            onChange={setModalSelectedEmployee}
+            allowClear
+          >
+            {employees.map((emp) => (
+              <Option key={emp._id} value={emp._id}>
+                <UserOutlined /> {emp.fullName}
+              </Option>
+            ))}
+          </Select>
+        </Space>
+
         <Table
-          dataSource={paidOrders}
+          dataSource={filteredPaidOrders}
           rowKey="_id"
+          loading={paidLoading}
           pagination={{
             ...paginationConfig,
             current: paginationOrderRefundSelect.current,
@@ -814,7 +860,12 @@ const OrderRefund: React.FC = () => {
             {
               title: "Nhân viên bán hàng",
               key: "employee",
-              render: (_, record) => record.employeeId.fullName,
+              render: (_, record) => (
+                <Space>
+                  <UserOutlined />
+                  {record.employeeId.fullName}
+                </Space>
+              ),
             },
             {
               title: "Tổng Tiền",
@@ -829,7 +880,7 @@ const OrderRefund: React.FC = () => {
               key: "paymentMethod",
               align: "right",
               render: (method) => (
-                <Tag color={method === "cash" ? "green" : "blue"}>{method === "cash" ? "Tiền Mặt" : "QR"}</Tag>
+                <Tag color={method === "cash" ? "green" : "blue"}>{method === "cash" ? "Tiền Mặt" : "QRCode"}</Tag>
               ),
             },
             {
