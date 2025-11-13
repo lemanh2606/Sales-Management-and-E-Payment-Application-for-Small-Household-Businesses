@@ -2,7 +2,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { Layout, Menu, Button, Avatar, Space, Drawer, Tooltip, Badge, Divider } from "antd";
 import {
-  MenuFoldOutlined,
   MenuUnfoldOutlined,
   LogoutOutlined,
   DashboardOutlined,
@@ -96,17 +95,17 @@ export default function Sidebar({ onCollapsedChange }) {
         children: [
           {
             key: `/dashboard/${storeId}`,
-            label: <span style={{ fontSize: 13.5 }}> Tổng quan</span>,
+            label: <span style={{ fontSize: 13.5 }}>Tổng quan</span>,
             permission: null,
           },
           {
             key: "/select-store",
-            label: <span style={{ fontSize: 13.5 }}> Chọn cửa hàng</span>,
+            label: <span style={{ fontSize: 13.5 }}>Chọn cửa hàng</span>,
             permission: "store:view",
           },
           {
             key: "/update/store",
-            label: <span style={{ fontSize: 13.5 }}> Thiết lập</span>,
+            label: <span style={{ fontSize: 13.5 }}>Thiết lập</span>,
             permission: "store:update",
           },
         ],
@@ -118,28 +117,16 @@ export default function Sidebar({ onCollapsedChange }) {
         children: [
           {
             key: "/products",
-            label: <span style={{ fontSize: 13.5 }}> Danh sách hàng hóa</span>,
+            label: <span style={{ fontSize: 13.5 }}>Danh sách hàng hóa</span>,
             permission: "products:view",
           },
           {
             key: "/suppliers",
-            label: <span style={{ fontSize: 13.5 }}> Nhà cung cấp</span>,
-            // children: [
-            //   {
-            //     key: "/suppliers",
-            //     label: <span style={{ fontSize: 13.5 }}> DS nhà cung cấp</span>,
-            //     permission: "supplier:view",
-            //   },
-            // ],
+            label: <span style={{ fontSize: 13.5 }}>Nhà cung cấp</span>,
           },
-          // {
-          //   key: "/inventory",
-          //   label: <span style={{ fontSize: 13.5 }}> Nhập/Xuất/Hủy</span>,
-          //   permission: "purchase-orders:view",
-          // },
           {
             key: "/product-groups",
-            label: <span style={{ fontSize: 13.5 }}> Nhóm hàng</span>,
+            label: <span style={{ fontSize: 13.5 }}>Nhóm hàng</span>,
             permission: "products:view",
           },
         ],
@@ -151,17 +138,17 @@ export default function Sidebar({ onCollapsedChange }) {
         children: [
           {
             key: "/orders/pos",
-            label: <span style={{ fontSize: 13.5 }}> POS - Bán hàng</span>,
+            label: <span style={{ fontSize: 13.5 }}>POS - Bán hàng</span>,
             permission: "orders:create",
           },
           {
             key: "/orders/list",
-            label: <span style={{ fontSize: 13.5 }}> DS đơn hàng</span>,
+            label: <span style={{ fontSize: 13.5 }}>DS đơn hàng</span>,
             permission: "orders:view",
           },
           {
             key: "/orders/list-pending",
-            label: <span style={{ fontSize: 13.5 }}> Đơn chưa hoàn tất</span>,
+            label: <span style={{ fontSize: 13.5 }}>Đơn chưa hoàn tất</span>,
             permission: "orders:view",
           },
         ],
@@ -173,12 +160,12 @@ export default function Sidebar({ onCollapsedChange }) {
         children: [
           {
             key: "/customers-list",
-            label: <span style={{ fontSize: 13.5 }}> Danh sách khách hàng</span>,
+            label: <span style={{ fontSize: 13.5 }}>Danh sách khách hàng</span>,
             permission: "customers:search",
           },
           {
             key: "/customers/top-customers",
-            label: <span style={{ fontSize: 13.5 }}> Khách VIP</span>,
+            label: <span style={{ fontSize: 13.5 }}>Khách VIP</span>,
             permission: "customers:top-customers",
           },
         ],
@@ -195,7 +182,7 @@ export default function Sidebar({ onCollapsedChange }) {
           },
           {
             key: `/stores/${storeId}/employees/schedule`,
-            label: <span style={{ fontSize: 13.5 }}> Lịch làm việc</span>,
+            label: <span style={{ fontSize: 13.5 }}>Lịch làm việc</span>,
             permission: "employees:assign",
           },
         ],
@@ -207,7 +194,7 @@ export default function Sidebar({ onCollapsedChange }) {
         children: [
           {
             key: "/loyalty/config",
-            label: <span style={{ fontSize: 13.5 }}> Cấu hình tích điểm</span>,
+            label: <span style={{ fontSize: 13.5 }}>Cấu hình tích điểm</span>,
             permission: "loyalty:manage",
           },
         ],
@@ -219,27 +206,27 @@ export default function Sidebar({ onCollapsedChange }) {
         children: [
           {
             key: "/reports/dashboard",
-            label: <span style={{ fontSize: 13.5 }}> Báo cáo tổng quan</span>,
+            label: <span style={{ fontSize: 13.5 }}>Báo cáo tổng quan</span>,
             permission: "reports:financial:view",
           },
           {
             key: "/reports/revenue",
-            label: <span style={{ fontSize: 13.5 }}> Báo cáo doanh thu chi tiết</span>,
+            label: <span style={{ fontSize: 13.5 }}>Báo cáo doanh thu chi tiết</span>,
             permission: "reports:revenue:view",
           },
           {
             key: "/reports/inventory-reports",
-            label: <span style={{ fontSize: 13.5 }}> Báo cáo tồn kho</span>,
+            label: <span style={{ fontSize: 13.5 }}>Báo cáo tồn kho</span>,
             permission: "inventory:stock-check:view",
           },
           {
             key: "/reports/tax",
-            label: <span style={{ fontSize: 13.5 }}> Kê khai thuế</span>,
+            label: <span style={{ fontSize: 13.5 }}>Kê khai thuế</span>,
             permission: "tax:preview",
           },
           {
             key: "/reports/top-products",
-            label: <span style={{ fontSize: 13.5 }}> Top sản phẩm bán chạy</span>,
+            label: <span style={{ fontSize: 13.5 }}>Top sản phẩm bán chạy</span>,
             permission: "reports:top-products",
           },
         ],
@@ -251,22 +238,22 @@ export default function Sidebar({ onCollapsedChange }) {
         children: [
           {
             key: "/settings/activity-log",
-            label: <span style={{ fontSize: 13.5 }}> Nhật ký hoạt động</span>,
+            label: <span style={{ fontSize: 13.5 }}>Nhật ký hoạt động</span>,
             permission: "settings:activity-log",
           },
           {
             key: "/settings/payment-method",
-            label: <span style={{ fontSize: 13.5 }}> Thanh toán</span>,
+            label: <span style={{ fontSize: 13.5 }}>Thanh toán</span>,
             permission: "settings:payment-method",
           },
           {
             key: "/settings/profile",
-            label: <span style={{ fontSize: 13.5 }}> Hồ sơ cá nhân</span>,
+            label: <span style={{ fontSize: 13.5 }}>Hồ sơ cá nhân</span>,
             permission: "users:view",
           },
           {
             key: "/settings/notification",
-            label: <span style={{ fontSize: 13.5 }}> Thông báo</span>,
+            label: <span style={{ fontSize: 13.5 }}>Thông báo</span>,
             permission: "notifications:view",
           },
           {
@@ -276,7 +263,7 @@ export default function Sidebar({ onCollapsedChange }) {
             children: [
               {
                 key: "/settings/subscription",
-                label: <span style={{ fontSize: 13.5 }}> Gói hiện tại</span>,
+                label: <span style={{ fontSize: 13.5 }}>Gói hiện tại</span>,
                 permission: "subscription:view",
               },
               {
@@ -288,8 +275,7 @@ export default function Sidebar({ onCollapsedChange }) {
           },
           {
             key: "/settings/file",
-
-            label: <span style={{ fontSize: 13.5 }}> Quản lý file</span>,
+            label: <span style={{ fontSize: 13.5 }}>Quản lý file</span>,
             permission: "file:view",
           },
         ],
@@ -397,24 +383,38 @@ export default function Sidebar({ onCollapsedChange }) {
 
   const siderContent = (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", position: "relative" }}>
-      {/* Header */}
+      {/* Header - Glassmorphism */}
       <div
         style={{
-          padding: collapsed ? "16px" : "20px 20px 16px",
-          background: "linear-gradient(135deg, #52c41a 0%, #73d13d 100%)",
+          padding: collapsed ? "16px" : "20px 18px 16px",
+          background: "linear-gradient(135deg, rgba(82, 196, 26, 0.95) 0%, rgba(115, 209, 61, 0.95) 100%)",
+          backdropFilter: "blur(12px)",
           position: "relative",
           overflow: "hidden",
+          borderBottom: "1px solid rgba(255,255,255,0.18)",
         }}
       >
+        {/* Decorative circles */}
         <div
           style={{
             position: "absolute",
-            top: -20,
-            right: -20,
-            width: 100,
-            height: 100,
+            top: -30,
+            right: -30,
+            width: 120,
+            height: 120,
             borderRadius: "50%",
-            background: "rgba(255,255,255,0.1)",
+            background: "radial-gradient(circle, rgba(255,255,255,0.15) 0%, transparent 70%)",
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            bottom: -20,
+            left: -20,
+            width: 80,
+            height: 80,
+            borderRadius: "50%",
+            background: "radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%)",
           }}
         />
 
@@ -428,29 +428,31 @@ export default function Sidebar({ onCollapsedChange }) {
             }}
           >
             <Space size={10}>
-              <Badge dot status="success" offset={[-4, 32]}>
-                {/* Avatar từ user.image hoặc icon default */}
+              <Badge dot status="success" offset={[-4, 36]}>
                 <Avatar
-                  size={collapsed ? 42 : 48}
+                  size={collapsed ? 44 : 52}
                   src={user?.image}
                   icon={!user?.image && <UserOutlined />}
                   style={{
-                    background: user?.image ? "transparent" : "rgba(255, 255, 255, 0.25)",
-                    border: "3px solid rgba(255, 255, 255, 0.5)",
-                    boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+                    background: user?.image ? "transparent" : "rgba(255, 255, 255, 0.28)",
+                    border: "3px solid rgba(255, 255, 255, 0.6)",
+                    boxShadow: "0 6px 16px rgba(0,0,0,0.2)",
                   }}
                 />
               </Badge>
 
               {!collapsed && (
                 <div>
-                  <div style={{ color: "#fff", fontWeight: 700, fontSize: 17, lineHeight: 1.2 }}>Smallbiz Sales</div>
-                  <div style={{ color: "rgba(255,255,255,0.9)", fontSize: 12, fontWeight: 500 }}>Quản lý bán hàng</div>
+                  <div style={{ color: "#fff", fontWeight: 800, fontSize: 17, lineHeight: 1.3, letterSpacing: 0.3 }}>
+                    Smallbiz Sales
+                  </div>
+                  <div style={{ color: "rgba(255,255,255,0.92)", fontSize: 12.5, fontWeight: 500, marginTop: 2 }}>
+                    Quản lý bán hàng
+                  </div>
                 </div>
               )}
             </Space>
 
-            {/* Nút thu gọn - màu trắng với icon xanh lá */}
             {!collapsed && (
               <Tooltip title="Thu gọn" placement="bottom">
                 <Button
@@ -460,10 +462,10 @@ export default function Sidebar({ onCollapsedChange }) {
                   style={{
                     background: "#fff",
                     border: "none",
-                    width: 36,
-                    height: 36,
+                    width: 38,
+                    height: 38,
                     borderRadius: 10,
-                    boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+                    boxShadow: "0 2px 10px rgba(0,0,0,0.18)",
                   }}
                   className="header-collapse-btn"
                 />
@@ -474,16 +476,16 @@ export default function Sidebar({ onCollapsedChange }) {
           {!collapsed && user && (
             <div
               style={{
-                background: "rgba(255,255,255,0.15)",
+                background: "rgba(255,255,255,0.18)",
                 backdropFilter: "blur(10px)",
-                padding: "10px 12px",
-                borderRadius: 8,
-                border: "1px solid rgba(255,255,255,0.2)",
+                padding: "11px 13px",
+                borderRadius: 10,
+                border: "1px solid rgba(255,255,255,0.28)",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
               }}
             >
-              <div style={{ color: "#fff", fontSize: 11, marginBottom: 2, opacity: 0.85 }}>👋 Xin chào,</div>
-              {/* Hiển thị fullname hoặc username */}
-              <div style={{ color: "#fff", fontSize: 13, fontWeight: 600 }}>
+              <div style={{ color: "#fff", fontSize: 11, marginBottom: 3, opacity: 0.88 }}>👋 Xin chào,</div>
+              <div style={{ color: "#fff", fontSize: 14, fontWeight: 700, letterSpacing: 0.2 }}>
                 {user.fullname || user.username || user.name || "User"}
               </div>
             </div>
@@ -499,9 +501,9 @@ export default function Sidebar({ onCollapsedChange }) {
                   background: "#fff",
                   border: "none",
                   width: "100%",
-                  height: 36,
+                  height: 38,
                   borderRadius: 10,
-                  boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+                  boxShadow: "0 2px 10px rgba(0,0,0,0.18)",
                 }}
                 className="header-collapse-btn"
               />
@@ -510,7 +512,7 @@ export default function Sidebar({ onCollapsedChange }) {
         </Space>
       </div>
 
-      <Divider style={{ margin: 0, borderColor: "#e8e8e8" }} />
+      <Divider style={{ margin: 0, borderColor: "#f0f0f0" }} />
 
       {/* Menu */}
       <div
@@ -519,10 +521,11 @@ export default function Sidebar({ onCollapsedChange }) {
           flex: 1,
           overflowY: "auto",
           overflowX: "hidden",
-          padding: "12px 0",
+          padding: "14px 0",
           position: "relative",
           scrollbarWidth: "none",
           msOverflowStyle: "none",
+          background: "#fafafa",
         }}
         className="menu-container"
       >
@@ -532,7 +535,7 @@ export default function Sidebar({ onCollapsedChange }) {
           defaultOpenKeys={openKeys}
           items={menuItems}
           onClick={handleMenuClick}
-          style={{ border: "none", fontSize: 14 }}
+          style={{ border: "none", fontSize: 14, background: "transparent" }}
           theme="light"
           inlineCollapsed={collapsed}
         />
@@ -543,10 +546,11 @@ export default function Sidebar({ onCollapsedChange }) {
         <div
           style={{
             position: "absolute",
-            bottom: 88,
+            bottom: 92,
             left: "50%",
             transform: "translateX(-50%)",
             zIndex: 100,
+            pointerEvents: "none",
           }}
         >
           <Button
@@ -558,8 +562,9 @@ export default function Sidebar({ onCollapsedChange }) {
             style={{
               background: "linear-gradient(135deg, #52c41a 0%, #73d13d 100%)",
               border: "none",
-              boxShadow: "0 4px 12px rgba(82, 196, 26, 0.5)",
+              boxShadow: "0 6px 16px rgba(82, 196, 26, 0.45)",
               animation: "bounce 2s infinite",
+              pointerEvents: "auto",
             }}
           />
         </div>
@@ -568,8 +573,8 @@ export default function Sidebar({ onCollapsedChange }) {
       {/* Footer - Logout */}
       <div
         style={{
-          padding: collapsed ? "12px 8px" : "14px 14px",
-          borderTop: "2px solid #e8e8e8",
+          padding: collapsed ? "14px 10px" : "16px 16px",
+          borderTop: "2px solid #f0f0f0",
           background: "linear-gradient(180deg, #fafafa 0%, #f5f5f5 100%)",
         }}
       >
@@ -581,12 +586,12 @@ export default function Sidebar({ onCollapsedChange }) {
             icon={<PoweroffOutlined style={{ fontSize: 19 }} />}
             onClick={handleLogout}
             style={{
-              height: collapsed ? 48 : 54,
+              height: collapsed ? 50 : 56,
               fontWeight: 700,
-              fontSize: 15,
+              fontSize: 15.5,
               background: "linear-gradient(135deg, #ff4d4f 0%, #ff7875 100%)",
               border: "none",
-              boxShadow: "0 6px 16px rgba(255, 77, 79, 0.4)",
+              boxShadow: "0 6px 18px rgba(255, 77, 79, 0.38)",
               borderRadius: 12,
               display: "flex",
               alignItems: "center",
@@ -619,10 +624,10 @@ export default function Sidebar({ onCollapsedChange }) {
           display: "none",
           background: "linear-gradient(135deg, #52c41a 0%, #73d13d 100%)",
           border: "none",
-          boxShadow: "0 4px 12px rgba(82, 196, 26, 0.4)",
+          boxShadow: "0 6px 16px rgba(82, 196, 26, 0.4)",
           borderRadius: 12,
-          height: 52,
-          width: 52,
+          height: 54,
+          width: 54,
         }}
         className="mobile-menu-btn"
       />
@@ -637,7 +642,7 @@ export default function Sidebar({ onCollapsedChange }) {
           left: 0,
           top: 0,
           bottom: 0,
-          boxShadow: "4px 0 24px rgba(0,0,0,0.08)",
+          boxShadow: "6px 0 28px rgba(0,0,0,0.08)",
           zIndex: 1000,
           background: "#fff",
         }}
@@ -651,14 +656,17 @@ export default function Sidebar({ onCollapsedChange }) {
         title={
           <Space>
             <Avatar
-              size={36}
+              size={38}
               src={user?.image}
               icon={!user?.image && <UserOutlined />}
-              style={{ background: user?.image ? "transparent" : "linear-gradient(135deg, #52c41a 0%, #73d13d 100%)" }}
+              style={{
+                background: user?.image ? "transparent" : "linear-gradient(135deg, #52c41a 0%, #73d13d 100%)",
+                border: "2px solid #f0f0f0",
+              }}
             />
             <div>
-              <div style={{ fontWeight: 700, fontSize: 16 }}>Smallbiz Sales</div>
-              <div style={{ fontSize: 12, color: "#8c8c8c" }}>Quản lý bán hàng</div>
+              <div style={{ fontWeight: 700, fontSize: 16.5 }}>Smallbiz Sales</div>
+              <div style={{ fontSize: 12.5, color: "#8c8c8c" }}>Quản lý bán hàng</div>
             </div>
           </Space>
         }
@@ -666,7 +674,7 @@ export default function Sidebar({ onCollapsedChange }) {
         onClose={() => setOpenMobile(false)}
         open={openMobile}
         width={300}
-        styles={{ body: { padding: 0 } }}
+        styles={{ body: { padding: 0, background: "#fafafa" } }}
         className="mobile-drawer"
       >
         <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
@@ -676,10 +684,10 @@ export default function Sidebar({ onCollapsedChange }) {
             defaultOpenKeys={openKeys}
             items={menuItems}
             onClick={handleMenuClick}
-            style={{ border: "none", flex: 1, overflowY: "auto", padding: "12px 0" }}
+            style={{ border: "none", flex: 1, overflowY: "auto", padding: "14px 0", background: "transparent" }}
           />
 
-          <div style={{ padding: 14, borderTop: "2px solid #e8e8e8", background: "#fafafa" }}>
+          <div style={{ padding: 16, borderTop: "2px solid #f0f0f0", background: "#fff" }}>
             <Button
               type="primary"
               danger
@@ -687,12 +695,13 @@ export default function Sidebar({ onCollapsedChange }) {
               icon={<PoweroffOutlined style={{ fontSize: 19 }} />}
               onClick={handleLogout}
               style={{
-                height: 54,
+                height: 56,
                 fontWeight: 700,
-                fontSize: 15,
+                fontSize: 15.5,
                 background: "linear-gradient(135deg, #ff4d4f 0%, #ff7875 100%)",
                 border: "none",
                 borderRadius: 12,
+                boxShadow: "0 6px 18px rgba(255, 77, 79, 0.38)",
               }}
             >
               <span>Đăng xuất</span>
@@ -724,34 +733,37 @@ export default function Sidebar({ onCollapsedChange }) {
           display: none;
         }
 
+        /* Menu item styling - mềm mại hơn */
         .ant-menu-item,
         .ant-menu-submenu-title {
-          border-radius: 10px !important;
-          margin: 3px 10px !important;
-          padding: 8px 14px !important;
+          border-radius: 11px !important;
+          margin: 4px 12px !important;
+          padding: 10px 16px !important;
           height: auto !important;
-          line-height: 1.4 !important;
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          line-height: 1.5 !important;
+          transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          font-weight: 500 !important;
         }
 
-        /* Hover state - màu nhẹ nhàng */
+        /* Hover - gradient xanh nhạt tinh tế */
         .ant-menu-item:hover,
         .ant-menu-submenu-title:hover {
-          background: linear-gradient(90deg, #f6ffed 0%, #fafffe 100%) !important;
+          background: linear-gradient(90deg, #f6ffed 0%, #fcfffe 100%) !important;
           color: #389e0d !important;
-          transform: translateX(3px);
-          border-left: 3px solid #52c41a;
-          padding-left: 11px !important;
+          transform: translateX(4px);
+          border-left: 3px solid #73d13d;
+          padding-left: 13px !important;
+          box-shadow: 0 2px 8px rgba(82, 196, 26, 0.08) !important;
         }
 
-        /* Selected state - xanh nhạt tinh tế */
+        /* Selected - xanh pastel mềm mại */
         .ant-menu-item-selected {
-          background: linear-gradient(135deg, #f6ffed 0%, #e6ffe6 100%) !important;
+          background: linear-gradient(135deg, #f0ffe6 0%, #e8f9e0 100%) !important;
           color: #237804 !important;
-          font-weight: 600 !important;
+          font-weight: 700 !important;
           border-left: 4px solid #52c41a !important;
-          padding-left: 10px !important;
-          box-shadow: 0 2px 8px rgba(82, 196, 26, 0.15) !important;
+          padding-left: 12px !important;
+          box-shadow: 0 3px 12px rgba(82, 196, 26, 0.18) !important;
         }
 
         .ant-menu-item-selected .ant-menu-item-icon,
@@ -759,32 +771,31 @@ export default function Sidebar({ onCollapsedChange }) {
           color: #237804 !important;
         }
 
-        /* Submenu items */
+        /* Submenu items - tree line mềm */
         .ant-menu-sub .ant-menu-item {
-          padding-left: 40px !important;
+          padding-left: 42px !important;
         }
 
         .ant-menu-sub .ant-menu-item:hover {
-          padding-left: 37px !important;
+          padding-left: 39px !important;
         }
 
         .ant-menu-sub .ant-menu-item-selected {
-          padding-left: 36px !important;
+          padding-left: 38px !important;
         }
 
-        /* Submenu title hover */
         .ant-menu-submenu-title:hover .ant-menu-submenu-arrow {
           color: #52c41a !important;
         }
 
-        /* Active submenu */
         .ant-menu-submenu-open > .ant-menu-submenu-title {
           color: #52c41a !important;
-          font-weight: 600;
+          font-weight: 700;
+          background: rgba(82, 196, 26, 0.04) !important;
         }
 
         .header-collapse-btn:hover {
-          background: #f0f0f0 !important;
+          background: rgba(0, 0, 0, 0.05) !important;
           transform: scale(1.08);
         }
 
@@ -795,8 +806,8 @@ export default function Sidebar({ onCollapsedChange }) {
           left: -100%;
           width: 100%;
           height: 100%;
-          background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
-          transition: left 0.6s;
+          background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+          transition: left 0.65s;
         }
 
         .logout-btn:hover::before {
@@ -805,7 +816,7 @@ export default function Sidebar({ onCollapsedChange }) {
 
         .logout-btn:hover {
           transform: translateY(-2px);
-          box-shadow: 0 8px 20px rgba(255, 77, 79, 0.5) !important;
+          box-shadow: 0 10px 24px rgba(255, 77, 79, 0.48) !important;
         }
 
         @keyframes bounce {
@@ -818,51 +829,54 @@ export default function Sidebar({ onCollapsedChange }) {
           }
         }
 
-        /* === Hiệu ứng cây (tree-like) cho menu trong Sidebar === */
-
-        /* Áp dụng đường dọc nối giữa cha–con */
+        /* Tree-line effect - thanh lịch hơn */
         .menu-container .ant-menu-submenu .ant-menu {
           position: relative;
-          margin-left: 14px; /* thụt vào một chút */
-          border-left: 1px solid #d9d9d9; /* đường dọc */
-          padding-left: 8px;
+          margin-left: 16px;
+          border-left: 2px solid #e8f9e0;
+          padding-left: 10px;
         }
 
-        /* Tạo đường ngang nối giữa parent và item con */
         .menu-container .ant-menu-item::before {
           content: "";
           position: absolute;
-          left: -14px; /* vị trí nối với border-left */
+          left: -16px;
           top: 50%;
-          width: 14px;
-          border-bottom: 1px solid #d9d9d9;
+          width: 16px;
+          border-bottom: 2px solid #e8f9e0;
+          border-radius: 0 0 0 4px;
         }
 
-        /* Đảm bảo chữ và icon không đè lên đường */
         .menu-container .ant-menu-item {
           position: relative;
-          padding-left: 28px !important;
+          padding-left: 32px !important;
         }
 
-        /* Khi hover hoặc selected thì đường cây đổi màu nhẹ */
         .menu-container .ant-menu-item:hover::before {
-          border-color: #52c41a;
+          border-color: #b7eb8f;
         }
+
         .menu-container .ant-menu-item-selected::before {
-          border-color: #52c41a;
+          border-color: #73d13d;
+          border-width: 2px;
         }
 
-        /* Đường cây cho submenu cấp sâu (ví dụ "Gói dịch vụ") */
         .menu-container .ant-menu-submenu .ant-menu-submenu .ant-menu {
-          margin-left: 16px;
-          border-left: 1px dashed #d0d0d0;
+          margin-left: 18px;
+          border-left: 2px dashed #d9f7be;
         }
 
-        /* Nếu collapse menu thì ẩn các đường cây đi để đỡ rối */
         .ant-menu-inline-collapsed .ant-menu-submenu .ant-menu,
         .ant-menu-inline-collapsed .ant-menu-item::before {
           border: none !important;
           content: none !important;
+        }
+
+        /* Smooth transitions for all interactive elements */
+        .ant-menu-item,
+        .ant-menu-submenu-title,
+        .ant-btn {
+          transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1) !important;
         }
       `}</style>
     </>
