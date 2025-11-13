@@ -16,6 +16,7 @@ const {
   restoreUser,
   sendForgotPasswordOTP,
   forgotChangePassword,
+  resendRegisterOtp,
 } = require("../controllers/user/userController");
 
 const {
@@ -31,6 +32,7 @@ const {
 // -------------------------
 router.post("/register", registerManager);
 router.post("/verify-otp", verifyOtp);
+router.post("/resend-register-otp", resendRegisterOtp);
 router.post("/login", login);
 
 router.post("/forgot-password/send-otp", sendForgotPasswordOTP);

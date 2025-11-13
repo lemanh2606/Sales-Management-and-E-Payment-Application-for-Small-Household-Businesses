@@ -450,6 +450,58 @@ const sendForgotPasswordOTP = async (req, res) => {
   }
 };
 
+const resendRegisterOtp = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ message: "Vui lòng nhập email" });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
+
+    if (!user) {
+      return res
+        .status(404)
+        .json({ message: "Email không tồn tại trong hệ thống" });
+    }
+
+    // ✅ KHÁC BIỆT: Kiểm tra đã verify chưa
+    if (user.isVerified) {
+      return res
+        .status(400)
+        .json({ message: "Email đã được xác minh. Vui lòng đăng nhập." });
+    }
+
+    // Tạo OTP mới (giống y hệt sendForgotPasswordOTP)
+    const otp = generateOTP();
+    const otp_hash = await hashString(otp);
+    const otp_expires = new Date(Date.now() + OTP_EXPIRE_MINUTES * 60 * 1000);
+
+    user.otp_hash = otp_hash;
+    user.otp_expires = otp_expires;
+    user.otp_attempts = 0;
+    await user.save();
+
+    // ✅ KHÁC BIỆT: Gửi email với type "register" thay vì "forgot-password"
+    await sendVerificationEmail(
+      user.email,
+      user.username,
+      otp,
+      OTP_EXPIRE_MINUTES,
+      "register" // ⚠️ Quan trọng: đúng template
+    );
+
+    res.json({
+      message: "OTP đã được gửi lại thành công",
+      email: user.email,
+    });
+  } catch (err) {
+    console.error("Lỗi gửi lại OTP đăng ký:", err.message);
+    res.status(500).json({ message: "Lỗi server khi gửi lại OTP" });
+  }
+};
+
 /* ------------------------- 
    Controller public: đổi mật khẩu khi quên mật khẩu (không cần login)
    ------------------------- */
@@ -1398,4 +1450,5 @@ module.exports = {
   changePassword,
   softDeleteUser,
   restoreUser,
+  resendRegisterOtp,
 };

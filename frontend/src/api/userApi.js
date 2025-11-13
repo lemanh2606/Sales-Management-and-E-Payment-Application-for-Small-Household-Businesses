@@ -9,6 +9,9 @@ export const registerManager = async (data) =>
 // Xác thực OTP đăng ký
 export const verifyOtp = async (data) =>
   (await apiClient.post("/users/verify-otp", data)).data;
+// ✅ GỬI LẠI OTP ĐĂNG KÝ
+export const resendRegisterOtp = async (data) =>
+  (await apiClient.post("/users/resend-register-otp", data)).data;
 
 // Đăng nhập hệ thống
 export const loginUser = async (data) =>
