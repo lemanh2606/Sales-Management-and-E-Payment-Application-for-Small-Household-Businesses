@@ -1,7 +1,7 @@
 // src/App.jsx
 import React, { useEffect } from "react";
 import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
-import { ConfigProvider, Spin, message } from "antd";
+import { ConfigProvider, message } from "antd";
 import viVN from "antd/locale/vi_VN";
 
 // Context
