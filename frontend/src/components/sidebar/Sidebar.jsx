@@ -122,21 +122,21 @@ export default function Sidebar({ onCollapsedChange }) {
             permission: "products:view",
           },
           {
-            key: "suppliers",
+            key: "/suppliers",
             label: <span style={{ fontSize: 13.5 }}> Nhà cung cấp</span>,
-            children: [
-              {
-                key: "/suppliers",
-                label: <span style={{ fontSize: 13.5 }}> DS nhà cung cấp</span>,
-                permission: "supplier:view",
-              },
-            ],
+            // children: [
+            //   {
+            //     key: "/suppliers",
+            //     label: <span style={{ fontSize: 13.5 }}> DS nhà cung cấp</span>,
+            //     permission: "supplier:view",
+            //   },
+            // ],
           },
-          {
-            key: "/inventory",
-            label: <span style={{ fontSize: 13.5 }}> Nhập/Xuất/Hủy</span>,
-            permission: "purchase-orders:view",
-          },
+          // {
+          //   key: "/inventory",
+          //   label: <span style={{ fontSize: 13.5 }}> Nhập/Xuất/Hủy</span>,
+          //   permission: "purchase-orders:view",
+          // },
           {
             key: "/product-groups",
             label: <span style={{ fontSize: 13.5 }}> Nhóm hàng</span>,
