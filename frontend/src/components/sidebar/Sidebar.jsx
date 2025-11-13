@@ -122,11 +122,6 @@ export default function Sidebar({ onCollapsedChange }) {
             permission: "products:view",
           },
           {
-            key: "/products/create",
-            label: <span style={{ fontSize: 13.5 }}> Thêm hàng hóa</span>,
-            permission: "products:create",
-          },
-          {
             key: "suppliers",
             label: <span style={{ fontSize: 13.5 }}> Nhà cung cấp</span>,
             children: [
