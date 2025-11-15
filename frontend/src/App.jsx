@@ -49,6 +49,7 @@ import InventoryReport from "./pages/report/InventoryReport";
 // Settings
 import Profile from "./pages/setting/Profile";
 import PricingPage from "./pages/setting/PricingPage";
+import DataExportPage from "./pages/setting/DataExportPage";
 import SubscriptionPage from "./pages/setting/SubscriptionPage";
 import ActivityLog from "./pages/setting/ActivityLog";
 import FileManager from "./pages/setting/FileManager";
@@ -301,6 +302,7 @@ function App() {
         <Route path="/settings/file" element={<ProtectedRoute allowedPermissions="file:view"><FileManager /></ProtectedRoute>} />
         <Route path="/settings/subscription/pricing" element={<ProtectedRoute allowedPermissions="subscription:view"><PricingPage /></ProtectedRoute>} />
         <Route path="/settings/subscription" element={<ProtectedRoute allowedPermissions="subscription:view"><SubscriptionPage /></ProtectedRoute>} />
+        <Route path="/settings/export-data" element={<ProtectedRoute allowedRoles={["MANAGER"]}><DataExportPage /></ProtectedRoute>} />
         <Route path="/terms" element={<ProtectedRoute><Term /></ProtectedRoute>} />
         <Route path="/privacy" element={<ProtectedRoute><Privacy /></ProtectedRoute>} />
 

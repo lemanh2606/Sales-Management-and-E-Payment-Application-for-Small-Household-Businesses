@@ -8,6 +8,7 @@ export { default as apiClient } from "./apiClient";
 
 // ========== MODULE API EXPORTS ==========
 export * as customerApi from "./customerApi";
+export * as exportApi from "./exportApi";
 export * as loyaltyApi from "./loyaltyApi";
 export * as orderApi from "./orderApi";
 export * as orderWebhookApi from "./orderWebhookApi";

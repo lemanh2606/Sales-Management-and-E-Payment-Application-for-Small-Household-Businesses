@@ -274,6 +274,11 @@ export default function Sidebar({ onCollapsedChange }) {
             ],
           },
           {
+            key: "/settings/export-data",
+            label: <span style={{ fontSize: 13.5 }}>Xuất dữ liệu</span>,
+            permission: "data:export",
+          },
+          {
             key: "/settings/file",
             label: <span style={{ fontSize: 13.5 }}>Quản lý file</span>,
             permission: "file:view",
@@ -325,7 +330,7 @@ export default function Sidebar({ onCollapsedChange }) {
           {
             ...settingsItem,
             children: settingsItem.children.filter((ch) =>
-              ["/settings/activity-log", "/settings/profile", "subscription"].includes(ch.key)
+              ["/settings/activity-log", "/settings/profile", "subscription", "/settings/export-data"].includes(ch.key)
             ),
           },
         ]);

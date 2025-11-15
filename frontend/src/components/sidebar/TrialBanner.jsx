@@ -79,8 +79,13 @@ const TrialBanner = () => {
         alignItems: "center",
         justifyContent: "space-between",
         boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
-        position: "relative",
-        zIndex: 1000,
+        position: "sticky",
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 50,
+        width: "100%",
+        backdropFilter: "blur(4px)",
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: "12px", flex: 1 }}>

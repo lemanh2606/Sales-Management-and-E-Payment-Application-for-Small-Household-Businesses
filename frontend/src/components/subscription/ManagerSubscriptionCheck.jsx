@@ -37,7 +37,8 @@ const ManagerSubscriptionCheck = () => {
       "/settings/profile",           // Hồ sơ cá nhân
       "/select-store",               // Trang chọn cửa hàng (để Manager có thể chọn store)
       "/login",
-      "/register"
+      "/register",
+      "/settings/export-data"
     ];
 
     const isAllowedPath = allowedPaths.some(path => location.pathname.startsWith(path));
