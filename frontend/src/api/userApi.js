@@ -15,7 +15,7 @@ export const resendRegisterOtp = async (data) =>
 
 // Đăng nhập hệ thống
 export const loginUser = async (data) =>
-  (await apiClient.post("/users/login", data)).data;
+  (await apiClient.post("/users/login", data, { skipAuthRefresh: true })).data;
 
 // Refresh access token bằng refresh token cookie
 export const refreshToken = async () =>

@@ -1,10 +1,37 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Sidebar from "../components/sidebar/Sidebar";
 import TrialBanner from "./sidebar/TrialBanner";
 
 export default function Layout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // 👈 Thêm state này
+  const getIsDesktop = () => {
+    if (typeof window === "undefined") {
+      return true;
+    }
+    return window.innerWidth >= 768;
+  };
+  const [isDesktop, setIsDesktop] = useState(getIsDesktop);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const handleResize = () => {
+      setIsDesktop(window.innerWidth >= 768);
+    };
+
+    handleResize();
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+    };
+  }, []);
+
+  const desktopPadding = sidebarCollapsed ? 76 : 280;
+  const contentPaddingLeft = isDesktop ? desktopPadding : 0;
 
   return (
     <div className="flex min-h-screen bg-[#ffffff]" style={{ width: "100%", overflow: "hidden" }}>
@@ -33,10 +60,13 @@ export default function Layout({ children }) {
 
       {/* Main content - ĐIỀU CHỈNH MARGIN DỰA VÀO collapsed */}
       <div
-        style={{ overflow: "auto", maxWidth: `calc(100% - ${sidebarCollapsed ? 80 : 250}px)` }} // cho scroll bình thường, tính toán chính xác để không co content
-        className={`flex-1 flex flex-col transition-all duration-300 ${
-          sidebarCollapsed ? "md:ml-20" : "md:ml-64" // 👈 Điều chỉnh margin
-        }`}
+        className="flex-1 flex flex-col transition-all duration-300"
+        style={{
+          width: "100%",
+          overflow: "auto",
+          paddingLeft: contentPaddingLeft,
+          transition: "padding-left 0.3s ease",
+        }}
       >
         {/* Trial Banner */}
         <TrialBanner />

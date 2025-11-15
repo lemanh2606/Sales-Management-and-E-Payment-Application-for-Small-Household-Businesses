@@ -40,11 +40,7 @@ const ManagerSubscriptionCheck = () => {
       "/register"
     ];
 
-    // Nếu đang ở trang được phép thì không redirect
-    if (allowedPaths.some(path => location.pathname.startsWith(path))) {
-      console.log("✅ Path in whitelist, skipping check");
-      return;
-    }
+    const isAllowedPath = allowedPaths.some(path => location.pathname.startsWith(path));
 
     try {
       const response = await subscriptionApi.getCurrentSubscription();
@@ -60,8 +56,10 @@ const ManagerSubscriptionCheck = () => {
       if (isExpired) {
         console.log("Manager subscription expired, redirecting to pricing...");
         setManagerSubscriptionExpired(true);
+        if (!isAllowedPath) {
         // Redirect sang trang mua gói với replace để không thêm vào history
-        navigate("/settings/subscription/pricing", { replace: true });
+          navigate("/settings/subscription/pricing", { replace: true });
+        }
       } else {
         setManagerSubscriptionExpired(false);
       }
@@ -71,7 +69,9 @@ const ManagerSubscriptionCheck = () => {
       if (error.response?.status === 403) {
         console.log("403 error, Manager subscription expired");
         setManagerSubscriptionExpired(true);
-        navigate("/settings/subscription/pricing", { replace: true });
+        if (!isAllowedPath) {
+          navigate("/settings/subscription/pricing", { replace: true });
+        }
       }
     }
   };
