@@ -17,19 +17,38 @@ const checkSubscriptionExpiry = async (req, res, next) => {
   }
 
   // Whitelist: Các endpoint Manager ĐƯỢC TRUY CẬP khi subscription expired
-  const allowedPaths = [
-    '/api/activity-logs',           // Activity log endpoints
-    '/api/users/profile',            // Profile update
-    '/api/users/password',           // Change password
-    '/api/subscriptions',            // Subscription endpoints (để gia hạn)
-    '/api/stores',                   // Store endpoints (cần để lấy thông tin cửa hàng)
+  const alwaysAllowedPaths = [
+    "/api/activity-logs",
+    "/api/users/profile",
+    "/api/users/password",
+    "/api/subscriptions",
   ];
 
-  // Kiểm tra nếu request path nằm trong whitelist
-  const isAllowedPath = allowedPaths.some(path => req.path.startsWith(path) || req.originalUrl.includes(path));
-  
-  // Nếu là Manager và đang ở path được phép, bỏ qua check subscription
-  if (user.role === "MANAGER" && isAllowedPath) {
+  const storeReadOnlyPrefixes = [
+    "/api/orders",
+    "/api/financials",
+    "/api/revenues",
+    "/api/products",
+    "/api/customers",
+    "/api/notifications",
+    "/api/stock",
+    "/api/purchase",
+    "/api/suppliers",
+  ];
+
+  const startsWithAny = (paths = []) =>
+    paths.some((path) => req.path.startsWith(path) || req.originalUrl.startsWith(path));
+
+  const isAlwaysAllowed = startsWithAny(alwaysAllowedPaths);
+  const isReadOnlyStoreRequest =
+    req.method === "GET" && startsWithAny(storeReadOnlyPrefixes);
+  const isStoreDetailsRequest =
+    req.method === "GET" &&
+    req.baseUrl === "/api/stores" &&
+    /^\/[^/]+$/.test(req.path || "") &&
+    req.params?.storeId;
+
+  if (user.role === "MANAGER" && (isAlwaysAllowed || isReadOnlyStoreRequest || isStoreDetailsRequest)) {
     return next();
   }
 

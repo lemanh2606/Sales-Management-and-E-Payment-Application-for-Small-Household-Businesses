@@ -837,6 +837,19 @@ const importProducts = async (req, res) => {
     const existingSKUs = new Set(existingProducts.map((p) => p.sku));
     const usedSKUsInThisImport = new Set(); // Để theo dõi SKU đã dùng trong import này
 
+    const lastProductGlobal = await Product.findOne({ isDeleted: false })
+      .sort({ sku: -1 })
+      .select("sku")
+      .lean();
+
+    const extractSkuNumber = (sku) => {
+      if (!sku) return 0;
+      const match = sku.match(/\d+$/);
+      return match ? parseInt(match[0], 10) : 0;
+    };
+
+    let globalSkuCounter = extractSkuNumber(lastProductGlobal?.sku);
+
     const supplierMap = new Map(
       suppliers.map((s) => [
         String((s.name || "").toLowerCase()).trim(),
@@ -857,36 +870,21 @@ const importProducts = async (req, res) => {
     );
 
     // Hàm generate SKU duy nhất TRONG CỬA HÀNG
-    const generateUniqueSKU = async (storeId, usedSKUs) => {
+    const generateUniqueSKU = async (usedSKUs) => {
       let attempt = 0;
-      const maxAttempts = 100;
+      const maxAttempts = 500;
 
       while (attempt < maxAttempts) {
-        // Tìm SKU lớn nhất hiện có TRONG CỬA HÀNG NÀY
-        const lastProduct = await Product.findOne({
-          store_id: storeId, // CHỈ tìm trong cửa hàng hiện tại
-          isDeleted: false,
-        }).sort({ sku: -1 });
+        globalSkuCounter += 1;
+        const newSKU = `SP${globalSkuCounter.toString().padStart(6, "0")}`;
 
-        let nextNumber = 1;
-        if (lastProduct && lastProduct.sku) {
-          const match = lastProduct.sku.match(/\d+/);
-          if (match) {
-            nextNumber = parseInt(match[0]) + 1;
-          }
+        if (existingSKUs.has(newSKU) || usedSKUs.has(newSKU)) {
+          attempt++;
+          continue;
         }
 
-        const newSKU = `SP${nextNumber.toString().padStart(6, "0")}`;
-
-        // Kiểm tra SKU chưa tồn tại TRONG CỬA HÀNG NÀY và chưa được dùng trong import này
-        if (!existingSKUs.has(newSKU) && !usedSKUs.has(newSKU)) {
-          usedSKUs.add(newSKU);
-          return newSKU;
-        }
-
-        // Nếu trùng, thử số tiếp theo
-        nextNumber++;
-        attempt++;
+        usedSKUs.add(newSKU);
+        return newSKU;
       }
 
       throw new Error(`Không thể tạo SKU duy nhất sau ${maxAttempts} lần thử`);
@@ -1231,9 +1229,11 @@ const importProducts = async (req, res) => {
           }
 
           usedSKUsInThisImport.add(sku);
+
+          // Cho phép trùng SKU giữa các cửa hàng khác nhau nên không kiểm tra toàn hệ thống
         } else {
           try {
-            sku = await generateUniqueSKU(storeId, usedSKUsInThisImport);
+            sku = await generateUniqueSKU(usedSKUsInThisImport);
             console.log(`✅ Đã generate SKU mới: ${sku}`);
           } catch (error) {
             console.log(
@@ -1307,10 +1307,7 @@ const importProducts = async (req, res) => {
 
             console.log(`🔄 SKU ${sku} bị trùng, thử generate SKU mới...`);
             try {
-              const newSKU = await generateUniqueSKU(
-                storeId,
-                usedSKUsInThisImport
-              );
+              const newSKU = await generateUniqueSKU(usedSKUsInThisImport);
               newProduct.sku = newSKU;
               await newProduct.save();
 
@@ -1367,20 +1364,29 @@ const importProducts = async (req, res) => {
       skuConflicts: results.debug.skuConflicts,
     });
 
-    // Thêm thông tin về các đối tượng đã được tạo mới
     const newlyCreated = {
       suppliers: results.debug.suppliersCreated,
       productGroups: results.debug.groupsCreated,
     };
 
-    return res.status(200).json({
-      message: "Import hoàn tất",
+    const responseMessage =
+      results.success.length === 0
+        ? "Import thất bại. Vui lòng kiểm tra file."
+        : results.failed.length > 0
+        ? "Import hoàn tất với một số dòng lỗi."
+        : "Import hoàn tất";
+
+    const statusCode = results.success.length === 0 ? 400 : 200;
+
+    return res.status(statusCode).json({
+      message: responseMessage,
       results: {
         success: results.success,
         failed: results.failed,
         total: results.total,
       },
       newlyCreated,
+      hasErrors: results.failed.length > 0,
       debug: process.env.NODE_ENV === "development" ? results.debug : undefined,
     });
   } catch (error) {

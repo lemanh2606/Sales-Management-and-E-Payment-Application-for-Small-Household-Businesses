@@ -324,18 +324,24 @@ export default function Sidebar({ onCollapsedChange }) {
     const isManagerExpired = user && user.role === "MANAGER" && managerSubscriptionExpired;
 
     if (isManagerExpired) {
+      const allowedItems = [];
+      const storeItem = baseItems.find((it) => it.key === "store");
       const settingsItem = baseItems.find((it) => it.key === "settings");
-      if (settingsItem) {
-        return filterMenuItems([
-          {
-            ...settingsItem,
-            children: settingsItem.children.filter((ch) =>
-              ["/settings/activity-log", "/settings/profile", "subscription", "/settings/export-data"].includes(ch.key)
-            ),
-          },
-        ]);
+
+      if (storeItem) {
+        allowedItems.push(storeItem);
       }
-      return [];
+
+      if (settingsItem) {
+        allowedItems.push({
+          ...settingsItem,
+          children: settingsItem.children.filter((ch) =>
+            ["/settings/activity-log", "/settings/profile", "subscription", "/settings/export-data"].includes(ch.key)
+          ),
+        });
+      }
+
+      return filterMenuItems(allowedItems);
     }
 
     let filtered = baseItems;

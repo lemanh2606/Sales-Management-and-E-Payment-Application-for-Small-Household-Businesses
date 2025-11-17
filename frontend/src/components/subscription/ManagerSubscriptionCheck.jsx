@@ -35,10 +35,12 @@ const ManagerSubscriptionCheck = () => {
       "/settings/subscription",      // Trang subscription (để gia hạn)
       "/settings/activity-log",      // Nhật ký hoạt động
       "/settings/profile",           // Hồ sơ cá nhân
+      "/settings/export-data",       // Xuất dữ liệu
       "/select-store",               // Trang chọn cửa hàng (để Manager có thể chọn store)
+      "/dashboard",                  // Bất kỳ dashboard nào của cửa hàng
+      "/update/store",               // Thiết lập cửa hàng
       "/login",
-      "/register",
-      "/settings/export-data"
+      "/register"
     ];
 
     const isAllowedPath = allowedPaths.some(path => location.pathname.startsWith(path));

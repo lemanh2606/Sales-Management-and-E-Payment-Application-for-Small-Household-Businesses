@@ -60,8 +60,11 @@ productSchema.pre(/^find/, function (next) {
   next();
 });
 
-// Index compound cho SKU unique per store
-productSchema.index({ sku: 1, store_id: 1 }, { unique: true });
+// Index compound để đảm bảo SKU unique trong phạm vi cửa hàng
+productSchema.index(
+  { store_id: 1, sku: 1 },
+  { unique: true, name: "store_sku_unique" }
+);
 
 // Index cho query low stock nhanh
 productSchema.index({

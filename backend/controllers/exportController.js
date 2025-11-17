@@ -38,6 +38,14 @@ const buildFilename = (store, key) => {
   return `${storeSlug}_${key}_${datePart}`;
 };
 
+const ensureHasRows = (res, rows) => {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    res.status(400).json({ message: "Không có dữ liệu để xuất" });
+    return false;
+  }
+  return true;
+};
+
 const parseDateRange = ({ from, to }) => {
   const range = {};
 
@@ -106,6 +114,8 @@ const exportProducts = async (req, res, definition) => {
     .sort({ name: 1 })
     .lean();
 
+  if (!ensureHasRows(res, products)) return;
+
   const columns = [
     { header: "STT", key: "index", width: 6 },
     { header: "SKU", key: "sku", width: 16 },
@@ -151,6 +161,8 @@ const exportCustomers = async (req, res, definition) => {
     .sort({ createdAt: -1 })
     .lean();
 
+  if (!ensureHasRows(res, customers)) return;
+
   const columns = [
     { header: "STT", key: "index", width: 6 },
     { header: "Tên khách", key: "name", width: 24 },
@@ -187,6 +199,8 @@ const exportSuppliers = async (req, res, definition) => {
   const suppliers = await Supplier.find({ store_id: storeId })
     .sort({ name: 1 })
     .lean();
+
+  if (!ensureHasRows(res, suppliers)) return;
 
   const columns = [
     { header: "STT", key: "index", width: 6 },
@@ -225,6 +239,8 @@ const exportEmployees = async (req, res, definition) => {
     .populate("user_id", "email username role")
     .sort({ createdAt: -1 })
     .lean();
+
+  if (!ensureHasRows(res, employees)) return;
 
   const columns = [
     { header: "STT", key: "index", width: 6 },
@@ -280,6 +296,8 @@ const exportOrders = async (req, res, definition) => {
     .populate("customer", "name phone")
     .sort({ createdAt: -1 })
     .lean();
+
+  if (!ensureHasRows(res, orders)) return;
 
   const orderIds = orders.map((o) => o._id);
   const orderItemStats = await aggregateOrderItems(orderIds);
@@ -338,6 +356,8 @@ const exportPurchaseOrders = async (req, res, definition) => {
     .sort({ purchase_order_date: -1 })
     .lean();
 
+  if (!ensureHasRows(res, purchaseOrders)) return;
+
   const columns = [
     { header: "STT", key: "index", width: 6 },
     { header: "Mã phiếu", key: "code", width: 20 },
@@ -388,6 +408,8 @@ const exportPurchaseReturns = async (req, res, definition) => {
     .sort({ return_date: -1 })
     .lean();
 
+  if (!ensureHasRows(res, purchaseReturns)) return;
+
   const columns = [
     { header: "STT", key: "index", width: 6 },
     { header: "Mã phiếu", key: "code", width: 20 },
@@ -437,6 +459,8 @@ const exportStockChecks = async (req, res, definition) => {
     .populate("created_by", "fullname email username")
     .sort({ check_date: -1 })
     .lean();
+
+  if (!ensureHasRows(res, stockChecks)) return;
 
   const columns = [
     { header: "STT", key: "index", width: 6 },
@@ -493,6 +517,8 @@ const exportStockDisposals = async (req, res, definition) => {
     .sort({ disposal_date: -1 })
     .lean();
 
+  if (!ensureHasRows(res, disposals)) return;
+
   const columns = [
     { header: "STT", key: "index", width: 6 },
     { header: "Mã xuất hủy", key: "code", width: 22 },
@@ -539,6 +565,8 @@ const exportActivityLogs = async (req, res, definition) => {
     .populate("user", "fullname email username role")
     .sort({ createdAt: -1 })
     .lean();
+
+  if (!ensureHasRows(res, logs)) return;
 
   const columns = [
     { header: "STT", key: "index", width: 6 },

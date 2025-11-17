@@ -16,8 +16,7 @@ const notFoundHandler = require("./middlewares/notFoundHandler");
 const swaggerUi = require("swagger-ui-express");
 const YAML = require("yamljs");
 const swaggerDocument = YAML.load(path.join(__dirname, "swagger.yaml")); // 👈 nhớ tạo file swagger.yaml
-// --- DB CONNECT ---
-connectDB();
+const ensureProductIndexes = require("./utils/ensureProductIndexes");
 // --- LOAD MODELS ---
 [
   "Product",
@@ -173,9 +172,20 @@ app.use(errorHandler);
 
 // --- SERVER START ---
 const PORT = process.env.PORT || 9999;
-server.listen(PORT, () => {
-  console.log(`🔥 Server running: http://localhost:${PORT}`);
-  console.log("🔔 Socket.io đang hoạt động...");
-  console.log(`📘 Swagger Docs:  http://localhost:${PORT}/docs`);
-  console.log(`📋 API Overview:  http://localhost:${PORT}/api`);
+
+async function bootstrap() {
+  await connectDB();
+  await ensureProductIndexes();
+
+  server.listen(PORT, () => {
+    console.log(`🔥 Server running: http://localhost:${PORT}`);
+    console.log("🔔 Socket.io đang hoạt động...");
+    console.log(`📘 Swagger Docs:  http://localhost:${PORT}/docs`);
+    console.log(`📋 API Overview:  http://localhost:${PORT}/api`);
+  });
+}
+
+bootstrap().catch((error) => {
+  console.error("❌ Không thể khởi động server:", error);
+  process.exit(1);
 });

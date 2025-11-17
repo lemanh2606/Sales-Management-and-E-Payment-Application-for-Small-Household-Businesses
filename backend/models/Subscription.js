@@ -39,15 +39,6 @@ const subscriptionSchema = new mongoose.Schema(
       enum: [1, 3, 6],
       default: null,
     },
-    price_paid: {
-      type: mongoose.Schema.Types.Decimal128, // Số tiền đã trả
-      default: null,
-    },
-    discount_amount: {
-      type: mongoose.Schema.Types.Decimal128, // Số tiền được giảm
-      default: 0,
-    },
-
     started_at: {
       type: Date, // Khi nào bắt đầu premium
       default: null,
@@ -61,47 +52,6 @@ const subscriptionSchema = new mongoose.Schema(
     auto_renew: {
       type: Boolean,
       default: false,
-    },
-
-    // === PAYMENT INFO ===
-    payment_method: {
-      type: String,
-      enum: ["VNPAY", "MOMO", "ZALOPAY", "PAYOS", "BANK_TRANSFER", "MANUAL"],
-      default: "PAYOS",
-    },
-    transaction_id: {
-      type: String,
-      default: null,
-    },
-    paid_at: {
-      type: Date,
-      default: null,
-    },
-
-    // === PAYMENT HISTORY ===
-    payment_history: [
-      {
-        plan_duration: Number,
-        amount: mongoose.Schema.Types.Decimal128,
-        paid_at: Date,
-        transaction_id: String,
-        expires_at: Date,
-        payment_method: String,
-      },
-    ],
-
-    // === METADATA ===
-    notes: {
-      type: String,
-      default: "",
-    },
-    cancelled_at: {
-      type: Date,
-      default: null,
-    },
-    cancelled_reason: {
-      type: String,
-      default: null,
     },
   },
   {
@@ -158,28 +108,15 @@ subscriptionSchema.methods.isExpired = function () {
 };
 
 // Method: Activate premium
-subscriptionSchema.methods.activatePremium = function (planDuration, pricePaid, transactionId) {
+subscriptionSchema.methods.activatePremium = function (planDuration) {
   const now = new Date();
   const expiresAt = new Date(now);
   expiresAt.setMonth(expiresAt.getMonth() + planDuration);
 
   this.status = "ACTIVE";
   this.plan_duration = planDuration;
-  this.price_paid = pricePaid;
   this.started_at = now;
   this.expires_at = expiresAt;
-  this.transaction_id = transactionId;
-  this.paid_at = now;
-
-  // Thêm vào history
-  this.payment_history.push({
-    plan_duration: planDuration,
-    amount: pricePaid,
-    paid_at: now,
-    transaction_id: transactionId,
-    expires_at: expiresAt,
-    payment_method: this.payment_method,
-  });
 
   return this;
 };

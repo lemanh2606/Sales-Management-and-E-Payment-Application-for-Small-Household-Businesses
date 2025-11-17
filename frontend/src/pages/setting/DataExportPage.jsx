@@ -44,6 +44,42 @@ const filterBadges = {
   paymentMethod: { color: "purple", label: "Hình thức thanh toán" },
 };
 
+const extractServerMessage = async (error) => {
+  const response = error?.response;
+  if (!response || response?.data == null) return null;
+  const data = response.data;
+
+  if (typeof data === "string") {
+    try {
+      const parsed = JSON.parse(data);
+      return parsed?.message || data;
+    } catch (parseErr) {
+      return data;
+    }
+  }
+
+  if (typeof Blob !== "undefined" && data instanceof Blob) {
+    try {
+      const text = await data.text();
+      if (!text) return null;
+      try {
+        const parsed = JSON.parse(text);
+        return parsed?.message || text;
+      } catch (parseErr) {
+        return text;
+      }
+    } catch (blobErr) {
+      return null;
+    }
+  }
+
+  if (typeof data === "object") {
+    return data.message || null;
+  }
+
+  return null;
+};
+
 const extractFilename = (contentDisposition, fallback) => {
   if (!contentDisposition) return fallback;
   const match = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(contentDisposition);
@@ -60,6 +96,7 @@ const DataExportPage = () => {
   const [loadingOptions, setLoadingOptions] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [form] = Form.useForm();
+  const [messageApi, contextHolder] = message.useMessage();
 
   const selectedOption = useMemo(() => options.find((opt) => opt.key === selectedKey), [options, selectedKey]);
 
@@ -74,7 +111,7 @@ const DataExportPage = () => {
         setSelectedKey((prev) => prev ?? fetchedOptions[0]?.key ?? null);
       } catch (error) {
         console.error("Load export options error", error);
-        message.error(error.response?.data?.message || "Không tải được danh sách dữ liệu");
+        messageApi.error(error.response?.data?.message || "Không tải được danh sách dữ liệu");
       } finally {
         setLoadingOptions(false);
       }
@@ -91,11 +128,11 @@ const DataExportPage = () => {
   const handleDownload = async () => {
     try {
       if (!currentStore?._id) {
-        message.warning("Vui lòng chọn cửa hàng trước khi xuất dữ liệu");
+        messageApi.warning("Vui lòng chọn cửa hàng trước khi xuất dữ liệu");
         return;
       }
       if (!selectedKey) {
-        message.warning("Vui lòng chọn loại dữ liệu muốn xuất");
+        messageApi.warning("Vui lòng chọn loại dữ liệu muốn xuất");
         return;
       }
 
@@ -104,7 +141,7 @@ const DataExportPage = () => {
         storeId: currentStore._id,
       };
 
-      if (values.dateRange) {
+      if (values.dateRange?.length === 2) {
         params.from = values.dateRange[0].format("YYYY-MM-DD");
         params.to = values.dateRange[1].format("YYYY-MM-DD");
       }
@@ -115,8 +152,16 @@ const DataExportPage = () => {
         params.paymentMethod = values.paymentMethod;
       }
 
+      const cleanedParams = Object.entries(params).reduce((acc, [key, value]) => {
+        if (value === undefined || value === null || value === "") {
+          return acc;
+        }
+        acc[key] = value;
+        return acc;
+      }, {});
+
       setDownloading(true);
-      const response = await exportApi.downloadResource(selectedKey, params);
+      const response = await exportApi.downloadResource(selectedKey, cleanedParams);
       const blob = new Blob([response.data], {
         type:
           response.headers?.["content-type"] || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -132,13 +177,18 @@ const DataExportPage = () => {
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-      message.success(`Đã tải xuống ${filename}`);
+      messageApi.success(`Đã tải xuống ${filename}`);
     } catch (error) {
       if (error?.errorFields) {
         return;
       }
       console.error("Export error", error);
-      message.error(error.response?.data?.message || "Xuất dữ liệu thất bại");
+      const serverMessage = await extractServerMessage(error);
+      if (serverMessage?.includes("Không có dữ liệu")) {
+        messageApi.info(serverMessage);
+      } else {
+        messageApi.error(serverMessage || "Xuất dữ liệu thất bại");
+      }
     } finally {
       setDownloading(false);
     }
@@ -149,12 +199,8 @@ const DataExportPage = () => {
     return (
       <>
         {selectedOption.filters?.includes("date") && (
-          <Form.Item
-            label="Khoảng thời gian"
-            name="dateRange"
-            rules={[{ required: true, message: "Chọn thời gian cần xuất" }]}
-          >
-            <RangePicker className="w-full" format="DD/MM/YYYY" />
+          <Form.Item label="Khoảng thời gian" name="dateRange">
+            <RangePicker className="w-full" format="DD/MM/YYYY" allowClear />
           </Form.Item>
         )}
 
@@ -223,6 +269,7 @@ const DataExportPage = () => {
 
   return (
     <Layout>
+      {contextHolder}
       <div className="max-w-6xl mx-auto space-y-16">
         <Card>
           <Title level={3} style={{ marginBottom: 8 }}>
