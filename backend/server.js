@@ -16,7 +16,6 @@ const notFoundHandler = require("./middlewares/notFoundHandler");
 const swaggerUi = require("swagger-ui-express");
 const YAML = require("yamljs");
 const swaggerDocument = YAML.load(path.join(__dirname, "swagger.yaml")); // 👈 nhớ tạo file swagger.yaml
-const ensureProductIndexes = require("./utils/ensureProductIndexes");
 // --- LOAD MODELS ---
 [
   "Product",
@@ -175,7 +174,6 @@ const PORT = process.env.PORT || 9999;
 
 async function bootstrap() {
   await connectDB();
-  await ensureProductIndexes();
 
   server.listen(PORT, () => {
     console.log(`🔥 Server running: http://localhost:${PORT}`);

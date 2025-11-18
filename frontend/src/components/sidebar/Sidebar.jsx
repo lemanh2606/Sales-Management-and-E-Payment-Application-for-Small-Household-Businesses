@@ -147,8 +147,8 @@ export default function Sidebar({ onCollapsedChange }) {
             permission: "orders:view",
           },
           {
-            key: "/orders/list-pending",
-            label: <span style={{ fontSize: 13.5 }}>Đơn chưa hoàn tất</span>,
+            key: "/orders/reconciliation",
+            label: <span style={{ fontSize: 13.5 }}>Đối soát hóa đơn</span>,
             permission: "orders:view",
           },
         ],

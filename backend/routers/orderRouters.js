@@ -2,6 +2,7 @@
 const express = require("express");
 const router = express.Router();
 const uploadMedia = require("../middlewares/uploadMedia");
+const uploadInvoice = require("../middlewares/uploadInvoice");
 
 const { verifyToken, isManager, checkStoreAccess, requirePermission } = require("../middlewares/authMiddleware");
 const { checkSubscriptionExpiry } = require("../middlewares/subscriptionMiddleware");
@@ -23,6 +24,7 @@ const {
   getOrderListAll,
   getOrderStats,
 } = require("../controllers/order/orderController");
+const { getPaidNotPrintedOrders, verifyInvoicePdf } = require("../controllers/order/orderReconciliationController");
 
 //API CHUNG: http://localhost:9999/api/orders
 
@@ -55,6 +57,23 @@ router.post(
   requirePermission("orders:refund"),
   uploadMedia.array("files", 5),
   refundOrder
+);
+router.get(
+  "/reconciliation/paid-not-printed",
+  verifyToken,
+  checkSubscriptionExpiry,
+  checkStoreAccess,
+  requirePermission("orders:view"),
+  getPaidNotPrintedOrders
+);
+router.post(
+  "/:orderId/reconciliation/verify-invoice",
+  verifyToken,
+  checkSubscriptionExpiry,
+  checkStoreAccess,
+  requirePermission("orders:view"),
+  uploadInvoice.single("invoice"),
+  verifyInvoicePdf
 );
 //top sản phẩm bán chạy, có dùng limit
 router.get("/top-products", verifyToken, checkSubscriptionExpiry, isManager, checkStoreAccess, getTopSellingProducts);

@@ -63,7 +63,7 @@ import LoyaltySetting from "./pages/loyalty/LoyaltySetting";
 // Orders
 import SidebarPOS from "./pages/order/SidebarPOS";
 import ListAllOrder from "./pages/order/ListAllOrder";
-import ListPendingOrders from "./pages/order/ListPendingOrders";
+import OrderReconciliationPage from "./pages/order/OrderReconciliationPage";
 
 /** Utility: Read user from localStorage */
 function getStoredUser() {
@@ -309,7 +309,7 @@ function App() {
         {/* ==================== Orders ==================== */}
         <Route path="/orders/pos" element={<ProtectedRoute allowedPermissions="orders:create"><SidebarPOS /></ProtectedRoute>} />
         <Route path="/orders/list" element={<ProtectedRoute allowedPermissions="orders:view"><ListAllOrder /></ProtectedRoute>} />
-        <Route path="/orders/list-pending" element={<ProtectedRoute allowedPermissions="orders:view"><ListPendingOrders /></ProtectedRoute>} />
+        <Route path="/orders/reconciliation" element={<ProtectedRoute allowedRoles={["MANAGER"]}><OrderReconciliationPage /></ProtectedRoute>} />
 
         {/* ==================== Error Pages ==================== */}
         <Route path="/unauthorized" element={<Unauthorized />} />
