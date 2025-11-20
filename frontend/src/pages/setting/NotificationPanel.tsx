@@ -110,7 +110,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ storeId, visible,
         icon: "success",
         title: "Thành công",
         text: "Đã đánh dấu tất cả là đã đọc",
-        timer: 2000,
+        timer: 1000,
         timerProgressBar: true,
       });
     } catch (err) {
@@ -120,7 +120,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ storeId, visible,
         text: "Lỗi đánh dấu tất cả",
         confirmButtonText: "Đóng",
         confirmButtonColor: "#d33",
-        timer: 5000,
+        timer: 3000,
         timerProgressBar: true,
       });
     }
@@ -155,13 +155,13 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ storeId, visible,
               }}
               icon={<CheckOutlined />}
             >
-              Đánh dấu đã đọc
+              Đánh dấu tất cả là đã đọc
             </Button>
           )}
         </div>
       }
       placement="right"
-      width={420}
+      width={450}
       onClose={onClose}
       open={visible}
       headerStyle={{

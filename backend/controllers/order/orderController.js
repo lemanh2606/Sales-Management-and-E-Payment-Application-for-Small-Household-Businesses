@@ -330,12 +330,42 @@ const printBill = async (req, res) => {
       session.startTransaction();
       try {
         for (let item of items) {
-          // Dùng items từ ngoài, chỉ trừ stock
           const prod = await Product.findById(item.productId._id).session(session); // Ref _id sau populate
           if (prod) {
             prod.stock_quantity -= item.quantity; // Trừ stock thật
             await prod.save({ session });
             console.log(`Trừ stock khi in bill thành công cho ${prod.name}: -${item.quantity}`);
+
+            // ==== CHECK LOW STOCK VÀ EMIT SOCKET + SAVE NOTIFICATION ====
+            if (prod.stock_quantity <= prod.min_stock && !prod.lowStockAlerted) {
+              // Lấy io từ app
+              const io = req.app.get("io");
+              if (io) {
+                io.emit("low_stock_alert", {
+                  storeId: prod.store_id,
+                  productId: prod._id,
+                  productName: prod.name,
+                  stock_quantity: prod.stock_quantity,
+                  min_stock: prod.min_stock,
+                  message: `⚠️ Sản phẩm ${prod.name} có số lượng tồn kho thấp (${prod.stock_quantity}/${prod.min_stock}). Hãy bổ sung để tránh hết hàng`,
+                });
+
+                await Notification.create({
+                  storeId: order.storeId._id,
+                  userId: req.user._id,
+                  type: "system",
+                  title: `⚠️ Tồn kho thấp: ${prod.name}`,
+                  message: `Sản phẩm ${prod.name} có số lượng tồn kho thấp (${prod.stock_quantity}/${prod.min_stock}). Bổ sung để tránh hết hàng`,
+                });
+
+                console.log(`🔔 Socket low stock alert gửi cho ${prod.name}`);
+              }
+
+              // Set flag đã cảnh báo để tránh lặp
+              prod.lowStockAlerted = true;
+              await prod.save({ session });
+            }
+            // ==== END LOW STOCK ====
           }
         }
         await session.commitTransaction();

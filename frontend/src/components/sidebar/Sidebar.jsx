@@ -3,7 +3,6 @@ import React, { useState, useMemo, useCallback, useEffect, useRef } from "react"
 import { Layout, Menu, Button, Avatar, Space, Drawer, Tooltip, Badge, Divider } from "antd";
 import {
   MenuUnfoldOutlined,
-  LogoutOutlined,
   DashboardOutlined,
   ShopOutlined,
   ShoppingCartOutlined,
@@ -133,7 +132,7 @@ export default function Sidebar({ onCollapsedChange }) {
       },
       {
         key: "orders",
-        label: "Đơn hàng",
+        label: "Đơn hàng/Bán hàng",
         icon: <ShoppingCartOutlined style={{ fontSize: 18 }} />,
         children: [
           {
@@ -260,7 +259,7 @@ export default function Sidebar({ onCollapsedChange }) {
           },
           {
             key: "/settings/payment-method",
-            label: <span style={{ fontSize: 13.5 }}>Thanh toán</span>,
+            label: <span style={{ fontSize: 13.5 }}>Thiết lập thanh toán</span>,
             permission: "settings:payment-method",
           },
           {
@@ -448,8 +447,8 @@ export default function Sidebar({ onCollapsedChange }) {
               <Badge dot status="success" offset={[-4, 36]}>
                 <Avatar
                   size={collapsed ? 44 : 52}
-                  src={user?.image}
-                  icon={!user?.image && <UserOutlined />}
+                  src={currentStore?.imageUrl} // dùng avatar store
+                  icon={!currentStore?.imageUrl && <ShopOutlined />} // fallback icon cho store
                   style={{
                     background: user?.image ? "transparent" : "rgba(255, 255, 255, 0.28)",
                     border: "3px solid rgba(255, 255, 255, 0.6)",
@@ -674,8 +673,8 @@ export default function Sidebar({ onCollapsedChange }) {
           <Space>
             <Avatar
               size={38}
-              src={user?.image}
-              icon={!user?.image && <UserOutlined />}
+              src={currentStore?.image}
+              icon={!currentStore?.image && <ShopOutlined />}
               style={{
                 background: user?.image ? "transparent" : "linear-gradient(135deg, #52c41a 0%, #73d13d 100%)",
                 border: "2px solid #f0f0f0",
