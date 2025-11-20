@@ -503,13 +503,13 @@ const FileManager = () => {
                     onChange={(e) => setSearchText(e.target.value)}
                     style={{ width: 380 }}
                   />
-                  <Select placeholder="Lọc loại file" style={{ width: 140 }} onChange={setFilterCategory} allowClear>
+                  <Select placeholder="Lọc loại file" style={{ width: 140 }} onChange={(value) => setFilterCategory(value || "all")} allowClear>
                     <Option value="image">Hình ảnh</Option>
                     <Option value="document">Tài liệu</Option>
                     <Option value="video">Video</Option>
                     <Option value="other">Khác</Option>
                   </Select>
-                  <Select placeholder="Lọc đuôi file" style={{ width: 140 }} onChange={setFilterExtension} allowClear>
+                  <Select placeholder="Lọc đuôi file" style={{ width: 140 }} onChange={(value) => setFilterExtension(value || "all")} allowClear>
                     <Option value="jpg">JPG</Option>
                     <Option value="png">PNG</Option>
                     <Option value="pdf">PDF</Option>

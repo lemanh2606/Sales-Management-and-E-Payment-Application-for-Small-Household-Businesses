@@ -29,8 +29,50 @@ router.get(
 );
 // 2️⃣ GET /api/activity-logs/:id - Chi tiết 1 log
 router.get("/:id", verifyToken, isManager, checkStoreAccess, requirePermission("settings:activity-log"), getActivityLogDetail);
+
 // 1️⃣ GET /api/activity-logs - Danh sách log (filter, pagination, sort)
-// Query: ?userName=John&action=create&entity=Order&fromDate=2025-01-01&toDate=2025-12-31&keyword=update&page=1&limit=20&sort=-createdAt
 router.get("/", verifyToken, isManager, checkStoreAccess, requirePermission("settings:activity-log"), getActivityLogs);
+
+// BÁO CÁO VÀO CA HÔM NAY – KHÔNG CẦN checkStoreAccess
+router.get(
+  "/today-login",
+  verifyToken,
+  isManager,
+  requirePermission("settings:activity-log"),
+  async (req, res) => {
+    try {
+      const { storeId } = req.query;
+      if (!storeId) return res.status(400).json({ success: false, message: "Thiếu storeId" });
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      const logs = await ActivityLog.find({
+        store: storeId,
+        action: "auth",
+        entity: "Store",
+        createdAt: { $gte: today, $lt: tomorrow },
+      })
+        .populate("user", "fullname email role image")
+        .sort({ createdAt: -1 })
+        .lean();
+
+      // Thêm enrich như enrichedLogs
+      const enrichedLogs = logs.map(log => ({
+        ...log,
+        time: new Date(log.createdAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }),
+        badge: log.ip && ["192.168.", "10.0.", "172.16."].some(p => log.ip.startsWith(p)) ? "success" : "warning",
+        badgeText: log.ip && ["192.168.", "10.0.", "172.16."].some(p => log.ip.startsWith(p)) ? "Máy quán" : "Máy khác",
+      }));
+
+      res.json({ success: true, data: { logs: enrichedLogs } });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ success: false, message: "Lỗi server" });
+    }
+  }
+);
 
 module.exports = router;

@@ -78,8 +78,13 @@ const userSchema = new mongoose.Schema(
       default: false,
     },
 
-    // Other
+    // Other, check đi làm
     last_login: { type: Date, default: null },
+    last_logout: { type: Date },
+    last_ip: { type: String },
+    last_user_agent: { type: String },
+    online_duration_today: { type: Number, default: 0 }, // phút online hôm nay
+
     isDeleted: { type: Boolean, default: false },
     deletedAt: { type: Date, default: null },
     restoredAt: { type: Date, default: null },

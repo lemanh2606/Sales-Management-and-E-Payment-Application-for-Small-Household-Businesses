@@ -277,6 +277,19 @@ const selectStore = async (req, res) => {
     user.current_store = store._id;
     await user.save();
 
+    // ===== GHI LOG: NHÂN VIÊN VÀO CA LÀM TẠI CỬA HÀNG =====
+    await logActivity({
+      user, // user object
+      store: { _id: store._id }, // store object
+      action: "auth",
+      entity: "Store",
+      entityId: store._id,
+      entityName: store.name || store.store_name || "Cửa hàng",
+      description: `Đăng nhập vào cửa hàng: ${store.name || store.store_name || "Cửa hàng"}`,
+      req,
+    });
+    // =================================================
+
     return res.json({ message: "Đã chọn cửa hàng", store });
   } catch (err) {
     console.error("selectStore error:", err);
@@ -536,7 +549,7 @@ const createEmployee = async (req, res) => {
 const getEmployeesByStore = async (req, res) => {
   try {
     const { storeId } = req.params;
-    const { deleted } = req.query;  // Thêm query param ?deleted=1 để lấy nhân viên đã xóa
+    const { deleted } = req.query; // Thêm query param ?deleted=1 để lấy nhân viên đã xóa
 
     // Validate store và quyền (đã check qua middleware)
     const store = req.store; // 👈 Dùng req.store từ middleware
@@ -548,7 +561,7 @@ const getEmployeesByStore = async (req, res) => {
 
     // Filter với isDeleted dựa trên query (default false)
     const isDeleted = deleted === "true";
-    
+
     const employees = (
       await Employee.find({ store_id: storeId, isDeleted })
         .populate("user_id", "username email phone role")
@@ -560,7 +573,7 @@ const getEmployeesByStore = async (req, res) => {
       commission_rate: emp.commission_rate ? Number(emp.commission_rate.toString()) : 0,
     }));
 
-    console.log(`Lấy danh sách nhân viên ${isDeleted ? 'đã xóa' : 'đang làm'} thành công cho cửa hàng ${store.name}`);
+    console.log(`Lấy danh sách nhân viên ${isDeleted ? "đã xóa" : "đang làm"} thành công cho cửa hàng ${store.name}`);
     res.json({ message: "Lấy danh sách nhân viên thành công", employees });
   } catch (err) {
     console.error("Lỗi lấy danh sách nhân viên:", err.message);

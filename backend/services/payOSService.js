@@ -127,7 +127,7 @@ async function generateQRWithPayOS(req) {
         err.message
       );
     }
-  }, 30000); // sau 30s
+  }, 10000); // sau 10s
 
   return { txnRef, amount, paymentLink: data.checkoutUrl, qrDataURL };
 }

@@ -197,14 +197,7 @@ const OrderPOSHome: React.FC = () => {
     const s = io(SOCKET_URL, { auth: { token } });
     setSocket(s);
     s.on("payment_success", (data) => {
-      Swal.fire({
-        title: "🎉 Thành công!",
-        text: "Thanh toán QR thành công!",
-        icon: "success",
-        confirmButtonText: "OK",
-        confirmButtonColor: "#52c41a",
-      });
-      setPendingOrderId(data.ref || data.orderId);
+      setPendingOrderId(data.orderId);// luôn dùng orderId Mongo chứ không dùng ref
       setBillModalOpen(true);
       // Thêm reset QR ngay lập tức
       setQrImageUrl(null);
@@ -465,22 +458,9 @@ const OrderPOSHome: React.FC = () => {
         setQrImageUrl(res.data.qrDataURL);
         setQrExpiryTs(res.data.order?.qrExpiry ? new Date(res.data.order.qrExpiry).getTime() : null);
         setPendingOrderId(orderId);
-        Swal.fire({
-          title: "🎉 Thành công!",
-          text: "QR đã tạo, chờ thanh toán....",
-          icon: "success",
-          confirmButtonText: "OK",
-          confirmButtonColor: "#52c41a",
-        });
+        //QR đã tạo, đang chờ thanh toán
       } else {
         setPendingOrderId(orderId);
-        Swal.fire({
-          title: "🎉 Thành công!",
-          text: "Đơn hàng đã tạo! Vui lòng xác nhận thanh toán tiền mặt.",
-          icon: "success",
-          confirmButtonText: "OK",
-          confirmButtonColor: "#52c41a",
-        });
       }
     } catch (err: any) {
       Swal.fire({
@@ -531,7 +511,7 @@ const OrderPOSHome: React.FC = () => {
 
   return (
     <div
-      style={{ display: "flex", flexDirection: "column", height: "100vh", background: "#f0f2f5", overflow: "hidden" }}
+      style={{ display: "flex", flexDirection: "column", height: "100vh", background: "#f0f2f5", overflow: "auto" }}
     >
       {/* HEADER */}
       <div
@@ -1216,13 +1196,6 @@ const OrderPOSHome: React.FC = () => {
                     try {
                       await axios.post(`${API_BASE}/orders/${pendingOrderId}/set-paid-cash`, {}, { headers });
                       setBillModalOpen(true);
-                      Swal.fire({
-                        title: "🎉 Thành công!",
-                        text: "Đã xác nhận thanh toán! Vui lòng in hóa đơn.",
-                        icon: "success",
-                        confirmButtonText: "OK",
-                        confirmButtonColor: "#52c41a",
-                      });
                     } catch (err: any) {
                       Swal.fire({
                         title: "❌ Lỗi!",
@@ -1338,7 +1311,7 @@ const OrderPOSHome: React.FC = () => {
                 onFinish={() => {
                   Swal.fire({
                     title: "⚠️ Cảnh báo!",
-                    text: "QR đã hết hạnnj",
+                    text: "QR đã hết hạn",
                     icon: "warning",
                     confirmButtonText: "OK",
                     confirmButtonColor: "#faad14",
