@@ -17,6 +17,7 @@ const {
   restoreUser,
   sendForgotPasswordOTP,
   forgotChangePassword,
+  resendRegisterOtp,
 } = require("../controllers/user/userController");
 
 const {
@@ -26,21 +27,6 @@ const {
   checkStoreAccess,
   requirePermission,
 } = require("../middlewares/authMiddleware");
-const {
-  registerManager,
-  verifyOtp,
-  login,
-  refreshToken,
-  updateProfile,
-  updateUser,
-  sendPasswordOTP,
-  changePassword,
-  softDeleteUser,
-  restoreUser,
-  sendForgotPasswordOTP,
-  forgotChangePassword,
-  resendRegisterOtp,
-} = require("../controllers/user/userController");
 
 // Public routes
 router.post("/register", registerManager);
