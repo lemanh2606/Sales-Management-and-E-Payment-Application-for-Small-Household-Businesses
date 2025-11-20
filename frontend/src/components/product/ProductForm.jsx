@@ -14,6 +14,7 @@ import {
 import { getSuppliers } from "../../api/supplierApi";
 import { getProductGroupsByStore } from "../../api/productGroupApi";
 import { createProduct, updateProduct } from "../../api/productApi";
+import Swal from "sweetalert2";
 
 const { TextArea } = Input;
 const { Panel } = Collapse;
