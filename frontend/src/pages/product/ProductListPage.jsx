@@ -1,5 +1,5 @@
 // src/pages/product/ProductListPage.jsx
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import {
   Table,
   Button,
@@ -21,6 +21,7 @@ import {
   Divider,
   Drawer,
   AutoComplete,
+  Alert,
 } from "antd";
 import {
   PlusOutlined,
@@ -37,10 +38,12 @@ import {
   ReloadOutlined,
   InfoCircleOutlined,
   MenuOutlined,
+  FileExcelOutlined,
 } from "@ant-design/icons";
 import Layout from "../../components/Layout";
 import ProductForm from "../../components/product/ProductForm";
-import { getProductsByStore } from "../../api/productApi";
+import { getProductsByStore, importProductsByExcel } from "../../api/productApi";
+import * as XLSX from "xlsx";
 
 const { Title, Text } = Typography;
 
@@ -55,15 +58,13 @@ export default function ProductListPage() {
   const [filteredProducts, setFilteredProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchValue, setSearchValue] = useState("");
-
+  const [isImporting, setIsImporting] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalProduct, setModalProduct] = useState(null);
-
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
-
   const [drawerVisible, setDrawerVisible] = useState(false);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [isMobile, setIsMobile] = useState(typeof window !== "undefined" ? window.innerWidth < 768 : false);
 
   const allColumns = [
     { key: "name", label: "Tên sản phẩm", default: true },
@@ -87,10 +88,18 @@ export default function ProductListPage() {
       const saved = localStorage.getItem("productVisibleColumns");
       if (saved) return JSON.parse(saved);
     } catch (err) {
-      console.warn("Lỗi load visibleColumns:", err);
+      console.warn("Không thể tải cấu hình cột:", err);
     }
     return allColumns.filter((col) => col.default).map((col) => col.key);
   });
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importFile, setImportFile] = useState(null);
+  const [previewRows, setPreviewRows] = useState([]);
+  const [previewError, setPreviewError] = useState("");
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  const fileInputRef = useRef(null);
+  const apiBaseUrl = import.meta.env.VITE_API_URL || "http://localhost:9999/api";
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -111,19 +120,14 @@ export default function ProductListPage() {
 
     try {
       setLoading(true);
-
-      const data = await getProductsByStore(storeId, {
-        page: 1,
-        limit: 10000,
-      });
-
+      const data = await getProductsByStore(storeId, { page: 1, limit: 10000 });
       const productList = Array.isArray(data?.products) ? data.products : [];
       setAllProducts(productList);
       setFilteredProducts(productList);
 
       if (showNotification) {
         api.success({
-          message: "🎉 Tải dữ liệu thành công",
+          message: "🎯 Tải dữ liệu thành công",
           description: `Đã tải ${productList.length} sản phẩm vào hệ thống`,
           placement: "topRight",
           duration: 3,
@@ -131,7 +135,6 @@ export default function ProductListPage() {
       }
     } catch (err) {
       console.error("Fetch error:", err);
-
       api.error({
         message: "❌ Lỗi tải dữ liệu",
         description: err?.message || "Không thể tải danh sách sản phẩm. Vui lòng thử lại.",
@@ -243,6 +246,74 @@ export default function ProductListPage() {
       placement: "bottomRight",
       duration: 2,
     });
+  };
+
+  const resetImportState = () => {
+    setImportFile(null);
+    setPreviewRows([]);
+    setPreviewError("");
+    setPreviewLoading(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const handleExcelButtonClick = () => {
+    if (!storeId) {
+      api.warning({
+        message: "⚠️ Chưa chọn cửa hàng",
+        description: "Vui lòng chọn cửa hàng trước khi nhập sản phẩm",
+        placement: "topRight",
+        duration: 3,
+      });
+      return;
+    }
+
+    resetImportState();
+    setImportModalOpen(true);
+  };
+
+  const handleExcelFileChange = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const isExcel = /\.(xlsx|xls|csv)$/i.test(file.name);
+    if (!isExcel) {
+      api.error({
+        message: "❌ Định dạng không hỗ trợ",
+        description: "Vui lòng chọn file Excel (.xlsx, .xls) hoặc CSV",
+        placement: "topRight",
+      });
+      event.target.value = "";
+      return;
+    }
+
+    setPreviewLoading(true);
+    setPreviewError("");
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { type: "array" });
+      const firstSheet = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[firstSheet];
+      const json = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+
+      if (!json.length) {
+        setPreviewError("File không có dữ liệu hoặc chưa đúng định dạng");
+        setPreviewRows([]);
+        setImportFile(null);
+      } else {
+        setPreviewRows(json.slice(0, 20));
+        setImportFile(file);
+      }
+    } catch (error) {
+      console.error("Parse excel error:", error);
+      setPreviewError("Không thể đọc file. Vui lòng kiểm tra và thử lại");
+      setPreviewRows([]);
+      setImportFile(null);
+    } finally {
+      setPreviewLoading(false);
+    }
   };
 
   const openCreateModal = () => {
@@ -544,6 +615,116 @@ export default function ProductListPage() {
     setItemsPerPage(pagination.pageSize);
   };
 
+  const previewColumns = useMemo(() => {
+    if (!previewRows.length) return [];
+    return Object.keys(previewRows[0]).map((key) => ({
+      title: key,
+      dataIndex: key,
+      key,
+      ellipsis: true,
+    }));
+  }, [previewRows]);
+
+  const handleConfirmImport = async () => {
+    if (!importFile) {
+      api.warning({
+        message: "⚠️ Chưa chọn file",
+        description: "Vui lòng chọn file Excel trước khi nhập",
+        placement: "topRight",
+      });
+      return;
+    }
+
+    try {
+      setIsImporting(true);
+      const response = await importProductsByExcel(storeId, importFile);
+
+      const resultData = response?.results || {};
+      const hasResultPayload =
+        Array.isArray(resultData?.success) || Array.isArray(resultData?.failed);
+      const successRows = resultData.success || [];
+      const failedRows = resultData.failed || [];
+      const totalRows = resultData.total ?? successRows.length + failedRows.length;
+
+      if (!hasResultPayload) {
+        await fetchProducts(false);
+        api.success({
+          message: response?.message || "🎉 Nhập sản phẩm thành công",
+          description: "Danh sách sản phẩm đã được cập nhật",
+          placement: "topRight",
+          duration: 4,
+        });
+        setImportModalOpen(false);
+        resetImportState();
+        return;
+      }
+
+      if (successRows.length > 0) {
+        await fetchProducts(false);
+      }
+
+      if (failedRows.length > 0) {
+        api.warning({
+          message: response?.message || "Import hoàn tất với cảnh báo",
+          description: (
+            <div>
+              <p>
+                Thành công {successRows.length}/{totalRows}. Có {failedRows.length} dòng lỗi đầu tiên:
+              </p>
+              <ul style={{ paddingLeft: 18, margin: 0 }}>
+                {failedRows.slice(0, 3).map((item) => (
+                  <li key={item.row}>
+                    Dòng {item.row}: {item.error}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ),
+          placement: "topRight",
+          duration: 6,
+        });
+      } else {
+        api.success({
+          message: response?.message || "🎉 Nhập sản phẩm thành công",
+          description: `Đã thêm ${successRows.length} sản phẩm vào hệ thống`,
+          placement: "topRight",
+          duration: 4,
+        });
+      }
+
+      if (successRows.length > 0) {
+        setImportModalOpen(false);
+        resetImportState();
+      }
+    } catch (error) {
+      console.error("Import products error:", error);
+      const serverData = error?.response?.data;
+      const failedRows = serverData?.results?.failed || [];
+
+      api.error({
+        message: serverData?.message || "❌ Nhập sản phẩm thất bại",
+        description: failedRows.length ? (
+          <div>
+            <p>{`Thất bại ${failedRows.length}/${serverData?.results?.total ?? failedRows.length}.`}</p>
+            <ul style={{ paddingLeft: 18, margin: 0 }}>
+              {failedRows.slice(0, 3).map((item) => (
+                <li key={item.row}>
+                  Dòng {item.row}: {item.error}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          serverData?.error || error?.message || "Vui lòng kiểm tra file và thử lại"
+        ),
+        placement: "topRight",
+        duration: 6,
+      });
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   if (!storeId) {
     return (
       <Layout>
@@ -710,6 +891,15 @@ export default function ProductListPage() {
               )}
 
               <Button
+                size="large"
+                icon={<FileExcelOutlined />}
+                loading={isImporting}
+                onClick={handleExcelButtonClick}
+              >
+                {isMobile ? "Import" : "Import"}
+              </Button>
+
+              <Button
                 type="primary"
                 size="large"
                 icon={<PlusOutlined />}
@@ -747,7 +937,9 @@ export default function ProductListPage() {
                 <div style={{ padding: isMobile ? "24px 0" : "48px 0" }}>
                   <ShoppingOutlined style={{ fontSize: isMobile ? 32 : 48, color: "#d9d9d9" }} />
                   <div style={{ marginTop: 16, color: "#999" }}>
-                    {searchValue ? `Không tìm thấy sản phẩm nào với từ khóa "${searchValue}"` : "Không có sản phẩm"}
+                    {searchValue
+                      ? `Không tìm thấy sản phẩm nào với từ khóa "${searchValue}"`
+                      : "Không có sản phẩm"}
                   </div>
                 </div>
               ),
@@ -785,6 +977,79 @@ export default function ProductListPage() {
           }}
         >
           <ProductForm storeId={storeId} product={modalProduct} onSuccess={onFormSuccess} onCancel={closeModal} />
+        </Modal>
+
+        <Modal
+          open={importModalOpen}
+          onCancel={() => {
+            setImportModalOpen(false);
+            resetImportState();
+          }}
+          title="Import sản phẩm bằng Excel"
+          width={isMobile ? "90%" : 720}
+          centered
+          okText="Xác nhận import"
+          cancelText="Hủy"
+          onOk={handleConfirmImport}
+          confirmLoading={isImporting}
+          okButtonProps={{ disabled: !importFile || !!previewError || previewLoading }}
+        >
+          <input
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            ref={fileInputRef}
+            style={{ display: "none" }}
+            onChange={handleExcelFileChange}
+          />
+
+          <Space direction="vertical" style={{ width: "100%" }} size={16}>
+            <Text>
+              Sử dụng template chuẩn để đảm bảo dữ liệu hợp lệ.
+              <Typography.Link
+                href={`${apiBaseUrl}/products/template/download?format=excel`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ marginLeft: 8 }}
+              >
+                Tải template
+              </Typography.Link>
+            </Text>
+
+            <Button icon={<FileExcelOutlined />} onClick={() => fileInputRef.current?.click()} loading={previewLoading}>
+              Chọn file Excel / CSV
+            </Button>
+            <Text type="secondary">Hỗ trợ .xlsx, .xls, .csv. File nên nhỏ hơn 20MB.</Text>
+
+            {previewError && (
+              <Alert type="error" message={previewError} showIcon closable onClose={() => setPreviewError("")} />
+            )}
+
+            {previewRows.length > 0 && (
+              <Card size="small" bodyStyle={{ padding: 0 }}>
+                <div style={{ padding: 12, display: "flex", justifyContent: "space-between" }}>
+                  <Text strong>Preview ({previewRows.length} dòng đầu tiên)</Text>
+                  <Text type="secondary">Tổng cột: {previewColumns.length}</Text>
+                </div>
+                <Table
+                  columns={previewColumns}
+                  dataSource={previewRows}
+                  rowKey={(_, idx) => idx}
+                  size="small"
+                  pagination={false}
+                  scroll={{ x: true, y: 240 }}
+                />
+              </Card>
+            )}
+
+            {!previewRows.length && !previewError && (
+              <Alert
+                type="info"
+                message="Chưa có file nào được chọn"
+                description="Chọn file Excel/CSV theo template để xem trước dữ liệu trước khi import."
+                showIcon
+              />
+            )}
+          </Space>
         </Modal>
       </div>
 

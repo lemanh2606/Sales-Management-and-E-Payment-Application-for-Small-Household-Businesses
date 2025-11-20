@@ -49,6 +49,7 @@ import InventoryReport from "./pages/report/InventoryReport";
 // Settings
 import Profile from "./pages/setting/Profile";
 import PricingPage from "./pages/setting/PricingPage";
+import DataExportPage from "./pages/setting/DataExportPage";
 import SubscriptionPage from "./pages/setting/SubscriptionPage";
 import ActivityLog from "./pages/setting/ActivityLog";
 import FileManager from "./pages/setting/FileManager";
@@ -62,7 +63,7 @@ import LoyaltySetting from "./pages/loyalty/LoyaltySetting";
 // Orders
 import SidebarPOS from "./pages/order/SidebarPOS";
 import ListAllOrder from "./pages/order/ListAllOrder";
-import ListPendingOrders from "./pages/order/ListPendingOrders";
+import OrderReconciliationPage from "./pages/order/OrderReconciliationPage";
 
 /** Utility: Read user from localStorage */
 function getStoredUser() {
@@ -301,13 +302,14 @@ function App() {
         <Route path="/settings/file" element={<ProtectedRoute allowedPermissions="file:view"><FileManager /></ProtectedRoute>} />
         <Route path="/settings/subscription/pricing" element={<ProtectedRoute allowedPermissions="subscription:view"><PricingPage /></ProtectedRoute>} />
         <Route path="/settings/subscription" element={<ProtectedRoute allowedPermissions="subscription:view"><SubscriptionPage /></ProtectedRoute>} />
+        <Route path="/settings/export-data" element={<ProtectedRoute allowedRoles={["MANAGER"]}><DataExportPage /></ProtectedRoute>} />
         <Route path="/terms" element={<ProtectedRoute><Term /></ProtectedRoute>} />
         <Route path="/privacy" element={<ProtectedRoute><Privacy /></ProtectedRoute>} />
 
         {/* ==================== Orders ==================== */}
         <Route path="/orders/pos" element={<ProtectedRoute allowedPermissions="orders:create"><SidebarPOS /></ProtectedRoute>} />
         <Route path="/orders/list" element={<ProtectedRoute allowedPermissions="orders:view"><ListAllOrder /></ProtectedRoute>} />
-        <Route path="/orders/list-pending" element={<ProtectedRoute allowedPermissions="orders:view"><ListPendingOrders /></ProtectedRoute>} />
+        <Route path="/orders/reconciliation" element={<ProtectedRoute allowedRoles={["MANAGER"]}><OrderReconciliationPage /></ProtectedRoute>} />
 
         {/* ==================== Error Pages ==================== */}
         <Route path="/unauthorized" element={<Unauthorized />} />

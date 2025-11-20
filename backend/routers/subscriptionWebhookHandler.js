@@ -94,7 +94,7 @@ module.exports = async (req, res) => {
     const expiresAt = new Date();
     expiresAt.setMonth(expiresAt.getMonth() + duration);
 
-    subscription.activatePremium(duration, amount, orderCode);
+    subscription.activatePremium(duration);
     await subscription.save();
     console.log(`✅ Activated premium for user ${userId}, expires at ${expiresAt}`);
 

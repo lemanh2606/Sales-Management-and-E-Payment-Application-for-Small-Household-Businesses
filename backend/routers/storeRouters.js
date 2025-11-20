@@ -54,7 +54,7 @@ router.post(
 router.get(
   "/",
   verifyToken,
-  checkSubscriptionExpiry,
+  // Cho phép Manager xem danh sách cửa hàng ngay cả khi gói hết hạn
   requirePermission("store:view"),
   isManager,
   storeController.getStoresByManager
@@ -100,7 +100,7 @@ router.delete(
 router.post(
   "/select/:storeId",
   verifyToken,
-  checkSubscriptionExpiry,
+  // Cho phép chọn cửa hàng kể cả khi Manager hết hạn
   requirePermission("store:view"),
   storeController.selectStore
 );

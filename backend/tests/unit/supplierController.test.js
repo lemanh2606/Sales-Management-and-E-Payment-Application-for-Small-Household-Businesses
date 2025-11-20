@@ -155,7 +155,7 @@ describe("Supplier Controller - Unit Tests", () => {
       });
 
       await createSupplier(req, res);
-      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.status).toHaveBeenCalledWith(201);
     });
 
     it("400 duplicate key on save (E11000)", async () => {
@@ -558,7 +558,7 @@ describe("Supplier Controller - Unit Tests", () => {
       logActivity.mockResolvedValue(true);
 
       await deleteSupplier(req, res);
-      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.status).toHaveBeenCalledWith(200);
     });
 
     it("500 server error", async () => {

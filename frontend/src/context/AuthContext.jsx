@@ -19,7 +19,25 @@ export const AuthProvider = ({ children }) => {
         const s = localStorage.getItem("currentStore");
         return s ? JSON.parse(s) : null;
     });
-    const [managerSubscriptionExpired, setManagerSubscriptionExpired] = useState(false);
+    const managerSubscriptionKey = "managerSubscriptionExpired";
+    const [managerSubscriptionExpired, setManagerSubscriptionExpiredState] = useState(() => {
+        if (typeof window === "undefined") {
+            return false;
+        }
+        return localStorage.getItem(managerSubscriptionKey) === "true";
+    });
+
+    const updateManagerSubscriptionExpired = (expired) => {
+        setManagerSubscriptionExpiredState(expired);
+        if (typeof window === "undefined") {
+            return;
+        }
+        if (expired) {
+            localStorage.setItem(managerSubscriptionKey, "true");
+        } else {
+            localStorage.removeItem(managerSubscriptionKey);
+        }
+    };
 
     useEffect(() => {
         const initAuth = async () => {
@@ -71,7 +89,31 @@ export const AuthProvider = ({ children }) => {
             (response) => response,
             async (error) => {
                 const originalRequest = error.config;
+
+                // Nếu request đánh dấu bỏ qua refresh thì trả lỗi ngay
+                if (originalRequest?.skipAuthRefresh) {
+                    return Promise.reject(error);
+                }
+
+                // 🛑 Bỏ qua refresh-token cho các endpoint công khai (login, register, forgot password...)
+                const isPublicAuthRequest = (() => {
+                    if (!originalRequest?.url) return false;
+                    const skipPaths = [
+                        "/users/login",
+                        "/users/register",
+                        "/users/verify-otp",
+                        "/users/forgot-password",
+                        "/users/forgot-password/send-otp",
+                        "/users/forgot-password/change",
+                        "/users/password/send-otp",
+                        "/users/password/change",
+                        "/users/refresh-token",
+                    ];
+                    return skipPaths.some((path) => originalRequest.url.includes(path));
+                })();
+
                 if (
+                    !isPublicAuthRequest &&
                     error.response &&
                     error.response.status === 401 &&
                     !originalRequest._retry
@@ -81,7 +123,7 @@ export const AuthProvider = ({ children }) => {
                         const data = await userApi.refreshToken();
                         setToken(data.token);
                         persist(user, data.token, currentStore);
-                        // Update header and retry original request
+                        // Gắn lại header mới rồi gọi lại request cũ
                         apiClient.defaults.headers.common["Authorization"] = `Bearer ${data.token}`;
                         originalRequest.headers["Authorization"] = `Bearer ${data.token}`;
                         return apiClient(originalRequest);
@@ -181,15 +223,15 @@ export const AuthProvider = ({ children }) => {
                         (subData.status === "TRIAL" && subData.trial && !subData.trial.is_active);
                     
                     if (isExpired) {
-                        setManagerSubscriptionExpired(true);
+                        updateManagerSubscriptionExpired(true);
                     } else {
-                        setManagerSubscriptionExpired(false);
+                        updateManagerSubscriptionExpired(false);
                     }
                 } catch (subErr) {
                     console.warn("Subscription check error in login (ignored):", subErr);
                     // Nếu lỗi 403, coi như expired
                     if (subErr.response?.status === 403) {
-                        setManagerSubscriptionExpired(true);
+                        updateManagerSubscriptionExpired(true);
                     }
                 }
                 
@@ -219,6 +261,7 @@ export const AuthProvider = ({ children }) => {
         setUser(null);
         setToken(null);
         setCurrentStore(null);
+        updateManagerSubscriptionExpired(false);
         localStorage.removeItem("user");
         localStorage.removeItem("token");
         localStorage.removeItem("currentStore");
@@ -247,7 +290,7 @@ export const AuthProvider = ({ children }) => {
             logout, 
             loading,
             managerSubscriptionExpired,
-            setManagerSubscriptionExpired
+            setManagerSubscriptionExpired: updateManagerSubscriptionExpired
         }}> 
             {children}
         </AuthContext.Provider>

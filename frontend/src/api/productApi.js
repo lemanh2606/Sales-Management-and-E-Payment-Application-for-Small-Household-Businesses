@@ -42,6 +42,22 @@ export const getProductsByStore = async (
 export const getProductById = async (productId) =>
   (await apiClient.get(`/products/${productId}`)).data;
 
+//  Import sản phẩm bằng file Excel/CSV
+export const importProductsByExcel = async (storeId, file) => {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await apiClient.post(
+    `/products/store/${storeId}/import`,
+    formData,
+    {
+      headers: { "Content-Type": "multipart/form-data" },
+    }
+  );
+
+  return response.data;
+};
+
 // ========================= EXPORT =========================
 export default {
   createProduct,
@@ -49,4 +65,5 @@ export default {
   deleteProduct,
   getProductsByStore,
   getProductById,
+  importProductsByExcel,
 };

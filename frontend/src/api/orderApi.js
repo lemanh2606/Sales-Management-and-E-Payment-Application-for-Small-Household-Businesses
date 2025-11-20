@@ -13,12 +13,22 @@ export const setPaidCash = async (orderId) =>
   (await apiClient.post(`/orders/${orderId}/set-paid-cash`)).data;
 
 // In hóa đơn và trừ kho hàng sau khi đã thanh toán
-export const printBill = async (orderId) =>
-  (await apiClient.post(`/orders/${orderId}/print-bill`)).data;
+export const printBill = async (orderId, { storeId } = {}) =>
+  (
+    await apiClient.post(
+      `/orders/${orderId}/print-bill`,
+      storeId ? { storeId } : {},
+      storeId ? { params: { storeId } } : undefined
+    )
+  ).data;
 
-// Lấy thông tin chi tiết một đơn hàng theo ID
-export const getOrderById = async (orderId) =>
-  (await apiClient.get(`/orders/${orderId}`)).data;
+// Lấy thông tin chi tiết một đơn hàng theo ID (tùy chọn truyền storeId để vượt middleware store)
+export const getOrderById = async (orderId, { storeId } = {}) =>
+  (
+    await apiClient.get(`/orders/${orderId}`, {
+      params: storeId ? { storeId } : undefined,
+    })
+  ).data;
 
 // ===================== VIETQR CALLBACK =====================
 
@@ -55,12 +65,31 @@ export const exportTopSellingProducts = async () =>
 export const getTopFrequentCustomers = async () =>
   (await apiClient.get("/orders/top-customers")).data;
 
+// ===================== RECONCILIATION =====================
+export const getPaidNotPrintedOrders = async (params) =>
+  (await apiClient.get("/orders/reconciliation/paid-not-printed", { params })).data;
+
+export const verifyInvoiceWithPdf = async ({ orderId, storeId, file }) => {
+  const formData = new FormData();
+  if (storeId) formData.append("storeId", storeId);
+  formData.append("invoice", file);
+
+  return (
+    await apiClient.post(`/orders/${orderId}/reconciliation/verify-invoice`, formData, {
+      params: storeId ? { storeId } : undefined,
+      headers: { "Content-Type": "multipart/form-data" },
+    })
+  ).data;
+};
+
 // ===================== EXPORT =====================
 export default {
   createOrder,
   setPaidCash,
   printBill,
   getOrderById,
+  getPaidNotPrintedOrders,
+  verifyInvoiceWithPdf,
   vietqrReturn,
   vietqrCancel,
   refundOrder,

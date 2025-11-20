@@ -35,16 +35,15 @@ const ManagerSubscriptionCheck = () => {
       "/settings/subscription",      // Trang subscription (để gia hạn)
       "/settings/activity-log",      // Nhật ký hoạt động
       "/settings/profile",           // Hồ sơ cá nhân
+      "/settings/export-data",       // Xuất dữ liệu
       "/select-store",               // Trang chọn cửa hàng (để Manager có thể chọn store)
+      "/dashboard",                  // Bất kỳ dashboard nào của cửa hàng
+      "/update/store",               // Thiết lập cửa hàng
       "/login",
       "/register"
     ];
 
-    // Nếu đang ở trang được phép thì không redirect
-    if (allowedPaths.some(path => location.pathname.startsWith(path))) {
-      console.log("✅ Path in whitelist, skipping check");
-      return;
-    }
+    const isAllowedPath = allowedPaths.some(path => location.pathname.startsWith(path));
 
     try {
       const response = await subscriptionApi.getCurrentSubscription();
@@ -60,8 +59,10 @@ const ManagerSubscriptionCheck = () => {
       if (isExpired) {
         console.log("Manager subscription expired, redirecting to pricing...");
         setManagerSubscriptionExpired(true);
+        if (!isAllowedPath) {
         // Redirect sang trang mua gói với replace để không thêm vào history
-        navigate("/settings/subscription/pricing", { replace: true });
+          navigate("/settings/subscription/pricing", { replace: true });
+        }
       } else {
         setManagerSubscriptionExpired(false);
       }
@@ -71,7 +72,9 @@ const ManagerSubscriptionCheck = () => {
       if (error.response?.status === 403) {
         console.log("403 error, Manager subscription expired");
         setManagerSubscriptionExpired(true);
-        navigate("/settings/subscription/pricing", { replace: true });
+        if (!isAllowedPath) {
+          navigate("/settings/subscription/pricing", { replace: true });
+        }
       }
     }
   };

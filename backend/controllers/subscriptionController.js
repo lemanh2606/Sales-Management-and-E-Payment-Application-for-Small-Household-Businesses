@@ -209,12 +209,8 @@ const createCheckout = async (req, res) => {
     const subscription = new Subscription({
       user_id: userId,
       status: "PENDING", // Chờ payment thành công
-      payment_method: "PAYOS",
       plan_duration: plan_duration,
       duration_months: plan_duration, // Alias để webhook query
-      price_paid: plan.price,
-      discount_amount: plan.discount,
-      transaction_id: paymentData.txnRef,
     });
 
     await subscription.save();
@@ -303,25 +299,12 @@ const activatePremium = async (req, res) => {
       
       subscription.expires_at = newExpires;
       subscription.plan_duration = plan_duration; // Update plan duration
-      subscription.payment_method = "MANUAL";
-      subscription.transaction_id = transaction_id;
-      subscription.price_paid = amount;
-      
-      // Thêm vào payment_history
-      subscription.payment_history.push({
-        plan_duration: plan_duration,
-        amount: amount,
-        paid_at: new Date(),
-        transaction_id: transaction_id,
-        expires_at: newExpires,
-        payment_method: "MANUAL",
-      });
+      subscription.auto_renew = false;
       
       console.log(`🔄 GIA HẠN: Cộng thêm ${additionalMonths} tháng. Expires: ${currentExpires} → ${newExpires}`);
     } else {
       // ✅ KÍCH HOẠT MỚI hoặc KÍCH HOẠT LẠI từ EXPIRED
-      subscription.activatePremium(plan_duration, amount, transaction_id);
-      subscription.payment_method = "MANUAL";
+      subscription.activatePremium(plan_duration);
       console.log(`✨ KÍCH HOẠT ${subscription._id ? 'LẠI' : 'MỚI'}: ${plan_duration} tháng`);
     }
     

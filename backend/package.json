@@ -68,6 +68,7 @@
     "multer-storage-cloudinary": "^4.0.0",
     "node-cron": "^4.2.1",
     "nodemailer": "^7.0.6",
+    "pdf-parse": "^2.4.5",
     "pdfkit": "^0.17.2",
     "qs": "^6.14.0",
     "sharp": "^0.34.5",
