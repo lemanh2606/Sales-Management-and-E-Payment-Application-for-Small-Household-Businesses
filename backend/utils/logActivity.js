@@ -21,14 +21,20 @@ const logActivity = async ({
   entityId,
   entityName,
   changes = null,
-  store,
+  store, // ← có thể null
   req = null,
   description = null,
 }) => {
   try {
     // Validate required
-    if (!user?._id || !store?._id) {
-      console.warn("Thiếu user hoặc store khi ghi log");
+    if (!user?._id) {
+      console.warn("Thiếu user khi ghi log");
+      return;
+    }
+
+    // Nếu không có store VÀ action là "auth" → cho phép ghi log (login/logout toàn hệ thống)
+    if (!store && action !== "auth") {
+      console.warn("Thiếu store khi ghi log (không phải auth)");
       return;
     }
 
@@ -40,8 +46,8 @@ const logActivity = async ({
       entity,
       entityId,
       entityName,
-      description,
-      store: store._id,
+      description: description || (action === "auth" ? "Đăng nhập vào hệ thống" : undefined),
+      store: store?._id || null, // ← cho phép null
       ip: req?.ip || req?.connection?.remoteAddress || req?.headers["x-forwarded-for"]?.split(",")[0] || "unknown",
       userAgent: req?.headers["user-agent"] || "unknown",
     });
@@ -50,6 +56,15 @@ const logActivity = async ({
     if (changes && !description) {
       log.description = JSON.stringify(changes);
     }
+
+    
+    // Trong logActivity.js – THÊM DÒNG NÀY
+console.log("ĐANG GHI LOG:", {
+ userName: user.fullname || user.username || user.email || "Unknown",
+  action,
+  store: store?._id || null
+});
+
 
     await log.save();
   } catch (error) {

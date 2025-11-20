@@ -28,6 +28,7 @@ import {
   InboxOutlined,
   DollarOutlined,
   AlertOutlined,
+  InfoCircleOutlined,
 } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import axios from "axios";
@@ -372,12 +373,17 @@ const InventoryReport: React.FC = () => {
       render: (val: MongoDecimal) => formatCurrency(val),
     },
     {
-      title: "Giá trị tồn",
+      title: (
+        <Tooltip title="Công thức tính: 'Tồn cuối kỳ' x 'Giá vốn'">
+          <span>
+            <InfoCircleOutlined style={{ color: "#1890ff", cursor: "pointer", marginLeft: 4 }} /> Giá trị tồn
+          </span>
+        </Tooltip>
+      ),
       dataIndex: "closingValue",
       key: "closingValue",
       width: 130,
       align: "right",
-      sorter: (a, b) => a.closingValue - b.closingValue,
       render: (val: number) => (
         <Text strong style={{ color: "#1890ff" }}>
           {formatCurrency(val)}

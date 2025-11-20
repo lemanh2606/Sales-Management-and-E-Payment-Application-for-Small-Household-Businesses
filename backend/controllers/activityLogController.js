@@ -22,27 +22,67 @@ const getActivityLogs = async (req, res) => {
       page = 1,
       limit = 20,
       sort = "-createdAt",
-      storeId, // 👈 Lấy từ query
+      storeId,
     } = req.query;
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
+    console.log("QUERY PARAMS:", req.query); // ← THÊM DÒNG NÀY
+    console.log("MATCH OBJECT:", { action, entity, storeId }); // ← THÊM DÒNG NÀY
+
     const match = {};
 
-    // ✅ Nếu có storeId → lọc luôn log của store đó
-    if (storeId) match.store = new mongoose.Types.ObjectId(storeId);
+    // 🔥 FIX LOGIN AUTH LOGIC – ƯU TIÊN HÀNG ĐẦU
+    if (action === "auth" && entity === "Store") {
+      delete match.store; // ❗ Đảm bảo không bị ảnh hưởng bởi store filter khác
+      delete match.entityId; // ❗ FE không gửi entityId → tránh match nhầm
+      match.action = "auth";
+      match.entity = "Store";
 
+      if (storeId) {
+        match.$or = [
+          { store: new mongoose.Types.ObjectId(storeId) },
+          { entityId: new mongoose.Types.ObjectId(storeId) },
+        ];
+      }
+    } else {
+      // 🔥 Chỉ chạy khi KHÔNG phải log login
+      if (action) match.action = action;
+      if (entity) match.entity = entity;
+      if (entityId) match.entityId = new mongoose.Types.ObjectId(entityId);
+
+      if (storeId) {
+        match.store = new mongoose.Types.ObjectId(storeId);
+      }
+    }
+
+    // User filter
     if (userName) match.userName = { $regex: userName, $options: "i" };
-    if (action) match.action = action;
-    if (entity) match.entity = entity;
-    if (entityId) match.entityId = new mongoose.Types.ObjectId(entityId);
-    if (fromDate) match.createdAt = { ...match.createdAt, $gte: new Date(fromDate) };
-    if (toDate) match.createdAt = { ...match.createdAt, $lte: new Date(toDate) };
+
+    // 🔥 DATE RANGE (chuẩn)
+    if (fromDate || toDate) {
+      const start = new Date(fromDate);
+      start.setHours(0, 0, 0, 0);
+
+      const end = new Date(toDate);
+      end.setHours(23, 59, 59, 999);
+
+      match.createdAt = {
+        ...(match.createdAt || {}),
+        $gte: start,
+        $lte: end,
+      };
+    }
+
+    // 🔥 KEYWORD KHÔNG ĐƯỢC GHI ĐÈ OR
     if (keyword) {
-      match.$or = [
+      const keywordOr = [
         { description: { $regex: keyword, $options: "i" } },
         { entityName: { $regex: keyword, $options: "i" } },
         { userName: { $regex: keyword, $options: "i" } },
       ];
+
+      if (match.$or) match.$or = [...match.$or, ...keywordOr];
+      else match.$or = keywordOr;
     }
 
     const pipeline = [
@@ -50,13 +90,14 @@ const getActivityLogs = async (req, res) => {
       { $sort: { createdAt: sort === "-createdAt" ? -1 : 1 } },
       { $skip: skip },
       { $limit: parseInt(limit) },
+
       {
         $lookup: {
           from: "users",
           localField: "user",
           foreignField: "_id",
           as: "userDetail",
-          pipeline: [{ $project: { fullName: 1, email: 1, role: 1 } }],
+          pipeline: [{ $project: { fullname: 1, email: 1, role: 1, image: 1 } }],
         },
       },
       {
@@ -70,6 +111,7 @@ const getActivityLogs = async (req, res) => {
       },
       { $unwind: { path: "$userDetail", preserveNullAndEmptyArrays: true } },
       { $unwind: { path: "$storeDetail", preserveNullAndEmptyArrays: true } },
+
       {
         $project: {
           _id: 1,
@@ -83,7 +125,8 @@ const getActivityLogs = async (req, res) => {
           ip: 1,
           userAgent: 1,
           createdAt: 1,
-          "userDetail.fullName": 1,
+          "userDetail.fullname": 1,
+          "userDetail.image": 1,
           "userDetail.email": 1,
           "userDetail.role": 1,
           "storeDetail.name": 1,
@@ -94,11 +137,32 @@ const getActivityLogs = async (req, res) => {
     const totalCount = await ActivityLog.countDocuments(match);
     const logs = await ActivityLog.aggregate(pipeline);
 
+    // Thêm phần log login để check xem nhân viên có đi làm không, có dùng máy ở quán không hay gian lận
+    const enrichedLogs = logs.map((log) => {
+      const isLogin = log.action === "auth" && log.entity === "Store";
+      //“Máy này đang ở trong quán (IP nội bộ) hay là login từ nhà (IP public)”
+      const isStoreIP = log.ip && ["192.168.", "10.0.", "172.16."].some((prefix) => log.ip.startsWith(prefix));
+
+      return {
+        ...log,
+        _id: log._id,
+        time: new Date(log.createdAt).toLocaleTimeString("vi-VN", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        date: new Date(log.createdAt).toLocaleDateString("vi-VN"),
+        actionText: isLogin ? "Vào ca làm" : log.action,
+        badge: isLogin ? (isStoreIP ? "success" : "warning") : "info",
+        badgeText: isLogin ? (isStoreIP ? "Máy quán" : "Từ nhà") : "",
+        icon: isLogin ? "login" : "edit",
+      };
+    });
+
     res.json({
       success: true,
       message: "Lấy danh sách nhật ký thành công",
       data: {
-        logs,
+        logs: enrichedLogs, // ← dùng enrichedLogs thay vì logs
         pagination: {
           current: parseInt(page),
           pageSize: parseInt(limit),
@@ -109,7 +173,10 @@ const getActivityLogs = async (req, res) => {
     });
   } catch (err) {
     console.error("Lỗi getActivityLogs:", err);
-    res.status(500).json({ success: false, message: "Lỗi server khi lấy nhật ký" });
+    res.status(500).json({
+      success: false,
+      message: "Lỗi server khi lấy nhật ký",
+    });
   }
 };
 

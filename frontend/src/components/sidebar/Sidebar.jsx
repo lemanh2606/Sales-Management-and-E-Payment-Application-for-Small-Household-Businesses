@@ -100,12 +100,12 @@ export default function Sidebar({ onCollapsedChange }) {
           },
           {
             key: "/select-store",
-            label: <span style={{ fontSize: 13.5 }}>Chọn cửa hàng</span>,
+            label: <span style={{ fontSize: 13.5 }}> Chọn cửa hàng khác</span>,
             permission: "store:view",
           },
           {
             key: "/update/store",
-            label: <span style={{ fontSize: 13.5 }}>Thiết lập</span>,
+            label: <span style={{ fontSize: 13.5 }}> Thiết lập cửa hàng</span>,
             permission: "store:update",
           },
         ],
@@ -126,7 +126,7 @@ export default function Sidebar({ onCollapsedChange }) {
           },
           {
             key: "/product-groups",
-            label: <span style={{ fontSize: 13.5 }}>Nhóm hàng</span>,
+            label: <span style={{ fontSize: 13.5 }}>Nhóm hàng hoá</span>,
             permission: "products:view",
           },
         ],
@@ -143,7 +143,7 @@ export default function Sidebar({ onCollapsedChange }) {
           },
           {
             key: "/orders/list",
-            label: <span style={{ fontSize: 13.5 }}>DS đơn hàng</span>,
+            label: <span style={{ fontSize: 13.5 }}> Danh sách đơn hàng</span>,
             permission: "orders:view",
           },
           {
@@ -237,6 +237,23 @@ export default function Sidebar({ onCollapsedChange }) {
         icon: <SettingOutlined style={{ fontSize: 18 }} />,
         children: [
           {
+            key: "subscription",
+            label: <span style={{ fontSize: 13.5 }}>Gói dịch vụ</span>,
+            permission: "subscription:view",
+            children: [
+              {
+                key: "/settings/subscription",
+                label: <span style={{ fontSize: 13.5 }}>Gói hiện tại</span>,
+                permission: "subscription:view",
+              },
+              {
+                key: "/settings/subscription/pricing",
+                label: <span style={{ fontSize: 13.5 }}>Nâng cấp Premium</span>,
+                permission: "subscription:view",
+              },
+            ],
+          },
+          {
             key: "/settings/activity-log",
             label: <span style={{ fontSize: 13.5 }}>Nhật ký hoạt động</span>,
             permission: "settings:activity-log",
@@ -255,23 +272,6 @@ export default function Sidebar({ onCollapsedChange }) {
             key: "/settings/notification",
             label: <span style={{ fontSize: 13.5 }}>Thông báo</span>,
             permission: "notifications:view",
-          },
-          {
-            key: "subscription",
-            label: <span style={{ fontSize: 13.5 }}>Gói dịch vụ</span>,
-            permission: "subscription:view",
-            children: [
-              {
-                key: "/settings/subscription",
-                label: <span style={{ fontSize: 13.5 }}>Gói hiện tại</span>,
-                permission: "subscription:view",
-              },
-              {
-                key: "/settings/subscription/pricing",
-                label: <span style={{ fontSize: 13.5 }}>Nâng cấp Premium</span>,
-                permission: "subscription:view",
-              },
-            ],
           },
           {
             key: "/settings/export-data",
@@ -358,7 +358,13 @@ export default function Sidebar({ onCollapsedChange }) {
   };
 
   const handleMenuClick = ({ key }) => {
-    navigate(key);
+    if (key === "/orders/pos") {
+      // Mở POS trong tab mới, mấy cái khác render bình thường ko ảnh hưởng
+      window.open(key, "_blank", "noopener,noreferrer");
+    } else {
+      navigate(key);
+    }
+
     if (openMobile) {
       setOpenMobile(false);
     }

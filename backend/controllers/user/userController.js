@@ -3,8 +3,10 @@ const User = require("../../models/User");
 const Employee = require("../../models/Employee");
 const Subscription = require("../../models/Subscription");
 const logActivity = require("../../utils/logActivity");
+const ActivityLog = require("../../models/ActivityLog");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const mongoose = require("mongoose");
 const { sendVerificationEmail } = require("../../services/emailService");
 const ImgBBService = require("../../services/imageService");
 const imgBB = new ImgBBService(process.env.IMGBB_API_KEY);
@@ -31,9 +33,7 @@ const BCRYPT_SALT_ROUNDS = Number(process.env.BCRYPT_SALT_ROUNDS || 10);
 
 // Thời hạn token
 const ACCESS_TOKEN_EXPIRES = process.env.JWT_EXPIRES || "2d";
-const REFRESH_TOKEN_EXPIRES =
-  process.env.REFRESH_TOKEN_EXPIRES ||
-  `${process.env.REFRESH_TOKEN_EXPIRES_DAYS || 7}d`;
+const REFRESH_TOKEN_EXPIRES = process.env.REFRESH_TOKEN_EXPIRES || `${process.env.REFRESH_TOKEN_EXPIRES_DAYS || 7}d`;
 
 // menu để phân quyền
 const ALL_PERMISSIONS = [
@@ -151,9 +151,7 @@ const ALL_PERMISSIONS = [
  * Trả về chuỗi (string) để dễ hash và so sánh.
  */
 const generateOTP = (len = OTP_LENGTH) =>
-  Math.floor(
-    Math.pow(10, len - 1) + Math.random() * 9 * Math.pow(10, len - 1)
-  ).toString();
+  Math.floor(Math.pow(10, len - 1) + Math.random() * 9 * Math.pow(10, len - 1)).toString();
 
 /**
  * Hash một chuỗi (password hoặc OTP) bằng bcrypt.
@@ -175,22 +173,14 @@ const compareString = async (str, hash) => await bcrypt.compare(str, hash);
  * Thời hạn từ ACCESS_TOKEN_EXPIRES.
  */
 const signAccessToken = (payload) =>
-  jwt.sign(
-    payload,
-    process.env.JWT_SECRET || "default_jwt_secret_change_in_env",
-    { expiresIn: ACCESS_TOKEN_EXPIRES }
-  );
+  jwt.sign(payload, process.env.JWT_SECRET || "default_jwt_secret_change_in_env", { expiresIn: ACCESS_TOKEN_EXPIRES });
 
 /**
  * Tạo refresh token (JWT với id, role).
  * Thời hạn từ REFRESH_TOKEN_EXPIRES.
  */
 const signRefreshToken = (payload) =>
-  jwt.sign(
-    payload,
-    process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET,
-    { expiresIn: REFRESH_TOKEN_EXPIRES }
-  );
+  jwt.sign(payload, process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET, { expiresIn: REFRESH_TOKEN_EXPIRES });
 
 /* ------------------------- 
    Controller: registerManager (đăng ký manager với OTP email)
@@ -207,9 +197,7 @@ const registerManager = async (req, res) => {
 
     // Validate input cơ bản
     if (!username || !email || !password || fullname === undefined) {
-      return res
-        .status(400)
-        .json({ message: "Thiếu username, email hoặc password" });
+      return res.status(400).json({ message: "Thiếu username, email hoặc password" });
     }
     if (password.length < 6) {
       return res.status(400).json({ message: "Password phải ít nhất 6 ký tự" });
@@ -218,9 +206,7 @@ const registerManager = async (req, res) => {
     // Kiểm tra unique username/email
     const existingUser = await User.findOne({ $or: [{ username }, { email }] });
     if (existingUser) {
-      return res
-        .status(400)
-        .json({ message: "Username hoặc email đã tồn tại" });
+      return res.status(400).json({ message: "Username hoặc email đã tồn tại" });
     }
 
     // Hash password
@@ -260,9 +246,7 @@ const registerManager = async (req, res) => {
     // Gửi email OTP
     await sendVerificationEmail(email, username, otp);
 
-    res
-      .status(201)
-      .json({ message: "Đăng ký thành công, kiểm tra email để xác minh OTP" });
+    res.status(201).json({ message: "Đăng ký thành công, kiểm tra email để xác minh OTP" });
   } catch (err) {
     console.error("Lỗi đăng ký:", err.message);
     res.status(500).json({ message: "Lỗi server khi đăng ký" });
@@ -283,15 +267,11 @@ const verifyOtp = async (req, res) => {
 
     const user = await User.findOne({ email: email.toLowerCase().trim() });
     if (!user || user.otp_hash === null || user.otp_expires < new Date()) {
-      return res
-        .status(400)
-        .json({ message: "OTP không hợp lệ hoặc đã hết hạn" });
+      return res.status(400).json({ message: "OTP không hợp lệ hoặc đã hết hạn" });
     }
 
     if (user.otp_attempts >= OTP_MAX_ATTEMPTS) {
-      return res
-        .status(400)
-        .json({ message: "Quá số lần thử, vui lòng yêu cầu OTP mới" });
+      return res.status(400).json({ message: "Quá số lần thử, vui lòng yêu cầu OTP mới" });
     }
 
     if (!(await compareString(otp, user.otp_hash))) {
@@ -334,9 +314,7 @@ const login = async (req, res) => {
 
     if (!user) {
       // Không tiết lộ là username hay email không đúng — giữ message chung
-      return res
-        .status(401)
-        .json({ message: "Username hoặc password không đúng" });
+      return res.status(401).json({ message: "Username hoặc password không đúng" });
     }
 
     if (!user.isVerified) {
@@ -354,16 +332,21 @@ const login = async (req, res) => {
         user.lockUntil = new Date(Date.now() + LOGIN_LOCK_MINUTES * 60 * 1000);
       }
       await user.save();
-      return res
-        .status(401)
-        .json({ message: "Username hoặc password không đúng" });
+      return res.status(401).json({ message: "Username hoặc password không đúng" });
     }
 
     // Login success, reset counters, update last_login
     user.loginAttempts = 0;
     user.lockUntil = null;
     user.last_login = new Date();
+    user.last_ip = req.ip || req.connection.remoteAddress;
+    user.last_user_agent = req.headers["user-agent"] || "unknown";
+
     await user.save();
+
+    // ===== THÊM LOG ĐĂNG NHẬP =====
+    const ip = req.ip || req.connection.remoteAddress || "unknown";
+    const userAgent = req.headers["user-agent"] || "unknown";
 
     // Tạo access token (JWT với id, role)
     const accessToken = signAccessToken({ id: user._id, role: user.role });
@@ -409,6 +392,45 @@ const login = async (req, res) => {
   }
 };
 
+// ================== LOGOUT ==================
+const logout = async (req, res) => {
+  try {
+    const user = req.user;
+
+    const loginTime = user.last_login;
+    const logoutTime = new Date();
+    const duration = loginTime ? Math.round((logoutTime - loginTime) / 60000) : 0;
+
+    // Cập nhật user
+    user.last_logout = logoutTime;
+    user.online_duration_today = (user.online_duration_today || 0) + duration;
+    await user.save();
+
+    // GHI LOG ĐĂNG XUẤT
+    await logActivity({
+      req,
+      action: "auth",
+      entity: "User",
+      entityId: user._id,
+      entityName: user.username,
+      description: `Đăng xuất sau ${duration} phút làm việc`,
+    });
+
+    res.clearCookie("refreshToken", {
+      httpOnly: true,
+      secure: IS_PROD,
+      sameSite: "Lax",
+      path: "/",
+    });
+
+    res.json({ success: true, message: "Đăng xuất thành công" });
+  } catch (err) {
+    console.error("Lỗi logout:", err);
+    res.status(500).json({ success: false, message: "Lỗi server" });
+  }
+};
+// ============================================
+
 /* ------------------------- 
    Controller public: gửi OTP khi quên mật khẩu (không cần login)
    ------------------------- */
@@ -421,9 +443,7 @@ const sendForgotPasswordOTP = async (req, res) => {
 
     const user = await User.findOne({ email: email.toLowerCase().trim() });
     if (!user) {
-      return res
-        .status(404)
-        .json({ message: "Email không tồn tại trong hệ thống" });
+      return res.status(404).json({ message: "Email không tồn tại trong hệ thống" });
     }
 
     const otp = generateOTP();
@@ -435,13 +455,7 @@ const sendForgotPasswordOTP = async (req, res) => {
     user.otp_attempts = 0;
     await user.save();
 
-    await sendVerificationEmail(
-      user.email,
-      user.username,
-      otp,
-      OTP_EXPIRE_MINUTES,
-      "forgot-password"
-    );
+    await sendVerificationEmail(user.email, user.username, otp, OTP_EXPIRE_MINUTES, "forgot-password");
 
     res.json({ message: "OTP đã gửi tới email, hết hạn sau 5 phút" });
   } catch (err) {
@@ -510,31 +524,23 @@ const forgotChangePassword = async (req, res) => {
     const { email, otp, password, confirmPassword } = req.body;
 
     if (!email || !otp || !password || !confirmPassword) {
-      return res
-        .status(400)
-        .json({ message: "Thiếu thông tin email, OTP hoặc mật khẩu" });
+      return res.status(400).json({ message: "Thiếu thông tin email, OTP hoặc mật khẩu" });
     }
 
     if (password.length < 6) {
       return res.status(400).json({ message: "Mật khẩu phải ít nhất 6 ký tự" });
     }
     if (password !== confirmPassword) {
-      return res
-        .status(400)
-        .json({ message: "Mật khẩu và xác nhận không khớp" });
+      return res.status(400).json({ message: "Mật khẩu và xác nhận không khớp" });
     }
 
     const user = await User.findOne({ email: email.toLowerCase().trim() });
     if (!user || !user.otp_hash || user.otp_expires < new Date()) {
-      return res
-        .status(400)
-        .json({ message: "OTP không hợp lệ hoặc đã hết hạn" });
+      return res.status(400).json({ message: "OTP không hợp lệ hoặc đã hết hạn" });
     }
 
     if (user.otp_attempts >= OTP_MAX_ATTEMPTS) {
-      return res
-        .status(400)
-        .json({ message: "Quá số lần thử, vui lòng gửi OTP mới" });
+      return res.status(400).json({ message: "Quá số lần thử, vui lòng gửi OTP mới" });
     }
 
     if (!(await compareString(otp, user.otp_hash))) {
@@ -558,9 +564,7 @@ const forgotChangePassword = async (req, res) => {
       entityId: user._id,
       entityName: user.username || user.email,
       req,
-      description: `Người dùng ${
-        user.username || user.email
-      } đã đổi mật khẩu thông qua chức năng quên mật khẩu`,
+      description: `Người dùng ${user.username || user.email} đã đổi mật khẩu thông qua chức năng quên mật khẩu`,
     });
 
     res.json({ message: "Đổi mật khẩu thành công" });
@@ -581,14 +585,9 @@ const refreshToken = async (req, res) => {
 
     let payload;
     try {
-      payload = jwt.verify(
-        token,
-        process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET
-      );
+      payload = jwt.verify(token, process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET);
     } catch (e) {
-      return res
-        .status(401)
-        .json({ message: "Refresh token invalid or expired" });
+      return res.status(401).json({ message: "Refresh token invalid or expired" });
     }
 
     const user = await User.findById(payload.id);
@@ -625,21 +624,17 @@ const updateUser = async (req, res) => {
     // load target user (mongoose document vì cần save)
     const targetUser = await User.findById(targetUserId);
     if (!targetUser) {
-      return res
-        .status(404)
-        .json({ message: "Người dùng mục tiêu không tồn tại" });
+      return res.status(404).json({ message: "Người dùng mục tiêu không tồn tại" });
     }
 
     // chuẩn hóa menu requester
     const menu = Array.isArray(requester.menu) ? requester.menu : [];
 
     // helper kiểm tra permission (global wildcard hỗ trợ)
-    const hasPerm = (p) =>
-      menu.includes(p) || menu.includes("*") || menu.includes("all");
+    const hasPerm = (p) => menu.includes(p) || menu.includes("*") || menu.includes("all");
 
     // xác định là self hay không
-    const isSelf =
-      String(requester._id || requester.id) === String(targetUserId);
+    const isSelf = String(requester._id || requester.id) === String(targetUserId);
 
     // Các trường cho self-update
     const selfAllowed = ["username", "email", "phone"];
@@ -672,41 +667,29 @@ const updateUser = async (req, res) => {
       const newPass = req.body.password;
       const confirm = req.body.confirmPassword;
       if (!confirm) {
-        return res
-          .status(400)
-          .json({ message: "Thiếu confirmPassword khi đổi mật khẩu" });
+        return res.status(400).json({ message: "Thiếu confirmPassword khi đổi mật khẩu" });
       }
       if (newPass.length < 6) {
-        return res
-          .status(400)
-          .json({ message: "Mật khẩu mới phải ít nhất 6 ký tự" });
+        return res.status(400).json({ message: "Mật khẩu mới phải ít nhất 6 ký tự" });
       }
       if (newPass !== confirm) {
-        return res
-          .status(400)
-          .json({ message: "Mật khẩu mới và xác nhận không khớp" });
+        return res.status(400).json({ message: "Mật khẩu mới và xác nhận không khớp" });
       }
 
       if (isSelf) {
         const current = req.body.currentPassword;
         if (!current) {
-          return res
-            .status(400)
-            .json({ message: "Cần currentPassword để đổi mật khẩu" });
+          return res.status(400).json({ message: "Cần currentPassword để đổi mật khẩu" });
         }
         // so sánh current với hash
         if (!(await compareString(current, targetUser.password_hash))) {
-          return res
-            .status(401)
-            .json({ message: "Mật khẩu hiện tại không đúng" });
+          return res.status(401).json({ message: "Mật khẩu hiện tại không đúng" });
         }
         updates.password_hash = await hashString(newPass);
       } else {
         // người khác đổi mật khẩu => phải có quyền quản lý user
         if (!hasPerm("users:manage") && !hasPerm("users:role:update")) {
-          return res
-            .status(403)
-            .json({ message: "Không có quyền thay đổi mật khẩu người khác" });
+          return res.status(403).json({ message: "Không có quyền thay đổi mật khẩu người khác" });
         }
         updates.password_hash = await hashString(newPass);
       }
@@ -734,8 +717,7 @@ const updateUser = async (req, res) => {
     // ------------------
     for (const [key, val] of Object.entries(req.body)) {
       // đã xử lý password-related ở trên, skip các field liên quan mật khẩu
-      if (["password", "confirmPassword", "currentPassword"].includes(key))
-        continue;
+      if (["password", "confirmPassword", "currentPassword"].includes(key)) continue;
 
       // Self-update các trường cơ bản
       if (isSelf && selfAllowed.includes(key)) {
@@ -749,9 +731,7 @@ const updateUser = async (req, res) => {
       // Cập nhật thông tin chung (username/email/phone)
       if (["username", "email", "phone"].includes(key)) {
         if (!hasPerm("users:update") && !hasPerm("users:manage")) {
-          return res
-            .status(403)
-            .json({ message: `Không có quyền cập nhật trường ${key}` });
+          return res.status(403).json({ message: `Không có quyền cập nhật trường ${key}` });
         }
         if (key === "username") updates.username = val.trim();
         else if (key === "email") updates.email = val.trim().toLowerCase();
@@ -762,9 +742,7 @@ const updateUser = async (req, res) => {
       // Thay đổi role
       if (key === "role") {
         if (!hasPerm("users:role:update") && !hasPerm("users:manage")) {
-          return res
-            .status(403)
-            .json({ message: "Không có quyền thay đổi role người dùng" });
+          return res.status(403).json({ message: "Không có quyền thay đổi role người dùng" });
         }
         if (!["MANAGER", "STAFF"].includes(val)) {
           return res.status(400).json({ message: "role không hợp lệ" });
@@ -783,14 +761,10 @@ const updateUser = async (req, res) => {
         // Nếu payload có role=MANAGER, menu đã bị override ở trên
         // Ngược lại, để gán menu thủ công phải có quyền users:menu:update hoặc users:manage
         if (!hasPerm("users:menu:update") && !hasPerm("users:manage")) {
-          return res
-            .status(403)
-            .json({ message: "Không có quyền cập nhật menu (permissions)" });
+          return res.status(403).json({ message: "Không có quyền cập nhật menu (permissions)" });
         }
         if (!Array.isArray(val) || !val.every((v) => typeof v === "string")) {
-          return res
-            .status(400)
-            .json({ message: "menu phải là mảng các chuỗi permission" });
+          return res.status(400).json({ message: "menu phải là mảng các chuỗi permission" });
         }
         updates.menu = val;
         continue;
@@ -799,26 +773,17 @@ const updateUser = async (req, res) => {
       // stores, store_roles, current_store
       if (["stores", "store_roles", "current_store"].includes(key)) {
         if (!hasPerm("users:stores:update") && !hasPerm("users:manage")) {
-          return res
-            .status(403)
-            .json({ message: `Không có quyền cập nhật trường ${key}` });
+          return res.status(403).json({ message: `Không có quyền cập nhật trường ${key}` });
         }
 
         if (key === "stores") {
-          if (
-            !Array.isArray(val) ||
-            !val.every((s) => mongoose.Types.ObjectId.isValid(s))
-          ) {
-            return res
-              .status(400)
-              .json({ message: "stores phải là mảng storeId hợp lệ" });
+          if (!Array.isArray(val) || !val.every((s) => mongoose.Types.ObjectId.isValid(s))) {
+            return res.status(400).json({ message: "stores phải là mảng storeId hợp lệ" });
           }
           updates.stores = val;
         } else if (key === "store_roles") {
           if (!Array.isArray(val)) {
-            return res
-              .status(400)
-              .json({ message: "store_roles phải là mảng" });
+            return res.status(400).json({ message: "store_roles phải là mảng" });
           }
           for (const r of val) {
             if (!r || !r.store || !r.role) {
@@ -827,9 +792,7 @@ const updateUser = async (req, res) => {
               });
             }
             if (!mongoose.Types.ObjectId.isValid(r.store)) {
-              return res
-                .status(400)
-                .json({ message: "store_roles.store không hợp lệ" });
+              return res.status(400).json({ message: "store_roles.store không hợp lệ" });
             }
             if (!["OWNER", "STAFF"].includes(r.role)) {
               return res.status(400).json({
@@ -840,9 +803,7 @@ const updateUser = async (req, res) => {
           updates.store_roles = val;
         } else if (key === "current_store") {
           if (val && !mongoose.Types.ObjectId.isValid(val)) {
-            return res
-              .status(400)
-              .json({ message: "current_store không hợp lệ" });
+            return res.status(400).json({ message: "current_store không hợp lệ" });
           }
           updates.current_store = val || null;
         }
@@ -852,9 +813,7 @@ const updateUser = async (req, res) => {
       // isDeleted / deletedAt / restoredAt
       if (["isDeleted", "deletedAt", "restoredAt"].includes(key)) {
         if (!hasPerm("users:delete") && !hasPerm("users:manage")) {
-          return res
-            .status(403)
-            .json({ message: "Không có quyền xóa/khôi phục người dùng" });
+          return res.status(403).json({ message: "Không có quyền xóa/khôi phục người dùng" });
         }
         updates[key] = val;
         continue;
@@ -864,9 +823,7 @@ const updateUser = async (req, res) => {
     }
 
     if (Object.keys(updates).length === 0) {
-      return res
-        .status(400)
-        .json({ message: "Không có trường hợp lệ để cập nhật" });
+      return res.status(400).json({ message: "Không có trường hợp lệ để cập nhật" });
     }
 
     // Áp dụng cập nhật vào document
@@ -877,9 +834,7 @@ const updateUser = async (req, res) => {
     console.log(
       `UPDATE USER: actor=${requester.username || requester.id} target=${
         targetUser.username || targetUser._id
-      } fields=${Object.keys(updates).join(
-        ", "
-      )} time=${new Date().toISOString()}`
+      } fields=${Object.keys(updates).join(", ")} time=${new Date().toISOString()}`
     );
 
     //Ghi nhật ký hoạt động
@@ -891,12 +846,8 @@ const updateUser = async (req, res) => {
       entityId: targetUser._id,
       entityName: targetUser.username,
       req,
-      description: `Người dùng ${
-        requester.username
-      } đã cập nhật thông tin của ${
-        isSelf
-          ? "chính mình"
-          : `người dùng ${targetUser.username || targetUser._id}`
+      description: `Người dùng ${requester.username} đã cập nhật thông tin của ${
+        isSelf ? "chính mình" : `người dùng ${targetUser.username || targetUser._id}`
       }. Các trường thay đổi: ${Object.keys(updates).join(", ")}`,
     });
 
@@ -906,9 +857,7 @@ const updateUser = async (req, res) => {
     return res.json({ message: "Cập nhật thành công", user: result });
   } catch (err) {
     console.error("updateUser error:", err);
-    return res
-      .status(500)
-      .json({ message: "Lỗi server khi cập nhật người dùng" });
+    return res.status(500).json({ message: "Lỗi server khi cập nhật người dùng" });
   }
 };
 
@@ -1000,17 +949,10 @@ const updateProfile = async (req, res) => {
         console.log("🔄 Processing image upload...");
 
         // Validate file type
-        const allowedMimes = [
-          "image/jpeg",
-          "image/png",
-          "image/jpg",
-          "image/gif",
-          "image/webp",
-        ];
+        const allowedMimes = ["image/jpeg", "image/png", "image/jpg", "image/gif", "image/webp"];
         if (!allowedMimes.includes(req.file.mimetype)) {
           return res.status(400).json({
-            message:
-              "Định dạng ảnh không hợp lệ. Chỉ chấp nhận JPEG, PNG, JPG, GIF, WEBP",
+            message: "Định dạng ảnh không hợp lệ. Chỉ chấp nhận JPEG, PNG, JPG, GIF, WEBP",
           });
         }
 
@@ -1029,11 +971,9 @@ const updateProfile = async (req, res) => {
         console.log("🖼️ Image URL:", imageUrl);
 
         // Update image sử dụng findByIdAndUpdate để có thể chain .select()
-        const updatedUserWithImage = await User.findByIdAndUpdate(
-          userId,
-          { image: imageUrl },
-          { new: true }
-        ).select("-password_hash");
+        const updatedUserWithImage = await User.findByIdAndUpdate(userId, { image: imageUrl }, { new: true }).select(
+          "-password_hash"
+        );
 
         if (!updatedUserWithImage) {
           return res.status(404).json({ message: "Người dùng không tồn tại" });
@@ -1120,20 +1060,12 @@ const updateProfile = async (req, res) => {
       if (employee) {
         let employeeChanged = false;
 
-        if (
-          fullname &&
-          fullname.trim() !== (employee.fullname || "") &&
-          changedFields.includes("fullname")
-        ) {
+        if (fullname && fullname.trim() !== (employee.fullname || "") && changedFields.includes("fullname")) {
           employee.fullname = fullname.trim();
           employeeChanged = true;
         }
 
-        if (
-          phone !== undefined &&
-          phone.trim() !== (employee.phone || "") &&
-          changedFields.includes("phone")
-        ) {
+        if (phone !== undefined && phone.trim() !== (employee.phone || "") && changedFields.includes("phone")) {
           employee.phone = phone.trim();
           employeeChanged = true;
         }
@@ -1155,16 +1087,12 @@ const updateProfile = async (req, res) => {
         entityId: user._id,
         entityName: user.username,
         req,
-        description: `Người dùng ${
-          user.username
-        } đã cập nhật thông tin cá nhân: ${changedFields.join(", ")}`,
+        description: `Người dùng ${user.username} đã cập nhật thông tin cá nhân: ${changedFields.join(", ")}`,
       });
     }
 
     // Trả về user updated
-    const updatedUser = await User.findById(userId)
-      .select("-password_hash")
-      .lean();
+    const updatedUser = await User.findById(userId).select("-password_hash").lean();
 
     res.json({
       message: "Profile updated successfully",
@@ -1212,13 +1140,7 @@ const sendPasswordOTP = async (req, res) => {
     await user.save();
 
     // Gửi email OTP (đúng tham số, thêm type "change-password" customize)
-    await sendVerificationEmail(
-      useEmail,
-      user.username,
-      otp,
-      OTP_EXPIRE_MINUTES,
-      "change-password"
-    );
+    await sendVerificationEmail(useEmail, user.username, otp, OTP_EXPIRE_MINUTES, "change-password");
 
     res.json({
       message: "OTP đổi mật khẩu đã gửi đến email, hết hạn sau 5 phút",
@@ -1239,19 +1161,13 @@ const changePassword = async (req, res) => {
     const { password, confirmPassword, otp } = req.body; // Password mới + confirmPassword + OTP
 
     if (!password || !confirmPassword || !otp) {
-      return res
-        .status(400)
-        .json({ message: "Thiếu mật khẩu mới, xác nhận mật khẩu hoặc OTP" });
+      return res.status(400).json({ message: "Thiếu mật khẩu mới, xác nhận mật khẩu hoặc OTP" });
     }
     if (password.length < 6) {
-      return res
-        .status(400)
-        .json({ message: "Mật khẩu mới phải ít nhất 6 ký tự" });
+      return res.status(400).json({ message: "Mật khẩu mới phải ít nhất 6 ký tự" });
     }
     if (password !== confirmPassword) {
-      return res
-        .status(400)
-        .json({ message: "Mật khẩu mới và xác nhận không khớp" });
+      return res.status(400).json({ message: "Mật khẩu mới và xác nhận không khớp" });
     }
 
     const user = await User.findById(userId);
@@ -1260,15 +1176,11 @@ const changePassword = async (req, res) => {
     }
 
     if (user.otp_hash === null || user.otp_expires < new Date()) {
-      return res
-        .status(400)
-        .json({ message: "OTP không hợp lệ hoặc đã hết hạn" });
+      return res.status(400).json({ message: "OTP không hợp lệ hoặc đã hết hạn" });
     }
 
     if (user.otp_attempts >= OTP_MAX_ATTEMPTS) {
-      return res
-        .status(400)
-        .json({ message: "Quá số lần thử, vui lòng gửi OTP mới" });
+      return res.status(400).json({ message: "Quá số lần thử, vui lòng gửi OTP mới" });
     }
 
     if (!(await compareString(otp, user.otp_hash))) {
@@ -1293,9 +1205,7 @@ const changePassword = async (req, res) => {
       entityId: user._id,
       entityName: user.username || user.email,
       req,
-      description: `Người dùng ${
-        user.username || user.email
-      } đã đổi mật khẩu thành công (xác thực bằng OTP)`,
+      description: `Người dùng ${user.username || user.email} đã đổi mật khẩu thành công (xác thực bằng OTP)`,
     });
 
     res.json({ message: "Đổi mật khẩu thành công" });
@@ -1317,9 +1227,7 @@ const softDeleteUser = async (req, res) => {
     //check xem có phải role manager đang thao tác không
     const manager = await User.findById(userId);
     if (!manager || manager.role !== "MANAGER") {
-      return res
-        .status(403)
-        .json({ message: "Chỉ manager mới được xóa nhân viên" });
+      return res.status(403).json({ message: "Chỉ manager mới được xóa nhân viên" });
     }
     //check nhân viên trong chính store đó
     const targetUser = await User.findById(targetUserId);
@@ -1328,15 +1236,11 @@ const softDeleteUser = async (req, res) => {
     }
     //check nhân viên đã bị xoá từ trước hay chưa
     if (targetUser.isDeleted) {
-      return res
-        .status(400)
-        .json({ message: "Tài khoản nhân viên này đã bị xoá trước đó rồi!" });
+      return res.status(400).json({ message: "Tài khoản nhân viên này đã bị xoá trước đó rồi!" });
     }
     // Check quyền: Manager chỉ xóa staff bind store hiện tại (current_store match)
     if (String(manager.current_store) !== String(targetUser.current_store)) {
-      return res
-        .status(403)
-        .json({ message: "Bạn chỉ xóa được nhân viên ở cửa hàng hiện tại" });
+      return res.status(403).json({ message: "Bạn chỉ xóa được nhân viên ở cửa hàng hiện tại" });
     }
     // Xóa mềm: đặt isDeleted=true, deletedAt=now
     targetUser.isDeleted = true;
@@ -1383,9 +1287,7 @@ const restoreUser = async (req, res) => {
 
     const manager = await User.findById(userId);
     if (!manager || manager.role !== "MANAGER") {
-      return res
-        .status(403)
-        .json({ message: "Chỉ manager mới được khôi phục nhân viên" });
+      return res.status(403).json({ message: "Chỉ manager mới được khôi phục nhân viên" });
     }
 
     const targetUser = await User.findById(targetUserId);
@@ -1441,6 +1343,7 @@ module.exports = {
   registerManager,
   verifyOtp,
   login,
+  logout,
   sendForgotPasswordOTP,
   forgotChangePassword,
   refreshToken,

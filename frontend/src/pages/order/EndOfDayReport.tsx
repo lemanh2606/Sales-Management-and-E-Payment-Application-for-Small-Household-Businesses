@@ -181,13 +181,6 @@ const EndOfDayReport: React.FC = () => {
           headers,
         });
         setReportData(res.data.report);
-        Swal.fire({
-          title: "🎉 Thành công!",
-          text: "Tải báo cáo thành công!",
-          icon: "success",
-          confirmButtonText: "OK",
-          confirmButtonColor: "#52c41a",
-        });
       } catch (err: any) {
         Swal.fire({
           title: "❌ Lỗi!",

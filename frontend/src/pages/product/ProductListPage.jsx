@@ -454,6 +454,7 @@ export default function ProductListPage() {
             <Tooltip title={isLowStock ? "Tồn kho thấp!" : ""}>
               <Badge
                 count={value || 0}
+                overflowCount={999999} //không hiển thị 99+ mà hiển đầy đủ, mặc định Badge hiện là 99+ nếu lớn hơn 99
                 showZero
                 style={{
                   backgroundColor: value > 10 ? "#52c41a" : value > 0 ? "#faad14" : "#f5222d",
@@ -589,7 +590,10 @@ export default function ProductListPage() {
   };
 
   const columnSelectorContent = (
-    <Card style={{ width: "100%", maxHeight: isMobile ? "70vh" : 400, overflowY: "auto" }} styles={{ body: { padding: 16 } }}>
+    <Card
+      style={{ width: "100%", maxHeight: isMobile ? "70vh" : 400, overflowY: "auto" }}
+      styles={{ body: { padding: 16 } }}
+    >
       <Text strong style={{ fontSize: 14 }}>
         Chọn cột hiển thị
       </Text>
@@ -771,7 +775,7 @@ export default function ProductListPage() {
                 styles={{ body: { padding: isMobile ? 12 : 24 } }}
               >
                 <Statistic
-                  title={<span style={{ color: "#fff", fontSize: isMobile ? 11 : 14 }}>Tổng SP</span>}
+                  title={<span style={{ color: "#fff", fontSize: isMobile ? 11 : 14 }}>Tổng Sản phẩm</span>}
                   value={filteredProducts.length}
                   prefix={<AppstoreOutlined style={{ fontSize: isMobile ? 16 : 24 }} />}
                   valueStyle={{ color: "#fff", fontWeight: "bold", fontSize: isMobile ? 18 : 24 }}
@@ -788,7 +792,7 @@ export default function ProductListPage() {
                 styles={{ body: { padding: isMobile ? 12 : 24 } }}
               >
                 <Statistic
-                  title={<span style={{ color: "#fff", fontSize: isMobile ? 11 : 14 }}>Kinh doanh</span>}
+                  title={<span style={{ color: "#fff", fontSize: isMobile ? 11 : 14 }}>Đang kinh doanh</span>}
                   value={activeProducts}
                   prefix={<CheckCircleOutlined style={{ fontSize: isMobile ? 16 : 24 }} />}
                   valueStyle={{ color: "#fff", fontWeight: "bold", fontSize: isMobile ? 18 : 24 }}
@@ -813,22 +817,25 @@ export default function ProductListPage() {
               </Card>
             </Col>
             <Col xs={12} sm={12} md={6}>
-              <Card
-                style={{
-                  background: "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",
-                  border: "none",
-                  borderRadius: 12,
-                }}
-                styles={{ body: { padding: isMobile ? 12 : 24 } }}
-              >
-                <Statistic
-                  title={<span style={{ color: "#fff", fontSize: isMobile ? 11 : 14 }}>Giá trị</span>}
-                  value={totalValue}
-                  prefix={<DollarOutlined style={{ fontSize: isMobile ? 16 : 24 }} />}
-                  suffix="₫"
-                  valueStyle={{ color: "#fff", fontWeight: "bold", fontSize: isMobile ? 14 : 18 }}
-                />
-              </Card>
+              <Tooltip title="Công thức tính: 'Tồn kho' x 'Giá bán'">
+                <Card
+                  style={{
+                    background: "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",
+                    border: "none",
+                    borderRadius: 12,
+                    cursor: "pointer",
+                  }}
+                  styles={{ body: { padding: isMobile ? 12 : 24 } }}
+                >
+                  <Statistic
+                    title={<span style={{ color: "#fff", fontSize: isMobile ? 11 : 14 }}>Giá trị</span>}
+                    value={totalValue}
+                    prefix={<DollarOutlined style={{ fontSize: isMobile ? 16 : 24 }} />}
+                    suffix="₫"
+                    valueStyle={{ color: "#fff", fontWeight: "bold", fontSize: isMobile ? 14 : 18 }}
+                  />
+                </Card>
+              </Tooltip>
             </Col>
           </Row>
 
@@ -903,7 +910,7 @@ export default function ProductListPage() {
                   boxShadow: "0 4px 12px rgba(102, 126, 234, 0.4)",
                 }}
               >
-                {isMobile ? "+" : "Thêm SP"}
+                {isMobile ? "+" : "Thêm sản phẩm"}
               </Button>
             </Space>
           </Space>

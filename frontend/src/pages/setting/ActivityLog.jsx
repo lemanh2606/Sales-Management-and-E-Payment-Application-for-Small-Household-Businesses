@@ -1,7 +1,34 @@
 // src/pages/ActivityLog.jsx
 import React, { useState, useEffect } from "react";
-import { Card, Col, Row, Select, Input, Button, Table, DatePicker, Statistic, Spin, Space, Modal, Typography, Switch, Timeline, Tag, Descriptions, Tooltip} from "antd";
-import { SearchOutlined, QuestionCircleOutlined, InfoCircleOutlined, AppstoreOutlined, UnorderedListOutlined, DownOutlined} from "@ant-design/icons";
+import {
+  Card,
+  Col,
+  Row,
+  Select,
+  Input,
+  Button,
+  Table,
+  DatePicker,
+  Statistic,
+  Spin,
+  Space,
+  Modal,
+  Typography,
+  Switch,
+  Timeline,
+  Tag,
+  Descriptions,
+  Tooltip,
+} from "antd";
+import {
+  SearchOutlined,
+  QuestionCircleOutlined,
+  InfoCircleOutlined,
+  AppstoreOutlined,
+  UnorderedListOutlined,
+  ClockCircleOutlined,
+  DownOutlined,
+} from "@ant-design/icons";
 import axios from "axios";
 import dayjs from "dayjs";
 import "dayjs/locale/vi";
@@ -25,6 +52,8 @@ const ActivityLog = () => {
   const [selectedLog, setSelectedLog] = useState(null);
   const [filterApplied, setFilterApplied] = useState(false);
   const [viewMode, setViewMode] = useState("table"); // table / timeline
+  const [attendance, setAttendance] = useState([]);
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [statsCollapsed, setStatsCollapsed] = useState(false);
 
   // state phân trang
@@ -139,8 +168,13 @@ const ActivityLog = () => {
       const respLogs = res.data.data.logs || [];
       const pagination = res.data.data.pagination || {};
 
-      setLogs(respLogs);
-      // set pagination states from backend (fallbacks)
+      // NẾU GỌI VỚI action=auth → LƯU VÀO attendance
+      if (overrideFilters?.action === "auth" && overrideFilters?.entity === "Store") {
+        setAttendance(respLogs);
+      } else {
+        setLogs(respLogs);
+      }
+      // xét logic phân trang (fallbacks)
       setCurrentPage(pagination.current || mergedFilters.page || 1);
       setPageSize(pagination.pageSize || pagination.limit || mergedFilters.limit || 20);
       setTotalLogs(pagination.total || 0);
@@ -154,6 +188,28 @@ const ActivityLog = () => {
       setError(err.response?.data?.message || "Lỗi tải nhật ký");
     } finally {
       setLoading(false);
+    }
+  };
+
+  //hàm fetch lấy thông tin điểm danh
+  const fetchAttendance = async () => {
+    if (!currentStore?._id) return;
+    setAttendanceLoading(true);
+    try {
+      // DÙNG CHUNG fetchLogs → ĐÃ PASS checkStoreAccess
+      await fetchLogs({
+        action: "auth",
+        entity: "Store",
+        fromDate: dayjs().format("YYYY-MM-DD"),
+        toDate: dayjs().format("YYYY-MM-DD"),
+        page: 1,
+        limit: 100,
+        sort: "-createdAt",
+      });
+    } catch (err) {
+      console.error("Lỗi load vào ca:", err);
+    } finally {
+      setAttendanceLoading(false);
     }
   };
 
@@ -178,8 +234,11 @@ const ActivityLog = () => {
   useEffect(() => {
     if (currentStore?._id) {
       fetchLogs();
+      if (viewMode === "attendance") {
+        fetchAttendance(); // ← GỌI NGAY KHI CHỌN STORE VÀ ĐANG Ở TAB VÀO CA
+      }
     }
-  }, [currentStore?._id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentStore._id, viewMode]);
 
   // helper: when user changes filters in UI
   const handleFilterChange = (key, value) => {
@@ -200,11 +259,7 @@ const ActivityLog = () => {
       setFilters((prev) => ({ ...prev, fromDate: "", toDate: "", page: 1 }));
     }
   };
-  //hàm đổi timeline và bảng
-  const handleViewMode = (checked) => {
-    setViewMode(checked ? "timeline" : "table");
-  };
-  // Table columns same như bạn
+  // Table columns
   const columns = [
     {
       title: "Thời gian",
@@ -296,7 +351,15 @@ const ActivityLog = () => {
   const timelineItems = logs.map((log) => ({
     label: formatDate(log.createdAt),
     color:
-      log.action === "create" ? "green" : log.action === "update" ? "blue" : log.action === "delete" ? "red" : "gray",
+      log.action === "create"
+        ? "green"
+        : log.action === "update"
+        ? "blue"
+        : log.action === "delete"
+        ? "red"
+        : log.action === "auth"
+        ? "purple"
+        : "gray",
     children: (
       <div>
         <Text strong>{log.userName}</Text>
@@ -345,132 +408,164 @@ const ActivityLog = () => {
           </Card>
         ) : (
           <Space direction="vertical" size="large" style={{ width: "100%" }}>
-          {/* HEADER + FILTERS */}
-          <Card style={{ border: "1px solid #8c8c8c" }}>
-            <Row gutter={16} align="middle">
-              <Col span={4}>
-                <Text strong style={{ fontSize: 22, color: "#1890ff" }}>
-                  {currentStore.name || "Đang tải..."}
-                </Text>
-              </Col>
-              <Col span={4}>
-                <Select
-                  style={{ width: "100%" }}
-                  placeholder="Lọc theo user"
-                  value={filters.userName || ""}
-                  onChange={(v) => handleFilterChange("userName", v)}
-                  allowClear
-                >
-                  <Option value="">
-                    <AppstoreOutlined /> Tất cả người dùng
-                  </Option>
-                  {users.map((u) => (
-                    <Option key={u} value={u}>
-                      {u}
-                    </Option>
-                  ))}
-                </Select>
-              </Col>
-              <Col span={4}>
-                <Select
-                  style={{ width: "100%" }}
-                  placeholder="Lọc theo hành động"
-                  value={filters.action || ""}
-                  onChange={(v) => handleFilterChange("action", v)}
-                  allowClear
-                >
-                  <Option value="">
-                    <AppstoreOutlined /> Tất cả hành động
-                  </Option>
-                  {actions.map((a) => (
-                    <Option key={a} value={a}>
-                      {a.toUpperCase()}
-                    </Option>
-                  ))}
-                </Select>
-              </Col>
-              <Col span={4}>
-                <Select
-                  style={{ width: "100%" }}
-                  placeholder="Lọc theo đối tượng"
-                  value={filters.entity || ""}
-                  onChange={(v) => handleFilterChange("entity", v)}
-                  allowClear
-                >
-                  <Option value="">
-                    <AppstoreOutlined /> Tất cả đối tượng
-                  </Option>
-                  {entities.map((e) => (
-                    <Option key={e} value={e}>
-                      {e}
-                    </Option>
-                  ))}
-                </Select>
-              </Col>
-              <Col span={4}>
-                <RangePicker
-                  style={{ width: "100%" }}
-                  onChange={handleDateRange}
-                  format="YYYY-MM-DD"
-                  placeholder={["Từ ngày", "Đến ngày"]}
-                />
-              </Col>
-              <Col span={4}>
-                <Input
-                  placeholder="Tìm kiếm keyword"
-                  onChange={(e) => handleFilterChange("keyword", e.target.value)}
-                  style={{ width: "100%" }}
-                />
-              </Col>
-            </Row>
-            <Row gutter={16} style={{ marginTop: 16 }}>
-              <Col span={12}>
-                <Button
-                  type="primary"
-                  icon={<SearchOutlined />}
-                  onClick={() => {
-                    setFilterApplied(true);
-                    fetchLogs();
-                  }}
-                >
-                  Xem nhật ký
-                </Button>
-              </Col>
-              <Col span={12} style={{ textAlign: "right" }}>
-                <Space>
-                  <Tooltip title="Chọn để xem nhật ký dạng timeline hoặc Bảng">
-                    <QuestionCircleOutlined style={{ color: "#1890ff", marginRight: 4 }} />
-                  </Tooltip>
-                  <Text>Chế độ xem:</Text>
-                  <Switch
-                    checkedChildren={<UnorderedListOutlined />}
-                    unCheckedChildren={<AppstoreOutlined />}
-                    checked={viewMode === "timeline"}
-                    onChange={handleViewMode}
-                  />
-                </Space>
-              </Col>
-            </Row>
-          </Card>
-
-          {/* STATS */}
-          {stats && (
-            <Card
-              title={
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span>Thống kê tổng quan</span>
-                  <Tooltip title={statsCollapsed ? "Mở thống kê" : "Thu gọn thống kê"}>
+            {/* HEADER: TIÊU ĐỀ + CHẾ ĐỘ XEM */}
+            <Card style={{ border: "1px solid #8c8c8c" }}>
+              <Row justify="space-between" align="middle">
+                <Col>
+                  <Text strong style={{ fontSize: 22, color: "#1890ff" }}>
+                    📋 Nhật ký hoạt động - {currentStore.name || "Đang tải..."}
+                  </Text>
+                </Col>
+                <Col>
+                  <Space size="middle">
+                    <Text strong style={{ color: "#595959" }}>
+                      Chế độ xem:
+                    </Text>
                     <Button
-                      type="text"
-                      icon={<DownOutlined rotate={statsCollapsed ? 0 : 180} />}
-                      onClick={() => setStatsCollapsed(!statsCollapsed)}
+                      type={viewMode === "table" ? "primary" : "default"}
+                      icon={<UnorderedListOutlined />}
+                      onClick={() => setViewMode("table")}
+                      style={{
+                        borderRadius: 8,
+                        fontWeight: 500,
+                      }}
+                    >
+                      Nhật ký chung
+                    </Button>
+                    <Button
+                      type={viewMode === "attendance" ? "primary" : "default"}
+                      icon={<AppstoreOutlined />}
+                      onClick={() => {
+                        setViewMode("attendance");
+                        fetchAttendance();
+                      }}
+                      style={{
+                        borderRadius: 8,
+                        fontWeight: 500,
+                      }}
+                    >
+                      Vào ca hôm nay
+                    </Button>
+                    <Button
+                      type={viewMode === "timeline" ? "primary" : "default"}
+                      icon={<ClockCircleOutlined />}
+                      onClick={() => setViewMode("timeline")}
+                      style={{
+                        borderRadius: 8,
+                        fontWeight: 500,
+                      }}
+                    >
+                      Timeline
+                    </Button>
+                  </Space>
+                </Col>
+              </Row>
+            </Card>
+
+            {/* FILTERS - CHỈ HIỆN KHI Ở CHẾ ĐỘ TABLE HOẶC TIMELINE */}
+            {(viewMode === "table" || viewMode === "timeline") && (
+              <Card style={{ border: "1px solid #8c8c8c" }}>
+                <Row gutter={16} align="middle">
+                  <Col span={4}>
+                    <Select
+                      style={{ width: "100%" }}
+                      placeholder="Lọc theo user"
+                      value={filters.userName || ""}
+                      onChange={(v) => handleFilterChange("userName", v)}
+                      allowClear
+                    >
+                      <Option value="">
+                        <AppstoreOutlined /> Tất cả người dùng
+                      </Option>
+                      {users.map((u) => (
+                        <Option key={u} value={u}>
+                          {u}
+                        </Option>
+                      ))}
+                    </Select>
+                  </Col>
+                  <Col span={4}>
+                    <Select
+                      style={{ width: "100%" }}
+                      placeholder="Lọc theo hành động"
+                      value={filters.action || ""}
+                      onChange={(v) => handleFilterChange("action", v)}
+                      allowClear
+                    >
+                      <Option value="">
+                        <AppstoreOutlined /> Tất cả hành động
+                      </Option>
+                      {actions.map((a) => (
+                        <Option key={a} value={a}>
+                          {a.toUpperCase()}
+                        </Option>
+                      ))}
+                    </Select>
+                  </Col>
+                  <Col span={4}>
+                    <Select
+                      style={{ width: "100%" }}
+                      placeholder="Lọc theo đối tượng"
+                      value={filters.entity || ""}
+                      onChange={(v) => handleFilterChange("entity", v)}
+                      allowClear
+                    >
+                      <Option value="">
+                        <AppstoreOutlined /> Tất cả đối tượng
+                      </Option>
+                      {entities.map((e) => (
+                        <Option key={e} value={e}>
+                          {e}
+                        </Option>
+                      ))}
+                    </Select>
+                  </Col>
+                  <Col span={6}>
+                    <RangePicker
+                      style={{ width: "100%" }}
+                      onChange={handleDateRange}
+                      format="YYYY-MM-DD"
+                      placeholder={["Từ ngày", "Đến ngày"]}
                     />
-                  </Tooltip>
-                </div>
-              }
-              style={{ border: "1px solid #8c8c8c" }}
-            >
-              {!statsCollapsed && (
+                  </Col>
+                  <Col span={6}>
+                    <Input
+                      placeholder="Tìm kiếm keyword"
+                      onChange={(e) => handleFilterChange("keyword", e.target.value)}
+                      style={{ width: "100%" }}
+                    />
+                  </Col>
+                </Row>
+                <Row style={{ marginTop: 16 }}>
+                  <Col span={24}>
+                    <Space>
+                      <Button
+                        type="primary"
+                        icon={<SearchOutlined />}
+                        onClick={() => {
+                          setFilterApplied(true);
+                          fetchLogs();
+                        }}
+                      >
+                        Xem nhật ký
+                      </Button>
+                      <Tooltip title="Thu gọn/Mở rộng thống kê">
+                        <Button
+                          icon={<DownOutlined rotate={statsCollapsed ? 0 : 180} />}
+                          onClick={() => setStatsCollapsed(!statsCollapsed)}
+                        >
+                          {statsCollapsed ? "Hiện" : "Ẩn"} thống kê
+                        </Button>
+                      </Tooltip>
+                    </Space>
+                  </Col>
+                </Row>
+              </Card>
+            )}
+
+            {/* STATS */}
+            {stats && !statsCollapsed && (
+              <Card title="Thống kê tổng quan" style={{ border: "1px solid #8c8c8c" }}>
                 <Row gutter={16}>
                   <Col span={6}>
                     <Statistic title="Tổng nhật ký hoạt động" value={stats.totalLogs} />
@@ -501,92 +596,193 @@ const ActivityLog = () => {
                     />
                   </Col>
                 </Row>
-              )}
-            </Card>
-          )}
+              </Card>
+            )}
 
-          {loading && <Spin tip="Đang tải nhật ký..." style={{ width: "100%", margin: "20px 0" }} />}
-          {error && <div style={{ color: "red" }}>{error}</div>}
+            {loading && <Spin tip="Đang tải nhật ký..." style={{ width: "100%", margin: "20px 0" }} />}
+            {error && <div style={{ color: "red" }}>{error}</div>}
 
-          {/* VIEW MODE */}
-          {viewMode === "table" ? (
-            <Card title="Danh sách nhật ký chi tiết" style={{ border: "1px solid #8c8c8c" }}>
-              <Table
-                columns={columns}
-                dataSource={logs}
-                rowKey="_id"
-                pagination={{
-                  current: currentPage,
-                  pageSize,
-                  total: totalLogs,
-                  showSizeChanger: true,
-                  onChange: handleTableChange,
-                  onShowSizeChange: (current, size) => handleTableChange(1, size),
-                  showTotal: (total, range) => (
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        width: "100%",
-                        fontSize: 14,
-                        color: "#555",
+            {/* VIEW MODE: TABLE */}
+            {viewMode === "table" && (
+              <Card title="Danh sách nhật ký chi tiết" style={{ border: "1px solid #8c8c8c" }}>
+                <Table
+                  columns={columns}
+                  dataSource={logs}
+                  rowKey="_id"
+                  pagination={{
+                    current: currentPage,
+                    pageSize,
+                    total: totalLogs,
+                    showSizeChanger: true,
+                    onChange: handleTableChange,
+                    onShowSizeChange: (current, size) => handleTableChange(1, size),
+                    showTotal: (total, range) => (
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          width: "100%",
+                          fontSize: 14,
+                          color: "#555",
+                        }}
+                      >
+                        <div>
+                          Đang xem{" "}
+                          <span style={{ color: "#1890ff", fontWeight: 600 }}>
+                            {range[0]} – {range[1]}
+                          </span>{" "}
+                          trên tổng số <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> nhật ký
+                        </div>
+                      </div>
+                    ),
+                  }}
+                  scroll={{ x: 1200 }}
+                  locale={{
+                    emptyText:
+                      logs.length === 0 ? (
+                        <div style={{ color: "#f45a07f7" }}>
+                          {filterApplied ? "Phần này chưa có nhật ký" : "Chưa có nhật ký. Hãy lọc và xem!"}
+                        </div>
+                      ) : null,
+                  }}
+                  onRow={(record) => ({ onClick: () => fetchLogDetail(record._id) })}
+                />
+              </Card>
+            )}
+
+            {/* VIEW MODE: ATTENDANCE (VÀO CA HÔM NAY) */}
+            {viewMode === "attendance" && (
+              <Card
+                title={
+                  <Space>
+                    <AppstoreOutlined style={{ color: "#1890ff" }} />
+                    <span>Nhân viên vào ca hôm nay</span>
+                    <Tag color="blue">{dayjs().format("DD/MM/YYYY")}</Tag>
+                  </Space>
+                }
+                style={{ border: "1px solid #8c8c8c" }}
+              >
+                {attendanceLoading ? (
+                  <div style={{ textAlign: "center", padding: "40px" }}>
+                    <Spin tip="Đang tải danh sách vào ca..." />
+                  </div>
+                ) : attendance.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "40px", color: "#999", fontSize: 16 }}>
+                    Chưa có nhân viên nào vào ca hôm nay
+                  </div>
+                ) : (
+                  <Table
+                    dataSource={attendance}
+                    rowKey="_id"
+                    pagination={false}
+                    columns={[
+                      {
+                        title: "Nhân viên",
+                        render: (_, log) => (
+                          <Space>
+                            <img
+                              src={log.userDetail?.image || "/default-avatar.png"}
+                              alt="avatar"
+                              width={32}
+                              style={{ borderRadius: "50%", objectFit: "cover" }}
+                            />
+                            <div>
+                              <div style={{ fontWeight: 600 }}>{log.userDetail?.fullname || log.userName}</div>
+                              <div style={{ fontSize: 12, color: "#888" }}>
+                                {log.userDetail?.role === "MANAGER" ? "Quản lý" : "Nhân viên"}
+                              </div>
+                            </div>
+                          </Space>
+                        ),
+                      },
+                      {
+                        title: "Email",
+                        dataIndex: ["userDetail", "email"],
+                        render: (email) => <span style={{ color: "#555" }}>{email || "-"}</span>,
+                      },
+                      {
+                        title: "Cửa hàng",
+                        dataIndex: ["storeDetail", "name"],
+                        render: (name) => (
+                          <Tag color="purple" style={{ fontSize: 13, padding: "2px 8px" }}>
+                            {name || "-"}
+                          </Tag>
+                        ),
+                      },
+                      {
+                        title: "Giờ vào ca",
+                        dataIndex: "createdAt",
+                        render: (date) => (
+                          <Tag color="blue" style={{ fontWeight: 600, fontSize: 14 }}>
+                            {dayjs(date).format("HH:mm")}
+                          </Tag>
+                        ),
+                      },
+                      {
+                        title: "Thiết bị",
+                        render: (_, log) => {
+                          const isStoreIP =
+                            log.ip && ["192.168.", "10.0.", "172.16."].some((p) => log.ip.startsWith(p));
+                          return (
+                            <Tag
+                              color={isStoreIP ? "green" : "orange"}
+                              icon={isStoreIP ? <AppstoreOutlined /> : <QuestionCircleOutlined />}
+                            >
+                              {isStoreIP ? "Máy tại quán" : "Thiết bị lạ"}
+                            </Tag>
+                          );
+                        },
+                      },
+                      {
+                        title: "Địa chỉ IP",
+                        dataIndex: "ip",
+                        render: (ip) =>
+                          ip ? (
+                            <code style={{ background: "#f5f5f5", padding: "2px 6px", borderRadius: 4 }}>{ip}</code>
+                          ) : (
+                            "-"
+                          ),
+                      },
+                    ]}
+                  />
+                )}
+              </Card>
+            )}
+
+            {/* VIEW MODE: TIMELINE */}
+            {viewMode === "timeline" && (
+              <Card title="Timeline nhật ký" style={{ border: "1px solid #8c8c8c" }}>
+                <Timeline mode="alternate" items={timelineItems} />
+                {totalLogs > logs.length && (
+                  <div style={{ textAlign: "center", marginTop: 16 }}>
+                    <Button
+                      onClick={async () => {
+                        const nextPage = currentPage + 1;
+                        const newFilters = { ...filters, page: nextPage, limit: pageSize };
+                        setLoading(true);
+                        try {
+                          const token = localStorage.getItem("token");
+                          const params = new URLSearchParams({ ...newFilters, storeId: currentStore._id });
+                          const res = await axios.get(`http://localhost:9999/api/activity-logs?${params.toString()}`, {
+                            headers: { Authorization: `Bearer ${token}` },
+                          });
+                          const newLogs = res.data.data.logs || [];
+                          setLogs((prev) => [...prev, ...newLogs]);
+                          setCurrentPage(nextPage);
+                        } catch (err) {
+                          console.error(err);
+                        } finally {
+                          setLoading(false);
+                        }
                       }}
                     >
-                      <div>
-                        Đang xem{" "}
-                        <span style={{ color: "#1890ff", fontWeight: 600 }}>
-                          {range[0]} – {range[1]}
-                        </span>
-                       {" "} trên tổng số <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> nhật ký
-                      </div>
-                    </div>
-                  ),
-                }}
-                scroll={{ x: 1200 }}
-                locale={{
-                  emptyText:
-                    logs.length === 0 ? (
-                      <div style={{ color: "#f45a07f7" }}>
-                        {filterApplied ? "Phần này chưa có nhật ký" : "Chưa có nhật ký. Hãy lọc và xem!"}
-                      </div>
-                    ) : null,
-                }}
-                onRow={(record) => ({ onClick: () => fetchLogDetail(record._id) })}
-              />
-            </Card>
-          ) : (
-            <Card title="Timeline nhật ký" style={{ border: "1px solid #8c8c8c" }}>
-              <Timeline mode="alternate" items={timelineItems} />
-              {totalLogs > logs.length && (
-                <div style={{ textAlign: "center", marginTop: 16 }}>
-                  <Button
-                    onClick={async () => {
-                      const nextPage = currentPage + 1;
-                      const newFilters = { ...filters, page: nextPage, limit: pageSize };
-                      setLoading(true);
-                      try {
-                        const token = localStorage.getItem("token");
-                        const params = new URLSearchParams({ ...newFilters, storeId: currentStore._id });
-                        const res = await axios.get(`http://localhost:9999/api/activity-logs?${params.toString()}`, {
-                          headers: { Authorization: `Bearer ${token}` },
-                        });
-                        const newLogs = res.data.data.logs || [];
-                        setLogs((prev) => [...prev, ...newLogs]); // nối dài timeline
-                        setCurrentPage(nextPage);
-                      } catch (err) {
-                        console.error(err);
-                      } finally {
-                        setLoading(false);
-                      }
-                    }}
-                  >
-                    Xem thêm
-                  </Button>
-                </div>
-              )}
-            </Card>
-          )}
-        </Space>
+                      Xem thêm
+                    </Button>
+                  </div>
+                )}
+              </Card>
+            )}
+          </Space>
         )}
 
         {/* DETAIL MODAL */}

@@ -84,8 +84,6 @@ const getRevenueByPeriod = async (req, res) => {
 
     const data = await calcRevenueByPeriod({ storeId, periodType, periodKey, type: "total" });
     const revenue = data[0] || { totalRevenue: 0, countOrders: 0 };
-
-    console.log(`✅ Báo cáo doanh thu ${periodType} ${periodKey}: ${revenue.totalRevenue} VND`);
     res.json({ message: "Báo cáo doanh thu thành công", revenue });
   } catch (err) {
     console.error("Lỗi báo cáo doanh thu:", err.message);
