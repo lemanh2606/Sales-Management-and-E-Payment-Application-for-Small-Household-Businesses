@@ -1,5 +1,4 @@
 // controllers/subscriptionController.js
-const mongoose = require("mongoose");
 const Subscription = require("../models/Subscription");
 const User = require("../models/User");
 const PaymentHistory = require("../models/PaymentHistory");
@@ -11,6 +10,20 @@ const PRICING = {
   3: { price: 499000, discount: 98000, label: "3 tháng", badge: "Phổ biến" },
   6: { price: 899000, discount: 295000, label: "6 tháng", badge: "Tiết kiệm nhất" },
 };
+
+const FRONTEND_BASE_URL = resolveBaseUrl(process.env.APP_PORTAL_URL || process.env.FRONTEND_URL, "http://localhost:5173");
+const API_BASE_URL = resolveBaseUrl(
+  process.env.PAYOS_PUBLIC_API_URL || process.env.PUBLIC_API_URL || process.env.API_BASE_URL,
+  "http://localhost:9999"
+);
+const SUB_RETURN_URL =
+  process.env.PAYOS_SUB_RETURN_URL || `${FRONTEND_BASE_URL}/subscription/checkout?status=success`;
+const SUB_CANCEL_URL =
+  process.env.PAYOS_SUB_CANCEL_URL || `${FRONTEND_BASE_URL}/subscription/checkout?status=cancel`;
+const SUB_WEBHOOK_URL =
+  process.env.PAYOS_SUBSCRIPTION_WEBHOOK_URL || `${API_BASE_URL}/api/subscriptions/webhook`;
+const DISABLE_WEBHOOK_SIM = process.env.PAYOS_DISABLE_SIMULATION === "true";
+const PENDING_TIMEOUT_MS = parseInt(process.env.SUBSCRIPTION_PENDING_TIMEOUT, 10) || 15 * 60 * 1000;
 
 /**
  * GET /api/subscriptions/plans
@@ -140,6 +153,17 @@ const getCurrentSubscription = async (req, res) => {
       };
     }
 
+    if (subscription.pending_order_code && isPendingPaymentFresh(subscription)) {
+      response.pending_payment = {
+        order_code: subscription.pending_order_code,
+        plan_duration: subscription.pending_plan_duration,
+        amount: subscription.pending_amount,
+        checkout_url: subscription.pending_checkout_url,
+        qr_data_url: subscription.pending_qr_url,
+        created_at: subscription.pending_created_at,
+      };
+    }
+
     res.json(response);
   } catch (error) {
     console.error("Lỗi getCurrentSubscription:", error);
@@ -157,6 +181,7 @@ const createCheckout = async (req, res) => {
   try {
     const userId = req.user._id;
     const { plan_duration } = req.body;
+    const parsedDuration = parseInt(plan_duration, 10);
 
     // Check role MANAGER
     const user = await User.findById(userId).select("role");
@@ -172,20 +197,41 @@ const createCheckout = async (req, res) => {
     }
 
     // Validate plan
-    if (!PRICING[plan_duration]) {
+    if (!PRICING[parsedDuration]) {
       return res.status(400).json({ message: "Gói không hợp lệ" });
     }
 
-    const plan = PRICING[plan_duration];
+    const plan = PRICING[parsedDuration];
 
-    // Kiểm tra subscription hiện tại
-    const currentSub = await Subscription.findActiveByUser(userId);
-    if (currentSub && currentSub.status === "ACTIVE" && !currentSub.isExpired()) {
-      return res.status(400).json({
-        message: "Bạn đang có gói Premium active",
-        expires_at: currentSub.expires_at,
+    // Lấy hoặc tạo subscription record
+    let subscription = await Subscription.findOne({ user_id: userId });
+    if (!subscription) {
+      subscription = await Subscription.createTrial(userId);
+    }
+
+    // Clear pending payment nếu đã quá hạn
+    if (subscription.pending_order_code && !isPendingPaymentFresh(subscription)) {
+      subscription.clearPendingPayment();
+      await subscription.save();
+    }
+
+    if (subscription.pending_order_code && isPendingPaymentFresh(subscription)) {
+      return res.status(200).json({
+        message: "Bạn đang có giao dịch đang chờ thanh toán",
+        checkout_url: subscription.pending_checkout_url,
+        qr_data_url: subscription.pending_qr_url,
+        amount: subscription.pending_amount,
+        plan: {
+          duration: subscription.pending_plan_duration,
+          label: PRICING[subscription.pending_plan_duration]?.label,
+          discount: PRICING[subscription.pending_plan_duration]?.discount,
+        },
+        transaction_id: subscription.pending_order_code,
+        pending: true,
       });
     }
+
+    const isRenewal = subscription.status === "ACTIVE" && !subscription.isExpired();
 
     // Tạo order description
     const orderInfo = `Premium ${plan.label} - User ${userId}`;
@@ -193,27 +239,40 @@ const createCheckout = async (req, res) => {
 
     // Generate payment link với PayOS
     const paymentData = await generateQRWithPayOS({
-      body: {
-        amount,
-        orderInfo,
-        // Metadata để webhook biết đây là subscription payment
-        metadata: {
-          type: "SUBSCRIPTION",
-          user_id: userId,
-          plan_duration,
-        },
-      },
+      amount,
+      orderInfo,
+      description: orderInfo,
+      returnUrl: SUB_RETURN_URL,
+      cancelUrl: SUB_CANCEL_URL,
+      webhookUrl: SUB_WEBHOOK_URL,
+      simulateWebhook: !DISABLE_WEBHOOK_SIM,
     });
 
-    // Tạo pending subscription (chờ payment)
-    const subscription = new Subscription({
-      user_id: userId,
-      status: "PENDING", // Chờ payment thành công
-      plan_duration: plan_duration,
-      duration_months: plan_duration, // Alias để webhook query
-    });
+    subscription
+      .markPendingPayment({
+        orderCode: paymentData.txnRef,
+        amount,
+        planDuration: parsedDuration,
+        checkoutUrl: paymentData.paymentLink,
+        qrUrl: paymentData.qrDataURL,
+      })
+      .set({ duration_months: parsedDuration });
 
     await subscription.save();
+
+    await PaymentHistory.create({
+      user_id: userId,
+      subscription_id: subscription._id,
+      transaction_id: paymentData.txnRef.toString(),
+      plan_duration: parsedDuration,
+      amount,
+      payment_method: "PAYOS",
+      status: "PENDING",
+      paid_at: null,
+      notes: isRenewal
+        ? `Gia hạn gói ${parsedDuration} tháng - PayOS (chờ xác nhận)`
+        : `Kích hoạt gói ${parsedDuration} tháng - PayOS (chờ xác nhận)`,
+    });
 
     res.json({
       message: "Đã tạo link thanh toán",
@@ -221,11 +280,12 @@ const createCheckout = async (req, res) => {
       qr_data_url: paymentData.qrDataURL,
       amount: plan.price,
       plan: {
-        duration: plan_duration,
+        duration: parsedDuration,
         label: plan.label,
         discount: plan.discount,
       },
-      transaction_id: paymentData.txnRef,
+      transaction_id: paymentData.txnRef.toString(),
+      pending: true,
     });
   } catch (error) {
     console.error("Lỗi createCheckout:", error);
@@ -248,6 +308,7 @@ const activatePremium = async (req, res) => {
     }
 
     const { plan_duration, amount, transaction_id } = req.body;
+    const parsedDuration = parseInt(plan_duration, 10);
 
     console.log("Activate premium request:", { userId, plan_duration, amount, transaction_id });
 
@@ -264,48 +325,47 @@ const activatePremium = async (req, res) => {
       });
     }
 
-    if (!plan_duration || !amount || !transaction_id) {
+    if (!parsedDuration || !amount || !transaction_id) {
       return res.status(400).json({ message: "Thiếu thông tin plan_duration, amount hoặc transaction_id" });
     }
 
     // Validate plan
-    if (!PRICING[plan_duration]) {
+    if (!PRICING[parsedDuration]) {
       return res.status(400).json({ message: "Gói không hợp lệ" });
     }
 
     // Check subscription hiện tại (bao gồm cả EXPIRED)
     let subscription = await Subscription.findOne({ user_id: userId });
-    
-    // Nếu chưa có subscription nào -> tạo mới
+
     if (!subscription) {
       console.log("Creating new subscription for user:", userId);
-      subscription = new Subscription({
-        user_id: userId,
-        status: "TRIAL", // Tạm thời set TRIAL, sẽ được update thành ACTIVE
-      });
+      subscription = await Subscription.createTrial(userId);
     } else {
-      console.log("Found existing subscription:", subscription._id, "status:", subscription.status);
+      console.log(
+        "Found existing subscription:",
+        subscription._id,
+        "status:",
+        subscription.status
+      );
     }
-    
+
+    // Clear pending payment metadata nếu có
+    if (subscription.pending_order_code) {
+      subscription.clearPendingPayment();
+    }
+
     // Check nếu đang ACTIVE và chưa expired -> Gia hạn
     const isRenewal = subscription.status === "ACTIVE" && !subscription.isExpired();
 
     if (isRenewal) {
-      // ✅ GIA HẠN: Cộng thêm thời gian vào expires_at hiện tại
-      const currentExpires = new Date(subscription.expires_at);
-      const additionalMonths = plan_duration;
-      const newExpires = new Date(currentExpires);
-      newExpires.setMonth(newExpires.getMonth() + additionalMonths);
-      
-      subscription.expires_at = newExpires;
-      subscription.plan_duration = plan_duration; // Update plan duration
+      subscription.extendPremium(parsedDuration);
       subscription.auto_renew = false;
-      
-      console.log(`🔄 GIA HẠN: Cộng thêm ${additionalMonths} tháng. Expires: ${currentExpires} → ${newExpires}`);
+      console.log(`🔄 GIA HẠN: +${parsedDuration} tháng cho subscription ${subscription._id}`);
     } else {
-      // ✅ KÍCH HOẠT MỚI hoặc KÍCH HOẠT LẠI từ EXPIRED
-      subscription.activatePremium(plan_duration);
-      console.log(`✨ KÍCH HOẠT ${subscription._id ? 'LẠI' : 'MỚI'}: ${plan_duration} tháng`);
+      subscription.activatePremium(parsedDuration);
+      console.log(
+        `✨ ${subscription._id ? "KÍCH HOẠT LẠI" : "KÍCH HOẠT MỚI"}: ${parsedDuration} tháng`
+      );
     }
     
     await subscription.save();
@@ -318,14 +378,14 @@ const activatePremium = async (req, res) => {
       user_id: userId,
       subscription_id: subscription._id,
       transaction_id,
-      plan_duration,
+      plan_duration: parsedDuration,
       amount,
       payment_method: "MANUAL",
       status: "SUCCESS",
       paid_at: new Date(),
-      notes: isRenewal 
-        ? `Gia hạn thêm ${plan_duration} tháng - MANUAL` 
-        : `Kích hoạt gói ${plan_duration} tháng - MANUAL`,
+      notes: isRenewal
+        ? `Gia hạn thêm ${parsedDuration} tháng - MANUAL`
+        : `Kích hoạt gói ${parsedDuration} tháng - MANUAL`,
     });
     await paymentHistory.save();
     console.log("💾 Saved PaymentHistory:", paymentHistory._id, "for user_id:", userId);
@@ -503,3 +563,22 @@ module.exports = {
   getPaymentHistory,
   getUsageStats,
 };
+
+function resolveBaseUrl(value, fallback) {
+  const base = value || fallback || "";
+  if (!base) return "";
+  return base.endsWith("/") ? base.slice(0, -1) : base;
+}
+
+function isPendingPaymentFresh(subscription) {
+  if (!subscription || !subscription.pending_order_code) {
+    return false;
+  }
+
+  if (!subscription.pending_created_at) {
+    return true;
+  }
+
+  const age = Date.now() - subscription.pending_created_at.getTime();
+  return age < PENDING_TIMEOUT_MS;
+}

@@ -1,27 +1,68 @@
 // pages/settings/PricingPage.jsx
 import React, { useState, useEffect } from "react";
-import { Card, Button, Row, Col, Typography, Badge, Space, Spin, message, Modal } from "antd";
-import { CheckOutlined, CrownOutlined, RocketOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import { Card, Button, Row, Col, Typography, Badge, Space, Spin, message, Modal, Alert, Tag } from "antd";
+import {
+  CheckOutlined,
+  CrownOutlined,
+  RocketOutlined,
+  ThunderboltOutlined,
+  QrcodeOutlined,
+  LinkOutlined,
+  CopyOutlined,
+  ReloadOutlined,
+  FieldTimeOutlined,
+} from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import subscriptionApi from "../../api/subscriptionApi";
 import Layout from "../../components/Layout";
 import Swal from "sweetalert2";
-import { useAuth } from "../../context/AuthContext";
+import dayjs from "dayjs";
 
 const { Title, Text, Paragraph } = Typography;
 
+const formatCurrency = (value) => Number(value || 0).toLocaleString("vi-VN");
+
+const normalizeCheckoutPayload = (payload = {}) => ({
+  transactionId: payload.transaction_id || payload.order_code || "",
+  amount: Number(payload.amount) || 0,
+  planDuration: payload.plan?.duration || payload.plan_duration || null,
+  planLabel: payload.plan?.label || (payload.plan_duration ? `Gói ${payload.plan_duration} tháng` : ""),
+  qrUrl: payload.qr_data_url,
+  checkoutUrl: payload.checkout_url,
+  createdAt: payload.created_at,
+  pending: payload.pending ?? true,
+});
+
+const normalizePendingCheckout = (pending = {}) =>
+  normalizeCheckoutPayload({
+    ...pending,
+    transaction_id: pending.order_code,
+    checkout_url: pending.checkout_url,
+    qr_data_url: pending.qr_data_url,
+  });
+
 const PricingPage = () => {
   const navigate = useNavigate();
-  const { setManagerSubscriptionExpired } = useAuth();
   const [plans, setPlans] = useState([]);
   const [currentSub, setCurrentSub] = useState(null);
   const [loading, setLoading] = useState(true);
   const [processingPlan, setProcessingPlan] = useState(null);
   const [selectedPlan, setSelectedPlan] = useState(null); // Track which plan is selected
+  const [checkoutModalVisible, setCheckoutModalVisible] = useState(false);
+  const [checkoutInfo, setCheckoutInfo] = useState(null);
+  const [pendingCheckoutInfo, setPendingCheckoutInfo] = useState(null);
 
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (currentSub?.pending_payment) {
+      setPendingCheckoutInfo(normalizePendingCheckout(currentSub.pending_payment));
+    } else {
+      setPendingCheckoutInfo(null);
+    }
+  }, [currentSub]);
 
   const fetchData = async () => {
     try {
@@ -78,6 +119,15 @@ const PricingPage = () => {
       ]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const refreshSubscriptionStatus = async () => {
+    try {
+      const res = await subscriptionApi.getCurrentSubscription();
+      setCurrentSub(res?.data || null);
+    } catch (error) {
+      console.error("Lỗi refresh subscription:", error);
     }
   };
 
@@ -153,7 +203,7 @@ const PricingPage = () => {
             )}đ</strong>
           </p>
           <p style="margin-top: 8px; font-size: 13px; color: #999;">
-            (Do chưa tích hợp PayOS, gói sẽ được kích hoạt ngay lập tức)
+            Sau khi xác nhận, hệ thống sẽ tạo mã QR PayOS để bạn quét và thanh toán.
           </p>
         </div>
       `,
@@ -166,50 +216,58 @@ const PricingPage = () => {
       width: 500,
     }).then(async (result) => {
       if (result.isConfirmed) {
-        console.log("✅ User confirmed, activating premium...");
+        console.log("✅ User confirmed, creating PayOS checkout...");
         try {
           setProcessingPlan(duration);
-
-          // Direct activate premium (skip PayOS)
-          const planInfo = plans.find((p) => p.duration === duration);
-
-          if (!planInfo) {
-            Swal.fire("Lỗi", "Không tìm thấy thông tin gói", "error");
-            setProcessingPlan(null);
-            return;
-          }
-
-          const response = await subscriptionApi.activatePremium({
-            plan_duration: duration,
-            amount: planInfo.price,
-            transaction_id: `MANUAL_${Date.now()}`,
-          });
-
-          console.log("Activate response:", response);
-
-          // Cập nhật trạng thái subscription trong AuthContext
-          setManagerSubscriptionExpired(false);
-
-          await Swal.fire({
-            title: "Thành công!",
-            text: "Đã kích hoạt gói Premium thành công! Menu sẽ được cập nhật ngay lập tức.",
-            icon: "success",
-            timer: 2000,
-            showConfirmButton: false,
-          });
-
-          // Reload data và navigate
-          await fetchData(); // Reload subscription data
-          navigate("/settings/subscription");
+          const checkoutRes = await subscriptionApi.createCheckout({ plan_duration: duration });
+          const normalized = normalizeCheckoutPayload(checkoutRes?.data || {});
+          setCheckoutInfo(normalized);
+          setCheckoutModalVisible(true);
+          message.success("Đã tạo yêu cầu thanh toán PayOS. Vui lòng quét QR để hoàn tất.");
+          await refreshSubscriptionStatus();
         } catch (error) {
-          console.error("Lỗi kích hoạt premium:", error);
-          const errorMsg = error.response?.data?.message || error.message || "Không thể kích hoạt Premium";
+          console.error("Lỗi tạo checkout premium:", error);
+          const errorMsg = error.response?.data?.message || error.message || "Không thể tạo thanh toán";
           Swal.fire("Lỗi", errorMsg, "error");
         } finally {
           setProcessingPlan(null);
         }
       }
     });
+  };
+
+  const handleOpenCheckoutModal = (info) => {
+    if (!info) return;
+    setCheckoutInfo(info);
+    setCheckoutModalVisible(true);
+  };
+
+  const handleCloseCheckoutModal = () => {
+    setCheckoutModalVisible(false);
+  };
+
+  const handleOpenPaymentLink = (url) => {
+    if (!url) {
+      message.warning("Không tìm thấy link thanh toán");
+      return;
+    }
+    window.open(url, "_blank", "noopener");
+  };
+
+  const handleCopyTransactionId = async (transactionId) => {
+    if (!transactionId) return;
+    try {
+      await navigator.clipboard.writeText(transactionId);
+      message.success("Đã sao chép mã giao dịch");
+    } catch (error) {
+      console.error("Không thể sao chép:", error);
+      message.error("Sao chép thất bại");
+    }
+  };
+
+  const handlePaymentCompleted = async () => {
+    await refreshSubscriptionStatus();
+    message.info("Đang kiểm tra trạng thái thanh toán...");
   };
 
   const getPlanIcon = (duration) => {
@@ -270,6 +328,40 @@ const PricingPage = () => {
             </Card>
           )}
         </div>
+
+        {pendingCheckoutInfo && (
+          <Alert
+            type="warning"
+            showIcon
+            style={{ marginBottom: 32 }}
+            message="Bạn đang có giao dịch PayOS chưa hoàn tất"
+            description={
+              <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                <Text>
+                  Mã giao dịch: <strong>{pendingCheckoutInfo.transactionId}</strong>
+                </Text>
+                <Space wrap>
+                  <Button
+                    type="primary"
+                    icon={<QrcodeOutlined />}
+                    onClick={() => handleOpenCheckoutModal(pendingCheckoutInfo)}
+                  >
+                    Tiếp tục thanh toán
+                  </Button>
+                  <Button
+                    icon={<CopyOutlined />}
+                    onClick={() => handleCopyTransactionId(pendingCheckoutInfo.transactionId)}
+                  >
+                    Sao chép mã giao dịch
+                  </Button>
+                  <Button icon={<ReloadOutlined />} onClick={handlePaymentCompleted}>
+                    Tôi đã thanh toán
+                  </Button>
+                </Space>
+              </Space>
+            }
+          />
+        )}
 
         {/* Pricing Cards */}
         <Row gutter={[24, 24]} justify="center">
@@ -464,6 +556,78 @@ const PricingPage = () => {
           </Row>
         </div>
       </div>
+
+      <Modal
+        open={checkoutModalVisible && !!checkoutInfo}
+        title={
+          <Space>
+            <QrcodeOutlined />
+            <span>Thanh toán qua PayOS</span>
+          </Space>
+        }
+        onCancel={handleCloseCheckoutModal}
+        footer={[
+          <Button key="refresh" icon={<ReloadOutlined />} onClick={handlePaymentCompleted}>
+            Tôi đã thanh toán
+          </Button>,
+          <Button
+            key="pay"
+            type="primary"
+            icon={<LinkOutlined />}
+            onClick={() => handleOpenPaymentLink(checkoutInfo?.checkoutUrl)}
+          >
+            Mở link PayOS
+          </Button>,
+        ]}
+        width={520}
+        centered
+        destroyOnClose
+      >
+        {checkoutInfo && (
+          <Space direction="vertical" size={16} style={{ width: "100%" }}>
+            <Tag color="orange">Đang chờ thanh toán</Tag>
+            <div>
+              <Text type="secondary">Gói</Text>
+              <Title level={4} style={{ margin: 0 }}>
+                {checkoutInfo.planLabel || `Gói ${checkoutInfo.planDuration} tháng`}
+              </Title>
+            </div>
+            <Space size={12} direction="vertical" style={{ width: "100%" }}>
+              <Text>
+                Số tiền: <strong>{formatCurrency(checkoutInfo.amount)}đ</strong>
+              </Text>
+              <Text>
+                Mã giao dịch: <strong>{checkoutInfo.transactionId}</strong>
+                <Button
+                  size="small"
+                  style={{ marginLeft: 12 }}
+                  icon={<CopyOutlined />}
+                  onClick={() => handleCopyTransactionId(checkoutInfo.transactionId)}
+                >
+                  Copy
+                </Button>
+              </Text>
+              {checkoutInfo.createdAt && (
+                <Text type="secondary">
+                  <FieldTimeOutlined /> {" "}
+                  Tạo lúc {dayjs(checkoutInfo.createdAt).format("DD/MM/YYYY HH:mm")}
+                </Text>
+              )}
+            </Space>
+            {checkoutInfo.qrUrl ? (
+              <div style={{ textAlign: "center" }}>
+                <img
+                  src={checkoutInfo.qrUrl}
+                  alt="QR PayOS"
+                  style={{ maxWidth: "100%", width: 260, borderRadius: 12, border: "1px solid #f0f0f0" }}
+                />
+              </div>
+            ) : (
+              <Alert type="info" message="Không tìm thấy ảnh QR. Hãy mở link PayOS để thanh toán." />
+            )}
+          </Space>
+        )}
+      </Modal>
     </Layout>
   );
 };

@@ -27,13 +27,19 @@ import {
   WarningOutlined,
   GiftOutlined,
   ReloadOutlined,
+  LinkOutlined,
+  CopyOutlined,
+  FieldTimeOutlined,
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import subscriptionApi from "../../api/subscriptionApi";
 import dayjs from "dayjs";
 import Layout from "../../components/Layout";
+import Swal from "sweetalert2";
 
 const { Title, Text, Paragraph } = Typography;
+
+const formatCurrency = (value) => Number(value || 0).toLocaleString("vi-VN");
 
 const SubscriptionPage = () => {
   const navigate = useNavigate();
@@ -78,6 +84,31 @@ const SubscriptionPage = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCopyValue = async (value, label = "thông tin") => {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      message.success(`Đã sao chép ${label}`);
+    } catch (error) {
+      console.error("Không thể sao chép:", error);
+      message.error("Sao chép thất bại");
+    }
+  };
+
+  const handleOpenPendingLink = (url) => {
+    if (!url) {
+      message.warning("Không tìm thấy link thanh toán");
+      return;
+    }
+    window.open(url, "_blank", "noopener");
+  };
+
+  const handlePendingPaymentDone = async () => {
+    message.loading({ content: "Đang kiểm tra trạng thái...", key: "pending-payment" });
+    await fetchData();
+    message.success({ content: "Đã cập nhật trạng thái subscription", key: "pending-payment" });
   };
 
   const handleUpgrade = () => {
@@ -175,6 +206,7 @@ const SubscriptionPage = () => {
   const daysRemaining = subscription?.days_remaining || 0;
   const totalDays = isTrial ? 14 : (subscription?.premium?.plan_duration || 1) * 30;
   const progressPercent = totalDays > 0 ? Math.round((daysRemaining / totalDays) * 100) : 0;
+  const pendingPayment = subscription?.pending_payment;
 
   return (
     <Layout>
@@ -191,6 +223,54 @@ const SubscriptionPage = () => {
             </div>
           </Space>
         </div>
+
+        {pendingPayment && (
+          <Card style={{ borderColor: "#faad14", marginBottom: 24 }}>
+            <Space direction="vertical" size={8} style={{ width: "100%" }}>
+              <Space>
+                <Tag color="orange" icon={<ClockCircleOutlined />}>
+                  Đang chờ thanh toán
+                </Tag>
+                <Text>Mã giao dịch: {pendingPayment.order_code}</Text>
+              </Space>
+              <Text>
+                Số tiền: <strong>{formatCurrency(pendingPayment.amount)}đ</strong> — Gói {pendingPayment.plan_duration} tháng
+              </Text>
+              {pendingPayment.created_at && (
+                <Text type="secondary">
+                  <FieldTimeOutlined /> Tạo lúc {dayjs(pendingPayment.created_at).format("DD/MM/YYYY HH:mm")}
+                </Text>
+              )}
+              {pendingPayment.qr_data_url && (
+                <div style={{ textAlign: "center", marginTop: 12 }}>
+                  <img
+                    src={pendingPayment.qr_data_url}
+                    alt="QR PayOS"
+                    style={{ maxWidth: "100%", width: 260, borderRadius: 12, border: "1px solid #f0f0f0" }}
+                  />
+                </div>
+              )}
+              <Space wrap style={{ marginTop: 12 }}>
+                <Button
+                  type="primary"
+                  icon={<LinkOutlined />}
+                  onClick={() => handleOpenPendingLink(pendingPayment.checkout_url)}
+                >
+                  Mở link PayOS
+                </Button>
+                <Button
+                  icon={<CopyOutlined />}
+                  onClick={() => handleCopyValue(pendingPayment.order_code, "mã giao dịch")}
+                >
+                  Sao chép mã giao dịch
+                </Button>
+                <Button icon={<ReloadOutlined />} onClick={handlePendingPaymentDone}>
+                  Tôi đã thanh toán
+                </Button>
+              </Space>
+            </Space>
+          </Card>
+        )}
 
         <Row gutter={[24, 24]}>
           {/* Current Subscription Card */}
@@ -437,14 +517,28 @@ const SubscriptionPage = () => {
                     >
                       <Space direction="vertical" size={4}>
                         <Text strong>
-                          Gói {payment.plan_duration} tháng - {payment.amount.toLocaleString("vi-VN")}đ
+                          Gói {payment.plan_duration} tháng - {formatCurrency(payment.amount)}đ
                         </Text>
                         <Text type="secondary" style={{ fontSize: 13 }}>
-                          {dayjs(payment.paid_at).format("DD/MM/YYYY HH:mm")}
+                          {payment.paid_at ? dayjs(payment.paid_at).format("DD/MM/YYYY HH:mm") : "Đang xử lý"}
                         </Text>
                         <Text type="secondary" style={{ fontSize: 12 }}>
                           Mã GD: {payment.transaction_id}
                         </Text>
+                        {payment.status && (
+                          <Tag
+                            color={
+                              payment.status === "SUCCESS"
+                                ? "green"
+                                : payment.status === "PENDING"
+                                ? "orange"
+                                : "red"
+                            }
+                            style={{ width: "fit-content" }}
+                          >
+                            {payment.status}
+                          </Tag>
+                        )}
                       </Space>
                     </Timeline.Item>
                   ))}

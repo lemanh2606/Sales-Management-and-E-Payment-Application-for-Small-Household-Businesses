@@ -53,6 +53,34 @@ const subscriptionSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+
+    // === PAYMENT STATE ===
+    pending_order_code: {
+      type: String,
+      default: null,
+      index: true,
+    },
+    pending_plan_duration: {
+      type: Number,
+      enum: [1, 3, 6],
+      default: null,
+    },
+    pending_amount: {
+      type: Number,
+      default: null,
+    },
+    pending_checkout_url: {
+      type: String,
+      default: null,
+    },
+    pending_qr_url: {
+      type: String,
+      default: null,
+    },
+    pending_created_at: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
@@ -63,6 +91,7 @@ const subscriptionSchema = new mongoose.Schema(
 // Index compound cho query hiệu quả
 subscriptionSchema.index({ user_id: 1, status: 1 });
 subscriptionSchema.index({ expires_at: 1, status: 1 });
+subscriptionSchema.index({ pending_created_at: 1 });
 
 // Virtual: Kiểm tra còn trial không
 subscriptionSchema.virtual("is_trial_active").get(function () {
@@ -115,9 +144,56 @@ subscriptionSchema.methods.activatePremium = function (planDuration) {
 
   this.status = "ACTIVE";
   this.plan_duration = planDuration;
+  this.duration_months = planDuration;
   this.started_at = now;
   this.expires_at = expiresAt;
 
+  return this;
+};
+
+subscriptionSchema.methods.extendPremium = function (planDuration) {
+  if (!this.expires_at || this.isExpired()) {
+    return this.activatePremium(planDuration);
+  }
+
+  const newExpires = new Date(this.expires_at);
+  newExpires.setMonth(newExpires.getMonth() + planDuration);
+
+  this.status = "ACTIVE";
+  this.plan_duration = planDuration;
+  this.duration_months = planDuration;
+  this.expires_at = newExpires;
+
+  if (!this.started_at) {
+    this.started_at = new Date();
+  }
+
+  return this;
+};
+
+subscriptionSchema.methods.markPendingPayment = function ({
+  orderCode,
+  amount,
+  planDuration,
+  checkoutUrl,
+  qrUrl,
+}) {
+  this.pending_order_code = orderCode ? orderCode.toString() : null;
+  this.pending_amount = amount ?? null;
+  this.pending_plan_duration = planDuration ?? null;
+  this.pending_checkout_url = checkoutUrl ?? null;
+  this.pending_qr_url = qrUrl ?? null;
+  this.pending_created_at = new Date();
+  return this;
+};
+
+subscriptionSchema.methods.clearPendingPayment = function () {
+  this.pending_order_code = null;
+  this.pending_amount = null;
+  this.pending_plan_duration = null;
+  this.pending_checkout_url = null;
+  this.pending_qr_url = null;
+  this.pending_created_at = null;
   return this;
 };
 

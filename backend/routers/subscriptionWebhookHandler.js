@@ -1,8 +1,9 @@
 // routers/subscriptionWebhookHandler.js
-const crypto = require("crypto");
 const Subscription = require("../models/Subscription");
 const User = require("../models/User");
 const Notification = require("../models/Notification");
+const PaymentHistory = require("../models/PaymentHistory");
+const { computePayOSSignatureFromData } = require("../services/payOSService");
 
 /**
  * Webhook handler cho thanh toán Subscription (PayOS)
@@ -34,105 +35,109 @@ module.exports = async (req, res) => {
 
     console.log("Nhận subscription webhook (parsed):", JSON.stringify(parsed, null, 2));
 
-    // Verify signature
-    const receivedSignature = req.headers["x-payos-signature"];
-    if (!receivedSignature) {
-      console.error("❌ Thiếu x-payos-signature header");
-      return res.status(400).json({ message: "Missing signature" });
-    }
-
     const checksumKey = process.env.PAYOS_CHECKSUM_KEY;
     if (!checksumKey) {
       console.error("❌ PAYOS_CHECKSUM_KEY chưa được cấu hình");
       return res.status(500).json({ message: "Server config error" });
     }
 
-    // Tính signature: HMAC-SHA256(rawBody, checksumKey)
-    const expectedSignature = crypto.createHmac("sha256", checksumKey).update(rawBody).digest("hex");
+    const tx = parsed.data || {};
+    const receivedSignature = (
+      req.headers["x-payos-signature"] ||
+      parsed.signature ||
+      tx.signature ||
+      ""
+    ).toUpperCase();
 
-    if (receivedSignature !== expectedSignature) {
-      console.error("❌ Signature không khớp");
-      console.error("Expected:", expectedSignature);
-      console.error("Received:", receivedSignature);
+    if (!Object.keys(tx).length) {
+      console.error("❌ Payload thiếu data để verify");
+      return res.status(400).json({ message: "Invalid payload" });
+    }
+
+    const expectedSignature = computePayOSSignatureFromData(tx, checksumKey);
+
+    if (!receivedSignature || receivedSignature !== expectedSignature) {
+      console.error("❌ Signature không khớp", { expected: expectedSignature, received: receivedSignature });
       return res.status(400).json({ message: "Invalid signature" });
     }
 
-    console.log("✅ Signature hợp lệ");
-
-    // Parse orderCode format: "SUB_{userId}_{duration}_{timestamp}"
-    const orderCode = parsed.data?.orderCode;
-    if (!orderCode || !orderCode.startsWith("SUB_")) {
-      console.log("⚠️ OrderCode không phải subscription, bỏ qua");
-      return res.status(200).json({ message: "Not a subscription order" });
+    if (parsed.code !== "00") {
+      console.warn("⚠️ PayOS báo lỗi:", parsed.desc);
+      return res.status(200).json({ message: "Ignored non-success event" });
     }
 
-    const parts = orderCode.split("_");
-    if (parts.length !== 4) {
-      console.error("❌ OrderCode format không hợp lệ:", orderCode);
-      return res.status(400).json({ message: "Invalid orderCode format" });
+    const orderCode = tx.orderCode ? tx.orderCode.toString() : null;
+    if (!orderCode) {
+      console.error("❌ orderCode missing trong webhook");
+      return res.status(400).json({ message: "Missing orderCode" });
     }
 
-    const userId = parts[1];
-    const duration = parseInt(parts[2]);
-    const amount = parsed.data?.amount;
-
-    console.log(`📦 Subscription payment detected: userId=${userId}, duration=${duration}, amount=${amount}`);
-
-    // Tìm subscription pending
-    const subscription = await Subscription.findOne({
-      user: userId,
-      status: "PENDING",
-      duration_months: duration,
-    }).sort({ created_at: -1 });
-
+    const subscription = await Subscription.findOne({ pending_order_code: orderCode });
     if (!subscription) {
-      console.error("❌ Không tìm thấy subscription pending cho user:", userId);
-      return res.status(404).json({ message: "Subscription not found" });
+      console.warn("⚠️ Không tìm thấy subscription khớp orderCode", orderCode);
+      return res.status(200).json({ message: "Subscription not found" });
     }
 
-    // Activate premium
-    const expiresAt = new Date();
-    expiresAt.setMonth(expiresAt.getMonth() + duration);
+    const planDuration =
+      subscription.pending_plan_duration || subscription.plan_duration || subscription.duration_months || 1;
+    const amount = tx.amount || subscription.pending_amount || 0;
+    const isRenewal = subscription.status === "ACTIVE" && !subscription.isExpired();
 
-    subscription.activatePremium(duration);
+    if (isRenewal) {
+      subscription.extendPremium(planDuration);
+    } else {
+      subscription.activatePremium(planDuration);
+    }
+
+    subscription.clearPendingPayment();
     await subscription.save();
-    console.log(`✅ Activated premium for user ${userId}, expires at ${expiresAt}`);
 
-    // Update User model - chỉ cập nhật is_premium flag
-    const user = await User.findById(userId);
+    await User.findByIdAndUpdate(subscription.user_id, { is_premium: true });
+
+    await PaymentHistory.findOneAndUpdate(
+      { subscription_id: subscription._id, transaction_id: orderCode },
+      {
+        subscription_id: subscription._id,
+        user_id: subscription.user_id,
+        plan_duration: planDuration,
+        amount,
+        payment_method: "PAYOS",
+        status: "SUCCESS",
+        paid_at: new Date(),
+        notes: isRenewal
+          ? `Gia hạn gói ${planDuration} tháng - PayOS`
+          : `Kích hoạt gói ${planDuration} tháng - PayOS`,
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    const user = await User.findById(subscription.user_id).select("fullname username");
     const displayName = user?.fullname || user?.username || "Người dùng";
+    const expiresAt = subscription.expires_at;
+    const expiresText = expiresAt ? expiresAt.toLocaleDateString("vi-VN") : "không xác định";
+    const message = `${displayName} đã kích hoạt gói Premium ${planDuration} tháng 🎉 (hết hạn vào ${expiresText})`;
 
-    if (user) {
-      user.is_premium = true;
-      await user.save();
-      console.log(`✅ Updated User ${user.username} to PREMIUM`);
-    }
-
-    // 🔔 Emit socket notification
     const io = req.app.get("io");
     if (io) {
       io.emit("subscription_activated", {
-        userId,
-        duration,
+        userId: subscription.user_id.toString(),
+        duration: planDuration,
         expiresAt,
-        message: `${displayName} đã kích hoạt gói Premium ${duration} tháng 🎉 (hết hạn vào ${expiresAt.toLocaleDateString(
-          "vi-VN"
-        )})`,
+        message,
       });
-
-      // 🧠 Lưu thông báo vào DB
-      await Notification.create({
-        storeId: null,
-        userId,
-        type: "service",
-        title: "Kích hoạt gói dịch vụ",
-        message: `${displayName} đã kích hoạt gói Premium ${duration} tháng 🎉 (hết hạn vào ${expiresAt.toLocaleDateString(
-          "vi-VN"
-        )})`,
-      });
-
-      console.log(`🔔 [SOCKET + DB] Premium ${duration} tháng kích hoạt cho user ${displayName} (${userId})`);
     }
+
+    await Notification.create({
+      storeId: null,
+      userId: subscription.user_id,
+      type: "service",
+      title: "Kích hoạt gói dịch vụ",
+      message,
+    });
+
+    console.log(
+      `🔔 [SOCKET + DB] Premium ${planDuration} tháng kích hoạt cho user ${displayName} (${subscription.user_id})`
+    );
 
     return res.status(200).json({ message: "Subscription activated" });
   } catch (err) {
