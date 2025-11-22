@@ -39,6 +39,7 @@ import {
   InfoCircleOutlined,
   MenuOutlined,
   FileExcelOutlined,
+  DownloadOutlined,
 } from "@ant-design/icons";
 import Layout from "../../components/Layout";
 import ProductForm from "../../components/product/ProductForm";
@@ -53,6 +54,7 @@ export default function ProductListPage() {
 
   const storeObj = JSON.parse(localStorage.getItem("currentStore")) || {};
   const storeId = storeObj._id || null;
+  const token = localStorage.getItem("token");
 
   const [allProducts, setAllProducts] = useState([]);
   const [filteredProducts, setFilteredProducts] = useState([]);
@@ -97,9 +99,59 @@ export default function ProductListPage() {
   const [previewRows, setPreviewRows] = useState([]);
   const [previewError, setPreviewError] = useState("");
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [downloadingTemplate, setDownloadingTemplate] = useState(false);
 
   const fileInputRef = useRef(null);
   const apiBaseUrl = import.meta.env.VITE_API_URL || "http://localhost:9999/api";
+
+  const handleDownloadTemplate = async () => {
+    if (!token) {
+      api.warning({
+        message: "⚠️ Chưa đăng nhập",
+        description: "Vui lòng đăng nhập lại để tải template.",
+        placement: "topRight",
+      });
+      return;
+    }
+
+    try {
+      setDownloadingTemplate(true);
+      const response = await fetch(`${apiBaseUrl}/products/template/download?format=excel`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Không thể tải template (mã ${response.status})`);
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "product_template.xlsx";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      api.success({
+        message: "✅ Đã tải template",
+        description: "Vui lòng nhập dữ liệu theo file vừa tải.",
+        placement: "topRight",
+      });
+    } catch (err) {
+      console.error("Download template failed", err);
+      api.error({
+        message: "❌ Tải template thất bại",
+        description: err?.message || "Vui lòng thử lại sau.",
+        placement: "topRight",
+      });
+    } finally {
+      setDownloadingTemplate(false);
+    }
+  };
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -1005,14 +1057,15 @@ export default function ProductListPage() {
           <Space direction="vertical" style={{ width: "100%" }} size={16}>
             <Text>
               Sử dụng template chuẩn để đảm bảo dữ liệu hợp lệ.
-              <Typography.Link
-                href={`${apiBaseUrl}/products/template/download?format=excel`}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ marginLeft: 8 }}
+              <Button
+                type="link"
+                icon={<DownloadOutlined />}
+                onClick={handleDownloadTemplate}
+                loading={downloadingTemplate}
+                style={{ marginLeft: 8, padding: 0 }}
               >
                 Tải template
-              </Typography.Link>
+              </Button>
             </Text>
 
             <Button icon={<FileExcelOutlined />} onClick={() => fileInputRef.current?.click()} loading={previewLoading}>

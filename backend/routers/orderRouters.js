@@ -24,7 +24,7 @@ const {
   getOrderListAll,
   getOrderStats,
 } = require("../controllers/order/orderController");
-const { getPaidNotPrintedOrders, verifyInvoicePdf } = require("../controllers/order/orderReconciliationController");
+const { getPaidNotPrintedOrders, verifyInvoicePdf, verifyInvoicePdfAuto } = require("../controllers/order/orderReconciliationController");
 
 //API CHUNG: http://localhost:9999/api/orders
 
@@ -74,6 +74,15 @@ router.post(
   requirePermission("orders:view"),
   uploadInvoice.single("invoice"),
   verifyInvoicePdf
+);
+router.post(
+  "/reconciliation/verify-invoice/auto",
+  verifyToken,
+  checkSubscriptionExpiry,
+  checkStoreAccess,
+  requirePermission("orders:view"),
+  uploadInvoice.single("invoice"),
+  verifyInvoicePdfAuto
 );
 //top sản phẩm bán chạy, có dùng limit
 router.get("/top-products", verifyToken, checkSubscriptionExpiry, isManager, checkStoreAccess, getTopSellingProducts);

@@ -82,6 +82,19 @@ export const verifyInvoiceWithPdf = async ({ orderId, storeId, file }) => {
   ).data;
 };
 
+export const verifyInvoiceAuto = async ({ storeId, file }) => {
+  const formData = new FormData();
+  if (storeId) formData.append("storeId", storeId);
+  formData.append("invoice", file);
+
+  return (
+    await apiClient.post("/orders/reconciliation/verify-invoice/auto", formData, {
+      params: storeId ? { storeId } : undefined,
+      headers: { "Content-Type": "multipart/form-data" },
+    })
+  ).data;
+};
+
 // ===================== EXPORT =====================
 export default {
   createOrder,
@@ -90,6 +103,7 @@ export default {
   getOrderById,
   getPaidNotPrintedOrders,
   verifyInvoiceWithPdf,
+  verifyInvoiceAuto,
   vietqrReturn,
   vietqrCancel,
   refundOrder,

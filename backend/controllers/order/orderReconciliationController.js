@@ -96,6 +96,23 @@ const sanitizeAmount = (value) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+const extractOrderIdFromText = (lines, normalizedText) => {
+  const idLine =
+    extractLineValue(lines, ["ID Hóa đơn", "ID Hoa don", "Mã hóa đơn", "Ma hoa don", "Mã đơn", "Ma don"]) ||
+    extractLineValue(lines, ["Invoice ID", "Order ID"]);
+
+  const pickValidId = (input) => {
+    if (!input) return null;
+    const match = input.match(/[a-f0-9]{24}/i);
+    return match ? match[0] : null;
+  };
+
+  const fromLine = pickValidId(idLine);
+  if (fromLine) return fromLine;
+
+  return pickValidId(normalizedText);
+};
+
 const getPaidNotPrintedOrders = async (req, res) => {
   try {
     const storeId = normalizeStoreId(req.store?._id || req.query.storeId);
@@ -261,7 +278,46 @@ const verifyInvoicePdf = async (req, res) => {
   }
 };
 
+const verifyInvoicePdfAuto = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "Thiếu file PDF hóa đơn" });
+    }
+
+    const storeId = normalizeStoreId(req.store?._id || req.query.storeId || req.body.storeId);
+    if (!storeId) {
+      return res.status(400).json({ message: "Thiếu hoặc sai storeId để đối soát" });
+    }
+
+    const pdfData = await parsePdfText(req.file.buffer);
+    const rawText = pdfData.text || "";
+    const lines = rawText.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const normalizedText = rawText.replace(/\s+/g, " ").toLowerCase();
+
+    const pdfOrderId = extractOrderIdFromText(lines, normalizedText);
+    if (!pdfOrderId) {
+      return res.status(404).json({ message: "Không tìm thấy mã hóa đơn trong file PDF" });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(pdfOrderId)) {
+      return res.status(400).json({ message: "Mã hóa đơn trong PDF không hợp lệ", pdfOrderId });
+    }
+
+    const orderExists = await Order.exists({ _id: pdfOrderId, storeId });
+    if (!orderExists) {
+      return res.status(404).json({ message: "Không tìm thấy hóa đơn trong hệ thống", orderId: pdfOrderId });
+    }
+
+    req.params = { ...req.params, orderId: pdfOrderId };
+    return verifyInvoicePdf(req, res);
+  } catch (err) {
+    console.error("verifyInvoicePdfAuto error:", err);
+    res.status(500).json({ message: "Lỗi server khi đối soát tự động", error: err.message });
+  }
+};
+
 module.exports = {
   getPaidNotPrintedOrders,
   verifyInvoicePdf,
+  verifyInvoicePdfAuto,
 };
