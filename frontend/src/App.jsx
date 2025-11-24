@@ -56,6 +56,7 @@ import FileManager from "./pages/setting/FileManager";
 import Notification from "./pages/setting/Notification";
 import Term from "./pages/setting/Term";
 import Privacy from "./pages/setting/Privacy";
+import PaymentGatewaySettingsPage from "./pages/setting/PaymentGatewaySettingsPage";
 
 // Loyalty
 import LoyaltySetting from "./pages/loyalty/LoyaltySetting";
@@ -65,7 +66,7 @@ import SidebarPOS from "./pages/order/SidebarPOS";
 import ListAllOrder from "./pages/order/ListAllOrder";
 import OrderReconciliationPage from "./pages/order/OrderReconciliationPage";
 
-/** Utility: Read user from localStorage */
+/** Utility: Đọc biến user từ localStorage */
 function getStoredUser() {
   try {
     const raw = localStorage.getItem("user");
@@ -77,7 +78,7 @@ function getStoredUser() {
   }
 }
 
-/** Utility: Check permissions */
+/** Utility: Kiểm tra quyền - permissions */
 function hasPermission(menu = [], required) {
   if (!required) return true;
   const reqs = Array.isArray(required) ? required : [required];
@@ -305,6 +306,7 @@ function App() {
         <Route path="/settings/export-data" element={<ProtectedRoute allowedRoles={["MANAGER"]}><DataExportPage /></ProtectedRoute>} />
         <Route path="/terms" element={<ProtectedRoute><Term /></ProtectedRoute>} />
         <Route path="/privacy" element={<ProtectedRoute><Privacy /></ProtectedRoute>} />
+        <Route path="/settings/payment-method" element={<ProtectedRoute allowedPermissions="settings:payment-method"><PaymentGatewaySettingsPage /></ProtectedRoute>} />
 
         {/* ==================== Orders ==================== */}
         <Route path="/orders/pos" element={<ProtectedRoute allowedPermissions="orders:create"><SidebarPOS /></ProtectedRoute>} />

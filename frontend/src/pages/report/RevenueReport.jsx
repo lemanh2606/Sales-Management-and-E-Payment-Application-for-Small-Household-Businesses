@@ -32,8 +32,6 @@ const RevenueReport = () => {
   const [summary, setSummary] = useState(null);
   const [employeeData, setEmployeeData] = useState([]);
   const [pagination, setPagination] = useState({ current: 1, pageSize: 10, total: 0 });
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
 
   // Lấy từ localStorage
   const currentStore = JSON.parse(localStorage.getItem("currentStore") || "{}");
