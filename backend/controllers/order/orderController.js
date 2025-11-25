@@ -12,7 +12,7 @@ const Employee = require("../../models/Employee");
 const Customer = require("../../models/Customer");
 const LoyaltySetting = require("../../models/LoyaltySetting");
 const Notification = require("../../models/Notification");
-const { generateQRWithPayOS } = require("../../services/payOSService");
+const StorePaymentConfig = require("../../models/StorePaymentConfig");
 const { periodToRange } = require("../../utils/period");
 const { v2: cloudinary } = require("cloudinary");
 
@@ -34,12 +34,7 @@ const createOrder = async (req, res) => {
     try {
       for (let item of items) {
         const prod = await Product.findById(item.productId).session(session);
-        if (
-          !prod ||
-          prod.store_id.toString() !== storeId.toString() ||
-          prod.stock_quantity < item.quantity ||
-          prod.status !== "Đang kinh doanh"
-        ) {
+        if (!prod || prod.store_id.toString() !== storeId.toString() || prod.stock_quantity < item.quantity || prod.status !== "Đang kinh doanh") {
           // Kiểm tra stock đủ trước, nhưng ko trừ - chỉ warn nếu thiếu
           throw new Error(`Sản phẩm ${prod?.name || "không tồn tại"} hết hàng hoặc không tồn tại trong cửa hàng`);
         }
@@ -132,21 +127,44 @@ const createOrder = async (req, res) => {
         await newItem.save({ session });
       }
 
-      let paymentRef = null;
+      // let paymentRef = null;
+      let defaultBank = null;
       if (paymentMethod === "qr") {
-        // Generate QR PayOS (pending, chờ webhook)
-        qrData = await generateQRWithPayOS({
-          body: {
-            amount: total,
-            orderInfo: `Thanh toan hoa don ${newOrder._id}`,
-          },
-        });
-        console.log("Sử dụng PayOS QR thành công");
-        paymentRef = qrData.txnRef;
-        newOrder.paymentRef = paymentRef;
-        newOrder.qrExpiry = new Date(Date.now() + 15 * 60 * 1000); // Hết hạn 15 phút
+        // === BƯỚC 1: LẤY NGÂN HÀNG MẶC ĐỊNH CỦA CHỦ CỬA HÀNG ===
+        const paymentConfig = await StorePaymentConfig.findOne({ store: storeId });
+        if (!paymentConfig || paymentConfig.banks.length === 0) {
+          throw new Error("Chủ cửa hàng chưa liên kết tài khoản ngân hàng nào. Vui lòng vào Cài đặt → Thiết lập cổng thanh toán → Liên kết với ngân hàng .");
+        }
+
+        defaultBank = paymentConfig.banks.find((b) => b.isDefault); // <- thêm || paymentConfig.banks[0] để lấy bank đầu danh sách nhưng chắc thôi
+        if (!defaultBank) {
+          throw new Error("Không tìm thấy ngân hàng mặc định. Bạn vui lòng chọn ít nhất 1 ngân hàng ĐÃ KẾT NỐI làm mặc định.");
+        }
+
+        // === BƯỚC 2: TẠO QR BẰNG VIETQR.IO (TIỀN VỀ ĐÚNG VÍ ÔNG CHỦ) ===
+        const amount = Math.round(total); // VietQR yêu cầu số nguyên
+        const description = `Thanh toan hoa don ${newOrder._id}`;
+
+        const template = defaultBank.qrTemplate || "compact2";
+        const vietQrUrl = `https://img.vietqr.io/image/${defaultBank.bankCode}-${
+          defaultBank.accountNumber
+        }-${template}.png?amount=${amount}&addInfo=${encodeURIComponent(description)}&accountName=${encodeURIComponent(defaultBank.accountName)}`;
+
+        // === BƯỚC 3: LƯU QR VÀO ORDER ===
+        newOrder.paymentMethod = "qr";
+        newOrder.qrImageUrl = vietQrUrl;
+        newOrder.qrExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 phút
+        newOrder.status = "pending"; // chờ khách quét
         await newOrder.save({ session });
-        console.log(`Tạo QR pending thành công cho hóa đơn ${newOrder._id}, ref: ${paymentRef}, chờ webhook confirm`);
+
+        console.log(`Tạo QR VietQR thành công cho cửa hàng ${storeId}, ngân hàng: ${defaultBank.bankName} - ${defaultBank.accountNumber}`);
+
+        // === TRẢ VỀ CHO FE ===
+        qrData = {
+          qrDataURL: vietQrUrl,
+          paymentLinkUrl: null,
+          txnRef: null,
+        };
       } else {
         // Cash: Pending, chờ in bill để paid + trừ stock
         console.log(`Tạo hóa đơn cash pending thành công cho ${newOrder._id}, chờ in bill`);
@@ -181,10 +199,14 @@ const createOrder = async (req, res) => {
         res.status(201).json({
           message: "Tạo hóa đơn thành công (pending)",
           order: orderedOrder,
-          qrRef: paymentRef, // Ref để webhook
-          qrDataURL: qrData ? qrData.qrDataURL : null, // QR base64 FE render
-          paymentLinkUrl: qrData ? qrData.paymentLinkUrl : null, // Link quẹt nếu PayOS
-          qrExpiry: paymentMethod === "qr" ? newOrder.qrExpiry : null, // Expiry FE countdown
+          qrRef: null, // không còn PayOS nữa
+          qrDataURL: qrData?.qrDataURL || null, // giờ là VietQR
+          paymentLinkUrl: qrData?.paymentLinkUrl || null,
+          qrExpiry: paymentMethod === "qr" ? newOrder.qrExpiry : null,
+          bankInfo: {
+            bankName: defaultBank.bankName,
+            accountNumber: defaultBank.accountNumber,
+          },
         });
       } catch (format_err) {
         console.log("Lỗi format response order:", format_err.message); // Log tiếng Việt format error
@@ -194,7 +216,7 @@ const createOrder = async (req, res) => {
       await session.abortTransaction(); // Abort chỉ inner error (validate/save)
       session.endSession();
       console.error("Lỗi inner createOrder:", inner_err.message); // Log tiếng Việt inner error
-      res.status(500).json({ message: "Lỗi tạo hóa đơn nội bộ: " + inner_err.message });
+      res.status(500).json({ message: inner_err.message });
     }
   } catch (err) {
     console.error("Lỗi tạo hóa đơn:", err.message); // Log tiếng Việt outer error
@@ -382,17 +404,15 @@ const printBill = async (req, res) => {
     bill += `ID Hóa đơn: ${order._id}\n`;
     bill += `Cửa hàng: ${order.storeId?.name || "Cửa hàng mặc định"}\n`;
     bill += `Nhân viên: ${order.employeeId?.fullName || "N/A"}\n`;
-    bill += `Khách hàng: ${order.customer?.name || "Khách vãng lai"} ${
-      order.customer?.phone ? "- " + order.customer.phone : ""
-    }\n`; // Populate từ customer ref
+    bill += `Khách hàng: ${order.customer?.name || "Khách vãng lai"} ${order.customer?.phone ? "- " + order.customer.phone : ""}\n`; // Populate từ customer ref
     bill += `Ngày: ${new Date(order.createdAt).toLocaleString("vi-VN")}\n`;
     bill += `Ngày in: ${new Date().toLocaleString("vi-VN")}\n`;
     if (isDuplicate) bill += `(Bản sao hóa đơn - lần in ${order.printCount + 1})\n`; // Note duplicate
     bill += `\nCHI TIẾT SẢN PHẨM:\n`;
     items.forEach((item) => {
-      bill += `- ${item.productId?.name || "Sản phẩm"} (${item.productId?.sku || "N/A"}): ${item.quantity} x ${
-        item.priceAtTime
-      } = ${item.subtotal} VND\n`;
+      bill += `- ${item.productId?.name || "Sản phẩm"} (${item.productId?.sku || "N/A"}): ${item.quantity} x ${item.priceAtTime} = ${
+        item.subtotal
+      } VND\n`;
     });
     bill += `\nTỔNG TIỀN: ${order.totalAmount.toString()} VND\n`; // toString() cho Decimal128 clean
     bill += `Phương thức: ${order.paymentMethod === "cash" ? "TIỀN MẶT" : "QR CODE"}\n`; // Rõ ràng hơn cho bill
@@ -541,8 +561,7 @@ const refundOrder = async (req, res) => {
     // 2️⃣ Kiểm tra đơn hàng
     const order = await Order.findById(mongoId).populate("employeeId", "fullName");
     if (!order) return res.status(404).json({ message: "Không tìm thấy đơn hàng" });
-    if (order.status !== "paid" && order.status !== "partially_refunded")
-      return res.status(400).json({ message: "Chỉ hoàn đơn đã thanh toán" });
+    if (order.status !== "paid" && order.status !== "partially_refunded") return res.status(400).json({ message: "Chỉ hoàn đơn đã thanh toán" });
 
     // 3️⃣ Upload chứng từ (image/video)
     const files = req.files || [];
@@ -595,9 +614,9 @@ const refundOrder = async (req, res) => {
 
         if (i.quantity + refundedQty > orderItem.quantity) {
           throw new Error(
-            `Tổng số lượng hoàn (${i.quantity + refundedQty}) vượt quá số lượng đã mua (${
-              orderItem.quantity
-            }) cho sản phẩm "${orderItem.productId.name}"`
+            `Tổng số lượng hoàn (${i.quantity + refundedQty}) vượt quá số lượng đã mua (${orderItem.quantity}) cho sản phẩm "${
+              orderItem.productId.name
+            }"`
           );
         }
 
