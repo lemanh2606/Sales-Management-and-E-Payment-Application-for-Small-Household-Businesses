@@ -183,6 +183,7 @@ const PaymentGatewaySettingsPage: React.FC = () => {
         accountNumber: connected.accountNumber,
         accountName: connected.accountName,
         qrTemplate: connected.qrTemplate || "compact2",
+        isDefault: connected.isDefault,
       });
     } else {
       // Add mode
@@ -210,7 +211,7 @@ const PaymentGatewaySettingsPage: React.FC = () => {
           accountName: values.accountName,
           accountNumber: values.accountNumber,
           qrTemplate: values.qrTemplate,
-          isDefault: values.isDefault || false,
+          isDefault: values.isDefault ?? editingBank.isDefault,
         };
         await axios.put(`${API_BASE}/${storeId}/banks`, { identifier, updates }, { headers });
         Swal.fire({

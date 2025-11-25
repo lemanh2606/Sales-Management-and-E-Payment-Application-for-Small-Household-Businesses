@@ -469,7 +469,6 @@ const OrderPOSHome: React.FC = () => {
         icon: "error",
         confirmButtonText: "OK",
         confirmButtonColor: "#ff4d4f",
-        timer: 2000,
       });
     } finally {
       setLoading(false);
@@ -1273,9 +1272,9 @@ const OrderPOSHome: React.FC = () => {
           setQrExpiryTs(null);
         }}
         centered
-        width={400}
+        width={600}
       >
-        <div style={{ textAlign: "center", padding: "20px" }}>
+        <div style={{ textAlign: "center", padding: "25px" }}>
           <Title level={3} style={{ marginBottom: 20, color: "#1890ff" }}>
             <QrcodeOutlined /> Quét mã thanh toán
           </Title>
@@ -1283,16 +1282,14 @@ const OrderPOSHome: React.FC = () => {
             style={{
               display: "flex",
               justifyContent: "center",
-              marginBottom: 20,
-              padding: "20px",
-              background: "#f5f5f5",
-              borderRadius: "12px",
+              marginBottom: 10,
+              padding: "10px",
             }}
           >
             {qrImageUrl ? (
-              <img src={qrImageUrl} alt="QR code" style={{ width: 256, height: 256 }} />
+              <img src={qrImageUrl} alt="QR code" style={{ width: 410, height: 410 }} />
             ) : qrPayload ? (
-              <QRCode value={qrPayload} size={256} />
+              <QRCode value={qrPayload} size={410} />
             ) : null}
           </div>
           {qrExpiryTs && (
