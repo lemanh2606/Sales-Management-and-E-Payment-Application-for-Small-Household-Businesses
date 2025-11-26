@@ -1,4 +1,5 @@
-import React, { JSX } from "react";
+// src/navigation/AppNavigator.tsx
+import React, { JSX, useState } from "react";
 import {
   View,
   Text,
@@ -6,34 +7,354 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  ScrollView,
+  Animated,
 } from "react-native";
 import {
   createDrawerNavigator,
-  DrawerContentScrollView,
-  DrawerItemList,
   DrawerContentComponentProps,
 } from "@react-navigation/drawer";
+import type { DrawerNavigationOptions } from "@react-navigation/drawer";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 
 import { useAuth } from "../context/AuthContext";
 import DashboardScreen from "../screens/home/DashboardScreen";
 import SelectStoreScreen from "../screens/store/SelectStoreScreen";
-import Unauthorized from "../screens/misc/Unauthorized"; // màn tạm thời
+import Unauthorized from "../screens/misc/Unauthorized";
 import Profile from "../screens/user/Profile";
 import ProductListScreen from "../screens/product/ProductListScreen";
-import CustomerListScreen from "../screens/customer/CustomerListScreen ";
+import CustomerListScreen from "../screens/customer/CustomerListScreen";
+import StoreSettingsScreen from "../screens/store/StoreSettingsScreen";
+import SupplierListScreen from "../screens/supplier/SupplierListScreen";
 
-const Drawer = createDrawerNavigator();
+// ========== TYPES ==========
+export type RootDrawerParamList = {
+  Dashboard: undefined;
+  SelectStore: undefined;
+  StoreSettings: undefined;
+  ProductList: undefined;
+  Suppliers: undefined;
+  ProductGroups: undefined;
+  PosOrders: undefined;
+  OrderList: undefined;
+  OrderReconciliation: undefined;
+  CustomerList: undefined;
+  TopCustomers: undefined;
+  Employees: undefined;
+  EmployeeSchedule: undefined;
+  LoyaltyConfig: undefined;
+  ReportsDashboard: undefined;
+  RevenueReport: undefined;
+  InventoryReport: undefined;
+  TaxReport: undefined;
+  TopProductsReport: undefined;
+  Profile: undefined;
+  Subscription: undefined;
+  SubscriptionPricing: undefined;
+  ActivityLog: undefined;
+  PaymentMethod: undefined;
+  NotificationSettings: undefined;
+  ExportData: undefined;
+  FileManager: undefined;
+};
+
+const Drawer = createDrawerNavigator<RootDrawerParamList>();
 
 // --- Check quyền menu chuẩn ---
-function hasPermission(menu: string[] = [], required?: string | string[]) {
+function hasPermission(
+  menu: string[] = [],
+  required?: string | string[]
+): boolean {
   if (!required) return true;
   const reqs = Array.isArray(required) ? required : [required];
-  return reqs.some((r) => menu.includes(r));
+  return reqs.some((r) => {
+    const [resource] = r.split(":");
+    return menu.includes(r) || menu.includes(`${resource}:*`);
+  });
 }
 
-function CustomDrawerContent(props: DrawerContentComponentProps) {
+// ========== PLACEHOLDER SCREENS ==========
+function PlaceholderScreen({ title }: { title: string }): JSX.Element {
+  return (
+    <View style={styles.placeholderContainer}>
+      <View style={styles.placeholderIconCircle}>
+        <Ionicons name="construct-outline" size={48} color="#10b981" />
+      </View>
+      <Text style={styles.placeholderTitle}>{title}</Text>
+      <Text style={styles.placeholderDesc}>
+        Màn hình này đang được phát triển cho ứng dụng di động.
+      </Text>
+    </View>
+  );
+}
+
+// const StoreSettingsScreen = () => (
+//   <PlaceholderScreen title="Thiết lập cửa hàng" />
+// );
+// const SupplierListScreen = () => <PlaceholderScreen title="Nhà cung cấp" />;
+const ProductGroupsScreen = () => <PlaceholderScreen title="Nhóm hàng hoá" />;
+const PosScreen = () => <PlaceholderScreen title="POS - Bán hàng" />;
+const OrderListScreen = () => <PlaceholderScreen title="Danh sách đơn hàng" />;
+const OrderReconciliationScreen = () => (
+  <PlaceholderScreen title="Đối soát hóa đơn" />
+);
+const TopCustomersScreen = () => <PlaceholderScreen title="Khách VIP" />;
+const EmployeesScreen = () => <PlaceholderScreen title="Nhân viên" />;
+const EmployeeScheduleScreen = () => (
+  <PlaceholderScreen title="Lịch làm việc" />
+);
+const LoyaltyConfigScreen = () => (
+  <PlaceholderScreen title="Cấu hình tích điểm" />
+);
+const ReportsDashboardScreen = () => (
+  <PlaceholderScreen title="Báo cáo tổng quan" />
+);
+const RevenueReportScreen = () => <PlaceholderScreen title="BC doanh thu" />;
+const InventoryReportScreen = () => <PlaceholderScreen title="BC tồn kho" />;
+const TaxReportScreen = () => <PlaceholderScreen title="Kê khai thuế" />;
+const TopProductsReportScreen = () => (
+  <PlaceholderScreen title="Top sản phẩm" />
+);
+const SubscriptionScreen = () => <PlaceholderScreen title="Gói hiện tại" />;
+const SubscriptionPricingScreen = () => (
+  <PlaceholderScreen title="Nâng cấp Premium" />
+);
+const ActivityLogScreen = () => <PlaceholderScreen title="Nhật ký hoạt động" />;
+const PaymentMethodScreen = () => (
+  <PlaceholderScreen title="Thiết lập thanh toán" />
+);
+const NotificationSettingsScreen = () => (
+  <PlaceholderScreen title="Thông báo" />
+);
+const ExportDataScreen = () => <PlaceholderScreen title="Xuất dữ liệu" />;
+const FileManagerScreen = () => <PlaceholderScreen title="Quản lý file" />;
+
+// ========== MENU TREE ==========
+interface MenuItem {
+  key: keyof RootDrawerParamList;
+  label: string;
+  icon: string;
+  permission?: string | string[];
+}
+
+interface MenuSection {
+  title: string;
+  icon: string;
+  items: MenuItem[];
+}
+
+const MENU_TREE: MenuSection[] = [
+  {
+    title: "CỬA HÀNG",
+    icon: "storefront",
+    items: [
+      { key: "Dashboard", label: "Tổng quan", icon: "speedometer-outline" },
+      {
+        key: "SelectStore",
+        label: "Chọn cửa hàng",
+        icon: "storefront-outline",
+        permission: "store:view",
+      },
+      {
+        key: "StoreSettings",
+        label: "Thiết lập CH",
+        icon: "settings-outline",
+        permission: "store:update",
+      },
+    ],
+  },
+  {
+    title: "QUẢN LÝ KHO",
+    icon: "cube",
+    items: [
+      {
+        key: "ProductList",
+        label: "Hàng hóa",
+        icon: "cube-outline",
+        permission: "products:view",
+      },
+      { key: "Suppliers", label: "Nhà cung cấp", icon: "business-outline" },
+      {
+        key: "ProductGroups",
+        label: "Nhóm hàng",
+        icon: "grid-outline",
+        permission: "products:view",
+      },
+    ],
+  },
+  {
+    title: "ĐƠN HÀNG",
+    icon: "cart",
+    items: [
+      {
+        key: "PosOrders",
+        label: "POS - Bán hàng",
+        icon: "cash-outline",
+        permission: "orders:create",
+      },
+      {
+        key: "OrderList",
+        label: "DS đơn hàng",
+        icon: "receipt-outline",
+        permission: "orders:view",
+      },
+      {
+        key: "OrderReconciliation",
+        label: "Đối soát HĐ",
+        icon: "document-text-outline",
+        permission: "orders:view",
+      },
+    ],
+  },
+  {
+    title: "KHÁCH HÀNG",
+    icon: "people",
+    items: [
+      {
+        key: "CustomerList",
+        label: "DS khách hàng",
+        icon: "people-outline",
+        permission: "customers:search",
+      },
+      {
+        key: "TopCustomers",
+        label: "Khách VIP",
+        icon: "star-outline",
+        permission: "customers:top-customers",
+      },
+    ],
+  },
+  {
+    title: "NHÂN VIÊN",
+    icon: "people-circle",
+    items: [
+      {
+        key: "Employees",
+        label: "Nhân viên",
+        icon: "id-card-outline",
+        permission: "employees:view",
+      },
+      {
+        key: "EmployeeSchedule",
+        label: "Lịch làm việc",
+        icon: "calendar-outline",
+        permission: "employees:assign",
+      },
+    ],
+  },
+  {
+    title: "TÍCH ĐIỂM",
+    icon: "gift",
+    items: [
+      {
+        key: "LoyaltyConfig",
+        label: "Cấu hình",
+        icon: "gift-outline",
+        permission: "loyalty:manage",
+      },
+    ],
+  },
+  {
+    title: "BÁO CÁO",
+    icon: "stats-chart",
+    items: [
+      {
+        key: "ReportsDashboard",
+        label: "BC tổng quan",
+        icon: "podium-outline",
+        permission: "reports:financial:view",
+      },
+      {
+        key: "RevenueReport",
+        label: "BC doanh thu",
+        icon: "trending-up-outline",
+        permission: "reports:revenue:view",
+      },
+      {
+        key: "InventoryReport",
+        label: "BC tồn kho",
+        icon: "cube-outline",
+        permission: "inventory:stock-check:view",
+      },
+      {
+        key: "TaxReport",
+        label: "Kê khai thuế",
+        icon: "newspaper-outline",
+        permission: "tax:preview",
+      },
+      {
+        key: "TopProductsReport",
+        label: "Top SP",
+        icon: "trophy-outline",
+        permission: "reports:top-products",
+      },
+    ],
+  },
+  {
+    title: "CẤU HÌNH",
+    icon: "settings",
+    items: [
+      {
+        key: "Profile",
+        label: "Hồ sơ cá nhân",
+        icon: "person-outline",
+        permission: "users:view",
+      },
+      {
+        key: "Subscription",
+        label: "Gói hiện tại",
+        icon: "card-outline",
+        permission: "subscription:view",
+      },
+      {
+        key: "SubscriptionPricing",
+        label: "Nâng cấp",
+        icon: "flash-outline",
+        permission: "subscription:view",
+      },
+      {
+        key: "ActivityLog",
+        label: "Nhật ký",
+        icon: "time-outline",
+        permission: "settings:activity-log",
+      },
+      {
+        key: "PaymentMethod",
+        label: "Thanh toán",
+        icon: "card-outline",
+        permission: "settings:payment-method",
+      },
+      {
+        key: "NotificationSettings",
+        label: "Thông báo",
+        icon: "notifications-outline",
+        permission: "notifications:view",
+      },
+      {
+        key: "ExportData",
+        label: "Xuất dữ liệu",
+        icon: "download-outline",
+        permission: "data:export",
+      },
+      {
+        key: "FileManager",
+        label: "Quản lý file",
+        icon: "folder-open-outline",
+        permission: "file:view",
+      },
+    ],
+  },
+];
+
+// ========== CUSTOM DRAWER CONTENT ==========
+type CustomDrawerProps = DrawerContentComponentProps;
+
+function CustomDrawerContent(props: CustomDrawerProps): JSX.Element {
   const { logout, user } = useAuth();
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(
+    new Set(["CỬA HÀNG", "QUẢN LÝ KHO"])
+  );
 
   const handleLogout = () => {
     Alert.alert(
@@ -47,213 +368,595 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
     );
   };
 
-  const nameLabel = user?.username || "Người dùng";
-  const roleLabel = user?.role || "—";
+  const toggleSection = (title: string) => {
+    setExpandedSections((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(title)) {
+        newSet.delete(title);
+      } else {
+        newSet.add(title);
+      }
+      return newSet;
+    });
+  };
 
-  // Chỉ filter SelectStore theo role (như trước)
-  const filteredRoutes = props.state.routes.filter((r) => {
-    if (r.name === "SelectStore" && user?.role !== "MANAGER") return false;
-    return true;
-  });
+  const menu = user?.menu || [];
+  const nameLabel = user?.fullname || user?.username || "Người dùng";
+  const roleLabel = user?.role || "—";
+  const currentRoute = props.state.routes[props.state.index].name;
 
   return (
-    <DrawerContentScrollView {...props} contentContainerStyle={{ flex: 1 }}>
-      <View style={styles.header}>
-        <View style={styles.avatar}>
-          <Ionicons name="person" size={32} color="#fff" />
+    <View style={{ flex: 1, backgroundColor: "#f8fafc" }}>
+      {/* Gradient Header */}
+      <LinearGradient
+        colors={["#10b981", "#059669", "#047857"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.header}
+      >
+        <View style={styles.avatarWrapper}>
+          <View style={styles.avatar}>
+            <Ionicons name="person" size={36} color="#fff" />
+          </View>
+          <View style={styles.onlineBadge} />
         </View>
-        <View style={{ marginLeft: 12 }}>
+        <View style={{ marginLeft: 14, flex: 1 }}>
           <Text style={styles.name}>{nameLabel}</Text>
-          <Text style={styles.role}>{roleLabel}</Text>
+          <View style={styles.roleContainer}>
+            <Ionicons name="shield-checkmark" size={12} color="#d1fae5" />
+            <Text style={styles.role}>{roleLabel}</Text>
+          </View>
         </View>
-      </View>
+      </LinearGradient>
 
-      <View style={styles.menu}>
-        <DrawerItemList
-          {...props}
-          state={{ ...props.state, routes: filteredRoutes }}
-        />
-      </View>
+      {/* Tree Menu */}
+      <ScrollView style={styles.menu} showsVerticalScrollIndicator={false}>
+        {MENU_TREE.map((section) => {
+          const visibleItems = section.items.filter((item) => {
+            if (item.key === "SelectStore" && user?.role !== "MANAGER")
+              return false;
+            return hasPermission(menu, item.permission);
+          });
 
+          if (visibleItems.length === 0) return null;
+
+          const isExpanded = expandedSections.has(section.title);
+
+          return (
+            <View key={section.title} style={styles.sectionContainer}>
+              {/* Section Header */}
+              <TouchableOpacity
+                style={styles.sectionHeader}
+                onPress={() => toggleSection(section.title)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.sectionHeaderLeft}>
+                  <View style={styles.sectionIconCircle}>
+                    <Ionicons
+                      name={section.icon as any}
+                      size={16}
+                      color="#10b981"
+                    />
+                  </View>
+                  <Text style={styles.sectionTitle}>{section.title}</Text>
+                </View>
+                <Ionicons
+                  name={isExpanded ? "chevron-down" : "chevron-forward"}
+                  size={18}
+                  color="#10b981"
+                />
+              </TouchableOpacity>
+
+              {/* Section Items */}
+              {isExpanded &&
+                visibleItems.map((item, idx) => {
+                  const isActive = currentRoute === item.key;
+                  return (
+                    <TouchableOpacity
+                      key={item.key}
+                      style={[
+                        styles.menuItem,
+                        isActive && styles.menuItemActive,
+                        idx === visibleItems.length - 1 && styles.menuItemLast,
+                      ]}
+                      onPress={() => props.navigation.navigate(item.key as any)}
+                      activeOpacity={0.7}
+                    >
+                      <View
+                        style={[
+                          styles.menuItemIconWrapper,
+                          isActive && styles.menuItemIconWrapperActive,
+                        ]}
+                      >
+                        <Ionicons
+                          name={item.icon as any}
+                          size={20}
+                          color={isActive ? "#10b981" : "#6b7280"}
+                        />
+                      </View>
+                      <Text
+                        style={[
+                          styles.menuItemText,
+                          isActive && styles.menuItemTextActive,
+                        ]}
+                      >
+                        {item.label}
+                      </Text>
+                      {isActive && <View style={styles.activeIndicator} />}
+                    </TouchableOpacity>
+                  );
+                })}
+            </View>
+          );
+        })}
+        <View style={{ height: 20 }} />
+      </ScrollView>
+
+      {/* Gradient Logout Button */}
       <View style={styles.bottom}>
-        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-          <Ionicons
-            name="log-out-outline"
-            size={18}
-            color="#ef4444"
-            style={{ marginRight: 10 }}
-          />
-          <Text style={styles.logoutText}>Đăng xuất</Text>
+        <TouchableOpacity
+          style={styles.logoutBtn}
+          onPress={handleLogout}
+          activeOpacity={0.8}
+        >
+          <LinearGradient
+            colors={["#ef4444", "#dc2626"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.logoutGradient}
+          >
+            <Ionicons name="log-out-outline" size={20} color="#fff" />
+            <Text style={styles.logoutText}>Đăng xuất</Text>
+          </LinearGradient>
         </TouchableOpacity>
         <Text style={styles.copy}>© 2025 Smallbiz-Sales</Text>
       </View>
-    </DrawerContentScrollView>
+    </View>
   );
 }
 
+// ========== APP NAVIGATOR ==========
 export default function AppNavigator(): JSX.Element {
   const { user, loading } = useAuth();
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#0b84ff" />
-        <Text style={{ marginTop: 10 }}>Đang tải dữ liệu người dùng...</Text>
+        <ActivityIndicator size="large" color="#10b981" />
+        <Text style={styles.loadingText}>Đang tải dữ liệu người dùng...</Text>
       </View>
     );
   }
 
   const menu = user?.menu || [];
 
-  // Wrapper kiểm tra quyền menu
-  const ProtectedScreen =
-    (Screen: JSX.Element, requiredPermission?: string | string[]) => () => {
+  const withPermission =
+    (
+      Component: React.ComponentType<any>,
+      requiredPermission?: string | string[]
+    ) =>
+    (props: any) => {
       if (!hasPermission(menu, requiredPermission)) {
-        return <Unauthorized />; // nếu không có quyền -> màn tạm thời
+        return <Unauthorized />;
       }
-      return Screen;
+      return <Component {...props} />;
     };
 
   return (
     <Drawer.Navigator
       initialRouteName="Dashboard"
       drawerContent={(props) => <CustomDrawerContent {...props} />}
-      screenOptions={({ navigation }) => ({
+      screenOptions={({ navigation }): DrawerNavigationOptions => ({
         headerStyle: {
           backgroundColor: "#10b981",
-          elevation: 0, // bỏ shadow trên Android
-          shadowOpacity: 0, // bỏ shadow trên iOS
+          elevation: 0,
+          shadowOpacity: 0,
         },
         headerTintColor: "#ffffff",
         headerTitleStyle: {
           fontWeight: "700",
           fontSize: 18,
         },
-        drawerActiveTintColor: "#10b981",
-        drawerInactiveTintColor: "#374151",
-        drawerLabelStyle: { fontSize: 15, fontWeight: "600" },
-        // QUAN TRỌNG: Tùy chỉnh icon mở drawer
+        drawerActiveBackgroundColor: "transparent",
+        drawerActiveTintColor: "transparent",
+        drawerInactiveTintColor: "transparent",
         headerLeft: ({ tintColor }) => (
           <TouchableOpacity
             onPress={() => navigation.toggleDrawer()}
-            style={{
-              marginLeft: 15,
-              padding: 8,
-              borderRadius: 8,
-              backgroundColor: "rgba(255,255,255,0.1)",
-            }}
+            style={styles.headerMenuBtn}
+            activeOpacity={0.7}
           >
-            {/* CÁC LỰA CHỌN ICON ĐẸP HƠN */}
-            {/* Lựa chọn 1: Icon menu hiện đại */}
             <Ionicons name="grid-outline" size={26} color={tintColor} />
-
-            {/* Lựa chọn 2: Icon menu cổ điển nhưng đẹp */}
-            {/* <Ionicons name="menu-outline" size={28} color={tintColor} /> */}
-
-            {/* Lựa chọn 3: Icon ba chấm dọc */}
-            {/* <Ionicons name="ellipsis-vertical" size={24} color={tintColor} /> */}
-
-            {/* Lựa chọn 4: Icon danh sách */}
-            {/* <Ionicons name="list-outline" size={28} color={tintColor} /> */}
           </TouchableOpacity>
         ),
       })}
     >
       <Drawer.Screen
         name="Dashboard"
-        component={ProtectedScreen(<DashboardScreen />)}
-        options={{
-          title: "Dashboard",
-          drawerIcon: ({ color, size }) => (
-            <Ionicons name="speedometer-outline" size={size} color={color} />
-          ),
-        }}
+        component={withPermission(DashboardScreen)}
+        options={{ title: "Tổng quan" }}
       />
       <Drawer.Screen
-        name="Profile"
-        component={ProtectedScreen(<Profile />)}
-        options={{
-          title: "Hồ sơ cá nhân",
-          drawerIcon: ({ color, size }) => (
-            <Ionicons name="person-outline" size={size} color={color} />
-          ),
-        }}
+        name="SelectStore"
+        component={withPermission(SelectStoreScreen, "store:view")}
+        options={{ headerShown: false }}
+      />
+      <Drawer.Screen
+        name="StoreSettings"
+        component={withPermission(StoreSettingsScreen, "store:update")}
+        options={{ title: "Thiết lập cửa hàng" }}
       />
       <Drawer.Screen
         name="ProductList"
-        component={ProtectedScreen(<ProductListScreen />)}
-        options={{
-          title: "Hàng hóa",
-          drawerIcon: ({ color, size }) => (
-            // 🔥 Lựa chọn 1: Icon hiện đại, đẹp
-            <Ionicons name="cube" size={size} color={color} />
-          ),
-        }}
+        component={withPermission(ProductListScreen, "products:view")}
+        options={{ title: "Hàng hóa" }}
+      />
+      <Drawer.Screen
+        name="Suppliers"
+        component={withPermission(SupplierListScreen)}
+        options={{ title: "Nhà cung cấp" }}
+      />
+      <Drawer.Screen
+        name="ProductGroups"
+        component={withPermission(ProductGroupsScreen, "products:view")}
+        options={{ title: "Nhóm hàng" }}
+      />
+      <Drawer.Screen
+        name="PosOrders"
+        component={withPermission(PosScreen, "orders:create")}
+        options={{ title: "POS" }}
+      />
+      <Drawer.Screen
+        name="OrderList"
+        component={withPermission(OrderListScreen, "orders:view")}
+        options={{ title: "Đơn hàng" }}
+      />
+      <Drawer.Screen
+        name="OrderReconciliation"
+        component={withPermission(OrderReconciliationScreen, "orders:view")}
+        options={{ title: "Đối soát HĐ" }}
       />
       <Drawer.Screen
         name="CustomerList"
-        component={ProtectedScreen(<CustomerListScreen />)}
-        options={{
-          title: "Khách hàng",
-          drawerIcon: ({ color, size }) => (
-            <Ionicons name="people-outline" size={size} color={color} />
-          ),
-        }}
+        component={withPermission(CustomerListScreen, "customers:search")}
+        options={{ title: "Khách hàng" }}
       />
-      {user?.role === "MANAGER" && (
-        <Drawer.Screen
-          name="SelectStore"
-          component={ProtectedScreen(<SelectStoreScreen />)}
-          options={{
-            headerShown: false,
-            title: "Chọn cửa hàng",
-            drawerIcon: ({ color, size }) => (
-              <Ionicons name="storefront-outline" size={size} color={color} />
-            ),
-          }}
-        />
-      )}
+      <Drawer.Screen
+        name="TopCustomers"
+        component={withPermission(
+          TopCustomersScreen,
+          "customers:top-customers"
+        )}
+        options={{ title: "Khách VIP" }}
+      />
+      <Drawer.Screen
+        name="Employees"
+        component={withPermission(EmployeesScreen, "employees:view")}
+        options={{ title: "Nhân viên" }}
+      />
+      <Drawer.Screen
+        name="EmployeeSchedule"
+        component={withPermission(EmployeeScheduleScreen, "employees:assign")}
+        options={{ title: "Lịch LV" }}
+      />
+      <Drawer.Screen
+        name="LoyaltyConfig"
+        component={withPermission(LoyaltyConfigScreen, "loyalty:manage")}
+        options={{ title: "Tích điểm" }}
+      />
+      <Drawer.Screen
+        name="ReportsDashboard"
+        component={withPermission(
+          ReportsDashboardScreen,
+          "reports:financial:view"
+        )}
+        options={{ title: "BC tổng quan" }}
+      />
+      <Drawer.Screen
+        name="RevenueReport"
+        component={withPermission(RevenueReportScreen, "reports:revenue:view")}
+        options={{ title: "BC doanh thu" }}
+      />
+      <Drawer.Screen
+        name="InventoryReport"
+        component={withPermission(
+          InventoryReportScreen,
+          "inventory:stock-check:view"
+        )}
+        options={{ title: "BC tồn kho" }}
+      />
+      <Drawer.Screen
+        name="TaxReport"
+        component={withPermission(TaxReportScreen, "tax:preview")}
+        options={{ title: "Thuế" }}
+      />
+      <Drawer.Screen
+        name="TopProductsReport"
+        component={withPermission(
+          TopProductsReportScreen,
+          "reports:top-products"
+        )}
+        options={{ title: "Top SP" }}
+      />
+      <Drawer.Screen
+        name="Profile"
+        component={withPermission(Profile, "users:view")}
+        options={{ title: "Hồ sơ" }}
+      />
+      <Drawer.Screen
+        name="Subscription"
+        component={withPermission(SubscriptionScreen, "subscription:view")}
+        options={{ title: "Gói hiện tại" }}
+      />
+      <Drawer.Screen
+        name="SubscriptionPricing"
+        component={withPermission(
+          SubscriptionPricingScreen,
+          "subscription:view"
+        )}
+        options={{ title: "Nâng cấp" }}
+      />
+      <Drawer.Screen
+        name="ActivityLog"
+        component={withPermission(ActivityLogScreen, "settings:activity-log")}
+        options={{ title: "Nhật ký" }}
+      />
+      <Drawer.Screen
+        name="PaymentMethod"
+        component={withPermission(
+          PaymentMethodScreen,
+          "settings:payment-method"
+        )}
+        options={{ title: "Thanh toán" }}
+      />
+      <Drawer.Screen
+        name="NotificationSettings"
+        component={withPermission(
+          NotificationSettingsScreen,
+          "notifications:view"
+        )}
+        options={{ title: "Thông báo" }}
+      />
+      <Drawer.Screen
+        name="ExportData"
+        component={withPermission(ExportDataScreen, "data:export")}
+        options={{ title: "Xuất DL" }}
+      />
+      <Drawer.Screen
+        name="FileManager"
+        component={withPermission(FileManagerScreen, "file:view")}
+        options={{ title: "Quản lý file" }}
+      />
     </Drawer.Navigator>
   );
 }
 
+// ========== STYLES ==========
 const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 5,
-    backgroundColor: "#10b981", // xanh lá tươi
-    borderBottomLeftRadius: 16,
-    borderBottomRightRadius: 16,
-    marginBottom: 0,
+    padding: 18,
+    paddingTop: 24,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  avatarWrapper: {
+    position: "relative",
   },
   avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
-    backgroundColor: "#059669", // xanh lá đậm
+    width: 60,
+    height: 60,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.3)",
+  },
+  onlineBadge: {
+    position: "absolute",
+    bottom: 2,
+    right: 2,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: "#22c55e",
+    borderWidth: 2,
+    borderColor: "#10b981",
+  },
+  name: {
+    color: "#ffffff",
+    fontWeight: "800",
+    fontSize: 17,
+    marginBottom: 4,
+    letterSpacing: 0.3,
+  },
+  roleContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  role: {
+    color: "#d1fae5",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  menu: {
+    flex: 1,
+    paddingTop: 12,
+  },
+  sectionContainer: {
+    marginBottom: 8,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginHorizontal: 10,
+    marginBottom: 4,
+    borderRadius: 12,
+    backgroundColor: "#ffffff",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  sectionHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  sectionIconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: "#ecfdf5",
     alignItems: "center",
     justifyContent: "center",
   },
-  name: { color: "#ffffff", fontWeight: "800", fontSize: 16 },
-  role: { color: "#d1fae5", fontSize: 12, marginTop: 2 },
-  menu: { flex: 1, paddingTop: 8 },
-  bottom: {
-    padding: 16,
-    borderTopWidth: 1,
-    borderColor: "#e5e7eb",
+  sectionTitle: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#374151",
+    letterSpacing: 0.8,
   },
-  logoutBtn: {
+  menuItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginHorizontal: 16,
+    marginBottom: 4,
+    borderRadius: 10,
+    position: "relative",
   },
-  logoutText: { color: "#ef4444", fontWeight: "700" },
-  copy: { marginTop: 12, fontSize: 12, color: "#9ca3af" },
+  menuItemLast: {
+    marginBottom: 8,
+  },
+  menuItemActive: {
+    backgroundColor: "#ecfdf5",
+    borderLeftWidth: 3,
+    borderLeftColor: "#10b981",
+    shadowColor: "#10b981",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  menuItemIconWrapper: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: "#f1f5f9",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  menuItemIconWrapperActive: {
+    backgroundColor: "#d1fae5",
+  },
+  menuItemText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#64748b",
+    flex: 1,
+  },
+  menuItemTextActive: {
+    color: "#059669",
+    fontWeight: "700",
+  },
+  activeIndicator: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#10b981",
+  },
+  bottom: {
+    padding: 16,
+    paddingBottom: 24,
+    borderTopWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#ffffff",
+  },
+  logoutBtn: {
+    borderRadius: 12,
+    overflow: "hidden",
+    shadowColor: "#ef4444",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  logoutGradient: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    gap: 8,
+  },
+  logoutText: {
+    color: "#ffffff",
+    fontWeight: "700",
+    fontSize: 15,
+  },
+  copy: {
+    marginTop: 12,
+    fontSize: 11,
+    color: "#9ca3af",
+    textAlign: "center",
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#ffffff", // nền trắng
+    backgroundColor: "#f8fafc",
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: "#64748b",
+  },
+  placeholderContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 32,
+    backgroundColor: "#f8fafc",
+  },
+  placeholderIconCircle: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: "#ecfdf5",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 20,
+  },
+  placeholderTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#111827",
+    marginBottom: 8,
+  },
+  placeholderDesc: {
+    fontSize: 14,
+    color: "#6b7280",
+    textAlign: "center",
+    lineHeight: 22,
+  },
+  headerMenuBtn: {
+    marginLeft: 15,
+    padding: 8,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.15)",
   },
 });
