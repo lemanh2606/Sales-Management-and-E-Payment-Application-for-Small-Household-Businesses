@@ -90,6 +90,7 @@ app.use(morgan("dev"));
 
 // --- ROUTERS ---
 const storeRouters = require("./routers/storeRouters");
+const storePaymentRouters = require("./routers/storePaymentRouters");
 const userRouters = require("./routers/userRouters");
 const productRouters = require("./routers/productRouters");
 const productGroupRouters = require("./routers/productGroupRouters");
@@ -114,6 +115,7 @@ const exportRouters = require("./routers/exportRouters");
 // --- MOUNT ROUTERS ---
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/api/stores", storeRouters);
+app.use("/api/stores-config-payment", storePaymentRouters);
 app.use("/api/users", userRouters);
 app.use("/api/products", productRouters);
 app.use("/api/product-groups", productGroupRouters);
