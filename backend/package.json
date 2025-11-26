@@ -50,7 +50,7 @@
     "express": "^5.1.0",
     "express-async-handler": "^1.2.0",
     "express-list-endpoints": "^7.1.1",
-    "form-data": "^4.0.4",
+    "form-data": "^4.0.5",
     "framer-motion": "^12.23.22",
     "google-auth-library": "^10.4.0",
     "googleapis": "^165.0.0",

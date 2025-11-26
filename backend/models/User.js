@@ -22,6 +22,8 @@ const userSchema = new mongoose.Schema(
       default: "/default-avatar.png", // 👈 Thêm default value
       trim: true,
     },
+    image_thumb: { type: String }, // Thumbnail URL
+    image_delete_url: { type: String }, // Delete URL for cleanup
     fullname: { type: String, default: "" },
 
     // role global (MANAGER: có thể tạo store; STAFF: nhân viên)

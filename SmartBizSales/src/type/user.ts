@@ -272,6 +272,12 @@ export interface AuthResponse {
     user?: UserPublic;
     store?: any | null; // the controller returns `store` sometimes
 }
+// src/types/user.ts (thêm vào file có sẵn)
+
+export interface ResendRegisterOtpDto {
+    email: string;
+}
+
 
 // ------------------------
 // Export helper: group types for convenient import

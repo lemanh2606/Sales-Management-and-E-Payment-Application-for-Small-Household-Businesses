@@ -1,5 +1,5 @@
 // src/navigation/AppNavigator.tsx
-import React, { JSX, useState } from "react";
+import React, { JSX, useState, useRef } from "react";
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   Alert,
   ActivityIndicator,
   ScrollView,
+  Image,
   Animated,
 } from "react-native";
 import {
@@ -22,11 +23,15 @@ import { useAuth } from "../context/AuthContext";
 import DashboardScreen from "../screens/home/DashboardScreen";
 import SelectStoreScreen from "../screens/store/SelectStoreScreen";
 import Unauthorized from "../screens/misc/Unauthorized";
-import Profile from "../screens/user/Profile";
+
 import ProductListScreen from "../screens/product/ProductListScreen";
 import CustomerListScreen from "../screens/customer/CustomerListScreen";
 import StoreSettingsScreen from "../screens/store/StoreSettingsScreen";
 import SupplierListScreen from "../screens/supplier/SupplierListScreen";
+import ProductGroupListScreen from "../screens/productGroup/ProductGroupListScreen";
+import ProfileScreen from "../screens/settings/ProfileScreen";
+import LoyaltyConfigScreen from "../screens/loyalty/LoyaltyConfigScreen";
+import TopCustomersScreen from "../screens/customer/TopCustomersScreen";
 
 // ========== TYPES ==========
 export type RootDrawerParamList = {
@@ -49,7 +54,7 @@ export type RootDrawerParamList = {
   InventoryReport: undefined;
   TaxReport: undefined;
   TopProductsReport: undefined;
-  Profile: undefined;
+  ProfileScreen: undefined;
   Subscription: undefined;
   SubscriptionPricing: undefined;
   ActivityLog: undefined;
@@ -89,24 +94,19 @@ function PlaceholderScreen({ title }: { title: string }): JSX.Element {
   );
 }
 
-// const StoreSettingsScreen = () => (
-//   <PlaceholderScreen title="Thiết lập cửa hàng" />
-// );
-// const SupplierListScreen = () => <PlaceholderScreen title="Nhà cung cấp" />;
-const ProductGroupsScreen = () => <PlaceholderScreen title="Nhóm hàng hoá" />;
 const PosScreen = () => <PlaceholderScreen title="POS - Bán hàng" />;
 const OrderListScreen = () => <PlaceholderScreen title="Danh sách đơn hàng" />;
 const OrderReconciliationScreen = () => (
   <PlaceholderScreen title="Đối soát hóa đơn" />
 );
-const TopCustomersScreen = () => <PlaceholderScreen title="Khách VIP" />;
+// const TopCustomersScreen = () => <PlaceholderScreen title="Khách VIP" />;
 const EmployeesScreen = () => <PlaceholderScreen title="Nhân viên" />;
 const EmployeeScheduleScreen = () => (
   <PlaceholderScreen title="Lịch làm việc" />
 );
-const LoyaltyConfigScreen = () => (
-  <PlaceholderScreen title="Cấu hình tích điểm" />
-);
+// const LoyaltyConfigScreen = () => (
+//   <PlaceholderScreen title="Cấu hình tích điểm" />
+// );
 const ReportsDashboardScreen = () => (
   <PlaceholderScreen title="Báo cáo tổng quan" />
 );
@@ -296,7 +296,7 @@ const MENU_TREE: MenuSection[] = [
     icon: "settings",
     items: [
       {
-        key: "Profile",
+        key: "ProfileScreen",
         label: "Hồ sơ cá nhân",
         icon: "person-outline",
         permission: "users:view",
@@ -356,6 +356,38 @@ function CustomDrawerContent(props: CustomDrawerProps): JSX.Element {
     new Set(["CỬA HÀNG", "QUẢN LÝ KHO"])
   );
 
+  // ✅ Scroll indicator state
+  const [showScrollIndicator, setShowScrollIndicator] = useState(false);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const bounceAnim = useRef(new Animated.Value(0)).current;
+
+  // ✅ Bounce animation for arrow
+  React.useEffect(() => {
+    if (showScrollIndicator) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(bounceAnim, {
+            toValue: 1,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+          Animated.timing(bounceAnim, {
+            toValue: 0,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    } else {
+      bounceAnim.setValue(0);
+    }
+  }, [showScrollIndicator]);
+
+  const translateY = bounceAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 8],
+  });
+
   const handleLogout = () => {
     Alert.alert(
       "Đăng xuất",
@@ -380,14 +412,30 @@ function CustomDrawerContent(props: CustomDrawerProps): JSX.Element {
     });
   };
 
+  // ✅ Handle scroll event
+  const handleScroll = (event: any) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    const isAtBottom =
+      contentOffset.y + layoutMeasurement.height >= contentSize.height - 20;
+    setShowScrollIndicator(
+      !isAtBottom && contentSize.height > layoutMeasurement.height
+    );
+  };
+
+  // ✅ Handle scroll indicator press
+  const handleScrollIndicatorPress = () => {
+    scrollViewRef.current?.scrollToEnd({ animated: true });
+  };
+
   const menu = user?.menu || [];
   const nameLabel = user?.fullname || user?.username || "Người dùng";
   const roleLabel = user?.role || "—";
+  const userImage = user?.image;
   const currentRoute = props.state.routes[props.state.index].name;
 
   return (
     <View style={{ flex: 1, backgroundColor: "#f8fafc" }}>
-      {/* Gradient Header */}
+      {/* Gradient Header with User Image */}
       <LinearGradient
         colors={["#10b981", "#059669", "#047857"]}
         start={{ x: 0, y: 0 }}
@@ -395,13 +443,19 @@ function CustomDrawerContent(props: CustomDrawerProps): JSX.Element {
         style={styles.header}
       >
         <View style={styles.avatarWrapper}>
-          <View style={styles.avatar}>
-            <Ionicons name="person" size={36} color="#fff" />
-          </View>
+          {userImage ? (
+            <Image source={{ uri: userImage }} style={styles.avatarImage} />
+          ) : (
+            <View style={styles.avatarPlaceholder}>
+              <Ionicons name="person" size={36} color="#fff" />
+            </View>
+          )}
           <View style={styles.onlineBadge} />
         </View>
         <View style={{ marginLeft: 14, flex: 1 }}>
-          <Text style={styles.name}>{nameLabel}</Text>
+          <Text style={styles.name} numberOfLines={1}>
+            {nameLabel}
+          </Text>
           <View style={styles.roleContainer}>
             <Ionicons name="shield-checkmark" size={12} color="#d1fae5" />
             <Text style={styles.role}>{roleLabel}</Text>
@@ -409,88 +463,117 @@ function CustomDrawerContent(props: CustomDrawerProps): JSX.Element {
         </View>
       </LinearGradient>
 
-      {/* Tree Menu */}
-      <ScrollView style={styles.menu} showsVerticalScrollIndicator={false}>
-        {MENU_TREE.map((section) => {
-          const visibleItems = section.items.filter((item) => {
-            if (item.key === "SelectStore" && user?.role !== "MANAGER")
-              return false;
-            return hasPermission(menu, item.permission);
-          });
+      {/* Tree Menu with Scroll Indicator */}
+      <View style={{ flex: 1, position: "relative" }}>
+        <ScrollView
+          ref={scrollViewRef}
+          style={styles.menu}
+          showsVerticalScrollIndicator={false}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+        >
+          {MENU_TREE.map((section) => {
+            const visibleItems = section.items.filter((item) => {
+              if (item.key === "SelectStore" && user?.role !== "MANAGER")
+                return false;
+              return hasPermission(menu, item.permission);
+            });
 
-          if (visibleItems.length === 0) return null;
+            if (visibleItems.length === 0) return null;
 
-          const isExpanded = expandedSections.has(section.title);
+            const isExpanded = expandedSections.has(section.title);
 
-          return (
-            <View key={section.title} style={styles.sectionContainer}>
-              {/* Section Header */}
-              <TouchableOpacity
-                style={styles.sectionHeader}
-                onPress={() => toggleSection(section.title)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.sectionHeaderLeft}>
-                  <View style={styles.sectionIconCircle}>
-                    <Ionicons
-                      name={section.icon as any}
-                      size={16}
-                      color="#10b981"
-                    />
+            return (
+              <View key={section.title} style={styles.sectionContainer}>
+                {/* Section Header */}
+                <TouchableOpacity
+                  style={styles.sectionHeader}
+                  onPress={() => toggleSection(section.title)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.sectionHeaderLeft}>
+                    <View style={styles.sectionIconCircle}>
+                      <Ionicons
+                        name={section.icon as any}
+                        size={16}
+                        color="#10b981"
+                      />
+                    </View>
+                    <Text style={styles.sectionTitle}>{section.title}</Text>
                   </View>
-                  <Text style={styles.sectionTitle}>{section.title}</Text>
-                </View>
-                <Ionicons
-                  name={isExpanded ? "chevron-down" : "chevron-forward"}
-                  size={18}
-                  color="#10b981"
-                />
-              </TouchableOpacity>
+                  <Ionicons
+                    name={isExpanded ? "chevron-down" : "chevron-forward"}
+                    size={18}
+                    color="#10b981"
+                  />
+                </TouchableOpacity>
 
-              {/* Section Items */}
-              {isExpanded &&
-                visibleItems.map((item, idx) => {
-                  const isActive = currentRoute === item.key;
-                  return (
-                    <TouchableOpacity
-                      key={item.key}
-                      style={[
-                        styles.menuItem,
-                        isActive && styles.menuItemActive,
-                        idx === visibleItems.length - 1 && styles.menuItemLast,
-                      ]}
-                      onPress={() => props.navigation.navigate(item.key as any)}
-                      activeOpacity={0.7}
-                    >
-                      <View
+                {/* Section Items */}
+                {isExpanded &&
+                  visibleItems.map((item, idx) => {
+                    const isActive = currentRoute === item.key;
+                    return (
+                      <TouchableOpacity
+                        key={item.key}
                         style={[
-                          styles.menuItemIconWrapper,
-                          isActive && styles.menuItemIconWrapperActive,
+                          styles.menuItem,
+                          isActive && styles.menuItemActive,
+                          idx === visibleItems.length - 1 &&
+                            styles.menuItemLast,
                         ]}
+                        onPress={() =>
+                          props.navigation.navigate(item.key as any)
+                        }
+                        activeOpacity={0.7}
                       >
-                        <Ionicons
-                          name={item.icon as any}
-                          size={20}
-                          color={isActive ? "#10b981" : "#6b7280"}
-                        />
-                      </View>
-                      <Text
-                        style={[
-                          styles.menuItemText,
-                          isActive && styles.menuItemTextActive,
-                        ]}
-                      >
-                        {item.label}
-                      </Text>
-                      {isActive && <View style={styles.activeIndicator} />}
-                    </TouchableOpacity>
-                  );
-                })}
-            </View>
-          );
-        })}
-        <View style={{ height: 20 }} />
-      </ScrollView>
+                        <View
+                          style={[
+                            styles.menuItemIconWrapper,
+                            isActive && styles.menuItemIconWrapperActive,
+                          ]}
+                        >
+                          <Ionicons
+                            name={item.icon as any}
+                            size={20}
+                            color={isActive ? "#10b981" : "#6b7280"}
+                          />
+                        </View>
+                        <Text
+                          style={[
+                            styles.menuItemText,
+                            isActive && styles.menuItemTextActive,
+                          ]}
+                        >
+                          {item.label}
+                        </Text>
+                        {isActive && <View style={styles.activeIndicator} />}
+                      </TouchableOpacity>
+                    );
+                  })}
+              </View>
+            );
+          })}
+          <View style={{ height: 20 }} />
+        </ScrollView>
+
+        {/* ✅ Scroll Indicator - Floating Arrow */}
+        {showScrollIndicator && (
+          <TouchableOpacity
+            style={styles.scrollIndicator}
+            onPress={handleScrollIndicatorPress}
+            activeOpacity={0.7}
+          >
+            <Animated.View
+              style={[
+                styles.scrollIndicatorInner,
+                { transform: [{ translateY }] },
+              ]}
+            >
+              <Ionicons name="chevron-down" size={24} color="#10b981" />
+            </Animated.View>
+          </TouchableOpacity>
+        )}
+      </View>
 
       {/* Gradient Logout Button */}
       <View style={styles.bottom}>
@@ -598,7 +681,7 @@ export default function AppNavigator(): JSX.Element {
       />
       <Drawer.Screen
         name="ProductGroups"
-        component={withPermission(ProductGroupsScreen, "products:view")}
+        component={withPermission(ProductGroupListScreen, "products:view")}
         options={{ title: "Nhóm hàng" }}
       />
       <Drawer.Screen
@@ -679,8 +762,8 @@ export default function AppNavigator(): JSX.Element {
         options={{ title: "Top SP" }}
       />
       <Drawer.Screen
-        name="Profile"
-        component={withPermission(Profile, "users:view")}
+        name="ProfileScreen"
+        component={withPermission(ProfileScreen, "users:view")}
         options={{ title: "Hồ sơ" }}
       />
       <Drawer.Screen
@@ -749,7 +832,14 @@ const styles = StyleSheet.create({
   avatarWrapper: {
     position: "relative",
   },
-  avatar: {
+  avatarImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.3)",
+  },
+  avatarPlaceholder: {
     width: 60,
     height: 60,
     borderRadius: 16,
@@ -790,6 +880,25 @@ const styles = StyleSheet.create({
   menu: {
     flex: 1,
     paddingTop: 12,
+  },
+  scrollIndicator: {
+    position: "absolute",
+    bottom: 20,
+    alignSelf: "center",
+    backgroundColor: "#ffffff",
+    borderRadius: 50,
+    padding: 8,
+    shadowColor: "#10b981",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+    borderWidth: 2,
+    borderColor: "#d1fae5",
+  },
+  scrollIndicatorInner: {
+    alignItems: "center",
+    justifyContent: "center",
   },
   sectionContainer: {
     marginBottom: 8,
