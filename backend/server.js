@@ -30,6 +30,10 @@ const swaggerDocument = YAML.load(path.join(__dirname, "swagger.yaml")); // 👈
 
 const app = express();
 
+// ✅ Body parser với limit lớn cho base64
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ limit: "10mb", extended: true }));
+
 // đảm bảo thư mục uploads tồn tại chỉ để đọc tạm
 const uploadDir = path.join(__dirname, "uploads");
 if (!fs.existsSync(uploadDir)) {
@@ -52,7 +56,12 @@ const io = new Server(server, {
   cors: {
     origin: "http://localhost:3000", //  FE React
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "Cache-Control", "Pragma"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "Cache-Control",
+      "Pragma",
+    ],
   },
 });
 
@@ -71,8 +80,16 @@ require("./services/cronJobs");
 // Webhook PayOS phải viết trước express.json()
 const orderWebhookHandler = require("./routers/orderWebhookHandler");
 const subscriptionWebhookHandler = require("./routers/subscriptionWebhookHandler");
-app.post("/api/orders/vietqr-webhook", express.raw({ type: "*/*" }), orderWebhookHandler);
-app.post("/api/subscriptions/webhook", express.raw({ type: "*/*" }), subscriptionWebhookHandler);
+app.post(
+  "/api/orders/vietqr-webhook",
+  express.raw({ type: "*/*" }),
+  orderWebhookHandler
+);
+app.post(
+  "/api/subscriptions/webhook",
+  express.raw({ type: "*/*" }),
+  subscriptionWebhookHandler
+);
 
 // --- MIDDLEWARE ---
 app.use(
@@ -80,7 +97,12 @@ app.use(
     origin: "http://localhost:3000",
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "Cache-Control", "Pragma"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "Cache-Control",
+      "Pragma",
+    ],
   })
 );
 app.use(express.json());

@@ -1,33 +1,61 @@
 // src/pages/user/Profile.jsx
 import React, { useState, useEffect } from "react";
-import { Form, Input, Button, Card, Alert, Spin, Row, Col, Badge, Divider, Upload, Avatar } from "antd";
-import { SaveOutlined, LockOutlined, MailOutlined, UserOutlined, UploadOutlined, CameraOutlined, DeleteOutlined } from "@ant-design/icons";
-import axios from "axios";
+import {
+  Form,
+  Input,
+  Button,
+  Card,
+  Alert,
+  Spin,
+  Row,
+  Col,
+  Upload,
+  Avatar,
+  message,
+} from "antd";
+import {
+  SaveOutlined,
+  LockOutlined,
+  MailOutlined,
+  UserOutlined,
+  CameraOutlined,
+  DeleteOutlined,
+} from "@ant-design/icons";
 import Swal from "sweetalert2";
 import { useAuth } from "../../context/AuthContext";
 import Layout from "../../components/Layout";
+import { updateProfile, sendPasswordOTP, changePassword } from "../../api/userApi";
 
 const { useForm } = Form;
 
 export default function Profile() {
-  const { token, user, setUser } = useAuth();
+  const { user, setUser } = useAuth();
   const [form] = useForm();
   const [passForm] = useForm();
+
+  // Loading states
   const [loading, setLoading] = useState(true);
   const [savingInfo, setSavingInfo] = useState(false);
   const [sendingOTP, setSendingOTP] = useState(false);
   const [changingPass, setChangingPass] = useState(false);
+
+  // Error states
   const [infoError, setInfoError] = useState(null);
   const [passError, setPassError] = useState(null);
+
+  // OTP states
   const [otpSent, setOtpSent] = useState(false);
-  const [uploadingImage, setUploadingImage] = useState(false);
+  const [timer, setTimer] = useState(0);
+
+  // Image states
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
 
   const otpExpireMinutes = Number(import.meta.env.VITE_OTP_EXPIRE_MINUTES || 5);
-  const [timer, setTimer] = useState(0);
 
-  // Load info user vào form khi mount
+  // ==================== EFFECTS ====================
+
+  // Load user data
   useEffect(() => {
     if (user) {
       form.setFieldsValue({
@@ -35,12 +63,9 @@ export default function Profile() {
         fullname: user.fullname || "",
         email: user.email || "",
         phone: user.phone || "",
-        role: user.role || "",
-        isVerified: user.isVerified || "",
-        isDeleted: user.isDeleted || "",
       });
 
-      // Set ảnh đại diện nếu có
+      // Set avatar preview
       if (user.image) {
         setImagePreview(user.image);
       }
@@ -51,89 +76,94 @@ export default function Profile() {
     }
   }, [user, form]);
 
+  // Timer countdown
   useEffect(() => {
     if (timer <= 0) return;
     const id = setInterval(() => setTimer((t) => Math.max(0, t - 1)), 1000);
     return () => clearInterval(id);
   }, [timer]);
 
+  // ==================== HELPERS ====================
+
   const formatTime = (sec) => {
     if (!sec || sec <= 0) return "00:00";
     return `${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(sec % 60).padStart(2, "0")}`;
   };
 
-  // Xử lý chọn ảnh
+  // ==================== IMAGE HANDLERS ====================
+
   const handleImageSelect = (file) => {
-    const isImage = file.type.startsWith('image/');
+    // Validate file type
+    const isImage = file.type.startsWith("image/");
     if (!isImage) {
-      Swal.fire({
-        title: "Lỗi",
-        text: "Chỉ được chọn file ảnh!",
-        icon: "error",
-        confirmButtonText: "OK"
-      });
+      message.error("Chỉ được chọn file ảnh!");
       return false;
     }
 
+    // Validate file size (5MB)
     const isLt5M = file.size / 1024 / 1024 < 5;
     if (!isLt5M) {
-      Swal.fire({
-        title: "Lỗi",
-        text: "Ảnh phải nhỏ hơn 5MB!",
-        icon: "error",
-        confirmButtonText: "OK"
-      });
+      message.error("Ảnh phải nhỏ hơn 5MB!");
       return false;
     }
 
     setSelectedImage(file);
 
-    // Tạo preview
+    // Create preview
     const reader = new FileReader();
     reader.onload = (e) => {
       setImagePreview(e.target.result);
     };
     reader.readAsDataURL(file);
 
-    return false; // Ngăn không cho Upload component tự động upload
+    message.success(`Đã chọn: ${file.name}`);
+    return false; // Prevent auto upload
   };
 
-  // Xử lý save info cá nhân (có ảnh)
+  const removeImage = async () => {
+    try {
+      const values = form.getFieldsValue();
+
+      // ✅ Call API với removeImage option
+      const response = await updateProfile(values, {
+        removeImage: true,
+      });
+
+      console.log("✅ Image removed:", response);
+
+      // Update state
+      setUser(response.user);
+      localStorage.setItem("user", JSON.stringify(response.user));
+      setImagePreview(null);
+      setSelectedImage(null);
+
+      message.success("Đã xóa ảnh đại diện!");
+    } catch (err) {
+      console.error("❌ Remove image error:", err);
+      message.error(err.response?.data?.message || "Không thể xóa ảnh đại diện");
+    }
+  };
+
+  // ==================== PROFILE HANDLERS ====================
+
   const onFinishInfo = async (values) => {
     setSavingInfo(true);
     setInfoError(null);
 
     try {
-      let response;
+      console.log("📝 Updating profile...", { values, selectedImage: !!selectedImage });
 
-      // Nếu có ảnh mới, dùng FormData
-      if (selectedImage) {
-        const formData = new FormData();
+      // ✅ Call API với imageFile option nếu có ảnh
+      const response = await updateProfile(
+        {
+          fullname: values.fullname,
+          email: values.email,
+          phone: values.phone,
+        },
+        selectedImage ? { imageFile: selectedImage } : {}
+      );
 
-        // Thêm các trường dữ liệu
-        Object.keys(values).forEach(key => {
-          if (values[key] !== undefined && values[key] !== null && values[key] !== '') {
-            formData.append(key, values[key]);
-          }
-        });
-
-        // Thêm ảnh
-        formData.append('avatar', selectedImage);
-
-        response = await axios.put("http://localhost:9999/api/users/profile", formData, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'multipart/form-data'
-          },
-        });
-      } else {
-        // Không có ảnh, gửi JSON bình thường
-        response = await axios.put("http://localhost:9999/api/users/profile", values, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-      }
-
-      console.log("Cập nhật thông tin thành công:", response.data.user);
+      console.log("✅ Profile updated:", response);
 
       Swal.fire({
         title: "Cập nhật thành công",
@@ -143,20 +173,21 @@ export default function Profile() {
         timer: 3000,
       });
 
-      // Cập nhật user context và localStorage
-      setUser(response.data.user);
-      localStorage.setItem("user", JSON.stringify(response.data.user));
+      // Update context và localStorage
+      setUser(response.user);
+      localStorage.setItem("user", JSON.stringify(response.user));
 
-      // Reset selected image sau khi upload thành công
+      // Reset selected image
       setSelectedImage(null);
-
     } catch (err) {
-      console.error("Lỗi cập nhật thông tin:", err.response?.data?.error || err.response?.data?.message || err.message);
-      setInfoError(err.response?.data?.error || err.response?.data?.message || "Lỗi cập nhật thông tin");
+      console.error("❌ Update profile error:", err);
+      const errorMessage = err.response?.data?.message || err.message || "Lỗi cập nhật thông tin";
+
+      setInfoError(errorMessage);
 
       Swal.fire({
         title: "Lỗi cập nhật",
-        text: err.response?.data?.error || err.response?.data?.message || "Không thể cập nhật thông tin",
+        text: errorMessage,
         icon: "error",
         confirmButtonText: "OK",
         timer: 4000,
@@ -166,42 +197,8 @@ export default function Profile() {
     }
   };
 
-  // Xóa ảnh đại diện
-  const removeImage = async () => {
-    try {
-      const values = form.getFieldsValue();
-      const response = await axios.put("http://localhost:9999/api/users/profile",
-        { ...values, image: null }, // Gửi null để xóa ảnh
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+  // ==================== PASSWORD HANDLERS ====================
 
-      setUser(response.data.user);
-      localStorage.setItem("user", JSON.stringify(response.data.user));
-      setImagePreview(null);
-      setSelectedImage(null);
-
-      Swal.fire({
-        title: "Thành công",
-        text: "Đã xóa ảnh đại diện!",
-        icon: "success",
-        confirmButtonText: "OK",
-        timer: 3000,
-      });
-
-    } catch (err) {
-      console.error("Lỗi xóa ảnh:", err);
-      Swal.fire({
-        title: "Lỗi",
-        text: "Không thể xóa ảnh đại diện",
-        icon: "error",
-        confirmButtonText: "OK",
-      });
-    }
-  };
-
-  // 👈 Xử lý gửi OTP đổi pass (POST /password/send-otp)
   const sendOTP = async () => {
     if (timer > 0) return;
 
@@ -210,31 +207,37 @@ export default function Profile() {
 
     try {
       const email = form.getFieldValue("email");
-      if (!email) throw new Error("Cần email để gửi OTP, cập nhật thông tin trước");
+      if (!email) {
+        throw new Error("Cần email để gửi OTP, vui lòng cập nhật thông tin trước");
+      }
 
-      const res = await axios.post(
-        "http://localhost:9999/api/users/password/send-otp",
-        { email },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      console.log("📧 Sending OTP to:", email);
+
+      // ✅ Call API gửi OTP
+      const res = await sendPasswordOTP({ email });
+
+      console.log("✅ OTP sent:", res);
+
       setOtpSent(true);
       setTimer(60 * otpExpireMinutes);
 
       Swal.fire({
         title: "Gửi OTP thành công",
-        text: res.data?.message || "Kiểm tra email để lấy mã OTP (hết hạn sau 5 phút)",
+        text: res.message || "Kiểm tra email để lấy mã OTP (hết hạn sau 5 phút)",
         icon: "success",
         confirmButtonText: "OK",
         timer: 4000,
       });
     } catch (err) {
-      console.error("Lỗi gửi OTP:", err.response?.data?.message || err.message);
+      console.error("❌ Send OTP error:", err);
+      const errorMessage = err.response?.data?.message || err.message || "Không thể gửi OTP";
+
       setOtpSent(false);
-      setPassError(err.response?.data?.message || err.message || "Không thể gửi OTP");
+      setPassError(errorMessage);
 
       Swal.fire({
         title: "OTP chưa được gửi",
-        text: err.response?.data?.message || "Không thể gửi OTP",
+        text: errorMessage,
         icon: "warning",
         confirmButtonText: "OK",
         timer: 4000,
@@ -244,34 +247,45 @@ export default function Profile() {
     }
   };
 
-  // 👈 Xử lý đổi pass (POST /password/change, validate OTP + new pass match length 6)
   const onFinishPass = async (values) => {
     setChangingPass(true);
     setPassError(null);
+
     try {
+      // Validate password match
       if (values.newPassword !== values.confirmPassword) {
         Swal.fire({
           icon: "error",
           title: "Mật khẩu không khớp",
           text: "Vui lòng nhập lại cho đúng.",
         });
+        setChangingPass(false);
         return;
       }
+
+      // Validate password length
       if (values.newPassword.length < 6) {
         setPassError("Mật khẩu mới phải ít nhất 6 ký tự");
+        setChangingPass(false);
         return;
       }
-      const payload = {
+
+      console.log("🔐 Changing password...");
+
+      // ✅ Call API đổi mật khẩu
+      const response = await changePassword({
         password: values.newPassword,
         confirmPassword: values.confirmPassword,
         otp: values.otp,
-      };
-      const response = await axios.post("http://localhost:9999/api/users/password/change", payload, {
-        headers: { Authorization: `Bearer ${token}` },
       });
-      console.log("Đổi mật khẩu thành công:", response.data.message);
+
+      console.log("✅ Password changed:", response);
+
+      // Reset form
       passForm.resetFields();
       setOtpSent(false);
+      setTimer(0);
+
       Swal.fire({
         title: "Đổi mật khẩu thành công",
         text: "Mật khẩu đã được cập nhật!",
@@ -280,11 +294,14 @@ export default function Profile() {
         timer: 3000,
       });
     } catch (err) {
-      console.error("Lỗi đổi mật khẩu:", err.response?.data?.message || err.message);
-      setPassError(err.response?.data?.message || "Lỗi đổi mật khẩu");
+      console.error("❌ Change password error:", err);
+      const errorMessage = err.response?.data?.message || err.message || "Lỗi đổi mật khẩu";
+
+      setPassError(errorMessage);
+
       Swal.fire({
         title: "Lỗi đổi mật khẩu",
-        text: err.response?.data?.message || "Không thể đổi mật khẩu",
+        text: errorMessage,
         icon: "error",
         confirmButtonText: "OK",
         timer: 4000,
@@ -294,11 +311,17 @@ export default function Profile() {
     }
   };
 
+  // ==================== RENDER ====================
+
   if (!user) {
     return (
       <Layout>
         <div className="p-6 max-w-4xl mx-auto">
-          <Alert message="Lỗi" description="Chưa đăng nhập. Vui lòng đăng nhập để xem hồ sơ." type="error" />
+          <Alert
+            message="Lỗi"
+            description="Chưa đăng nhập. Vui lòng đăng nhập để xem hồ sơ."
+            type="error"
+          />
         </div>
       </Layout>
     );
@@ -321,6 +344,7 @@ export default function Profile() {
           </div>
         ) : (
           <>
+            {/* Error Alert */}
             {infoError && (
               <Alert
                 message="Lỗi"
@@ -333,11 +357,20 @@ export default function Profile() {
               />
             )}
 
-            {/* Form thông tin cá nhân */}
-            <Form form={form} name="profile-form" onFinish={onFinishInfo} layout="vertical" className="space-y-4 mb-8">
-              <Card title={<span className="font-semibold text-gray-800">Thông Tin Cá Nhân</span>} className="bg-white">
+            {/* Profile Form */}
+            <Form
+              form={form}
+              name="profile-form"
+              onFinish={onFinishInfo}
+              layout="vertical"
+              className="space-y-4 mb-8"
+            >
+              <Card
+                title={<span className="font-semibold text-gray-800">Thông Tin Cá Nhân</span>}
+                className="bg-white"
+              >
                 <Row gutter={24}>
-                  {/* Avatar Upload Section */}
+                  {/* Avatar Section */}
                   <Col span={24} className="mb-6">
                     <div className="flex items-center gap-6">
                       <div className="relative">
@@ -353,10 +386,9 @@ export default function Profile() {
                             danger
                             size="small"
                             onClick={removeImage}
-                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-lg"
-                          >
-                            <DeleteOutlined />
-                          </Button>
+                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-lg hover:bg-red-600"
+                            icon={<DeleteOutlined />}
+                          />
                         )}
                       </div>
                       <div className="flex-1">
@@ -370,16 +402,13 @@ export default function Profile() {
                             showUploadList={false}
                             accept="image/*"
                           >
-                            <Button
-                              icon={<CameraOutlined />}
-                              className="flex items-center gap-2"
-                            >
+                            <Button icon={<CameraOutlined />} className="flex items-center gap-2">
                               Chọn ảnh
                             </Button>
                           </Upload>
                         </div>
                         <p className="text-xs text-gray-500">
-                          Chọn ảnh JPG, PNG nhỏ hơn 5MB
+                          Chọn ảnh JPG, PNG nhỏ hơn 5MB. Ảnh sẽ được upload lên ImgBB
                         </p>
                         {selectedImage && (
                           <p className="text-sm text-green-600 mt-1">
@@ -421,7 +450,11 @@ export default function Profile() {
 
                   {/* Email */}
                   <Col span={8}>
-                    <Form.Item name="email" label="Email" rules={[{ type: "email", message: "Email không hợp lệ" }]}>
+                    <Form.Item
+                      name="email"
+                      label="Email"
+                      rules={[{ type: "email", message: "Email không hợp lệ" }]}
+                    >
                       <Input
                         placeholder="Email"
                         className="!py-2 !px-3 !text-lg rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-300"
@@ -429,13 +462,14 @@ export default function Profile() {
                     </Form.Item>
                   </Col>
 
-                  {/* Phone - Role - Verified */}
+                  {/* Phone */}
                   <Col xs={24} md={12} lg={8}>
                     <Form.Item name="phone" label={<span className="font-medium">Số điện thoại</span>}>
                       <Input placeholder="Số điện thoại" className="h-11 text-base rounded-lg" />
                     </Form.Item>
                   </Col>
 
+                  {/* Role */}
                   <Col xs={24} md={12} lg={8}>
                     <Form.Item label={<span className="font-medium">Vai trò</span>}>
                       <div className="flex items-center gap-2 h-11 px-3 bg-blue-50 rounded-lg border border-blue-200">
@@ -447,33 +481,46 @@ export default function Profile() {
                     </Form.Item>
                   </Col>
 
+                  {/* Email Verified */}
                   <Col xs={24} md={12} lg={8}>
                     <Form.Item label={<span className="font-medium">Xác thực Email</span>}>
                       <div
-                        className={`flex items-center gap-2 h-11 px-3 rounded-lg border ${user?.isVerified ? "bg-green-50 border-green-200" : "bg-yellow-50 border-yellow-200"
+                        className={`flex items-center gap-2 h-11 px-3 rounded-lg border ${user?.isVerified
+                          ? "bg-green-50 border-green-200"
+                          : "bg-yellow-50 border-yellow-200"
                           }`}
                       >
                         <span
-                          className={`w-3 h-3 rounded-full ${user?.isVerified ? "bg-green-500" : "bg-yellow-500"}`}
+                          className={`w-3 h-3 rounded-full ${user?.isVerified ? "bg-green-500" : "bg-yellow-500"
+                            }`}
                         ></span>
-                        <span className={`font-semibold ${user?.isVerified ? "text-green-700" : "text-yellow-700"}`}>
+                        <span
+                          className={`font-semibold ${user?.isVerified ? "text-green-700" : "text-yellow-700"
+                            }`}
+                        >
                           {user?.isVerified ? "Đã xác thực" : "Chưa xác thực"}
                         </span>
                       </div>
                     </Form.Item>
                   </Col>
 
-                  {/* Trạng thái tài khoản */}
+                  {/* Account Status */}
                   <Col xs={24} md={12} lg={8}>
                     <Form.Item label={<span className="font-medium">Trạng thái tài khoản</span>}>
                       <div
-                        className={`flex items-center gap-2 h-11 px-3 rounded-lg border ${user?.isDeleted ? "bg-red-50 border-red-200" : "bg-green-50 border-green-200"
+                        className={`flex items-center gap-2 h-11 px-3 rounded-lg border ${user?.isDeleted
+                          ? "bg-red-50 border-red-200"
+                          : "bg-green-50 border-green-200"
                           }`}
                       >
                         <span
-                          className={`w-3 h-3 rounded-full ${user?.isDeleted ? "bg-red-500" : "bg-green-500"}`}
+                          className={`w-3 h-3 rounded-full ${user?.isDeleted ? "bg-red-500" : "bg-green-500"
+                            }`}
                         ></span>
-                        <span className={`font-semibold ${user?.isDeleted ? "text-red-700" : "text-green-700"}`}>
+                        <span
+                          className={`font-semibold ${user?.isDeleted ? "text-red-700" : "text-green-700"
+                            }`}
+                        >
                           {user?.isDeleted ? "Đã bị khóa" : "Đang hoạt động"}
                         </span>
                       </div>
@@ -481,6 +528,7 @@ export default function Profile() {
                   </Col>
                 </Row>
 
+                {/* Submit Button */}
                 <div className="flex justify-center pt-4">
                   <Button
                     type="primary"
@@ -496,7 +544,7 @@ export default function Profile() {
               </Card>
             </Form>
 
-            {/* 👈 Section đổi mật khẩu */}
+            {/* Password Change Section */}
             <Card
               title={
                 <div className="flex items-center gap-2">
@@ -508,7 +556,7 @@ export default function Profile() {
               style={{ marginTop: "30px", backgroundColor: "white" }}
             >
               <div className="space-y-4">
-                {/* Lỗi riêng của pass, không còn dùng chung setError */}
+                {/* Password Error */}
                 {passError && (
                   <Alert
                     message="Lỗi"
@@ -520,6 +568,8 @@ export default function Profile() {
                     onClose={() => setPassError(null)}
                   />
                 )}
+
+                {/* Send OTP Button */}
                 <Button
                   type="dashed"
                   onClick={sendOTP}
@@ -527,7 +577,9 @@ export default function Profile() {
                   size="large"
                   disabled={timer > 0 || sendingOTP || changingPass}
                   loading={sendingOTP && !otpSent}
-                  className={`w-full py-3 text-lg rounded-lg border-dashed border-gray-300 ${timer > 0 ? "opacity-60 cursor-not-allowed" : "hover:border-blue-500 hover:bg-blue-50"
+                  className={`w-full py-3 text-lg rounded-lg border-dashed border-gray-300 ${timer > 0
+                    ? "opacity-60 cursor-not-allowed"
+                    : "hover:border-blue-500 hover:bg-blue-50"
                     }`}
                 >
                   {sendingOTP
@@ -539,6 +591,7 @@ export default function Profile() {
                         : "Gửi OTP đến Email"}
                 </Button>
 
+                {/* Password Form */}
                 {otpSent && (
                   <Form
                     form={passForm}
@@ -548,6 +601,7 @@ export default function Profile() {
                     className="space-y-4"
                   >
                     <Row gutter={24}>
+                      {/* OTP Input */}
                       <Col span={12}>
                         <Form.Item
                           name="otp"
@@ -561,6 +615,8 @@ export default function Profile() {
                           />
                         </Form.Item>
                       </Col>
+
+                      {/* New Password Input */}
                       <Col span={12}>
                         <Form.Item
                           name="newPassword"
@@ -579,6 +635,7 @@ export default function Profile() {
                     </Row>
 
                     <Row gutter={24}>
+                      {/* Confirm Password Input */}
                       <Col span={12}>
                         <Form.Item
                           name="confirmPassword"
@@ -593,6 +650,7 @@ export default function Profile() {
                       </Col>
                     </Row>
 
+                    {/* Submit Button */}
                     <div className="flex justify-end pt-4">
                       <Button
                         type="primary"
