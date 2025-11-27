@@ -32,36 +32,47 @@ import ProductGroupListScreen from "../screens/productGroup/ProductGroupListScre
 import ProfileScreen from "../screens/settings/ProfileScreen";
 import LoyaltyConfigScreen from "../screens/loyalty/LoyaltyConfigScreen";
 import TopCustomersScreen from "../screens/customer/TopCustomersScreen";
+import ReportsDashboardScreen from "../screens/reports/ReportsDashboardScreen";
+import RevenueReportScreen from "../screens/reports/RevenueReportScreen";
+import InventoryReportScreen from "../screens/reports/InventoryReportScreen";
+import TaxDeclarationScreen from "../screens/reports/TaxDeclarationScreen";
+import TopProductsScreen from "../screens/reports/TopProductsScreen";
+import ActivityLogScreen from "../screens/settings/ActivityLogScreen";
+import PaymentSettingsScreen from "../screens/settings/PaymentSettingsScreen";
+import NotificationScreen from "../screens/settings/NotificationScreen";
+import FileManagerScreen from "../screens/settings/FileManagerScreen";
+import PricingScreen from "../screens/settings/PricingScreen";
+import SubscriptionScreen from "../screens/settings/SubscriptionScreen";
 
 // ========== TYPES ==========
 export type RootDrawerParamList = {
-  Dashboard: undefined;
-  SelectStore: undefined;
-  StoreSettings: undefined;
-  ProductList: undefined;
-  Suppliers: undefined;
-  ProductGroups: undefined;
-  PosOrders: undefined;
-  OrderList: undefined;
-  OrderReconciliation: undefined;
-  CustomerList: undefined;
-  TopCustomers: undefined;
-  Employees: undefined;
-  EmployeeSchedule: undefined;
-  LoyaltyConfig: undefined;
-  ReportsDashboard: undefined;
-  RevenueReport: undefined;
-  InventoryReport: undefined;
-  TaxReport: undefined;
-  TopProductsReport: undefined;
-  ProfileScreen: undefined;
-  Subscription: undefined;
-  SubscriptionPricing: undefined;
-  ActivityLog: undefined;
-  PaymentMethod: undefined;
-  NotificationSettings: undefined;
-  ExportData: undefined;
-  FileManager: undefined;
+  Dashboard: any;
+  SelectStore: any;
+  StoreSettings: any;
+  ProductList: any;
+  Suppliers: any;
+  ProductGroups: any;
+  PosOrders: any;
+  OrderList: any;
+  OrderReconciliation: any;
+  CustomerList: any;
+  TopCustomers: any;
+  Employees: any;
+  EmployeeSchedule: any;
+  LoyaltyConfig: any;
+  ReportsDashboard: any;
+  RevenueReport: any;
+  InventoryReport: any;
+  TaxReport: any;
+  TopProductsReport: any;
+  ProfileScreen: any;
+  Subscription: any;
+  SubscriptionPricing: any;
+  ActivityLog: any;
+  PaymentMethod: any;
+  NotificationSettings: any;
+  ExportData: any;
+  FileManager: any;
 };
 
 const Drawer = createDrawerNavigator<RootDrawerParamList>();
@@ -104,31 +115,14 @@ const EmployeesScreen = () => <PlaceholderScreen title="Nhân viên" />;
 const EmployeeScheduleScreen = () => (
   <PlaceholderScreen title="Lịch làm việc" />
 );
-// const LoyaltyConfigScreen = () => (
-//   <PlaceholderScreen title="Cấu hình tích điểm" />
+
+// const SubscriptionScreen = () => <PlaceholderScreen title="Gói hiện tại" />;
+// const SubscriptionPricingScreen = () => (
+//   <PlaceholderScreen title="Nâng cấp Premium" />
 // );
-const ReportsDashboardScreen = () => (
-  <PlaceholderScreen title="Báo cáo tổng quan" />
-);
-const RevenueReportScreen = () => <PlaceholderScreen title="BC doanh thu" />;
-const InventoryReportScreen = () => <PlaceholderScreen title="BC tồn kho" />;
-const TaxReportScreen = () => <PlaceholderScreen title="Kê khai thuế" />;
-const TopProductsReportScreen = () => (
-  <PlaceholderScreen title="Top sản phẩm" />
-);
-const SubscriptionScreen = () => <PlaceholderScreen title="Gói hiện tại" />;
-const SubscriptionPricingScreen = () => (
-  <PlaceholderScreen title="Nâng cấp Premium" />
-);
-const ActivityLogScreen = () => <PlaceholderScreen title="Nhật ký hoạt động" />;
-const PaymentMethodScreen = () => (
-  <PlaceholderScreen title="Thiết lập thanh toán" />
-);
-const NotificationSettingsScreen = () => (
-  <PlaceholderScreen title="Thông báo" />
-);
+
 const ExportDataScreen = () => <PlaceholderScreen title="Xuất dữ liệu" />;
-const FileManagerScreen = () => <PlaceholderScreen title="Quản lý file" />;
+// const FileManagerScreen = () => <PlaceholderScreen title="Quản lý file" />;
 
 // ========== MENU TREE ==========
 interface MenuItem {
@@ -750,15 +744,12 @@ export default function AppNavigator(): JSX.Element {
       />
       <Drawer.Screen
         name="TaxReport"
-        component={withPermission(TaxReportScreen, "tax:preview")}
+        component={withPermission(TaxDeclarationScreen, "tax:preview")}
         options={{ title: "Thuế" }}
       />
       <Drawer.Screen
         name="TopProductsReport"
-        component={withPermission(
-          TopProductsReportScreen,
-          "reports:top-products"
-        )}
+        component={withPermission(TopProductsScreen, "reports:top-products")}
         options={{ title: "Top SP" }}
       />
       <Drawer.Screen
@@ -773,10 +764,7 @@ export default function AppNavigator(): JSX.Element {
       />
       <Drawer.Screen
         name="SubscriptionPricing"
-        component={withPermission(
-          SubscriptionPricingScreen,
-          "subscription:view"
-        )}
+        component={withPermission(PricingScreen, "subscription:view")}
         options={{ title: "Nâng cấp" }}
       />
       <Drawer.Screen
@@ -787,17 +775,14 @@ export default function AppNavigator(): JSX.Element {
       <Drawer.Screen
         name="PaymentMethod"
         component={withPermission(
-          PaymentMethodScreen,
+          PaymentSettingsScreen,
           "settings:payment-method"
         )}
         options={{ title: "Thanh toán" }}
       />
       <Drawer.Screen
         name="NotificationSettings"
-        component={withPermission(
-          NotificationSettingsScreen,
-          "notifications:view"
-        )}
+        component={withPermission(NotificationScreen, "notifications:view")}
         options={{ title: "Thông báo" }}
       />
       <Drawer.Screen
