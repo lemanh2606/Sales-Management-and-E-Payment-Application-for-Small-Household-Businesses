@@ -49,7 +49,7 @@ export const AuthProvider = ({ children }) => {
                 setToken(storedToken);
             }
 
-            setLoading(false); // ✅ Chỉ khi init xong mới check quyền
+            setLoading(false);
         };
 
         initAuth();
@@ -65,6 +65,39 @@ export const AuthProvider = ({ children }) => {
 
         if (store) localStorage.setItem("currentStore", JSON.stringify(store));
         else localStorage.removeItem("currentStore");
+    };
+
+    // ✅ LOGOUT FUNCTION - Clear all auth data
+    const logout = async () => {
+        console.log("🚪 Logging out...");
+
+        // Clear state
+        setUser(null);
+        setToken(null);
+        setCurrentStore(null);
+        updateManagerSubscriptionExpired(false);
+
+        // Clear localStorage
+        localStorage.removeItem("user");
+        localStorage.removeItem("token");
+        localStorage.removeItem("currentStore");
+        localStorage.removeItem(managerSubscriptionKey);
+
+        // Clear axios headers
+        delete axios.defaults.headers.common["Authorization"];
+        if (apiClient && apiClient.defaults) {
+            delete apiClient.defaults.headers.common["Authorization"];
+        }
+
+        // Optional: Call logout API
+        // try {
+        //     await apiClient.post("/users/logout");
+        // } catch (e) {
+        //     console.warn("Logout API failed (ignored):", e?.message || e);
+        // }
+
+        // Navigate to login
+        navigate("/login", { replace: true });
     };
 
     // Set bearer header for axios & apiClient
@@ -84,7 +117,7 @@ export const AuthProvider = ({ children }) => {
         };
         setAuthHeader(token);
 
-        // Axios interceptor for automatic refresh token
+        // ✅ AXIOS INTERCEPTOR - Auto refresh token or logout
         const interceptor = apiClient.interceptors.response.use(
             (response) => response,
             async (error) => {
@@ -95,7 +128,7 @@ export const AuthProvider = ({ children }) => {
                     return Promise.reject(error);
                 }
 
-                // 🛑 Bỏ qua refresh-token cho các endpoint công khai (login, register, forgot password...)
+                // 🛑 Bỏ qua refresh-token cho các endpoint công khai
                 const isPublicAuthRequest = (() => {
                     if (!originalRequest?.url) return false;
                     const skipPaths = [
@@ -108,10 +141,12 @@ export const AuthProvider = ({ children }) => {
                         "/users/password/send-otp",
                         "/users/password/change",
                         "/users/refresh-token",
+                        "/users/resend-register-otp",
                     ];
                     return skipPaths.some((path) => originalRequest.url.includes(path));
                 })();
 
+                // ✅ HANDLE 401 - Token expired or invalid
                 if (
                     !isPublicAuthRequest &&
                     error.response &&
@@ -119,19 +154,62 @@ export const AuthProvider = ({ children }) => {
                     !originalRequest._retry
                 ) {
                     originalRequest._retry = true;
+
+                    console.warn("⚠️ 401 Unauthorized - Attempting token refresh...");
+
                     try {
+                        // Try to refresh token
                         const data = await userApi.refreshToken();
+
+                        console.log("✅ Token refreshed successfully");
+
+                        // Update token
                         setToken(data.token);
                         persist(user, data.token, currentStore);
-                        // Gắn lại header mới rồi gọi lại request cũ
+
+                        // Update headers
                         apiClient.defaults.headers.common["Authorization"] = `Bearer ${data.token}`;
                         originalRequest.headers["Authorization"] = `Bearer ${data.token}`;
+
+                        // Retry original request
                         return apiClient(originalRequest);
-                    } catch (e) {
-                        console.error("Refresh token failed:", e);
-                        logout(); // nếu refresh không được thì logout
+                    } catch (refreshError) {
+                        console.error("❌ Token refresh failed:", refreshError);
+
+                        // ✅ AUTO LOGOUT - Token refresh failed
+                        console.log("🔒 Auto logout due to invalid/expired token");
+                        logout();
+
+                        return Promise.reject(refreshError);
                     }
                 }
+
+                // ✅ HANDLE 403 - Forbidden (could be expired subscription or invalid token)
+                if (
+                    !isPublicAuthRequest &&
+                    error.response &&
+                    error.response.status === 403
+                ) {
+                    const errorData = error.response.data || {};
+
+                    // Check if it's a token-related 403
+                    const isTokenError =
+                        errorData.message?.toLowerCase().includes("token") ||
+                        errorData.message?.toLowerCase().includes("unauthorized") ||
+                        errorData.message?.toLowerCase().includes("invalid token") ||
+                        errorData.message?.toLowerCase().includes("jwt");
+
+                    if (isTokenError) {
+                        console.error("❌ 403 Forbidden - Invalid token");
+                        console.log("🔒 Auto logout due to token error");
+                        logout();
+                        return Promise.reject(error);
+                    }
+
+                    // Otherwise, it might be subscription-related, let it pass
+                    console.warn("⚠️ 403 Forbidden - Not token related:", errorData.message);
+                }
+
                 return Promise.reject(error);
             }
         );
@@ -142,8 +220,6 @@ export const AuthProvider = ({ children }) => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [token, user, currentStore]);
 
-    // 👉 FIX CẬP NHẬT: Giảm block từ ensureStore(), navigate sớm hơn cho MANAGER nếu chưa có store
-    // Thêm log để debug (xóa sau)
     const login = async (userData, tokenData) => {
         setLoading(true);
 
@@ -153,75 +229,63 @@ export const AuthProvider = ({ children }) => {
             setToken(tokenData);
 
             // Nếu user là STAFF và có currentStore, giữ lại store đó
-            // Các role khác sẽ phải chọn lại
             const initialStore = (userData?.role === "STAFF" && currentStore) ? currentStore : null;
             persist(userData, tokenData, initialStore);
 
-            // Try to prepare store info but do NOT block redirect for STAFF
+            // Try to prepare store info
             let resolvedStore = null;
-            let hasMultipleStores = false;
             try {
                 const res = await ensureStore();
                 resolvedStore =
                     res?.store || res?.currentStore || (res?.stores && res.stores[0]) || null;
-                hasMultipleStores = res?.stores && Array.isArray(res.stores) && res.stores.length > 1;
 
                 if (resolvedStore) {
                     setCurrentStore(resolvedStore);
-                    // Dù là role nào, nếu ensureStore() tìm thấy store,
-                    // ta sẽ cập nhật lại localStorage với store mới/chuẩn.
                     persist(userData, tokenData, resolvedStore);
                 }
             } catch (err) {
-                // Không crash app nếu ensureStore lỗi — chỉ log để debug
                 console.warn("ensureStore error in login (ignored):", err);
             }
 
-            // 👉 FIX: Chờ 1 tick để state update (React batch) trước khi navigate
-            await new Promise(resolve => setTimeout(resolve, 100)); // TĂNG LÊN 100ms để settle tốt hơn (test 0 nếu nhanh quá)
+            // Wait for state update
+            await new Promise(resolve => setTimeout(resolve, 100));
 
             // Navigate based on role
-            // Yêu cầu: nếu là STAFF -> check subscription của Manager trước
             if (userData?.role === "STAFF") {
-                // Check subscription bằng cách gọi một API bất kỳ có middleware
                 try {
                     // Gọi API để trigger middleware check
-                    const response = await fetch('/api/products?limit=1', {
-                        headers: {
-                            'Authorization': `Bearer ${responseToken}`
-                        }
+                    const response = await apiClient.get('/products', {
+                        params: { limit: 1 }
                     });
-                    
-                    if (response.status === 403) {
-                        const errorData = await response.json();
-                        
-                        // Check nếu là lỗi Manager expired - component sẽ hiện modal
+
+                    navigate("/dashboard");
+                } catch (err) {
+                    if (err.response?.status === 403) {
+                        const errorData = err.response.data;
+
+                        // Check nếu là lỗi Manager expired
                         if (errorData.manager_expired || errorData.is_staff) {
-                            // Vẫn navigate để component được mount
                             navigate("/dashboard");
                             return;
                         }
                     }
-                    
-                    navigate("/dashboard");
-                } catch (err) {
+
                     console.error('STAFF subscription check error:', err);
                     navigate("/dashboard");
                 }
                 return;
             }
 
-            // Manager và các role khác giữ hành vi cũ
             if (userData?.role === "MANAGER") {
-                // � CHECK SUBSCRIPTION TRƯỚC KHI REDIRECT
+                // Check subscription
                 try {
                     const subResponse = await subscriptionApi.getCurrentSubscription();
                     const subData = subResponse.data || subResponse;
-                    
-                    const isExpired = 
-                        subData.status === "EXPIRED" || 
+
+                    const isExpired =
+                        subData.status === "EXPIRED" ||
                         (subData.status === "TRIAL" && subData.trial && !subData.trial.is_active);
-                    
+
                     if (isExpired) {
                         updateManagerSubscriptionExpired(true);
                     } else {
@@ -229,13 +293,11 @@ export const AuthProvider = ({ children }) => {
                     }
                 } catch (subErr) {
                     console.warn("Subscription check error in login (ignored):", subErr);
-                    // Nếu lỗi 403, coi như expired
                     if (subErr.response?.status === 403) {
                         updateManagerSubscriptionExpired(true);
                     }
                 }
-                
-                // Manager LUÔN vào select-store để chọn cửa hàng
+
                 navigate("/select-store");
                 return;
             }
@@ -250,48 +312,25 @@ export const AuthProvider = ({ children }) => {
             persist(null, null, null);
             navigate("/login");
         } finally {
-            // Tắt loading sau navigate
             setTimeout(() => {
                 setLoading(false);
-            }, 200); // 200ms để user thấy Spin tắt sau navigate
+            }, 200);
         }
-    };
-
-    const logout = async () => {
-        setUser(null);
-        setToken(null);
-        setCurrentStore(null);
-        updateManagerSubscriptionExpired(false);
-        localStorage.removeItem("user");
-        localStorage.removeItem("token");
-        localStorage.removeItem("currentStore");
-        delete axios.defaults.headers.common["Authorization"];
-        if (apiClient && apiClient.defaults) {
-            delete apiClient.defaults.headers.common["Authorization"];
-        }
-        // (nếu sau cần invalidate server, thêm lại sau)
-        // try {
-        //     await apiClient.post("/users/logout");
-        // } catch (e) {
-        //     console.warn("Logout API failed (ignored):", e?.message || e);
-        // }
-        navigate("/login");
     };
 
     return (
-        // Thêm set user để nó cập nhật thông tin mới nhất nếu có Save gì đó trong Profile.jsx
-        <AuthContext.Provider value={{ 
-            user, 
-            setUser, 
-            token, 
-            currentStore, 
-            setCurrentStore, 
-            login, 
-            logout, 
+        <AuthContext.Provider value={{
+            user,
+            setUser,
+            token,
+            currentStore,
+            setCurrentStore,
+            login,
+            logout,
             loading,
             managerSubscriptionExpired,
             setManagerSubscriptionExpired: updateManagerSubscriptionExpired
-        }}> 
+        }}>
             {children}
         </AuthContext.Provider>
     );
