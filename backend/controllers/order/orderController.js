@@ -133,7 +133,9 @@ const createOrder = async (req, res) => {
         // === BƯỚC 1: LẤY NGÂN HÀNG MẶC ĐỊNH CỦA CHỦ CỬA HÀNG ===
         const paymentConfig = await StorePaymentConfig.findOne({ store: storeId });
         if (!paymentConfig || paymentConfig.banks.length === 0) {
-          throw new Error("Chủ cửa hàng chưa liên kết tài khoản ngân hàng nào. Vui lòng vào Cài đặt → Thiết lập cổng thanh toán → Liên kết với ngân hàng .");
+          throw new Error(
+            "Chủ cửa hàng chưa liên kết tài khoản ngân hàng nào. Vui lòng vào Cài đặt → Thiết lập cổng thanh toán → Liên kết với ngân hàng ."
+          );
         }
 
         defaultBank = paymentConfig.banks.find((b) => b.isDefault); // <- thêm || paymentConfig.banks[0] để lấy bank đầu danh sách nhưng chắc thôi
@@ -844,7 +846,7 @@ const getTopSellingProducts = async (req, res) => {
   }
 };
 
-//api/orders/top-customers?limit=5&range=thisMonth&storeId=68e81dbffae46c6d9fe2e895
+//http://localhost:9999/api/orders/top-customers?limit=5&range=thisMonth&storeId=68f8f19a4d723cad0bda9fa5
 const getTopFrequentCustomers = async (req, res) => {
   try {
     const { limit = 10, storeId, range } = req.query;
@@ -902,6 +904,7 @@ const getTopFrequentCustomers = async (req, res) => {
         },
       },
 
+      { $match: { _id: { $ne: null } } }, // ← Loại bỏ hoàn toàn khách lẻ
       { $sort: { totalAmount: -1 } },
       { $limit: parseInt(limit) },
 
