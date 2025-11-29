@@ -12,6 +12,21 @@ const {
   sanitizeData,
 } = require("../../utils/fileImport");
 
+function resolveStoreId(req) {
+  const candidate =
+    req.store?._id ||
+    req.store?.id ||
+    req.params?.storeId ||
+    req.query?.storeId ||
+    req.query?.shopId ||
+    req.body?.storeId ||
+    req.body?.shopId ||
+    req.user?.current_store ||
+    null;
+
+  return candidate ? candidate.toString() : null;
+}
+
 // POST /api/customers - Tạo mới khách hàng
 // Body: { name, phone, address?, note?, storeId? }
 const createCustomer = async (req, res) => {
@@ -111,10 +126,16 @@ const searchCustomers = async (req, res) => {
       return res.status(400).json({ message: "Thiếu query tìm kiếm" });
     }
 
+    const storeId = resolveStoreId(req);
+    if (!storeId) {
+      return res.status(400).json({ message: "Thiếu storeId để tìm khách hàng" });
+    }
+
     console.log(`Query search: "${query}", limit: ${limit}`); // Log query để debug
 
     // Search exact phone ($eq) + fuzzy name ($regex 'i'), filter isDeleted: { $ne: true } match missing field
     const searchQuery = {
+      storeId,
       isDeleted: { $ne: true }, // Ko true (bao gồm missing field default false)
     };
     if (query.length >= 10) {
@@ -136,11 +157,13 @@ const searchCustomers = async (req, res) => {
 
     // Log DB count để debug (tổng active customers)
     const totalActive = await Customer.countDocuments({
+      storeId,
       isDeleted: { $ne: true },
     }); // Ko true (missing ok)
     // Log raw document match phone exact để debug
     const rawPhoneMatch = await Customer.findOne({
       phone: query.trim(),
+      storeId,
       isDeleted: { $ne: true },
     }).lean();
     console.log(
