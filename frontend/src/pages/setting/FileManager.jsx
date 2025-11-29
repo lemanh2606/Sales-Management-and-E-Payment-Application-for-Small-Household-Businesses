@@ -42,7 +42,7 @@ import axios from "axios";
 import dayjs from "dayjs";
 import Layout from "../../components/Layout";
 import Swal from "sweetalert2";
-
+const apiUrl = import.meta.env.VITE_API_URL;
 const { Dragger } = Upload;
 const { Text, Title } = Typography;
 const { Option } = Select;
@@ -93,7 +93,7 @@ const FileManager = () => {
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const url = `http://localhost:9999/api/files/store/${currentStore._id}`;
+      const url = `${apiUrl}/files/store/${currentStore._id}`;
       const res = await axios.get(url, {
         headers: { Authorization: `Bearer ${token}`, "Cache-Control": "no-cache", Pragma: "no-cache" },
       });
@@ -179,7 +179,7 @@ const FileManager = () => {
 
       try {
         const token = localStorage.getItem("token");
-        const res = await axios.post(`http://localhost:9999/api/files/upload?storeId=${currentStore._id}`, formData, {
+        const res = await axios.post(`${apiUrl}/files/upload?storeId=${currentStore._id}`, formData, {
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "multipart/form-data",
@@ -270,7 +270,7 @@ const FileManager = () => {
         const token = localStorage.getItem("token");
         await Promise.all(
           selectedKeys.map((id) =>
-            axios.delete(`http://localhost:9999/api/files/${id}?storeId=${currentStore._id}`, {
+            axios.delete(`${apiUrl}/files/${id}?storeId=${currentStore._id}`, {
               headers: { Authorization: `Bearer ${token}` },
             })
           )
@@ -448,7 +448,7 @@ const FileManager = () => {
             onConfirm={async () => {
               try {
                 const token = localStorage.getItem("token");
-                await axios.delete(`http://localhost:9999/api/files/${record._id}?storeId=${currentStore._id}`, {
+                await axios.delete(`${apiUrl}/files/${record._id}?storeId=${currentStore._id}`, {
                   headers: { Authorization: `Bearer ${token}` },
                 });
                 Swal.fire({

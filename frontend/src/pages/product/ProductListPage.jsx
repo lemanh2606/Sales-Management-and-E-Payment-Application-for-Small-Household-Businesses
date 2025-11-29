@@ -47,7 +47,7 @@ import { getProductsByStore, importProductsByExcel } from "../../api/productApi"
 import * as XLSX from "xlsx";
 
 const { Title, Text } = Typography;
-
+const apiUrl = import.meta.env.VITE_API_URL;
 export default function ProductListPage() {
   // ✅ Only useNotification
   const [api, contextHolder] = notification.useNotification();
@@ -102,7 +102,7 @@ export default function ProductListPage() {
   const [downloadingTemplate, setDownloadingTemplate] = useState(false);
 
   const fileInputRef = useRef(null);
-  const apiBaseUrl = import.meta.env.VITE_API_URL || "http://localhost:9999/api";
+  const apiBaseUrl = import.meta.env.VITE_API_URL || "${apiUrl}";
 
   const handleDownloadTemplate = async () => {
     if (!token) {
@@ -116,7 +116,7 @@ export default function ProductListPage() {
 
     try {
       setDownloadingTemplate(true);
-      const response = await fetch(`${apiBaseUrl}/products/template/download?format=excel`, {
+      const response = await fetch(`${apiUrl}/products/template/download?format=excel`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },

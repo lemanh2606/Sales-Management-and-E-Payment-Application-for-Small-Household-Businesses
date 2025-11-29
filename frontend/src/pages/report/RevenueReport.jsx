@@ -25,7 +25,7 @@ import Layout from "../../components/Layout";
 dayjs.locale("vi");
 
 const { Option } = Select;
-
+const apiUrl = import.meta.env.VITE_API_URL;
 const RevenueReport = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -69,14 +69,14 @@ const RevenueReport = () => {
 
       // 1. Tổng doanh thu
       const totalRes = await axios.get(
-        `http://localhost:9999/api/revenues?storeId=${currentStore._id}&periodType=${periodType}&periodKey=${periodKey}`,
+        `${apiUrl}/revenues?storeId=${currentStore._id}&periodType=${periodType}&periodKey=${periodKey}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setSummary(totalRes.data.revenue);
 
       // 2. Doanh thu nhân viên
       const empRes = await axios.get(
-        `http://localhost:9999/api/revenues/employee?storeId=${currentStore._id}&periodType=${periodType}&periodKey=${periodKey}`,
+        `${apiUrl}/revenues/employee?storeId=${currentStore._id}&periodType=${periodType}&periodKey=${periodKey}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const data = empRes.data.data || [];
@@ -129,7 +129,7 @@ const RevenueReport = () => {
 
     try {
       const token = localStorage.getItem("token");
-      const url = `http://localhost:9999/api/revenues/export?storeId=${currentStore._id}&periodType=${periodType}&periodKey=${periodKey}&format=${format}&type=${type}`;
+      const url = `${apiUrl}/revenues/export?storeId=${currentStore._id}&periodType=${periodType}&periodKey=${periodKey}&format=${format}&type=${type}`;
       const res = await axios.get(url, {
         headers: { Authorization: `Bearer ${token}` },
         responseType: "blob",

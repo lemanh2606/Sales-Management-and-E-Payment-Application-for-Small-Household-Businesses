@@ -41,8 +41,8 @@ const { RangePicker } = DatePicker;
 const { Option } = Select;
 const { Title, Text } = Typography;
 const { TextArea } = Input;
-
-const API_BASE = "http://localhost:9999/api";
+const apiUrl = import.meta.env.VITE_API_URL;
+const API_BASE = `${apiUrl}`;
 
 // ==================== INTERFACES ====================
 

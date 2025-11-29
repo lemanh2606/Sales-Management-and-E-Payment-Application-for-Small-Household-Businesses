@@ -9,8 +9,8 @@ import Layout from "../../components/Layout";
 
 const { TabPane } = Tabs;
 const { Search } = Input;
-
-const API_BASE = "http://localhost:9999/api";
+const apiUrl = import.meta.env.VITE_API_URL;
+const API_BASE = `${apiUrl}`;
 
 export default function EmployeesPage() {
   const currentStore = JSON.parse(localStorage.getItem("currentStore") || "{}");

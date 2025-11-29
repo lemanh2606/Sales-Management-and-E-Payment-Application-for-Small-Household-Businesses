@@ -31,6 +31,9 @@ import axios from "axios";
 import dayjs from "dayjs";
 import Layout from "../../components/Layout";
 
+
+const apiUrl = import.meta.env.VITE_API_URL;
+
 const { Option } = Select;
 const { Text, Title } = Typography;
 const { Search } = Input;
@@ -85,7 +88,7 @@ const TopCustomer = () => {
       params.append("range", range);
       if (limit) params.append("limit", limit);
 
-      const url = `http://localhost:9999/api/orders/top-customers?${params.toString()}`;
+      const url = `${apiUrl}/api/orders/top-customers?${params.toString()}`;
       const res = await axios.get(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -132,7 +135,7 @@ const TopCustomer = () => {
       params.append("range", range);
       params.append("format", format);
 
-      const url = `http://localhost:9999/api/orders/top-customers/export?${params.toString()}`;
+      const url = `${apiUrl}/orders/top-customers/export?${params.toString()}`;
       const res = await axios.get(url, {
         headers: { Authorization: `Bearer ${token}` },
         responseType: "blob",
@@ -424,11 +427,10 @@ const TopCustomer = () => {
                 emptyText: (
                   <div style={{ color: "#f45a07f7" }}>
                     {hasFetched
-                      ? `${
-                          rangeTextMap[range]
-                            ? rangeTextMap[range][0].toUpperCase() + rangeTextMap[range].slice(1)
-                            : range
-                        } chưa có dữ liệu nào!`
+                      ? `${rangeTextMap[range]
+                        ? rangeTextMap[range][0].toUpperCase() + rangeTextMap[range].slice(1)
+                        : range
+                      } chưa có dữ liệu nào!`
                       : "Chưa có dữ liệu. Hãy chọn kỳ thống kê và nhấn 'Xem kết quả' để tải!"}
                   </div>
                 ),

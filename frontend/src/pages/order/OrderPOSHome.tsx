@@ -1,5 +1,11 @@
 // src/pages/order/OrderPOSHome.tsx
-import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+} from "react";
 import {
   Table,
   Input,
@@ -47,9 +53,9 @@ const { Option } = Select;
 const { Search } = Input;
 const { TabPane } = Tabs;
 const { Countdown } = Statistic;
-
-const API_BASE = "http://localhost:9999/api";
-const SOCKET_URL = "http://localhost:9999";
+const apiUrl = import.meta.env.VITE_API_URL;
+const API_BASE = `${apiUrl}`;
+const SOCKET_URL = `${apiUrl}`;
 
 interface Product {
   _id: string;
@@ -197,7 +203,7 @@ const OrderPOSHome: React.FC = () => {
     const s = io(SOCKET_URL, { auth: { token } });
     setSocket(s);
     s.on("payment_success", (data) => {
-      setPendingOrderId(data.orderId);// luôn dùng orderId Mongo chứ không dùng ref
+      setPendingOrderId(data.orderId); // luôn dùng orderId Mongo chứ không dùng ref
       setBillModalOpen(true);
       // Thêm reset QR ngay lập tức
       setQrImageUrl(null);
@@ -219,7 +225,10 @@ const OrderPOSHome: React.FC = () => {
   // Load danh sách nhân viên
   const loadEmployees = async () => {
     try {
-      const res = await axios.get(`${API_BASE}/stores/${storeId}/employees?deleted=false`, { headers });
+      const res = await axios.get(
+        `${API_BASE}/stores/${storeId}/employees?deleted=false`,
+        { headers }
+      );
       setEmployees(res.data.employees || []);
     } catch (err) {
       Swal.fire({
@@ -236,7 +245,9 @@ const OrderPOSHome: React.FC = () => {
   // Load cài đặt loyalty
   const loadLoyaltySetting = async () => {
     try {
-      const res = await axios.get(`${API_BASE}/loyaltys/config/${storeId}`, { headers });
+      const res = await axios.get(`${API_BASE}/loyaltys/config/${storeId}`, {
+        headers,
+      });
       if (res.data.isConfigured && res.data.config.isActive) {
         setLoyaltySetting(res.data.config);
       } else {
@@ -257,7 +268,9 @@ const OrderPOSHome: React.FC = () => {
       }
       try {
         const res = await axios.get(
-          `${API_BASE}/products/search?query=${encodeURIComponent(query)}&storeId=${storeId}`,
+          `${API_BASE}/products/search?query=${encodeURIComponent(
+            query
+          )}&storeId=${storeId}`,
           { headers }
         );
         setSearchedProducts(res.data.products || []);
@@ -288,7 +301,11 @@ const OrderPOSHome: React.FC = () => {
         const newQty = existing.quantity + 1;
         tab.cart = tab.cart.map((item) =>
           item.productId === product._id
-            ? { ...item, quantity: newQty, subtotal: (newQty * priceNum).toFixed(2) }
+            ? {
+                ...item,
+                quantity: newQty,
+                subtotal: (newQty * priceNum).toFixed(2),
+              }
             : item
         );
       } else {
@@ -321,7 +338,9 @@ const OrderPOSHome: React.FC = () => {
         tab.cart = tab.cart.filter((i) => i.productId !== id);
       } else {
         tab.cart = tab.cart.map((i) =>
-          i.productId === id ? { ...i, quantity: qty, subtotal: (qty * priceNum).toFixed(2) } : i
+          i.productId === id
+            ? { ...i, quantity: qty, subtotal: (qty * priceNum).toFixed(2) }
+            : i
         );
       }
     });
@@ -346,7 +365,10 @@ const OrderPOSHome: React.FC = () => {
   );
 
   // Cập nhật thông tin tab đơn hàng
-  const updateOrderTab = (updater: (tab: OrderTab) => void, key = activeTab) => {
+  const updateOrderTab = (
+    updater: (tab: OrderTab) => void,
+    key = activeTab
+  ) => {
     setOrders((prev) =>
       prev.map((tab) => {
         if (tab.key !== key) return tab;
@@ -390,12 +412,23 @@ const OrderPOSHome: React.FC = () => {
 
   // Tính toán các giá trị thanh toán
   const subtotal = useMemo(
-    () => currentTab.cart.reduce((sum, item) => sum + getPriceNumber(item.price) * item.quantity, 0),
+    () =>
+      currentTab.cart.reduce(
+        (sum, item) => sum + getPriceNumber(item.price) * item.quantity,
+        0
+      ),
     [currentTab.cart]
   );
   const discount = useMemo(
-    () => (currentTab.usedPointsEnabled ? currentTab.usedPoints * (loyaltySetting?.vndPerPoint || 0) : 0),
-    [currentTab.usedPoints, currentTab.usedPointsEnabled, loyaltySetting?.vndPerPoint]
+    () =>
+      currentTab.usedPointsEnabled
+        ? currentTab.usedPoints * (loyaltySetting?.vndPerPoint || 0)
+        : 0,
+    [
+      currentTab.usedPoints,
+      currentTab.usedPointsEnabled,
+      loyaltySetting?.vndPerPoint,
+    ]
   );
   const beforeTax = Math.max(subtotal - discount, 0);
   const vatAmount = currentTab.isVAT ? beforeTax * 0.1 : 0;
@@ -420,7 +453,10 @@ const OrderPOSHome: React.FC = () => {
 
     setLoading(true);
     try {
-      const items = currentTab.cart.map((item) => ({ productId: item.productId, quantity: item.quantity }));
+      const items = currentTab.cart.map((item) => ({
+        productId: item.productId,
+        quantity: item.quantity,
+      }));
 
       // Build payload conditionally
       const payload: any = {
@@ -440,23 +476,37 @@ const OrderPOSHome: React.FC = () => {
       }
 
       // Chỉ gửi usedPoints khi user bật tính năng và có điểm > 0
-      if (currentTab.usedPointsEnabled && currentTab.usedPoints && currentTab.usedPoints > 0) {
+      if (
+        currentTab.usedPointsEnabled &&
+        currentTab.usedPoints &&
+        currentTab.usedPoints > 0
+      ) {
         payload.usedPoints = currentTab.usedPoints;
       }
 
-      const res = await axios.post<OrderResponse>(`${API_BASE}/orders`, payload, { headers });
+      const res = await axios.post<OrderResponse>(
+        `${API_BASE}/orders`,
+        payload,
+        { headers }
+      );
       const order = res.data.order;
       const orderId = order._id;
 
       // set thông tin cho modal in hóa đơn (an toàn với undefined/null)
       setPendingOrderId(orderId);
       setOrderCreatedAt(order.createdAt || "");
-      setOrderPrintCount(typeof order.printCount === "number" ? order.printCount : 0);
+      setOrderPrintCount(
+        typeof order.printCount === "number" ? order.printCount : 0
+      );
       setOrderEarnedPoints((order as any).earnedPoints ?? 0);
 
       if (currentTab.paymentMethod === "qr" && res.data.qrDataURL) {
         setQrImageUrl(res.data.qrDataURL);
-        setQrExpiryTs(res.data.order?.qrExpiry ? new Date(res.data.order.qrExpiry).getTime() : null);
+        setQrExpiryTs(
+          res.data.order?.qrExpiry
+            ? new Date(res.data.order.qrExpiry).getTime()
+            : null
+        );
         setPendingOrderId(orderId);
         //QR đã tạo, đang chờ thanh toán
       } else {
@@ -478,7 +528,11 @@ const OrderPOSHome: React.FC = () => {
   // In hóa đơn
   const triggerPrint = async (orderId: string) => {
     try {
-      await axios.post(`${API_BASE}/orders/${orderId}/print-bill`, {}, { headers });
+      await axios.post(
+        `${API_BASE}/orders/${orderId}/print-bill`,
+        {},
+        { headers }
+      );
       Swal.fire({
         icon: "success",
         title: "Thành công!",
@@ -504,13 +558,20 @@ const OrderPOSHome: React.FC = () => {
     }
   };
 
-  const currentEmployeeName = employees.find((e) => e._id === currentTab.employeeId)?.fullName || "N/A";
+  const currentEmployeeName =
+    employees.find((e) => e._id === currentTab.employeeId)?.fullName || "N/A";
   const currentCustomerName = currentTab?.customer?.name || "Khách vãng lai";
   const currentCustomerPhone = currentTab?.customer?.phone || "Không có";
 
   return (
     <div
-      style={{ display: "flex", flexDirection: "column", height: "100vh", background: "#f0f2f5", overflow: "auto" }}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100vh",
+        background: "#f0f2f5",
+        overflow: "auto",
+      }}
     >
       {/* HEADER */}
       <div
@@ -524,13 +585,25 @@ const OrderPOSHome: React.FC = () => {
           gap: "20px",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "16px", flex: 1 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "16px",
+            flex: 1,
+          }}
+        >
           <ShopOutlined style={{ fontSize: 28, color: "#fff" }} />
           <div>
-            <Title level={4} style={{ margin: 0, color: "#fff", fontSize: "20px" }}>
+            <Title
+              level={4}
+              style={{ margin: 0, color: "#fff", fontSize: "20px" }}
+            >
               {currentStore.name || "Cửa Hàng"}
             </Title>
-            <Text style={{ color: "rgba(255,255,255,0.85)", fontSize: "12px" }}>Hệ thống bán hàng POS</Text>
+            <Text style={{ color: "rgba(255,255,255,0.85)", fontSize: "12px" }}>
+              Hệ thống bán hàng POS
+            </Text>
           </div>
         </div>
 
@@ -582,7 +655,9 @@ const OrderPOSHome: React.FC = () => {
             scrollbarWidth: "thin",
             transition: "transform 0.15s ease, opacity 0.15s ease",
             opacity: searchedProducts.length > 0 ? 1 : 0,
-            transform: `translateX(-50%) ${searchedProducts.length > 0 ? "translateY(0)" : "translateY(-5px)"}`,
+            transform: `translateX(-50%) ${
+              searchedProducts.length > 0 ? "translateY(0)" : "translateY(-5px)"
+            }`,
           }}
         >
           {searchedProducts.map((prod) => (
@@ -597,10 +672,18 @@ const OrderPOSHome: React.FC = () => {
                 transition: "all 0.2s ease",
                 marginBottom: "4px",
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "#f5faff")}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.background = "#f5faff")
+              }
               onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
                 <div>
                   <Text strong style={{ fontSize: "15px", color: "#000" }}>
                     {prod.name}
@@ -609,7 +692,10 @@ const OrderPOSHome: React.FC = () => {
                     <Text type="secondary" style={{ fontSize: "12px" }}>
                       Mã SKU: {prod.sku}
                     </Text>
-                    <Text type="secondary" style={{ fontSize: "12px", marginLeft: 12 }}>
+                    <Text
+                      type="secondary"
+                      style={{ fontSize: "12px", marginLeft: 12 }}
+                    >
                       Đơn vị: {prod.unit}
                     </Text>
                   </div>
@@ -638,7 +724,13 @@ const OrderPOSHome: React.FC = () => {
       {/* BODY - 2 CỘT (GRID 24 CỘT) */}
       <Row gutter={[16, 16]} style={{ flex: 1, padding: 16 }}>
         {/* CỘT TRÁI - GIỎ HÀNG (CHIẾM 16/24) */}
-        <Col xs={24} md={16} lg={17} xl={18} style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+        <Col
+          xs={24}
+          md={16}
+          lg={17}
+          xl={18}
+          style={{ display: "flex", flexDirection: "column", height: "100%" }}
+        >
           {/* Row 1 - Card chính (chiếm hết chiều cao trừ footer) */}
           <Row style={{ flex: 1, overflow: "hidden" }}>
             <Col span={24}>
@@ -666,24 +758,47 @@ const OrderPOSHome: React.FC = () => {
                   type="editable-card"
                   onEdit={(targetKey, action) => {
                     if (action === "add") addNewOrderTab();
-                    else if (action === "remove") removeOrderTab(targetKey as string);
+                    else if (action === "remove")
+                      removeOrderTab(targetKey as string);
                   }}
                   style={{ flex: 1, display: "flex", flexDirection: "column" }}
                   items={orders.map((tab) => ({
                     key: tab.key,
-                    label: <span style={{ fontWeight: 600 }}>Đơn {tab.key}</span>,
+                    label: (
+                      <span style={{ fontWeight: 600 }}>Đơn {tab.key}</span>
+                    ),
                     closable: orders.length > 1,
                     children: (
-                      <div style={{ flex: 1, display: "flex", flexDirection: "column", height: "100%" }}>
+                      <div
+                        style={{
+                          flex: 1,
+                          display: "flex",
+                          flexDirection: "column",
+                          height: "100%",
+                        }}
+                      >
                         <Table
-                          dataSource={tab.cart.map((item, i) => ({ ...item, stt: i + 1 }))}
+                          dataSource={tab.cart.map((item, i) => ({
+                            ...item,
+                            stt: i + 1,
+                          }))}
                           pagination={false}
                           size="middle"
                           scroll={{ y: "calc(100vh - 420px)" }}
                           style={{ flex: 1 }}
                           columns={[
-                            { title: "STT", dataIndex: "stt", width: 60, align: "center" },
-                            { title: "SKU", dataIndex: "sku", width: 150, render: (text) => <Text code>{text}</Text> },
+                            {
+                              title: "STT",
+                              dataIndex: "stt",
+                              width: 60,
+                              align: "center",
+                            },
+                            {
+                              title: "SKU",
+                              dataIndex: "sku",
+                              width: 150,
+                              render: (text) => <Text code>{text}</Text>,
+                            },
                             {
                               title: "Tên sản phẩm",
                               dataIndex: "name",
@@ -691,7 +806,12 @@ const OrderPOSHome: React.FC = () => {
                               width: 300,
                               render: (text) => <Text strong>{text}</Text>,
                             },
-                            { title: "Đơn vị", dataIndex: "unit", width: 100, align: "center" },
+                            {
+                              title: "Đơn vị",
+                              dataIndex: "unit",
+                              width: 100,
+                              align: "center",
+                            },
                             {
                               title: "Số lượng",
                               width: 120,
@@ -700,7 +820,9 @@ const OrderPOSHome: React.FC = () => {
                                 <InputNumber
                                   min={1}
                                   value={r.quantity}
-                                  onChange={(v) => updateQuantity(r.productId, v || 1)}
+                                  onChange={(v) =>
+                                    updateQuantity(r.productId, v || 1)
+                                  }
                                   style={{ width: "100%" }}
                                 />
                               ),
@@ -710,7 +832,9 @@ const OrderPOSHome: React.FC = () => {
                               dataIndex: "price",
                               align: "right",
                               width: 140,
-                              render: (price) => <Text>{formatPrice(price)}</Text>,
+                              render: (price) => (
+                                <Text>{formatPrice(price)}</Text>
+                              ),
                             },
                             {
                               title: "Thành tiền",
@@ -734,7 +858,9 @@ const OrderPOSHome: React.FC = () => {
                                   icon={<DeleteOutlined />}
                                   onClick={() =>
                                     updateOrderTab((t) => {
-                                      t.cart = t.cart.filter((i) => i.productId !== r.productId);
+                                      t.cart = t.cart.filter(
+                                        (i) => i.productId !== r.productId
+                                      );
                                     })
                                   }
                                 />
@@ -804,7 +930,12 @@ const OrderPOSHome: React.FC = () => {
               height: "100%",
             }}
             styles={{
-              body: { flex: 1, display: "flex", flexDirection: "column", padding: 20 },
+              body: {
+                flex: 1,
+                display: "flex",
+                flexDirection: "column",
+                padding: 20,
+              },
             }}
           >
             <Title level={5} style={{ marginBottom: 16, color: "#1890ff" }}>
@@ -819,7 +950,9 @@ const OrderPOSHome: React.FC = () => {
                   placeholder="Nhập SĐT khách hàng..."
                   prefix={<UserOutlined />}
                   suffix={
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div
+                      style={{ display: "flex", alignItems: "center", gap: 8 }}
+                    >
                       <div
                         style={{
                           width: 1,
@@ -852,7 +985,9 @@ const OrderPOSHome: React.FC = () => {
                     setShowCustomerDropdown(true);
                   }}
                   onFocus={() => setShowCustomerDropdown(true)}
-                  onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 200)}
+                  onBlur={() =>
+                    setTimeout(() => setShowCustomerDropdown(false), 200)
+                  }
                   style={{
                     marginBottom: 12,
                     borderRadius: 8,
@@ -913,8 +1048,12 @@ const OrderPOSHome: React.FC = () => {
                           cursor: "pointer",
                           borderBottom: "1px solid #f0f0f0",
                         }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = "#f5faff")}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
+                        onMouseEnter={(e) =>
+                          (e.currentTarget.style.background = "#f5faff")
+                        }
+                        onMouseLeave={(e) =>
+                          (e.currentTarget.style.background = "#fff")
+                        }
                       >
                         <Space direction="vertical" size={0}>
                           <Text strong>{c.name}</Text>
@@ -925,7 +1064,13 @@ const OrderPOSHome: React.FC = () => {
                       </div>
                     ))
                   ) : (
-                    <div style={{ padding: "10px 14px", color: "#999", fontStyle: "italic" }}>
+                    <div
+                      style={{
+                        padding: "10px 14px",
+                        color: "#999",
+                        fontStyle: "italic",
+                      }}
+                    >
                       Không tìm thấy khách hàng
                     </div>
                   )}
@@ -947,7 +1092,10 @@ const OrderPOSHome: React.FC = () => {
                 <Space>
                   <UserOutlined style={{ color: "#52c41a" }} />
                   <Text strong>{currentTab.customer.name}</Text>
-                  <Badge count={`${currentTab.customer.loyaltyPoints} điểm`} style={{ backgroundColor: "#faad14" }} />
+                  <Badge
+                    count={`${currentTab.customer.loyaltyPoints} điểm`}
+                    style={{ backgroundColor: "#faad14" }}
+                  />
                 </Space>
               </div>
             )}
@@ -955,8 +1103,21 @@ const OrderPOSHome: React.FC = () => {
             <Divider style={{ margin: "12px 0" }} />
 
             {/* Tổng tiền và các tùy chọn */}
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "12px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div
+              style={{
+                flex: 1,
+                display: "flex",
+                flexDirection: "column",
+                gap: "12px",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <Text style={{ fontSize: "15px" }}>Tổng tiền hàng:</Text>
                   <Text type="secondary" style={{ fontSize: "13px" }}>
@@ -978,10 +1139,18 @@ const OrderPOSHome: React.FC = () => {
                   marginBottom: 12,
                 }}
               >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
                   <Space>
                     <GiftOutlined style={{ color: "#faad14" }} />
-                    <Text style={{ fontWeight: 500 }}>Áp dụng điểm giảm giá:</Text>
+                    <Text style={{ fontWeight: 500 }}>
+                      Áp dụng điểm giảm giá:
+                    </Text>
                   </Space>
 
                   <Switch
@@ -1005,7 +1174,8 @@ const OrderPOSHome: React.FC = () => {
                       value={currentTab.usedPoints}
                       onChange={(val) => {
                         const n = Math.max(0, Math.floor((val as number) || 0));
-                        const maxAllowed = currentTab.customer?.loyaltyPoints ?? n;
+                        const maxAllowed =
+                          currentTab.customer?.loyaltyPoints ?? n;
                         const clamped = Math.min(n, maxAllowed);
                         updateOrderTab((t) => {
                           t.usedPoints = clamped;
@@ -1014,8 +1184,12 @@ const OrderPOSHome: React.FC = () => {
                       size="large"
                       style={{ width: "100%" }}
                       placeholder="Nhập số điểm muốn sử dụng"
-                      formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
-                      parser={(v) => parseInt((v || "0").toString().replace(/(,*)/g, ""), 10)}
+                      formatter={(v) =>
+                        `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+                      }
+                      parser={(v) =>
+                        parseInt((v || "0").toString().replace(/(,*)/g, ""), 10)
+                      }
                       addonAfter="điểm"
                     />
 
@@ -1042,20 +1216,44 @@ const OrderPOSHome: React.FC = () => {
                     gap: 4,
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <Text style={{ color: "#389e0d" }}>Giảm giá từ điểm tích lũy:</Text>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <Text style={{ color: "#389e0d" }}>
+                      Giảm giá từ điểm tích lũy:
+                    </Text>
                     <Text strong style={{ color: "#389e0d", fontSize: 16 }}>
                       -{formatPrice(discount)}
                     </Text>
                   </div>
-                  <div style={{ fontSize: 13, color: "#52c41a", textAlign: "right" }}>
-                    Tỷ lệ quy đổi: <Text strong>{loyaltySetting?.vndPerPoint?.toLocaleString()}đ</Text> / điểm
+                  <div
+                    style={{
+                      fontSize: 13,
+                      color: "#52c41a",
+                      textAlign: "right",
+                    }}
+                  >
+                    Tỷ lệ quy đổi:{" "}
+                    <Text strong>
+                      {loyaltySetting?.vndPerPoint?.toLocaleString()}đ
+                    </Text>{" "}
+                    / điểm
                   </div>
                 </div>
               )}
 
               {/* VAT */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
                 <Text>VAT 10%:</Text>
                 <Switch
                   checked={currentTab.isVAT}
@@ -1068,7 +1266,13 @@ const OrderPOSHome: React.FC = () => {
               </div>
 
               {currentTab.isVAT && (
-                <div style={{ display: "flex", justifyContent: "space-between", color: "#fa8c16" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    color: "#fa8c16",
+                  }}
+                >
                   <Text style={{ color: "#fa8c16" }}>+ VAT:</Text>
                   <Text strong style={{ color: "#fa8c16" }}>
                     {formatPrice(vatAmount)}
@@ -1087,7 +1291,13 @@ const OrderPOSHome: React.FC = () => {
                   border: "2px solid #1890ff",
                 }}
               >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
                   <Text strong style={{ fontSize: "16px" }}>
                     Khách phải trả:
                   </Text>
@@ -1106,7 +1316,9 @@ const OrderPOSHome: React.FC = () => {
                       t.paymentMethod = "cash";
                     })
                   }
-                  type={currentTab.paymentMethod === "cash" ? "primary" : "default"}
+                  type={
+                    currentTab.paymentMethod === "cash" ? "primary" : "default"
+                  }
                   size="large"
                   style={{ flex: 1, borderRadius: "8px" }}
                 >
@@ -1119,7 +1331,9 @@ const OrderPOSHome: React.FC = () => {
                       t.paymentMethod = "qr";
                     })
                   }
-                  type={currentTab.paymentMethod === "qr" ? "primary" : "default"}
+                  type={
+                    currentTab.paymentMethod === "qr" ? "primary" : "default"
+                  }
                   size="large"
                   style={{ flex: 1, borderRadius: "8px" }}
                 >
@@ -1131,7 +1345,9 @@ const OrderPOSHome: React.FC = () => {
               {currentTab.paymentMethod === "cash" && (
                 <>
                   <div style={{ marginTop: 8 }}>
-                    <Text style={{ display: "block", marginBottom: 8 }}>Tiền khách đưa:</Text>
+                    <Text style={{ display: "block", marginBottom: 8 }}>
+                      Tiền khách đưa:
+                    </Text>
                     <InputNumber
                       min={0}
                       value={currentTab.cashReceived}
@@ -1140,8 +1356,12 @@ const OrderPOSHome: React.FC = () => {
                           t.cashReceived = v || 0;
                         })
                       }
-                      formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
-                      parser={(v) => parseFloat(v?.replace(/\$\s?|(,*)/g, "") || "0")}
+                      formatter={(v) =>
+                        `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+                      }
+                      parser={(v) =>
+                        parseFloat(v?.replace(/\$\s?|(,*)/g, "") || "0")
+                      }
                       size="large"
                       style={{ width: "100%" }}
                       addonAfter="đ"
@@ -1154,13 +1374,27 @@ const OrderPOSHome: React.FC = () => {
                       background: changeAmount >= 0 ? "#f6ffed" : "#fff1f0",
                       padding: "12px",
                       borderRadius: "8px",
-                      border: changeAmount >= 0 ? "1px solid #b7eb8f" : "1px solid #ffa39e",
+                      border:
+                        changeAmount >= 0
+                          ? "1px solid #b7eb8f"
+                          : "1px solid #ffa39e",
                     }}
                   >
-                    <Text strong style={{ color: changeAmount >= 0 ? "#52c41a" : "#ff4d4f" }}>
+                    <Text
+                      strong
+                      style={{
+                        color: changeAmount >= 0 ? "#52c41a" : "#ff4d4f",
+                      }}
+                    >
                       Tiền thừa trả khách:
                     </Text>
-                    <Text strong style={{ fontSize: "18px", color: changeAmount >= 0 ? "#52c41a" : "#ff4d4f" }}>
+                    <Text
+                      strong
+                      style={{
+                        fontSize: "18px",
+                        color: changeAmount >= 0 ? "#52c41a" : "#ff4d4f",
+                      }}
+                    >
                       {changeAmount >= 0 ? formatPrice(changeAmount) : "0đ"}
                     </Text>
                   </div>
@@ -1180,11 +1414,14 @@ const OrderPOSHome: React.FC = () => {
                   fontSize: "16px",
                   fontWeight: 600,
                   borderRadius: "8px",
-                  background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                  background:
+                    "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
                   border: "none",
                 }}
               >
-                {currentTab.paymentMethod === "qr" ? "Tạo QR Thanh Toán" : "Tạo Đơn Hàng"}
+                {currentTab.paymentMethod === "qr"
+                  ? "Tạo QR Thanh Toán"
+                  : "Tạo Đơn Hàng"}
               </Button>
 
               {/* Xác nhận thanh toán tiền mặt */}
@@ -1193,7 +1430,11 @@ const OrderPOSHome: React.FC = () => {
                   title={`Xác nhận khách đã đưa ${formatPrice(totalAmount)}?`}
                   onConfirm={async () => {
                     try {
-                      await axios.post(`${API_BASE}/orders/${pendingOrderId}/set-paid-cash`, {}, { headers });
+                      await axios.post(
+                        `${API_BASE}/orders/${pendingOrderId}/set-paid-cash`,
+                        {},
+                        { headers }
+                      );
                       setBillModalOpen(true);
                     } catch (err: any) {
                       Swal.fire({
@@ -1235,7 +1476,9 @@ const OrderPOSHome: React.FC = () => {
         loading={loading}
         onCreate={async (values) => {
           try {
-            const res = await axios.post(`${API_BASE}/customers`, values, { headers });
+            const res = await axios.post(`${API_BASE}/customers`, values, {
+              headers,
+            });
             updateOrderTab((tab) => {
               tab.customer = res.data.customer;
             });
@@ -1287,7 +1530,11 @@ const OrderPOSHome: React.FC = () => {
             }}
           >
             {qrImageUrl ? (
-              <img src={qrImageUrl} alt="QR code" style={{ width: 410, height: 410 }} />
+              <img
+                src={qrImageUrl}
+                alt="QR code"
+                style={{ width: 410, height: 410 }}
+              />
             ) : qrPayload ? (
               <QRCode value={qrPayload} size={410} />
             ) : null}

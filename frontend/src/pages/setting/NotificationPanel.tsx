@@ -1,6 +1,15 @@
 // src/pages/NotificationPanel.tsx
 import React, { useState, useEffect } from "react";
-import { Drawer, Button, Space, Spin, Empty, Dropdown, Menu, Badge } from "antd";
+import {
+  Drawer,
+  Button,
+  Space,
+  Spin,
+  Empty,
+  Dropdown,
+  Menu,
+  Badge,
+} from "antd";
 import { CheckOutlined, MoreOutlined, BellOutlined } from "@ant-design/icons";
 import axios from "axios";
 import dayjs from "dayjs";
@@ -11,7 +20,7 @@ import Swal from "sweetalert2";
 
 dayjs.extend(relativeTime);
 dayjs.locale("vi");
-
+const apiUrl = import.meta.env.VITE_API_URL;
 interface Notification {
   _id: string;
   title: string;
@@ -26,7 +35,11 @@ interface NotificationPanelProps {
   onClose: () => void;
 }
 
-const NotificationPanel: React.FC<NotificationPanelProps> = ({ storeId, visible, onClose }) => {
+const NotificationPanel: React.FC<NotificationPanelProps> = ({
+  storeId,
+  visible,
+  onClose,
+}) => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -47,9 +60,14 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ storeId, visible,
       });
       if (tab === "unread") params.append("read", "false");
 
-      const res = await axios.get(`http://localhost:9999/api/notifications?${params}`, { headers });
+      const res = await axios.get(`${apiUrl}/notifications?${params}`, {
+        headers,
+      });
       setNotifications(res.data.data);
-      setUnreadCount(res.data.meta.totalUnread || res.data.data.filter((n: Notification) => !n.read).length);
+      setUnreadCount(
+        res.data.meta.totalUnread ||
+          res.data.data.filter((n: Notification) => !n.read).length
+      );
     } catch (err) {
       Swal.fire({
         icon: "error",
@@ -71,18 +89,29 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ storeId, visible,
 
   const markAsRead = async (id: string, read: boolean) => {
     try {
-      await axios.patch(`http://localhost:9999/api/notifications/${id}/read`, { read }, { headers });
-      setNotifications((prev) => prev.map((n) => (n._id === id ? { ...n, read } : n)));
+      await axios.patch(
+        `${apiUrl}/notifications/${id}/read`,
+        { read },
+        { headers }
+      );
+      setNotifications((prev) =>
+        prev.map((n) => (n._id === id ? { ...n, read } : n))
+      );
 
       setUnreadCount((prev) => {
-        const wasUnread = notifications.find((n) => n._id === id)?.read === false;
+        const wasUnread =
+          notifications.find((n) => n._id === id)?.read === false;
         const willBeUnread = !read;
 
         let newCount = prev;
         if (wasUnread && !willBeUnread) newCount -= 1;
         if (!wasUnread && willBeUnread) newCount += 1;
 
-        window.dispatchEvent(new CustomEvent("notifications:updated", { detail: { unreadCount: newCount } }));
+        window.dispatchEvent(
+          new CustomEvent("notifications:updated", {
+            detail: { unreadCount: newCount },
+          })
+        );
         return newCount;
       });
     } catch (err) {
@@ -100,12 +129,16 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ storeId, visible,
 
   const markAllAsRead = async () => {
     try {
-      await axios.patch(`http://localhost:9999/api/notifications/read-all`, {}, { headers });
+      await axios.patch(`${apiUrl}/notifications/read-all`, {}, { headers });
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
 
       const newCount = 0;
       setUnreadCount(newCount);
-      window.dispatchEvent(new CustomEvent("notifications:updated", { detail: { unreadCount: newCount } }));
+      window.dispatchEvent(
+        new CustomEvent("notifications:updated", {
+          detail: { unreadCount: newCount },
+        })
+      );
       Swal.fire({
         icon: "success",
         title: "Thành công",
@@ -129,7 +162,13 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ storeId, visible,
   return (
     <Drawer
       title={
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <BellOutlined style={{ fontSize: 18, color: "#1890ff" }} />
             <span style={{ fontWeight: 600, fontSize: 16 }}>Thông báo</span>
@@ -224,7 +263,8 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ storeId, visible,
                 style={{
                   marginLeft: 4,
                   padding: "0 6px",
-                  background: tab === "unread" ? "rgba(255,255,255,0.3)" : "#1890ff",
+                  background:
+                    tab === "unread" ? "rgba(255,255,255,0.3)" : "#1890ff",
                   color: tab === "unread" ? "#fff" : "#fff",
                   borderRadius: 10,
                   fontSize: 12,
@@ -268,7 +308,9 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ storeId, visible,
             <Empty
               description={
                 <span style={{ color: "#8c8c8c" }}>
-                  {tab === "unread" ? "Không có thông báo chưa đọc" : "Không có thông báo"}
+                  {tab === "unread"
+                    ? "Không có thông báo chưa đọc"
+                    : "Không có thông báo"}
                 </span>
               }
               image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -291,7 +333,9 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ storeId, visible,
                   gap: 12,
                   cursor: "pointer",
                   transition: "all 0.2s ease",
-                  borderLeft: notif.read ? "3px solid transparent" : "3px solid #1890ff",
+                  borderLeft: notif.read
+                    ? "3px solid transparent"
+                    : "3px solid #1890ff",
                   ...(hoveredId === notif._id && {
                     background: notif.read ? "#fafafa" : "#d6f0ff",
                     transform: "translateX(2px)",
@@ -354,7 +398,8 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ storeId, visible,
                       fontWeight: 500,
                     }}
                   >
-                    {dayjs(notif.createdAt).fromNow()} • {dayjs(notif.createdAt).format("HH:mm, DD/MM/YYYY")}
+                    {dayjs(notif.createdAt).fromNow()} •{" "}
+                    {dayjs(notif.createdAt).format("HH:mm, DD/MM/YYYY")}
                   </div>
                 </div>
 
@@ -394,7 +439,8 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ storeId, visible,
                       color: "#8c8c8c",
                       cursor: "pointer",
                       transition: "all 0.2s ease",
-                      background: hoveredId === notif._id ? "#e6e6e6" : "transparent",
+                      background:
+                        hoveredId === notif._id ? "#e6e6e6" : "transparent",
                     }}
                   >
                     <MoreOutlined style={{ fontSize: 16 }} />

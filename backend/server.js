@@ -49,12 +49,22 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage, limits: { fileSize: 20 * 1024 * 1024 } });
 
+// ✅ Danh sách origins được phép
+const allowedOrigins = [
+  "http://localhost:3000",
+  "http://menup.shop",
+  "http://skinanalysis.life",
+  "https://skinanalysis.life",
+  "https://menup.shop",
+];
+
 // =====Socket.io=====
 const server = http.createServer(app); //  Tạo server http để gắn socket.io
 // ⚡ Khởi tạo Socket.io
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:3000", //  FE React
+    origin: allowedOrigins, //  ✅ Sử dụng allowedOrigins
+    credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: [
       "Content-Type",
@@ -94,7 +104,7 @@ app.post(
 // --- MIDDLEWARE ---
 app.use(
   cors({
-    origin: "http://localhost:3000",
+    origin: allowedOrigins, // ✅ ĐÃ SỬA - dùng allowedOrigins thay vì hardcode
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: [

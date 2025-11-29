@@ -41,7 +41,7 @@ import ComponentTaxGuide from "./ComponentTaxGuide";
 import Swal from "sweetalert2";
 
 dayjs.locale("vi");
-
+const apiUrl = import.meta.env.VITE_API_URL;
 const { Option } = Select;
 const { RangePicker } = DatePicker;
 const { Title, Paragraph, Text } = Typography;
@@ -102,7 +102,7 @@ const TaxDeclaration = () => {
         throw new Error("Thiếu thông tin kỳ báo cáo");
       }
 
-      const url = `http://localhost:9999/api/taxs/preview?${params}`;
+      const url = `${apiUrl}/taxs/preview?${params}`;
       const res = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } });
 
       setSystemRevenue(res.data.systemRevenue);
@@ -123,7 +123,7 @@ const TaxDeclaration = () => {
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const url = `http://localhost:9999/api/taxs?shopId=${currentStore._id}`;
+      const url = `${apiUrl}/taxs?shopId=${currentStore._id}`;
       const res = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } });
       setDeclarations(res.data.data || []);
     } catch (err) {
@@ -197,7 +197,7 @@ const TaxDeclaration = () => {
 
     try {
       const token = localStorage.getItem("token");
-      const baseUrl = "http://localhost:9999/api/taxs";
+      const baseUrl = "${apiUrl}/taxs";
       let url = `${baseUrl}?shopId=${currentStore._id}`;
       let method = "post";
 
@@ -289,7 +289,7 @@ const TaxDeclaration = () => {
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const url = `http://localhost:9999/api/taxs/${id}/clone`;
+      const url = `${apiUrl}/taxs/${id}/clone`;
       await axios.post(url, {}, { headers: { Authorization: `Bearer ${token}` } });
 
       Swal.fire({
@@ -326,7 +326,7 @@ const TaxDeclaration = () => {
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const url = `http://localhost:9999/api/taxs/${deletingId}?shopId=${currentStore._id}`;
+      const url = `${apiUrl}/taxs/${deletingId}?shopId=${currentStore._id}`;
       await axios.delete(url, { headers: { Authorization: `Bearer ${token}` } });
       Swal.fire({
         title: "🎉 Thành công!",
@@ -357,7 +357,7 @@ const TaxDeclaration = () => {
   const handleExport = async (id, format) => {
     try {
       const token = localStorage.getItem("token");
-      const url = `http://localhost:9999/api/taxs/${id}/export?format=${format}&shopId=${currentStore._id}`;
+      const url = `${apiUrl}/taxs/${id}/export?format=${format}&shopId=${currentStore._id}`;
       const res = await axios.get(url, {
         headers: { Authorization: `Bearer ${token}` },
         responseType: "blob",
