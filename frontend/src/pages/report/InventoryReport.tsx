@@ -175,15 +175,15 @@ const InventoryReport: React.FC = () => {
 
       if (res.data.success) {
         setReportData(res.data.data);
-        Swal.fire({
-          icon: "success",
-          title: "Thành công",
-          text: "Tải báo cáo thành công!",
-          timer: 2000, // 2000ms = 2 giây
-          timerProgressBar: true,
-          confirmButtonText: "Ok",
-          confirmButtonColor: "#27ae60",
-        });
+        // Swal.fire({
+        //   icon: "success",
+        //   title: "Thành công",
+        //   text: "Tải báo cáo thành công!",
+        //   timer: 2000, // 2000ms = 2 giây
+        //   timerProgressBar: true,
+        //   confirmButtonText: "Ok",
+        //   confirmButtonColor: "#27ae60",
+        // });
       }
     } catch (err: any) {
       Swal.fire({
