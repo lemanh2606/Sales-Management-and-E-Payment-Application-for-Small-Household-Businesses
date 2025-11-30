@@ -1,4 +1,4 @@
-// controllers/tax/taxController.js - BẢN ĐẦY ĐỦ HỖ TRỢ MẪU 01/CNKD
+// controllers/tax/taxController.js - ✅ BẢN ĐẦY ĐỦ VỚI ERROR HANDLING & LOGGING
 const mongoose = require("mongoose");
 const PDFDocument = require("pdfkit");
 const Order = require("../../models/Order");
@@ -26,7 +26,61 @@ function isManagerUser(user) {
   return false;
 }
 
-// ✅ Lấy thông tin người nộp thuế từ Store - MỞ RỘNG THEO MẪU 01/CNKD
+// ✅ VALIDATION HELPER
+function validateRequiredFields(data, requiredFields) {
+  const missing = [];
+  const invalid = [];
+
+  requiredFields.forEach(({ field, type, message }) => {
+    const value = data[field];
+
+    if (value === undefined || value === null || value === "") {
+      missing.push({ field, message: message || `Thiếu trường ${field}` });
+      return;
+    }
+
+    // Type validation
+    if (type === "number" && (isNaN(value) || Number(value) < 0)) {
+      invalid.push({ field, message: `${field} phải là số dương` });
+    }
+    if (type === "string" && typeof value !== "string") {
+      invalid.push({ field, message: `${field} phải là chuỗi` });
+    }
+    if (type === "objectId" && !mongoose.Types.ObjectId.isValid(value)) {
+      invalid.push({ field, message: `${field} không phải ObjectId hợp lệ` });
+    }
+  });
+
+  return {
+    missing,
+    invalid,
+    isValid: missing.length === 0 && invalid.length === 0,
+  };
+}
+
+// ✅ STANDARDIZED ERROR RESPONSE
+function errorResponse(res, status, message, details = {}) {
+  console.error(`❌ [${status}] ${message}`, JSON.stringify(details, null, 2));
+  return res.status(status).json({
+    success: false,
+    message,
+    ...details,
+    timestamp: new Date().toISOString(),
+  });
+}
+
+// ✅ STANDARDIZED SUCCESS RESPONSE
+function successResponse(res, message, data = {}, status = 200) {
+  console.log(`✅ [${status}] ${message}`);
+  return res.status(status).json({
+    success: true,
+    message,
+    ...data,
+    timestamp: new Date().toISOString(),
+  });
+}
+
+// ✅ Lấy thông tin người nộp thuế từ Store
 async function getTaxpayerInfo(storeId) {
   try {
     const store = await Store.findOne({ _id: storeId, deleted: false })
@@ -37,138 +91,104 @@ async function getTaxpayerInfo(storeId) {
       .populate("staff_ids", "_id name email")
       .lean();
 
-    if (!store) return {};
+    if (!store) {
+      console.warn(`⚠️ Store not found: ${storeId}`);
+      return {};
+    }
 
     const owner = store.owner_id || {};
 
     return {
-      // [04] Người nộp thuế
       name: owner.fullName || owner.name || store.owner_name || "",
-
-      // [05] Tên cửa hàng/thương hiệu
       storeName: store.name || "",
-
-      // [06] Tài khoản ngân hàng
       bankAccount: store.bankAccount || "",
-
-      // [07] Mã số thuế
       taxCode: store.taxCode || "",
-
-      // [08] Ngành nghề kinh doanh
       businessSector: store.businessSector || store.tags?.join(", ") || "",
-      businessSectorChanged: store.businessSectorChanged || false, // [08a]
-
-      // [09] Diện tích kinh doanh
+      businessSectorChanged: store.businessSectorChanged || false,
       businessArea: store.area || 0,
-
-      // [09a] Đi thuê
       isRented: store.isRented || false,
-
-      // [10] Số lượng lao động
       employeeCount: store.staff_ids?.length || 0,
-
-      // [11] Thời gian hoạt động
       workingHours: {
         from: store.openingHours?.open || "08:00",
         to: store.openingHours?.close || "22:00",
       },
-
-      // [12] Địa chỉ kinh doanh
       businessAddress: {
         full: store.address || "",
-        street: store.addressDetails?.street || "", // [12b]
-        ward: store.addressDetails?.ward || "", // [12c]
-        district: store.addressDetails?.district || "", // [12d]
-        province: store.addressDetails?.province || "", // [12đ]
-        borderMarket: store.addressDetails?.borderMarket || false, // [12e]
-        changed: store.businessAddressChanged || false, // [12a]
+        street: store.addressDetails?.street || "",
+        ward: store.addressDetails?.ward || "",
+        district: store.addressDetails?.district || "",
+        province: store.addressDetails?.province || "",
+        borderMarket: store.addressDetails?.borderMarket || false,
+        changed: store.businessAddressChanged || false,
       },
-
-      // [13] Địa chỉ cư trú
       residenceAddress: {
         full: store.ownerResidence?.full || "",
-        street: store.ownerResidence?.street || "", // [13a]
-        ward: store.ownerResidence?.ward || "", // [13b]
-        district: store.ownerResidence?.district || "", // [13c]
-        province: store.ownerResidence?.province || "", // [13d]
+        street: store.ownerResidence?.street || "",
+        ward: store.ownerResidence?.ward || "",
+        district: store.ownerResidence?.district || "",
+        province: store.ownerResidence?.province || "",
       },
-
-      // [14] Điện thoại
       phone: store.phone || "",
-
-      // [15] Fax
       fax: store.fax || "",
-
-      // [16] Email
       email: store.email || "",
-
-      // [17] Văn bản ủy quyền khai thuế
       taxAuthorizationDoc: store.taxAuthorizationDoc || null,
-
-      // [18] Thông tin cá nhân (cho CNKD chưa đăng ký thuế)
       personalInfo: {
-        dateOfBirth: owner.dateOfBirth || null, // [18a]
-        nationality: owner.nationality || "Việt Nam", // [18b]
+        dateOfBirth: owner.dateOfBirth || null,
+        nationality: owner.nationality || "Việt Nam",
         idCard: {
-          number: owner.idCard?.number || "", // [18c]
-          issueDate: owner.idCard?.issueDate || null, // [18c.1]
-          issuePlace: owner.idCard?.issuePlace || "", // [18c.2]
+          number: owner.idCard?.number || "",
+          issueDate: owner.idCard?.issueDate || null,
+          issuePlace: owner.idCard?.issuePlace || "",
         },
         passport: {
-          number: owner.passport?.number || "", // [18d]
-          issueDate: owner.passport?.issueDate || null, // [18d.1]
-          issuePlace: owner.passport?.issuePlace || "", // [18d.2]
+          number: owner.passport?.number || "",
+          issueDate: owner.passport?.issueDate || null,
+          issuePlace: owner.passport?.issuePlace || "",
         },
-        borderPass: owner.borderPass || null, // [18đ]
-        borderIdCard: owner.borderIdCard || null, // [18e]
-        otherIdDoc: owner.otherIdDoc || null, // [18f]
-        permanentResidence: owner.permanentResidence || {}, // [18g]
-        currentResidence: owner.currentResidence || {}, // [18h]
+        borderPass: owner.borderPass || null,
+        borderIdCard: owner.borderIdCard || null,
+        otherIdDoc: owner.otherIdDoc || null,
+        permanentResidence: owner.permanentResidence || {},
+        currentResidence: owner.currentResidence || {},
         businessRegistration: {
-          number: store.businessRegistrationNumber || "", // [18i]
-          issueDate: store.businessRegistrationDate || null, // [18i.1]
-          issueAuthority: store.businessRegistrationAuthority || "", // [18i.2]
+          number: store.businessRegistrationNumber || "",
+          issueDate: store.businessRegistrationDate || null,
+          issueAuthority: store.businessRegistrationAuthority || "",
         },
-        capital: store.registeredCapital || 0, // [18k]
+        capital: store.registeredCapital || 0,
       },
-
-      // [19-21] Đại lý thuế
       taxAgent: {
-        name: store.taxAgent?.name || "", // [19]
-        taxCode: store.taxAgent?.taxCode || "", // [20]
-        contractNumber: store.taxAgent?.contractNumber || "", // [21]
+        name: store.taxAgent?.name || "",
+        taxCode: store.taxAgent?.taxCode || "",
+        contractNumber: store.taxAgent?.contractNumber || "",
         contractDate: store.taxAgent?.contractDate || null,
       },
-
-      // [22-27] Tổ chức khai thay
       substituteOrg: {
-        name: store.substituteOrg?.name || "", // [22]
-        taxCode: store.substituteOrg?.taxCode || "", // [23]
-        address: store.substituteOrg?.address || "", // [24]
-        phone: store.substituteOrg?.phone || "", // [25]
-        fax: store.substituteOrg?.fax || "", // [26]
-        email: store.substituteOrg?.email || "", // [27]
+        name: store.substituteOrg?.name || "",
+        taxCode: store.substituteOrg?.taxCode || "",
+        address: store.substituteOrg?.address || "",
+        phone: store.substituteOrg?.phone || "",
+        fax: store.substituteOrg?.fax || "",
+        email: store.substituteOrg?.email || "",
       },
     };
   } catch (err) {
-    console.error("getTaxpayerInfo error:", err);
+    console.error("❌ getTaxpayerInfo error:", err);
     return {};
   }
 }
 
-// ✅ Helper: Map category code sang tên tiếng Việt (theo mẫu 01/CNKD)
 function getCategoryName(code) {
   const map = {
-    goods_distribution: "Phân phối, cung cấp hàng hóa", // [28]
-    service_construction: "Dịch vụ, xây dựng không bao thầu nguyên vật liệu", // [29]
+    goods_distribution: "Phân phối, cung cấp hàng hóa",
+    service_construction: "Dịch vụ, xây dựng không bao thầu nguyên vật liệu",
     manufacturing_transport:
-      "Sản xuất, vận tải, dịch vụ có gắn với hàng hóa, xây dựng có bao thầu nguyên vật liệu", // [30]
-    other_business: "Hoạt động kinh doanh khác", // [31]
+      "Sản xuất, vận tải, dịch vụ có gắn với hàng hóa, xây dựng có bao thầu nguyên vật liệu",
+    other_business: "Hoạt động kinh doanh khác",
   };
   return map[code] || code;
 }
 
-// ✅ Helper: Map category code sang mã chỉ tiêu
 function getCategoryCode(code) {
   const map = {
     goods_distribution: "[28]",
@@ -179,15 +199,17 @@ function getCategoryCode(code) {
   return map[code] || "";
 }
 
-// ✅ Helper: Format kỳ tính thuế theo mẫu 01/CNKD
 function formatTaxPeriod(periodType, periodKey) {
   switch (periodType) {
     case "yearly":
+    case "year":
       return `[01a] Năm ${periodKey}`;
     case "monthly":
+    case "month":
       const [year, month] = periodKey.split("-");
       return `[01b] Tháng ${month} năm ${year}`;
     case "quarterly":
+    case "quarter":
       const [qYear, quarter] = periodKey.split("-Q");
       const qMonthStart = (quarter - 1) * 3 + 1;
       const qMonthEnd = quarter * 3;
@@ -207,40 +229,63 @@ function formatTaxPeriod(periodType, periodKey) {
 
 /**
  * 1. PREVIEW SYSTEM REVENUE
- * GET /api/tax/preview?periodType=...&periodKey=...&storeId=...
+ * GET /api/taxs/preview?periodType=...&periodKey=...&storeId=...
  */
 const previewSystemRevenue = async (req, res) => {
+  console.log("\n📋 === PREVIEW SYSTEM REVENUE ===");
+  console.log("Query params:", req.query);
+
   try {
     const { periodType, periodKey, storeId, monthFrom, monthTo } = req.query;
 
-    if (!periodType || !storeId) {
-      return res.status(400).json({
-        success: false,
-        message: "Thiếu params: periodType, storeId",
+    // Validation
+    const validation = validateRequiredFields({ periodType, storeId }, [
+      { field: "periodType", type: "string", message: "Thiếu loại kỳ kê khai" },
+      {
+        field: "storeId",
+        type: "objectId",
+        message: "Thiếu hoặc sai ID cửa hàng",
+      },
+    ]);
+
+    if (!validation.isValid) {
+      return errorResponse(res, 400, "Dữ liệu không hợp lệ", {
+        missingFields: validation.missing,
+        invalidFields: validation.invalid,
       });
     }
 
     if (periodType !== "custom" && !periodKey) {
-      return res.status(400).json({
-        success: false,
-        message: "Thiếu periodKey cho periodType không phải custom",
-      });
+      return errorResponse(
+        res,
+        400,
+        "Thiếu periodKey cho loại kỳ không phải custom",
+        {
+          hint: "Vui lòng chọn tháng/quý/năm cụ thể",
+        }
+      );
     }
 
     if (periodType === "custom" && (!monthFrom || !monthTo)) {
-      return res.status(400).json({
-        success: false,
-        message: "Thiếu monthFrom/monthTo cho periodType custom",
-      });
+      return errorResponse(
+        res,
+        400,
+        "Thiếu monthFrom hoặc monthTo cho kỳ tùy chỉnh",
+        {
+          hint: "Vui lòng chọn khoảng thời gian",
+        }
+      );
     }
 
     const store = await Store.findOne({ _id: storeId, deleted: false });
     if (!store) {
-      return res.status(404).json({
-        success: false,
-        message: "Không tìm thấy cửa hàng hoặc cửa hàng đã bị xóa",
+      return errorResponse(res, 404, "Không tìm thấy cửa hàng", {
+        storeId,
+        hint: "Cửa hàng không tồn tại hoặc đã bị xóa",
       });
     }
+
+    console.log(`✅ Store found: ${store.name} (${storeId})`);
 
     const { start, end } = periodToRange(
       periodType,
@@ -248,6 +293,7 @@ const previewSystemRevenue = async (req, res) => {
       monthFrom,
       monthTo
     );
+    console.log(`📅 Period range: ${start} -> ${end}`);
 
     const agg = await Order.aggregate([
       {
@@ -261,41 +307,53 @@ const previewSystemRevenue = async (req, res) => {
         $group: {
           _id: null,
           totalRevenue: { $sum: { $toDouble: "$totalAmount" } },
+          orderCount: { $sum: 1 },
         },
       },
     ]);
 
     const systemRevenue = agg[0] ? agg[0].totalRevenue.toFixed(2) : "0.00";
+    const orderCount = agg[0] ? agg[0].orderCount : 0;
 
-    res.json({
-      success: true,
+    console.log(
+      `💰 System revenue: ${systemRevenue} VND (${orderCount} orders)`
+    );
+
+    return successResponse(res, "Lấy doanh thu hệ thống thành công", {
       systemRevenue,
+      orderCount,
       periodType,
       periodKey,
       storeId,
+      storeName: store.name,
       monthFrom,
       monthTo,
-      start,
-      end,
+      dateRange: { start, end },
     });
   } catch (err) {
-    console.error("previewSystemRevenue error:", err);
-    res.status(500).json({
-      success: false,
-      message: "Lỗi server khi preview doanh thu",
+    console.error("❌ previewSystemRevenue error:", err);
+    return errorResponse(res, 500, "Lỗi server khi tính doanh thu", {
       error: err.message,
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
     });
   }
 };
 
 /**
  * 2. CREATE TAX DECLARATION
- * POST /api/tax
- * Body: { storeId, periodType, periodKey, declaredRevenue, taxRates, ... }
+ * POST /api/taxs
  */
 const createTaxDeclaration = async (req, res) => {
+  console.log("\n📋 === CREATE TAX DECLARATION ===");
+  console.log("Request body keys:", Object.keys(req.body));
+  console.log("StoreId:", req.body.storeId);
+  console.log("PeriodType:", req.body.periodType);
+  console.log("PeriodKey:", req.body.periodKey);
+  console.log("DeclaredRevenue:", req.body.declaredRevenue);
+
   const session = await mongoose.startSession();
   session.startTransaction();
+
   try {
     const storeId = req.body.storeId || req.query.storeId;
     const periodType = req.body.periodType || req.query.periodType;
@@ -304,6 +362,47 @@ const createTaxDeclaration = async (req, res) => {
       req.body.declaredRevenue || req.query.declaredRevenue;
     const createdBy = req.user?._id;
 
+    console.log("📝 Extracted fields:");
+    console.log("  - storeId:", storeId);
+    console.log("  - periodType:", periodType);
+    console.log("  - periodKey:", periodKey);
+    console.log("  - declaredRevenue:", declaredRevenue);
+    console.log("  - createdBy:", createdBy);
+
+    // ✅ VALIDATE REQUIRED FIELDS
+    const validation = validateRequiredFields(
+      { storeId, periodType, periodKey, declaredRevenue },
+      [
+        {
+          field: "storeId",
+          type: "objectId",
+          message: "Thiếu hoặc sai ID cửa hàng",
+        },
+        {
+          field: "periodType",
+          type: "string",
+          message: "Thiếu loại kỳ kê khai",
+        },
+        { field: "periodKey", type: "string", message: "Thiếu mã kỳ kê khai" },
+        {
+          field: "declaredRevenue",
+          type: "number",
+          message: "Thiếu hoặc sai doanh thu kê khai",
+        },
+      ]
+    );
+
+    if (!validation.isValid) {
+      await session.abortTransaction();
+      session.endSession();
+      return errorResponse(res, 400, "Thiếu hoặc sai các trường bắt buộc", {
+        missingFields: validation.missing.map((f) => f.field),
+        invalidFields: validation.invalid.map((f) => f.field),
+        details: [...validation.missing, ...validation.invalid],
+        hint: "Vui lòng kiểm tra: storeId, periodType, periodKey, declaredRevenue",
+      });
+    }
+
     if (
       periodType === "custom" &&
       typeof periodKey === "string" &&
@@ -311,16 +410,7 @@ const createTaxDeclaration = async (req, res) => {
     ) {
       const [from, to] = periodKey.split("đến").map((s) => s.trim());
       periodKey = `${from}_${to}`;
-    }
-
-    if (!storeId || !periodType || !periodKey || declaredRevenue == null) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(400).json({
-        success: false,
-        message:
-          "Thiếu storeId hoặc periodType hoặc periodKey hoặc declaredRevenue",
-      });
+      console.log("  - periodKey (converted):", periodKey);
     }
 
     const store = await Store.findOne({ _id: storeId, deleted: false }).session(
@@ -329,11 +419,13 @@ const createTaxDeclaration = async (req, res) => {
     if (!store) {
       await session.abortTransaction();
       session.endSession();
-      return res.status(404).json({
-        success: false,
-        message: "Không tìm thấy cửa hàng hoặc cửa hàng đã bị xóa",
+      return errorResponse(res, 404, "Không tìm thấy cửa hàng", {
+        storeId,
+        hint: "Cửa hàng không tồn tại hoặc đã bị xóa",
       });
     }
+
+    console.log(`✅ Store found: ${store.name}`);
 
     const existingOriginal = await TaxDeclaration.findOne({
       shopId: storeId,
@@ -345,10 +437,11 @@ const createTaxDeclaration = async (req, res) => {
     if (existingOriginal) {
       await session.abortTransaction();
       session.endSession();
-      return res.status(409).json({
-        success: false,
-        message:
-          "Đã tồn tại tờ khai cho kỳ này. Vui lòng cập nhật tờ khai hiện có hoặc tạo bản sao.",
+      return errorResponse(res, 409, "Tờ khai cho kỳ này đã tồn tại", {
+        existingId: existingOriginal._id,
+        periodType,
+        periodKey,
+        hint: "Vui lòng cập nhật tờ khai hiện có hoặc tạo bản sao",
       });
     }
 
@@ -358,6 +451,8 @@ const createTaxDeclaration = async (req, res) => {
       periodType === "custom"
         ? periodToRange(periodType, periodKey, monthFrom, monthTo)
         : periodToRange(periodType, periodKey);
+
+    console.log(`📅 Period range: ${start} -> ${end}`);
 
     const agg = await Order.aggregate([
       {
@@ -379,6 +474,8 @@ const createTaxDeclaration = async (req, res) => {
       ? agg[0].total
       : mongoose.Types.Decimal128.fromString("0.00");
 
+    console.log(`💰 System revenue: ${systemRevenueDecimal.toString()}`);
+
     const taxpayerInfo = await getTaxpayerInfo(storeId);
 
     const gtgtRate =
@@ -389,13 +486,17 @@ const createTaxDeclaration = async (req, res) => {
       req.body.taxRates?.tncn !== undefined
         ? Number(req.body.taxRates.tncn)
         : 0.5;
-
     const declaredNum = Number(declaredRevenue);
     const gtgtAmount = (declaredNum * gtgtRate) / 100;
     const tncnAmount = (declaredNum * tncnRate) / 100;
     const totalTax = gtgtAmount + tncnAmount;
 
-    // [28-31] Doanh thu theo nhóm ngành nghề
+    console.log("💸 Tax calculation:");
+    console.log(`  - Declared: ${declaredNum}`);
+    console.log(`  - GTGT (${gtgtRate}%): ${gtgtAmount}`);
+    console.log(`  - TNCN (${tncnRate}%): ${tncnAmount}`);
+    console.log(`  - Total: ${totalTax}`);
+
     const revenueByCategory = (req.body.revenueByCategory || []).map((cat) => ({
       category: cat.category,
       categoryCode: getCategoryCode(cat.category),
@@ -404,11 +505,10 @@ const createTaxDeclaration = async (req, res) => {
       tncnTax: parseDecimal(cat.tncnTax || 0),
     }));
 
-    // [33] Thuế tiêu thụ đặc biệt (TTĐB)
     const specialConsumptionTax = (req.body.specialConsumptionTax || []).map(
       (item, idx) => ({
         itemName: item.itemName,
-        itemCode: `[33${String.fromCharCode(97 + idx)}]`, // [33a], [33b], ...
+        itemCode: `[33${String.fromCharCode(97 + idx)}]`,
         unit: item.unit,
         revenue: parseDecimal(item.revenue || 0),
         taxRate: Number(item.taxRate || 0),
@@ -416,10 +516,9 @@ const createTaxDeclaration = async (req, res) => {
       })
     );
 
-    // [34-36] Thuế môi trường/tài nguyên
     const environmentalTax = (req.body.environmentalTax || []).map(
       (item, idx) => ({
-        type: item.type, // 'resource' | 'environmental_tax' | 'environmental_fee'
+        type: item.type,
         itemName: item.itemName,
         itemCode:
           item.type === "resource"
@@ -435,14 +534,16 @@ const createTaxDeclaration = async (req, res) => {
       })
     );
 
+    console.log("📦 Creating declaration document...");
+
     const doc = await TaxDeclaration.create(
       [
         {
           shopId: storeId,
           periodType,
           periodKey,
-          isFirstTime: req.body.isFirstTime !== false, // [02]
-          supplementNumber: req.body.supplementNumber || 0, // [03]
+          isFirstTime: req.body.isFirstTime !== false,
+          supplementNumber: req.body.supplementNumber || 0,
           taxpayerInfo,
           systemRevenue: systemRevenueDecimal,
           declaredRevenue: parseDecimal(declaredNum),
@@ -470,6 +571,8 @@ const createTaxDeclaration = async (req, res) => {
     await session.commitTransaction();
     session.endSession();
 
+    console.log(`✅ Declaration created: ${doc[0]._id}`);
+
     await logActivity({
       user: req.user,
       store: { _id: storeId },
@@ -481,31 +584,42 @@ const createTaxDeclaration = async (req, res) => {
       description: `Tạo tờ khai thuế kỳ ${periodType} ${periodKey} cho cửa hàng ${store.name}`,
     });
 
-    return res.status(201).json({
-      success: true,
-      message: "Tạo tờ khai thành công",
-      declaration: doc[0],
-    });
+    return successResponse(
+      res,
+      "Tạo tờ khai thành công",
+      {
+        declaration: doc[0],
+        periodFormatted: formatTaxPeriod(periodType, periodKey),
+      },
+      201
+    );
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
-    console.error("createTaxDeclaration error:", err.message);
-    console.error(err.stack);
-    return res.status(500).json({
-      success: false,
-      message: "Lỗi server khi tạo tờ khai",
+    console.error("❌ createTaxDeclaration error:", err);
+    return errorResponse(res, 500, "Lỗi server khi tạo tờ khai", {
       error: err.message,
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
     });
   }
 };
 
 /**
  * 3. UPDATE TAX DECLARATION
- * PUT /api/tax/:id
+ * PUT /api/taxs/:id
  */
 const updateTaxDeclaration = async (req, res) => {
+  console.log("\n📋 === UPDATE TAX DECLARATION ===");
+  console.log("ID:", req.params.id);
+  console.log("Request body keys:", Object.keys(req.body));
+
   try {
     const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return errorResponse(res, 400, "ID tờ khai không hợp lệ", { id });
+    }
+
     const {
       declaredRevenue,
       taxRates,
@@ -517,31 +631,44 @@ const updateTaxDeclaration = async (req, res) => {
       status,
       isFirstTime,
       supplementNumber,
+      taxpayerInfo,
     } = req.body;
 
     const doc = await TaxDeclaration.findById(id);
     if (!doc) {
-      return res.status(404).json({
-        success: false,
-        message: "Không tìm thấy tờ khai",
-      });
+      return errorResponse(res, 404, "Không tìm thấy tờ khai", { id });
     }
 
+    console.log(
+      `✅ Declaration found: ${doc.periodType}-${doc.periodKey} (status: ${doc.status})`
+    );
+
     if (!["draft", "saved"].includes(doc.status)) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Chỉ tờ khai trạng thái 'draft' hoặc 'saved' mới được chỉnh sửa",
-      });
+      return errorResponse(
+        res,
+        400,
+        "Chỉ tờ khai trạng thái 'draft' hoặc 'saved' mới được chỉnh sửa",
+        {
+          currentStatus: doc.status,
+          hint: "Tờ khai đã nộp hoặc đã duyệt không thể sửa",
+        }
+      );
     }
 
     const userId = req.user?._id;
     if (!isManagerUser(req.user) && String(doc.createdBy) !== String(userId)) {
-      return res.status(403).json({
-        success: false,
-        message: "Chỉ người tạo hoặc manager mới được cập nhật",
-      });
+      return errorResponse(
+        res,
+        403,
+        "Chỉ người tạo hoặc manager mới được cập nhật",
+        {
+          createdBy: doc.createdBy,
+          currentUser: userId,
+        }
+      );
     }
+
+    console.log("🔧 Updating fields...");
 
     if (declaredRevenue != null) {
       const declaredNum = Number(declaredRevenue);
@@ -564,6 +691,10 @@ const updateTaxDeclaration = async (req, res) => {
       doc.taxAmounts.gtgt = parseDecimal(gtgtAmount);
       doc.taxAmounts.tncn = parseDecimal(tncnAmount);
       doc.taxAmounts.total = parseDecimal(totalTax);
+
+      console.log(
+        `💸 Tax updated: GTGT=${gtgtAmount}, TNCN=${tncnAmount}, Total=${totalTax}`
+      );
     }
 
     if (revenueByCategory) {
@@ -574,6 +705,9 @@ const updateTaxDeclaration = async (req, res) => {
         gtgtTax: parseDecimal(cat.gtgtTax || 0),
         tncnTax: parseDecimal(cat.tncnTax || 0),
       }));
+      console.log(
+        `📊 Revenue by category updated: ${revenueByCategory.length} items`
+      );
     }
 
     if (specialConsumptionTax) {
@@ -585,6 +719,9 @@ const updateTaxDeclaration = async (req, res) => {
         taxRate: Number(item.taxRate || 0),
         taxAmount: parseDecimal(item.taxAmount || 0),
       }));
+      console.log(
+        `🍾 Special consumption tax updated: ${specialConsumptionTax.length} items`
+      );
     }
 
     if (environmentalTax) {
@@ -603,6 +740,14 @@ const updateTaxDeclaration = async (req, res) => {
         taxRate: Number(item.taxRate || 0),
         taxAmount: parseDecimal(item.taxAmount || 0),
       }));
+      console.log(
+        `🌿 Environmental tax updated: ${environmentalTax.length} items`
+      );
+    }
+
+    if (taxpayerInfo) {
+      doc.taxpayerInfo = { ...doc.taxpayerInfo, ...taxpayerInfo };
+      console.log("👤 Taxpayer info updated");
     }
 
     if (notes !== undefined) doc.notes = notes;
@@ -616,11 +761,14 @@ const updateTaxDeclaration = async (req, res) => {
       doc.status = status;
       if (status === "submitted" && !doc.submittedAt) {
         doc.submittedAt = new Date();
+        console.log("📤 Status changed to submitted");
       }
     }
 
     doc.updatedAt = new Date();
     await doc.save();
+
+    console.log(`✅ Declaration updated: ${doc._id}`);
 
     await logActivity({
       user: req.user,
@@ -633,39 +781,48 @@ const updateTaxDeclaration = async (req, res) => {
       description: `Cập nhật tờ khai thuế kỳ ${doc.periodType} ${doc.periodKey}`,
     });
 
-    return res.json({
-      success: true,
-      message: "Cập nhật tờ khai thành công",
+    return successResponse(res, "Cập nhật tờ khai thành công", {
       declaration: doc,
     });
   } catch (err) {
-    console.error("updateTaxDeclaration error:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Lỗi server khi cập nhật tờ khai",
+    console.error("❌ updateTaxDeclaration error:", err);
+    return errorResponse(res, 500, "Lỗi server khi cập nhật tờ khai", {
       error: err.message,
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
     });
   }
 };
 
 /**
  * 4. CLONE TAX DECLARATION
- * POST /api/tax/:id/clone
+ * POST /api/taxs/:id/clone
  */
 const cloneTaxDeclaration = async (req, res) => {
+  console.log("\n📋 === CLONE TAX DECLARATION ===");
+  console.log("Source ID:", req.params.id);
+
   const session = await mongoose.startSession();
   session.startTransaction();
+
   try {
     const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      await session.abortTransaction();
+      session.endSession();
+      return errorResponse(res, 400, "ID tờ khai không hợp lệ", { id });
+    }
+
     const source = await TaxDeclaration.findById(id).session(session);
     if (!source) {
       await session.abortTransaction();
       session.endSession();
-      return res.status(404).json({
-        success: false,
-        message: "Nguồn để sao chép không tồn tại",
-      });
+      return errorResponse(res, 404, "Nguồn để sao chép không tồn tại", { id });
     }
+
+    console.log(
+      `✅ Source found: ${source.periodType}-${source.periodKey} v${source.version}`
+    );
 
     const maxVerDoc = await TaxDeclaration.findOne({
       shopId: source.shopId,
@@ -676,6 +833,8 @@ const cloneTaxDeclaration = async (req, res) => {
       .session(session);
 
     const newVersion = maxVerDoc ? maxVerDoc.version + 1 : source.version + 1;
+
+    console.log(`📦 Creating clone with version ${newVersion}...`);
 
     const cloneDoc = await TaxDeclaration.create(
       [
@@ -708,6 +867,8 @@ const cloneTaxDeclaration = async (req, res) => {
     await session.commitTransaction();
     session.endSession();
 
+    console.log(`✅ Clone created: ${cloneDoc[0]._id}`);
+
     await logActivity({
       user: req.user,
       store: { _id: source.shopId },
@@ -719,52 +880,68 @@ const cloneTaxDeclaration = async (req, res) => {
       description: `Tạo bản sao tờ khai thuế kỳ ${source.periodType} ${source.periodKey} từ bản ${source._id}`,
     });
 
-    return res.status(201).json({
-      success: true,
-      message: "Tạo bản sao thành công",
-      declaration: cloneDoc[0],
-    });
+    return successResponse(
+      res,
+      "Tạo bản sao thành công",
+      {
+        declaration: cloneDoc[0],
+        sourceVersion: source.version,
+        newVersion,
+      },
+      201
+    );
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
-    console.error("cloneTaxDeclaration error:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Lỗi server khi clone tờ khai",
+    console.error("❌ cloneTaxDeclaration error:", err);
+    return errorResponse(res, 500, "Lỗi server khi clone tờ khai", {
       error: err.message,
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
     });
   }
 };
 
 /**
  * 5. DELETE TAX DECLARATION
- * DELETE /api/tax/:id
+ * DELETE /api/taxs/:id
  */
 const deleteTaxDeclaration = async (req, res) => {
+  console.log("\n📋 === DELETE TAX DECLARATION ===");
+  console.log("ID:", req.params.id);
+
   const session = await mongoose.startSession();
   session.startTransaction();
+
   try {
     const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      await session.abortTransaction();
+      session.endSession();
+      return errorResponse(res, 400, "ID tờ khai không hợp lệ", { id });
+    }
+
     const doc = await TaxDeclaration.findById(id).session(session);
     if (!doc) {
       await session.abortTransaction();
       session.endSession();
-      return res.status(404).json({
-        success: false,
-        message: "Không tìm thấy tờ khai",
-      });
+      return errorResponse(res, 404, "Không tìm thấy tờ khai", { id });
     }
+
+    console.log(
+      `✅ Declaration found: ${doc.periodType}-${doc.periodKey} v${doc.version}`
+    );
 
     if (!isManagerUser(req.user)) {
       await session.abortTransaction();
       session.endSession();
-      return res.status(403).json({
-        success: false,
-        message: "Chỉ Manager mới được xóa tờ khai",
+      return errorResponse(res, 403, "Chỉ Manager mới được xóa tờ khai", {
+        userRole: req.user?.role,
       });
     }
 
     if (!doc.isClone) {
+      console.log("🔍 Checking for clone to promote...");
       const clone = await TaxDeclaration.findOne({
         shopId: doc.shopId,
         periodType: doc.periodType,
@@ -778,6 +955,8 @@ const deleteTaxDeclaration = async (req, res) => {
         clone.originalId = null;
         clone.isClone = false;
         await clone.save({ session });
+
+        console.log(`✅ Promoted clone v${clone.version} to original`);
 
         await logActivity({
           user: req.user,
@@ -797,6 +976,8 @@ const deleteTaxDeclaration = async (req, res) => {
     await session.commitTransaction();
     session.endSession();
 
+    console.log(`✅ Declaration deleted: ${id}`);
+
     await logActivity({
       user: req.user,
       store: { _id: doc.shopId },
@@ -808,27 +989,30 @@ const deleteTaxDeclaration = async (req, res) => {
       description: `Xóa tờ khai thuế kỳ ${doc.periodType} ${doc.periodKey}`,
     });
 
-    return res.json({
-      success: true,
-      message: "Xóa tờ khai thành công",
+    return successResponse(res, "Xóa tờ khai thành công", {
+      deletedId: id,
+      periodType: doc.periodType,
+      periodKey: doc.periodKey,
     });
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
-    console.error("deleteTaxDeclaration error:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Lỗi server khi xóa tờ khai",
+    console.error("❌ deleteTaxDeclaration error:", err);
+    return errorResponse(res, 500, "Lỗi server khi xóa tờ khai", {
       error: err.message,
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
     });
   }
 };
 
 /**
  * 6. LIST TAX DECLARATIONS
- * GET /api/tax?storeId=...&periodType=...&periodKey=...
+ * GET /api/taxs?storeId=...&periodType=...&periodKey=...
  */
 const listDeclarations = async (req, res) => {
+  console.log("\n📋 === LIST TAX DECLARATIONS ===");
+  console.log("Query params:", req.query);
+
   try {
     const {
       storeId,
@@ -841,17 +1025,14 @@ const listDeclarations = async (req, res) => {
     } = req.query;
 
     if (!storeId) {
-      console.warn("⚠️ Thiếu storeId trong query");
-      return res.status(400).json({
-        success: false,
-        message: "Thiếu storeId",
+      return errorResponse(res, 400, "Thiếu storeId trong query", {
+        hint: "Vui lòng cung cấp storeId",
       });
     }
 
     if (!mongoose.Types.ObjectId.isValid(storeId)) {
-      return res.status(400).json({
-        success: false,
-        message: `storeId không hợp lệ: ${storeId}`,
+      return errorResponse(res, 400, "storeId không hợp lệ", {
+        storeId,
       });
     }
 
@@ -862,6 +1043,8 @@ const listDeclarations = async (req, res) => {
     if (status) q.status = status;
     if (isClone !== undefined) q.isClone = isClone === "true";
 
+    console.log("🔍 Query:", JSON.stringify(q));
+
     const docs = await TaxDeclaration.find(q)
       .populate("createdBy", "fullName email")
       .populate("approvedBy", "fullName email")
@@ -871,6 +1054,8 @@ const listDeclarations = async (req, res) => {
       .lean();
 
     const total = await TaxDeclaration.countDocuments(q);
+
+    console.log(`✅ Found ${docs.length} declarations (total: ${total})`);
 
     const data = docs.map((d) => ({
       ...d,
@@ -899,8 +1084,7 @@ const listDeclarations = async (req, res) => {
       })),
     }));
 
-    return res.json({
-      success: true,
+    return successResponse(res, "Lấy danh sách tờ khai thành công", {
       data,
       pagination: {
         page: Number(page),
@@ -911,21 +1095,27 @@ const listDeclarations = async (req, res) => {
     });
   } catch (err) {
     console.error("❌ listDeclarations error:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Lỗi server khi lấy danh sách tờ khai",
+    return errorResponse(res, 500, "Lỗi server khi lấy danh sách tờ khai", {
       error: err.message,
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
     });
   }
 };
 
 /**
  * 7. GET SINGLE TAX DECLARATION
- * GET /api/tax/:id
+ * GET /api/taxs/:id
  */
 const getDeclaration = async (req, res) => {
+  console.log("\n📋 === GET TAX DECLARATION ===");
+  console.log("ID:", req.params.id);
+
   try {
     const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return errorResponse(res, 400, "ID tờ khai không hợp lệ", { id });
+    }
 
     const doc = await TaxDeclaration.findById(id)
       .populate("createdBy", "fullName email")
@@ -933,11 +1123,12 @@ const getDeclaration = async (req, res) => {
       .lean();
 
     if (!doc) {
-      return res.status(404).json({
-        success: false,
-        message: "Không tìm thấy tờ khai",
-      });
+      return errorResponse(res, 404, "Không tìm thấy tờ khai", { id });
     }
+
+    console.log(
+      `✅ Declaration found: ${doc.periodType}-${doc.periodKey} v${doc.version}`
+    );
 
     const formatted = {
       ...doc,
@@ -966,56 +1157,72 @@ const getDeclaration = async (req, res) => {
       })),
     };
 
-    return res.json({
-      success: true,
+    return successResponse(res, "Lấy chi tiết tờ khai thành công", {
       declaration: formatted,
     });
   } catch (err) {
-    console.error("getDeclaration error:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Lỗi server khi lấy chi tiết tờ khai",
+    console.error("❌ getDeclaration error:", err);
+    return errorResponse(res, 500, "Lỗi server khi lấy chi tiết tờ khai", {
       error: err.message,
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
     });
   }
 };
 
 /**
  * 8. APPROVE/REJECT TAX DECLARATION
- * POST /api/tax/:id/approve
+ * POST /api/taxs/:id/approve
  */
 const approveRejectDeclaration = async (req, res) => {
+  console.log("\n📋 === APPROVE/REJECT TAX DECLARATION ===");
+  console.log("ID:", req.params.id);
+  console.log("Action:", req.body.action);
+
   try {
     const { id } = req.params;
     const { action, rejectionReason } = req.body;
 
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return errorResponse(res, 400, "ID tờ khai không hợp lệ", { id });
+    }
+
     if (!["approve", "reject"].includes(action)) {
-      return res.status(400).json({
-        success: false,
-        message: "Action phải là 'approve' hoặc 'reject'",
+      return errorResponse(res, 400, "Action phải là 'approve' hoặc 'reject'", {
+        action,
+        hint: "Vui lòng gửi action: 'approve' hoặc 'reject'",
       });
     }
 
     if (!isManagerUser(req.user)) {
-      return res.status(403).json({
-        success: false,
-        message: "Chỉ Manager mới được duyệt/từ chối tờ khai",
-      });
+      return errorResponse(
+        res,
+        403,
+        "Chỉ Manager mới được duyệt/từ chối tờ khai",
+        {
+          userRole: req.user?.role,
+        }
+      );
     }
 
     const doc = await TaxDeclaration.findById(id);
     if (!doc) {
-      return res.status(404).json({
-        success: false,
-        message: "Không tìm thấy tờ khai",
-      });
+      return errorResponse(res, 404, "Không tìm thấy tờ khai", { id });
     }
 
+    console.log(
+      `✅ Declaration found: ${doc.periodType}-${doc.periodKey} (status: ${doc.status})`
+    );
+
     if (doc.status !== "submitted") {
-      return res.status(400).json({
-        success: false,
-        message: "Chỉ tờ khai đã nộp (submitted) mới được duyệt/từ chối",
-      });
+      return errorResponse(
+        res,
+        400,
+        "Chỉ tờ khai đã nộp (submitted) mới được duyệt/từ chối",
+        {
+          currentStatus: doc.status,
+          hint: "Tờ khai phải có trạng thái 'submitted'",
+        }
+      );
     }
 
     if (action === "approve") {
@@ -1023,14 +1230,20 @@ const approveRejectDeclaration = async (req, res) => {
       doc.approvedAt = new Date();
       doc.approvedBy = req.user._id;
       doc.rejectionReason = "";
+      console.log("✅ Approving declaration...");
     } else {
       doc.status = "rejected";
       doc.rejectionReason = rejectionReason || "Không có lý do";
       doc.approvedAt = null;
       doc.approvedBy = null;
+      console.log(
+        `❌ Rejecting declaration: ${rejectionReason || "No reason"}`
+      );
     }
 
     await doc.save();
+
+    console.log(`✅ Declaration ${action}d: ${id}`);
 
     await logActivity({
       user: req.user,
@@ -1045,31 +1258,46 @@ const approveRejectDeclaration = async (req, res) => {
       } tờ khai thuế kỳ ${doc.periodType} ${doc.periodKey}`,
     });
 
-    return res.json({
-      success: true,
-      message: `${
-        action === "approve" ? "Duyệt" : "Từ chối"
-      } tờ khai thành công`,
-      declaration: doc,
-    });
+    return successResponse(
+      res,
+      `${action === "approve" ? "Duyệt" : "Từ chối"} tờ khai thành công`,
+      {
+        declaration: doc,
+        action,
+      }
+    );
   } catch (err) {
-    console.error("approveRejectDeclaration error:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Lỗi server khi duyệt/từ chối tờ khai",
+    console.error("❌ approveRejectDeclaration error:", err);
+    return errorResponse(res, 500, "Lỗi server khi duyệt/từ chối tờ khai", {
       error: err.message,
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
     });
   }
 };
 
 /**
- * 9. EXPORT TAX DECLARATION -> CSV or PDF (THEO MẪU 01/CNKD ĐẦY ĐỦ)
- * GET /api/tax/:id/export?format=pdf|csv
+ * 9. EXPORT TAX DECLARATION -> CSV or PDF
+ * GET /api/taxs/:id/export?format=pdf|csv
  */
 const exportDeclaration = async (req, res) => {
+  console.log("\n📋 === EXPORT TAX DECLARATION ===");
+  console.log("ID:", req.params.id);
+  console.log("Format:", req.query.format);
+
   try {
     const { id } = req.params;
     const format = (req.query.format || "pdf").toLowerCase();
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return errorResponse(res, 400, "ID tờ khai không hợp lệ", { id });
+    }
+
+    if (!["pdf", "csv"].includes(format)) {
+      return errorResponse(res, 400, "Format phải là 'pdf' hoặc 'csv'", {
+        format,
+        hint: "Vui lòng chọn format=pdf hoặc format=csv",
+      });
+    }
 
     const doc = await TaxDeclaration.findById(id)
       .populate("createdBy", "fullName email")
@@ -1077,11 +1305,13 @@ const exportDeclaration = async (req, res) => {
       .lean();
 
     if (!doc) {
-      return res.status(404).json({
-        success: false,
-        message: "Không tìm thấy tờ khai",
-      });
+      return errorResponse(res, 404, "Không tìm thấy tờ khai", { id });
     }
+
+    console.log(
+      `✅ Declaration found: ${doc.periodType}-${doc.periodKey} v${doc.version}`
+    );
+    console.log(`📄 Exporting as ${format.toUpperCase()}...`);
 
     const payload = {
       shopId: String(doc.shopId),
@@ -1112,11 +1342,12 @@ const exportDeclaration = async (req, res) => {
       const csv = parser.parse([payload]);
       res.header("Content-Type", "text/csv; charset=utf-8");
       res.attachment(`to-khai-thue-${doc.periodKey}-v${doc.version}.csv`);
+      console.log("✅ CSV export successful");
       res.send("\uFEFF" + csv);
       return;
     }
 
-    // ===== PDF THEO MẪU 01/CNKD ĐẦY ĐỦ =====
+    // ===== PDF =====
     const fontPath = {
       normal: path.resolve(
         __dirname,
@@ -1146,11 +1377,13 @@ const exportDeclaration = async (req, res) => {
           pdf.registerFont("RobotoBold", fontPath.bold);
         }
         pdf.font("Roboto");
+        console.log("✅ Using Roboto font");
       } catch (e) {
-        console.error("❌ Lỗi registerFont Roboto:", e);
+        console.warn("⚠️ Roboto font error, using Helvetica:", e.message);
         pdf.font("Helvetica");
       }
     } else {
+      console.warn("⚠️ Roboto font not found, using Helvetica");
       pdf.font("Helvetica");
     }
 
@@ -1441,13 +1674,13 @@ const exportDeclaration = async (req, res) => {
       align: "right",
     });
 
+    console.log("✅ PDF export successful");
     pdf.end();
   } catch (err) {
-    console.error("exportDeclaration error:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Lỗi server khi export tờ khai",
+    console.error("❌ exportDeclaration error:", err);
+    return errorResponse(res, 500, "Lỗi server khi export tờ khai", {
       error: err.message,
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
     });
   }
 };
