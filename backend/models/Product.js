@@ -7,6 +7,7 @@ const productSchema = new mongoose.Schema(
     description: { type: String, maxlength: 500, trim: true },
     sku: { type: String, maxlength: 100, trim: true }, // Mã SKU sản phẩm - unique per store
     price: { type: mongoose.Schema.Types.Decimal128, required: true },
+    //thêm 1 ô là giá có thể 
     cost_price: { type: mongoose.Schema.Types.Decimal128, required: true },
     stock_quantity: { type: Number, required: true, default: 0 },
     min_stock: { type: Number, default: 0 }, // Tồn kho tối thiểu
