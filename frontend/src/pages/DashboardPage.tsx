@@ -49,15 +49,15 @@ import {
 import type { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import axios from "axios";
-// import Swal from "sweetalert2";
 import "./DashboardPage.css";
 import NotificationPanel from "../pages/setting/NotificationPanel";
 import { io } from "socket.io-client";
+
 const apiUrl = import.meta.env.VITE_API_URL;
 
 const socket = io(import.meta.env.VITE_API_URL.replace("/api", ""), {
   auth: { token: localStorage.getItem("token") },
-}); // Kết nối socket với token
+});
 
 const { Title, Text } = Typography;
 
@@ -121,7 +121,6 @@ export default function DashboardPage() {
   const [showOnboardingCard, setShowOnboardingCard] = useState(true);
   const [cardVisible, setCardVisible] = useState(true);
 
-  //State của phần 7 cái Stats
   const [financials, setFinancials] = useState<FinancialData | null>(null);
   const [loadingFinancials, setLoadingFinancials] = useState(false);
   const [errorFinancials, setErrorFinancials] = useState<string | null>(null);
@@ -135,12 +134,10 @@ export default function DashboardPage() {
     netSoldItems: 0,
   });
 
-  // State của phần sản phẩm bán chạy
   const [topProducts, setTopProducts] = useState([]);
   const [loadingTopProducts, setLoadingTopProducts] = useState(false);
   const [errorTopProducts, setErrorTopProducts] = useState<string | null>(null);
 
-  //state của phần biểu đồ doanh thu
   const [revenueSummary, setRevenueSummary] = useState<RevenueSummary | null>(
     null
   );
@@ -148,7 +145,6 @@ export default function DashboardPage() {
   const [errorRevenue, setErrorRevenue] = useState<string | null>(null);
 
   const [steps, setSteps] = useState<OnboardingStep[]>(() => {
-    // Lấy từ localStorage nếu có, không thì dùng mặc định, lưu theo cả storeId để sang store khác ko bị đánh dấu bừa
     const saved = localStorage.getItem(`onboardingSteps_${storeId}`);
     if (saved) {
       return JSON.parse(saved);
@@ -196,7 +192,6 @@ export default function DashboardPage() {
   });
 
   useEffect(() => {
-    // 1. Fetch lần đầu
     const fetchInitialUnreadCount = async () => {
       if (!storeId) return;
       try {
@@ -213,7 +208,7 @@ export default function DashboardPage() {
       }
     };
     fetchInitialUnreadCount();
-    // 2. Lắng nghe event từ NotificationPanel
+
     const handleNotificationUpdate = (e: Event) => {
       const event = e as CustomEvent<{ unreadCount: number }>;
       if (event.detail?.unreadCount !== undefined) {
@@ -221,10 +216,11 @@ export default function DashboardPage() {
       }
     };
     window.addEventListener("notifications:updated", handleNotificationUpdate);
-    // 3. Lắng nghe socket (payment_success)
+
     socket.on("payment_success", () => {
       setUnreadCount((prev) => prev + 1);
     });
+
     return () => {
       window.removeEventListener(
         "notifications:updated",
@@ -244,9 +240,8 @@ export default function DashboardPage() {
       const now = dayjs();
 
       params.append("storeId", storeId);
-      // Thay vì "thisYear", dùng "thisMonth"
       params.append("range", "thisMonth");
-      params.append("limit", "5"); // top 5
+      params.append("limit", "5");
 
       const url = `${apiUrl}/orders/top-products?${params.toString()}`;
       const res = await axios.get(url, {
@@ -274,7 +269,6 @@ export default function DashboardPage() {
       const token = localStorage.getItem("token");
       const now = dayjs();
       const periodKey = now.format("YYYY-MM");
-      //const periodKey = now.subtract(1, "month").format("YYYY-MM"); // 2025-10 (lùi 1 tháng vì tháng 10 mới có dữ liệu test)
 
       const params = new URLSearchParams();
       params.append("storeId", storeId);
@@ -282,29 +276,24 @@ export default function DashboardPage() {
       params.append("periodKey", periodKey);
 
       const url = `${apiUrl}/revenues?${params.toString()}`;
-      //console.log(url);
       const res = await axios.get(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
       const data = res.data.revenue || {};
 
-      // Lấy tổng
       const totalRevenue =
         typeof data.totalRevenue === "object"
           ? Number(data.totalRevenue.$numberDecimal || 0)
           : data.totalRevenue;
       const countOrders = data.countOrders || 0;
 
-      // Lấy ra năm-tháng từ periodKey (VD: "2025-10")
       const [year, month] = periodKey.split("-").map(Number);
-      // Số ngày trong tháng
       const daysInMonth = dayjs(`${year}-${month}`).daysInMonth();
 
-      // Fake doanh thu mỗi ngày (ngẫu nhiên nhẹ, tổng ~ gần totalRevenue)
       const fakeDaily = Array.from({ length: daysInMonth }, (_, i) => {
         const base = totalRevenue / daysInMonth;
-        const randomFactor = Math.random() * 0.4 + 0.8; // dao động 80–120%
+        const randomFactor = Math.random() * 0.4 + 0.8;
         return {
           day: `${i + 1}`,
           revenue: Math.floor(base * randomFactor),
@@ -332,7 +321,6 @@ export default function DashboardPage() {
     }
   }, [steps, storeId]);
 
-  //Effect của biểu đồ doanh thu và sản phẩm bán chạy để chung luôn
   useEffect(() => {
     if (storeId) {
       fetchRevenueSummary();
@@ -340,12 +328,10 @@ export default function DashboardPage() {
     }
   }, [storeId]);
 
-  //Effect của Order
   useEffect(() => {
     if (!storeId) return;
 
     const token = localStorage.getItem("token");
-    // Gọi API stats theo năm hiện tại
     const now = dayjs().format("YYYY");
     axios
       .get(`${apiUrl}/orders/stats`, {
@@ -357,7 +343,6 @@ export default function DashboardPage() {
         headers: { Authorization: `Bearer ${token}` },
       })
       .then((res) => {
-        // Chỉ lấy 4 số liệu, bỏ qua mảng orders
         const {
           total,
           pending,
@@ -387,7 +372,7 @@ export default function DashboardPage() {
 
     const token = localStorage.getItem("token");
     const now = dayjs();
-    const periodKey = now.format("YYYY"); // năm hiện tại
+    const periodKey = now.format("YYYY");
 
     const fetchFinancials = async () => {
       setLoadingFinancials(true);
@@ -422,7 +407,6 @@ export default function DashboardPage() {
     fetchFinancials();
   }, [storeId]);
 
-  // === Đây là vị trí hợp lý để tính giá trị trung bình đơn ===
   const avgOrderValue =
     orderStats.paid > 0 && financials
       ? financials.totalRevenue / orderStats.paid
@@ -482,21 +466,24 @@ export default function DashboardPage() {
 
   return (
     <Layout>
-      {/* Header Dashboard */}
+      {/* Header Dashboard - RESPONSIVE */}
       <div
+        className="dashboard-header"
         style={{
-          padding: "0px 24px 24px 24px",
+          padding: "12px 16px",
           borderBottom: "1px solid #f0f0f0",
           background: "#fff",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
+          gap: 12,
+          flexWrap: "wrap",
         }}
       >
-        {/* Ô tìm kiếm */}
+        {/* Ô tìm kiếm - RESPONSIVE */}
         <Input
           placeholder="Tìm kiếm đơn hàng, sản phẩm, khách hàng..."
-          style={{ width: 600 }}
+          style={{ width: "100%", maxWidth: 600, minWidth: 200 }}
           prefix={<SearchOutlined style={{ color: "#bfbfbf" }} />}
           allowClear
         />
@@ -506,8 +493,7 @@ export default function DashboardPage() {
           {/* Icon hỏi chấm - có dropdown */}
           <Dropdown
             overlay={
-              <Menu style={{ width: 300, padding: "16px" }}>
-                {/* 4 lựa chọn */}
+              <Menu style={{ width: "100%", maxWidth: 300, padding: "16px" }}>
                 <Menu.Item key="help" icon={<QuestionCircleOutlined />}>
                   <Link
                     to="/help"
@@ -545,7 +531,6 @@ export default function DashboardPage() {
                   </div>
                 </Menu.Item>
 
-                {/* Footer: Hotline + Link hỗ trợ */}
                 <Menu.Divider />
                 <div
                   style={{
@@ -556,6 +541,8 @@ export default function DashboardPage() {
                     background: "#f5f5f5",
                     borderRadius: "4px",
                     margin: "8px 0 0 0",
+                    flexWrap: "wrap",
+                    gap: 8,
                   }}
                 >
                   <div
@@ -600,14 +587,13 @@ export default function DashboardPage() {
               onClick={() => setPanelVisible(true)}
             />
           </Badge>
-          {/* Phần Panel Chuông  */}
           <NotificationPanel
             storeId={storeId}
             visible={panelVisible}
             onClose={() => setPanelVisible(false)}
           />
 
-          {/* Phần avata và dropdown */}
+          {/* Phần avata và dropdown - RESPONSIVE */}
           <Dropdown
             placement="bottomRight"
             trigger={["click"]}
@@ -638,7 +624,6 @@ export default function DashboardPage() {
                     Điều khoản dịch vụ
                   </Link>
                 </Menu.Item>
-
                 <Menu.Item key="privacy" icon={<LockOutlined />}>
                   <Link
                     to="/privacy"
@@ -682,7 +667,13 @@ export default function DashboardPage() {
                   border: "2px solid #9a0505ff",
                 }}
               />
-              <span style={{ fontWeight: 500, color: "#595959" }}>
+              <span
+                style={{
+                  fontWeight: 500,
+                  color: "#595959",
+                  display: window.innerWidth < 768 ? "none" : "inline",
+                }}
+              >
                 {user?.fullname || "Người dùng"}
               </span>
               <DownOutlined style={{ fontSize: 12, color: "#8c8c8c" }} />
@@ -691,11 +682,13 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Phần body dashboard */}
-      <div className="p-6 space-y-6">
-        <div>
-          <Title level={3}>Xin chào, {user?.fullname || "Manager"} 👋</Title>
-          <Text type="secondary">
+      {/* Phần body dashboard - RESPONSIVE PADDING */}
+      <div className="dashboard-body" style={{ padding: "16px" }}>
+        <div style={{ marginBottom: 16 }}>
+          <Title level={3} style={{ fontSize: "clamp(18px, 5vw, 24px)" }}>
+            Xin chào, {user?.fullname || "Manager"} 👋
+          </Title>
+          <Text type="secondary" style={{ fontSize: "clamp(12px, 3vw, 14px)" }}>
             Đang xem Dashboard của cửa hàng:{" "}
             <b>{currentStore?.name || storeId}</b>
           </Text>
@@ -703,7 +696,7 @@ export default function DashboardPage() {
 
         {/* Onboarding Card */}
         {showOnboardingCard && (
-          <div className="grid gap-6">
+          <div style={{ marginBottom: 24 }}>
             <Card
               style={{ border: "1px solid #8c8c8c", borderRadius: 12 }}
               title={
@@ -712,9 +705,11 @@ export default function DashboardPage() {
                     display: "flex",
                     justifyContent: "space-between",
                     width: "100%",
+                    flexWrap: "wrap",
+                    gap: 8,
                   }}
                 >
-                  <Text strong>
+                  <Text strong style={{ fontSize: "clamp(13px, 3vw, 15px)" }}>
                     Cùng SmartRetail làm quen các bước xây dựng và vận hành cửa
                     hàng nhé
                   </Text>
@@ -728,7 +723,7 @@ export default function DashboardPage() {
             >
               {cardVisible && (
                 <>
-                  <Text strong>
+                  <Text strong style={{ fontSize: "clamp(12px, 3vw, 14px)" }}>
                     Đã hoàn thành {completedSteps} trên {steps.length} bước
                   </Text>
                   <Progress
@@ -741,7 +736,11 @@ export default function DashboardPage() {
                     {steps.map((step) => (
                       <Collapse.Panel
                         key={step.key}
-                        header={step.title}
+                        header={
+                          <span style={{ fontSize: "clamp(13px, 3vw, 14px)" }}>
+                            {step.title}
+                          </span>
+                        }
                         extra={
                           <Tooltip
                             title={
@@ -772,6 +771,7 @@ export default function DashboardPage() {
                                 cursor: "pointer",
                                 userSelect: "none",
                                 transition: "all 0.2s ease",
+                                fontSize: "clamp(11px, 2.5vw, 13px)",
                               }}
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -815,7 +815,9 @@ export default function DashboardPage() {
                           </Tooltip>
                         }
                       >
-                        <p>{step.description}</p>
+                        <p style={{ fontSize: "clamp(12px, 3vw, 14px)" }}>
+                          {step.description}
+                        </p>
                         {step.actions?.map((act) => (
                           <Button
                             key={act.label}
@@ -825,6 +827,7 @@ export default function DashboardPage() {
                               borderColor: "#1677ff",
                               borderRadius: 6,
                               margin: "20px 0px 10px 5px",
+                              fontSize: "clamp(12px, 3vw, 14px)",
                             }}
                             onClick={() => navigate(act.link)}
                           >
@@ -840,8 +843,8 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Kết quả kinh doanh */}
-        <div className="grid gap-6">
+        {/* Kết quả kinh doanh - RESPONSIVE GRID */}
+        <div style={{ marginBottom: 24 }}>
           <Card
             title={
               <Space
@@ -849,22 +852,42 @@ export default function DashboardPage() {
                   display: "flex",
                   justifyContent: "space-between",
                   width: "100%",
+                  flexWrap: "wrap",
+                  gap: 8,
                 }}
               >
-                <Text strong>
+                <Text strong style={{ fontSize: "clamp(13px, 3vw, 15px)" }}>
                   Kết quả kinh doanh năm {dayjs().format("YYYY")}
                 </Text>
-                <Link to="/reports/dashboard">Xem chi tiết</Link>
+                <Link
+                  to="/reports/dashboard"
+                  style={{ fontSize: "clamp(12px, 3vw, 14px)" }}
+                >
+                  Xem chi tiết
+                </Link>
               </Space>
             }
             style={{ border: "1px solid #8c8c8c", borderRadius: 12 }}
           >
-            <div className="grid grid-cols-12 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4">
               {/* Dòng 1 */}
-              <div className="p-4 bg-purple-50 rounded-lg flex items-center justify-between col-span-12 md:col-span-4">
-                <div>
-                  <Text type="secondary">Doanh thu</Text>
-                  <Title level={4} style={{ margin: 0, color: "#1890ff" }}>
+              <div className="p-4 bg-purple-50 rounded-lg flex items-center justify-between col-span-1 sm:col-span-1 lg:col-span-4">
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Text
+                    type="secondary"
+                    style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}
+                  >
+                    Doanh thu
+                  </Text>
+                  <Title
+                    level={4}
+                    style={{
+                      margin: 0,
+                      color: "#1890ff",
+                      fontSize: "clamp(16px, 4vw, 20px)",
+                      wordBreak: "break-word",
+                    }}
+                  >
                     {loadingFinancials ? (
                       <Spin size="small" />
                     ) : financials ? (
@@ -884,15 +907,30 @@ export default function DashboardPage() {
                       color: "#1890ff",
                       fontSize: 16,
                       cursor: "pointer",
+                      marginLeft: 8,
+                      flexShrink: 0,
                     }}
                   />
                 </Tooltip>
               </div>
 
-              <div className="p-4 bg-purple-50 rounded-lg flex items-center justify-between col-span-12 md:col-span-4">
-                <div>
-                  <Text type="secondary">Giá trị trung bình đơn</Text>
-                  <Title level={4} style={{ margin: 0, color: "#52c41a" }}>
+              <div className="p-4 bg-purple-50 rounded-lg flex items-center justify-between col-span-1 sm:col-span-1 lg:col-span-4">
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Text
+                    type="secondary"
+                    style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}
+                  >
+                    Giá trị trung bình đơn
+                  </Text>
+                  <Title
+                    level={4}
+                    style={{
+                      margin: 0,
+                      color: "#52c41a",
+                      fontSize: "clamp(16px, 4vw, 20px)",
+                      wordBreak: "break-word",
+                    }}
+                  >
                     {avgOrderValue.toLocaleString("vi-VN", {
                       maximumFractionDigits: 0,
                     })}{" "}
@@ -905,15 +943,29 @@ export default function DashboardPage() {
                       color: "#1890ff",
                       fontSize: 16,
                       cursor: "pointer",
+                      marginLeft: 8,
+                      flexShrink: 0,
                     }}
                   />
                 </Tooltip>
               </div>
 
-              <div className="p-4 bg-orange-50 rounded-lg flex items-center justify-between col-span-12 md:col-span-4">
-                <div>
-                  <Text type="secondary">Tổng đơn</Text>
-                  <Title level={4} style={{ margin: 0, color: "#fa8c16" }}>
+              <div className="p-4 bg-orange-50 rounded-lg flex items-center justify-between col-span-1 sm:col-span-1 lg:col-span-4">
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Text
+                    type="secondary"
+                    style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}
+                  >
+                    Tổng đơn
+                  </Text>
+                  <Title
+                    level={4}
+                    style={{
+                      margin: 0,
+                      color: "#fa8c16",
+                      fontSize: "clamp(16px, 4vw, 20px)",
+                    }}
+                  >
                     {orderStats.total}
                   </Title>
                 </div>
@@ -923,16 +975,30 @@ export default function DashboardPage() {
                       color: "#fa8c16",
                       fontSize: 16,
                       cursor: "pointer",
+                      marginLeft: 8,
+                      flexShrink: 0,
                     }}
                   />
                 </Tooltip>
               </div>
 
               {/* Dòng 2 */}
-              <div className="p-4 bg-purple-50 rounded-lg flex items-center justify-between col-span-12 md:col-span-3">
-                <div>
-                  <Text type="secondary">Số lượng hàng thực bán</Text>
-                  <Title level={4} style={{ margin: 0, color: "#722ed1" }}>
+              <div className="p-4 bg-purple-50 rounded-lg flex items-center justify-between col-span-1 sm:col-span-1 lg:col-span-3">
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Text
+                    type="secondary"
+                    style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}
+                  >
+                    Số lượng hàng thực bán
+                  </Text>
+                  <Title
+                    level={4}
+                    style={{
+                      margin: 0,
+                      color: "#722ed1",
+                      fontSize: "clamp(16px, 4vw, 20px)",
+                    }}
+                  >
                     {orderStats.netSoldItems.toLocaleString("vi-VN")}
                   </Title>
                 </div>
@@ -954,14 +1020,21 @@ export default function DashboardPage() {
                       color: "#1890ff",
                       fontSize: 16,
                       cursor: "pointer",
+                      marginLeft: 8,
+                      flexShrink: 0,
                     }}
                   />
                 </Tooltip>
               </div>
 
-              <div className="p-4 bg-green-50 rounded-lg flex items-center justify-between col-span-12 md:col-span-4">
-                <div>
-                  <Text type="secondary">Tiền lãi thực</Text>
+              <div className="p-4 bg-green-50 rounded-lg flex items-center justify-between col-span-1 sm:col-span-1 lg:col-span-4">
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Text
+                    type="secondary"
+                    style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}
+                  >
+                    Tiền lãi thực
+                  </Text>
                   <Title
                     level={4}
                     style={{
@@ -970,6 +1043,8 @@ export default function DashboardPage() {
                         (financials?.netProfit ?? 0) >= 0
                           ? "#389e0d"
                           : "#f5222d",
+                      fontSize: "clamp(16px, 4vw, 20px)",
+                      wordBreak: "break-word",
                     }}
                   >
                     {loadingFinancials ? (
@@ -991,15 +1066,29 @@ export default function DashboardPage() {
                       color: "#389e0d",
                       fontSize: 16,
                       cursor: "pointer",
+                      marginLeft: 8,
+                      flexShrink: 0,
                     }}
                   />
                 </Tooltip>
               </div>
 
-              <div className="p-4 bg-red-50 rounded-lg flex items-center justify-between col-span-12 md:col-span-3">
-                <div>
-                  <Text type="secondary">Chưa thanh toán</Text>
-                  <Title level={4} style={{ margin: 0, color: "#f5222d" }}>
+              <div className="p-4 bg-red-50 rounded-lg flex items-center justify-between col-span-1 sm:col-span-1 lg:col-span-3">
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Text
+                    type="secondary"
+                    style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}
+                  >
+                    Chưa thanh toán
+                  </Text>
+                  <Title
+                    level={4}
+                    style={{
+                      margin: 0,
+                      color: "#f5222d",
+                      fontSize: "clamp(16px, 4vw, 20px)",
+                    }}
+                  >
                     {orderStats.pending}
                   </Title>
                 </div>
@@ -1009,15 +1098,29 @@ export default function DashboardPage() {
                       color: "#f5222d",
                       fontSize: 16,
                       cursor: "pointer",
+                      marginLeft: 8,
+                      flexShrink: 0,
                     }}
                   />
                 </Tooltip>
               </div>
 
-              <div className="p-4 bg-gray-100 rounded-lg flex items-center justify-between col-span-12 md:col-span-2">
-                <div>
-                  <Text type="secondary">Đơn bị hoàn trả</Text>
-                  <Title level={4} style={{ margin: 0, color: "#595959" }}>
+              <div className="p-4 bg-gray-100 rounded-lg flex items-center justify-between col-span-1 sm:col-span-1 lg:col-span-2">
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Text
+                    type="secondary"
+                    style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}
+                  >
+                    Đơn bị hoàn trả
+                  </Text>
+                  <Title
+                    level={4}
+                    style={{
+                      margin: 0,
+                      color: "#595959",
+                      fontSize: "clamp(16px, 4vw, 20px)",
+                    }}
+                  >
                     {orderStats.refunded}
                   </Title>
                 </div>
@@ -1027,6 +1130,8 @@ export default function DashboardPage() {
                       color: "#595959",
                       fontSize: 16,
                       cursor: "pointer",
+                      marginLeft: 8,
+                      flexShrink: 0,
                     }}
                   />
                 </Tooltip>
@@ -1035,8 +1140,8 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* Biểu đồ doanh thu tổng quan */}
-        <div className="grid gap-6">
+        {/* Biểu đồ doanh thu tổng quan - RESPONSIVE */}
+        <div style={{ marginBottom: 24 }}>
           <Card
             title={
               <Space
@@ -1044,12 +1149,19 @@ export default function DashboardPage() {
                   display: "flex",
                   justifyContent: "space-between",
                   width: "100%",
+                  flexWrap: "wrap",
+                  gap: 8,
                 }}
               >
-                <Text strong>
+                <Text strong style={{ fontSize: "clamp(13px, 3vw, 15px)" }}>
                   Biểu đồ doanh thu tháng {dayjs().format("MM/YYYY")}
                 </Text>
-                <Link to="/reports/revenue">Xem chi tiết</Link>
+                <Link
+                  to="/reports/revenue"
+                  style={{ fontSize: "clamp(12px, 3vw, 14px)" }}
+                >
+                  Xem chi tiết
+                </Link>
               </Space>
             }
             style={{ border: "1px solid #8c8c8c", borderRadius: 12 }}
@@ -1067,11 +1179,10 @@ export default function DashboardPage() {
               </div>
             ) : errorRevenue ? (
               <Alert type="error" message={errorRevenue} />
-            ) : revenueSummary ? ( // <-- chỉ check có summary là render
+            ) : revenueSummary ? (
               <div>
                 {revenueSummary.dailyRevenue?.length ? (
-                  // Có dữ liệu daily thì vẽ chart
-                  <ResponsiveContainer width="100%" height={220}>
+                  <ResponsiveContainer width="100%" height={220} minWidth={280}>
                     <LineChart
                       data={revenueSummary.dailyRevenue}
                       margin={{ top: 5, right: 10, left: 0, bottom: 0 }}
@@ -1115,7 +1226,12 @@ export default function DashboardPage() {
                     </LineChart>
                   </ResponsiveContainer>
                 ) : (
-                  <Text type="secondary">(Không có dữ liệu theo ngày)</Text>
+                  <Text
+                    type="secondary"
+                    style={{ fontSize: "clamp(12px, 3vw, 14px)" }}
+                  >
+                    (Không có dữ liệu theo ngày)
+                  </Text>
                 )}
 
                 <Space
@@ -1124,10 +1240,21 @@ export default function DashboardPage() {
                   style={{ marginTop: 16, width: "100%" }}
                 >
                   <div>
-                    <Text type="secondary" style={{ fontSize: 13 }}>
+                    <Text
+                      type="secondary"
+                      style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}
+                    >
                       Tổng doanh thu tháng {dayjs().format("MM/YYYY")}
                     </Text>
-                    <Title level={4} style={{ margin: 0, color: "#1890ff" }}>
+                    <Title
+                      level={4}
+                      style={{
+                        margin: 0,
+                        color: "#1890ff",
+                        fontSize: "clamp(16px, 4vw, 20px)",
+                        wordBreak: "break-word",
+                      }}
+                    >
                       {new Intl.NumberFormat("vi-VN", {
                         style: "currency",
                         currency: "VND",
@@ -1142,23 +1269,28 @@ export default function DashboardPage() {
                     </Title>
                   </div>
                   <div>
-                    <Text type="secondary" style={{ fontSize: 13 }}>
-                      Số đơn hàng trong tháng {dayjs().format("MM/YYYY")} là:{" "}
-                    </Text>
-                    <Text strong style={{ color: "#52c41a", fontSize: 16 }}>
-                      {revenueSummary.countOrders} đơn
+                    <Text
+                      type="secondary"
+                      style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}
+                    >
+                      Số đơn hàng: <b>{revenueSummary.countOrders}</b>
                     </Text>
                   </div>
                 </Space>
               </div>
             ) : (
-              <Text type="secondary">Chưa có doanh thu trong tháng này</Text>
+              <Text
+                type="secondary"
+                style={{ fontSize: "clamp(12px, 3vw, 14px)" }}
+              >
+                Không có dữ liệu
+              </Text>
             )}
           </Card>
         </div>
 
-        {/* Sản phẩm bán chạy tổng quan */}
-        <div className="grid gap-6">
+        {/* Top sản phẩm bán chạy - RESPONSIVE TABLE */}
+        <div style={{ marginBottom: 24 }}>
           <Card
             title={
               <Space
@@ -1166,28 +1298,54 @@ export default function DashboardPage() {
                   display: "flex",
                   justifyContent: "space-between",
                   width: "100%",
+                  flexWrap: "wrap",
+                  gap: 8,
                 }}
               >
-                <Text strong>
-                  Sản phẩm bán chạy tháng {now.format("MM/YYYY")}
+                <Text strong style={{ fontSize: "clamp(13px, 3vw, 15px)" }}>
+                  Top 5 sản phẩm bán chạy tháng {dayjs().format("MM/YYYY")}
                 </Text>
-                <Link to="/reports/top-products">Xem chi tiết</Link>
+                <Link
+                  to="/reports/products"
+                  style={{ fontSize: "clamp(12px, 3vw, 14px)" }}
+                >
+                  Xem chi tiết
+                </Link>
               </Space>
             }
             style={{ border: "1px solid #8c8c8c", borderRadius: 12 }}
           >
             {loadingTopProducts ? (
-              <Spin tip="Đang tải top sản phẩm..." />
+              <div
+                style={{
+                  height: 200,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Spin tip="Đang tải..." />
+              </div>
             ) : errorTopProducts ? (
               <Alert type="error" message={errorTopProducts} />
+            ) : topProducts.length > 0 ? (
+              <div style={{ overflowX: "auto" }}>
+                <Table
+                  columns={columnsTopProducts}
+                  dataSource={topProducts}
+                  rowKey="_id"
+                  pagination={false}
+                  size="small"
+                  scroll={{ x: 600 }}
+                />
+              </div>
             ) : (
-              <Table
-                columns={columnsTopProducts}
-                dataSource={topProducts}
-                rowKey="_id"
-                pagination={false}
-                size="small"
-              />
+              <Text
+                type="secondary"
+                style={{ fontSize: "clamp(12px, 3vw, 14px)" }}
+              >
+                Chưa có dữ liệu sản phẩm bán chạy
+              </Text>
             )}
           </Card>
         </div>
