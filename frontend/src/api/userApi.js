@@ -156,6 +156,12 @@ export const softDeleteUser = async (data) =>
 export const restoreUser = async (data) =>
   (await apiClient.post("/users/staff/restore", data)).data;
 
+export const getPermissionCatalog = async () =>
+  (await apiClient.get("/users/permissions/catalog")).data;
+
+export const updateUserById = async (userId, data) =>
+  (await apiClient.put(`/users/${userId}`, data)).data;
+
 // ==================== DASHBOARD ROUTES ====================
 
 /**
@@ -185,6 +191,8 @@ export default {
   changePassword,
   softDeleteUser,
   restoreUser,
+  getPermissionCatalog,
+  updateUserById,
   getManagerDashboard,
   getStaffDashboard,
 };

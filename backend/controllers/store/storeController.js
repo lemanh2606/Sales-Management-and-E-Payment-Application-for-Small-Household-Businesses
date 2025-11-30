@@ -5,6 +5,7 @@ const Store = require("../../models/Store");
 const User = require("../../models/User");
 const logActivity = require("../../utils/logActivity");
 const bcrypt = require("bcryptjs");
+const { STAFF_DEFAULT_MENU } = require("../../config/constants/permissions");
 
 /**
  * Tạo store mới (MANAGER)
@@ -498,6 +499,7 @@ const createEmployee = async (req, res) => {
           role: "STAFF",
         },
       ],
+      menu: STAFF_DEFAULT_MENU.slice(),
       isVerified: true, // Default verified, staff đổi pass sau
     });
     await newUser.save();
@@ -564,7 +566,7 @@ const getEmployeesByStore = async (req, res) => {
 
     const employees = (
       await Employee.find({ store_id: storeId, isDeleted })
-        .populate("user_id", "username email phone role")
+        .populate("user_id", "username email phone role menu")
         .populate("store_id", "name")
         .lean()
     ).map((emp) => ({
@@ -587,7 +589,7 @@ const getEmployeeById = async (req, res) => {
     const { id, storeId } = req.params; // 👈 Add storeId từ params
 
     const employee = await Employee.findById(id)
-      .populate("user_id", "name username email phone role") // Populate user info
+      .populate("user_id", "name username email phone role menu") // Populate user info
       .populate("store_id", "name") // Store name
       .lean();
 

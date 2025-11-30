@@ -9,6 +9,7 @@ const jwt = require("jsonwebtoken");
 const mongoose = require("mongoose");
 const { sendVerificationEmail } = require("../../services/emailService");
 const ImgBBService = require("../../services/imageService");
+const { ALL_PERMISSIONS, STAFF_DEFAULT_MENU } = require("../../config/constants/permissions");
 // Initialize ImgBB service
 const imgbbService = new ImgBBService(process.env.IMGBB_API_KEY);
 
@@ -38,113 +39,6 @@ const REFRESH_TOKEN_EXPIRES =
   process.env.REFRESH_TOKEN_EXPIRES ||
   `${process.env.REFRESH_TOKEN_EXPIRES_DAYS || 7}d`;
 
-// menu để phân quyền
-const ALL_PERMISSIONS = [
-  // store
-  "store:create",
-  "store:view",
-  "store:update",
-  "store:delete",
-  "store:dashboard:view",
-  "store:staff:assign",
-  "store:employee:create",
-  "store:employee:view",
-  "store:employee:update",
-  "store:employee:delete",
-  "store:employee:softDelete",
-  "store:employee:restore",
-  // customers
-  "customers:create",
-  "customers:search",
-  "customers:update",
-  "customers:delete",
-  "customers:top-customers",
-  // loyalty
-  "loyalty:view",
-  "loyalty:manage",
-  // orders
-  "orders:create",
-  "orders:pay",
-  "orders:print",
-  "orders:view",
-  "orders:refund",
-  // reports
-  "reports:top-products",
-  "reports:revenue:view",
-  "reports:revenue:employee",
-  "reports:revenue:export",
-  "reports:financial:view",
-  "reports:financial:export",
-  "reports:financial:list",
-  // products
-  "products:create",
-  "products:view",
-  "products:update",
-  "products:price",
-  "products:delete",
-  "products:image:delete",
-  "products:search",
-  "products:low-stock",
-  // product groups
-  "product-groups:create",
-  "product-groups:view",
-  "product-groups:update",
-  "product-groups:delete",
-  // purchase orders
-  "purchase-orders:create",
-  "purchase-orders:view",
-  "purchase-orders:update",
-  "purchase-orders:delete",
-  // purchase returns
-  "purchase-returns:create",
-  "purchase-returns:view",
-  "purchase-returns:update",
-  "purchase-returns:delete",
-  // stock checks / inventory
-  "inventory:stock-check:create",
-  "inventory:stock-check:view",
-  "inventory:stock-check:detail",
-  "inventory:stock-check:update",
-  "inventory:stock-check:delete",
-  // stock disposal
-  "inventory:disposal:create",
-  "inventory:disposal:view",
-  "inventory:disposal:update",
-  "inventory:disposal:delete",
-  // suppliers
-  "supplier:create",
-  "supplier:view",
-  "supplier:update",
-  "supplier:delete",
-  // taxx
-  "tax:preview",
-  "tax:create",
-  "tax:update",
-  "tax:clone",
-  "tax:delete",
-  "tax:list",
-  "tax:export",
-  // user
-  "users:manage",
-  "users:role:update",
-  "users:menu:update",
-  "users:update",
-  // purchase/supplier related reports/exports
-  "reports:export",
-  "reports:activity-log:view",
-  "reports:endofday:view",
-  // cấu hình
-  "settings:activity-log",
-  "settings:payment-method",
-  "notifications:view",
-  // subscription
-  "subscription:view",
-  "subscription:manage",
-  "subscription:activate",
-  "subscription:cancel",
-  "subscription:history",
-  "file:view",
-];
 /* ------------------------- 
    Helper functions
    ------------------------- */
@@ -822,9 +716,11 @@ const updateUser = async (req, res) => {
         }
         updates.role = val;
 
-        // Nếu role đổi thành MANAGER thì tự động gán menu full quyền
-        if (String(val).toUpperCase() === "MANAGER") {
-          updates.menu = ALL_PERMISSIONS.slice(); // clone mảng ALL_PERMISSIONS
+        const normalizedRole = String(val).toUpperCase();
+        if (normalizedRole === "MANAGER") {
+          updates.menu = ALL_PERMISSIONS.slice();
+        } else if (normalizedRole === "STAFF") {
+          updates.menu = STAFF_DEFAULT_MENU.slice();
         }
         continue;
       }
@@ -1386,6 +1282,15 @@ const changePassword = async (req, res) => {
   }
 };
 
+const getPermissionCatalog = async (req, res) => {
+  try {
+    return res.json({ permissions: ALL_PERMISSIONS, staffDefault: STAFF_DEFAULT_MENU });
+  } catch (err) {
+    console.error("Lỗi lấy danh sách quyền:", err.message);
+    return res.status(500).json({ message: "Lỗi server khi lấy danh sách quyền" });
+  }
+};
+
 //Chỉ manager xóa staff khác, check store match current_store, set isDeleted=true + deletedAt=now
 const softDeleteUser = async (req, res) => {
   try {
@@ -1533,4 +1438,5 @@ module.exports = {
   softDeleteUser,
   restoreUser,
   resendRegisterOtp,
+  getPermissionCatalog,
 };
