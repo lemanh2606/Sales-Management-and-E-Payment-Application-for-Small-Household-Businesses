@@ -47,9 +47,9 @@ import { getProductsByStore, importProductsByExcel } from "../../api/productApi"
 import * as XLSX from "xlsx";
 
 const { Title, Text } = Typography;
+const apiUrl = import.meta.env.VITE_API_URL;
 
 export default function ProductListPage() {
-  // ✅ Only useNotification
   const [api, contextHolder] = notification.useNotification();
 
   const storeObj = JSON.parse(localStorage.getItem("currentStore")) || {};
@@ -66,7 +66,9 @@ export default function ProductListPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [drawerVisible, setDrawerVisible] = useState(false);
-  const [isMobile, setIsMobile] = useState(typeof window !== "undefined" ? window.innerWidth < 768 : false);
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== "undefined" ? window.innerWidth < 768 : false
+  );
 
   const allColumns = [
     { key: "name", label: "Tên sản phẩm", default: true },
@@ -94,6 +96,7 @@ export default function ProductListPage() {
     }
     return allColumns.filter((col) => col.default).map((col) => col.key);
   });
+
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importFile, setImportFile] = useState(null);
   const [previewRows, setPreviewRows] = useState([]);
@@ -102,7 +105,6 @@ export default function ProductListPage() {
   const [downloadingTemplate, setDownloadingTemplate] = useState(false);
 
   const fileInputRef = useRef(null);
-  const apiBaseUrl = import.meta.env.VITE_API_URL || "http://localhost:9999/api";
 
   const handleDownloadTemplate = async () => {
     if (!token) {
@@ -116,7 +118,7 @@ export default function ProductListPage() {
 
     try {
       setDownloadingTemplate(true);
-      const response = await fetch(`${apiBaseUrl}/products/template/download?format=excel`, {
+      const response = await fetch(`${apiUrl}/products/template/download?format=excel`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -257,9 +259,9 @@ export default function ProductListPage() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <Space>
             <ShoppingOutlined style={{ color: "#1890ff" }} />
-            <span>{product.name}</span>
+            <span style={{ fontSize: "clamp(12px, 3vw, 14px)" }}>{product.name}</span>
           </Space>
-          <Text type="secondary" style={{ fontSize: 12 }}>
+          <Text type="secondary" style={{ fontSize: "clamp(10px, 2.5vw, 12px)" }}>
             {product.sku}
           </Text>
         </div>
@@ -452,7 +454,7 @@ export default function ProductListPage() {
         title: (
           <Space>
             <ShoppingOutlined style={{ color: "#1890ff" }} />
-            <span>Tên sản phẩm</span>
+            <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Tên sản phẩm</span>
           </Space>
         ),
         dataIndex: "name",
@@ -460,31 +462,31 @@ export default function ProductListPage() {
         width: isMobile ? 180 : 250,
         ellipsis: true,
         render: (text) => (
-          <Text strong style={{ color: "#1890ff" }}>
+          <Text strong style={{ color: "#1890ff", fontSize: "clamp(12px, 2.5vw, 14px)" }}>
             {text}
           </Text>
         ),
       },
       sku: {
-        title: "SKU",
+        title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>SKU</span>,
         dataIndex: "sku",
         key: "sku",
-        width: 150,
-        render: (text) => <Tag color="cyan">{text || "-"}</Tag>,
+        width: isMobile ? 100 : 150,
+        render: (text) => <Tag color="cyan" style={{ fontSize: "clamp(10px, 2vw, 12px)" }}>{text || "-"}</Tag>,
       },
       price: {
         title: (
           <Space>
             <DollarOutlined style={{ color: "#52c41a" }} />
-            <span>Giá bán</span>
+            <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Giá bán</span>
           </Space>
         ),
         dataIndex: "price",
         key: "price",
-        width: 150,
+        width: isMobile ? 110 : 150,
         align: "right",
         render: (value) => (
-          <Text strong style={{ color: "#52c41a" }}>
+          <Text strong style={{ color: "#52c41a", fontSize: "clamp(11px, 2.5vw, 13px)" }}>
             {value ? `${value.toLocaleString()}₫` : "-"}
           </Text>
         ),
@@ -493,12 +495,12 @@ export default function ProductListPage() {
         title: (
           <Space>
             <StockOutlined style={{ color: "#faad14" }} />
-            <span>Tồn kho</span>
+            <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Tồn kho</span>
           </Space>
         ),
         dataIndex: "stock_quantity",
         key: "stock_quantity",
-        width: 120,
+        width: isMobile ? 90 : 120,
         align: "center",
         render: (value, record) => {
           const isLowStock = record.min_stock && value <= record.min_stock && value > 0;
@@ -506,10 +508,11 @@ export default function ProductListPage() {
             <Tooltip title={isLowStock ? "Tồn kho thấp!" : ""}>
               <Badge
                 count={value || 0}
-                overflowCount={999999} //không hiển thị 99+ mà hiển đầy đủ, mặc định Badge hiện là 99+ nếu lớn hơn 99
+                overflowCount={999999}
                 showZero
                 style={{
                   backgroundColor: value > 10 ? "#52c41a" : value > 0 ? "#faad14" : "#f5222d",
+                  fontSize: "clamp(10px, 2vw, 12px)",
                 }}
               />
             </Tooltip>
@@ -517,69 +520,78 @@ export default function ProductListPage() {
         },
       },
       status: {
-        title: "Trạng thái",
+        title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Trạng thái</span>,
         dataIndex: "status",
         key: "status",
-        width: 170,
+        width: isMobile ? 140 : 170,
         align: "center",
         render: (value) => (
           <Tag
             icon={value === "Đang kinh doanh" ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
             color={value === "Đang kinh doanh" ? "success" : "error"}
+            style={{ fontSize: "clamp(10px, 2vw, 12px)" }}
           >
             {value || "Chưa xác định"}
           </Tag>
         ),
       },
       cost_price: {
-        title: "Giá vốn",
+        title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Giá vốn</span>,
         dataIndex: "cost_price",
         key: "cost_price",
-        width: 150,
+        width: isMobile ? 110 : 150,
         align: "right",
-        render: (value) => <Text type="secondary">{value ? `${value.toLocaleString()}₫` : "-"}</Text>,
+        render: (value) => (
+          <Text type="secondary" style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
+            {value ? `${value.toLocaleString()}₫` : "-"}
+          </Text>
+        ),
       },
       supplier: {
-        title: "NCC",
+        title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>NCC</span>,
         dataIndex: "supplier",
         key: "supplier",
-        width: 150,
+        width: isMobile ? 120 : 150,
         ellipsis: true,
-        render: (value) => <Text>{value?.name || "-"}</Text>,
+        render: (value) => <Text style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>{value?.name || "-"}</Text>,
       },
       group: {
-        title: "Nhóm",
+        title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Nhóm</span>,
         dataIndex: "group",
         key: "group",
-        width: 150,
+        width: isMobile ? 120 : 150,
         ellipsis: true,
-        render: (value) => <Tag color="purple">{value?.name || "-"}</Tag>,
+        render: (value) => (
+          <Tag color="purple" style={{ fontSize: "clamp(10px, 2vw, 12px)" }}>
+            {value?.name || "-"}
+          </Tag>
+        ),
       },
       unit: {
-        title: "ĐV",
+        title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>ĐV</span>,
         dataIndex: "unit",
         key: "unit",
         width: 100,
-        render: (value) => value || "-",
+        render: (value) => <span style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>{value || "-"}</span>,
       },
       min_stock: {
-        title: "Min",
+        title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Min</span>,
         dataIndex: "min_stock",
         key: "min_stock",
         width: 100,
         align: "center",
-        render: (value) => value || 0,
+        render: (value) => <span style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>{value || 0}</span>,
       },
       max_stock: {
-        title: "Max",
+        title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Max</span>,
         dataIndex: "max_stock",
         key: "max_stock",
         width: 100,
         align: "center",
-        render: (value) => value || 0,
+        render: (value) => <span style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>{value || 0}</span>,
       },
       image: {
-        title: "Ảnh",
+        title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Ảnh</span>,
         dataIndex: "image",
         key: "image",
         width: 100,
@@ -589,37 +601,47 @@ export default function ProductListPage() {
             <Image
               src={value}
               alt={record.name}
-              width={50}
-              height={50}
+              width={isMobile ? 40 : 50}
+              height={isMobile ? 40 : 50}
               style={{ objectFit: "cover", borderRadius: "8px" }}
               preview={{ mask: <EyeOutlined /> }}
             />
           ) : (
-            <Text type="secondary">-</Text>
+            <Text type="secondary" style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
+              -
+            </Text>
           ),
       },
       createdAt: {
-        title: "Ngày tạo",
+        title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Ngày tạo</span>,
         dataIndex: "createdAt",
         key: "createdAt",
         width: 120,
-        render: (value) => (value ? new Date(value).toLocaleDateString("vi-VN") : "-"),
+        render: (value) => (
+          <span style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
+            {value ? new Date(value).toLocaleDateString("vi-VN") : "-"}
+          </span>
+        ),
       },
       updatedAt: {
-        title: "Cập nhật",
+        title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Cập nhật</span>,
         dataIndex: "updatedAt",
         key: "updatedAt",
         width: 120,
-        render: (value) => (value ? new Date(value).toLocaleDateString("vi-VN") : "-"),
+        render: (value) => (
+          <span style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
+            {value ? new Date(value).toLocaleDateString("vi-VN") : "-"}
+          </span>
+        ),
       },
     };
 
     const columns = visibleColumns.map((key) => columnConfigs[key]).filter(Boolean);
 
     columns.push({
-      title: "Thao tác",
+      title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Thao tác</span>,
       key: "action",
-      width: 120,
+      width: isMobile ? 80 : 120,
       align: "center",
       fixed: "right",
       render: (_, record) => (
@@ -627,7 +649,7 @@ export default function ProductListPage() {
           <Button
             type="primary"
             icon={<EditOutlined />}
-            size="small"
+            size={isMobile ? "small" : "middle"}
             onClick={() => openEditModal(record)}
             style={{
               background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
@@ -646,14 +668,14 @@ export default function ProductListPage() {
       style={{ width: "100%", maxHeight: isMobile ? "70vh" : 400, overflowY: "auto" }}
       styles={{ body: { padding: 16 } }}
     >
-      <Text strong style={{ fontSize: 14 }}>
+      <Text strong style={{ fontSize: "clamp(13px, 3vw, 14px)" }}>
         Chọn cột hiển thị
       </Text>
       <Divider style={{ margin: "8px 0" }} />
       <Checkbox.Group value={visibleColumns} onChange={toggleColumn} style={{ width: "100%" }}>
         <Space direction="vertical" style={{ width: "100%" }} size={8}>
           {allColumns.map((col) => (
-            <Checkbox key={col.key} value={col.key}>
+            <Checkbox key={col.key} value={col.key} style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>
               {col.label}
             </Checkbox>
           ))}
@@ -670,10 +692,11 @@ export default function ProductListPage() {
   const previewColumns = useMemo(() => {
     if (!previewRows.length) return [];
     return Object.keys(previewRows[0]).map((key) => ({
-      title: key,
+      title: <span style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>{key}</span>,
       dataIndex: key,
       key,
       ellipsis: true,
+      render: (text) => <span style={{ fontSize: "clamp(10px, 2vw, 12px)" }}>{text}</span>,
     }));
   }, [previewRows]);
 
@@ -692,8 +715,7 @@ export default function ProductListPage() {
       const response = await importProductsByExcel(storeId, importFile);
 
       const resultData = response?.results || {};
-      const hasResultPayload =
-        Array.isArray(resultData?.success) || Array.isArray(resultData?.failed);
+      const hasResultPayload = Array.isArray(resultData?.success) || Array.isArray(resultData?.failed);
       const successRows = resultData.success || [];
       const failedRows = resultData.failed || [];
       const totalRows = resultData.total ?? successRows.length + failedRows.length;
@@ -725,7 +747,7 @@ export default function ProductListPage() {
               </p>
               <ul style={{ paddingLeft: 18, margin: 0 }}>
                 {failedRows.slice(0, 3).map((item) => (
-                  <li key={item.row}>
+                  <li key={item.row} style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
                     Dòng {item.row}: {item.error}
                   </li>
                 ))}
@@ -760,7 +782,7 @@ export default function ProductListPage() {
             <p>{`Thất bại ${failedRows.length}/${serverData?.results?.total ?? failedRows.length}.`}</p>
             <ul style={{ paddingLeft: 18, margin: 0 }}>
               {failedRows.slice(0, 3).map((item) => (
-                <li key={item.row}>
+                <li key={item.row} style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
                   Dòng {item.row}: {item.error}
                 </li>
               ))}
@@ -781,10 +803,14 @@ export default function ProductListPage() {
     return (
       <Layout>
         {contextHolder}
-        <Card style={{ margin: 24, borderRadius: 16 }}>
-          <Title level={2}>Danh sách sản phẩm</Title>
+        <Card style={{ margin: isMobile ? 12 : 24, borderRadius: 16 }}>
+          <Title level={2} style={{ fontSize: "clamp(20px, 5vw, 32px)" }}>
+            Danh sách sản phẩm
+          </Title>
           <Card style={{ background: "#FFF9C4", border: "none", marginTop: 16 }}>
-            <Text strong>⚠️ Không tìm thấy cửa hàng hiện hành.</Text>
+            <Text strong style={{ fontSize: "clamp(13px, 3vw, 15px)" }}>
+              ⚠️ Không tìm thấy cửa hàng hiện hành.
+            </Text>
           </Card>
         </Card>
       </Layout>
@@ -795,28 +821,43 @@ export default function ProductListPage() {
     <Layout>
       {contextHolder}
 
-      <div style={{ padding: isMobile ? 12 : 24, background: "#ffffff", minHeight: "100vh" }}>
-        <Card style={{ borderRadius: 16, boxShadow: "0 4px 20px rgba(0,0,0,0.08)", marginBottom: 24 }}>
-          <div style={{ marginBottom: 24 }}>
+      <div
+        style={{
+          padding: isMobile ? 1 : 5,
+          background: "#ffffff",
+          minHeight: "100vh",
+        }}
+      >
+        <Card
+          style={{
+            borderRadius: 16,
+            boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
+            marginBottom: isMobile ? 10 : 15,
+          }}
+        >
+          <div style={{ marginBottom: isMobile ? 10 : 20 }}>
             <Title
               level={2}
               style={{
                 margin: 0,
-                background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                background: "#ffffff",
                 WebkitBackgroundClip: "text",
                 WebkitTextFillColor: "transparent",
-                fontSize: isMobile ? 24 : 32,
+                fontSize: "clamp(20px, 6vw, 32px)",
                 fontWeight: 700,
+                marginBottom: isMobile ? 4 : 8,
               }}
             >
               📦 Quản lý Sản phẩm
             </Title>
             {!isMobile && (
-              <Text type="secondary">Quản lý danh mục sản phẩm - giá bán, tồn kho và thông tin chi tiết</Text>
+              <Text type="secondary" style={{ fontSize: "clamp(12px, 3vw, 14px)" }}>
+                Quản lý danh mục sản phẩm - giá bán, tồn kho và thông tin chi tiết
+              </Text>
             )}
           </div>
 
-          <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+          <Row gutter={[isMobile ? 8 : 16, isMobile ? 8 : 16]} style={{ marginBottom: isMobile ? 16 : 24 }}>
             <Col xs={12} sm={12} md={6}>
               <Card
                 style={{
@@ -824,13 +865,21 @@ export default function ProductListPage() {
                   border: "none",
                   borderRadius: 12,
                 }}
-                styles={{ body: { padding: isMobile ? 12 : 24 } }}
+                styles={{ body: { padding: isMobile ? 12 : 20 } }}
               >
                 <Statistic
-                  title={<span style={{ color: "#fff", fontSize: isMobile ? 11 : 14 }}>Tổng Sản phẩm</span>}
+                  title={
+                    <span style={{ color: "#fff", fontSize: "clamp(10px, 2.5vw, 14px)", fontWeight: 500 }}>
+                      Tổng SP
+                    </span>
+                  }
                   value={filteredProducts.length}
-                  prefix={<AppstoreOutlined style={{ fontSize: isMobile ? 16 : 24 }} />}
-                  valueStyle={{ color: "#fff", fontWeight: "bold", fontSize: isMobile ? 18 : 24 }}
+                  prefix={<AppstoreOutlined style={{ fontSize: "clamp(14px, 4vw, 20px)" }} />}
+                  valueStyle={{
+                    color: "#fff",
+                    fontWeight: "bold",
+                    fontSize: "clamp(16px, 5vw, 24px)",
+                  }}
                 />
               </Card>
             </Col>
@@ -841,13 +890,21 @@ export default function ProductListPage() {
                   border: "none",
                   borderRadius: 12,
                 }}
-                styles={{ body: { padding: isMobile ? 12 : 24 } }}
+                styles={{ body: { padding: isMobile ? 12 : 20 } }}
               >
                 <Statistic
-                  title={<span style={{ color: "#fff", fontSize: isMobile ? 11 : 14 }}>Đang kinh doanh</span>}
+                  title={
+                    <span style={{ color: "#fff", fontSize: "clamp(10px, 2.5vw, 14px)", fontWeight: 500 }}>
+                      Đang KD
+                    </span>
+                  }
                   value={activeProducts}
-                  prefix={<CheckCircleOutlined style={{ fontSize: isMobile ? 16 : 24 }} />}
-                  valueStyle={{ color: "#fff", fontWeight: "bold", fontSize: isMobile ? 18 : 24 }}
+                  prefix={<CheckCircleOutlined style={{ fontSize: "clamp(14px, 4vw, 20px)" }} />}
+                  valueStyle={{
+                    color: "#fff",
+                    fontWeight: "bold",
+                    fontSize: "clamp(16px, 5vw, 24px)",
+                  }}
                 />
               </Card>
             </Col>
@@ -858,13 +915,21 @@ export default function ProductListPage() {
                   border: "none",
                   borderRadius: 12,
                 }}
-                styles={{ body: { padding: isMobile ? 12 : 24 } }}
+                styles={{ body: { padding: isMobile ? 12 : 20 } }}
               >
                 <Statistic
-                  title={<span style={{ color: "#fff", fontSize: isMobile ? 11 : 14 }}>Tồn kho</span>}
+                  title={
+                    <span style={{ color: "#fff", fontSize: "clamp(10px, 2.5vw, 14px)", fontWeight: 500 }}>
+                      Tồn kho
+                    </span>
+                  }
                   value={totalStock}
-                  prefix={<StockOutlined style={{ fontSize: isMobile ? 16 : 24 }} />}
-                  valueStyle={{ color: "#fff", fontWeight: "bold", fontSize: isMobile ? 18 : 24 }}
+                  prefix={<StockOutlined style={{ fontSize: "clamp(14px, 4vw, 20px)" }} />}
+                  valueStyle={{
+                    color: "#fff",
+                    fontWeight: "bold",
+                    fontSize: "clamp(16px, 5vw, 24px)",
+                  }}
                 />
               </Card>
             </Col>
@@ -877,14 +942,22 @@ export default function ProductListPage() {
                     borderRadius: 12,
                     cursor: "pointer",
                   }}
-                  styles={{ body: { padding: isMobile ? 12 : 24 } }}
+                  styles={{ body: { padding: isMobile ? 12 : 20 } }}
                 >
                   <Statistic
-                    title={<span style={{ color: "#fff", fontSize: isMobile ? 11 : 14 }}>Giá trị</span>}
+                    title={
+                      <span style={{ color: "#fff", fontSize: "clamp(10px, 2.5vw, 14px)", fontWeight: 500 }}>
+                        Giá trị
+                      </span>
+                    }
                     value={totalValue}
-                    prefix={<DollarOutlined style={{ fontSize: isMobile ? 16 : 24 }} />}
+                    prefix={<DollarOutlined style={{ fontSize: "clamp(14px, 4vw, 20px)" }} />}
                     suffix="₫"
-                    valueStyle={{ color: "#fff", fontWeight: "bold", fontSize: isMobile ? 14 : 18 }}
+                    valueStyle={{
+                      color: "#fff",
+                      fontWeight: "bold",
+                      fontSize: "clamp(12px, 4vw, 18px)",
+                    }}
                   />
                 </Card>
               </Tooltip>
@@ -895,17 +968,22 @@ export default function ProductListPage() {
 
           <Space
             direction={isMobile ? "vertical" : "horizontal"}
-            style={{ marginBottom: 24, width: "100%", justifyContent: "space-between" }}
-            size={16}
+            style={{
+              marginBottom: isMobile ? 16 : 24,
+              width: "100%",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+            }}
+            size={isMobile ? 12 : 16}
           >
             <AutoComplete
               value={searchValue}
               options={searchOptions}
               onChange={(value) => setSearchValue(value)}
               onSelect={(value) => setSearchValue(value)}
-              style={{ width: isMobile ? "100%" : 400 }}
-              size="large"
-              placeholder={isMobile ? "Tìm kiếm..." : "Tìm kiếm sản phẩm..."}
+              style={{ width: isMobile ? "100%" : 400, minWidth: isMobile ? "auto" : 300 }}
+              size={isMobile ? "middle" : "large"}
+              placeholder={isMobile ? "Tìm kiếm..." : "Tìm kiếm sản phẩm theo tên, SKU..."}
               allowClear
               onClear={() => setSearchValue("")}
             >
@@ -913,7 +991,7 @@ export default function ProductListPage() {
                 prefix={<SearchOutlined style={{ color: "#1890ff" }} />}
                 suffix={
                   searchValue && (
-                    <Text type="secondary" style={{ fontSize: 12 }}>
+                    <Text type="secondary" style={{ fontSize: "clamp(10px, 2vw, 12px)" }}>
                       {filteredProducts.length} kết quả
                     </Text>
                   )
@@ -921,13 +999,13 @@ export default function ProductListPage() {
               />
             </AutoComplete>
 
-            <Space size={12} wrap>
-              <Button size="large" icon={<ReloadOutlined />} onClick={handleRefresh}>
+            <Space size={isMobile ? 8 : 12} wrap style={{ width: isMobile ? "100%" : "auto" }}>
+              <Button size={isMobile ? "middle" : "large"} icon={<ReloadOutlined />} onClick={handleRefresh}>
                 {!isMobile && "Làm mới"}
               </Button>
 
               {isMobile ? (
-                <Button size="large" icon={<MenuOutlined />} onClick={() => setDrawerVisible(true)}>
+                <Button size="middle" icon={<MenuOutlined />} onClick={() => setDrawerVisible(true)}>
                   Cột
                 </Button>
               ) : (
@@ -943,17 +1021,17 @@ export default function ProductListPage() {
               )}
 
               <Button
-                size="large"
+                size={isMobile ? "middle" : "large"}
                 icon={<FileExcelOutlined />}
                 loading={isImporting}
                 onClick={handleExcelButtonClick}
               >
-                {isMobile ? "Import" : "Import"}
+                Import
               </Button>
 
               <Button
                 type="primary"
-                size="large"
+                size={isMobile ? "middle" : "large"}
                 icon={<PlusOutlined />}
                 onClick={openCreateModal}
                 style={{
@@ -962,45 +1040,49 @@ export default function ProductListPage() {
                   boxShadow: "0 4px 12px rgba(102, 126, 234, 0.4)",
                 }}
               >
-                {isMobile ? "+" : "Thêm sản phẩm"}
+                {isMobile ? "Thêm" : "Thêm sản phẩm"}
               </Button>
             </Space>
           </Space>
 
-          <Table
-            columns={getTableColumns()}
-            dataSource={filteredProducts}
-            rowKey="_id"
-            loading={loading}
-            pagination={{
-              current: currentPage,
-              pageSize: itemsPerPage,
-              total: filteredProducts.length,
-              showSizeChanger: !isMobile,
-              showTotal: (total, range) => `${range[0]}-${range[1]} của ${total} sản phẩm`,
-              pageSizeOptions: ["5", "10", "20", "50", "100"],
-            }}
-            onChange={handleTableChange}
-            scroll={{ x: "max-content" }}
-            size={isMobile ? "small" : "middle"}
-            rowClassName={(_, index) => (index % 2 === 0 ? "table-row-light" : "table-row-dark")}
-            locale={{
-              emptyText: (
-                <div style={{ padding: isMobile ? "24px 0" : "48px 0" }}>
-                  <ShoppingOutlined style={{ fontSize: isMobile ? 32 : 48, color: "#d9d9d9" }} />
-                  <div style={{ marginTop: 16, color: "#999" }}>
-                    {searchValue
-                      ? `Không tìm thấy sản phẩm nào với từ khóa "${searchValue}"`
-                      : "Không có sản phẩm"}
+          <div style={{ overflowX: "auto" }}>
+            <Table
+              columns={getTableColumns()}
+              dataSource={filteredProducts}
+              rowKey="_id"
+              loading={loading}
+              pagination={{
+                current: currentPage,
+                pageSize: itemsPerPage,
+                total: filteredProducts.length,
+                showSizeChanger: !isMobile,
+                showTotal: (total, range) =>
+                  isMobile ? `${range[0]}-${range[1]}/${total}` : `${range[0]}-${range[1]} của ${total} sản phẩm`,
+                pageSizeOptions: ["5", "10", "20", "50", "100"],
+                style: { marginTop: 16 },
+              }}
+              onChange={handleTableChange}
+              scroll={{ x: "max-content" }}
+              size={isMobile ? "small" : "middle"}
+              rowClassName={(_, index) => (index % 2 === 0 ? "table-row-light" : "table-row-dark")}
+              locale={{
+                emptyText: (
+                  <div style={{ padding: isMobile ? "24px 0" : "48px 0" }}>
+                    <ShoppingOutlined style={{ fontSize: isMobile ? 32 : 48, color: "#d9d9d9" }} />
+                    <div style={{ marginTop: 16, color: "#999", fontSize: "clamp(12px, 3vw, 14px)" }}>
+                      {searchValue
+                        ? `Không tìm thấy sản phẩm nào với từ khóa "${searchValue}"`
+                        : "Chưa có sản phẩm nào"}
+                    </div>
                   </div>
-                </div>
-              ),
-            }}
-          />
+                ),
+              }}
+            />
+          </div>
         </Card>
 
         <Drawer
-          title="Chọn cột hiển thị"
+          title={<span style={{ fontSize: "clamp(14px, 3.5vw, 16px)" }}>Chọn cột hiển thị</span>}
           placement="bottom"
           onClose={() => setDrawerVisible(false)}
           open={drawerVisible}
@@ -1013,7 +1095,9 @@ export default function ProductListPage() {
           title={
             <Space>
               <ShoppingOutlined style={{ color: "#1890ff" }} />
-              <span>{modalProduct ? "Cập nhật sản phẩm" : "Thêm sản phẩm"}</span>
+              <span style={{ fontSize: "clamp(14px, 3.5vw, 16px)" }}>
+                {modalProduct ? "Cập nhật sản phẩm" : "Thêm sản phẩm"}
+              </span>
             </Space>
           }
           open={isModalOpen}
@@ -1037,14 +1121,19 @@ export default function ProductListPage() {
             setImportModalOpen(false);
             resetImportState();
           }}
-          title="Import sản phẩm bằng Excel"
-          width={isMobile ? "90%" : 720}
+          title={<span style={{ fontSize: "clamp(14px, 3.5vw, 16px)" }}>Import sản phẩm bằng Excel</span>}
+          width={isMobile ? "95%" : 720}
           centered
           okText="Xác nhận import"
           cancelText="Hủy"
           onOk={handleConfirmImport}
           confirmLoading={isImporting}
           okButtonProps={{ disabled: !importFile || !!previewError || previewLoading }}
+          styles={{
+            body: {
+              padding: isMobile ? 12 : 24,
+            },
+          }}
         >
           <input
             type="file"
@@ -1055,42 +1144,63 @@ export default function ProductListPage() {
           />
 
           <Space direction="vertical" style={{ width: "100%" }} size={16}>
-            <Text>
+            <Text style={{ fontSize: "clamp(12px, 3vw, 14px)" }}>
               Sử dụng template chuẩn để đảm bảo dữ liệu hợp lệ.
               <Button
                 type="link"
                 icon={<DownloadOutlined />}
                 onClick={handleDownloadTemplate}
                 loading={downloadingTemplate}
-                style={{ marginLeft: 8, padding: 0 }}
+                style={{ marginLeft: 8, padding: 0, fontSize: "clamp(12px, 3vw, 14px)" }}
               >
                 Tải template
               </Button>
             </Text>
 
-            <Button icon={<FileExcelOutlined />} onClick={() => fileInputRef.current?.click()} loading={previewLoading}>
+            <Button
+              icon={<FileExcelOutlined />}
+              onClick={() => fileInputRef.current?.click()}
+              loading={previewLoading}
+              size={isMobile ? "middle" : "large"}
+              style={{ fontSize: "clamp(12px, 3vw, 14px)" }}
+            >
               Chọn file Excel / CSV
             </Button>
-            <Text type="secondary">Hỗ trợ .xlsx, .xls, .csv. File nên nhỏ hơn 20MB.</Text>
+            <Text type="secondary" style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
+              Hỗ trợ .xlsx, .xls, .csv. File nên nhỏ hơn 20MB.
+            </Text>
 
             {previewError && (
-              <Alert type="error" message={previewError} showIcon closable onClose={() => setPreviewError("")} />
+              <Alert
+                type="error"
+                message={previewError}
+                showIcon
+                closable
+                onClose={() => setPreviewError("")}
+                style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}
+              />
             )}
 
             {previewRows.length > 0 && (
-              <Card size="small" bodyStyle={{ padding: 0 }}>
-                <div style={{ padding: 12, display: "flex", justifyContent: "space-between" }}>
-                  <Text strong>Preview ({previewRows.length} dòng đầu tiên)</Text>
-                  <Text type="secondary">Tổng cột: {previewColumns.length}</Text>
+              <Card size="small" styles={{ body: { padding: 0 } }}>
+                <div style={{ padding: 12, display: "flex", justifyContent: "space-between", flexWrap: "wrap" }}>
+                  <Text strong style={{ fontSize: "clamp(12px, 3vw, 14px)" }}>
+                    Preview ({previewRows.length} dòng đầu tiên)
+                  </Text>
+                  <Text type="secondary" style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
+                    Tổng cột: {previewColumns.length}
+                  </Text>
                 </div>
-                <Table
-                  columns={previewColumns}
-                  dataSource={previewRows}
-                  rowKey={(_, idx) => idx}
-                  size="small"
-                  pagination={false}
-                  scroll={{ x: true, y: 240 }}
-                />
+                <div style={{ overflowX: "auto" }}>
+                  <Table
+                    columns={previewColumns}
+                    dataSource={previewRows}
+                    rowKey={(_, idx) => idx}
+                    size="small"
+                    pagination={false}
+                    scroll={{ x: true, y: isMobile ? 200 : 240 }}
+                  />
+                </div>
               </Card>
             )}
 
@@ -1100,6 +1210,7 @@ export default function ProductListPage() {
                 message="Chưa có file nào được chọn"
                 description="Chọn file Excel/CSV theo template để xem trước dữ liệu trước khi import."
                 showIcon
+                style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}
               />
             )}
           </Space>
@@ -1119,7 +1230,7 @@ export default function ProductListPage() {
         }
 
         :global(.ant-table) :global(.ant-table-content)::-webkit-scrollbar {
-          height: 14px;
+          height: ${isMobile ? "8px" : "14px"};
         }
         :global(.ant-table) :global(.ant-table-content)::-webkit-scrollbar-track {
           background: #f5f5f5;
@@ -1128,13 +1239,61 @@ export default function ProductListPage() {
         :global(.ant-table) :global(.ant-table-content)::-webkit-scrollbar-thumb {
           background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
           border-radius: 10px;
-          border: 3px solid #f5f5f5;
+          border: ${isMobile ? "2px" : "3px"} solid #f5f5f5;
+        }
+
+        /* Mobile specific styles */
+        @media (max-width: 768px) {
+          :global(.ant-space-item) {
+            width: 100%;
+          }
+
+          :global(.ant-card-body) {
+            padding: 12px !important;
+          }
+
+          :global(.ant-statistic-title) {
+            margin-bottom: 4px !important;
+          }
+
+          :global(.ant-table-pagination) {
+            margin: 12px 0 !important;
+          }
+
+          :global(.ant-pagination-item),
+          :global(.ant-pagination-prev),
+          :global(.ant-pagination-next) {
+            min-width: 28px !important;
+            height: 28px !important;
+            line-height: 26px !important;
+            font-size: 12px !important;
+          }
         }
       `}</style>
 
       <style jsx global>{`
         .ant-notification-notice {
           border-radius: 12px !important;
+        }
+
+        @media (max-width: 768px) {
+          .ant-notification {
+            margin-right: 12px !important;
+            width: calc(100vw - 24px) !important;
+          }
+
+          .ant-notification-notice {
+            padding: 12px 16px !important;
+          }
+
+          .ant-notification-notice-message {
+            font-size: 13px !important;
+            margin-bottom: 4px !important;
+          }
+
+          .ant-notification-notice-description {
+            font-size: 12px !important;
+          }
         }
       `}</style>
     </Layout>

@@ -21,7 +21,7 @@ import Layout from "../../components/Layout";
 
 const { Option } = Select;
 const { Text } = Typography;
-
+const apiUrl = import.meta.env.VITE_API_URL;
 const TopProductsReport = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -75,7 +75,7 @@ const TopProductsReport = () => {
       params.append("range", range);
       if (limit) params.append("limit", limit);
 
-      const url = `http://localhost:9999/api/orders/top-products?${params.toString()}`;
+      const url = `${apiUrl}/orders/top-products?${params.toString()}`;
       const res = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } });
 
       setProducts(res.data.data || []);
@@ -108,7 +108,7 @@ const TopProductsReport = () => {
       params.append("range", range);
       params.append("format", format);
 
-      const url = `http://localhost:9999/api/orders/top-products/export?${params.toString()}`;
+      const url = `${apiUrl}/orders/top-products/export?${params.toString()}`;
       const res = await axios.get(url, {
         headers: { Authorization: `Bearer ${token}` },
         responseType: "blob",
@@ -328,11 +328,10 @@ const TopProductsReport = () => {
                 emptyText: (
                   <div style={{ color: "#f45a07f7" }}>
                     {hasFetched
-                      ? `${
-                          rangeTextMap[range]
-                            ? rangeTextMap[range][0].toUpperCase() + rangeTextMap[range].slice(1)
-                            : range
-                        } chưa có dữ liệu nào!`
+                      ? `${rangeTextMap[range]
+                        ? rangeTextMap[range][0].toUpperCase() + rangeTextMap[range].slice(1)
+                        : range
+                      } chưa có dữ liệu nào!`
                       : "Chưa có dữ liệu. Hãy chọn kỳ thống kê và nhấn 'Xem kết quả' để tải!"}
                   </div>
                 ),

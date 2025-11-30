@@ -1,5 +1,16 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { Card, Input, Table, Tag, Space, DatePicker, Select, Typography, Spin, Empty } from "antd";
+import {
+  Card,
+  Input,
+  Table,
+  Tag,
+  Space,
+  DatePicker,
+  Select,
+  Typography,
+  Spin,
+  Empty,
+} from "antd";
 import {
   SearchOutlined,
   FileTextOutlined,
@@ -17,7 +28,9 @@ const { RangePicker } = DatePicker;
 const { Option } = Select;
 const { Title, Text } = Typography;
 
-const API_BASE = "http://localhost:9999/api";
+const apiUrl = import.meta.env.VITE_API_URL;
+
+const API_BASE = `${apiUrl}`;
 
 // ========== Interfaces ==========
 interface MongoDecimal {
@@ -66,22 +79,47 @@ const ListAllOrder: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchText, setSearchText] = useState("");
-  const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null]>([null, null]);
-  const [selectedStatus, setSelectedStatus] = useState<string | undefined>(undefined);
+  const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null]>([
+    null,
+    null,
+  ]);
+  const [selectedStatus, setSelectedStatus] = useState<string | undefined>(
+    undefined
+  );
   const [pagination, setPagination] = useState({ current: 1, pageSize: 10 });
 
   // Format currency
   const formatCurrency = (value: MongoDecimal): string =>
     parseFloat(value.$numberDecimal).toLocaleString("vi-VN") + "₫";
 
-  const formatDate = (date: string): string => new Date(date).toLocaleString("vi-VN");
+  const formatDate = (date: string): string =>
+    new Date(date).toLocaleString("vi-VN");
 
   const getStatusConfig = (status: string) => {
-    const configs: Record<string, { color: string; icon: React.ReactNode; text: string }> = {
-      pending: { color: "orange", icon: <ClockCircleOutlined />, text: "Chờ Thanh Toán" },
-      paid: { color: "green", icon: <CheckCircleOutlined />, text: "Đã Thanh Toán" },
-      refunded: { color: "red", icon: <RollbackOutlined />, text: "Hoàn Toàn Bộ" },
-      partially_refunded: { color: "volcano", icon: <RollbackOutlined />, text: "Hoàn 1 Phần" },
+    const configs: Record<
+      string,
+      { color: string; icon: React.ReactNode; text: string }
+    > = {
+      pending: {
+        color: "orange",
+        icon: <ClockCircleOutlined />,
+        text: "Chờ Thanh Toán",
+      },
+      paid: {
+        color: "green",
+        icon: <CheckCircleOutlined />,
+        text: "Đã Thanh Toán",
+      },
+      refunded: {
+        color: "red",
+        icon: <RollbackOutlined />,
+        text: "Hoàn Toàn Bộ",
+      },
+      partially_refunded: {
+        color: "volcano",
+        icon: <RollbackOutlined />,
+        text: "Hoàn 1 Phần",
+      },
     };
     return configs[status] || configs.pending;
   };
@@ -90,10 +128,13 @@ const ListAllOrder: React.FC = () => {
   const loadOrders = async () => {
     setLoading(true);
     try {
-      const res = await axios.get<OrderListResponse>(`${API_BASE}/orders/list-all`, {
-        params: { storeId },
-        headers,
-      });
+      const res = await axios.get<OrderListResponse>(
+        `${API_BASE}/orders/list-all`,
+        {
+          params: { storeId },
+          headers,
+        }
+      );
       setOrders(res.data.orders);
     } catch (err: any) {
       Swal.fire({
@@ -122,7 +163,9 @@ const ListAllOrder: React.FC = () => {
   const filteredOrders = orders.filter((order) => {
     const matchSearch = searchText
       ? order._id.toLowerCase().includes(searchText.toLowerCase()) ||
-        order.customer?.name?.toLowerCase().includes(searchText.toLowerCase()) ||
+        order.customer?.name
+          ?.toLowerCase()
+          .includes(searchText.toLowerCase()) ||
         order.customer?.phone?.includes(searchText)
       : true;
 
@@ -131,7 +174,8 @@ const ListAllOrder: React.FC = () => {
     let matchDate = true;
     if (dateRange[0] && dateRange[1]) {
       const orderDate = dayjs(order.createdAt);
-      matchDate = orderDate.isAfter(dateRange[0]) && orderDate.isBefore(dateRange[1]);
+      matchDate =
+        orderDate.isAfter(dateRange[0]) && orderDate.isBefore(dateRange[1]);
     }
 
     return matchSearch && matchStatus && matchDate;
@@ -150,10 +194,13 @@ const ListAllOrder: React.FC = () => {
         <span style={{ color: "#1890ff", fontWeight: 600 }}>
           {range[0]} – {range[1]}
         </span>{" "}
-        trên tổng số <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> đơn hàng
+        trên tổng số{" "}
+        <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> đơn
+        hàng
       </div>
     ),
-    onChange: (page: number, pageSize: number) => setPagination({ current: page, pageSize }),
+    onChange: (page: number, pageSize: number) =>
+      setPagination({ current: page, pageSize }),
   };
 
   return (
@@ -164,7 +211,15 @@ const ListAllOrder: React.FC = () => {
         </Title>
         <Card style={{ borderRadius: 12, marginTop: 16 }}>
           {/* Bộ lọc */}
-          <Space direction="horizontal" style={{ width: "100%", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
+          <Space
+            direction="horizontal"
+            style={{
+              width: "100%",
+              marginBottom: 16,
+              flexWrap: "wrap",
+              gap: 12,
+            }}
+          >
             <Input
               placeholder="Tìm mã đơn hàng, tên khách, SĐT..."
               prefix={<SearchOutlined />}
@@ -177,7 +232,9 @@ const ListAllOrder: React.FC = () => {
               style={{ flex: 1, minWidth: 440 }}
               placeholder={["Từ ngày", "Đến ngày"]}
               format="DD/MM/YYYY"
-              onChange={(dates) => setDateRange(dates as [Dayjs | null, Dayjs | null])}
+              onChange={(dates) =>
+                setDateRange(dates as [Dayjs | null, Dayjs | null])
+              }
               size="large"
             />
             <Select
@@ -243,7 +300,9 @@ const ListAllOrder: React.FC = () => {
                   dataIndex: "totalAmount",
                   key: "totalAmount",
                   align: "right",
-                  render: (value) => <Text strong>{formatCurrency(value)}</Text>,
+                  render: (value) => (
+                    <Text strong>{formatCurrency(value)}</Text>
+                  ),
                 },
                 {
                   title: "Trạng Thái",

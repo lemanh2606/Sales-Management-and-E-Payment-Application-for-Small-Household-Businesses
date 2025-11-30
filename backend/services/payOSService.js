@@ -11,25 +11,61 @@ const PAYOS_CHECKSUM_KEY = process.env.PAYOS_CHECKSUM_KEY;
 const VIETQR_ACQ_ID = process.env.VIETQR_ACQ_ID;
 const VIETQR_ACCOUNT_NO = process.env.VIETQR_ACCOUNT_NO;
 const VIETQR_ACCOUNT_NAME = process.env.VIETQR_ACCOUNT_NAME;
+const API_URL = process.env.API_URL;
 
 /**
  * 🧩 Tạo QR thanh toán qua PayOS (nhưng render ảnh bằng VietQR vì 2 cái này là đối tác)
  */
-async function generateQRWithPayOS(req) {
+async function generateQRWithPayOS(input = {}) {
   if (!PAYOS_CLIENT_ID || !PAYOS_API_KEY || !PAYOS_CHECKSUM_KEY) {
     throw new Error("Missing PayOS env variables");
   }
 
-  const amount = Number(req.body?.amount) || 1000;
-  const txnRef = Math.floor(Date.now() / 1000); // dùng timestamp làm txnRef đơn giản
-  const orderInfo = `HD${txnRef}`.slice(0, 25); // mô tả ngắn gọn, max 25 ký tự
+  const payload = input.body || input; // chấp nhận req Express hoặc object thuần
+
+  const amount = Number(payload.amount ?? input.amount) || 1000;
+
+  const providedOrderCode =
+    payload.orderCode || payload.txnRef || input.orderCode || input.txnRef;
+
+  const txnRef = providedOrderCode
+    ? Number(providedOrderCode)
+    : Math.floor(Date.now() / 1000);
+
+  const rawInfo =
+    payload.orderInfo ||
+    payload.description ||
+    input.orderInfo ||
+    input.description ||
+    `HD${txnRef}`;
+
+  const orderInfo = rawInfo.toString();
+  const description = orderInfo.slice(0, 25);
+
+  const returnUrl =
+    payload.returnUrl ||
+    input.returnUrl ||
+    process.env.PAYOS_RETURN_URL ||
+    `${API_URL}/api/orders/payments/vietqr_return`;
+
+  const cancelUrl =
+    payload.cancelUrl ||
+    input.cancelUrl ||
+    process.env.PAYOS_CANCEL_URL ||
+    `${API_URL}/api/orders/payments/vietqr_cancel`;
+
+  const webhookUrl =
+    payload.webhookUrl || input.webhookUrl || process.env.PAYOS_WEBHOOK_URL;
+
+  const simulateWebhook =
+    payload.simulateWebhook ?? input.simulateWebhook ?? true;
 
   const bodyData = {
     orderCode: txnRef,
     amount,
-    description: orderInfo,
-    returnUrl: "http://localhost:9999/api/orders/payments/vietqr_return",
-    cancelUrl: "http://localhost:9999/api/orders/payments/vietqr_cancel",
+    description,
+    returnUrl,
+    cancelUrl,
   };
 
   // Tạo signature chuẩn
@@ -71,7 +107,7 @@ async function generateQRWithPayOS(req) {
 
   // ✅ Dùng VietQR API render ảnh QR thật, có amount + addInfo
   const qrDataURL = `https://img.vietqr.io/image/${VIETQR_ACQ_ID}-${VIETQR_ACCOUNT_NO}-compact2.png?amount=${amount}&addInfo=${encodeURIComponent(
-    data.description
+    description
   )}&accountName=${encodeURIComponent(VIETQR_ACCOUNT_NAME)}`;
 
   console.log("=== PAYOS QR DEBUG ===");
@@ -81,53 +117,55 @@ async function generateQRWithPayOS(req) {
   console.log("===============================");
 
   // ✅ Giả lập webhook sau 30s nếu PayOS không gửi thật
-  setTimeout(async () => {
-    try {
-      console.log(`⏳ [SIMULATOR] Auto-simulating webhook cho đơn ${txnRef}`);
+  if (simulateWebhook && webhookUrl) {
+    setTimeout(async () => {
+      try {
+        console.log(`⏳ [SIMULATOR] Auto-simulating webhook cho đơn ${txnRef}`);
 
-      const fakeWebhook = {
-        code: "00",
-        desc: "success",
-        data: {
-          orderCode: Number(txnRef),
-          amount,
-          description: orderInfo,
-          accountNumber: process.env.VIETQR_ACCOUNT_NO,
-          reference: "SIMULATED_" + Date.now(),
-          transactionDateTime: new Date()
-            .toISOString()
-            .replace("T", " ")
-            .split(".")[0],
-          paymentLinkId: "SIM-" + txnRef,
-        },
-      };
+        const fakeWebhook = {
+          code: "00",
+          desc: "success",
+          data: {
+            orderCode: Number(txnRef),
+            amount,
+            description: orderInfo,
+            accountNumber: process.env.VIETQR_ACCOUNT_NO,
+            reference: "SIMULATED_" + Date.now(),
+            transactionDateTime: new Date()
+              .toISOString()
+              .replace("T", " ")
+              .split(".")[0],
+            paymentLinkId: "SIM-" + txnRef,
+          },
+        };
 
-      // 🧮 Tính chữ ký HMAC giống thật
-      const kvString = Object.keys(fakeWebhook.data)
-        .sort()
-        .map((k) => `${k}=${fakeWebhook.data[k]}`)
-        .join("&");
+        // 🧮 Tính chữ ký HMAC giống thật
+        const kvString = Object.keys(fakeWebhook.data)
+          .sort()
+          .map((k) => `${k}=${fakeWebhook.data[k]}`)
+          .join("&");
 
-      fakeWebhook.signature = crypto
-        .createHmac("sha256", PAYOS_CHECKSUM_KEY)
-        .update(kvString, "utf8")
-        .digest("hex")
-        .toUpperCase();
+        fakeWebhook.signature = crypto
+          .createHmac("sha256", PAYOS_CHECKSUM_KEY)
+          .update(kvString, "utf8")
+          .digest("hex")
+          .toUpperCase();
 
-      await axios.post(`${process.env.PAYOS_WEBHOOK_URL}`, fakeWebhook, {
-        headers: { "Content-Type": "application/json" },
-      });
+        await axios.post(webhookUrl, fakeWebhook, {
+          headers: { "Content-Type": "application/json" },
+        });
 
-      console.log(
-        `✅ [SIMULATOR] Webhook giả lập gửi thành công cho đơn ${txnRef}`
-      );
-    } catch (err) {
-      console.error(
-        "❌ [SIMULATOR] Gửi webhook giả lập thất bại, hãy bật ngrok:",
-        err.message
-      );
-    }
-  }, 10000); // sau 10s
+        console.log(
+          `✅ [SIMULATOR] Webhook giả lập gửi thành công cho đơn ${txnRef}`
+        );
+      } catch (err) {
+        console.error(
+          "❌ [SIMULATOR] Gửi webhook giả lập thất bại, hãy bật ngrok:",
+          err.message
+        );
+      }
+    }, 10000); // sau 10s
+  }
 
   return { txnRef, amount, paymentLink: data.checkoutUrl, qrDataURL };
 }
@@ -213,4 +251,8 @@ function computePayOSSignatureFromData(data, secret) {
     .toUpperCase();
 }
 
-module.exports = { generateQRWithPayOS, verifyPaymentWithPayOS };
+module.exports = {
+  generateQRWithPayOS,
+  verifyPaymentWithPayOS,
+  computePayOSSignatureFromData,
+};

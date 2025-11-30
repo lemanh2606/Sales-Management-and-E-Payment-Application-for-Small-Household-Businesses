@@ -40,7 +40,7 @@ import Layout from "../../components/Layout";
 import Swal from "sweetalert2";
 
 dayjs.extend(quarterOfYear);
-
+const apiUrl = import.meta.env.VITE_API_URL;
 const { Option } = Select;
 const { RangePicker } = DatePicker;
 const { Title, Text } = Typography;
@@ -102,7 +102,10 @@ const InventoryReport: React.FC = () => {
   const [selectedMonth, setSelectedMonth] = useState<Dayjs>(dayjs());
   const [selectedQuarter, setSelectedQuarter] = useState<Dayjs>(dayjs());
   const [selectedYear, setSelectedYear] = useState<Dayjs>(dayjs());
-  const [customRange, setCustomRange] = useState<[Dayjs | null, Dayjs | null]>([null, null]);
+  const [customRange, setCustomRange] = useState<[Dayjs | null, Dayjs | null]>([
+    null,
+    null,
+  ]);
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(false);
   const [searchText, setSearchText] = useState("");
@@ -110,7 +113,9 @@ const InventoryReport: React.FC = () => {
   // Helper: Format currency
   const formatCurrency = (value: number | MongoDecimal): string => {
     const numValue =
-      typeof value === "object" && value.$numberDecimal ? parseFloat(value.$numberDecimal) : Number(value);
+      typeof value === "object" && value.$numberDecimal
+        ? parseFloat(value.$numberDecimal)
+        : Number(value);
     return numValue.toLocaleString("vi-VN") + "₫";
   };
 
@@ -163,7 +168,10 @@ const InventoryReport: React.FC = () => {
       }
       // If periodType = "realtime", no extra params needed
 
-      const res = await axios.get<ReportResponse>(`http://localhost:9999/api/inventory-reports`, { params, headers });
+      const res = await axios.get<ReportResponse>(
+        `${apiUrl}/inventory-reports`,
+        { params, headers }
+      );
 
       if (res.data.success) {
         setReportData(res.data.data);
@@ -272,7 +280,9 @@ const InventoryReport: React.FC = () => {
     if (periodType === "quarter") return `Quý ${periodKey}`;
     if (periodType === "year") return `Năm ${periodKey}`;
     if (periodType === "custom") {
-      return `${dayjs(reportData.period.from).format("MM/YYYY")} - ${dayjs(reportData.period.to).format("MM/YYYY")}`;
+      return `${dayjs(reportData.period.from).format("MM/YYYY")} - ${dayjs(
+        reportData.period.to
+      ).format("MM/YYYY")}`;
     }
     return "Realtime";
   };
@@ -332,7 +342,8 @@ const InventoryReport: React.FC = () => {
       key: "importedQty",
       width: 90,
       align: "center",
-      render: (val: number) => (val > 0 ? <Tag color="green">+{val}</Tag> : val),
+      render: (val: number) =>
+        val > 0 ? <Tag color="green">+{val}</Tag> : val,
     },
     {
       title: "Xuất trong kỳ",
@@ -369,14 +380,19 @@ const InventoryReport: React.FC = () => {
       key: "costPrice",
       width: 110,
       align: "right",
-      sorter: (a, b) => parseFloat(a.costPrice.$numberDecimal) - parseFloat(b.costPrice.$numberDecimal),
+      sorter: (a, b) =>
+        parseFloat(a.costPrice.$numberDecimal) -
+        parseFloat(b.costPrice.$numberDecimal),
       render: (val: MongoDecimal) => formatCurrency(val),
     },
     {
       title: (
         <Tooltip title="Công thức tính: 'Tồn cuối kỳ' x 'Giá vốn'">
           <span>
-            <InfoCircleOutlined style={{ color: "#1890ff", cursor: "pointer", marginLeft: 4 }} /> Giá trị tồn
+            <InfoCircleOutlined
+              style={{ color: "#1890ff", cursor: "pointer", marginLeft: 4 }}
+            />{" "}
+            Giá trị tồn
           </span>
         </Tooltip>
       ),
@@ -408,7 +424,8 @@ const InventoryReport: React.FC = () => {
   ];
 
   // Low stock count
-  const lowStockCount = reportData?.details.filter((item) => item.lowStock).length || 0;
+  const lowStockCount =
+    reportData?.details.filter((item) => item.lowStock).length || 0;
 
   return (
     <Layout>
@@ -446,7 +463,12 @@ const InventoryReport: React.FC = () => {
               <Text strong style={{ display: "block", marginBottom: 8 }}>
                 <CalendarOutlined /> Chọn kỳ báo cáo
               </Text>
-              <Select value={periodType} onChange={setPeriodType} style={{ width: "100%" }} size="large">
+              <Select
+                value={periodType}
+                onChange={setPeriodType}
+                style={{ width: "100%" }}
+                size="large"
+              >
                 <Option value="realtime">Realtime (tồn hiện tại)</Option>
                 <Option value="month">Theo tháng</Option>
                 <Option value="quarter">Theo quý</Option>
@@ -496,7 +518,9 @@ const InventoryReport: React.FC = () => {
                 <RangePicker
                   picker="month"
                   value={customRange}
-                  onChange={(dates) => setCustomRange(dates as [Dayjs | null, Dayjs | null])}
+                  onChange={(dates) =>
+                    setCustomRange(dates as [Dayjs | null, Dayjs | null])
+                  }
                   format="MM/YYYY"
                   style={{ width: "100%" }}
                   size="large"
@@ -507,10 +531,21 @@ const InventoryReport: React.FC = () => {
 
             <Col xs={24} sm={24} md={10}>
               <Space wrap style={{ marginTop: "21px" }}>
-                <Button type="primary" size="large" onClick={fetchReport} loading={loading} icon={<SearchOutlined />}>
+                <Button
+                  type="primary"
+                  size="large"
+                  onClick={fetchReport}
+                  loading={loading}
+                  icon={<SearchOutlined />}
+                >
                   Xem báo cáo
                 </Button>
-                <Button icon={<ReloadOutlined />} size="large" onClick={fetchReport} disabled={!reportData}>
+                <Button
+                  icon={<ReloadOutlined />}
+                  size="large"
+                  onClick={fetchReport}
+                  disabled={!reportData}
+                >
                   Làm mới
                 </Button>
                 <Button
@@ -530,7 +565,9 @@ const InventoryReport: React.FC = () => {
         {loading ? (
           <Card style={{ textAlign: "center", padding: 60 }}>
             <Spin size="large" />
-            <div style={{ marginTop: 16, color: "#8c8c8c" }}>Đang tải dữ liệu...</div>
+            <div style={{ marginTop: 16, color: "#8c8c8c" }}>
+              Đang tải dữ liệu...
+            </div>
           </Card>
         ) : !reportData ? (
           <Empty
@@ -608,7 +645,9 @@ const InventoryReport: React.FC = () => {
                     title="Sản phẩm tồn thấp"
                     value={lowStockCount}
                     prefix={<AlertOutlined />}
-                    valueStyle={{ color: lowStockCount > 0 ? "#ff4d4f" : "#52c41a" }}
+                    valueStyle={{
+                      color: lowStockCount > 0 ? "#ff4d4f" : "#52c41a",
+                    }}
                     suffix={`/ ${reportData.summary.totalProducts}`}
                   />
                 </Card>
@@ -668,7 +707,11 @@ const InventoryReport: React.FC = () => {
                       <span style={{ color: "#1890ff", fontWeight: 600 }}>
                         {range[0]} — {range[1]}
                       </span>{" "}
-                      trên tổng số <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> sản phẩm
+                      trên tổng số{" "}
+                      <span style={{ color: "#d4380d", fontWeight: 600 }}>
+                        {total}
+                      </span>{" "}
+                      sản phẩm
                     </Text>
                   ),
                 }}

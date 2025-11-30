@@ -35,7 +35,7 @@ import Swal from "sweetalert2";
 
 dayjs.extend(relativeTime);
 dayjs.locale("vi");
-
+const apiUrl = import.meta.env.VITE_API_URL;
 const { RangePicker } = DatePicker;
 const { Option } = Select;
 
@@ -137,9 +137,12 @@ const Notification: React.FC = () => {
         if (filters.type !== "all") params.append("type", filters.type);
         if (filters.read !== "all") params.append("read", filters.read);
 
-        const res = await axios.get<NotificationResponse>(`http://localhost:9999/api/notifications?${params}`, {
-          headers,
-        });
+        const res = await axios.get<NotificationResponse>(
+          `${apiUrl}/notifications?${params}`,
+          {
+            headers,
+          }
+        );
 
         let data = res.data.data;
 
@@ -147,7 +150,9 @@ const Notification: React.FC = () => {
         if (searchText.trim()) {
           const search = searchText.toLowerCase().trim();
           data = data.filter(
-            (item) => item.title.toLowerCase().includes(search) || item.message.toLowerCase().includes(search)
+            (item) =>
+              item.title.toLowerCase().includes(search) ||
+              item.message.toLowerCase().includes(search)
           );
         }
 
@@ -156,7 +161,10 @@ const Notification: React.FC = () => {
           const [start, end] = filters.dateRange;
           data = data.filter((item) => {
             const date = dayjs(item.createdAt);
-            return date.isAfter(start.startOf("day")) && date.isBefore(end.endOf("day"));
+            return (
+              date.isAfter(start.startOf("day")) &&
+              date.isBefore(end.endOf("day"))
+            );
           });
         }
 
@@ -191,7 +199,11 @@ const Notification: React.FC = () => {
 
   const markAsRead = async (id: string, read: boolean) => {
     try {
-      await axios.patch(`http://localhost:9999/api/notifications/${id}/read`, { read }, { headers });
+      await axios.patch(
+        `${apiUrl}/notifications/${id}/read`,
+        { read },
+        { headers }
+      );
       Swal.fire({
         icon: "success",
         title: read ? "Đã đánh dấu đã đọc" : "Đã đánh dấu chưa đọc",
@@ -223,7 +235,7 @@ const Notification: React.FC = () => {
 
     if (result.isConfirmed) {
       try {
-        await axios.delete(`http://localhost:9999/api/notifications/${id}`, { headers });
+        await axios.delete(`${apiUrl}/notifications/${id}`, { headers });
         Swal.fire({
           icon: "success",
           title: "Đã xóa thông báo",
@@ -244,7 +256,7 @@ const Notification: React.FC = () => {
 
   const markAllAsRead = async () => {
     try {
-      await axios.patch(`http://localhost:9999/api/notifications/read-all`, {}, { headers });
+      await axios.patch(`${apiUrl}/notifications/read-all`, {}, { headers });
       Swal.fire({
         icon: "success",
         title: "Đã đánh dấu tất cả là đã đọc",
@@ -279,7 +291,9 @@ const Notification: React.FC = () => {
     if (result.isConfirmed) {
       try {
         await Promise.all(
-          selectedRowKeys.map((id) => axios.delete(`http://localhost:9999/api/notifications/${id}`, { headers }))
+          selectedRowKeys.map((id) =>
+            axios.delete(`${apiUrl}/notifications/${id}`, { headers })
+          )
         );
         Swal.fire({
           icon: "success",
@@ -327,7 +341,9 @@ const Notification: React.FC = () => {
       key: "type",
       width: 120,
       render: (type: keyof typeof NOTIFICATION_TYPES) => (
-        <Tag color={NOTIFICATION_TYPES[type].color}>{NOTIFICATION_TYPES[type].label}</Tag>
+        <Tag color={NOTIFICATION_TYPES[type].color}>
+          {NOTIFICATION_TYPES[type].label}
+        </Tag>
       ),
     },
     {
@@ -372,7 +388,9 @@ const Notification: React.FC = () => {
       render: (date: string) => (
         <div>
           <div>{dayjs(date).format("DD/MM/YYYY HH:mm")}</div>
-          <div style={{ fontSize: 12, color: "#8c8c8c" }}>{dayjs(date).fromNow()}</div>
+          <div style={{ fontSize: 12, color: "#8c8c8c" }}>
+            {dayjs(date).fromNow()}
+          </div>
         </div>
       ),
     },
@@ -386,11 +404,20 @@ const Notification: React.FC = () => {
         <Dropdown
           overlay={
             <Menu>
-              <Menu.Item key="toggle" icon={<CheckOutlined />} onClick={() => markAsRead(record._id, !record.read)}>
+              <Menu.Item
+                key="toggle"
+                icon={<CheckOutlined />}
+                onClick={() => markAsRead(record._id, !record.read)}
+              >
                 {record.read ? "Đánh dấu chưa đọc" : "Đánh dấu đã đọc"}
               </Menu.Item>
               <Menu.Divider />
-              <Menu.Item key="delete" icon={<DeleteOutlined />} danger onClick={() => deleteNotification(record._id)}>
+              <Menu.Item
+                key="delete"
+                icon={<DeleteOutlined />}
+                danger
+                onClick={() => deleteNotification(record._id)}
+              >
                 Xóa
               </Menu.Item>
             </Menu>
@@ -414,7 +441,9 @@ const Notification: React.FC = () => {
         <span style={{ color: "#1890ff", fontWeight: 600 }}>
           {range[0]} – {range[1]}
         </span>{" "}
-        trên tổng số <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> sản phẩm
+        trên tổng số{" "}
+        <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> sản
+        phẩm
       </div>
     ),
   };
@@ -428,17 +457,32 @@ const Notification: React.FC = () => {
         title={
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <BellOutlined style={{ fontSize: 24, color: "#1890ff" }} />
-            <span style={{ fontSize: 20, fontWeight: 600 }}>Quản lý thông báo</span>
-            {unreadCount > 0 && <Badge count={unreadCount} style={{ backgroundColor: "#ff4d4f" }} overflowCount={99} />}
+            <span style={{ fontSize: 20, fontWeight: 600 }}>
+              Quản lý thông báo
+            </span>
+            {unreadCount > 0 && (
+              <Badge
+                count={unreadCount}
+                style={{ backgroundColor: "#ff4d4f" }}
+                overflowCount={99}
+              />
+            )}
           </div>
         }
         extra={
           <Space>
-            <Button icon={<ReloadOutlined />} onClick={() => fetchNotifications(1, 10)}>
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={() => fetchNotifications(1, 10)}
+            >
               Làm mới
             </Button>
             {unreadCount > 0 && (
-              <Button type="primary" icon={<CheckOutlined />} onClick={markAllAsRead}>
+              <Button
+                type="primary"
+                icon={<CheckOutlined />}
+                onClick={markAllAsRead}
+              >
                 Đánh dấu tất cả đã đọc
               </Button>
             )}
@@ -447,7 +491,11 @@ const Notification: React.FC = () => {
         bordered={false}
       >
         {/* FILTERS */}
-        <Space direction="vertical" size="middle" style={{ width: "100%", marginBottom: 16 }}>
+        <Space
+          direction="vertical"
+          size="middle"
+          style={{ width: "100%", marginBottom: 16 }}
+        >
           <Space wrap size="middle">
             <Input
               placeholder="Tìm kiếm thông báo theo nội dung..."
@@ -493,8 +541,16 @@ const Notification: React.FC = () => {
               style={{ width: 260 }}
             />
 
-            {(filters.type !== "all" || filters.read !== "all" || searchText || filters.dateRange) && (
-              <Button icon={<CloseCircleOutlined />} onClick={clearFilters} danger type="text">
+            {(filters.type !== "all" ||
+              filters.read !== "all" ||
+              searchText ||
+              filters.dateRange) && (
+              <Button
+                icon={<CloseCircleOutlined />}
+                onClick={clearFilters}
+                danger
+                type="text"
+              >
                 Xóa bộ lọc
               </Button>
             )}
@@ -503,7 +559,12 @@ const Notification: React.FC = () => {
           {/* BULK ACTIONS */}
           {selectedRowKeys.length > 0 && (
             <Space>
-              <Button type="primary" danger icon={<DeleteOutlined />} onClick={bulkDelete}>
+              <Button
+                type="primary"
+                danger
+                icon={<DeleteOutlined />}
+                onClick={bulkDelete}
+              >
                 Xóa {selectedRowKeys.length} thông báo
               </Button>
               <Button onClick={() => setSelectedRowKeys([])}>Bỏ chọn</Button>
@@ -521,7 +582,8 @@ const Notification: React.FC = () => {
             ...paginationConfig,
             current: pagination.current,
             pageSize: pagination.pageSize,
-            onChange: (page, pageSize) => setPagination({ current: page, pageSize }),
+            onChange: (page, pageSize) =>
+              setPagination({ current: page, pageSize }),
           }}
           onChange={handleTableChange}
           scroll={{ x: 1200 }}
@@ -530,7 +592,12 @@ const Notification: React.FC = () => {
             onChange: (keys) => setSelectedRowKeys(keys),
           }}
           locale={{
-            emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Không có thông báo nào" />,
+            emptyText: (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="Không có thông báo nào"
+              />
+            ),
           }}
         />
       </Card>

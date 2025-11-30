@@ -18,7 +18,28 @@ const { v2: cloudinary } = require("cloudinary");
 
 const createOrder = async (req, res) => {
   try {
-    const { storeId, employeeId, customerInfo, items, paymentMethod, isVATInvoice, vatInfo, usedPoints } = req.body;
+    const {
+      storeId: bodyStoreId,
+      employeeId,
+      customerInfo,
+      items,
+      paymentMethod,
+      isVATInvoice,
+      vatInfo,
+      usedPoints,
+    } = req.body;
+
+    const storeId =
+      bodyStoreId ||
+      (req.store?._id && req.store._id.toString()) ||
+      req.store?.id ||
+      (req.user?.current_store && req.user.current_store.toString()) ||
+      null;
+
+    if (!storeId) {
+      console.log("Lỗi: Thiếu storeId khi tạo đơn hàng");
+      return res.status(400).json({ message: "Thiếu storeId để tạo đơn hàng" });
+    }
 
     if (!items || items.length === 0) {
       console.log("Lỗi: Không có sản phẩm trong hóa đơn");
@@ -64,22 +85,26 @@ const createOrder = async (req, res) => {
       // Xử lý customer: Tìm hoặc tạo mới nếu phone ko trùng (tránh duplicate)
       let customer;
       if (customerInfo && customerInfo.phone) {
+        const normalizedPhone = customerInfo.phone.trim();
         customer = await Customer.findOne({
-          phone: customerInfo.phone.trim(),
+          phone: normalizedPhone,
+          storeId,
+          isDeleted: { $ne: true },
         }).session(session);
         if (!customer) {
           // Tạo mới nếu ko tồn tại
           customer = new Customer({
-            name: customerInfo.name.trim(),
-            phone: customerInfo.phone.trim(),
+            name: customerInfo.name ? customerInfo.name.trim() : normalizedPhone,
+            phone: normalizedPhone,
             storeId: storeId, // 👈 Fix: Truyền storeId vào Customer để ref store (required validation pass)
           });
           await customer.save({ session });
           console.log("Tạo khách hàng mới:", customer.phone);
         } else {
           // Update name nếu khác
-          if (customer.name !== customerInfo.name.trim()) {
-            customer.name = customerInfo.name.trim();
+          const incomingName = customerInfo.name ? customerInfo.name.trim() : null;
+          if (incomingName && customer.name !== incomingName) {
+            customer.name = incomingName;
             await customer.save({ session });
           }
         }

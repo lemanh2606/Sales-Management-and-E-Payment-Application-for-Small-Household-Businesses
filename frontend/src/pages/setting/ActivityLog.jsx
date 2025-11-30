@@ -39,7 +39,7 @@ dayjs.locale("vi");
 const { Option } = Select;
 const { RangePicker } = DatePicker;
 const { Text } = Typography;
-
+const apiUrl = import.meta.env.VITE_API_URL;
 const ActivityLog = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -90,7 +90,7 @@ const ActivityLog = () => {
     const fetchLogsForFilters = async () => {
       try {
         const token = localStorage.getItem("token");
-        const url = `http://localhost:9999/api/activity-logs?storeId=${currentStore._id}&limit=1000`;
+        const url = `${apiUrl}/activity-logs?storeId=${currentStore._id}&limit=1000`;
         const res = await axios.get(url, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -117,7 +117,7 @@ const ActivityLog = () => {
     const fetchStats = async () => {
       try {
         const token = localStorage.getItem("token");
-        const url = `http://localhost:9999/api/activity-logs/stats?storeId=${currentStore._id}`;
+        const url = `${apiUrl}/activity-logs/stats?storeId=${currentStore._id}`;
         const res = await axios.get(url, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -162,7 +162,7 @@ const ActivityLog = () => {
         storeId: currentStore._id, // 👈 thêm storeId vào cùng cấp
       });
       if (currentStore?._id);
-      const url = `http://localhost:9999/api/activity-logs?${params.toString()}`;
+      const url = `${apiUrl}/activity-logs?${params.toString()}`;
       const res = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } });
 
       const respLogs = res.data.data.logs || [];
@@ -218,7 +218,7 @@ const ActivityLog = () => {
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const url = `http://localhost:9999/api/activity-logs/${id}?storeId=${currentStore._id}`;
+      const url = `${apiUrl}/activity-logs/${id}?storeId=${currentStore._id}`;
       const res = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } });
       setSelectedLog(res.data.data);
       setDetailVisible(true);
@@ -354,12 +354,12 @@ const ActivityLog = () => {
       log.action === "create"
         ? "green"
         : log.action === "update"
-        ? "blue"
-        : log.action === "delete"
-        ? "red"
-        : log.action === "auth"
-        ? "purple"
-        : "gray",
+          ? "blue"
+          : log.action === "delete"
+            ? "red"
+            : log.action === "auth"
+              ? "purple"
+              : "gray",
     children: (
       <div>
         <Text strong>{log.userName}</Text>
@@ -763,7 +763,7 @@ const ActivityLog = () => {
                         try {
                           const token = localStorage.getItem("token");
                           const params = new URLSearchParams({ ...newFilters, storeId: currentStore._id });
-                          const res = await axios.get(`http://localhost:9999/api/activity-logs?${params.toString()}`, {
+                          const res = await axios.get(`${apiUrl}/activity-logs?${params.toString()}`, {
                             headers: { Authorization: `Bearer ${token}` },
                           });
                           const newLogs = res.data.data.logs || [];

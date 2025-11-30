@@ -7,8 +7,9 @@ import debounce from "../../utils/debounce"; // hoặc "@/utils/debounce"
 
 const { Title, Text } = Typography;
 const { Option } = Select;
+const apiUrl = import.meta.env.VITE_API_URL;
 
-const API_BASE = "http://localhost:9999/api";
+const API_BASE = `${apiUrl}`;
 
 interface Product {
   _id: string;
@@ -24,7 +25,9 @@ const InventoryLookup: React.FC = () => {
   const [filtered, setFiltered] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc" | "default">("default");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc" | "default">(
+    "default"
+  );
   const [pagination, setPagination] = useState({
     current: 1,
     pageSize: 10,
@@ -40,7 +43,9 @@ const InventoryLookup: React.FC = () => {
     if (!storeId) return;
     setLoading(true);
     try {
-      const res = await axios.get(`${API_BASE}/products/store/${storeId}`, { headers });
+      const res = await axios.get(`${API_BASE}/products/store/${storeId}`, {
+        headers,
+      });
       const data = res.data.products || [];
       setProducts(data);
       setFiltered(data);
@@ -61,7 +66,9 @@ const InventoryLookup: React.FC = () => {
       debounce((value: string) => {
         const lower = value.toLowerCase();
         const result = products.filter(
-          (p) => p.name.toLowerCase().includes(lower) || p.sku.toLowerCase().includes(lower)
+          (p) =>
+            p.name.toLowerCase().includes(lower) ||
+            p.sku.toLowerCase().includes(lower)
         );
         setFiltered(result);
       }, 200), // delay ngắn, tối ưu UX
@@ -81,7 +88,9 @@ const InventoryLookup: React.FC = () => {
     }
 
     const sorted = [...filtered].sort((a, b) =>
-      order === "asc" ? a.stock_quantity - b.stock_quantity : b.stock_quantity - a.stock_quantity
+      order === "asc"
+        ? a.stock_quantity - b.stock_quantity
+        : b.stock_quantity - a.stock_quantity
     );
     setFiltered(sorted);
   };
@@ -132,7 +141,11 @@ const InventoryLookup: React.FC = () => {
       key: "stock_quantity",
       width: 120,
       align: "center" as const,
-      render: (stock: number) => <Tag color={stock === 0 ? "red" : stock <= 10 ? "orange" : "green"}>{stock}</Tag>,
+      render: (stock: number) => (
+        <Tag color={stock === 0 ? "red" : stock <= 10 ? "orange" : "green"}>
+          {stock}
+        </Tag>
+      ),
     },
   ];
 
@@ -156,7 +169,9 @@ const InventoryLookup: React.FC = () => {
         <span style={{ color: "#1890ff", fontWeight: 600 }}>
           {range[0]} – {range[1]}
         </span>{" "}
-        trên tổng số <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> sản phẩm
+        trên tổng số{" "}
+        <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> sản
+        phẩm
       </div>
     ),
   };
@@ -201,7 +216,8 @@ const InventoryLookup: React.FC = () => {
       </div>
 
       <Text className="block mb-4">
-        Có tất cả <strong style={{ color: "#1d39c4" }}>{filtered.length}</strong> sản phẩm
+        Có tất cả{" "}
+        <strong style={{ color: "#1d39c4" }}>{filtered.length}</strong> sản phẩm
       </Text>
 
       {loading ? (
@@ -217,7 +233,8 @@ const InventoryLookup: React.FC = () => {
             ...paginationConfig,
             current: pagination.current,
             pageSize: pagination.pageSize,
-            onChange: (page, pageSize) => setPagination({ current: page, pageSize }),
+            onChange: (page, pageSize) =>
+              setPagination({ current: page, pageSize }),
           }}
           scroll={{ x: 600 }}
           locale={{ emptyText: "Không có sản phẩm" }}
