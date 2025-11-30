@@ -18,6 +18,7 @@ const {
   sendForgotPasswordOTP,
   forgotChangePassword,
   resendRegisterOtp,
+  getPermissionCatalog,
 } = require("../controllers/user/userController");
 
 const {
@@ -189,6 +190,12 @@ router.post("/staff/soft-delete", verifyToken, isManager, softDeleteUser);
  * Khôi phục nhân viên (chỉ Manager)
  */
 router.post("/staff/restore", verifyToken, isManager, restoreUser);
+
+/**
+ * GET /api/users/permissions/catalog
+ * Lấy danh sách quyền và preset cho Manager phân quyền
+ */
+router.get("/permissions/catalog", verifyToken, isManager, getPermissionCatalog);
 
 // ==================== ADMIN ROUTES ====================
 
