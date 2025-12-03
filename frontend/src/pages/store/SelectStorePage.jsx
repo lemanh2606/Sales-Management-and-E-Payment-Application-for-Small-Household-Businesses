@@ -35,7 +35,9 @@ import {
   EyeOutlined,
   CheckCircleOutlined,
   UserOutlined,
+  ThunderboltFilled,
   FilterOutlined,
+  FireOutlined,
   ReloadOutlined,
   AppstoreOutlined,
   UnorderedListOutlined,
@@ -43,14 +45,7 @@ import {
 } from "@ant-design/icons";
 import StoreFormModal from "../../components/store/StoreFormModal";
 import StoreDetailModal from "../../components/store/StoreDetailModal";
-import {
-  selectStore,
-  createStore,
-  updateStore,
-  deleteStore,
-  getStoresByManager,
-  getStoreById,
-} from "../../api/storeApi";
+import { selectStore, createStore, updateStore, deleteStore, getStoresByManager, getStoreById } from "../../api/storeApi";
 
 const { Content } = Layout;
 const { Title, Text, Paragraph } = Typography;
@@ -186,10 +181,7 @@ export default function SelectStorePage() {
     try {
       setBusy(true);
       const res = await selectStore(store._id);
-      let returnedStore =
-        (res && (res.store || res.data?.store || res.data)) ||
-        (res && res._id ? res : null) ||
-        store;
+      let returnedStore = (res && (res.store || res.data?.store || res.data)) || (res && res._id ? res : null) || store;
 
       try {
         const prev = localStorage.getItem("currentStore");
@@ -383,154 +375,309 @@ export default function SelectStorePage() {
   );
 
   return (
-    <Layout style={{ minHeight: "100vh", background: "#f5f7fa" }}>
+    <Layout style={{ minHeight: "100vh", background: "#f0f2f5" }}>
       {contextHolder}
-      <Content style={{ padding: isMobile ? "16px" : "24px" }}>
-        <div style={{ maxWidth: 1600, margin: "0 auto" }}>
-          {/* Header Bar */}
-          <Card
+      <Content style={{ padding: isMobile ? "12px" : "32px 48px" }}>
+        <div style={{ maxWidth: 1400, margin: "0 auto" }}>
+          {/* Hero Header Section */}
+          <div
             style={{
-              marginBottom: 20,
-              borderRadius: 16,
-              background: "linear-gradient(135deg, #52c41a 0%, #73d13d 100%)",
-              border: "none",
-              boxShadow: "0 8px 24px rgba(82, 196, 26, 0.25)",
-              color: "#fff",
+              marginBottom: 32,
+              borderRadius: 24,
+              background: "linear-gradient(135deg, #3f59cdff 10%, #7dd44e 90%)",
+              padding: isMobile ? "32px 20px" : "48px 40px",
+              position: "relative",
+              overflow: "hidden",
+              boxShadow: "0 20px 60px rgba(102, 126, 234, 0.3)",
             }}
-            styles={{ body: { padding: isMobile ? "16px" : "24px" } }}
           >
-            <Row gutter={[16, 16]} align="middle">
-              <Col xs={24} md={12} lg={14}>
-                <Space direction="vertical" size={6}>
-                  <Title level={3} style={{ color: "#fff", margin: 0 }}>
-                    Cửa hàng của bạn
-                  </Title>
-                  <Text style={{ color: "rgba(255,255,255,0.9)" }}>
-                    Chọn hoặc tạo cửa hàng để bắt đầu quản lý
-                  </Text>
-                </Space>
-              </Col>
-              <Col xs={24} md={12} lg={10}>
-                <Row gutter={[12, 12]} justify="end">
-                  <Col xs={12} sm={8}>
-                    <Statistic
-                      title={<span style={{ color: "rgba(255,255,255,0.9)" }}>Tổng cửa hàng</span>}
-                      value={stores.length}
-                      prefix={<ShopOutlined style={{ color: "#fff" }} />}
-                      valueStyle={{ color: "#fff" }}
-                    />
-                  </Col>
-                  <Col xs={12} sm={8}>
-                    <Statistic
-                      title={<span style={{ color: "rgba(255,255,255,0.9)" }}>Kết quả</span>}
-                      value={filteredStores.length}
-                      prefix={<SearchOutlined style={{ color: "#fff" }} />}
-                      valueStyle={{ color: "#fff" }}
-                    />
-                  </Col>
-                  <Col xs={24} sm={8}>
-                    <Button
-                      type="primary"
-                      icon={<PlusOutlined />}
-                      onClick={handleAdd}
-                      block
-                      size="large"
+            {/* Decorative Elements */}
+            <div
+              style={{
+                position: "absolute",
+                top: -50,
+                right: -50,
+                width: 200,
+                height: 200,
+                borderRadius: "50%",
+                background: "rgba(255, 255, 255, 0.1)",
+                filter: "blur(40px)",
+              }}
+            />
+            <div
+              style={{
+                position: "absolute",
+                bottom: -30,
+                left: -30,
+                width: 150,
+                height: 150,
+                borderRadius: "50%",
+                background: "rgba(255, 255, 255, 0.1)",
+                filter: "blur(40px)",
+              }}
+            />
+
+            <Row gutter={[24, 24]} align="middle" style={{ position: "relative", zIndex: 1 }}>
+              <Col xs={24} lg={14}>
+                <Space direction="vertical" size={12}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <div
                       style={{
-                        background: "#fff",
-                        color: "#52c41a",
-                        border: "none",
-                        borderRadius: 10,
-                        height: 44,
-                        fontWeight: 700,
+                        width: 56,
+                        height: 56,
+                        borderRadius: 16,
+                        background: "rgba(255, 255, 255, 0.2)",
+                        backdropFilter: "blur(10px)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
                       }}
                     >
-                      Thêm cửa hàng
-                    </Button>
+                      <ShopOutlined style={{ fontSize: 28, color: "#fff" }} />
+                    </div>
+                    <div>
+                      <Title level={2} style={{ color: "#fff", margin: 0, fontSize: isMobile ? 24 : 32 }}>
+                        Cửa Hàng Của Bạn
+                      </Title>
+                      <Text style={{ color: "rgba(255,255,255,0.95)", fontSize: 15 }}>Quản lý và điều hành cửa hàng một cách hiệu quả</Text>
+                    </div>
+                  </div>
+                </Space>
+              </Col>
+
+              <Col xs={24} lg={10}>
+                <Row gutter={[16, 16]}>
+                  <Col xs={12}>
+                    <Card
+                      style={{
+                        background: "rgba(255, 255, 255, 0.15)",
+                        backdropFilter: "blur(10px)",
+                        border: "1px solid rgba(255, 255, 255, 0.2)",
+                        borderRadius: 16,
+                      }}
+                      bodyStyle={{ padding: 20 }}
+                    >
+                      <Statistic
+                        title={<span style={{ color: "rgba(255,255,255,0.9)", fontSize: 13 }}>Tổng Cửa Hàng</span>}
+                        value={stores.length}
+                        prefix={<FireOutlined style={{ color: "#ffd666" }} />}
+                        valueStyle={{ color: "#fff", fontSize: 28, fontWeight: 700 }}
+                      />
+                    </Card>
+                  </Col>
+                  <Col xs={12}>
+                    <Card
+                      style={{
+                        background: "rgba(255, 255, 255, 0.15)",
+                        backdropFilter: "blur(10px)",
+                        border: "1px solid rgba(255, 255, 255, 0.2)",
+                        borderRadius: 16,
+                      }}
+                      bodyStyle={{ padding: 20 }}
+                    >
+                      <Statistic
+                        title={<span style={{ color: "rgba(255,255,255,0.9)", fontSize: 13 }}>Kết Quả Lọc</span>}
+                        value={filteredStores.length}
+                        prefix={<SearchOutlined style={{ color: "#95de64" }} />}
+                        valueStyle={{ color: "#fff", fontSize: 28, fontWeight: 700 }}
+                      />
+                    </Card>
                   </Col>
                 </Row>
               </Col>
             </Row>
-          </Card>
+          </div>
 
-          {/* Control Bar */}
+          {/* Control Bar - Modern Search & Filters */}
           <Card
             style={{
-              marginBottom: 16,
-              borderRadius: 12,
-              boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+              marginBottom: 24,
+              borderRadius: 20,
+              border: "none",
+              boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
             }}
-            styles={{ body: { padding: isMobile ? "12px" : "16px" } }}
+            bodyStyle={{ padding: isMobile ? "16px" : "24px" }}
           >
-            <Row gutter={[12, 12]} align="middle">
-              <Col xs={24} md={12} lg={14}>
+            <Row gutter={[16, 16]} align="middle">
+              <Col xs={24} lg={13}>
                 <AutoComplete
                   value={search}
                   options={searchOptions}
                   onChange={(value) => setSearch(value)}
                   onSelect={(value) => setSearch(value)}
                   style={{ width: "100%" }}
-                  placeholder={isMobile ? "🔍 Tìm kiếm..." : "🔍 Tìm kiếm cửa hàng theo tên, địa chỉ, số điện thoại..."}
                   allowClear
-                  popupMatchSelectWidth={isMobile ? true : 480}
+                  popupMatchSelectWidth={isMobile ? true : 500}
                 >
                   <Input
                     size="large"
-                    prefix={<SearchOutlined style={{ color: "#52c41a", fontSize: 18 }} />}
+                    prefix={
+                      <SearchOutlined
+                        style={{
+                          color: "#667eea",
+                          fontSize: 20,
+                          marginRight: 8,
+                        }}
+                      />
+                    }
                     suffix={
                       filteredStores.length !== stores.length && (
-                        <Badge count={filteredStores.length} style={{ backgroundColor: "#52c41a" }} />
+                        <Badge
+                          count={filteredStores.length}
+                          style={{
+                            backgroundColor: "#667eea",
+                            boxShadow: "0 2px 8px rgba(102, 126, 234, 0.4)",
+                          }}
+                        />
                       )
                     }
-                    style={{ borderRadius: 10, height: 44 }}
+                    style={{
+                      borderRadius: 12,
+                      height: 48,
+                      border: "2px solid #f0f0f0",
+                      transition: "all 0.3s ease",
+                    }}
                   />
                 </AutoComplete>
               </Col>
-              <Col xs={12} md={6} lg={5}>
+
+              <Col xs={24} sm={12} lg={6}>
                 <Segmented
                   options={[
-                    { label: "Lưới", value: "grid", icon: <AppstoreOutlined /> },
-                    { label: "Danh sách", value: "list", icon: <UnorderedListOutlined /> },
+                    {
+                      label: isMobile ? "Grid" : "Lưới",
+                      value: "grid",
+                      icon: <AppstoreOutlined />,
+                    },
+                    {
+                      label: isMobile ? "List" : "Danh Sách",
+                      value: "list",
+                      icon: <UnorderedListOutlined />,
+                    },
                   ]}
                   value={viewMode}
                   onChange={setViewMode}
                   block
+                  size="large"
+                  style={{ height: 48, borderRadius: 12 }}
                 />
               </Col>
-              <Col xs={12} md={6} lg={5}>
-                <Space.Compact style={{ width: "100%" }}>
+
+              <Col xs={24} sm={12} lg={5}>
+                <Space.Compact style={{ width: "100%" }} size="large">
                   <Dropdown overlay={filterMenu} trigger={["click"]}>
-                    <Button icon={<FilterOutlined />} style={{ width: "50%" }}>
+                    <Button
+                      icon={<FilterOutlined />}
+                      style={{
+                        width: "50%",
+                        height: 48,
+                        borderRadius: "12px 0 0 12px",
+                        fontWeight: 500,
+                      }}
+                    >
                       Lọc
                     </Button>
                   </Dropdown>
-                  <Button icon={<ReloadOutlined />} style={{ width: "50%" }} onClick={loadStores}>
-                    Tải lại
+                  <Button
+                    icon={<ReloadOutlined />}
+                    style={{
+                      width: "50%",
+                      height: 48,
+                      borderRadius: "0 12px 12px 0",
+                      fontWeight: 500,
+                    }}
+                    onClick={loadStores}
+                  >
+                    Tải Lại
                   </Button>
                 </Space.Compact>
               </Col>
             </Row>
+
+            <Divider style={{ margin: "20px 0 16px 0" }} />
+
+            <Row justify="space-between" align="middle">
+              <Col>
+                <Text type="secondary" style={{ fontSize: 14 }}>
+                  Hiển thị{" "}
+                  <Text strong style={{ color: "#667eea" }}>
+                    {paginatedStores.length}
+                  </Text>{" "}
+                  trong tổng số{" "}
+                  <Text strong style={{ color: "#667eea" }}>
+                    {filteredStores.length}
+                  </Text>{" "}
+                  cửa hàng
+                </Text>
+              </Col>
+              <Col>
+                <Button
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  onClick={handleAdd}
+                  size="large"
+                  style={{
+                    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                    border: "none",
+                    borderRadius: 12,
+                    height: 48,
+                    paddingLeft: 24,
+                    paddingRight: 24,
+                    fontWeight: 600,
+                    boxShadow: "0 4px 15px rgba(102, 126, 234, 0.4)",
+                  }}
+                >
+                  Thêm Cửa Hàng
+                </Button>
+              </Col>
+            </Row>
           </Card>
 
-          {/* Content */}
+          {/* Content Area */}
           {loading ? (
-            <div style={{ textAlign: "center", padding: "80px 0" }}>
-              <Spin size="large" tip="Đang tải danh sách cửa hàng..." />
+            <div style={{ textAlign: "center", padding: "100px 0" }}>
+              <Spin size="large" tip={<Text style={{ marginTop: 16, fontSize: 16, color: "#667eea" }}>Đang tải danh sách cửa hàng...</Text>} />
             </div>
           ) : filteredStores.length === 0 ? (
-            <Card style={{ borderRadius: 12, textAlign: "center", padding: "60px 20px" }}>
+            <Card
+              style={{
+                borderRadius: 20,
+                textAlign: "center",
+                padding: "80px 20px",
+                border: "2px dashed #d9d9d9",
+                background: "#fafafa",
+              }}
+            >
               <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                imageStyle={{ height: 120 }}
                 description={
-                  <Space direction="vertical" size={12}>
-                    <Title level={4} style={{ margin: 0, color: "#8c8c8c" }}>
-                      {search ? "Không tìm thấy cửa hàng phù hợp" : "Chưa có cửa hàng"}
+                  <Space direction="vertical" size={16}>
+                    <Title level={3} style={{ margin: 0, color: "#8c8c8c" }}>
+                      {search ? "🔍 Không Tìm Thấy Cửa Hàng" : "🏪 Chưa Có Cửa Hàng"}
                     </Title>
-                    <Text type="secondary">
+                    <Text type="secondary" style={{ fontSize: 15 }}>
                       {search
-                        ? "Thử từ khóa khác hoặc xóa bộ lọc"
-                        : "Tạo cửa hàng đầu tiên để bắt đầu quản lý bán hàng"}
+                        ? "Thử từ khóa khác hoặc xóa bộ lọc để xem tất cả cửa hàng"
+                        : "Tạo cửa hàng đầu tiên để bắt đầu quản lý bán hàng của bạn"}
                     </Text>
-                    <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
-                      Thêm cửa hàng
+                    <Button
+                      type="primary"
+                      icon={<PlusOutlined />}
+                      onClick={handleAdd}
+                      size="large"
+                      style={{
+                        marginTop: 8,
+                        background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                        border: "none",
+                        borderRadius: 12,
+                        height: 48,
+                        paddingLeft: 32,
+                        paddingRight: 32,
+                        fontWeight: 600,
+                      }}
+                    >
+                      Thêm Cửa Hàng Ngay
                     </Button>
                   </Space>
                 }
@@ -538,153 +685,239 @@ export default function SelectStorePage() {
             </Card>
           ) : viewMode === "grid" ? (
             <>
-              <Row gutter={[16, 16]}>
+              <Row gutter={[20, 20]}>
                 {paginatedStores.map((store) => (
-                  <Col xs={24} sm={12} md={8} lg={6} key={store._id}>
+                  <Col xs={24} sm={12} lg={8} xl={6} key={store._id}>
                     <Card
                       hoverable
                       style={{
-                        borderRadius: 14,
+                        borderRadius: 20,
                         overflow: "hidden",
                         height: "100%",
-                        border: "1px solid #e8e8e8",
-                        transition: "all .25s ease",
+                        border: "none",
+                        boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
+                        transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
                       }}
-                      styles={{ body: { padding: 0 } }}
-                      className="store-card-compact"
+                      bodyStyle={{ padding: 0 }}
+                      className="store-card-modern"
                       onClick={() => handleDetail(store._id)}
                     >
-                      {/* Cover */}
+                      {/* Cover Image */}
                       <div
                         style={{
-                          height: 150,
-                          background: store.imageUrl
-                            ? `url(${store.imageUrl}) center/cover`
-                            : "linear-gradient(135deg, #52c41a 0%, #73d13d 100%)",
+                          height: 180,
+                          background: store.imageUrl ? `url(${store.imageUrl}) center/cover` : "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
                           position: "relative",
                         }}
                       >
                         {!store.imageUrl && (
-                          <ShopOutlined
+                          <div
                             style={{
                               position: "absolute",
-                              top: "50%",
-                              left: "50%",
-                              transform: "translate(-50%, -50%)",
-                              fontSize: 48,
-                              color: "rgba(255,255,255,0.3)",
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              background: "rgba(0,0,0,0.1)",
                             }}
-                          />
+                          >
+                            <ShopOutlined
+                              style={{
+                                fontSize: 64,
+                                color: "rgba(255,255,255,0.4)",
+                              }}
+                            />
+                          </div>
                         )}
+
+                        {/* Overlay Gradient */}
                         <div
                           style={{
                             position: "absolute",
-                            top: 10,
-                            left: 10,
-                            background: "rgba(255,255,255,0.95)",
-                            padding: "4px 10px",
-                            borderRadius: 12,
-                            fontWeight: 600,
-                            fontSize: 12,
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 6,
+                            bottom: 0,
+                            left: 0,
+                            right: 0,
+                            height: 80,
+                            background: "linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 100%)",
                           }}
-                        >
-                          <StarFilled style={{ color: "#faad14" }} />
-                          <span>{(store.tags?.length || 0) + 1} mục</span>
-                        </div>
+                        />
+
+                        {/* Tags Badge */}
+                        {store.tags && store.tags.length > 0 && (
+                          <div
+                            style={{
+                              position: "absolute",
+                              top: 12,
+                              left: 12,
+                              background: "rgba(255,255,255,0.95)",
+                              backdropFilter: "blur(10px)",
+                              padding: "6px 12px",
+                              borderRadius: 20,
+                              fontWeight: 600,
+                              fontSize: 12,
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 6,
+                              boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+                            }}
+                          >
+                            <StarFilled style={{ color: "#faad14" }} />
+                            <span>{store.tags.length} tags</span>
+                          </div>
+                        )}
+
+                        {/* Active Badge */}
                         <Badge
                           count="Active"
                           style={{
                             backgroundColor: "#52c41a",
                             position: "absolute",
-                            top: 10,
-                            right: 10,
+                            top: 12,
+                            right: 12,
+                            boxShadow: "0 2px 8px rgba(82, 196, 26, 0.4)",
                           }}
                         />
                       </div>
 
-                      {/* Info */}
-                      <div style={{ padding: 16 }}>
-                        <Space direction="vertical" size={10} style={{ width: "100%" }}>
-                          <Title level={5} ellipsis style={{ margin: 0, fontSize: 16 }}>
+                      {/* Card Content */}
+                      <div style={{ padding: 20 }}>
+                        <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                          {/* Store Name */}
+                          <Title
+                            level={5}
+                            ellipsis={{ rows: 1 }}
+                            style={{
+                              margin: 0,
+                              fontSize: 17,
+                              fontWeight: 700,
+                              color: "#262626",
+                            }}
+                          >
                             {store.name}
                           </Title>
 
-                          <Space size={6} align="start" style={{ width: "100%" }}>
-                            <EnvironmentOutlined style={{ color: "#52c41a", fontSize: 14, marginTop: 2 }} />
-                            <Text ellipsis={{ rows: 1 }} type="secondary" style={{ fontSize: 12, flex: 1 }}>
+                          {/* Address */}
+                          <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                            <EnvironmentOutlined
+                              style={{
+                                color: "#667eea",
+                                fontSize: 16,
+                                marginTop: 2,
+                                flexShrink: 0,
+                              }}
+                            />
+                            <Text ellipsis={{ rows: 2 }} type="secondary" style={{ fontSize: 13, lineHeight: "1.5" }}>
                               {store.address || "Chưa có địa chỉ"}
                             </Text>
-                          </Space>
+                          </div>
 
+                          {/* Phone */}
                           {store.phone && (
-                            <Space size={6}>
-                              <PhoneOutlined style={{ color: "#faad14", fontSize: 14 }} />
-                              <Text style={{ fontSize: 12, fontWeight: 500 }}>{store.phone}</Text>
-                            </Space>
+                            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                              <PhoneOutlined style={{ color: "#52c41a", fontSize: 15 }} />
+                              <Text style={{ fontSize: 13, fontWeight: 500 }}>{store.phone}</Text>
+                            </div>
                           )}
 
+                          {/* Tags */}
                           {store.tags && store.tags.length > 0 && (
-                            <Space size={6} wrap>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
                               {store.tags.slice(0, 3).map((tag, idx) => (
-                                <Tag key={idx} color="green" style={{ fontSize: 11, padding: "0 8px", margin: 0 }}>
+                                <Tag
+                                  key={idx}
+                                  color="purple"
+                                  style={{
+                                    fontSize: 11,
+                                    padding: "2px 10px",
+                                    margin: 0,
+                                    borderRadius: 12,
+                                    border: "none",
+                                  }}
+                                >
                                   {tag}
                                 </Tag>
                               ))}
                               {store.tags.length > 3 && (
-                                <Tag style={{ fontSize: 11, padding: "0 8px" }}>+{store.tags.length - 3}</Tag>
+                                <Tag
+                                  style={{
+                                    fontSize: 11,
+                                    padding: "2px 10px",
+                                    borderRadius: 12,
+                                    background: "#f0f0f0",
+                                    border: "none",
+                                  }}
+                                >
+                                  +{store.tags.length - 3}
+                                </Tag>
                               )}
-                            </Space>
+                            </div>
                           )}
 
-                          {/* Actions */}
-                          <Space size={8} style={{ width: "100%", marginTop: 4 }}>
-                            <Button
-                              type="primary"
-                              icon={<CheckCircleOutlined />}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleSelect(store);
-                              }}
-                              loading={busy}
-                              size="small"
-                              style={{
-                                flex: 1,
-                                background: "linear-gradient(135deg, #52c41a 0%, #73d13d 100%)",
-                                border: "none",
-                                borderRadius: 8,
-                                fontWeight: 600,
-                                height: 34,
-                                fontSize: 12,
-                              }}
-                            >
-                              Chọn
-                            </Button>
-                            <Tooltip title="Xem nhanh">
+                          <Divider style={{ margin: "8px 0" }} />
+
+                          {/* Action Buttons */}
+                          <Row gutter={8}>
+                            <Col span={14}>
                               <Button
-                                icon={<EyeOutlined />}
+                                type="primary"
+                                icon={<ThunderboltFilled />}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleDetail(store._id);
+                                  handleSelect(store);
                                 }}
-                                size="small"
-                                style={{ borderRadius: 8, height: 34 }}
-                              />
-                            </Tooltip>
-                            <Tooltip title="Sửa">
-                              <Button
-                                icon={<EditOutlined />}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleEdit(store);
+                                loading={busy}
+                                block
+                                style={{
+                                  background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                                  border: "none",
+                                  borderRadius: 10,
+                                  fontWeight: 600,
+                                  height: 40,
+                                  fontSize: 13,
+                                  boxShadow: "0 4px 12px rgba(102, 126, 234, 0.3)",
                                 }}
-                                size="small"
-                                style={{ borderRadius: 8, height: 34 }}
-                              />
-                            </Tooltip>
-                          </Space>
+                              >
+                                Chọn
+                              </Button>
+                            </Col>
+                            <Col span={5}>
+                              <Tooltip title="Xem Chi Tiết">
+                                <Button
+                                  icon={<EyeOutlined />}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDetail(store._id);
+                                  }}
+                                  block
+                                  style={{
+                                    borderRadius: 10,
+                                    height: 40,
+                                    border: "2px solid #f0f0f0",
+                                  }}
+                                />
+                              </Tooltip>
+                            </Col>
+                            <Col span={5}>
+                              <Tooltip title="Chỉnh Sửa">
+                                <Button
+                                  icon={<EditOutlined />}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleEdit(store);
+                                  }}
+                                  block
+                                  style={{
+                                    borderRadius: 10,
+                                    height: 40,
+                                    border: "2px solid #f0f0f0",
+                                  }}
+                                />
+                              </Tooltip>
+                            </Col>
+                          </Row>
                         </Space>
                       </div>
                     </Card>
@@ -692,8 +925,9 @@ export default function SelectStorePage() {
                 ))}
               </Row>
 
+              {/* Pagination */}
               {filteredStores.length > pageSize && (
-                <div style={{ textAlign: "center", marginTop: 24 }}>
+                <div style={{ textAlign: "center", marginTop: 40 }}>
                   <Pagination
                     current={currentPage}
                     total={filteredStores.length}
@@ -701,117 +935,191 @@ export default function SelectStorePage() {
                     onChange={setCurrentPage}
                     showSizeChanger={false}
                     simple={isMobile}
-                    size="small"
+                    style={{
+                      display: "inline-block",
+                      padding: "12px 24px",
+                      background: "#fff",
+                      borderRadius: 16,
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+                    }}
                   />
                 </div>
               )}
             </>
           ) : (
-            // List mode
-            <Card style={{ borderRadius: 12 }} bodyStyle={{ padding: 0 }}>
-              {paginatedStores.map((store, idx) => (
-                <div
-                  key={store._id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 16,
-                    padding: 16,
-                    borderBottom: idx === paginatedStores.length - 1 ? "none" : "1px solid #f0f0f0",
-                    cursor: "pointer",
-                  }}
-                  onClick={() => handleDetail(store._id)}
-                >
+            // List View Mode
+            <>
+              <Card
+                style={{
+                  borderRadius: 20,
+                  border: "none",
+                  boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
+                }}
+                bodyStyle={{ padding: 0 }}
+              >
+                {paginatedStores.map((store, idx) => (
                   <div
+                    key={store._id}
                     style={{
-                      width: 56,
-                      height: 56,
-                      borderRadius: 12,
-                      background: store.imageUrl
-                        ? `url(${store.imageUrl}) center/cover`
-                        : "linear-gradient(135deg, #52c41a 0%, #73d13d 100%)",
-                      position: "relative",
-                      flexShrink: 0,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 20,
+                      padding: isMobile ? "16px" : "20px 24px",
+                      borderBottom: idx === paginatedStores.length - 1 ? "none" : "1px solid #f0f0f0",
+                      cursor: "pointer",
+                      transition: "all 0.3s ease",
+                      background: "#fff",
                     }}
+                    className="store-list-item"
+                    onClick={() => handleDetail(store._id)}
                   >
-                    {!store.imageUrl && (
-                      <ShopOutlined
-                        style={{
-                          position: "absolute",
-                          top: "50%",
-                          left: "50%",
-                          transform: "translate(-50%, -50%)",
-                          fontSize: 24,
-                          color: "rgba(255,255,255,0.85)",
-                        }}
-                      />
-                    )}
-                  </div>
-
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <Title level={5} style={{ margin: 0 }}>
-                      {store.name}
-                    </Title>
-                    <Space size={10} wrap>
-                      <Text type="secondary" style={{ fontSize: 12 }}>
-                        <EnvironmentOutlined /> {store.address || "Chưa có địa chỉ"}
-                      </Text>
-                      {store.phone && (
-                        <Text type="secondary" style={{ fontSize: 12 }}>
-                          <PhoneOutlined /> {store.phone}
-                        </Text>
-                      )}
-                      {store.tags && store.tags.length > 0 && (
-                        <Space size={4} wrap>
-                          {store.tags.slice(0, 3).map((tag, i) => (
-                            <Tag key={i} color="green" style={{ margin: 0 }}>
-                              {tag}
-                            </Tag>
-                          ))}
-                          {store.tags.length > 3 && <Tag>+{store.tags.length - 3}</Tag>}
-                        </Space>
-                      )}
-                    </Space>
-                  </div>
-
-                  <Space>
-                    <Button
-                      type="primary"
-                      icon={<CheckCircleOutlined />}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSelect(store);
-                      }}
-                      loading={busy}
+                    {/* Store Avatar/Image */}
+                    <div
                       style={{
-                        background: "linear-gradient(135deg, #52c41a 0%, #73d13d 100%)",
-                        border: "none",
-                        borderRadius: 8,
-                        fontWeight: 600,
+                        width: 72,
+                        height: 72,
+                        borderRadius: 16,
+                        background: store.imageUrl ? `url(${store.imageUrl}) center/cover` : "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                        position: "relative",
+                        flexShrink: 0,
+                        boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
                       }}
                     >
-                      Chọn
-                    </Button>
-                    <Button
-                      icon={<EyeOutlined />}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDetail(store._id);
-                      }}
-                    />
-                    <Button
-                      icon={<EditOutlined />}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleEdit(store);
-                      }}
-                    />
-                  </Space>
-                </div>
-              ))}
+                      {!store.imageUrl && (
+                        <ShopOutlined
+                          style={{
+                            position: "absolute",
+                            top: "50%",
+                            left: "50%",
+                            transform: "translate(-50%, -50%)",
+                            fontSize: 32,
+                            color: "rgba(255,255,255,0.9)",
+                          }}
+                        />
+                      )}
+                    </div>
 
+                    {/* Store Info */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <Title
+                        level={5}
+                        style={{
+                          margin: 0,
+                          marginBottom: 8,
+                          fontSize: 16,
+                          fontWeight: 700,
+                          color: "#262626",
+                        }}
+                      >
+                        {store.name}
+                      </Title>
+
+                      <Space size={16} wrap style={{ fontSize: 13 }}>
+                        <Text type="secondary">
+                          <EnvironmentOutlined style={{ marginRight: 6, color: "#667eea" }} />
+                          {store.address || "Chưa có địa chỉ"}
+                        </Text>
+
+                        {store.phone && (
+                          <Text type="secondary">
+                            <PhoneOutlined style={{ marginRight: 6, color: "#52c41a" }} />
+                            {store.phone}
+                          </Text>
+                        )}
+
+                        {store.tags && store.tags.length > 0 && (
+                          <Space size={4} wrap>
+                            {store.tags.slice(0, 3).map((tag, i) => (
+                              <Tag
+                                key={i}
+                                color="purple"
+                                style={{
+                                  margin: 0,
+                                  fontSize: 11,
+                                  padding: "2px 10px",
+                                  borderRadius: 12,
+                                  border: "none",
+                                }}
+                              >
+                                {tag}
+                              </Tag>
+                            ))}
+                            {store.tags.length > 3 && (
+                              <Tag
+                                style={{
+                                  margin: 0,
+                                  fontSize: 11,
+                                  padding: "2px 10px",
+                                  borderRadius: 12,
+                                  background: "#f0f0f0",
+                                  border: "none",
+                                }}
+                              >
+                                +{store.tags.length - 3}
+                              </Tag>
+                            )}
+                          </Space>
+                        )}
+                      </Space>
+                    </div>
+
+                    {/* Actions */}
+                    {!isMobile && (
+                      <Space size={8}>
+                        <Button
+                          type="primary"
+                          icon={<ThunderboltFilled />}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSelect(store);
+                          }}
+                          loading={busy}
+                          style={{
+                            background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                            border: "none",
+                            borderRadius: 10,
+                            fontWeight: 600,
+                            height: 40,
+                            paddingLeft: 20,
+                            paddingRight: 20,
+                            boxShadow: "0 4px 12px rgba(102, 126, 234, 0.3)",
+                          }}
+                        >
+                          Chọn
+                        </Button>
+                        <Button
+                          icon={<EyeOutlined />}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDetail(store._id);
+                          }}
+                          style={{
+                            borderRadius: 10,
+                            height: 40,
+                            border: "2px solid #f0f0f0",
+                          }}
+                        />
+                        <Button
+                          icon={<EditOutlined />}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEdit(store);
+                          }}
+                          style={{
+                            borderRadius: 10,
+                            height: 40,
+                            border: "2px solid #f0f0f0",
+                          }}
+                        />
+                      </Space>
+                    )}
+                  </div>
+                ))}
+              </Card>
+
+              {/* Pagination */}
               {filteredStores.length > pageSize && (
-                <div style={{ textAlign: "center", padding: 16 }}>
+                <div style={{ textAlign: "center", marginTop: 32 }}>
                   <Pagination
                     current={currentPage}
                     total={filteredStores.length}
@@ -819,15 +1127,22 @@ export default function SelectStorePage() {
                     onChange={setCurrentPage}
                     showSizeChanger={false}
                     simple={isMobile}
-                    size="small"
+                    style={{
+                      display: "inline-block",
+                      padding: "12px 24px",
+                      background: "#fff",
+                      borderRadius: 16,
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+                    }}
                   />
                 </div>
               )}
-            </Card>
+            </>
           )}
         </div>
       </Content>
 
+      {/* Modals */}
       <StoreFormModal
         open={showModal}
         onClose={() => setShowModal(false)}
@@ -835,7 +1150,7 @@ export default function SelectStorePage() {
         setForm={setStoreForm}
         onSave={handleSave}
         busy={busy}
-        title={editingStore ? "Sửa cửa hàng" : "Thêm cửa hàng"}
+        title={editingStore ? "Sửa Cửa Hàng" : "Thêm Cửa Hàng"}
       />
 
       <StoreDetailModal
@@ -847,11 +1162,32 @@ export default function SelectStorePage() {
         onDelete={(id) => handleDelete(id)}
       />
 
+      {/* Custom Styles */}
       <style jsx global>{`
-        .store-card-compact:hover {
-          box-shadow: 0 12px 32px rgba(82, 196, 26, 0.2) !important;
-          transform: translateY(-4px);
-          border-color: #52c41a !important;
+        .store-card-modern:hover {
+          transform: translateY(-8px);
+          box-shadow: 0 12px 40px rgba(102, 126, 234, 0.25) !important;
+        }
+
+        .store-list-item:hover {
+          background: #fafafa !important;
+          padding-left: 28px !important;
+        }
+
+        .ant-input:focus,
+        .ant-input-focused {
+          border-color: #667eea !important;
+          box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1) !important;
+        }
+
+        .ant-btn-primary:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4) !important;
+        }
+
+        .ant-segmented-item-selected {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+          color: #fff !important;
         }
       `}</style>
     </Layout>

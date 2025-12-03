@@ -50,7 +50,9 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
 
   // 2️⃣ VAT
   const vat = await Order.aggregate([
-    { $match: { storeId: objectStoreId, status: "paid", isVATInvoice: true, printDate: { $gte: start, $lte: end } } },
+    {
+      $match: { storeId: objectStoreId, status: { $in: ["paid", "partially_refunded"] }, isVATInvoice: true, printDate: { $gte: start, $lte: end } },
+    },
     { $group: { _id: null, totalVAT: { $sum: "$vatAmount" } } },
   ]);
   let totalVAT = toNumber(vat[0]?.totalVAT);
@@ -102,10 +104,8 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
   } else {
     extraExpense = [Number(extraExpense)];
   }
-
   const totalExtraExpense = extraExpense.reduce((sum, val) => sum + (val || 0), 0);
-
-  // ✅ Tổng chi phí vận hành trước khi cộng thêm phần điều chỉnh và hủy hàng
+  //Tổng chi phí vận hành trước khi cộng thêm phần điều chỉnh và hủy hàng
   let operatingCost = totalSalary + totalCommission + totalExtraExpense;
 
   // 9️⃣ Điều chỉnh tồn kho
@@ -133,7 +133,7 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
   ]);
   let stockDisposalCost = toNumber(disp[0]?.total);
 
-  // ✅ Cập nhật operatingCost cuối cùng
+  //Cập nhật operatingCost cuối cùng
   operatingCost += stockDisposalCost;
   if (stockAdjustmentValue < 0) operatingCost += Math.abs(stockAdjustmentValue);
   if (stockAdjustmentValue > 0) grossProfit += stockAdjustmentValue;
@@ -141,23 +141,158 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
   // 6️⃣ Lợi nhuận ròng
   const netProfit = grossProfit - operatingCost - totalVAT;
 
-  // 7️⃣ Giá trị tồn kho hiện tại
-  const stock = await Product.aggregate([
-    { $match: { store_id: objectStoreId } },
-    { $group: { _id: null, total: { $sum: { $multiply: ["$stock_quantity", "$cost_price"] } } } },
+  // 7️⃣ Giá trị tồn kho hiện tại (theo giá vốn + giá bán)
+  const stockAgg = await Product.aggregate([
+    { $match: { store_id: objectStoreId, isDeleted: { $ne: true } } }, // thêm isDeleted để chắc chắn
+    {
+      $group: {
+        _id: null,
+        stockValueAtCost: { $sum: { $multiply: ["$stock_quantity", "$cost_price"] } },
+        stockValueAtSale: { $sum: { $multiply: ["$stock_quantity", { $toDecimal: "$price" }] } }, // ← TỒN KHO THEO GIÁ BÁN
+      },
+    },
   ]);
-  let stockValue = toNumber(stock[0]?.total);
+  const stockResult = stockAgg[0] || { stockValueAtCost: 0, stockValueAtSale: 0 };
+  let stockValue = toNumber(stockResult.stockValueAtCost); // giữ nguyên tên cũ (giá vốn)
+  let stockValueAtSalePrice = toNumber(stockResult.stockValueAtSale); // ← MỚI!!!
+
+  //8️⃣ TOP NHÓM HÀNG HÓA – SIÊU CHUẨN, DỰA TRÊN ORDERITEM + PRODUCT + PRODUCTGROUP
+  const groupStats = await mongoose.model("ProductGroup").aggregate([
+    {
+      $match: { storeId: objectStoreId, isDeleted: false },
+    },
+
+    // JOIN SẢN PHẨM
+    {
+      $lookup: {
+        from: "products",
+        localField: "_id",
+        foreignField: "group_id",
+        as: "products",
+      },
+    },
+
+    // JOIN ORDERITEM theo từng sản phẩm
+    {
+      $lookup: {
+        from: "order_items",
+        let: { productIds: "$products._id" },
+        pipeline: [
+          { $match: { $expr: { $in: ["$productId", "$$productIds"] } } },
+          {
+            $lookup: {
+              from: "orders",
+              localField: "orderId",
+              foreignField: "_id",
+              as: "order",
+            },
+          },
+          { $unwind: { path: "$order", preserveNullAndEmptyArrays: true } },
+
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ["$order.storeId", objectStoreId] },
+                  { $in: ["$order.status", ["paid", "partially_refunded"]] },
+                  { $gte: ["$order.printDate", start] },
+                  { $lte: ["$order.printDate", end] },
+                ],
+              },
+            },
+          },
+        ],
+        as: "sales",
+      },
+    },
+
+    // TÍNH TOÁN
+    {
+      $project: {
+        groupName: "$name",
+
+        productCount: { $size: "$products" },
+
+        // TỒN KHO theo giá vốn
+        stockValueCost: {
+          $sum: {
+            $map: {
+              input: "$products",
+              as: "p",
+              in: { $multiply: ["$$p.stock_quantity", "$$p.cost_price"] },
+            },
+          },
+        },
+
+        // TỒN KHO theo giá bán
+        stockValueSale: {
+          $sum: {
+            $map: {
+              input: "$products",
+              as: "p",
+              in: { $multiply: ["$$p.stock_quantity", { $toDecimal: "$$p.price" }] },
+            },
+          },
+        },
+        stockQuantity: { $sum: "$products.stock_quantity" },
+
+        // SỐ LƯỢNG BÁN
+        quantitySold: {
+          $sum: "$sales.quantity",
+        },
+
+        // DOANH THU
+        revenue: {
+          $sum: {
+            $map: {
+              input: "$sales",
+              as: "s",
+              in: { $toDecimal: "$$s.subtotal" },
+            },
+          },
+        },
+      },
+    },
+
+    // TỈNH TOÁN PHỤ
+    {
+      $addFields: {
+        potentialProfit: { $subtract: ["$stockValueSale", "$stockValueCost"] },
+        stockToRevenueRatio: {
+          $cond: [{ $gt: ["$revenue", 0] }, { $divide: ["$stockValueSale", "$revenue"] }, 999],
+        },
+      },
+    },
+
+    // SẮP XẾP
+    { $sort: { revenue: -1 } },
+  ]);
+  // Convert Decimal128 → number
+  const formattedGroupStats = groupStats.map((g) => ({
+    _id: g._id,
+    groupName: g.groupName,
+    revenue: toNumber(g.revenue),
+    quantitySold: g.quantitySold,
+    stockQuantity: g.stockQuantity,
+    stockValueCost: toNumber(g.stockValueCost),
+    stockValueSale: toNumber(g.stockValueSale),
+    potentialProfit: toNumber(g.potentialProfit),
+    stockToRevenueRatio: g.stockToRevenueRatio,
+    productCount: g.productCount || 0,
+  }));
 
   return {
-    totalRevenue,
-    totalVAT,
-    totalCOGS,
-    grossProfit,
-    operatingCost,
-    netProfit,
-    stockValue,
-    stockAdjustmentValue,
-    stockDisposalCost,
+    totalRevenue, //doanh thu
+    totalVAT, //thuế GTGT
+    totalCOGS, //Chi phí nhập hàng
+    grossProfit, //lợi nhuận gộp
+    operatingCost, //chi phí vận hành
+    netProfit, //lợi nhuận ròng
+    stockValue, //giá trị tồn kho
+    stockValueAtSalePrice, //giá trị tồn kho theo giá bán
+    stockAdjustmentValue, //điều chỉnh tồn kho
+    stockDisposalCost, //hàng hóa hủy
+    groupStats: formattedGroupStats, //thống kê nhóm hàng hóa
   };
 };
 
@@ -221,12 +356,12 @@ const generateEndOfDayReport = async (req, res) => {
         $match: {
           storeId: new mongoose.Types.ObjectId(storeId),
           createdAt: { $gte: start, $lte: end },
-          status: "paid",
+          status: { $in: ["paid", "partially_refunded"] },
         },
       },
       {
         $lookup: {
-          from: "loyalty_settings", // join để lấy vndPerPoint (nếu cần quy đổi)
+          from: "loyalty_settings",
           localField: "storeId",
           foreignField: "storeId",
           as: "loyalty",
@@ -246,11 +381,7 @@ const generateEndOfDayReport = async (req, res) => {
         $addFields: {
           // Giảm giá từ điểm = usedPoints * vndPerPoint (mặc định nếu loyalty null thì 0)
           discountFromPoints: {
-            $cond: [
-              { $and: ["$usedPoints", "$loyalty.vndPerPoint"] },
-              { $multiply: ["$usedPoints", "$loyalty.vndPerPoint"] },
-              0,
-            ],
+            $cond: [{ $and: ["$usedPoints", "$loyalty.vndPerPoint"] }, { $multiply: ["$usedPoints", "$loyalty.vndPerPoint"] }, 0],
           },
         },
       },
@@ -288,7 +419,7 @@ const generateEndOfDayReport = async (req, res) => {
         $match: {
           storeId: new mongoose.Types.ObjectId(storeId),
           createdAt: { $gte: start, $lte: end },
-          status: "paid",
+          status: { $in: ["paid", "partially_refunded"] },
         },
       },
       {
@@ -306,7 +437,7 @@ const generateEndOfDayReport = async (req, res) => {
         $match: {
           storeId: new mongoose.Types.ObjectId(storeId),
           createdAt: { $gte: start, $lte: end },
-          status: "paid",
+          status: { $in: ["paid", "partially_refunded"] },
         },
       },
       {
@@ -469,7 +600,7 @@ const generateEndOfDayReport = async (req, res) => {
 module.exports = { getFinancialSummary, exportFinancial, generateEndOfDayReport };
 
 /*
-Mẫu JSON trả về từ API như sau: period theo YEAR
+Mẫu JSON trả về từ API của báo cáo tổng quan "getFinancialSummary" như sau: period theo YEAR (năm 2025)
 {
     "message": "Báo cáo tài chính thành công",
     "data": {

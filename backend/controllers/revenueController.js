@@ -4,53 +4,61 @@ const { periodToRange } = require("../utils/period");
 const { Parser } = require("json2csv");
 const PDFDocument = require("pdfkit");
 
-// ========== HÀM DÙNG CHUNG: TÍNH DOANH THU ==========
-// type = "total" | "employee"
+// ========== HÀM TÍNH DOANH THU – CÓ CẢ HOÀN 1 NỬA partially_refunded ==========
 async function calcRevenueByPeriod({ storeId, periodType, periodKey, type = "total" }) {
   const { start, end } = periodToRange(periodType, periodKey);
 
+  // Chỉ lấy các đơn ĐÃ THANH TOÁN (toàn bộ hoặc 1 phần)
+  const baseMatch = {
+    storeId: new mongoose.Types.ObjectId(storeId),
+    status: { $in: ["paid", "partially_refunded"] }, // ← quan trọng: lấy cả 2 loại
+    createdAt: { $gte: start, $lte: end },
+  };
+
   if (type === "total") {
     const pipeline = [
-      {
-        $match: {
-          storeId: new mongoose.Types.ObjectId(storeId),
-          status: "paid",
-          printDate: { $gte: start, $lte: end },
-        },
-      },
+      { $match: baseMatch },
       {
         $group: {
           _id: null,
-          totalRevenue: { $sum: "$totalAmount" },
+          totalRevenue: {
+            $sum: {
+              $toDecimal: "$totalAmount",
+            },
+          },
           countOrders: { $sum: 1 },
         },
       },
-      { $project: { _id: 0 } },
+      {
+        $project: {
+          _id: 0,
+          totalRevenue: { $toDouble: "$totalRevenue" },
+          countOrders: 1,
+        },
+      },
     ];
+
     const result = await Order.aggregate(pipeline);
+    const row = result[0] || { totalRevenue: 0, countOrders: 0 };
+
     return [
       {
         periodType,
         periodKey,
-        totalRevenue: result[0]?.totalRevenue || 0,
-        countOrders: result[0]?.countOrders || 0,
+        totalRevenue: row.totalRevenue,
+        countOrders: row.countOrders,
       },
     ];
   }
 
+  // =================== THEO NHÂN VIÊN ===================
   if (type === "employee") {
     const pipeline = [
-      {
-        $match: {
-          storeId: new mongoose.Types.ObjectId(storeId),
-          status: "paid",
-          printDate: { $gte: start, $lte: end },
-        },
-      },
+      { $match: baseMatch },
       {
         $group: {
           _id: "$employeeId",
-          totalRevenue: { $sum: "$totalAmount" },
+          totalRevenue: { $sum: { $toDecimal: "$totalAmount" } },
           countOrders: { $sum: 1 },
         },
       },
@@ -66,7 +74,9 @@ async function calcRevenueByPeriod({ storeId, periodType, periodKey, type = "tot
       { $unwind: "$employeeInfo" },
       { $sort: { totalRevenue: -1 } },
     ];
-    return await Order.aggregate(pipeline);
+
+    const result = await Order.aggregate(pipeline);
+    return result;
   }
 
   return [];
@@ -152,11 +162,7 @@ const exportRevenue = async (req, res) => {
             col2 = 280,
             col3 = 400;
 
-          doc
-            .fontSize(12)
-            .text("Nhân viên", col1, tableTop)
-            .text("Số HĐ", col2, tableTop)
-            .text("Doanh thu (VND)", col3, tableTop);
+          doc.fontSize(12).text("Nhân viên", col1, tableTop).text("Số HĐ", col2, tableTop).text("Doanh thu (VND)", col3, tableTop);
           doc
             .moveTo(50, tableTop + 15)
             .lineTo(550, tableTop + 15)

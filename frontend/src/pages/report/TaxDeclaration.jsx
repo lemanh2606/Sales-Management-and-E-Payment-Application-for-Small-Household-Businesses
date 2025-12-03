@@ -1,18 +1,69 @@
-// src/pages/report/TaxDeclaration.jsx - ✅ BẢN HOÀN CHỈNH ĐÃ ĐƯỢC TỐI ƯU
+// src/pages/report/TaxDeclaration.jsx
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
-  Card, Col, Row, Select, DatePicker, InputNumber, Button, Table, Form, Spin,
-  Alert, Space, Modal, message, Dropdown, Menu, Statistic, Typography, Divider,
-  Tooltip, Tag, Popconfirm, Badge, Descriptions, Result, Input, Collapse,
-  Switch, Checkbox, notification, Progress, Empty
+  Card,
+  Col,
+  Row,
+  Select,
+  DatePicker,
+  InputNumber,
+  Button,
+  Table,
+  Form,
+  Spin,
+  Alert,
+  Space,
+  Modal,
+  message,
+  Dropdown,
+  Menu,
+  Statistic,
+  Typography,
+  Divider,
+  Tooltip,
+  Tag,
+  Popconfirm,
+  Badge,
+  Descriptions,
+  Result,
+  Input,
+  Collapse,
+  Switch,
+  Checkbox,
+  notification,
+  Progress,
+  Empty,
 } from "antd";
 import {
-  EditOutlined, CopyOutlined, DeleteOutlined, DownloadOutlined, FileExcelOutlined,
-  FilePdfOutlined, InfoCircleOutlined, SyncOutlined, CheckCircleOutlined, ClockCircleOutlined,
-  EyeOutlined, FileDoneOutlined, UndoOutlined, QuestionCircleOutlined, CalculatorOutlined,
-  PlusOutlined, MinusCircleOutlined, UserOutlined, ShopOutlined, EnvironmentOutlined,
-  BankOutlined, IdcardOutlined, TeamOutlined, WarningOutlined, CloseCircleOutlined,
-  CheckOutlined, ExclamationCircleOutlined, BulbOutlined, ReloadOutlined
+  EditOutlined,
+  CopyOutlined,
+  DeleteOutlined,
+  DownloadOutlined,
+  FileExcelOutlined,
+  FilePdfOutlined,
+  InfoCircleOutlined,
+  SyncOutlined,
+  CheckCircleOutlined,
+  ClockCircleOutlined,
+  EyeOutlined,
+  FileDoneOutlined,
+  UndoOutlined,
+  QuestionCircleOutlined,
+  CalculatorOutlined,
+  PlusOutlined,
+  MinusCircleOutlined,
+  UserOutlined,
+  ShopOutlined,
+  EnvironmentOutlined,
+  BankOutlined,
+  IdcardOutlined,
+  TeamOutlined,
+  WarningOutlined,
+  CloseCircleOutlined,
+  CheckOutlined,
+  ExclamationCircleOutlined,
+  BulbOutlined,
+  ReloadOutlined,
 } from "@ant-design/icons";
 import axios from "axios";
 import dayjs from "dayjs";
@@ -22,6 +73,7 @@ import "dayjs/locale/vi";
 import readVietnameseNumber from "read-vietnamese-number";
 import Layout from "../../components/Layout";
 import ComponentTaxGuide from "./ComponentTaxGuide";
+import Swal from "sweetalert2";
 
 dayjs.extend(quarterOfYear);
 dayjs.extend(customParseFormat);
@@ -76,17 +128,17 @@ class ErrorBoundary extends React.Component {
 
 // ==================== CONSTANTS & CONFIG ====================
 const PERIOD_TYPES = [
-  { value: "month", label: "📅 Tháng", description: "Kê khai theo tháng" },
-  { value: "quarter", label: "📊 Quý", description: "Kê khai theo quý" },
-  { value: "year", label: "📈 Năm", description: "Kê khai theo năm" },
-  { value: "custom", label: "⚙️ Tùy chỉnh", description: "Kê khai theo khoảng thời gian tùy chọn" }
+  { value: "month", label: "Tháng", description: "Kê khai theo tháng" },
+  { value: "quarter", label: "Quý", description: "Kê khai theo quý" },
+  { value: "year", label: "Năm", description: "Kê khai theo năm" },
+  { value: "custom", label: "Tùy chỉnh", description: "Kê khai theo khoảng thời gian tùy chọn" },
 ];
 
 const TAX_RATES = {
   DEFAULT_GTGT: 1.0,
   DEFAULT_TNCN: 0.5,
   MAX_GTGT: 10,
-  MAX_TNCN: 5
+  MAX_TNCN: 5,
 };
 
 const STATUS_CONFIG = {
@@ -108,9 +160,7 @@ const CATEGORY_MAP = {
 const formatVND = (value) => {
   if (!value && value !== 0) return "₫0";
   try {
-    const num = typeof value === "object" ?
-      (value.$numberDecimal || value.toString()) :
-      value;
+    const num = typeof value === "object" ? value.$numberDecimal || value.toString() : value;
     return new Intl.NumberFormat("vi-VN", {
       style: "currency",
       currency: "VND",
@@ -194,10 +244,10 @@ const TaxDeclaration = () => {
   // ==================== NOTIFICATION SYSTEM ====================
   const showNotification = useCallback((type, title, description, hints = [], duration = 6) => {
     const icons = {
-      success: <CheckCircleOutlined style={{ color: '#52c41a' }} />,
-      error: <CloseCircleOutlined style={{ color: '#ff4d4f' }} />,
-      warning: <ExclamationCircleOutlined style={{ color: '#faad14' }} />,
-      info: <InfoCircleOutlined style={{ color: '#1890ff' }} />,
+      success: <CheckCircleOutlined style={{ color: "#52c41a" }} />,
+      error: <CloseCircleOutlined style={{ color: "#ff4d4f" }} />,
+      warning: <ExclamationCircleOutlined style={{ color: "#faad14" }} />,
+      info: <InfoCircleOutlined style={{ color: "#1890ff" }} />,
     };
 
     notification[type]({
@@ -209,23 +259,23 @@ const TaxDeclaration = () => {
       ),
       description: (
         <div>
-          {description && (
-            <Paragraph style={{ marginBottom: hints.length > 0 ? 12 : 0, marginTop: 4 }}>
-              {description}
-            </Paragraph>
-          )}
+          {description && <Paragraph style={{ marginBottom: hints.length > 0 ? 12 : 0, marginTop: 4 }}>{description}</Paragraph>}
           {hints.length > 0 && (
-            <div style={{
-              paddingLeft: 16,
-              borderLeft: "3px solid #1890ff",
-              background: "#f0f5ff",
-              padding: 12,
-              borderRadius: 4
-            }}>
+            <div
+              style={{
+                paddingLeft: 16,
+                borderLeft: "3px solid #1890ff",
+                background: "#f0f5ff",
+                padding: 12,
+                borderRadius: 4,
+              }}
+            >
               <Space align="start">
                 <BulbOutlined style={{ color: "#1890ff", marginTop: 2 }} />
                 <div>
-                  <Text strong style={{ color: "#1890ff" }}>Gợi ý:</Text>
+                  <Text strong style={{ color: "#1890ff" }}>
+                    Gợi ý:
+                  </Text>
                   <ul style={{ margin: "4px 0 0 0", paddingLeft: 20 }}>
                     {hints.map((hint, idx) => (
                       <li key={idx} style={{ color: "#666", marginBottom: 4, lineHeight: 1.6 }}>
@@ -248,90 +298,96 @@ const TaxDeclaration = () => {
   }, []);
 
   // ==================== ERROR HANDLER ====================
-  const handleApiError = useCallback((error, defaultMessage = "Có lỗi xảy ra", context = "") => {
-    console.error(`❌ ${context} Error:`, error);
+  const handleApiError = useCallback(
+    (error, defaultMessage = "Có lỗi xảy ra", context = "") => {
+      console.error(`❌ ${context} Error:`, error);
 
-    const response = error.response?.data;
-    const status = error.response?.status;
+      const response = error.response?.data;
+      const status = error.response?.status;
 
-    // Extract error details
-    const errorMessage = response?.message || defaultMessage;
-    const missingFields = response?.missingFields || [];
-    const invalidFields = response?.invalidFields || [];
-    const hint = response?.hint;
-    const details = response?.details || [];
-    const existingId = response?.existingId;
+      // Extract error details
+      const errorMessage = response?.message || defaultMessage;
+      const missingFields = response?.missingFields || [];
+      const invalidFields = response?.invalidFields || [];
+      const hint = response?.hint;
+      const details = response?.details || [];
+      const existingId = response?.existingId;
 
-    // Build hints array
-    const hints = [];
+      // Build hints array
+      const hints = [];
 
-    if (hint) {
-      hints.push(hint);
-    }
+      if (hint) {
+        hints.push(hint);
+      }
 
-    if (missingFields.length > 0) {
-      hints.push(`❌ Thiếu: ${missingFields.join(", ")}`);
-    }
+      if (missingFields.length > 0) {
+        hints.push(`❌ Thiếu: ${missingFields.join(", ")}`);
+      }
 
-    if (invalidFields.length > 0) {
-      hints.push(`⚠️ Không hợp lệ: ${invalidFields.join(", ")}`);
-    }
+      if (invalidFields.length > 0) {
+        hints.push(`⚠️ Không hợp lệ: ${invalidFields.join(", ")}`);
+      }
 
-    if (details.length > 0) {
-      details.forEach(detail => {
-        if (detail.message) {
-          hints.push(`• ${detail.message}`);
+      if (details.length > 0) {
+        details.forEach((detail) => {
+          if (detail.message) {
+            hints.push(`• ${detail.message}`);
+          }
+        });
+      }
+
+      // Status-specific hints
+      if (status === 400) {
+        if (hints.length === 0) {
+          hints.push("Vui lòng kiểm tra lại thông tin đã nhập");
+          hints.push("Đảm bảo tất cả trường bắt buộc đã được điền");
         }
-      });
-    }
-
-    // Status-specific hints
-    if (status === 400) {
-      if (hints.length === 0) {
-        hints.push("Vui lòng kiểm tra lại thông tin đã nhập");
-        hints.push("Đảm bảo tất cả trường bắt buộc đã được điền");
+      } else if (status === 401) {
+        hints.push("Phiên đăng nhập đã hết hạn");
+        hints.push("Vui lòng đăng nhập lại để tiếp tục");
+      } else if (status === 403) {
+        hints.push("Bạn không có quyền thực hiện thao tác này");
+        hints.push("Liên hệ quản lý để được cấp quyền");
+      } else if (status === 404) {
+        hints.push("Dữ liệu không tồn tại hoặc đã bị xóa");
+        hints.push("Thử làm mới trang để cập nhật danh sách");
+      } else if (status === 409) {
+        hints.push("Dữ liệu đã tồn tại trong hệ thống");
+        if (existingId) {
+          hints.push(`ID bản ghi: ${existingId}`);
+        }
+        hints.push("Vui lòng cập nhật bản ghi hiện có hoặc tạo bản sao");
+      } else if (status >= 500) {
+        hints.push("Lỗi server, vui lòng thử lại sau");
+        hints.push("Nếu lỗi vẫn tiếp tục, liên hệ hỗ trợ kỹ thuật");
       }
-    } else if (status === 401) {
-      hints.push("Phiên đăng nhập đã hết hạn");
-      hints.push("Vui lòng đăng nhập lại để tiếp tục");
-    } else if (status === 403) {
-      hints.push("Bạn không có quyền thực hiện thao tác này");
-      hints.push("Liên hệ quản lý để được cấp quyền");
-    } else if (status === 404) {
-      hints.push("Dữ liệu không tồn tại hoặc đã bị xóa");
-      hints.push("Thử làm mới trang để cập nhật danh sách");
-    } else if (status === 409) {
-      hints.push("Dữ liệu đã tồn tại trong hệ thống");
-      if (existingId) {
-        hints.push(`ID bản ghi: ${existingId}`);
-      }
-      hints.push("Vui lòng cập nhật bản ghi hiện có hoặc tạo bản sao");
-    } else if (status >= 500) {
-      hints.push("Lỗi server, vui lòng thử lại sau");
-      hints.push("Nếu lỗi vẫn tiếp tục, liên hệ hỗ trợ kỹ thuật");
-    }
 
-    showNotification("error", errorMessage, context ? `Lỗi khi ${context}` : null, hints, 8);
+      showNotification("error", errorMessage, context ? `Lỗi khi ${context}` : null, hints, 8);
 
-    return errorMessage;
-  }, [showNotification]);
+      return errorMessage;
+    },
+    [showNotification]
+  );
 
   // ==================== API HELPER ====================
-  const fetchWithAuth = useCallback(async (url, options = {}) => {
-    try {
-      const response = await axios({
-        url,
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        ...options,
-      });
-      return response;
-    } catch (error) {
-      throw error;
-    }
-  }, [token]);
+  const fetchWithAuth = useCallback(
+    async (url, options = {}) => {
+      try {
+        const response = await axios({
+          url,
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          ...options,
+        });
+        return response;
+      } catch (error) {
+        throw error;
+      }
+    },
+    [token]
+  );
 
   // ==================== CALCULATION FUNCTIONS ====================
   const calculateTax = useCallback((values) => {
@@ -385,7 +441,9 @@ const TaxDeclaration = () => {
     if (categoryRevenues.length > 0 && declaredRevenue) {
       const categoryTotal = categoryRevenues.reduce((sum, cat) => sum + (Number(cat.revenue) || 0), 0);
       if (Math.abs(categoryTotal - declaredRevenue) > 1000) {
-        warnings.push(`Tổng doanh thu theo ngành nghề (${formatVND(categoryTotal)}) không khớp với doanh thu kê khai (${formatVND(declaredRevenue)})`);
+        warnings.push(
+          `Tổng doanh thu theo ngành nghề (${formatVND(categoryTotal)}) không khớp với doanh thu kê khai (${formatVND(declaredRevenue)})`
+        );
       }
     }
 
@@ -410,7 +468,7 @@ const TaxDeclaration = () => {
       showNotification("warning", "Chưa chọn cửa hàng", "Vui lòng chọn cửa hàng trước khi kê khai thuế", [
         "🏪 Truy cập trang quản lý cửa hàng",
         "✓ Chọn cửa hàng bạn muốn kê khai",
-        "🔄 Quay lại trang này sau khi chọn"
+        "🔄 Quay lại trang này sau khi chọn",
       ]);
       return;
     }
@@ -419,7 +477,7 @@ const TaxDeclaration = () => {
       showNotification("warning", "Thiếu thông tin", "Vui lòng chọn đầy đủ thông tin trước khi xem doanh thu", [
         "✓ Chọn kỳ kê khai (tháng/quý/năm/tùy chỉnh)",
         "✓ Chọn thời gian cụ thể",
-        "✓ Đảm bảo đã chọn cửa hàng"
+        "✓ Đảm bảo đã chọn cửa hàng",
       ]);
       return;
     }
@@ -428,12 +486,12 @@ const TaxDeclaration = () => {
       const periodNames = {
         month: "tháng",
         quarter: "quý",
-        year: "năm"
+        year: "năm",
       };
       showNotification("warning", "Chưa chọn kỳ", `Vui lòng chọn ${periodNames[periodType] || "kỳ"} cụ thể`, [
         `📅 Nhấn vào ô chọn ${periodNames[periodType] || "thời gian"}`,
         `🗓️ Chọn ${periodNames[periodType] || "kỳ"} bạn muốn kê khai thuế`,
-        periodType === "custom" ? "⏳ Chọn cả tháng bắt đầu và kết thúc" : ""
+        periodType === "custom" ? "⏳ Chọn cả tháng bắt đầu và kết thúc" : "",
       ]);
       return;
     }
@@ -442,10 +500,10 @@ const TaxDeclaration = () => {
     try {
       const params = new URLSearchParams({ storeId, periodType });
       if (periodType === "custom" && monthRange.length === 2) {
-        params.append('monthFrom', monthRange[0].format("YYYY-MM"));
-        params.append('monthTo', monthRange[1].format("YYYY-MM"));
+        params.append("monthFrom", monthRange[0].format("YYYY-MM"));
+        params.append("monthTo", monthRange[1].format("YYYY-MM"));
       } else if (periodKey) {
-        params.append('periodKey', periodKey);
+        params.append("periodKey", periodKey);
       }
 
       console.log("📤 Fetching preview:", `${apiUrl}/taxs/preview?${params}`);
@@ -461,13 +519,17 @@ const TaxDeclaration = () => {
       // Set declared revenue but allow user to change it
       form.setFieldsValue({ declaredRevenue: revenue });
 
-      showNotification("success", "✅ Đã tải doanh thu thành công",
-        `Doanh thu hệ thống: ${formatVND(revenue)}`, [
-        `📊 Tổng ${count} đơn hàng đã thanh toán`,
-        `📅 Kỳ: ${periodDisplay}`,
-        "💡 Bạn có thể điều chỉnh doanh thu kê khai nếu cần",
-        "⏭️ Tiếp theo: Nhấn 'Tính thuế' để xem số thuế phải nộp"
-      ], 8
+      showNotification(
+        "success",
+        "✅ Đã tải doanh thu thành công",
+        `Doanh thu hệ thống: ${formatVND(revenue)}`,
+        [
+          `Tổng ${count} đơn hàng đã thanh toán`,
+          `Kỳ: ${periodDisplay}`,
+          "Bạn có thể điều chỉnh doanh thu kê khai nếu cần",
+          "Tiếp theo: Nhấn 'Tính thuế' để xem số thuế phải nộp",
+        ],
+        8
       );
     } catch (err) {
       handleApiError(err, "Lỗi tải doanh thu hệ thống", "tải doanh thu");
@@ -543,16 +605,23 @@ const TaxDeclaration = () => {
     form.resetFields();
     setCalculatedTax(null);
 
-    const typeConfig = PERIOD_TYPES.find(t => t.value === value);
+    const typeConfig = PERIOD_TYPES.find((t) => t.value === value);
 
-    showNotification("info", `Đã chọn kê khai theo ${typeConfig?.label || value}`,
-      typeConfig?.description || `Bạn đang kê khai thuế theo ${value}`, [
-      value === "month" ? "⏭️ Tiếp theo: Chọn tháng cụ thể" :
-        value === "quarter" ? "⏭️ Tiếp theo: Chọn quý cụ thể" :
-          value === "year" ? "⏭️ Tiếp theo: Chọn năm cụ thể" :
-            "⏭️ Tiếp theo: Chọn khoảng thời gian (từ tháng - đến tháng)",
-      "Sau khi chọn xong, nhấn 'Xem doanh thu hệ thống'"
-    ], 5
+    showNotification(
+      "info",
+      `Đã chọn kê khai theo ${typeConfig?.label || value}`,
+      typeConfig?.description || `Bạn đang kê khai thuế theo ${value}`,
+      [
+        value === "month"
+          ? "⏭️ Tiếp theo: Chọn tháng cụ thể"
+          : value === "quarter"
+          ? "⏭️ Tiếp theo: Chọn quý cụ thể"
+          : value === "year"
+          ? "⏭️ Tiếp theo: Chọn năm cụ thể"
+          : "⏭️ Tiếp theo: Chọn khoảng thời gian (từ tháng - đến tháng)",
+        "Sau khi chọn xong, nhấn 'Xem doanh thu hệ thống'",
+      ],
+      5
     );
   };
 
@@ -590,9 +659,7 @@ const TaxDeclaration = () => {
     const validation = validateForm();
 
     if (!validation.isValid) {
-      showNotification("error", "Thông tin chưa đầy đủ", "Vui lòng kiểm tra và điền đầy đủ thông tin",
-        validation.errors, 8
-      );
+      showNotification("error", "Thông tin chưa đầy đủ", "Vui lòng kiểm tra và điền đầy đủ thông tin", validation.errors, 8);
       return;
     }
 
@@ -606,10 +673,14 @@ const TaxDeclaration = () => {
             <Paragraph>Phát hiện một số vấn đề cần lưu ý:</Paragraph>
             <ul style={{ paddingLeft: 20 }}>
               {validation.warnings.map((w, idx) => (
-                <li key={idx} style={{ marginBottom: 8 }}>{w}</li>
+                <li key={idx} style={{ marginBottom: 8 }}>
+                  {w}
+                </li>
               ))}
             </ul>
-            <Paragraph strong style={{ marginTop: 16 }}>Bạn có muốn tiếp tục lưu tờ khai?</Paragraph>
+            <Paragraph strong style={{ marginTop: 16 }}>
+              Bạn có muốn tiếp tục lưu tờ khai?
+            </Paragraph>
           </div>
         ),
         okText: "Tiếp tục lưu",
@@ -635,24 +706,24 @@ const TaxDeclaration = () => {
         declaredRevenue: values.declaredRevenue,
         taxRates: {
           gtgt: values.gtgtRate || TAX_RATES.DEFAULT_GTGT,
-          tncn: values.tncnRate || TAX_RATES.DEFAULT_TNCN
+          tncn: values.tncnRate || TAX_RATES.DEFAULT_TNCN,
         },
         isFirstTime: values.isFirstTime !== false,
         supplementNumber: values.supplementNumber || 0,
-        revenueByCategory: categoryRevenues.map(cat => ({
+        revenueByCategory: categoryRevenues.map((cat) => ({
           category: cat.category,
           revenue: cat.revenue || 0,
           gtgtTax: cat.gtgtTax || 0,
           tncnTax: cat.tncnTax || 0,
         })),
-        specialConsumptionTax: specialTaxItems.map(item => ({
+        specialConsumptionTax: specialTaxItems.map((item) => ({
           itemName: item.itemName || "",
           unit: item.unit || "",
           revenue: item.revenue || 0,
           taxRate: item.taxRate || 0,
           taxAmount: item.taxAmount || 0,
         })),
-        environmentalTax: envTaxItems.map(item => ({
+        environmentalTax: envTaxItems.map((item) => ({
           type: item.type || "environmental_tax",
           itemName: item.itemName || "",
           unit: item.unit || "",
@@ -696,7 +767,7 @@ const TaxDeclaration = () => {
       console.log("📤 Sending payload:", JSON.stringify(payload, null, 2));
 
       const response = await fetchWithAuth(url, {
-        method: 'POST',
+        method: "POST",
         data: payload,
       });
 
@@ -704,15 +775,18 @@ const TaxDeclaration = () => {
 
       // Success notification
       const tax = calculatedTax || calculateTax(values);
-      showNotification("success",
+      showNotification(
+        "success",
         "✅ Tạo tờ khai mới thành công",
-        `Tờ khai thuế kỳ ${periodDisplay} đã được tạo mới`, [
-        `💰 Doanh thu: ${formatVND(values.declaredRevenue)}`,
-        `📊 Thuế GTGT: ${formatVND(tax.gtgt)}`,
-        `👤 Thuế TNCN: ${formatVND(tax.tncn)}`,
-        `💳 Tổng thuế: ${formatVND(tax.total)}`,
-        "📋 Bạn có thể xem chi tiết trong danh sách bên dưới"
-      ], 8
+        `Tờ khai thuế kỳ ${periodDisplay} đã được tạo mới`,
+        [
+          `💰 Doanh thu: ${formatVND(values.declaredRevenue)}`,
+          `📊 Thuế GTGT: ${formatVND(tax.gtgt)}`,
+          `👤 Thuế TNCN: ${formatVND(tax.tncn)}`,
+          `💳 Tổng thuế: ${formatVND(tax.total)}`,
+          "📋 Bạn có thể xem chi tiết trong danh sách bên dưới",
+        ],
+        8
       );
 
       // Reset form
@@ -737,16 +811,17 @@ const TaxDeclaration = () => {
       showNotification("warning", "Chưa có doanh thu hệ thống", "Vui lòng xem trước doanh thu trước khi áp dụng", [
         "📊 Nhấn nút 'Xem doanh thu hệ thống' ở trên",
         "✓ Chọn đầy đủ kỳ kê khai trước",
-        "💡 Hệ thống sẽ tính tổng đơn hàng đã thanh toán trong kỳ"
+        "💡 Hệ thống sẽ tính tổng đơn hàng đã thanh toán trong kỳ",
       ]);
       return;
     }
-
     form.setFieldsValue({ declaredRevenue: systemRevenue });
-
-    message.success({
-      content: `✅ Đã áp dụng: ${formatVND(systemRevenue)} (${orderCount} đơn hàng)`,
-      duration: 3,
+    Swal.fire({
+      icon: "success",
+      title: "Đã áp dụng",
+      text: `Doanh thu: ${formatVND(systemRevenue)}, tổng số đơn là: ${orderCount} đơn hàng`,
+      confirmButtonText: "OK",
+      timer: 2000,
     });
   };
 
@@ -760,7 +835,7 @@ const TaxDeclaration = () => {
         showNotification("warning", "Chưa nhập doanh thu", "Vui lòng nhập doanh thu kê khai trước khi tính thuế", [
           "📝 Nhập vào ô 'Doanh thu kê khai'",
           "💡 Hoặc nhấn 'Áp dụng doanh thu hệ thống'",
-          "⚠️ Doanh thu phải lớn hơn 0"
+          "⚠️ Doanh thu phải lớn hơn 0",
         ]);
         return;
       }
@@ -768,15 +843,19 @@ const TaxDeclaration = () => {
       const result = calculateTax(values);
       setCalculatedTax(result);
 
-      showNotification("success", "✅ Đã tính thuế thành công",
-        `Tổng thuế phải nộp: ${formatVND(result.total)}`, [
-        `💰 Doanh thu kê khai: ${formatVND(values.declaredRevenue)}`,
-        `📊 Thuế GTGT (${result.gtgtRate}%): ${formatVND(result.gtgt)}`,
-        `👤 Thuế TNCN (${result.tncnRate}%): ${formatVND(result.tncn)}`,
-        `💳 Tổng cộng: ${formatVND(result.total)}`,
-        `🔤 Bằng chữ: ${readNumberSafe(result.total)} đồng`,
-        "⏭️ Tiếp theo: Nhấn 'Lưu tờ khai' để hoàn tất"
-      ], 10
+      showNotification(
+        "success",
+        "✅ Đã tính thuế thành công",
+        `Tổng thuế phải nộp: ${formatVND(result.total)}`,
+        [
+          `💰 Doanh thu kê khai: ${formatVND(values.declaredRevenue)}`,
+          `📊 Thuế GTGT (${result.gtgtRate}%): ${formatVND(result.gtgt)}`,
+          `👤 Thuế TNCN (${result.tncnRate}%): ${formatVND(result.tncn)}`,
+          `💳 Tổng cộng: ${formatVND(result.total)}`,
+          `🔤 Bằng chữ: ${readNumberSafe(result.total)} đồng`,
+          "⏭️ Tiếp theo: Nhấn 'Lưu tờ khai' để hoàn tất",
+        ],
+        10
       );
     } catch (error) {
       console.error("Calculate tax error:", error);
@@ -784,7 +863,7 @@ const TaxDeclaration = () => {
     }
   }, [form, calculateTax, formatVND, readNumberSafe, showNotification, handleApiError]);
 
-  const handleAction = async (url, method = 'POST', data = {}, successMsg = "Thành công", successHints = []) => {
+  const handleAction = async (url, method = "POST", data = {}, successMsg = "Thành công", successHints = []) => {
     console.log(`🔧 Action: ${method} ${url}`);
 
     setLoading(true);
@@ -806,42 +885,29 @@ const TaxDeclaration = () => {
     }
   };
 
-  const handleClone = (id) => handleAction(
-    `${apiUrl}/taxs/${id}/clone`,
-    'POST',
-    {},
-    "✅ Đã tạo bản sao",
-    [
+  const handleClone = (id) =>
+    handleAction(`${apiUrl}/taxs/${id}/clone`, "POST", {}, "✅ Đã tạo bản sao", [
       "Bản sao đã được tạo với trạng thái 'Nháp'",
       "Bạn có thể chỉnh sửa bản sao này",
-      "Xem trong danh sách bên dưới"
-    ]
-  );
+      "Xem trong danh sách bên dưới",
+    ]);
 
-  const handleDelete = (id) => handleAction(
-    `${apiUrl}/taxs/${id}`,
-    'DELETE',
-    {},
-    "✅ Đã xóa tờ khai",
-    [
+  const handleDelete = (id) =>
+    handleAction(`${apiUrl}/taxs/${id}`, "DELETE", {}, "✅ Đã xóa tờ khai", [
       "Tờ khai đã bị xóa khỏi hệ thống",
-      "Nếu có bản sao, bản sao sẽ được nâng lên thành bản chính"
-    ]
-  );
+      "Nếu có bản sao, bản sao sẽ được nâng lên thành bản chính",
+    ]);
 
-  const handleApproveReject = (id, action) => handleAction(
-    `${apiUrl}/taxs/${id}/approve`,
-    'POST',
-    { action },
-    action === "approve" ? "✅ Đã duyệt tờ khai" : "❌ Đã từ chối tờ khai",
-    action === "approve" ? [
-      "Tờ khai đã được duyệt",
-      "Có thể export PDF để nộp cho cơ quan thuế"
-    ] : [
-      "Tờ khai đã bị từ chối",
-      "Người tạo cần chỉnh sửa và nộp lại"
-    ]
-  );
+  const handleApproveReject = (id, action) =>
+    handleAction(
+      `${apiUrl}/taxs/${id}/approve`,
+      "POST",
+      { action },
+      action === "approve" ? "✅ Đã duyệt tờ khai" : "❌ Đã từ chối tờ khai",
+      action === "approve"
+        ? ["Tờ khai đã được duyệt", "Có thể export PDF để nộp cho cơ quan thuế"]
+        : ["Tờ khai đã bị từ chối", "Người tạo cần chỉnh sửa và nộp lại"]
+    );
 
   const handleExport = async (id, format) => {
     console.log(`📥 Exporting as ${format}...`);
@@ -849,15 +915,12 @@ const TaxDeclaration = () => {
     try {
       message.loading({
         content: `Đang xuất file ${format.toUpperCase()}...`,
-        key: 'export',
+        key: "export",
       });
 
-      const res = await fetchWithAuth(
-        `${apiUrl}/taxs/${id}/export?format=${format}&storeId=${storeId}`,
-        { responseType: 'blob' }
-      );
+      const res = await fetchWithAuth(`${apiUrl}/taxs/${id}/export?format=${format}&storeId=${storeId}`, { responseType: "blob" });
 
-      const blob = new Blob([res.data], { type: res.headers['content-type'] });
+      const blob = new Blob([res.data], { type: res.headers["content-type"] });
       const link = document.createElement("a");
       link.href = window.URL.createObjectURL(blob);
       link.download = `to-khai-thue_${id}_${dayjs().format("YYYYMMDD")}.${format}`;
@@ -865,21 +928,24 @@ const TaxDeclaration = () => {
 
       message.success({
         content: `✅ Tải file ${format.toUpperCase()} thành công`,
-        key: 'export',
+        key: "export",
       });
 
-      showNotification("success", "✅ Xuất file thành công",
-        `File ${format.toUpperCase()} đã được tải xuống`, [
-        "📁 Kiểm tra thư mục Downloads của bạn",
-        format === "pdf" ? "📄 File PDF theo mẫu 01/CNKD chính thức" :
-          "📊 File CSV có thể mở bằng Excel",
-        "💡 Bạn có thể in hoặc gửi file này cho cơ quan thuế"
-      ], 6
+      showNotification(
+        "success",
+        "✅ Xuất file thành công",
+        `File ${format.toUpperCase()} đã được tải xuống`,
+        [
+          "📁 Kiểm tra thư mục Downloads của bạn",
+          format === "pdf" ? "📄 File PDF theo mẫu 01/CNKD chính thức" : "📊 File CSV có thể mở bằng Excel",
+          "💡 Bạn có thể in hoặc gửi file này cho cơ quan thuế",
+        ],
+        6
       );
     } catch (err) {
       message.error({
         content: "Lỗi tải file",
-        key: 'export',
+        key: "export",
       });
       handleApiError(err, "Lỗi xuất file", `xuất file ${format}`);
     }
@@ -892,12 +958,15 @@ const TaxDeclaration = () => {
 
   // ==================== CATEGORY REVENUE HANDLERS ====================
   const addCategoryRevenue = () => {
-    setCategoryRevenues([...categoryRevenues, {
-      category: "goods_distribution",
-      revenue: 0,
-      gtgtTax: 0,
-      tncnTax: 0,
-    }]);
+    setCategoryRevenues([
+      ...categoryRevenues,
+      {
+        category: "goods_distribution",
+        revenue: 0,
+        gtgtTax: 0,
+        tncnTax: 0,
+      },
+    ]);
     message.info("✅ Đã thêm ngành nghề mới");
   };
 
@@ -914,13 +983,16 @@ const TaxDeclaration = () => {
 
   // ==================== SPECIAL TAX HANDLERS ====================
   const addSpecialTaxItem = () => {
-    setSpecialTaxItems([...specialTaxItems, {
-      itemName: "",
-      unit: "",
-      revenue: 0,
-      taxRate: 0,
-      taxAmount: 0,
-    }]);
+    setSpecialTaxItems([
+      ...specialTaxItems,
+      {
+        itemName: "",
+        unit: "",
+        revenue: 0,
+        taxRate: 0,
+        taxAmount: 0,
+      },
+    ]);
     message.info("✅ Đã thêm hàng hóa chịu thuế TTĐB");
   };
 
@@ -932,7 +1004,7 @@ const TaxDeclaration = () => {
   const updateSpecialTaxItem = (index, field, value) => {
     const newItems = [...specialTaxItems];
     newItems[index][field] = value;
-    if (field === 'revenue' || field === 'taxRate') {
+    if (field === "revenue" || field === "taxRate") {
       newItems[index].taxAmount = (newItems[index].revenue * newItems[index].taxRate) / 100;
     }
     setSpecialTaxItems(newItems);
@@ -940,15 +1012,18 @@ const TaxDeclaration = () => {
 
   // ==================== ENV TAX HANDLERS ====================
   const addEnvTaxItem = () => {
-    setEnvTaxItems([...envTaxItems, {
-      type: "environmental_tax",
-      itemName: "",
-      unit: "",
-      quantity: 0,
-      unitPrice: 0,
-      taxRate: 0,
-      taxAmount: 0,
-    }]);
+    setEnvTaxItems([
+      ...envTaxItems,
+      {
+        type: "environmental_tax",
+        itemName: "",
+        unit: "",
+        quantity: 0,
+        unitPrice: 0,
+        taxRate: 0,
+        taxAmount: 0,
+      },
+    ]);
     message.info("✅ Đã thêm mục thuế môi trường");
   };
 
@@ -960,154 +1035,156 @@ const TaxDeclaration = () => {
   const updateEnvTaxItem = (index, field, value) => {
     const newItems = [...envTaxItems];
     newItems[index][field] = value;
-    if (['quantity', 'unitPrice', 'taxRate'].includes(field)) {
+    if (["quantity", "unitPrice", "taxRate"].includes(field)) {
       newItems[index].taxAmount = (newItems[index].quantity * newItems[index].unitPrice * newItems[index].taxRate) / 100;
     }
     setEnvTaxItems(newItems);
   };
 
   // ==================== TABLE COLUMNS ====================
-  const columns = useMemo(() => [
-    {
-      title: "Kỳ",
-      dataIndex: "periodKey",
-      key: "periodKey",
-      width: 150,
-      sorter: (a, b) => a.periodKey.localeCompare(b.periodKey),
-    },
-    {
-      title: "Phiên bản",
-      dataIndex: "version",
-      key: "version",
-      width: 100,
-      render: (v, record) => (
-        <Space>
-          <Tag color={record.isClone ? "orange" : "blue"}>v{v}</Tag>
-          {record.isClone && <Tag color="orange">Bản sao</Tag>}
-        </Space>
-      )
-    },
-    {
-      title: "Doanh thu",
-      dataIndex: "declaredRevenue",
-      key: "declaredRevenue",
-      render: (v) => <Text>{formatVND(v)}</Text>,
-      sorter: (a, b) => Number(a.declaredRevenue) - Number(b.declaredRevenue),
-    },
-    {
-      title: "Tổng thuế",
-      dataIndex: ["taxAmounts", "total"],
-      key: "total",
-      render: (v) => <Text strong style={{ color: "#d4380d" }}>{formatVND(v)}</Text>,
-      sorter: (a, b) => Number(a.taxAmounts?.total || 0) - Number(b.taxAmounts?.total || 0),
-    },
-    {
-      title: "Trạng thái",
-      dataIndex: "status",
-      key: "status",
-      width: 120,
-      render: (status) => {
-        const config = STATUS_CONFIG[status] || { text: status, color: "default", icon: null };
-        return (
-          <Tag color={config.color} icon={config.icon}>
-            {config.text}
-          </Tag>
-        );
+  const columns = useMemo(
+    () => [
+      {
+        title: "STT",
+        dataIndex: "index",
+        key: "index",
+        width: 60,
+        render: (_value, _record, index) => index + 1,
+        align: "center",
+        fixed: "left",
       },
-      filters: Object.keys(STATUS_CONFIG).map(key => ({
-        text: STATUS_CONFIG[key].text,
-        value: key,
-      })),
-      onFilter: (value, record) => record.status === value,
-    },
-    {
-      title: "Ngày tạo",
-      dataIndex: "createdAt",
-      width: 120,
-      render: (t) => (
-        <Tooltip title={dayjs(t).format("DD/MM/YYYY HH:mm")}>
-          {dayjs(t).format("DD/MM/YYYY")}
-        </Tooltip>
-      ),
-      sorter: (a, b) => dayjs(a.createdAt).unix() - dayjs(b.createdAt).unix(),
-    },
-    {
-      title: "Hành động",
-      key: "actions",
-      width: 220,
-      fixed: "right",
-      render: (_, record) => (
-        <Space size="small">
-          <Tooltip title="Xem chi tiết">
-            <Button size="small" icon={<EyeOutlined />} onClick={() => handleDetail(record)} />
-          </Tooltip>
-          {["draft", "saved"].includes(record.status) && (
-            <Tooltip title="Chỉnh sửa">
-              <Button size="small" icon={<EditOutlined />} onClick={() => handleEdit(record._id)} />
+      {
+        title: "Kỳ kê khai",
+        dataIndex: "periodKey",
+        key: "periodKey",
+        width: 150,
+        sorter: (a, b) => a.periodKey.localeCompare(b.periodKey),
+      },
+      {
+        title: "Phiên bản",
+        dataIndex: "version",
+        key: "version",
+        width: 120,
+        render: (v, record) => (
+          <Space>
+            <Tag color={record.isClone ? "orange" : "blue"}>V{v}</Tag>
+            {record.isClone && <Tag color="orange">Bản sao</Tag>}
+          </Space>
+        ),
+      },
+      {
+        title: "Doanh thu",
+        dataIndex: "declaredRevenue",
+        key: "declaredRevenue",
+        render: (v) => <Text>{formatVND(v)}</Text>,
+        sorter: (a, b) => Number(a.declaredRevenue) - Number(b.declaredRevenue),
+        width: 150,
+      },
+      {
+        title: "Tổng thuế",
+        dataIndex: ["taxAmounts", "total"],
+        key: "total",
+        render: (v) => (
+          <Text strong style={{ color: "#d4380d" }}>
+            {formatVND(v)}
+          </Text>
+        ),
+        sorter: (a, b) => Number(a.taxAmounts?.total || 0) - Number(b.taxAmounts?.total || 0),
+        width: 150,
+      },
+      {
+        title: "Trạng thái",
+        dataIndex: "status",
+        key: "status",
+        width: 120,
+        render: (status) => {
+          const config = STATUS_CONFIG[status] || { text: status, color: "default", icon: null };
+          return (
+            <Tag color={config.color} icon={config.icon}>
+              {config.text}
+            </Tag>
+          );
+        },
+        filters: Object.keys(STATUS_CONFIG).map((key) => ({
+          text: STATUS_CONFIG[key].text,
+          value: key,
+        })),
+        onFilter: (value, record) => record.status === value,
+      },
+      {
+        title: "Ngày tạo",
+        dataIndex: "createdAt",
+        width: 120,
+        render: (t) => <Tooltip title={dayjs(t).format("DD/MM/YYYY HH:mm")}>{dayjs(t).format("DD/MM/YYYY")}</Tooltip>,
+        sorter: (a, b) => dayjs(a.createdAt).unix() - dayjs(b.createdAt).unix(),
+      },
+      {
+        title: "Hành động",
+        key: "actions",
+        width: 150,
+        render: (_, record) => (
+          <Space size="small">
+            <Tooltip title="Xem chi tiết">
+              <Button size="small" icon={<EyeOutlined />} onClick={() => handleDetail(record)} />
             </Tooltip>
-          )}
-          <Tooltip title="Nhân bản">
-            <Button size="small" icon={<CopyOutlined />} onClick={() => handleClone(record._id)} />
-          </Tooltip>
-          {record.status === "submitted" && (
-            <>
-              <Tooltip title="Duyệt tờ khai">
-                <Button
-                  size="small"
-                  type="primary"
-                  icon={<CheckCircleOutlined />}
-                  onClick={() => handleApproveReject(record._id, "approve")}
-                />
+            {["draft", "saved"].includes(record.status) && (
+              <Tooltip title="Chỉnh sửa">
+                <Button size="small" icon={<EditOutlined />} onClick={() => handleEdit(record._id)} />
               </Tooltip>
-              <Tooltip title="Từ chối">
-                <Popconfirm
-                  title="Từ chối tờ khai?"
-                  description="Tờ khai sẽ chuyển về trạng thái 'Từ chối'"
-                  onConfirm={() => handleApproveReject(record._id, "reject")}
-                  okText="Từ chối"
-                  cancelText="Hủy"
-                >
-                  <Button size="small" danger icon={<UndoOutlined />} />
-                </Popconfirm>
-              </Tooltip>
-            </>
-          )}
-          <Popconfirm
-            title="Xóa tờ khai?"
-            description="Hành động này không thể hoàn tác"
-            onConfirm={() => handleDelete(record._id)}
-            okText="Xóa"
-            okType="danger"
-            cancelText="Hủy"
-          >
-            <Tooltip title="Xóa">
-              <Button size="small" danger icon={<DeleteOutlined />} />
+            )}
+            <Tooltip title="Nhân bản">
+              <Button size="small" icon={<CopyOutlined />} onClick={() => handleClone(record._id)} />
             </Tooltip>
-          </Popconfirm>
-          <Dropdown overlay={
-            <Menu>
-              <Menu.Item
-                key="csv"
-                icon={<FileExcelOutlined />}
-                onClick={() => handleExport(record._id, "csv")}
-              >
-                Xuất CSV
-              </Menu.Item>
-              <Menu.Item
-                key="pdf"
-                icon={<FilePdfOutlined />}
-                onClick={() => handleExport(record._id, "pdf")}
-              >
-                Xuất PDF (Mẫu 01/CNKD)
-              </Menu.Item>
-            </Menu>
-          }>
-            <Button size="small" icon={<DownloadOutlined />} />
-          </Dropdown>
-        </Space>
-      ),
-    },
-  ], []);
+            {record.status === "submitted" && (
+              <>
+                <Tooltip title="Duyệt tờ khai">
+                  <Button size="small" type="primary" icon={<CheckCircleOutlined />} onClick={() => handleApproveReject(record._id, "approve")} />
+                </Tooltip>
+                <Tooltip title="Từ chối">
+                  <Popconfirm
+                    title="Từ chối tờ khai?"
+                    description="Tờ khai sẽ chuyển về trạng thái 'Từ chối'"
+                    onConfirm={() => handleApproveReject(record._id, "reject")}
+                    okText="Từ chối"
+                    cancelText="Hủy"
+                  >
+                    <Button size="small" danger icon={<UndoOutlined />} />
+                  </Popconfirm>
+                </Tooltip>
+              </>
+            )}
+            <Popconfirm
+              title="Xóa tờ khai?"
+              description="Hành động này không thể hoàn tác"
+              onConfirm={() => handleDelete(record._id)}
+              okText="Xóa"
+              okType="danger"
+              cancelText="Hủy"
+            >
+              <Tooltip title="Xóa">
+                <Button size="small" danger icon={<DeleteOutlined />} />
+              </Tooltip>
+            </Popconfirm>
+            <Dropdown
+              overlay={
+                <Menu>
+                  <Menu.Item key="csv" icon={<FileExcelOutlined />} onClick={() => handleExport(record._id, "csv")}>
+                    Xuất CSV
+                  </Menu.Item>
+                  <Menu.Item key="pdf" icon={<FilePdfOutlined />} onClick={() => handleExport(record._id, "pdf")}>
+                    Xuất PDF (Mẫu 01/CNKD)
+                  </Menu.Item>
+                </Menu>
+              }
+            >
+              <Button size="small" icon={<DownloadOutlined />} />
+            </Dropdown>
+          </Space>
+        ),
+      },
+    ],
+    []
+  );
 
   // ==================== RENDER ====================
   if (!storeId || !token) {
@@ -1138,13 +1215,10 @@ const TaxDeclaration = () => {
     <ErrorBoundary>
       <Layout>
         <Spin spinning={loading} size="large" tip="Đang xử lý...">
-          <div style={{ padding: "24px" }}>
+          <div>
             <Space direction="vertical" size={24} style={{ width: "100%" }}>
               {/* HEADER */}
-              <Card
-                style={{ borderRadius: 12, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}
-                bodyStyle={{ padding: "24px" }}
-              >
+              <Card style={{ borderRadius: 12, boxShadow: "0 2px 8px rgba(0,0,0,0.1)", border: "1px solid #8c8c8c" }}>
                 <Row gutter={24} align="middle">
                   <Col xs={24} lg={6}>
                     <Space direction="vertical">
@@ -1163,14 +1237,8 @@ const TaxDeclaration = () => {
                   </Col>
                   <Col xs={24} lg={5}>
                     <Form.Item label="Kỳ kê khai" style={{ marginBottom: 0 }}>
-                      <Select
-                        value={periodType}
-                        onChange={handleTypeChange}
-                        style={{ width: "100%" }}
-                        size="large"
-                        placeholder="Chọn kỳ..."
-                      >
-                        {PERIOD_TYPES.map(type => (
+                      <Select value={periodType} onChange={handleTypeChange} style={{ width: "100%" }} size="large" placeholder="Chọn kỳ...">
+                        {PERIOD_TYPES.map((type) => (
                           <Option key={type.value} value={type.value}>
                             {type.label}
                           </Option>
@@ -1179,10 +1247,7 @@ const TaxDeclaration = () => {
                     </Form.Item>
                   </Col>
                   <Col xs={24} lg={7}>
-                    <Form.Item
-                      label={periodType === "custom" ? "Khoảng thời gian" : "Chọn kỳ"}
-                      style={{ marginBottom: 0 }}
-                    >
+                    <Form.Item label={periodType === "custom" ? "Khoảng thời gian" : "Chọn kỳ"} style={{ marginBottom: 0 }}>
                       {periodType === "custom" ? (
                         <RangePicker
                           picker="month"
@@ -1203,11 +1268,7 @@ const TaxDeclaration = () => {
                           placeholder={`Chọn ${periodType === "month" ? "tháng" : periodType === "quarter" ? "quý" : "năm"}`}
                         />
                       ) : (
-                        <Input
-                          placeholder="Chọn kỳ kê khai bên trái"
-                          disabled
-                          size="large"
-                        />
+                        <Input placeholder="Chọn kỳ kê khai trước" disabled size="large" />
                       )}
                     </Form.Item>
                   </Col>
@@ -1240,14 +1301,16 @@ const TaxDeclaration = () => {
                     </Space>
                   }
                   extra={
-                    <Space>
-                      <Badge count={orderCount} showZero>
-                        <Text type="secondary">Đơn hàng</Text>
-                      </Badge>
+                    <Space size={12} align="center">
+                      <Space size={6} align="center">
+                        <Badge count={orderCount} showZero />
+                        <Text type="secondary">Đơn hàng, trong kỳ</Text>
+                      </Space>
+
                       <Tag color="blue">{periodDisplay}</Tag>
                     </Space>
                   }
-                  style={{ borderRadius: 12 }}
+                  style={{ borderRadius: 12, border: "1px solid #8c8c8c" }}
                 >
                   <Row gutter={24} style={{ marginBottom: 24 }}>
                     <Col xs={24} md={12}>
@@ -1261,17 +1324,15 @@ const TaxDeclaration = () => {
                         value={systemRevenue}
                         precision={0}
                         formatter={(value) => formatVND(value)}
-                        suffix={<Text type="secondary" style={{ fontSize: 14 }}>({orderCount} đơn)</Text>}
+                        suffix={
+                          <Text type="secondary" style={{ fontSize: 14 }}>
+                            ({orderCount} đơn)
+                          </Text>
+                        }
                       />
                     </Col>
                     <Col xs={24} md={12}>
-                      <Button
-                        block
-                        size="large"
-                        onClick={useSystemRevenue}
-                        icon={<CalculatorOutlined />}
-                        style={{ height: 64, fontSize: 16 }}
-                      >
+                      <Button block size="large" onClick={useSystemRevenue} icon={<CalculatorOutlined />} style={{ height: 64, fontSize: 16 }}>
                         Áp dụng doanh thu hệ thống
                       </Button>
                     </Col>
@@ -1285,15 +1346,11 @@ const TaxDeclaration = () => {
                     layout="vertical"
                     onFinishFailed={(errorInfo) => {
                       console.log("❌ Form validation failed:", errorInfo);
-                      const errors = errorInfo.errorFields.map(f => f.errors[0]);
+                      const errors = errorInfo.errorFields.map((f) => f.errors[0]);
                       showNotification("error", "Form chưa hợp lệ", "Vui lòng kiểm tra lại các trường bắt buộc", errors);
                     }}
                   >
-                    <Collapse
-                      defaultActiveKey={['1', '2', '3']}
-                      style={{ marginBottom: 24 }}
-                      bordered={false}
-                    >
+                    <Collapse defaultActiveKey={["1", "2", "3"]} style={{ marginBottom: 24 }} bordered={false}>
                       {/* PHẦN 1: THÔNG TIN CƠ BẢN */}
                       <Panel
                         header={
@@ -1323,12 +1380,7 @@ const TaxDeclaration = () => {
                               initialValue={0}
                               tooltip="Nhập số lần bổ sung (0 nếu là lần đầu)"
                             >
-                              <InputNumber
-                                min={0}
-                                max={10}
-                                style={{ width: "100%" }}
-                                placeholder="Nhập 0 nếu là lần đầu"
-                              />
+                              <InputNumber min={0} max={10} style={{ width: "100%" }} placeholder="Nhập 0 nếu là lần đầu" />
                             </Form.Item>
                           </Col>
                         </Row>
@@ -1360,11 +1412,7 @@ const TaxDeclaration = () => {
                               tooltip="Họ tên đầy đủ của người nộp thuế"
                               initialValue={currentStore.owner_name}
                             >
-                              <Input
-                                prefix={<UserOutlined />}
-                                placeholder="Họ tên đầy đủ"
-                                size="large"
-                              />
+                              <Input prefix={<UserOutlined />} placeholder="Họ tên đầy đủ" size="large" />
                             </Form.Item>
                           </Col>
                           <Col span={12}>
@@ -1374,11 +1422,7 @@ const TaxDeclaration = () => {
                               tooltip="Tên cửa hàng hoặc thương hiệu"
                               initialValue={currentStore.name}
                             >
-                              <Input
-                                prefix={<ShopOutlined />}
-                                placeholder="Tên cửa hàng"
-                                size="large"
-                              />
+                              <Input prefix={<ShopOutlined />} placeholder="Tên cửa hàng" size="large" />
                             </Form.Item>
                           </Col>
                           <Col span={12}>
@@ -1388,11 +1432,7 @@ const TaxDeclaration = () => {
                               tooltip="Số tài khoản ngân hàng dùng để thanh toán thuế"
                               initialValue={currentStore.bankAccount}
                             >
-                              <Input
-                                prefix={<BankOutlined />}
-                                placeholder="Số tài khoản"
-                                size="large"
-                              />
+                              <Input prefix={<BankOutlined />} placeholder="Số tài khoản" size="large" />
                             </Form.Item>
                           </Col>
                           <Col span={12}>
@@ -1404,15 +1444,11 @@ const TaxDeclaration = () => {
                               rules={[
                                 {
                                   pattern: /^[0-9]{10,13}$/,
-                                  message: "Mã số thuế phải là 10-13 chữ số"
-                                }
+                                  message: "Mã số thuế phải là 10-13 chữ số",
+                                },
                               ]}
                             >
-                              <Input
-                                prefix={<IdcardOutlined />}
-                                placeholder="Mã số thuế (10-13 số)"
-                                size="large"
-                              />
+                              <Input prefix={<IdcardOutlined />} placeholder="Mã số thuế (10-13 số)" size="large" />
                             </Form.Item>
                           </Col>
                           <Col span={24}>
@@ -1422,10 +1458,7 @@ const TaxDeclaration = () => {
                               tooltip="Mô tả ngành nghề kinh doanh chính"
                               initialValue={currentStore.businessSector}
                             >
-                              <Input
-                                placeholder="Ví dụ: Bán lẻ thực phẩm, đồ uống"
-                                size="large"
-                              />
+                              <Input placeholder="Ví dụ: Bán lẻ thực phẩm, đồ uống" size="large" />
                             </Form.Item>
                           </Col>
                           <Col span={8}>
@@ -1435,18 +1468,13 @@ const TaxDeclaration = () => {
                               tooltip="Diện tích mặt bằng kinh doanh"
                               initialValue={currentStore.area}
                             >
-                              <InputNumber
-                                min={0}
-                                style={{ width: "100%" }}
-                                placeholder="Diện tích m²"
-                                size="large"
-                              />
+                              <InputNumber min={0} style={{ width: "100%" }} placeholder="Diện tích m²" size="large" />
                             </Form.Item>
                           </Col>
                           <Col span={8}>
                             <Form.Item
                               name="isRented"
-                              label="[09a] Đi thuê"
+                              label="[10] Đi thuê"
                               valuePropName="checked"
                               tooltip="Đánh dấu nếu địa điểm kinh doanh đi thuê"
                             >
@@ -1454,71 +1482,44 @@ const TaxDeclaration = () => {
                             </Form.Item>
                           </Col>
                           <Col span={8}>
-                            <Form.Item
-                              name="employeeCount"
-                              label="[10] Số lượng lao động"
-                              tooltip="Tổng số lao động đang làm việc"
-                            >
-                              <InputNumber
-                                min={0}
-                                prefix={<TeamOutlined />}
-                                style={{ width: "100%" }}
-                                placeholder="Số lượng"
-                                size="large"
-                              />
+                            <Form.Item name="employeeCount" label="[11] Số lượng lao động" tooltip="Tổng số lao động đang làm việc">
+                              <InputNumber min={0} prefix={<TeamOutlined />} style={{ width: "100%" }} placeholder="Số lượng" size="large" />
                             </Form.Item>
                           </Col>
                           <Col span={12}>
-                            <Form.Item
-                              name="workingHoursFrom"
-                              label="[11] Thời gian hoạt động từ"
-                              tooltip="Giờ mở cửa"
-                              initialValue="08:00"
-                            >
+                            <Form.Item name="workingHoursFrom" label="[12] Thời gian hoạt động từ" tooltip="Giờ mở cửa" initialValue="08:00">
                               <Input type="time" size="large" />
                             </Form.Item>
                           </Col>
                           <Col span={12}>
-                            <Form.Item
-                              name="workingHoursTo"
-                              label="[11] Đến"
-                              tooltip="Giờ đóng cửa"
-                              initialValue="22:00"
-                            >
+                            <Form.Item name="workingHoursTo" label="[13] Đến" tooltip="Giờ đóng cửa" initialValue="22:00">
                               <Input type="time" size="large" />
                             </Form.Item>
                           </Col>
                           <Col span={24}>
                             <Form.Item
                               name="businessAddressFull"
-                              label="[12] Địa chỉ kinh doanh"
+                              label="[14] Địa chỉ kinh doanh"
                               tooltip="Địa chỉ đầy đủ nơi kinh doanh"
                               initialValue={currentStore.address}
                             >
-                              <Input
-                                prefix={<EnvironmentOutlined />}
-                                placeholder="Địa chỉ đầy đủ"
-                                size="large"
-                              />
+                              <Input prefix={<EnvironmentOutlined />} placeholder="Địa chỉ đầy đủ" size="large" />
                             </Form.Item>
                           </Col>
                           <Col span={12}>
                             <Form.Item
                               name="phone"
-                              label="[14] Điện thoại"
+                              label="[15] Điện thoại"
                               tooltip="Số điện thoại liên hệ"
                               initialValue={currentStore.phone}
                               rules={[
                                 {
                                   pattern: /^[0-9]{10,11}$/,
-                                  message: "Số điện thoại phải là 10-11 chữ số"
-                                }
+                                  message: "Số điện thoại phải là 10-11 chữ số",
+                                },
                               ]}
                             >
-                              <Input
-                                placeholder="Số điện thoại"
-                                size="large"
-                              />
+                              <Input placeholder="Số điện thoại" size="large" />
                             </Form.Item>
                           </Col>
                           <Col span={12}>
@@ -1530,15 +1531,11 @@ const TaxDeclaration = () => {
                               rules={[
                                 {
                                   type: "email",
-                                  message: "Email không hợp lệ"
-                                }
+                                  message: "Email không hợp lệ",
+                                },
                               ]}
                             >
-                              <Input
-                                type="email"
-                                placeholder="Email liên hệ"
-                                size="large"
-                              />
+                              <Input type="email" placeholder="Email liên hệ" size="large" />
                             </Form.Item>
                           </Col>
                         </Row>
@@ -1576,11 +1573,11 @@ const TaxDeclaration = () => {
                               rules={[
                                 { required: true, message: "Vui lòng nhập doanh thu kê khai" },
                                 {
-                                  type: 'number',
+                                  type: "number",
                                   min: 0,
                                   message: "Doanh thu phải >= 0",
-                                  transform: (value) => Number(value)
-                                }
+                                  transform: (value) => Number(value),
+                                },
                               ]}
                               tooltip="Tổng doanh thu phát sinh trong kỳ kê khai"
                             >
@@ -1589,7 +1586,7 @@ const TaxDeclaration = () => {
                                 size="large"
                                 min={0}
                                 formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
-                                parser={(v) => v ? v.replace(/\$\s?|(,*)/g, '') : ''}
+                                parser={(v) => (v ? v.replace(/\$\s?|(,*)/g, "") : "")}
                                 placeholder="Nhập doanh thu..."
                               />
                             </Form.Item>
@@ -1601,13 +1598,7 @@ const TaxDeclaration = () => {
                               initialValue={TAX_RATES.DEFAULT_GTGT}
                               tooltip="Thuế suất GTGT (thường 1% đối với hộ kinh doanh)"
                             >
-                              <InputNumber
-                                min={0}
-                                max={TAX_RATES.MAX_GTGT}
-                                step={0.1}
-                                style={{ width: "100%" }}
-                                size="large"
-                              />
+                              <InputNumber min={0} max={TAX_RATES.MAX_GTGT} step={0.1} style={{ width: "100%" }} size="large" />
                             </Form.Item>
                           </Col>
                           <Col span={8}>
@@ -1617,13 +1608,7 @@ const TaxDeclaration = () => {
                               initialValue={TAX_RATES.DEFAULT_TNCN}
                               tooltip="Thuế suất TNCN (thường 0.5% đối với hộ kinh doanh)"
                             >
-                              <InputNumber
-                                min={0}
-                                max={TAX_RATES.MAX_TNCN}
-                                step={0.1}
-                                style={{ width: "100%" }}
-                                size="large"
-                              />
+                              <InputNumber min={0} max={TAX_RATES.MAX_TNCN} step={0.1} style={{ width: "100%" }} size="large" />
                             </Form.Item>
                           </Col>
                         </Row>
@@ -1632,12 +1617,7 @@ const TaxDeclaration = () => {
                           <Space>
                             <Text>[28-31] Doanh thu theo nhóm ngành nghề</Text>
                             <Tooltip title="Thêm ngành nghề nếu kinh doanh đa ngành">
-                              <Button
-                                size="small"
-                                type="dashed"
-                                icon={<PlusOutlined />}
-                                onClick={addCategoryRevenue}
-                              >
+                              <Button size="small" type="dashed" icon={<PlusOutlined />} onClick={addCategoryRevenue}>
                                 Thêm ngành nghề
                               </Button>
                             </Tooltip>
@@ -1660,11 +1640,11 @@ const TaxDeclaration = () => {
                               <Col span={6}>
                                 <Select
                                   value={cat.category}
-                                  onChange={(v) => updateCategoryRevenue(index, 'category', v)}
+                                  onChange={(v) => updateCategoryRevenue(index, "category", v)}
                                   style={{ width: "100%" }}
                                   size="large"
                                 >
-                                  {Object.keys(CATEGORY_MAP).map(key => (
+                                  {Object.keys(CATEGORY_MAP).map((key) => (
                                     <Option key={key} value={key}>
                                       {CATEGORY_MAP[key].code} {CATEGORY_MAP[key].name}
                                     </Option>
@@ -1675,7 +1655,7 @@ const TaxDeclaration = () => {
                                 <InputNumber
                                   placeholder="Doanh thu"
                                   value={cat.revenue}
-                                  onChange={(v) => updateCategoryRevenue(index, 'revenue', v)}
+                                  onChange={(v) => updateCategoryRevenue(index, "revenue", v)}
                                   style={{ width: "100%" }}
                                   min={0}
                                   formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
@@ -1686,7 +1666,7 @@ const TaxDeclaration = () => {
                                 <InputNumber
                                   placeholder="Thuế GTGT"
                                   value={cat.gtgtTax}
-                                  onChange={(v) => updateCategoryRevenue(index, 'gtgtTax', v)}
+                                  onChange={(v) => updateCategoryRevenue(index, "gtgtTax", v)}
                                   style={{ width: "100%" }}
                                   min={0}
                                   size="large"
@@ -1696,7 +1676,7 @@ const TaxDeclaration = () => {
                                 <InputNumber
                                   placeholder="Thuế TNCN"
                                   value={cat.tncnTax}
-                                  onChange={(v) => updateCategoryRevenue(index, 'tncnTax', v)}
+                                  onChange={(v) => updateCategoryRevenue(index, "tncnTax", v)}
                                   style={{ width: "100%" }}
                                   min={0}
                                   size="large"
@@ -1704,12 +1684,7 @@ const TaxDeclaration = () => {
                               </Col>
                               <Col span={3}>
                                 <Tooltip title="Xóa ngành nghề này">
-                                  <Button
-                                    danger
-                                    icon={<MinusCircleOutlined />}
-                                    onClick={() => removeCategoryRevenue(index)}
-                                    size="large"
-                                  />
+                                  <Button danger icon={<MinusCircleOutlined />} onClick={() => removeCategoryRevenue(index)} size="large" />
                                 </Tooltip>
                               </Col>
                             </Row>
@@ -1720,9 +1695,9 @@ const TaxDeclaration = () => {
                           <Alert
                             message={`Tổng doanh thu theo ngành nghề: ${formatVND(totalDeclaredRevenue)}`}
                             description={
-                              totalDeclaredRevenue !== form.getFieldValue("declaredRevenue") ?
-                                "Lưu ý: Tổng này chưa khớp với doanh thu kê khai tổng" :
-                                "✓ Đã khớp với doanh thu kê khai tổng"
+                              totalDeclaredRevenue !== form.getFieldValue("declaredRevenue")
+                                ? "Lưu ý: Tổng này chưa khớp với doanh thu kê khai tổng"
+                                : "✓ Đã khớp với doanh thu kê khai tổng"
                             }
                             type={totalDeclaredRevenue !== form.getFieldValue("declaredRevenue") ? "warning" : "success"}
                             showIcon
@@ -1736,7 +1711,9 @@ const TaxDeclaration = () => {
                           <Space>
                             <FilePdfOutlined />
                             <Text strong>PHẦN B: Thuế tiêu thụ đặc biệt (TTĐB)</Text>
-                            <Text type="secondary" style={{ fontSize: 12 }}>(Chỉ áp dụng cho một số ngành)</Text>
+                            <Text type="secondary" style={{ fontSize: 12 }}>
+                              (Chỉ áp dụng cho một số ngành)
+                            </Text>
                           </Space>
                         }
                         key="4"
@@ -1750,21 +1727,12 @@ const TaxDeclaration = () => {
                           closable
                         />
                         <Space style={{ marginBottom: 16 }}>
-                          <Button
-                            type="dashed"
-                            icon={<PlusOutlined />}
-                            onClick={addSpecialTaxItem}
-                          >
+                          <Button type="dashed" icon={<PlusOutlined />} onClick={addSpecialTaxItem}>
                             Thêm hàng hóa chịu thuế TTĐB
                           </Button>
                         </Space>
 
-                        {specialTaxItems.length === 0 && (
-                          <Empty
-                            description="Chưa có hàng hóa chịu thuế TTĐB"
-                            image={Empty.PRESENTED_IMAGE_SIMPLE}
-                          />
-                        )}
+                        {specialTaxItems.length === 0 && <Empty description="Chưa có hàng hóa chịu thuế TTĐB" image={Empty.PRESENTED_IMAGE_SIMPLE} />}
 
                         {specialTaxItems.map((item, index) => (
                           <Card key={index} size="small" style={{ marginBottom: 16, background: "#fafafa" }}>
@@ -1773,7 +1741,7 @@ const TaxDeclaration = () => {
                                 <Input
                                   placeholder="[33] Tên hàng hóa/dịch vụ"
                                   value={item.itemName}
-                                  onChange={(e) => updateSpecialTaxItem(index, 'itemName', e.target.value)}
+                                  onChange={(e) => updateSpecialTaxItem(index, "itemName", e.target.value)}
                                   size="large"
                                 />
                               </Col>
@@ -1781,7 +1749,7 @@ const TaxDeclaration = () => {
                                 <Input
                                   placeholder="Đơn vị tính"
                                   value={item.unit}
-                                  onChange={(e) => updateSpecialTaxItem(index, 'unit', e.target.value)}
+                                  onChange={(e) => updateSpecialTaxItem(index, "unit", e.target.value)}
                                   size="large"
                                 />
                               </Col>
@@ -1789,7 +1757,7 @@ const TaxDeclaration = () => {
                                 <InputNumber
                                   placeholder="Doanh thu"
                                   value={item.revenue}
-                                  onChange={(v) => updateSpecialTaxItem(index, 'revenue', v)}
+                                  onChange={(v) => updateSpecialTaxItem(index, "revenue", v)}
                                   style={{ width: "100%" }}
                                   min={0}
                                   formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
@@ -1800,7 +1768,7 @@ const TaxDeclaration = () => {
                                 <InputNumber
                                   placeholder="Thuế suất (%)"
                                   value={item.taxRate}
-                                  onChange={(v) => updateSpecialTaxItem(index, 'taxRate', v)}
+                                  onChange={(v) => updateSpecialTaxItem(index, "taxRate", v)}
                                   style={{ width: "100%" }}
                                   min={0}
                                   size="large"
@@ -1815,12 +1783,7 @@ const TaxDeclaration = () => {
                               </Col>
                               <Col span={2}>
                                 <Tooltip title="Xóa mục này">
-                                  <Button
-                                    danger
-                                    icon={<MinusCircleOutlined />}
-                                    onClick={() => removeSpecialTaxItem(index)}
-                                    size="large"
-                                  />
+                                  <Button danger icon={<MinusCircleOutlined />} onClick={() => removeSpecialTaxItem(index)} size="large" />
                                 </Tooltip>
                               </Col>
                             </Row>
@@ -1834,7 +1797,9 @@ const TaxDeclaration = () => {
                           <Space>
                             <EnvironmentOutlined />
                             <Text strong>PHẦN C: Thuế/Phí bảo vệ môi trường</Text>
-                            <Text type="secondary" style={{ fontSize: 12 }}>(Nếu có)</Text>
+                            <Text type="secondary" style={{ fontSize: 12 }}>
+                              (Nếu có)
+                            </Text>
                           </Space>
                         }
                         key="5"
@@ -1848,32 +1813,18 @@ const TaxDeclaration = () => {
                           closable
                         />
                         <Space style={{ marginBottom: 16 }}>
-                          <Button
-                            type="dashed"
-                            icon={<PlusOutlined />}
-                            onClick={addEnvTaxItem}
-                          >
+                          <Button type="dashed" icon={<PlusOutlined />} onClick={addEnvTaxItem}>
                             Thêm mục thuế môi trường
                           </Button>
                         </Space>
 
-                        {envTaxItems.length === 0 && (
-                          <Empty
-                            description="Chưa có mục thuế môi trường"
-                            image={Empty.PRESENTED_IMAGE_SIMPLE}
-                          />
-                        )}
+                        {envTaxItems.length === 0 && <Empty description="Chưa có mục thuế môi trường" image={Empty.PRESENTED_IMAGE_SIMPLE} />}
 
                         {envTaxItems.map((item, index) => (
                           <Card key={index} size="small" style={{ marginBottom: 16, background: "#fafafa" }}>
                             <Row gutter={16} align="middle">
                               <Col span={5}>
-                                <Select
-                                  value={item.type}
-                                  onChange={(v) => updateEnvTaxItem(index, 'type', v)}
-                                  style={{ width: "100%" }}
-                                  size="large"
-                                >
+                                <Select value={item.type} onChange={(v) => updateEnvTaxItem(index, "type", v)} style={{ width: "100%" }} size="large">
                                   <Option value="resource">[34] Thuế tài nguyên</Option>
                                   <Option value="environmental_tax">[35] Thuế BVMT</Option>
                                   <Option value="environmental_fee">[36] Phí BVMT</Option>
@@ -1883,7 +1834,7 @@ const TaxDeclaration = () => {
                                 <Input
                                   placeholder="Tên tài nguyên/hàng hóa"
                                   value={item.itemName}
-                                  onChange={(e) => updateEnvTaxItem(index, 'itemName', e.target.value)}
+                                  onChange={(e) => updateEnvTaxItem(index, "itemName", e.target.value)}
                                   size="large"
                                 />
                               </Col>
@@ -1891,7 +1842,7 @@ const TaxDeclaration = () => {
                                 <Input
                                   placeholder="ĐVT"
                                   value={item.unit}
-                                  onChange={(e) => updateEnvTaxItem(index, 'unit', e.target.value)}
+                                  onChange={(e) => updateEnvTaxItem(index, "unit", e.target.value)}
                                   size="large"
                                 />
                               </Col>
@@ -1899,7 +1850,7 @@ const TaxDeclaration = () => {
                                 <InputNumber
                                   placeholder="Số lượng"
                                   value={item.quantity}
-                                  onChange={(v) => updateEnvTaxItem(index, 'quantity', v)}
+                                  onChange={(v) => updateEnvTaxItem(index, "quantity", v)}
                                   style={{ width: "100%" }}
                                   min={0}
                                   size="large"
@@ -1909,7 +1860,7 @@ const TaxDeclaration = () => {
                                 <InputNumber
                                   placeholder="Đơn giá"
                                   value={item.unitPrice}
-                                  onChange={(v) => updateEnvTaxItem(index, 'unitPrice', v)}
+                                  onChange={(v) => updateEnvTaxItem(index, "unitPrice", v)}
                                   style={{ width: "100%" }}
                                   min={0}
                                   size="large"
@@ -1919,7 +1870,7 @@ const TaxDeclaration = () => {
                                 <InputNumber
                                   placeholder="T.suất"
                                   value={item.taxRate}
-                                  onChange={(v) => updateEnvTaxItem(index, 'taxRate', v)}
+                                  onChange={(v) => updateEnvTaxItem(index, "taxRate", v)}
                                   style={{ width: "100%" }}
                                   min={0}
                                   size="large"
@@ -1934,12 +1885,7 @@ const TaxDeclaration = () => {
                               </Col>
                               <Col span={1}>
                                 <Tooltip title="Xóa mục này">
-                                  <Button
-                                    danger
-                                    icon={<MinusCircleOutlined />}
-                                    onClick={() => removeEnvTaxItem(index)}
-                                    size="large"
-                                  />
+                                  <Button danger icon={<MinusCircleOutlined />} onClick={() => removeEnvTaxItem(index)} size="large" />
                                 </Tooltip>
                               </Col>
                             </Row>
@@ -1957,17 +1903,8 @@ const TaxDeclaration = () => {
                         }
                         key="6"
                       >
-                        <Form.Item
-                          name="notes"
-                          label="Ghi chú bổ sung"
-                          tooltip="Các thông tin bổ sung cho tờ khai (nếu có)"
-                        >
-                          <TextArea
-                            rows={4}
-                            placeholder="Nhập các ghi chú bổ sung cho tờ khai..."
-                            showCount
-                            maxLength={500}
-                          />
+                        <Form.Item name="notes" label="Ghi chú bổ sung" tooltip="Các thông tin bổ sung cho tờ khai (nếu có)">
+                          <TextArea rows={4} placeholder="Nhập các ghi chú bổ sung cho tờ khai..." showCount maxLength={500} />
                         </Form.Item>
                         <Alert
                           message="📝 Cam đoan"
@@ -1986,23 +1923,20 @@ const TaxDeclaration = () => {
                         marginBottom: 24,
                         padding: "16px",
                         background: "#f5f5f5",
-                        borderRadius: 8
+                        borderRadius: 8,
                       }}
                     >
-                      <Button
-                        type="link"
-                        icon={<QuestionCircleOutlined />}
-                        onClick={() => setShowGuide(!showGuide)}
-                      >
+                      <Button type="link" icon={<QuestionCircleOutlined />} onClick={() => setShowGuide(!showGuide)}>
                         {showGuide ? "Ẩn hướng dẫn" : "Xem hướng dẫn thuế"}
                       </Button>
+                      {/* Hiện bảng hướng dẫn thuế */}
+                      <Modal title="Hướng dẫn thuế" open={showGuide} onCancel={() => setShowGuide(false)} footer={null} width={1000}>
+                        <ComponentTaxGuide />
+                      </Modal>
+
                       <Space>
-                        <Button
-                          icon={<CalculatorOutlined />}
-                          onClick={handleCalculateTax}
-                          size="large"
-                        >
-                          Tính thuế
+                        <Button icon={<CalculatorOutlined />} onClick={handleCalculateTax} size="large">
+                          Tính toán ngay
                         </Button>
                         <Button
                           type="primary"
@@ -2012,7 +1946,7 @@ const TaxDeclaration = () => {
                           icon={<CheckCircleOutlined />}
                           style={{ minWidth: 150 }}
                         >
-                          💾 Lưu tờ khai
+                          Lưu tờ khai
                         </Button>
                       </Space>
                     </Space>
@@ -2038,7 +1972,7 @@ const TaxDeclaration = () => {
                                   value={calculatedTax.gtgt}
                                   precision={0}
                                   formatter={(value) => formatVND(value)}
-                                  valueStyle={{ color: '#1890ff', fontSize: 18 }}
+                                  valueStyle={{ color: "#1890ff", fontSize: 18 }}
                                 />
                               </Col>
                               <Col span={8}>
@@ -2047,7 +1981,7 @@ const TaxDeclaration = () => {
                                   value={calculatedTax.tncn}
                                   precision={0}
                                   formatter={(value) => formatVND(value)}
-                                  valueStyle={{ color: '#722ed1', fontSize: 18 }}
+                                  valueStyle={{ color: "#722ed1", fontSize: 18 }}
                                 />
                               </Col>
                               <Col span={8}>
@@ -2056,7 +1990,7 @@ const TaxDeclaration = () => {
                                   value={calculatedTax.total}
                                   precision={0}
                                   formatter={(value) => formatVND(value)}
-                                  valueStyle={{ color: '#cf1322', fontSize: 18, fontWeight: 'bold' }}
+                                  valueStyle={{ color: "#cf1322", fontSize: 18, fontWeight: "bold" }}
                                 />
                               </Col>
                             </Row>
@@ -2066,12 +2000,6 @@ const TaxDeclaration = () => {
                       />
                     )}
                   </Form>
-
-                  {showGuide && (
-                    <div style={{ marginTop: 24, padding: 16, background: "#f0f5ff", borderRadius: 8 }}>
-                      <ComponentTaxGuide />
-                    </div>
-                  )}
                 </Card>
               )}
 
@@ -2080,12 +2008,14 @@ const TaxDeclaration = () => {
                 title={
                   <Space>
                     <FileDoneOutlined style={{ fontSize: 20 }} />
-                    <Title level={4} style={{ margin: 0 }}>Lịch sử tờ khai</Title>
-                    <Badge
-                      count={totalCount}
-                      showZero
-                      style={{ backgroundColor: '#1890ff' }}
-                    />
+
+                    <Title level={4} style={{ margin: 0 }}>
+                      Lịch sử các tờ khai đã tạo, tổng
+                    </Title>
+
+                    <Tag color="blue" style={{ fontSize: 14, padding: "2px 8px" }}>
+                      {totalCount} bản
+                    </Tag>
                   </Space>
                 }
                 extra={
@@ -2093,47 +2023,58 @@ const TaxDeclaration = () => {
                     <Text type="secondary">
                       Hiển thị {declarations.length} / {totalCount} tờ khai
                     </Text>
-                    <Button
-                      icon={<SyncOutlined />}
-                      onClick={fetchDeclarations}
-                      loading={loading}
-                    >
-                      Làm mới
+                    <Button icon={<SyncOutlined />} onClick={fetchDeclarations} loading={loading}>
+                      Tải lại dữ liệu
                     </Button>
                   </Space>
                 }
-                style={{ borderRadius: 12 }}
+                style={{ borderRadius: 12, border: "1px solid #8c8c8c" }}
               >
                 <Table
                   columns={columns}
                   dataSource={declarations}
                   rowKey="_id"
                   loading={loading}
-                  scroll={{ x: 1400 }}
+                  scroll={{ x: 1000 }}
                   pagination={{
                     current: currentPage,
                     pageSize,
                     total: totalCount,
                     showSizeChanger: true,
-                    showQuickJumper: true,
-                    showTotal: (total) => (
-                      <Space>
-                        <Text strong>Tổng cộng: {total} tờ khai</Text>
-                      </Space>
-                    ),
-                    onChange: (page) => setCurrentPage(page),
-                    onShowSizeChange: (_, size) => {
+                    onChange: (page, size) => {
+                      setCurrentPage(page);
                       setPageSize(size);
-                      setCurrentPage(1);
                     },
-                    pageSizeOptions: ['10', '20', '50', '100'],
+                    showTotal: (total, range) => (
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          width: "100%",
+                          fontSize: 14,
+                          color: "#555",
+                        }}
+                      >
+                        <div>
+                          Đang xem{" "}
+                          <span style={{ color: "#1890ff", fontWeight: 600 }}>
+                            {range[0]} – {range[1]}
+                          </span>{" "}
+                          trên tổng số <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> tờ khai
+                        </div>
+                      </div>
+                    ),
                   }}
                   locale={{
                     emptyText: (
                       <div style={{ padding: "60px 0" }}>
                         <Result
                           icon={<FileDoneOutlined style={{ fontSize: 64, color: "#bfbfbf" }} />}
-                          title={<Title level={4} style={{ color: "#bfbfbf" }}>Chưa có tờ khai thuế</Title>}
+                          title={
+                            <Title level={4} style={{ color: "#bfbfbf" }}>
+                              Chưa có tờ khai thuế
+                            </Title>
+                          }
                           subTitle={
                             <Space direction="vertical">
                               <Text type="secondary">Bạn chưa tạo tờ khai thuế nào</Text>
@@ -2145,10 +2086,10 @@ const TaxDeclaration = () => {
                     ),
                   }}
                   rowClassName={(record) => {
-                    if (record.status === 'approved') return 'row-approved';
-                    if (record.status === 'rejected') return 'row-rejected';
-                    if (record.status === 'submitted') return 'row-submitted';
-                    return '';
+                    if (record.status === "approved") return "row-approved";
+                    if (record.status === "rejected") return "row-rejected";
+                    if (record.status === "submitted") return "row-submitted";
+                    return "";
                   }}
                 />
               </Card>
@@ -2173,7 +2114,7 @@ const TaxDeclaration = () => {
                       icon={<DownloadOutlined />}
                       onClick={() => {
                         setDetailVisible(false);
-                        handleExport(selectedRecord._id, 'pdf');
+                        handleExport(selectedRecord._id, "pdf");
                       }}
                     >
                       Xuất PDF
@@ -2190,22 +2131,25 @@ const TaxDeclaration = () => {
                         <Tag color="blue">{selectedRecord.periodKey}</Tag>
                       </Descriptions.Item>
                       <Descriptions.Item label="Phiên bản">
-                        <Tag color={selectedRecord.isClone ? "orange" : "blue"}>
-                          v{selectedRecord.version}
-                        </Tag>
+                        <Tag color={selectedRecord.isClone ? "orange" : "blue"}>v{selectedRecord.version}</Tag>
                       </Descriptions.Item>
                       <Descriptions.Item label="Trạng thái">
-                        <Tag color={
-                          selectedRecord.status === 'approved' ? 'success' :
-                            selectedRecord.status === 'rejected' ? 'error' :
-                              selectedRecord.status === 'submitted' ? 'warning' :
-                                'default'
-                        }>
+                        <Tag
+                          color={
+                            selectedRecord.status === "approved"
+                              ? "success"
+                              : selectedRecord.status === "rejected"
+                              ? "error"
+                              : selectedRecord.status === "submitted"
+                              ? "warning"
+                              : "default"
+                          }
+                        >
                           {STATUS_CONFIG[selectedRecord.status]?.text || selectedRecord.status}
                         </Tag>
                       </Descriptions.Item>
                       <Descriptions.Item label="Doanh thu kê khai" span={2}>
-                        <Text strong style={{ fontSize: 16, color: '#1890ff' }}>
+                        <Text strong style={{ fontSize: 16, color: "#1890ff" }}>
                           {formatVND(selectedRecord.declaredRevenue)}
                         </Text>
                       </Descriptions.Item>
@@ -2216,21 +2160,19 @@ const TaxDeclaration = () => {
                         <Text>{formatVND(selectedRecord.taxAmounts?.tncn)}</Text>
                       </Descriptions.Item>
                       <Descriptions.Item label="Tổng thuế phải nộp" span={2}>
-                        <Text strong style={{ fontSize: 18, color: '#d4380d' }}>
+                        <Text strong style={{ fontSize: 18, color: "#d4380d" }}>
                           {formatVND(selectedRecord.taxAmounts?.total)}
                         </Text>
                       </Descriptions.Item>
                       <Descriptions.Item label="Bằng chữ" span={2}>
-                        <Text italic style={{ color: '#666' }}>
+                        <Text italic style={{ color: "#666" }}>
                           {readNumberSafe(selectedRecord.taxAmounts?.total)} đồng
                         </Text>
                       </Descriptions.Item>
                       <Descriptions.Item label="Người tạo">
-                        {selectedRecord.createdBy?.fullName || selectedRecord.createdBy?.email || 'N/A'}
+                        {selectedRecord.createdBy?.fullName || selectedRecord.createdBy?.email || "N/A"}
                       </Descriptions.Item>
-                      <Descriptions.Item label="Ngày tạo">
-                        {dayjs(selectedRecord.createdAt).format("DD/MM/YYYY HH:mm")}
-                      </Descriptions.Item>
+                      <Descriptions.Item label="Ngày tạo">{dayjs(selectedRecord.createdAt).format("DD/MM/YYYY HH:mm")}</Descriptions.Item>
                       {selectedRecord.submittedAt && (
                         <Descriptions.Item label="Ngày nộp" span={2}>
                           {dayjs(selectedRecord.submittedAt).format("DD/MM/YYYY HH:mm")}
@@ -2238,12 +2180,8 @@ const TaxDeclaration = () => {
                       )}
                       {selectedRecord.approvedAt && (
                         <>
-                          <Descriptions.Item label="Người duyệt">
-                            {selectedRecord.approvedBy?.fullName || 'N/A'}
-                          </Descriptions.Item>
-                          <Descriptions.Item label="Ngày duyệt">
-                            {dayjs(selectedRecord.approvedAt).format("DD/MM/YYYY HH:mm")}
-                          </Descriptions.Item>
+                          <Descriptions.Item label="Người duyệt">{selectedRecord.approvedBy?.fullName || "N/A"}</Descriptions.Item>
+                          <Descriptions.Item label="Ngày duyệt">{dayjs(selectedRecord.approvedAt).format("DD/MM/YYYY HH:mm")}</Descriptions.Item>
                         </>
                       )}
                       {selectedRecord.rejectionReason && (
@@ -2264,24 +2202,16 @@ const TaxDeclaration = () => {
                         <Divider orientation="left">Thông tin người nộp thuế</Divider>
                         <Descriptions bordered column={2} size="small">
                           {selectedRecord.taxpayerInfo.name && (
-                            <Descriptions.Item label="Người nộp thuế">
-                              {selectedRecord.taxpayerInfo.name}
-                            </Descriptions.Item>
+                            <Descriptions.Item label="Người nộp thuế">{selectedRecord.taxpayerInfo.name}</Descriptions.Item>
                           )}
                           {selectedRecord.taxpayerInfo.storeName && (
-                            <Descriptions.Item label="Tên cửa hàng">
-                              {selectedRecord.taxpayerInfo.storeName}
-                            </Descriptions.Item>
+                            <Descriptions.Item label="Tên cửa hàng">{selectedRecord.taxpayerInfo.storeName}</Descriptions.Item>
                           )}
                           {selectedRecord.taxpayerInfo.taxCode && (
-                            <Descriptions.Item label="Mã số thuế">
-                              {selectedRecord.taxpayerInfo.taxCode}
-                            </Descriptions.Item>
+                            <Descriptions.Item label="Mã số thuế">{selectedRecord.taxpayerInfo.taxCode}</Descriptions.Item>
                           )}
                           {selectedRecord.taxpayerInfo.phone && (
-                            <Descriptions.Item label="Điện thoại">
-                              {selectedRecord.taxpayerInfo.phone}
-                            </Descriptions.Item>
+                            <Descriptions.Item label="Điện thoại">{selectedRecord.taxpayerInfo.phone}</Descriptions.Item>
                           )}
                           {selectedRecord.taxpayerInfo.email && (
                             <Descriptions.Item label="Email" span={2}>
@@ -2307,31 +2237,31 @@ const TaxDeclaration = () => {
                           pagination={false}
                           columns={[
                             {
-                              title: 'Ngành nghề',
-                              dataIndex: 'category',
-                              key: 'category',
-                              render: (cat) => getCategoryName(cat)
+                              title: "Ngành nghề",
+                              dataIndex: "category",
+                              key: "category",
+                              render: (cat) => getCategoryName(cat),
                             },
                             {
-                              title: 'Doanh thu',
-                              dataIndex: 'revenue',
-                              key: 'revenue',
+                              title: "Doanh thu",
+                              dataIndex: "revenue",
+                              key: "revenue",
                               render: (v) => formatVND(v),
-                              align: 'right'
+                              align: "right",
                             },
                             {
-                              title: 'Thuế GTGT',
-                              dataIndex: 'gtgtTax',
-                              key: 'gtgtTax',
+                              title: "Thuế GTGT",
+                              dataIndex: "gtgtTax",
+                              key: "gtgtTax",
                               render: (v) => formatVND(v),
-                              align: 'right'
+                              align: "right",
                             },
                             {
-                              title: 'Thuế TNCN',
-                              dataIndex: 'tncnTax',
-                              key: 'tncnTax',
+                              title: "Thuế TNCN",
+                              dataIndex: "tncnTax",
+                              key: "tncnTax",
                               render: (v) => formatVND(v),
-                              align: 'right'
+                              align: "right",
                             },
                           ]}
                         />

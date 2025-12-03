@@ -1,23 +1,6 @@
 // src/pages/customer/CustomerListPage.jsx
 import React, { useEffect, useState, useCallback } from "react";
-import {
-  Table,
-  Button,
-  Modal,
-  Space,
-  Typography,
-  Card,
-  Input,
-  Tag,
-  Tooltip,
-  message,
-  Popconfirm,
-  Statistic,
-  Row,
-  Col,
-  Badge,
-  Divider,
-} from "antd";
+import { Table, Button, Modal, Space, Typography, Card, Input, Tag, Tooltip, message, Popconfirm, Statistic, Row, Col, Badge, Divider } from "antd";
 import {
   PlusOutlined,
   ReloadOutlined,
@@ -179,9 +162,8 @@ export default function CustomerListPage() {
       key: "index",
       width: 70,
       align: "center",
-      render: (_, __, index) => (
-        <Badge count={(currentPage - 1) * itemsPerPage + index + 1} style={{ backgroundColor: "#52c41a" }} />
-      ),
+      onCell: () => ({ style: { cursor: "pointer" } }),
+      render: (_, __, index) => <Badge count={(currentPage - 1) * itemsPerPage + index + 1} style={{ backgroundColor: "#52c41a" }} />,
     },
     {
       title: (
@@ -192,6 +174,7 @@ export default function CustomerListPage() {
       ),
       dataIndex: "name",
       key: "name",
+      onCell: () => ({ style: { cursor: "pointer" } }),
       render: (text) => (
         <Text strong style={{ color: "#1890ff" }}>
           {text}
@@ -207,6 +190,7 @@ export default function CustomerListPage() {
       ),
       dataIndex: "phone",
       key: "phone",
+      onCell: () => ({ style: { cursor: "pointer" } }),
       render: (text) => (
         <Tag icon={<PhoneOutlined />} color="processing">
           {text}
@@ -222,18 +206,18 @@ export default function CustomerListPage() {
       ),
       dataIndex: "address",
       key: "address",
+      onCell: () => ({ style: { cursor: "pointer" } }),
       render: (text) => text || <Text type="secondary">Chưa có</Text>,
     },
     {
       title: "Ghi chú",
       dataIndex: "note",
       key: "note",
-      ellipsis: {
-        showTitle: false,
-      },
+      ellipsis: { showTitle: false },
+      onCell: () => ({ style: { cursor: "pointer" } }),
       render: (text) => (
         <Tooltip placement="topLeft" title={text}>
-          {text || <Text type="secondary">-</Text>}
+          <span style={{ cursor: "pointer" }}>{text || <Text type="secondary">-</Text>}</span>
         </Tooltip>
       ),
     },
@@ -247,6 +231,7 @@ export default function CustomerListPage() {
       dataIndex: "totalSpent",
       key: "totalSpent",
       align: "right",
+      onCell: () => ({ style: { cursor: "pointer" } }),
       render: (value) => {
         const v = value ?? "0";
         const str = typeof v === "object" && v?.$numberDecimal ? v.$numberDecimal : String(v);
@@ -258,6 +243,8 @@ export default function CustomerListPage() {
         );
       },
     },
+
+    // Cột hành động KHÔNG thêm cursor pointer
     {
       title: "Hành động",
       key: "action",
@@ -279,6 +266,7 @@ export default function CustomerListPage() {
               Sửa
             </Button>
           </Tooltip>
+
           <Popconfirm
             title="Xóa khách hàng"
             description="Bạn có chắc muốn xóa khách hàng này không?"
@@ -327,198 +315,206 @@ export default function CustomerListPage() {
 
   return (
     <Layout>
-      <div style={{ padding: "24px", background: "#ffffff", minHeight: "100vh" }}>
-        <Card
-          style={{
-            borderRadius: "16px",
-            boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
-            marginBottom: "24px",
-          }}
-        >
-          {/* Header */}
-          <div style={{ marginBottom: "24px" }}>
-            <Title
-              level={2}
-              style={{
-                margin: 0,
-                background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                fontSize: "32px",
-                fontWeight: 700,
-              }}
-            >
-              👥 Quản lý Khách hàng
-            </Title>
-            <Text type="secondary" style={{ fontSize: "14px" }}>
-              Quản lý thông tin khách hàng - tên, số điện thoại và lịch sử chi tiêu
-            </Text>
-          </div>
-
-          {/* Statistics */}
-          <Row gutter={16} style={{ marginBottom: "24px" }}>
-            <Col xs={24} sm={12} md={8}>
-              <Card
-                style={{
-                  background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                  border: "none",
-                  borderRadius: "12px",
-                }}
-              >
-                <Statistic
-                  title={<span style={{ color: "#fff" }}>Tổng khách hàng</span>}
-                  value={totalItems}
-                  prefix={<UserOutlined />}
-                  valueStyle={{ color: "#fff", fontWeight: "bold" }}
-                />
-              </Card>
-            </Col>
-            <Col xs={24} sm={12} md={8}>
-              <Card
-                style={{
-                  background: "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
-                  border: "none",
-                  borderRadius: "12px",
-                }}
-              >
-                <Statistic
-                  title={<span style={{ color: "#fff" }}>Khách hàng hiện tại</span>}
-                  value={customers.length}
-                  prefix={<UserOutlined />}
-                  valueStyle={{ color: "#fff", fontWeight: "bold" }}
-                />
-              </Card>
-            </Col>
-            <Col xs={24} sm={24} md={8}>
-              <Card
-                style={{
-                  background: "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",
-                  border: "none",
-                  borderRadius: "12px",
-                }}
-              >
-                <Statistic
-                  title={<span style={{ color: "#fff" }}>Tổng doanh thu</span>}
-                  value={totalSpending}
-                  prefix={<WalletOutlined />}
-                  suffix="₫"
-                  valueStyle={{ color: "#fff", fontWeight: "bold" }}
-                />
-              </Card>
-            </Col>
-          </Row>
-
-          <Divider />
-
-          {/* Actions Bar */}
-          <Space
+      <Card style={{ borderRadius: "16px", marginBottom: "24px", border: "1px solid #8c8c8c" }}>
+        {/* Header */}
+        <div style={{ marginBottom: "24px" }}>
+          <Title
+            level={2}
             style={{
-              marginBottom: "24px",
-              width: "100%",
-              justifyContent: "space-between",
-              flexWrap: "wrap",
+              margin: 0,
+              background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              fontSize: "32px",
+              fontWeight: 700,
             }}
           >
-            <Search
-              placeholder="Tìm kiếm theo tên hoặc số điện thoại..."
-              allowClear
-              size="large"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+            👥 Quản lý Khách hàng
+          </Title>
+          <Text type="secondary" style={{ fontSize: "14px" }}>
+            Quản lý thông tin khách hàng - tên, số điện thoại và lịch sử chi tiêu
+          </Text>
+        </div>
+
+        {/* Statistics */}
+        <Row gutter={16} style={{ marginBottom: "24px" }}>
+          <Col xs={24} sm={12} md={8}>
+            <Card
               style={{
-                width: "100%",
-                maxWidth: "400px",
+                background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                border: "none",
+                borderRadius: "12px",
               }}
-              prefix={<SearchOutlined style={{ color: "#1890ff" }} />}
-            />
+            >
+              <Statistic
+                title={<span style={{ color: "#fff" }}>Tổng khách hàng</span>}
+                value={totalItems}
+                prefix={<UserOutlined />}
+                valueStyle={{ color: "#fff", fontWeight: "bold" }}
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={8}>
+            <Card
+              style={{
+                background: "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
+                border: "none",
+                borderRadius: "12px",
+              }}
+            >
+              <Statistic
+                title={<span style={{ color: "#fff" }}>Khách hàng hiện tại</span>}
+                value={customers.length}
+                prefix={<UserOutlined />}
+                valueStyle={{ color: "#fff", fontWeight: "bold" }}
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={24} md={8}>
+            <Card
+              style={{
+                background: "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",
+                border: "none",
+                borderRadius: "12px",
+              }}
+            >
+              <Statistic
+                title={<span style={{ color: "#fff" }}>Tổng doanh thu</span>}
+                value={totalSpending}
+                prefix={<WalletOutlined />}
+                suffix="₫"
+                valueStyle={{ color: "#fff", fontWeight: "bold" }}
+              />
+            </Card>
+          </Col>
+        </Row>
 
-            <Space>
-              <Button
-                size="large"
-                icon={<ReloadOutlined />}
-                onClick={handleRefresh}
-                style={{
-                  borderRadius: "8px",
-                  fontWeight: 500,
-                }}
-              >
-                Làm mới
-              </Button>
-              <Button
-                type="primary"
-                size="large"
-                icon={<PlusOutlined />}
-                onClick={openCreate}
-                style={{
-                  background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                  border: "none",
-                  borderRadius: "8px",
-                  fontWeight: 500,
-                  boxShadow: "0 4px 12px rgba(102, 126, 234, 0.4)",
-                }}
-              >
-                Thêm khách hàng
-              </Button>
-            </Space>
-          </Space>
+        <Divider />
 
-          {/* Table */}
-          <Table
-            columns={columns}
-            dataSource={customers}
-            rowKey="_id"
-            loading={loading}
-            pagination={{
-              current: currentPage,
-              pageSize: itemsPerPage,
-              total: totalItems,
-              showSizeChanger: true,
-              showTotal: (total, range) => `${range[0]}-${range[1]} của ${total} khách hàng`,
-              pageSizeOptions: ["5", "10", "20", "50", "100"],
-              style: { marginTop: "16px" },
-            }}
-            onChange={handleTableChange}
-            scroll={{ x: 1200 }}
-            style={{
-              borderRadius: "12px",
-              overflow: "hidden",
-            }}
-            rowClassName={(record, index) => (index % 2 === 0 ? "table-row-light" : "table-row-dark")}
-            locale={{
-              emptyText: (
-                <div style={{ padding: "48px 0" }}>
-                  <UserOutlined style={{ fontSize: "48px", color: "#d9d9d9" }} />
-                  <div style={{ marginTop: "16px", color: "#999" }}>Không có khách hàng nào</div>
-                </div>
-              ),
-            }}
-          />
-        </Card>
-
-        {/* Modal */}
-        <Modal
-          title={
-            <Space>
-              <UserOutlined style={{ color: "#1890ff" }} />
-              <span style={{ fontSize: "18px", fontWeight: 600 }}>
-                {modalCustomer ? "Cập nhật khách hàng" : "Thêm khách hàng mới"}
-              </span>
-            </Space>
-          }
-          open={isModalOpen}
-          onCancel={closeModal}
-          footer={null}
-          width={800}
-          style={{ top: 20 }}
-          bodyStyle={{
-            maxHeight: "calc(100vh - 200px)",
-            overflowY: "auto",
-            padding: "24px",
+        {/* Actions Bar */}
+        <Space
+          style={{
+            marginBottom: "24px",
+            width: "100%",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
           }}
         >
-          <CustomerForm customer={modalCustomer} onSuccess={onFormSuccess} onCancel={closeModal} />
-        </Modal>
-      </div>
+          <Search
+            placeholder="Tìm kiếm theo tên hoặc số điện thoại..."
+            allowClear
+            size="large"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            style={{
+              width: "100%",
+              maxWidth: "400px",
+            }}
+            prefix={<SearchOutlined style={{ color: "#1890ff" }} />}
+          />
+
+          <Space>
+            <Button
+              size="large"
+              icon={<ReloadOutlined />}
+              onClick={handleRefresh}
+              style={{
+                borderRadius: "8px",
+                fontWeight: 500,
+              }}
+            >
+              Làm mới
+            </Button>
+            <Button
+              type="primary"
+              size="large"
+              icon={<PlusOutlined />}
+              onClick={openCreate}
+              style={{
+                background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                border: "none",
+                borderRadius: "8px",
+                fontWeight: 500,
+                boxShadow: "0 4px 12px rgba(102, 126, 234, 0.4)",
+              }}
+            >
+              Thêm khách hàng
+            </Button>
+          </Space>
+        </Space>
+
+        {/* Table */}
+        <Table
+          columns={columns}
+          dataSource={customers}
+          rowKey="_id"
+          loading={loading}
+          pagination={{
+            current: currentPage,
+            pageSize: itemsPerPage,
+            total: totalItems,
+            showSizeChanger: true,
+            showTotal: (total, range) => (
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  width: "100%",
+                  fontSize: 14,
+                  color: "#595959",
+                }}
+              >
+                <div>
+                  Đang xem{" "}
+                  <span style={{ color: "#1677ff", fontWeight: 600 }}>
+                    {range[0]} – {range[1]}
+                  </span>{" "}
+                  trên tổng số <span style={{ color: "#fa541c", fontWeight: 600 }}>{total}</span> khách hàng
+                </div>
+              </div>
+            ),
+            pageSizeOptions: ["5", "10", "20", "50", "100"],
+            style: { marginTop: "16px" },
+          }}
+          onChange={handleTableChange}
+          scroll={{ x: 1200 }}
+          style={{
+            borderRadius: "12px",
+            overflow: "hidden",
+          }}
+          rowClassName={(record, index) => (index % 2 === 0 ? "table-row-light" : "table-row-dark")}
+          locale={{
+            emptyText: (
+              <div style={{ padding: "48px 0" }}>
+                <UserOutlined style={{ fontSize: "48px", color: "#d9d9d9" }} />
+                <div style={{ marginTop: "16px", color: "#999" }}>Không có khách hàng nào</div>
+              </div>
+            ),
+          }}
+        />
+      </Card>
+
+      {/* Modal */}
+      <Modal
+        title={
+          <Space>
+            <UserOutlined style={{ color: "#1890ff" }} />
+            <span style={{ fontSize: "18px", fontWeight: 600 }}>{modalCustomer ? "Cập nhật khách hàng" : "Thêm khách hàng mới"}</span>
+          </Space>
+        }
+        open={isModalOpen}
+        onCancel={closeModal}
+        footer={null}
+        width={800}
+        style={{ top: 20 }}
+        bodyStyle={{
+          maxHeight: "calc(100vh - 200px)",
+          overflowY: "auto",
+          padding: "24px",
+        }}
+      >
+        <CustomerForm customer={modalCustomer} onSuccess={onFormSuccess} onCancel={closeModal} />
+      </Modal>
 
       {/* Custom CSS for table rows */}
       <style jsx>{`
