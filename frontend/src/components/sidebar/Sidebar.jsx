@@ -180,11 +180,11 @@ export default function Sidebar({ onCollapsedChange }) {
             label: <span style={{ fontSize: 13.5 }}>Danh sách nhân viên</span>,
             permission: "employees:view",
           },
-          {
-            key: `/stores/${storeId}/employees/schedule`,
-            label: <span style={{ fontSize: 13.5 }}>Lịch làm việc</span>,
-            permission: "employees:assign",
-          },
+          // {
+          //   key: `/stores/${storeId}/employees/schedule`,
+          //   label: <span style={{ fontSize: 13.5 }}>Lịch làm việc</span>,
+          //   permission: "employees:assign",
+          // },
         ],
       },
       {

@@ -31,6 +31,9 @@ export interface StoreOpeningHours {
 }
 
 export interface Store {
+    taxCode: string;
+    email: string;
+    owner_name: string;
     _id: string; // ObjectId string từ Mongo
     name: string;
     address?: string;
@@ -46,6 +49,13 @@ export interface Store {
     deleted?: boolean;
     createdAt?: string;
     updatedAt?: string;
+    bankAccount?: {
+        accountNumber: string;
+        bankName: string;
+        accountHolderName: string;
+    };
+    businessSector?: string;
+    area?: string;
 }
 
 /**

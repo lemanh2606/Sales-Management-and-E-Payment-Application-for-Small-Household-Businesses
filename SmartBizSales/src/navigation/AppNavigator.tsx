@@ -55,6 +55,7 @@ import NotificationScreen from "../screens/settings/NotificationScreen";
 import FileManagerScreen from "../screens/settings/FileManagerScreen";
 import PricingScreen from "../screens/settings/PricingScreen";
 import SubscriptionScreen from "../screens/settings/SubscriptionScreen";
+import OrderReconciliationScreen from "../screens/orders/OrderReconciliationScreen";
 
 // ========== TYPES ==========
 export type RootDrawerParamList = {
@@ -150,9 +151,9 @@ const PosScreen: FC = () => <PlaceholderScreen title="POS - Bán hàng" />;
 const OrderListScreen: FC = () => (
   <PlaceholderScreen title="Danh sách đơn hàng" />
 );
-const OrderReconciliationScreen: FC = () => (
-  <PlaceholderScreen title="Đối soát hóa đơn" />
-);
+// const OrderReconciliationScreen: FC = () => (
+//   <PlaceholderScreen title="Đối soát hóa đơn" />
+// );
 const EmployeesScreen: FC = () => <PlaceholderScreen title="Nhân viên" />;
 const EmployeeScheduleScreen: FC = () => (
   <PlaceholderScreen title="Lịch làm việc" />

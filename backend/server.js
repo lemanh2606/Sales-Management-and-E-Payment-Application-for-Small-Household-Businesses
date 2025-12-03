@@ -55,6 +55,8 @@ const allowedOrigins = [
   "http://menup.shop",
   "http://skinanalysis.life",
   "https://skinanalysis.life",
+  "http://smallbizsales.site",
+  "https://smallbizsales.site",
   "https://menup.shop",
 ];
 
