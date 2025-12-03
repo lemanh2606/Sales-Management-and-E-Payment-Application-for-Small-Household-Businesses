@@ -1,3 +1,4 @@
+// frontend/src/pages/order/ModalPrintBill.tsx
 import React, { useRef } from "react";
 import { Modal, Button, Divider, Typography, Tag, Table } from "antd";
 import { PrinterOutlined } from "@ant-design/icons";
@@ -76,7 +77,12 @@ const ModalPrintBill: React.FC<ModalPrintBillProps> = ({
         <Button key="cancel" onClick={onCancel}>
           Hủy
         </Button>,
-        <Button key="print" type="primary" icon={<PrinterOutlined />} onClick={handlePrint}>
+        <Button
+          key="print"
+          type="primary"
+          icon={<PrinterOutlined />}
+          onClick={handlePrint}
+        >
           In hóa đơn
         </Button>,
         <div
@@ -91,18 +97,32 @@ const ModalPrintBill: React.FC<ModalPrintBillProps> = ({
           }}
         >
           ⚠️ Bắt buộc phải in hóa đơn mỗi khi thanh toán thành công để cập nhật{" "}
-          <span style={{ color: "blue", fontWeight: "bold" }}>HÀNG TỒN KHO</span> chính xác nhất.
+          <span style={{ color: "blue", fontWeight: "bold" }}>
+            HÀNG TỒN KHO
+          </span>{" "}
+          chính xác nhất.
         </div>,
       ]}
       width={560}
     >
-      <div ref={printRef} className="p-4" style={{ fontFamily: "monospace", fontSize: "12px" }}>
+      <div
+        ref={printRef}
+        className="p-4"
+        style={{ fontFamily: "monospace", fontSize: "12px" }}
+      >
         <Title level={3} className="text-center m-0">
           {storeName}
         </Title>
         <div className="text-center">Địa chỉ: {address}</div>
         <br></br>
-        <Text style={{ display: "block", textAlign: "center", fontWeight: "bold", fontSize: "18px" }}>
+        <Text
+          style={{
+            display: "block",
+            textAlign: "center",
+            fontWeight: "bold",
+            fontSize: "18px",
+          }}
+        >
           === HÓA ĐƠN BÁN HÀNG ===
         </Text>
         <br></br>
@@ -114,15 +134,22 @@ const ModalPrintBill: React.FC<ModalPrintBillProps> = ({
           <span className="font-bold">Nhân viên:</span> {employeeName}
         </div>
         <div>
-          <span className="font-bold">Khách hàng:</span> {customerName} {customerPhone && `- SĐT: ${customerPhone}`}
+          <span className="font-bold">Khách hàng:</span> {customerName}{" "}
+          {customerPhone && `- SĐT: ${customerPhone}`}
         </div>
         <div>
-          <span className="font-bold">Ngày:</span> {format(createdDate, "dd/MM/yyyy HH:mm")}
+          <span className="font-bold">Ngày:</span>{" "}
+          {format(createdDate, "dd/MM/yyyy HH:mm")}
         </div>
         <div>
-          <span className="font-bold">Ngày in hoá đơn:</span> {format(now, "dd/MM/yyyy HH:mm")}
+          <span className="font-bold">Ngày in hoá đơn:</span>{" "}
+          {format(now, "dd/MM/yyyy HH:mm")}
         </div>
-        {isDuplicate && <Text type="warning">(Bản sao hóa đơn - lần in {printCount + 1})</Text>}
+        {isDuplicate && (
+          <Text type="warning">
+            (Bản sao hóa đơn - lần in {printCount + 1})
+          </Text>
+        )}
 
         <Divider className="my-2" />
 
@@ -132,7 +159,9 @@ const ModalPrintBill: React.FC<ModalPrintBillProps> = ({
           pagination={false}
           size="small"
           bordered
-          rowKey={(_, idx) => (idx !== undefined ? idx.toString() : Math.random().toString())}
+          rowKey={(_, idx) =>
+            idx !== undefined ? idx.toString() : Math.random().toString()
+          }
           columns={[
             {
               title: "Sản phẩm",
@@ -159,7 +188,10 @@ const ModalPrintBill: React.FC<ModalPrintBillProps> = ({
               key: "price",
               width: 80,
               align: "center" as const,
-              render: (_, record) => formatPrice((parseFloat(record.subtotal) || 0) / (record.quantity || 1)),
+              render: (_, record) =>
+                formatPrice(
+                  (parseFloat(record.subtotal) || 0) / (record.quantity || 1)
+                ),
             },
             {
               title: "Thành tiền",

@@ -17,9 +17,7 @@ const swaggerUi = require("swagger-ui-express");
 const YAML = require("yamljs");
 const swaggerDocument = YAML.load(path.join(__dirname, "swagger.yaml")); // 👈 nhớ tạo file swagger.yaml
 // --- LOAD MODELS ---
-["Product", "ProductGroup", "Supplier", "Employee", "StockDisposal", "StockCheck", "PurchaseOrder", "PurchaseReturn"].forEach((model) =>
-  require(`./models/${model}`)
-);
+["Product", "ProductGroup", "Supplier", "Employee", "StockDisposal", "StockCheck", "PurchaseOrder", "PurchaseReturn"].forEach((model) => require(`./models/${model}`));
 
 const app = express();
 
@@ -43,7 +41,15 @@ const storage = multer.diskStorage({
 const upload = multer({ storage, limits: { fileSize: 20 * 1024 * 1024 } });
 
 // ✅ Danh sách origins được phép
-const allowedOrigins = ["http://localhost:3000", "http://menup.shop", "http://skinanalysis.life", "https://skinanalysis.life", "https://menup.shop"];
+const allowedOrigins = [
+  "http://localhost:3000",
+  "http://menup.shop",
+  "http://skinanalysis.life",
+  "https://skinanalysis.life", //đây là backend thay cho http:localhost:9999
+  "http://smallbizsales.site",
+  "https://smallbizsales.site", //đây là frontend thay cho http:localhost:3000
+  "https://menup.shop", // production menup.shop của app mobile
+];
 
 // =====Socket.io=====
 const server = http.createServer(app); //  Tạo server http để gắn socket.io

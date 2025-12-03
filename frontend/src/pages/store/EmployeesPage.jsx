@@ -181,6 +181,16 @@ const PERMISSION_LABELS = {
   "file:view": "Xem & tải tệp",
 };
 
+const STAFF_ALLOWED_PREFIXES = ["customers", "orders", "notifications"];
+const STAFF_ALLOWED_EXACT = ["store:dashboard:view"];
+
+const isAllowedForStaff = (permission = "") =>
+  STAFF_ALLOWED_EXACT.includes(permission) ||
+  STAFF_ALLOWED_PREFIXES.some((prefix) => permission.startsWith(`${prefix}:`));
+
+const filterStaffPermissions = (list = []) =>
+  Array.from(new Set(list.filter((permission) => isAllowedForStaff(permission))));
+
 const groupPermissions = (permissionList = []) => {
   const groups = {};
   permissionList.forEach((permission) => {
@@ -274,8 +284,8 @@ export default function EmployeesPage() {
     }
     try {
       const res = await getPermissionCatalog();
-      const permissions = res.permissions || [];
-      const staffDefault = res.staffDefault || [];
+      const permissions = filterStaffPermissions(res.permissions || []);
+      const staffDefault = filterStaffPermissions(res.staffDefault?.length ? res.staffDefault : permissions);
       setPermissionOptions(permissions);
       setDefaultStaffPermissions(staffDefault);
       return { permissions, staffDefault };
@@ -454,7 +464,7 @@ export default function EmployeesPage() {
     if (!record?._id) return;
     if (selectedStaff && String(selectedStaff._id) === String(record._id) && permissionOptions.length) {
       const currentMenu = Array.isArray(record.user_id?.menu) ? record.user_id.menu : [];
-      setSelectedPermissions(currentMenu);
+      setSelectedPermissions(filterStaffPermissions(currentMenu));
       return;
     }
     setSelectedStaff(record);
@@ -463,9 +473,9 @@ export default function EmployeesPage() {
       const catalog = await ensurePermissionCatalog();
       const catalogKeys = catalog?.permissions || [];
       const currentMenu = Array.isArray(record.user_id?.menu) ? record.user_id.menu : [];
-      const mergedCatalog = Array.from(new Set([...(catalogKeys || []), ...currentMenu]));
+      const mergedCatalog = filterStaffPermissions([...(catalogKeys || []), ...currentMenu]);
       setPermissionOptions(mergedCatalog);
-      setSelectedPermissions(currentMenu);
+      setSelectedPermissions(filterStaffPermissions(currentMenu));
     } catch (err) {
       console.error(err);
       Swal.fire({
@@ -516,14 +526,15 @@ export default function EmployeesPage() {
     }
 
     const userId = selectedStaff.user_id?._id || selectedStaff.user_id;
+    const sanitizedMenu = filterStaffPermissions(selectedPermissions);
     setPermissionSaving(true);
     try {
-      await updateUserById(userId, { menu: selectedPermissions, storeId: currentStore._id });
-      syncUpdatedMenus(userId, selectedPermissions);
+      await updateUserById(userId, { menu: sanitizedMenu, storeId: currentStore._id });
+      syncUpdatedMenus(userId, sanitizedMenu);
       setSelectedStaff((prev) => {
         if (!prev) return prev;
         if (String(prev._id) !== String(selectedStaff._id)) return prev;
-        return { ...prev, user_id: { ...prev.user_id, menu: [...selectedPermissions] } };
+        return { ...prev, user_id: { ...prev.user_id, menu: [...sanitizedMenu] } };
       });
       Swal.fire({
         title: "🎉 Thành công!",
@@ -683,6 +694,12 @@ export default function EmployeesPage() {
       dataIndex: "fullName",
       key: "permissionFullName",
       render: (_, record) => record.fullName || record.user_id?.username || record.user_id?.email || "—",
+    },
+    {
+      title: "Email",
+      dataIndex: "email",
+      key: "permissionEmail",
+      render: (_, record) => record.user_id?.email || "—",
     },
   ];
 

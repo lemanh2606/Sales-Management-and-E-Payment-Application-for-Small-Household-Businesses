@@ -1,5 +1,13 @@
 // src/navigation/AppNavigator.tsx
-import React, { JSX, useState, useRef } from "react";
+import React, {
+  JSX,
+  useState,
+  useRef,
+  memo,
+  useCallback,
+  FC,
+  useMemo,
+} from "react";
 import {
   View,
   Text,
@@ -10,20 +18,24 @@ import {
   ScrollView,
   Image,
   Animated,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
 } from "react-native";
 import {
   createDrawerNavigator,
   DrawerContentComponentProps,
+  DrawerNavigationOptions,
 } from "@react-navigation/drawer";
-import type { DrawerNavigationOptions } from "@react-navigation/drawer";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 
 import { useAuth } from "../context/AuthContext";
+import CleanupManager from "../utils/cleanupManager"; // 🚀 IMPORT CLEANUP MANAGER
+
+// ========== SCREEN IMPORTS ==========
 import DashboardScreen from "../screens/home/DashboardScreen";
 import SelectStoreScreen from "../screens/store/SelectStoreScreen";
 import Unauthorized from "../screens/misc/Unauthorized";
-
 import ProductListScreen from "../screens/product/ProductListScreen";
 import CustomerListScreen from "../screens/customer/CustomerListScreen";
 import StoreSettingsScreen from "../screens/store/StoreSettingsScreen";
@@ -43,102 +55,113 @@ import NotificationScreen from "../screens/settings/NotificationScreen";
 import FileManagerScreen from "../screens/settings/FileManagerScreen";
 import PricingScreen from "../screens/settings/PricingScreen";
 import SubscriptionScreen from "../screens/settings/SubscriptionScreen";
+import OrderReconciliationScreen from "../screens/orders/OrderReconciliationScreen";
 
 // ========== TYPES ==========
 export type RootDrawerParamList = {
-  Dashboard: any;
-  SelectStore: any;
-  StoreSettings: any;
-  ProductList: any;
-  Suppliers: any;
-  ProductGroups: any;
-  PosOrders: any;
-  OrderList: any;
-  OrderReconciliation: any;
-  CustomerList: any;
-  TopCustomers: any;
-  Employees: any;
-  EmployeeSchedule: any;
-  LoyaltyConfig: any;
-  ReportsDashboard: any;
-  RevenueReport: any;
-  InventoryReport: any;
-  TaxReport: any;
-  TopProductsReport: any;
-  ProfileScreen: any;
-  Subscription: any;
-  SubscriptionPricing: any;
-  ActivityLog: any;
-  PaymentMethod: any;
-  NotificationSettings: any;
-  ExportData: any;
-  FileManager: any;
+  Dashboard: undefined;
+  SelectStore: undefined;
+  StoreSettings: undefined;
+  ProductList: undefined;
+  Suppliers: undefined;
+  ProductGroups: undefined;
+  PosOrders: undefined;
+  OrderList: undefined;
+  OrderReconciliation: undefined;
+  CustomerList: undefined;
+  TopCustomers: undefined;
+  Employees: undefined;
+  EmployeeSchedule: undefined;
+  LoyaltyConfig: undefined;
+  ReportsDashboard: undefined;
+  RevenueReport: undefined;
+  InventoryReport: undefined;
+  TaxReport: undefined;
+  TopProductsReport: undefined;
+  ProfileScreen: undefined;
+  Subscription: undefined;
+  SubscriptionPricing: undefined;
+  ActivityLog: undefined;
+  PaymentMethod: undefined;
+  NotificationSettings: undefined;
+  ExportData: undefined;
+  FileManager: undefined;
 };
+
+interface MenuItem {
+  key: keyof RootDrawerParamList;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  permission?: string | string[];
+}
+
+interface MenuSection {
+  title: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  items: MenuItem[];
+}
+
+interface MenuItemComponentProps {
+  item: MenuItem;
+  isActive: boolean;
+  onPress: () => void;
+  isLast: boolean;
+}
+
+interface PlaceholderScreenProps {
+  title: string;
+}
 
 const Drawer = createDrawerNavigator<RootDrawerParamList>();
 
-// --- Check quyền menu chuẩn ---
-function hasPermission(
+// ========== UTILITY FUNCTIONS ==========
+const hasPermission = (
   menu: string[] = [],
   required?: string | string[]
-): boolean {
+): boolean => {
   if (!required) return true;
   const reqs = Array.isArray(required) ? required : [required];
   return reqs.some((r) => {
     const [resource] = r.split(":");
     return menu.includes(r) || menu.includes(`${resource}:*`);
   });
-}
+};
+
+// ========== PLACEHOLDER SCREEN (MEMOIZED) ==========
+const PlaceholderScreen = memo<PlaceholderScreenProps>(
+  ({ title }): JSX.Element => {
+    return (
+      <View style={styles.placeholderContainer}>
+        <View style={styles.placeholderIconCircle}>
+          <Ionicons name="construct-outline" size={48} color="#10b981" />
+        </View>
+        <Text style={styles.placeholderTitle}>{title}</Text>
+        <Text style={styles.placeholderDesc}>
+          Màn hình này đang được phát triển cho ứng dụng di động.
+        </Text>
+      </View>
+    );
+  }
+);
+
+PlaceholderScreen.displayName = "PlaceholderScreen";
 
 // ========== PLACEHOLDER SCREENS ==========
-function PlaceholderScreen({ title }: { title: string }): JSX.Element {
-  return (
-    <View style={styles.placeholderContainer}>
-      <View style={styles.placeholderIconCircle}>
-        <Ionicons name="construct-outline" size={48} color="#10b981" />
-      </View>
-      <Text style={styles.placeholderTitle}>{title}</Text>
-      <Text style={styles.placeholderDesc}>
-        Màn hình này đang được phát triển cho ứng dụng di động.
-      </Text>
-    </View>
-  );
-}
-
-const PosScreen = () => <PlaceholderScreen title="POS - Bán hàng" />;
-const OrderListScreen = () => <PlaceholderScreen title="Danh sách đơn hàng" />;
-const OrderReconciliationScreen = () => (
-  <PlaceholderScreen title="Đối soát hóa đơn" />
+const PosScreen: FC = () => <PlaceholderScreen title="POS - Bán hàng" />;
+const OrderListScreen: FC = () => (
+  <PlaceholderScreen title="Danh sách đơn hàng" />
 );
-// const TopCustomersScreen = () => <PlaceholderScreen title="Khách VIP" />;
-const EmployeesScreen = () => <PlaceholderScreen title="Nhân viên" />;
-const EmployeeScheduleScreen = () => (
+// const OrderReconciliationScreen: FC = () => (
+//   <PlaceholderScreen title="Đối soát hóa đơn" />
+// );
+const EmployeesScreen: FC = () => <PlaceholderScreen title="Nhân viên" />;
+const EmployeeScheduleScreen: FC = () => (
   <PlaceholderScreen title="Lịch làm việc" />
 );
-
-// const SubscriptionScreen = () => <PlaceholderScreen title="Gói hiện tại" />;
-// const SubscriptionPricingScreen = () => (
-//   <PlaceholderScreen title="Nâng cấp Premium" />
-// );
-
-const ExportDataScreen = () => <PlaceholderScreen title="Xuất dữ liệu" />;
-// const FileManagerScreen = () => <PlaceholderScreen title="Quản lý file" />;
+const ExportDataScreen: FC = () => <PlaceholderScreen title="Xuất dữ liệu" />;
 
 // ========== MENU TREE ==========
-interface MenuItem {
-  key: keyof RootDrawerParamList;
-  label: string;
-  icon: string;
-  permission?: string | string[];
-}
-
-interface MenuSection {
-  title: string;
-  icon: string;
-  items: MenuItem[];
-}
-
-const MENU_TREE: MenuSection[] = [
+const MENU_TREE: readonly MenuSection[] = [
   {
     title: "CỬA HÀNG",
     icon: "storefront",
@@ -339,314 +362,391 @@ const MENU_TREE: MenuSection[] = [
       },
     ],
   },
-];
+] as const;
+
+// ========== MENU ITEM COMPONENT (MEMOIZED) ==========
+const MenuItemComponent = memo<MenuItemComponentProps>(
+  ({ item, isActive, onPress, isLast }): JSX.Element => {
+    return (
+      <TouchableOpacity
+        style={[
+          styles.menuItem,
+          isActive && styles.menuItemActive,
+          isLast && styles.menuItemLast,
+        ]}
+        onPress={onPress}
+        activeOpacity={0.7}
+      >
+        <View
+          style={[
+            styles.menuItemIconWrapper,
+            isActive && styles.menuItemIconWrapperActive,
+          ]}
+        >
+          <Ionicons
+            name={item.icon}
+            size={20}
+            color={isActive ? "#10b981" : "#6b7280"}
+          />
+        </View>
+        <Text
+          style={[styles.menuItemText, isActive && styles.menuItemTextActive]}
+        >
+          {item.label}
+        </Text>
+        {isActive && <View style={styles.activeIndicator} />}
+      </TouchableOpacity>
+    );
+  }
+);
+
+MenuItemComponent.displayName = "MenuItem";
 
 // ========== CUSTOM DRAWER CONTENT ==========
-type CustomDrawerProps = DrawerContentComponentProps;
-
-function CustomDrawerContent(props: CustomDrawerProps): JSX.Element {
-  const { logout, user } = useAuth();
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(
-    new Set(["CỬA HÀNG", "QUẢN LÝ KHO"])
-  );
-
-  // ✅ Scroll indicator state
-  const [showScrollIndicator, setShowScrollIndicator] = useState(false);
-  const scrollViewRef = useRef<ScrollView>(null);
-  const bounceAnim = useRef(new Animated.Value(0)).current;
-
-  // ✅ Bounce animation for arrow
-  React.useEffect(() => {
-    if (showScrollIndicator) {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(bounceAnim, {
-            toValue: 1,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-          Animated.timing(bounceAnim, {
-            toValue: 0,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-        ])
-      ).start();
-    } else {
-      bounceAnim.setValue(0);
-    }
-  }, [showScrollIndicator]);
-
-  const translateY = bounceAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 8],
-  });
-
-  const handleLogout = () => {
-    Alert.alert(
-      "Đăng xuất",
-      "Bạn có chắc muốn đăng xuất không?",
-      [
-        { text: "Hủy", style: "cancel" },
-        { text: "Đăng xuất", style: "destructive", onPress: logout },
-      ],
-      { cancelable: true }
+const CustomDrawerContent = memo<DrawerContentComponentProps>(
+  (props): JSX.Element => {
+    const { logout, user } = useAuth();
+    const [expandedSections, setExpandedSections] = useState<Set<string>>(
+      new Set(["CỬA HÀNG"])
     );
-  };
+    const [showScrollIndicator, setShowScrollIndicator] =
+      useState<boolean>(false);
+    const scrollViewRef = useRef<ScrollView>(null);
+    const bounceAnim = useRef(new Animated.Value(0)).current;
 
-  const toggleSection = (title: string) => {
-    setExpandedSections((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(title)) {
-        newSet.delete(title);
+    // Bounce animation
+    React.useEffect(() => {
+      if (showScrollIndicator) {
+        const animation = Animated.loop(
+          Animated.sequence([
+            Animated.timing(bounceAnim, {
+              toValue: 1,
+              duration: 800,
+              useNativeDriver: true,
+            }),
+            Animated.timing(bounceAnim, {
+              toValue: 0,
+              duration: 800,
+              useNativeDriver: true,
+            }),
+          ])
+        );
+        animation.start();
+        return () => {
+          animation.stop();
+          bounceAnim.setValue(0);
+        };
       } else {
-        newSet.add(title);
+        bounceAnim.setValue(0);
       }
-      return newSet;
+    }, [showScrollIndicator, bounceAnim]);
+
+    const translateY = bounceAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0, 8],
     });
-  };
 
-  // ✅ Handle scroll event
-  const handleScroll = (event: any) => {
-    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-    const isAtBottom =
-      contentOffset.y + layoutMeasurement.height >= contentSize.height - 20;
-    setShowScrollIndicator(
-      !isAtBottom && contentSize.height > layoutMeasurement.height
+    // Memoized handlers
+    const handleLogout = useCallback((): void => {
+      Alert.alert(
+        "Đăng xuất",
+        "Bạn có chắc muốn đăng xuất không?",
+        [
+          { text: "Hủy", style: "cancel" },
+          {
+            text: "Đăng xuất",
+            style: "destructive",
+            onPress: () => {
+              CleanupManager.cleanup("AppNavigator");
+              logout();
+            },
+          },
+        ],
+        { cancelable: true }
+      );
+    }, [logout]);
+
+    const toggleSection = useCallback((title: string): void => {
+      setExpandedSections((prev) => {
+        const newSet = new Set(prev);
+        if (newSet.has(title)) {
+          newSet.delete(title);
+        } else {
+          newSet.add(title);
+        }
+        return newSet;
+      });
+    }, []);
+
+    const handleScroll = useCallback(
+      (event: NativeSyntheticEvent<NativeScrollEvent>): void => {
+        const { contentOffset, contentSize, layoutMeasurement } =
+          event.nativeEvent;
+        const isAtBottom =
+          contentOffset.y + layoutMeasurement.height >= contentSize.height - 20;
+        setShowScrollIndicator(
+          !isAtBottom && contentSize.height > layoutMeasurement.height
+        );
+      },
+      []
     );
-  };
 
-  // ✅ Handle scroll indicator press
-  const handleScrollIndicatorPress = () => {
-    scrollViewRef.current?.scrollToEnd({ animated: true });
-  };
+    const handleScrollIndicatorPress = useCallback((): void => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, []);
 
-  const menu = user?.menu || [];
-  const nameLabel = user?.fullname || user?.username || "Người dùng";
-  const roleLabel = user?.role || "—";
-  const userImage = user?.image;
-  const currentRoute = props.state.routes[props.state.index].name;
+    const menu: string[] = useMemo(() => user?.menu || [], [user?.menu]);
+    const nameLabel: string = useMemo(
+      () => user?.fullname || user?.username || "Người dùng",
+      [user?.fullname, user?.username]
+    );
+    const roleLabel: string = useMemo(() => user?.role || "—", [user?.role]);
+    const userImage: string | undefined = useMemo(
+      () => user?.image,
+      [user?.image]
+    );
+    const currentRoute: string = props.state.routes[props.state.index].name;
 
-  return (
-    <View style={{ flex: 1, backgroundColor: "#f8fafc" }}>
-      {/* Gradient Header with User Image */}
-      <LinearGradient
-        colors={["#10b981", "#059669", "#047857"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.header}
-      >
-        <View style={styles.avatarWrapper}>
-          {userImage ? (
-            <Image source={{ uri: userImage }} style={styles.avatarImage} />
-          ) : (
-            <View style={styles.avatarPlaceholder}>
-              <Ionicons name="person" size={36} color="#fff" />
-            </View>
-          )}
-          <View style={styles.onlineBadge} />
-        </View>
-        <View style={{ marginLeft: 14, flex: 1 }}>
-          <Text style={styles.name} numberOfLines={1}>
-            {nameLabel}
-          </Text>
-          <View style={styles.roleContainer}>
-            <Ionicons name="shield-checkmark" size={12} color="#d1fae5" />
-            <Text style={styles.role}>{roleLabel}</Text>
-          </View>
-        </View>
-      </LinearGradient>
+    // Memoize visible sections
+    const visibleSections = useMemo(() => {
+      return MENU_TREE.map((section) => {
+        const visibleItems = section.items.filter((item) => {
+          if (item.key === "SelectStore" && user?.role !== "MANAGER")
+            return false;
+          return hasPermission(menu, item.permission);
+        });
+        return { section, visibleItems };
+      }).filter(({ visibleItems }) => visibleItems.length > 0);
+    }, [menu, user?.role]);
 
-      {/* Tree Menu with Scroll Indicator */}
-      <View style={{ flex: 1, position: "relative" }}>
-        <ScrollView
-          ref={scrollViewRef}
-          style={styles.menu}
-          showsVerticalScrollIndicator={false}
-          onScroll={handleScroll}
-          scrollEventThrottle={16}
+    return (
+      <View style={styles.drawerRoot}>
+        {/* Header */}
+        <LinearGradient
+          colors={["#10b981", "#059669", "#047857"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.header}
         >
-          {MENU_TREE.map((section) => {
-            const visibleItems = section.items.filter((item) => {
-              if (item.key === "SelectStore" && user?.role !== "MANAGER")
-                return false;
-              return hasPermission(menu, item.permission);
-            });
-
-            if (visibleItems.length === 0) return null;
-
-            const isExpanded = expandedSections.has(section.title);
-
-            return (
-              <View key={section.title} style={styles.sectionContainer}>
-                {/* Section Header */}
-                <TouchableOpacity
-                  style={styles.sectionHeader}
-                  onPress={() => toggleSection(section.title)}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.sectionHeaderLeft}>
-                    <View style={styles.sectionIconCircle}>
-                      <Ionicons
-                        name={section.icon as any}
-                        size={16}
-                        color="#10b981"
-                      />
-                    </View>
-                    <Text style={styles.sectionTitle}>{section.title}</Text>
-                  </View>
-                  <Ionicons
-                    name={isExpanded ? "chevron-down" : "chevron-forward"}
-                    size={18}
-                    color="#10b981"
-                  />
-                </TouchableOpacity>
-
-                {/* Section Items */}
-                {isExpanded &&
-                  visibleItems.map((item, idx) => {
-                    const isActive = currentRoute === item.key;
-                    return (
-                      <TouchableOpacity
-                        key={item.key}
-                        style={[
-                          styles.menuItem,
-                          isActive && styles.menuItemActive,
-                          idx === visibleItems.length - 1 &&
-                            styles.menuItemLast,
-                        ]}
-                        onPress={() =>
-                          props.navigation.navigate(item.key as any)
-                        }
-                        activeOpacity={0.7}
-                      >
-                        <View
-                          style={[
-                            styles.menuItemIconWrapper,
-                            isActive && styles.menuItemIconWrapperActive,
-                          ]}
-                        >
-                          <Ionicons
-                            name={item.icon as any}
-                            size={20}
-                            color={isActive ? "#10b981" : "#6b7280"}
-                          />
-                        </View>
-                        <Text
-                          style={[
-                            styles.menuItemText,
-                            isActive && styles.menuItemTextActive,
-                          ]}
-                        >
-                          {item.label}
-                        </Text>
-                        {isActive && <View style={styles.activeIndicator} />}
-                      </TouchableOpacity>
-                    );
-                  })}
+          <View style={styles.avatarWrapper}>
+            {userImage ? (
+              <Image source={{ uri: userImage }} style={styles.avatarImage} />
+            ) : (
+              <View style={styles.avatarPlaceholder}>
+                <Ionicons name="person" size={36} color="#fff" />
               </View>
-            );
-          })}
-          <View style={{ height: 20 }} />
-        </ScrollView>
+            )}
+            <View style={styles.onlineBadge} />
+          </View>
+          <View style={styles.headerTextContainer}>
+            <Text style={styles.name} numberOfLines={1}>
+              {nameLabel}
+            </Text>
+            <View style={styles.roleContainer}>
+              <Ionicons name="shield-checkmark" size={12} color="#d1fae5" />
+              <Text style={styles.role}>{roleLabel}</Text>
+            </View>
+          </View>
+        </LinearGradient>
 
-        {/* ✅ Scroll Indicator - Floating Arrow */}
-        {showScrollIndicator && (
-          <TouchableOpacity
-            style={styles.scrollIndicator}
-            onPress={handleScrollIndicatorPress}
-            activeOpacity={0.7}
+        {/* Menu */}
+        <View style={styles.menuContainer}>
+          <ScrollView
+            ref={scrollViewRef}
+            style={styles.menu}
+            contentContainerStyle={styles.menuContent}
+            showsVerticalScrollIndicator={false}
+            onScroll={handleScroll}
+            scrollEventThrottle={16}
+            removeClippedSubviews={true}
           >
-            <Animated.View
-              style={[
-                styles.scrollIndicatorInner,
-                { transform: [{ translateY }] },
-              ]}
+            {visibleSections.map(({ section, visibleItems }) => {
+              const isExpanded: boolean = expandedSections.has(section.title);
+
+              return (
+                <View key={section.title} style={styles.sectionContainer}>
+                  <TouchableOpacity
+                    style={styles.sectionHeader}
+                    onPress={() => toggleSection(section.title)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.sectionHeaderLeft}>
+                      <View style={styles.sectionIconCircle}>
+                        <Ionicons
+                          name={section.icon}
+                          size={16}
+                          color="#10b981"
+                        />
+                      </View>
+                      <Text style={styles.sectionTitle}>{section.title}</Text>
+                    </View>
+                    <Ionicons
+                      name={isExpanded ? "chevron-down" : "chevron-forward"}
+                      size={18}
+                      color="#10b981"
+                    />
+                  </TouchableOpacity>
+
+                  {isExpanded &&
+                    visibleItems.map((item, idx) => (
+                      <MenuItemComponent
+                        key={item.key}
+                        item={item}
+                        isActive={currentRoute === item.key}
+                        onPress={() => {
+                          // 🚀 Log cleanup stats before navigation
+                          if (__DEV__) {
+                            console.log(
+                              "📊 Before navigation:",
+                              CleanupManager.getStats()
+                            );
+                          }
+                          // Cast to any to satisfy overloaded navigate signatures for dynamic keys
+                          props.navigation.navigate(item.key as any);
+                        }}
+                        isLast={idx === visibleItems.length - 1}
+                      />
+                    ))}
+                </View>
+              );
+            })}
+            <View style={styles.menuBottomSpacer} />
+          </ScrollView>
+
+          {/* Scroll Indicator */}
+          {showScrollIndicator && (
+            <TouchableOpacity
+              style={styles.scrollIndicator}
+              onPress={handleScrollIndicatorPress}
+              activeOpacity={0.7}
             >
-              <Ionicons name="chevron-down" size={24} color="#10b981" />
-            </Animated.View>
-          </TouchableOpacity>
-        )}
-      </View>
+              <Animated.View
+                style={[
+                  styles.scrollIndicatorInner,
+                  { transform: [{ translateY }] },
+                ]}
+              >
+                <Ionicons name="chevron-down" size={24} color="#10b981" />
+              </Animated.View>
+            </TouchableOpacity>
+          )}
+        </View>
 
-      {/* Gradient Logout Button */}
-      <View style={styles.bottom}>
-        <TouchableOpacity
-          style={styles.logoutBtn}
-          onPress={handleLogout}
-          activeOpacity={0.8}
-        >
-          <LinearGradient
-            colors={["#ef4444", "#dc2626"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.logoutGradient}
+        {/* Logout */}
+        <View style={styles.bottom}>
+          <TouchableOpacity
+            style={styles.logoutBtn}
+            onPress={handleLogout}
+            activeOpacity={0.8}
           >
-            <Ionicons name="log-out-outline" size={20} color="#fff" />
-            <Text style={styles.logoutText}>Đăng xuất</Text>
-          </LinearGradient>
-        </TouchableOpacity>
-        <Text style={styles.copy}>© 2025 Smallbiz-Sales</Text>
+            <LinearGradient
+              colors={["#ef4444", "#dc2626"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.logoutGradient}
+            >
+              <Ionicons name="log-out-outline" size={20} color="#fff" />
+              <Text style={styles.logoutText}>Đăng xuất</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+          <Text style={styles.copy}>© 2025 Smallbiz-Sales</Text>
+        </View>
       </View>
-    </View>
-  );
-}
+    );
+  }
+);
+
+CustomDrawerContent.displayName = "CustomDrawerContent";
 
 // ========== APP NAVIGATOR ==========
-export default function AppNavigator(): JSX.Element {
+const AppNavigator: FC = (): JSX.Element => {
   const { user, loading } = useAuth();
 
+  // Loading screen
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#10b981" />
+        <LinearGradient
+          colors={["#10b981", "#059669"]}
+          style={styles.loadingCircle}
+        >
+          <ActivityIndicator size="large" color="#fff" />
+        </LinearGradient>
         <Text style={styles.loadingText}>Đang tải dữ liệu người dùng...</Text>
       </View>
     );
   }
 
-  const menu = user?.menu || [];
+  const menu: string[] = user?.menu || [];
 
-  const withPermission =
+  // Permission wrapper HOC
+  const withPermission = useCallback(
     (
       Component: React.ComponentType<any>,
       requiredPermission?: string | string[]
     ) =>
-    (props: any) => {
-      if (!hasPermission(menu, requiredPermission)) {
-        return <Unauthorized />;
-      }
-      return <Component {...props} />;
-    };
+      (props: any): JSX.Element => {
+        if (!hasPermission(menu, requiredPermission)) {
+          return <Unauthorized />;
+        }
+        return <Component {...props} />;
+      },
+    [menu]
+  );
+
+  // Screen options with cleanup
+  const screenOptions = useCallback(
+    ({ navigation }: any): any => ({
+      headerStyle: {
+        backgroundColor: "#10b981",
+        elevation: 0,
+        shadowOpacity: 0,
+      },
+      headerTintColor: "#ffffff",
+      headerTitleStyle: { fontWeight: "700", fontSize: 18 },
+      drawerActiveBackgroundColor: "transparent",
+      drawerActiveTintColor: "transparent",
+      drawerInactiveTintColor: "transparent",
+      // 🚀 CRITICAL: Unmount screens when navigating away
+      unmountOnBlur: true,
+      // 🚀 CRITICAL: Freeze inactive screens
+      freezeOnBlur: true,
+      // 🚀 Cleanup on blur
+      listeners: {
+        blur: () => {
+          if (__DEV__) {
+            console.log("🧹 Screen blur - Force cleanup");
+          }
+          CleanupManager.cleanup();
+        },
+        focus: () => {
+          if (__DEV__) {
+            console.log("📊 Screen focus - Stats:", CleanupManager.getStats());
+          }
+        },
+      },
+      headerLeft: ({ tintColor }: { tintColor?: string }) => (
+        <TouchableOpacity
+          onPress={() => navigation.toggleDrawer()}
+          style={styles.headerMenuBtn}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="grid-outline" size={26} color={tintColor} />
+        </TouchableOpacity>
+      ),
+    }),
+    []
+  );
 
   return (
     <Drawer.Navigator
       initialRouteName="Dashboard"
-      drawerContent={(props) => <CustomDrawerContent {...props} />}
-      screenOptions={({ navigation }): DrawerNavigationOptions => ({
-        headerStyle: {
-          backgroundColor: "#10b981",
-          elevation: 0,
-          shadowOpacity: 0,
-        },
-        headerTintColor: "#ffffff",
-        headerTitleStyle: {
-          fontWeight: "700",
-          fontSize: 18,
-        },
-        drawerActiveBackgroundColor: "transparent",
-        drawerActiveTintColor: "transparent",
-        drawerInactiveTintColor: "transparent",
-        headerLeft: ({ tintColor }) => (
-          <TouchableOpacity
-            onPress={() => navigation.toggleDrawer()}
-            style={styles.headerMenuBtn}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="grid-outline" size={26} color={tintColor} />
-          </TouchableOpacity>
-        ),
-      })}
+      drawerContent={(props: DrawerContentComponentProps) => (
+        <CustomDrawerContent {...props} />
+      )}
+      screenOptions={screenOptions}
+      // 🚀 CRITICAL: Detach inactive screens to save memory
+      detachInactiveScreens={true}
     >
       <Drawer.Screen
         name="Dashboard"
@@ -797,10 +897,16 @@ export default function AppNavigator(): JSX.Element {
       />
     </Drawer.Navigator>
   );
-}
+};
+
+export default AppNavigator;
 
 // ========== STYLES ==========
 const styles = StyleSheet.create({
+  drawerRoot: {
+    flex: 1,
+    backgroundColor: "#f8fafc",
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -845,6 +951,10 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "#10b981",
   },
+  headerTextContainer: {
+    marginLeft: 14,
+    flex: 1,
+  },
   name: {
     color: "#ffffff",
     fontWeight: "800",
@@ -862,9 +972,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
   },
+  menuContainer: {
+    flex: 1,
+    position: "relative",
+  },
   menu: {
     flex: 1,
     paddingTop: 12,
+  },
+  menuContent: {
+    paddingBottom: 20,
+  },
+  menuBottomSpacer: {
+    height: 20,
   },
   scrollIndicator: {
     position: "absolute",
@@ -1014,10 +1134,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#f8fafc",
   },
+  loadingCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+    shadowColor: "#10b981",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
   loadingText: {
     marginTop: 12,
     fontSize: 14,
     color: "#64748b",
+    fontWeight: "600",
   },
   placeholderContainer: {
     flex: 1,

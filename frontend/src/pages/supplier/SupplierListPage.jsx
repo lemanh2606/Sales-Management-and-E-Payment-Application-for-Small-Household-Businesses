@@ -403,7 +403,7 @@ export default function SupplierListPage() {
     <Layout>
       {contextHolder}
 
-      <div style={{ padding: isMobile ? 12 : 24, background: "#f0f2f5", minHeight: "100vh" }}>
+      <div style={{ padding: isMobile ? 12 : 2, background: "#ffffff", minHeight: "100vh" }}>
         <Card style={{ borderRadius: 16, boxShadow: "0 4px 20px rgba(0,0,0,0.08)", marginBottom: 24 }}>
           {/* Header */}
           <div style={{ marginBottom: 24 }}>

@@ -19,10 +19,10 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
-import Constants from "expo-constants";
+import apiClient from "../../api/apiClient"; // 🚀 IMPORT APICLIENT
 import * as ImagePicker from "expo-image-picker";
 import type { ImagePickerResult } from "expo-image-picker";
+import { LinearGradient } from "expo-linear-gradient";
 
 // ========== TYPES ==========
 interface OpeningHours {
@@ -67,19 +67,6 @@ interface InputFieldProps {
   multiline?: boolean;
   maxLength?: number;
 }
-
-// ========== API UTILS ==========
-function getDevHost(): string {
-  const hostUri = (Constants as any).expoConfig?.hostUri;
-  if (hostUri) return hostUri.split(":")[0];
-  const manifest = (Constants as any).manifest;
-  const debuggerHost = manifest?.debuggerHost;
-  if (debuggerHost) return debuggerHost.split(":")[0];
-  return "localhost";
-}
-
-const API_PORT = 9999;
-const getApiUrl = (): string => `http://${getDevHost()}:${API_PORT}/api`;
 
 // ========== SUB-COMPONENTS ==========
 const InputField: React.FC<InputFieldProps> = ({
@@ -172,6 +159,7 @@ const ToggleSection: React.FC<{
       onValueChange={onValueChange}
       trackColor={{ false: "#e5e7eb", true: "#10b981" }}
       thumbColor={value ? "#fff" : "#f3f4f6"}
+      ios_backgroundColor="#e5e7eb"
     />
   </View>
 );
@@ -210,7 +198,6 @@ const StoreSettingsScreen: React.FC = () => {
 
   const fetchStore = async (): Promise<void> => {
     try {
-      const token = await AsyncStorage.getItem("token");
       const storeStr = await AsyncStorage.getItem("currentStore");
       const currentStore = storeStr ? JSON.parse(storeStr) : null;
       const storeId = currentStore?._id;
@@ -221,13 +208,8 @@ const StoreSettingsScreen: React.FC = () => {
         return;
       }
 
-      const res = await axios.get<StoreResponse>(
-        `${getApiUrl()}/stores/${storeId}`,
-        {
-          headers: { Authorization: token ? `Bearer ${token}` : "" },
-          timeout: 15000,
-        }
-      );
+      // 🚀 SỬ DỤNG APICLIENT
+      const res = await apiClient.get<StoreResponse>(`/stores/${storeId}`);
 
       const data = res.data?.store || res.data;
       setStore({
@@ -245,8 +227,7 @@ const StoreSettingsScreen: React.FC = () => {
         isActive: data.isActive !== undefined ? data.isActive : true,
       });
     } catch (error) {
-      const axiosError = error as any;
-      console.error("Fetch store error:", axiosError?.message || error);
+      console.error("❌ Fetch store error:", error);
       Alert.alert("Lỗi", "Không thể tải thông tin cửa hàng");
     } finally {
       setLoading(false);
@@ -297,7 +278,6 @@ const StoreSettingsScreen: React.FC = () => {
 
     setSaving(true);
     try {
-      const token = await AsyncStorage.getItem("token");
       const storeStr = await AsyncStorage.getItem("currentStore");
       const currentStore = storeStr ? JSON.parse(storeStr) : null;
       const storeId = currentStore?._id;
@@ -319,20 +299,21 @@ const StoreSettingsScreen: React.FC = () => {
         isActive: store.isActive,
       };
 
-      await axios.put(`${getApiUrl()}/stores/${storeId}`, payload, {
-        headers: { Authorization: token ? `Bearer ${token}` : "" },
-        timeout: 15000,
-      });
+      // 🚀 SỬ DỤNG APICLIENT
+      await apiClient.put(`/stores/${storeId}`, payload);
 
       // Update localStorage
       const updatedStore = { ...currentStore, ...payload };
       await AsyncStorage.setItem("currentStore", JSON.stringify(updatedStore));
 
-      Alert.alert("Thành công", "Cập nhật thông tin cửa hàng thành công");
-      await fetchStore();
+      Alert.alert("Thành công", "Cập nhật thông tin cửa hàng thành công", [
+        {
+          text: "OK",
+          onPress: () => fetchStore(),
+        },
+      ]);
     } catch (error) {
-      const axiosError = error as any;
-      console.error("Save store error:", axiosError?.message || error);
+      console.error("❌ Save store error:", error);
       Alert.alert("Lỗi", "Không thể lưu thông tin cửa hàng");
     } finally {
       setSaving(false);
@@ -377,6 +358,7 @@ const StoreSettingsScreen: React.FC = () => {
                 activeSection === tab.id && styles.navTabActive,
               ]}
               onPress={() => setActiveSection(tab.id)}
+              activeOpacity={0.7}
             >
               <Ionicons
                 name={tab.icon as any}
@@ -515,6 +497,13 @@ const StoreSettingsScreen: React.FC = () => {
           </View>
         </View>
       )}
+
+      <View style={styles.infoCard}>
+        <Ionicons name="information-circle" size={20} color="#3b82f6" />
+        <Text style={styles.infoText}>
+          Thời gian mở cửa sẽ được hiển thị cho khách hàng khi tìm kiếm cửa hàng
+        </Text>
+      </View>
     </View>
   );
 
@@ -529,7 +518,7 @@ const StoreSettingsScreen: React.FC = () => {
 
       <View style={styles.timeRow}>
         <View style={styles.timeInputContainer}>
-          <Text style={styles.label}>Vĩ độ</Text>
+          <Text style={styles.label}>Vĩ độ (Latitude)</Text>
           <View style={styles.inputWrapper}>
             <Ionicons
               name="location-outline"
@@ -557,7 +546,7 @@ const StoreSettingsScreen: React.FC = () => {
         </View>
 
         <View style={styles.timeInputContainer}>
-          <Text style={styles.label}>Kinh độ</Text>
+          <Text style={styles.label}>Kinh độ (Longitude)</Text>
           <View style={styles.inputWrapper}>
             <Ionicons
               name="location-outline"
@@ -585,11 +574,28 @@ const StoreSettingsScreen: React.FC = () => {
         </View>
       </View>
 
-      {store.location.lat && store.location.lng && (
-        <TouchableOpacity style={styles.mapButton} onPress={handleOpenMap}>
-          <Ionicons name="map" size={20} color="#3b82f6" />
-          <Text style={styles.mapButtonText}>Xem trên bản đồ</Text>
+      {store.location.lat && store.location.lng ? (
+        <TouchableOpacity
+          style={styles.mapButton}
+          onPress={handleOpenMap}
+          activeOpacity={0.8}
+        >
+          <LinearGradient
+            colors={["#3b82f6", "#2563eb"]}
+            style={styles.mapButtonGradient}
+          >
+            <Ionicons name="map" size={20} color="#fff" />
+            <Text style={styles.mapButtonText}>Xem trên Google Maps</Text>
+          </LinearGradient>
         </TouchableOpacity>
+      ) : (
+        <View style={styles.infoCard}>
+          <Ionicons name="help-circle" size={20} color="#6b7280" />
+          <Text style={styles.infoText}>
+            Nhập tọa độ địa lý để khách hàng có thể tìm đường đến cửa hàng của
+            bạn
+          </Text>
+        </View>
       )}
     </View>
   );
@@ -608,27 +614,63 @@ const StoreSettingsScreen: React.FC = () => {
         value={store.isActive}
         onValueChange={(value) => setStore({ ...store, isActive: value })}
         icon="power"
-        iconColor="#10b981"
+        iconColor={store.isActive ? "#10b981" : "#ef4444"}
       />
 
-      <View style={styles.settingNote}>
-        <Ionicons name="information-circle" size={18} color="#6b7280" />
+      <View
+        style={[
+          styles.settingNote,
+          store.isActive
+            ? styles.settingNoteActive
+            : styles.settingNoteInactive,
+        ]}
+      >
+        <Ionicons
+          name={store.isActive ? "checkmark-circle" : "close-circle"}
+          size={20}
+          color={store.isActive ? "#10b981" : "#ef4444"}
+        />
         <Text style={styles.settingNoteText}>
           {store.isActive
-            ? "Cửa hàng đang hiển thị với khách hàng"
-            : "Cửa hàng tạm thời ẩn với khách hàng"}
+            ? "✅ Cửa hàng đang hiển thị và khách hàng có thể đặt hàng"
+            : "⚠️ Cửa hàng tạm thời ẩn, khách hàng không thể đặt hàng"}
         </Text>
       </View>
+
+      {store.createdAt && (
+        <View style={styles.metadataCard}>
+          <View style={styles.metadataRow}>
+            <Ionicons name="calendar-outline" size={16} color="#6b7280" />
+            <Text style={styles.metadataLabel}>Ngày tạo:</Text>
+            <Text style={styles.metadataValue}>
+              {new Date(store.createdAt).toLocaleDateString("vi-VN")}
+            </Text>
+          </View>
+          {store.updatedAt && (
+            <View style={styles.metadataRow}>
+              <Ionicons name="time-outline" size={16} color="#6b7280" />
+              <Text style={styles.metadataLabel}>Cập nhật lần cuối:</Text>
+              <Text style={styles.metadataValue}>
+                {new Date(store.updatedAt).toLocaleDateString("vi-VN")}
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
     </View>
   );
 
   if (loading) {
     return (
       <View style={styles.center}>
-        <View style={styles.loadingCircle}>
-          <ActivityIndicator size="large" color="#10b981" />
-        </View>
+        <LinearGradient
+          colors={["#10b981", "#059669"]}
+          style={styles.loadingCircle}
+        >
+          <ActivityIndicator size="large" color="#fff" />
+        </LinearGradient>
         <Text style={styles.loadingText}>Đang tải thông tin cửa hàng...</Text>
+        <Text style={styles.loadingSubtext}>Vui lòng chờ trong giây lát</Text>
       </View>
     );
   }
@@ -637,6 +679,7 @@ const StoreSettingsScreen: React.FC = () => {
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
     >
       <ScrollView
         style={styles.container}
@@ -652,7 +695,7 @@ const StoreSettingsScreen: React.FC = () => {
       >
         <Animated.View style={{ opacity: fadeAnim }}>
           {/* Header Section */}
-          <View style={styles.header}>
+          <LinearGradient colors={["#10b981", "#059669"]} style={styles.header}>
             <View style={styles.avatarSection}>
               <TouchableOpacity onPress={handlePickImage} activeOpacity={0.8}>
                 <View style={styles.avatarWrapper}>
@@ -663,12 +706,15 @@ const StoreSettingsScreen: React.FC = () => {
                     />
                   ) : (
                     <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                      <Ionicons name="storefront" size={48} color="#d1fae5" />
+                      <Ionicons name="storefront" size={48} color="#10b981" />
                     </View>
                   )}
-                  <View style={styles.cameraBtn}>
+                  <LinearGradient
+                    colors={["#3b82f6", "#2563eb"]}
+                    style={styles.cameraBtn}
+                  >
                     <Ionicons name="camera" size={18} color="#fff" />
-                  </View>
+                  </LinearGradient>
                 </View>
               </TouchableOpacity>
               <View style={styles.storeInfo}>
@@ -680,7 +726,7 @@ const StoreSettingsScreen: React.FC = () => {
                     style={[
                       styles.statusDot,
                       {
-                        backgroundColor: store.isActive ? "#10b981" : "#6b7280",
+                        backgroundColor: store.isActive ? "#10b981" : "#ef4444",
                       },
                     ]}
                   />
@@ -690,7 +736,7 @@ const StoreSettingsScreen: React.FC = () => {
                 </View>
               </View>
             </View>
-          </View>
+          </LinearGradient>
 
           {/* Navigation Tabs */}
           <NavigationTabs />
@@ -708,7 +754,10 @@ const StoreSettingsScreen: React.FC = () => {
             disabled={saving}
             activeOpacity={0.8}
           >
-            <View style={styles.saveBtnContent}>
+            <LinearGradient
+              colors={saving ? ["#9ca3af", "#6b7280"] : ["#10b981", "#059669"]}
+              style={styles.saveBtnGradient}
+            >
               {saving ? (
                 <ActivityIndicator color="#fff" size="small" />
               ) : (
@@ -717,7 +766,7 @@ const StoreSettingsScreen: React.FC = () => {
                   <Text style={styles.saveBtnText}>Lưu thay đổi</Text>
                 </>
               )}
-            </View>
+            </LinearGradient>
           </TouchableOpacity>
 
           <View style={{ height: 30 }} />
@@ -745,28 +794,37 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: "#ecfdf5",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 16,
     shadowColor: "#10b981",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.3,
     shadowRadius: 12,
-    elevation: 6,
+    elevation: 8,
   },
   loadingText: {
-    fontSize: 15,
-    color: "#64748b",
-    fontWeight: "600",
+    fontSize: 16,
+    color: "#1f2937",
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  loadingSubtext: {
+    fontSize: 14,
+    color: "#6b7280",
+    fontWeight: "500",
   },
   header: {
-    backgroundColor: "#fff",
     paddingHorizontal: 20,
-    paddingTop: 24,
-    paddingBottom: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9",
+    paddingTop: 60,
+    paddingBottom: 24,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
   },
   avatarSection: {
     flexDirection: "row",
@@ -777,14 +835,14 @@ const styles = StyleSheet.create({
     marginRight: 16,
   },
   avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 16,
-    borderWidth: 3,
-    borderColor: "#f1f5f9",
+    width: 90,
+    height: 90,
+    borderRadius: 20,
+    borderWidth: 4,
+    borderColor: "#fff",
   },
   avatarPlaceholder: {
-    backgroundColor: "#e2e8f0",
+    backgroundColor: "#fff",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -792,33 +850,32 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: -4,
     right: -4,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#10b981",
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 3,
     borderColor: "#fff",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.2,
     shadowRadius: 4,
-    elevation: 3,
+    elevation: 4,
   },
   storeInfo: {
     flex: 1,
   },
   storeName: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#1e293b",
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#fff",
     marginBottom: 8,
   },
   statusBadge: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f8fafc",
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
@@ -831,9 +888,9 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   statusText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "600",
-    color: "#475569",
+    color: "#fff",
   },
   navContainer: {
     backgroundColor: "#fff",
@@ -849,7 +906,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 10,
     marginRight: 8,
     borderRadius: 20,
     backgroundColor: "#f8fafc",
@@ -876,10 +933,10 @@ const styles = StyleSheet.create({
     padding: 20,
     borderRadius: 16,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
-    elevation: 2,
+    elevation: 3,
     borderWidth: 1,
     borderColor: "#f1f5f9",
   },
@@ -889,8 +946,8 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   sectionIconCircle: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
@@ -900,7 +957,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "700",
     color: "#1e293b",
     marginBottom: 4,
@@ -908,7 +965,7 @@ const styles = StyleSheet.create({
   sectionSubtitle: {
     fontSize: 13,
     color: "#64748b",
-    lineHeight: 16,
+    lineHeight: 18,
   },
   inputContainer: {
     marginBottom: 20,
@@ -980,8 +1037,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   toggleIconCircle: {
-    width: 36,
-    height: 36,
+    width: 40,
+    height: 40,
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
@@ -994,36 +1051,89 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   mapButton: {
+    marginTop: 12,
+    borderRadius: 12,
+    overflow: "hidden",
+    shadowColor: "#3b82f6",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  mapButtonGradient: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f0f9ff",
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e0f2fe",
-    marginTop: 8,
+    paddingVertical: 14,
     gap: 8,
   },
   mapButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#0ea5e9",
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#fff",
+  },
+  infoCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: "#f0f9ff",
+    padding: 12,
+    borderRadius: 12,
+    marginTop: 12,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: "#e0f2fe",
+  },
+  infoText: {
+    flex: 1,
+    fontSize: 13,
+    color: "#475569",
+    lineHeight: 18,
   },
   settingNote: {
     flexDirection: "row",
     alignItems: "flex-start",
-    backgroundColor: "#f8fafc",
-    padding: 12,
-    borderRadius: 8,
+    padding: 14,
+    borderRadius: 12,
     marginTop: 8,
-    gap: 8,
+    gap: 10,
+    borderWidth: 1,
+  },
+  settingNoteActive: {
+    backgroundColor: "#ecfdf5",
+    borderColor: "#d1fae5",
+  },
+  settingNoteInactive: {
+    backgroundColor: "#fef2f2",
+    borderColor: "#fecaca",
   },
   settingNoteText: {
     flex: 1,
     fontSize: 13,
-    color: "#64748b",
-    lineHeight: 16,
+    color: "#374151",
+    fontWeight: "500",
+    lineHeight: 18,
+  },
+  metadataCard: {
+    backgroundColor: "#f8fafc",
+    padding: 12,
+    borderRadius: 10,
+    marginTop: 16,
+    gap: 8,
+  },
+  metadataRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  metadataLabel: {
+    fontSize: 13,
+    color: "#6b7280",
+    fontWeight: "500",
+  },
+  metadataValue: {
+    fontSize: 13,
+    color: "#1e293b",
+    fontWeight: "600",
   },
   saveBtn: {
     marginHorizontal: 16,
@@ -1039,11 +1149,10 @@ const styles = StyleSheet.create({
   saveBtnDisabled: {
     opacity: 0.6,
   },
-  saveBtnContent: {
+  saveBtnGradient: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#10b981",
     paddingVertical: 16,
     gap: 10,
   },

@@ -14,11 +14,10 @@ import {
   Animated,
 } from "react-native";
 import { useAuth } from "../../context/AuthContext";
-import axios from "axios";
+import apiClient from "../../api/apiClient"; // 🚀 IMPORT APICLIENT
 import dayjs from "dayjs";
 import { LineChart, BarChart, PieChart } from "react-native-chart-kit";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import Constants from "expo-constants";
 import { LinearGradient } from "expo-linear-gradient";
 
 const { width, height } = Dimensions.get("window");
@@ -66,21 +65,6 @@ interface CategoryDistribution {
   legendFontColor: string;
   legendFontSize: number;
 }
-
-// ==================== API UTILS ====================
-function getDevHost(): string {
-  const hostUri = (Constants as any).expoConfig?.hostUri;
-  if (hostUri) return hostUri.split(":")[0];
-
-  const manifest = (Constants as any).manifest;
-  const debuggerHost = manifest?.debuggerHost;
-  if (debuggerHost) return debuggerHost.split(":")[0];
-
-  return "localhost";
-}
-
-const API_PORT = 9999;
-const getApiUrl = (): string => `http://${getDevHost()}:${API_PORT}/api`;
 
 // ==================== SUB-COMPONENTS ====================
 const StatCard: React.FC<{
@@ -147,7 +131,7 @@ const MetricProgress: React.FC<{
         </Text>
       </View>
       <View style={styles.progressBar}>
-        <View
+        <Animated.View
           style={[
             styles.progressFill,
             {
@@ -210,7 +194,7 @@ export default function DashboardScreen() {
         setStoreId(store._id);
       }
     } catch (error) {
-      console.error("Load store error:", error);
+      console.error("❌ Load store error:", error);
     }
   };
 
@@ -246,19 +230,11 @@ export default function DashboardScreen() {
         }),
       ]).start();
     } catch (error) {
-      console.error("Fetch data error:", error);
+      console.error("❌ Fetch data error:", error);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
-
-  // ==================== GET TOKEN ====================
-  const getAuthHeaders = async () => {
-    const token = await AsyncStorage.getItem("token");
-    return {
-      Authorization: token ? `Bearer ${token}` : "",
-    };
   };
 
   // ==================== FETCH ORDER STATS ====================
@@ -267,12 +243,9 @@ export default function DashboardScreen() {
 
     try {
       const year = dayjs().format("YYYY");
-      const headers = await getAuthHeaders();
 
-      const res = await axios.get(`${getApiUrl()}/orders/stats`, {
+      const res = await apiClient.get("/orders/stats", {
         params: { storeId, periodType: "year", periodKey: year },
-        headers,
-        timeout: 15000,
       });
 
       const { total, pending, refunded, paid, netSoldItems } =
@@ -282,7 +255,7 @@ export default function DashboardScreen() {
         };
       setOrderStats({ total, pending, refunded, paid, netSoldItems });
     } catch (error: any) {
-      console.error("Order stats error:", error?.message || error);
+      console.error("❌ Order stats error:", error?.message || error);
     }
   };
 
@@ -292,18 +265,15 @@ export default function DashboardScreen() {
 
     try {
       const year = dayjs().format("YYYY");
-      const headers = await getAuthHeaders();
 
-      const res = await axios.get(`${getApiUrl()}/financials`, {
+      const res = await apiClient.get("/financials", {
         params: { storeId, periodType: "year", periodKey: year },
-        headers,
-        timeout: 15000,
       });
 
       const data = (res.data as { data: FinancialData }).data;
       setFinancials(data);
     } catch (error: any) {
-      console.error("Financials error:", error?.message || error);
+      console.error("❌ Financials error:", error?.message || error);
     }
   };
 
@@ -312,18 +282,14 @@ export default function DashboardScreen() {
     if (!storeId) return;
 
     try {
-      const headers = await getAuthHeaders();
-
-      const res = await axios.get(`${getApiUrl()}/orders/top-products`, {
+      const res = await apiClient.get("/orders/top-products", {
         params: { storeId, range: "thisMonth", limit: 5 },
-        headers,
-        timeout: 15000,
       });
 
       const data = (res.data as { data: TopProduct[] }).data;
       setTopProducts(data || []);
     } catch (error: any) {
-      console.error("Top products error:", error?.message || error);
+      console.error("❌ Top products error:", error?.message || error);
     }
   };
 
@@ -333,12 +299,9 @@ export default function DashboardScreen() {
 
     try {
       const periodKey = dayjs().format("YYYY-MM");
-      const headers = await getAuthHeaders();
 
-      const res = await axios.get(`${getApiUrl()}/revenues`, {
+      const res = await apiClient.get("/revenues", {
         params: { storeId, periodType: "month", periodKey },
-        headers,
-        timeout: 15000,
       });
 
       const data = (res.data as RevenueResponse).revenue || {};
@@ -355,7 +318,7 @@ export default function DashboardScreen() {
       });
       setRevenueData(fakeDaily);
     } catch (error: any) {
-      console.error("Revenue chart error:", error?.message || error);
+      console.error("❌ Revenue chart error:", error?.message || error);
     }
   };
 
@@ -505,7 +468,10 @@ export default function DashboardScreen() {
     labels: revenueData.slice(-7).map((_, i) => `T${i + 1}`),
     datasets: [
       {
-        data: revenueData.slice(-7),
+        data:
+          revenueData.slice(-7).length > 0
+            ? revenueData.slice(-7)
+            : [0, 0, 0, 0, 0, 0, 0],
       },
     ],
   };
@@ -521,6 +487,7 @@ export default function DashboardScreen() {
           <ActivityIndicator size="large" color="#fff" />
         </LinearGradient>
         <Text style={styles.loadingText}>Đang tải dữ liệu dashboard...</Text>
+        <Text style={styles.loadingSubtext}>Vui lòng chờ trong giây lát</Text>
       </View>
     );
   }
@@ -568,6 +535,7 @@ export default function DashboardScreen() {
                 key={tab.id}
                 style={[styles.tab, activeTab === tab.id && styles.tabActive]}
                 onPress={() => setActiveTab(tab.id as any)}
+                activeOpacity={0.8}
               >
                 <Text style={styles.tabIcon}>{tab.icon}</Text>
                 <Text
@@ -656,7 +624,7 @@ export default function DashboardScreen() {
 
               {/* Performance Metrics */}
               <View style={[styles.metricsCard, styles.cardShadow]}>
-                <Text style={styles.sectionTitle}>Chỉ số hiệu suất</Text>
+                <Text style={styles.sectionTitle}>📊 Chỉ số hiệu suất</Text>
                 <MetricProgress
                   label="Mục tiêu doanh thu"
                   value={totalRevenueOfMonth}
@@ -684,13 +652,13 @@ export default function DashboardScreen() {
               <View style={[styles.chartCard, styles.cardShadow]}>
                 <View style={styles.chartHeader}>
                   <Text style={styles.chartTitle}>
-                    Doanh thu 7 ngày gần nhất
+                    📈 Doanh thu 7 ngày gần nhất
                   </Text>
                   <View style={styles.chartLegend}>
                     <View
                       style={[styles.legendDot, { backgroundColor: "#3b82f6" }]}
                     />
-                    <Text style={styles.legendText}>Doanh thu hàng ngày</Text>
+                    <Text style={styles.legendText}>Doanh thu</Text>
                   </View>
                 </View>
                 <BarChart
@@ -700,20 +668,23 @@ export default function DashboardScreen() {
                   chartConfig={{
                     backgroundColor: "#ffffff",
                     backgroundGradientFrom: "#ffffff",
-                    backgroundGradientTo: "#ffffff",
+                    backgroundGradientTo: "#f8fafc",
                     decimalPlaces: 0,
                     color: (opacity = 1) => `rgba(59, 130, 246, ${opacity})`,
                     labelColor: (opacity = 1) => `rgba(75, 85, 99, ${opacity})`,
-                    barPercentage: 0.6,
+                    barPercentage: 0.7,
                     propsForBackgroundLines: {
                       strokeDasharray: "4 4",
                       stroke: "#e5e7eb",
+                      strokeWidth: 1,
                     },
                   }}
                   yAxisLabel=""
                   yAxisSuffix=""
                   style={styles.chart}
                   showValuesOnTopOfBars
+                  withInnerLines
+                  fromZero
                 />
               </View>
             </>
@@ -724,7 +695,7 @@ export default function DashboardScreen() {
             <>
               <View style={[styles.chartCard, styles.cardShadow]}>
                 <Text style={styles.sectionTitle}>
-                  Phân tích doanh thu theo tuần
+                  📊 Phân tích doanh thu theo tuần
                 </Text>
                 <LineChart
                   data={weeklyRevenueData}
@@ -738,9 +709,10 @@ export default function DashboardScreen() {
                     color: (opacity = 1) => `rgba(139, 92, 246, ${opacity})`,
                     labelColor: (opacity = 1) => `rgba(75, 85, 99, ${opacity})`,
                     propsForDots: {
-                      r: "4",
+                      r: "5",
                       strokeWidth: "2",
                       stroke: "#8b5cf6",
+                      fill: "#ffffff",
                     },
                     propsForBackgroundLines: {
                       strokeDasharray: "4 4",
@@ -749,12 +721,16 @@ export default function DashboardScreen() {
                   }}
                   bezier
                   style={styles.chart}
+                  withInnerLines
+                  withOuterLines
+                  withVerticalLines
+                  withHorizontalLines
                 />
               </View>
 
               <View style={styles.analyticsRow}>
                 <View style={[styles.pieChartCard, styles.cardShadow]}>
-                  <Text style={styles.sectionTitle}>Phân loại sản phẩm</Text>
+                  <Text style={styles.sectionTitle}>🎨 Phân loại sản phẩm</Text>
                   <PieChart
                     data={categoryData}
                     width={width - 48}
@@ -777,13 +753,17 @@ export default function DashboardScreen() {
             <>
               <View style={[styles.productsCard, styles.cardShadow]}>
                 <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>Sản phẩm bán chạy</Text>
+                  <Text style={styles.sectionTitle}>🏆 Sản phẩm bán chạy</Text>
                   <Text style={styles.sectionSubtitle}>Tháng {monthLabel}</Text>
                 </View>
 
                 {topProducts.length > 0 ? (
                   topProducts.map((product, index) => (
-                    <View key={product._id} style={styles.productItem}>
+                    <TouchableOpacity
+                      key={product._id}
+                      style={styles.productItem}
+                      activeOpacity={0.7}
+                    >
                       <View style={styles.productRank}>
                         <LinearGradient
                           colors={
@@ -812,13 +792,16 @@ export default function DashboardScreen() {
                           {formatProductSales(product.totalSales)}
                         </Text>
                       </View>
-                    </View>
+                    </TouchableOpacity>
                   ))
                 ) : (
                   <View style={styles.emptyState}>
                     <Text style={styles.emptyIcon}>📦</Text>
                     <Text style={styles.emptyText}>
                       Chưa có dữ liệu sản phẩm
+                    </Text>
+                    <Text style={styles.emptySubtext}>
+                      Dữ liệu sẽ được cập nhật khi có đơn hàng mới
                     </Text>
                   </View>
                 )}
@@ -886,8 +869,14 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 16,
+    color: "#1f2937",
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  loadingSubtext: {
+    fontSize: 14,
     color: "#6b7280",
-    fontWeight: "600",
+    fontWeight: "500",
   },
   header: {
     paddingTop: 60,
@@ -970,7 +959,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   tabActive: {
-    backgroundColor: "rgba(255,255,255,0.2)",
+    backgroundColor: "rgba(255,255,255,0.25)",
   },
   tabIcon: {
     fontSize: 16,
@@ -1002,6 +991,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 5,
+    backgroundColor: "#ffffff",
   },
   statHeader: {
     flexDirection: "row",
@@ -1096,14 +1086,14 @@ const styles = StyleSheet.create({
     color: "#1f2937",
   },
   progressBar: {
-    height: 6,
+    height: 8,
     backgroundColor: "#e5e7eb",
-    borderRadius: 3,
+    borderRadius: 4,
     overflow: "hidden",
   },
   progressFill: {
     height: "100%",
-    borderRadius: 3,
+    borderRadius: 4,
   },
   progressText: {
     fontSize: 11,
@@ -1124,7 +1114,7 @@ const styles = StyleSheet.create({
   },
   chartTitle: {
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "700",
     color: "#1f2937",
   },
   chartLegend: {
@@ -1140,6 +1130,7 @@ const styles = StyleSheet.create({
   legendText: {
     fontSize: 12,
     color: "#6b7280",
+    fontWeight: "500",
   },
   chart: {
     borderRadius: 12,
@@ -1169,14 +1160,19 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   rankBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   rankText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "800",
     color: "#ffffff",
   },
@@ -1204,7 +1200,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   productRevenue: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: "#059669",
   },
@@ -1217,7 +1213,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   emptyText: {
-    fontSize: 14,
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#374151",
+    marginBottom: 4,
+  },
+  emptySubtext: {
+    fontSize: 13,
     color: "#6b7280",
     textAlign: "center",
   },
@@ -1226,7 +1228,7 @@ const styles = StyleSheet.create({
     bottom: 24,
     right: 24,
     borderRadius: 25,
-    shadowColor: "#000",
+    shadowColor: "#667eea",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,

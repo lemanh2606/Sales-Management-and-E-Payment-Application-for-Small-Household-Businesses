@@ -249,14 +249,14 @@ const InformationStore: React.FC = () => {
       <div
         style={{
           minHeight: "100vh",
-          background: COLORS.offWhite,
+          background: COLORS.white,
         }}
       >
         <div
           style={{
-            maxWidth: 1400,
+            maxWidth: "auto",
             margin: "0 auto",
-            padding: 24,
+            padding: 2,
           }}
         >
           {/* HEADER */}

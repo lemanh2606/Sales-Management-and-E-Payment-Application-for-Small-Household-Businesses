@@ -309,44 +309,55 @@ const ensureStore = async (req, res) => {
 
     if (!user) return res.status(404).json({ message: "User không tìm thấy" });
 
-    // Lấy tất cả store owner
-    const stores = await Store.find({ owner_id: userId }).sort({
-      createdAt: -1,
-    });
+    let stores = [];
 
-    // Nếu manager chưa có store -> tạo default
-    if (user.role === "MANAGER" && (!stores || stores.length === 0)) {
-      const defaultStore = new Store({
-        name: `My Store - ${user.username}`,
-        address: "",
-        phone: user.phone || "",
-        owner_id: user._id,
-        isDefault: true,
-      });
-      await defaultStore.save();
+    if (user.role === "MANAGER") {
+      stores = await Store.find({ owner_id: userId, deleted: false }).sort({ createdAt: -1 });
 
-      user.stores = user.stores || [];
-      user.stores.push(defaultStore._id);
-      user.current_store = defaultStore._id;
-      user.store_roles = user.store_roles || [];
-      user.store_roles.push({ store: defaultStore._id, role: "OWNER" });
-      await user.save();
+      if (!stores || stores.length === 0) {
+        const defaultStore = new Store({
+          name: `My Store - ${user.username}`,
+          address: "",
+          phone: user.phone || "",
+          owner_id: user._id,
+          isDefault: true,
+        });
+        await defaultStore.save();
 
-      return res.status(201).json({ created: true, store: defaultStore });
+        user.stores = user.stores || [];
+        user.stores.push(defaultStore._id);
+        user.current_store = defaultStore._id;
+        user.store_roles = user.store_roles || [];
+        user.store_roles.push({ store: defaultStore._id, role: "OWNER" });
+        await user.save();
+
+        return res.status(201).json({ created: true, store: defaultStore });
+      }
+    } else {
+      const assignedStoreIds = (user.store_roles || [])
+        .filter((entry) => entry?.store)
+        .map((entry) => entry.store);
+
+      if (!assignedStoreIds.length) {
+        return res.status(403).json({ message: "Bạn chưa được phân vào cửa hàng nào" });
+      }
+
+      stores = await Store.find({ _id: { $in: assignedStoreIds }, deleted: false }).sort({ createdAt: -1 });
+
+      if (!stores.length) {
+        return res.status(404).json({ message: "Không tìm thấy cửa hàng được phân công" });
+      }
     }
 
-    // Nếu user đã có store nhưng chưa chọn current_store -> gán store đầu tiên
     let currentStore = null;
-    if (!user.current_store && stores.length > 0) {
+    if (user.current_store) {
+      currentStore = stores.find((store) => String(store._id) === String(user.current_store));
+    }
+
+    if (!currentStore && stores.length > 0) {
       currentStore = stores[0];
       user.current_store = currentStore._id;
       await user.save();
-      return res.json({ created: false, stores, currentStore });
-    }
-
-    // Nếu đã có current_store -> trả về nó
-    if (user.current_store) {
-      currentStore = await Store.findById(user.current_store);
     }
 
     return res.json({ created: false, stores, currentStore });
