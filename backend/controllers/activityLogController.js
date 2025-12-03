@@ -25,16 +25,17 @@ const getActivityLogs = async (req, res) => {
       storeId,
     } = req.query;
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    console.log("QUERY PARAMS:", req.query); // ← THÊM DÒNG NÀY
-    console.log("MATCH OBJECT:", { action, entity, storeId }); // ← THÊM DÒNG NÀY
+    const currentPage = parseInt(page);
+    const pageSize = parseInt(limit);
+    const skip = (currentPage - 1) * pageSize;
+
+    console.log("QUERY PARAMS:", req.query);
+    console.log("MATCH OBJECT:", { action, entity, storeId });
 
     const match = {};
 
     // 🔥 FIX LOGIN AUTH LOGIC – ƯU TIÊN HÀNG ĐẦU
     if (action === "auth" && entity === "Store") {
-      delete match.store; // ❗ Đảm bảo không bị ảnh hưởng bởi store filter khác
-      delete match.entityId; // ❗ FE không gửi entityId → tránh match nhầm
       match.action = "auth";
       match.entity = "Store";
 
@@ -67,7 +68,6 @@ const getActivityLogs = async (req, res) => {
       end.setHours(23, 59, 59, 999);
 
       match.createdAt = {
-        ...(match.createdAt || {}),
         $gte: start,
         $lte: end,
       };
@@ -75,73 +75,108 @@ const getActivityLogs = async (req, res) => {
 
     // 🔥 KEYWORD KHÔNG ĐƯỢC GHI ĐÈ OR
     if (keyword) {
-      const keywordOr = [
+      const keywordConditions = [
         { description: { $regex: keyword, $options: "i" } },
         { entityName: { $regex: keyword, $options: "i" } },
         { userName: { $regex: keyword, $options: "i" } },
       ];
 
-      if (match.$or) match.$or = [...match.$or, ...keywordOr];
-      else match.$or = keywordOr;
+      if (match.$or) {
+        // Kết hợp $or hiện tại với keyword search bằng $and
+        match.$and = [{ $or: match.$or }, { $or: keywordConditions }];
+        delete match.$or;
+      } else {
+        match.$or = keywordConditions;
+      }
     }
 
+    // 🚀 TỐI ƯU: Dùng $facet để chạy count và data song song
     const pipeline = [
       { $match: match },
-      { $sort: { createdAt: sort === "-createdAt" ? -1 : 1 } },
-      { $skip: skip },
-      { $limit: parseInt(limit) },
+      {
+        $facet: {
+          // Đếm tổng số (không cần lookup ở đây)
+          metadata: [{ $count: "total" }],
 
-      {
-        $lookup: {
-          from: "users",
-          localField: "user",
-          foreignField: "_id",
-          as: "userDetail",
-          pipeline: [{ $project: { fullname: 1, email: 1, role: 1, image: 1 } }],
-        },
-      },
-      {
-        $lookup: {
-          from: "stores",
-          localField: "store",
-          foreignField: "_id",
-          as: "storeDetail",
-          pipeline: [{ $project: { name: 1 } }],
-        },
-      },
-      { $unwind: { path: "$userDetail", preserveNullAndEmptyArrays: true } },
-      { $unwind: { path: "$storeDetail", preserveNullAndEmptyArrays: true } },
+          // Lấy data với pagination
+          data: [
+            { $sort: { createdAt: sort === "-createdAt" ? -1 : 1 } },
+            { $skip: skip },
+            { $limit: pageSize },
 
-      {
-        $project: {
-          _id: 1,
-          userName: 1,
-          userRole: 1,
-          action: 1,
-          entity: 1,
-          entityId: 1,
-          entityName: 1,
-          description: 1,
-          ip: 1,
-          userAgent: 1,
-          createdAt: 1,
-          "userDetail.fullname": 1,
-          "userDetail.image": 1,
-          "userDetail.email": 1,
-          "userDetail.role": 1,
-          "storeDetail.name": 1,
+            // Lookup chỉ cho data cần thiết
+            {
+              $lookup: {
+                from: "users",
+                localField: "user",
+                foreignField: "_id",
+                as: "userDetail",
+                pipeline: [
+                  { $project: { fullname: 1, email: 1, role: 1, image: 1 } },
+                ],
+              },
+            },
+            {
+              $lookup: {
+                from: "stores",
+                localField: "store",
+                foreignField: "_id",
+                as: "storeDetail",
+                pipeline: [{ $project: { name: 1 } }],
+              },
+            },
+            {
+              $unwind: {
+                path: "$userDetail",
+                preserveNullAndEmptyArrays: true,
+              },
+            },
+            {
+              $unwind: {
+                path: "$storeDetail",
+                preserveNullAndEmptyArrays: true,
+              },
+            },
+
+            {
+              $project: {
+                _id: 1,
+                userName: 1,
+                userRole: 1,
+                action: 1,
+                entity: 1,
+                entityId: 1,
+                entityName: 1,
+                description: 1,
+                ip: 1,
+                userAgent: 1,
+                createdAt: 1,
+                "userDetail.fullname": 1,
+                "userDetail.image": 1,
+                "userDetail.email": 1,
+                "userDetail.role": 1,
+                "storeDetail.name": 1,
+              },
+            },
+          ],
         },
       },
     ];
 
-    const totalCount = await ActivityLog.countDocuments(match);
-    const logs = await ActivityLog.aggregate(pipeline);
+    const result = await ActivityLog.aggregate(pipeline);
+
+    const totalCount = result[0]?.metadata[0]?.total || 0;
+    const logs = result[0]?.data || [];
 
     // Thêm phần log login để check xem nhân viên có đi làm không, có dùng máy ở quán không hay gian lận
     const enrichedLogs = logs.map((log) => {
       const isLogin = log.action === "auth" && log.entity === "Store";
-      //“Máy này đang ở trong quán (IP nội bộ) hay là login từ nhà (IP public)”
-      const isStoreIP = log.ip && ["192.168.", "10.0.", "172.16."].some((prefix) => log.ip.startsWith(prefix));
+      //"Máy này đang ở trong quán (IP nội bộ) hay là login từ nhà (IP public)"
+      const isStoreIP =
+        log.ip &&
+        ["192.168.", "10.0.", "172.16."].some((prefix) =>
+          log.ip.startsWith(prefix)
+        );
 
       return {
         ...log,
@@ -158,17 +193,17 @@ const getActivityLogs = async (req, res) => {
       };
     });
 
+    // 📱 Response format tương thích với cả Ant Design Table và React Native FlatList
     res.json({
       success: true,
       message: "Lấy danh sách nhật ký thành công",
-      data: {
-        logs: enrichedLogs, // ← dùng enrichedLogs thay vì logs
-        pagination: {
-          current: parseInt(page),
-          pageSize: parseInt(limit),
-          total: totalCount,
-          totalPages: Math.ceil(totalCount / limit),
-        },
+      data: enrichedLogs, // FlatList dùng trực tiếp
+      pagination: {
+        current: currentPage,
+        pageSize: pageSize,
+        total: totalCount,
+        totalPages: Math.ceil(totalCount / pageSize),
+        hasMore: currentPage * pageSize < totalCount, // Cho infinite scroll
       },
     });
   } catch (err) {
@@ -188,18 +223,32 @@ const getActivityLogDetail = async (req, res) => {
     const { id } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ success: false, message: "ID không hợp lệ" });
+      return res
+        .status(400)
+        .json({ success: false, message: "ID không hợp lệ" });
     }
 
-    const log = await ActivityLog.findById(id).populate("user", "fullName email role").populate("store", "name").lean();
+    const log = await ActivityLog.findById(id)
+      .populate("user", "fullName email role")
+      .populate("store", "name")
+      .lean();
 
     if (!log) {
-      return res.status(404).json({ success: false, message: "Không tìm thấy nhật ký" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Không tìm thấy nhật ký" });
     }
-    res.json({ success: true, message: "Lấy chi tiết nhật ký thành công", data: log });
+
+    res.json({
+      success: true,
+      message: "Lấy chi tiết nhật ký thành công",
+      data: log,
+    });
   } catch (err) {
     console.error("Lỗi getActivityLogDetail:", err);
-    res.status(500).json({ success: false, message: "Lỗi server khi lấy chi tiết" });
+    res
+      .status(500)
+      .json({ success: false, message: "Lỗi server khi lấy chi tiết" });
   }
 };
 
@@ -212,43 +261,77 @@ const getUserActivity = async (req, res) => {
     const { storeId, page = 1, limit = 20, sort = "-createdAt" } = req.query;
 
     if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return res.status(400).json({ success: false, message: "User ID không hợp lệ" });
+      return res
+        .status(400)
+        .json({ success: false, message: "User ID không hợp lệ" });
     }
 
     // Kiểm tra quyền: chỉ manager hoặc chính user đó mới xem được
     if (req.user._id.toString() !== userId && req.user.role !== "MANAGER") {
-      return res.status(403).json({ success: false, message: "Không có quyền xem nhật ký người khác" });
+      return res.status(403).json({
+        success: false,
+        message: "Không có quyền xem nhật ký người khác",
+      });
     }
 
     const match = { user: new mongoose.Types.ObjectId(userId) };
     if (storeId) match.store = new mongoose.Types.ObjectId(storeId);
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    const logs = await ActivityLog.find(match)
-      .populate("store", "name")
-      .sort(sort)
-      .skip(skip)
-      .limit(parseInt(limit))
-      .lean();
+    const currentPage = parseInt(page);
+    const pageSize = parseInt(limit);
+    const skip = (currentPage - 1) * pageSize;
 
-    const total = await ActivityLog.countDocuments(match);
+    // 🚀 Dùng $facet để tối ưu
+    const pipeline = [
+      { $match: match },
+      {
+        $facet: {
+          metadata: [{ $count: "total" }],
+          data: [
+            { $sort: { createdAt: sort === "-createdAt" ? -1 : 1 } },
+            { $skip: skip },
+            { $limit: pageSize },
+            {
+              $lookup: {
+                from: "stores",
+                localField: "store",
+                foreignField: "_id",
+                as: "storeDetail",
+                pipeline: [{ $project: { name: 1 } }],
+              },
+            },
+            {
+              $unwind: {
+                path: "$storeDetail",
+                preserveNullAndEmptyArrays: true,
+              },
+            },
+          ],
+        },
+      },
+    ];
+
+    const result = await ActivityLog.aggregate(pipeline);
+    const total = result[0]?.metadata[0]?.total || 0;
+    const logs = result[0]?.data || [];
 
     res.json({
       success: true,
       message: "Lấy nhật ký user thành công",
-      data: {
-        logs,
-        pagination: {
-          current: parseInt(page),
-          pageSize: parseInt(limit),
-          total,
-          totalPages: Math.ceil(total / limit),
-        },
+      data: logs,
+      pagination: {
+        current: currentPage,
+        pageSize: pageSize,
+        total,
+        totalPages: Math.ceil(total / pageSize),
+        hasMore: currentPage * pageSize < total,
       },
     });
   } catch (err) {
     console.error("Lỗi getUserActivity:", err);
-    res.status(500).json({ success: false, message: "Lỗi server khi lấy nhật ký user" });
+    res
+      .status(500)
+      .json({ success: false, message: "Lỗi server khi lấy nhật ký user" });
   }
 };
 
@@ -268,21 +351,62 @@ const getEntityActivity = async (req, res) => {
     } = req.query;
 
     const filter = { entity };
-    if (storeId) filter.store = storeId;
+    if (storeId) filter.store = new mongoose.Types.ObjectId(storeId);
     if (action) filter.action = action;
-    if (userId) filter.user = userId;
+    if (userId) filter.user = new mongoose.Types.ObjectId(userId);
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const currentPage = parseInt(page);
+    const pageSize = parseInt(limit);
+    const skip = (currentPage - 1) * pageSize;
 
-    const logs = await ActivityLog.find(filter)
-      .populate("user", "fullName email role")
-      .populate("store", "name")
-      .sort(sort)
-      .skip(skip)
-      .limit(parseInt(limit))
-      .lean();
+    // 🚀 Dùng $facet để tối ưu
+    const pipeline = [
+      { $match: filter },
+      {
+        $facet: {
+          metadata: [{ $count: "total" }],
+          data: [
+            { $sort: { createdAt: sort === "-createdAt" ? -1 : 1 } },
+            { $skip: skip },
+            { $limit: pageSize },
+            {
+              $lookup: {
+                from: "users",
+                localField: "user",
+                foreignField: "_id",
+                as: "userDetail",
+                pipeline: [{ $project: { fullName: 1, email: 1, role: 1 } }],
+              },
+            },
+            {
+              $lookup: {
+                from: "stores",
+                localField: "store",
+                foreignField: "_id",
+                as: "storeDetail",
+                pipeline: [{ $project: { name: 1 } }],
+              },
+            },
+            {
+              $unwind: {
+                path: "$userDetail",
+                preserveNullAndEmptyArrays: true,
+              },
+            },
+            {
+              $unwind: {
+                path: "$storeDetail",
+                preserveNullAndEmptyArrays: true,
+              },
+            },
+          ],
+        },
+      },
+    ];
 
-    const total = await ActivityLog.countDocuments(filter);
+    const result = await ActivityLog.aggregate(pipeline);
+    const total = result[0]?.metadata[0]?.total || 0;
+    const logs = result[0]?.data || [];
 
     res.status(200).json({
       success: true,
@@ -290,9 +414,10 @@ const getEntityActivity = async (req, res) => {
       data: logs,
       pagination: {
         total,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        totalPages: Math.ceil(total / limit),
+        current: currentPage,
+        pageSize: pageSize,
+        totalPages: Math.ceil(total / pageSize),
+        hasMore: currentPage * pageSize < total,
       },
     });
   } catch (error) {
@@ -313,8 +438,10 @@ const getActivityStats = async (req, res) => {
     const { dateFrom, dateTo, storeId } = req.query;
 
     const match = {};
-    if (dateFrom) match.createdAt = { ...match.createdAt, $gte: new Date(dateFrom) };
-    if (dateTo) match.createdAt = { ...match.createdAt, $lte: new Date(dateTo) };
+    if (dateFrom)
+      match.createdAt = { ...match.createdAt, $gte: new Date(dateFrom) };
+    if (dateTo)
+      match.createdAt = { ...match.createdAt, $lte: new Date(dateTo) };
     if (storeId) match.store = new mongoose.Types.ObjectId(storeId);
 
     // Thống kê cơ bản
@@ -401,7 +528,9 @@ const getActivityStats = async (req, res) => {
     });
   } catch (err) {
     console.error("Lỗi getActivityStats:", err);
-    res.status(500).json({ success: false, message: "Lỗi server khi lấy thống kê" });
+    res
+      .status(500)
+      .json({ success: false, message: "Lỗi server khi lấy thống kê" });
   }
 };
 
