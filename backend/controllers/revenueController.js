@@ -12,7 +12,7 @@ async function calcRevenueByPeriod({ storeId, periodType, periodKey, type = "tot
   const baseMatch = {
     storeId: new mongoose.Types.ObjectId(storeId),
     status: { $in: ["paid", "partially_refunded"] }, // ← quan trọng: lấy cả 2 loại
-    printDate: { $gte: start, $lte: end },
+    createdAt: { $gte: start, $lte: end },
   };
 
   if (type === "total") {

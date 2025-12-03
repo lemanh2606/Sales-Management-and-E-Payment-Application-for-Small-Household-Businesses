@@ -1,25 +1,34 @@
 // src/pages/report/ReportDashboard.jsx
 import React, { useState, useEffect } from "react";
-import { Card, Col, Row, Select, DatePicker, Statistic, Spin, Alert, Space, InputNumber, Button, Popover } from "antd";
-import { InfoCircleOutlined } from "@ant-design/icons";
 import {
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
+  Card,
+  Col,
+  Row,
+  Select,
+  DatePicker,
+  Statistic,
+  Spin,
+  Alert,
+  Space,
+  InputNumber,
+  Button,
+  Popover,
+  Tag,
+  Table,
+  Typography,
+  Divider,
+  Tooltip as AntTooltip,
+} from "antd";
+import { InfoCircleOutlined, CheckCircleOutlined, WarningOutlined, ClockCircleOutlined, ExclamationCircleOutlined } from "@ant-design/icons";
+import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import axios from "axios";
 import dayjs from "dayjs";
 import localizedFormat from "dayjs/plugin/localizedFormat";
 import quarterOfYear from "dayjs/plugin/quarterOfYear";
 import Layout from "../../components/Layout";
 import "dayjs/locale/vi"; // ✅ LOCALE VI
+
+const { Text } = Typography;
 
 dayjs.locale("vi"); // ✅ SET LOCALE VI
 dayjs.extend(localizedFormat);
@@ -46,6 +55,9 @@ const COLORS = {
   operatingCost: "#fa8c16",
   vat: "#f5222d",
   stockValue: "#13c2c2",
+  totalVAT: "#fa8c16",
+  totalCOGS: "#52c41a",
+  stockValueAtSalePrice: "#e90c77ff",
 };
 
 // helper: trả về màu dựa vào giá trị profit (VND)
@@ -68,6 +80,11 @@ const ReportDashboard = () => {
   const [extraExpenses, setExtraExpenses] = useState([]);
   const [newExpense, setNewExpense] = useState("");
   const [pickerValue, setPickerValue] = useState(null);
+  const [groupPagination, setGroupPagination] = useState({
+    current: 1,
+    pageSize: 10,
+    total: 0,
+  });
 
   // Format tiền tệ việt nam (VND)
   const formatVND = (value) => {
@@ -86,6 +103,7 @@ const ReportDashboard = () => {
       { name: "Doanh thu", value: data.totalRevenue, fill: COLORS.revenue },
       { name: "Lợi nhuận gộp", value: data.grossProfit, fill: COLORS.grossProfit },
       { name: "Chi phí vận hành", value: data.operatingCost, fill: COLORS.operatingCost },
+      { name: "Thuế VAT", value: data.totalVAT, fill: COLORS.totalVAT },
       { name: "Lợi nhuận ròng", value: data.netProfit, fill: COLORS.netProfit },
     ];
   };
@@ -189,9 +207,7 @@ const ReportDashboard = () => {
           <Card style={{ border: "1px solid #8c8c8c" }}>
             <Row gutter={16} align="middle">
               <Col span={6}>
-                <span style={{ color: "#1890ff", fontWeight: "bold", fontSize: "20px" }}>
-                  {currentStore.name || "Đang tải..."}
-                </span>
+                <span style={{ color: "#1890ff", fontWeight: "bold", fontSize: "20px" }}>{currentStore.name || "Đang tải..."}</span>
               </Col>
               <Col span={5}>
                 <label>Kỳ báo cáo:</label>
@@ -227,41 +243,15 @@ const ReportDashboard = () => {
                       lang: {
                         locale: "vi_VN",
                         monthFormat: "MMMM",
-                        shortMonths: [
-                          "Th 1",
-                          "Th 2",
-                          "Th 3",
-                          "Th 4",
-                          "Th 5",
-                          "Th 6",
-                          "Th 7",
-                          "Th 8",
-                          "Th 9",
-                          "Th 10",
-                          "Th 11",
-                          "Th 12",
-                        ],
-                        months: [
-                          "Tháng 1",
-                          "Tháng 2",
-                          "Tháng 3",
-                          "Tháng 4",
-                          "Tháng 5",
-                          "Tháng 6",
-                          "Tháng 7",
-                          "Tháng 8",
-                          "Tháng 9",
-                          "Tháng 10",
-                          "Tháng 11",
-                          "Tháng 12",
-                        ],
+                        shortMonths: ["Th 1", "Th 2", "Th 3", "Th 4", "Th 5", "Th 6", "Th 7", "Th 8", "Th 9", "Th 10", "Th 11", "Th 12"],
+                        months: ["Tháng 1", "Tháng 2", "Tháng 3", "Tháng 4", "Tháng 5", "Tháng 6", "Tháng 7", "Tháng 8", "Tháng 9", "Tháng 10", "Tháng 11", "Tháng 12"],
                       },
                     }}
                   />
                 )}
               </Col>
               <Col span={8}>
-                <label>Chi phí ngoài:{" "}</label>
+                <label>Chi phí ngoài: </label>
                 <Space style={{ marginTop: 8 }}>
                   <InputNumber
                     min={0}
@@ -308,9 +298,7 @@ const ReportDashboard = () => {
                     </span>
                   ))}
                 </div>
-                <small style={{ display: "block", color: "blue", marginBottom: 4 }}>
-                  (Chi phí không nằm trong hệ thống, VD: mặt bằng, điện-nước, marketing,...)
-                </small>
+                <small style={{ display: "block", color: "blue", marginBottom: 4 }}>(Chi phí không nằm trong hệ thống, VD: mặt bằng, điện-nước, marketing,...)</small>
               </Col>
             </Row>
           </Card>
@@ -319,53 +307,92 @@ const ReportDashboard = () => {
           {error && <Alert message="Lỗi" description={error} type="error" showIcon style={{ marginBottom: 16 }} />}
 
           {(!periodType || !periodKey) && !loading && (
-            <Alert
-              message="Vui lòng chọn kỳ báo cáo để xem dữ liệu."
-              type="info"
-              showIcon
-              closable
-              style={{ marginBottom: 16, height: 80 }}
-            />
+            <Alert message="Vui lòng chọn kỳ báo cáo để xem dữ liệu." type="info" showIcon closable style={{ marginBottom: 16, height: 80 }} />
           )}
 
           {!loading && data && (
             <>
               {/* CHỈ SỐ */}
               <Row gutter={[16, 16]}>
-                <Col xs={24} sm={12} lg={6}>
+                <Col flex="1 1 20%">
                   <Card style={{ border: "1px solid #8c8c8c" }}>
                     <Statistic
-                      title="Doanh thu"
+                      title={
+                        <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          Doanh thu
+                          <AntTooltip title="Doanh thu là tổng số tiền thu được từ việc bán hàng (chưa trừ chi phí).">
+                            <InfoCircleOutlined style={{ color: "#178fff", cursor: "pointer" }} />
+                          </AntTooltip>
+                        </span>
+                      }
                       value={data.totalRevenue}
                       formatter={formatVND}
                       valueStyle={{ color: COLORS.revenue }}
                     />
                   </Card>
                 </Col>
-                <Col xs={24} sm={12} lg={6}>
+                <Col flex="1 1 20%">
                   <Card style={{ border: "1px solid #8c8c8c" }}>
                     <Statistic
-                      title="Lợi nhuận gộp"
+                      title={
+                        <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          Lợi nhuận gộp
+                          <AntTooltip title="Lợi nhuận gộp = Doanh thu − Chi phí nhập hàng(COGS).">
+                            <InfoCircleOutlined style={{ color: "#178fff", cursor: "pointer" }} />
+                          </AntTooltip>
+                        </span>
+                      }
                       value={data.grossProfit}
                       formatter={formatVND}
                       valueStyle={{ color: COLORS.grossProfit }}
                     />
                   </Card>
                 </Col>
-                <Col xs={24} sm={12} lg={6}>
+                <Col flex="1 1 20%">
                   <Card style={{ border: "1px solid #8c8c8c" }}>
                     <Statistic
-                      title="Chi phí vận hành"
+                      title={
+                        <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          Chi phí vận hành
+                          <AntTooltip title="Chi phí vận hành bao gồm = lương nhân viên + chi phí duy trì hoạt động bên ngoài được nhập ở ô Chi phí ngoài bên trên.">
+                            <InfoCircleOutlined style={{ color: "#178fff", cursor: "pointer" }} />
+                          </AntTooltip>
+                        </span>
+                      }
                       value={data.operatingCost}
                       formatter={formatVND}
                       valueStyle={{ color: COLORS.operatingCost }}
                     />
                   </Card>
                 </Col>
-                <Col xs={24} sm={12} lg={6}>
+                <Col flex="1 1 20%">
                   <Card style={{ border: "1px solid #8c8c8c" }}>
                     <Statistic
-                      title="Lợi nhuận ròng"
+                      title={
+                        <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          Thuế VAT
+                          <AntTooltip title="Tổng số tiền thuế giá trị gia tăng (VAT) đã thu từ các đơn hàng trong kỳ báo cáo.">
+                            <InfoCircleOutlined style={{ color: "#888", cursor: "pointer" }} />
+                          </AntTooltip>
+                        </span>
+                      }
+                      value={data.totalVAT}
+                      formatter={formatVND}
+                      valueStyle={{ color: "#fa8c16" }}
+                    />
+                  </Card>
+                </Col>
+                <Col flex="1 1 20%">
+                  <Card style={{ border: "1px solid #8c8c8c" }}>
+                    <Statistic
+                      title={
+                        <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          Lợi nhuận ròng
+                          <AntTooltip title="Lợi nhuận ròng = Lợi nhuận gộp − Chi phí vận hành - Thuế VAT. Đây là số tiền thật sự bạn kiếm được.">
+                            <InfoCircleOutlined style={{ color: "#178fff", cursor: "pointer" }} />
+                          </AntTooltip>
+                        </span>
+                      }
                       value={data.netProfit}
                       formatter={formatVND}
                       valueStyle={{ color: data.netProfit > 0 ? COLORS.netProfit : "#f5222d" }}
@@ -374,7 +401,7 @@ const ReportDashboard = () => {
                 </Col>
               </Row>
 
-              {/* BIỂU ĐỒ */}
+              {/* BIỂU ĐỒ CỘT */}
               <Row gutter={[16, 16]}>
                 <Col xs={24} lg={24}>
                   <Card style={{ border: "1px solid #8c8c8c" }} title="Cơ cấu tài chính">
@@ -391,15 +418,17 @@ const ReportDashboard = () => {
                 </Col>
               </Row>
 
+              {/* ========== 2 Biểu đồ tròn ========== */}
               <Row gutter={[16, 16]}>
-                <Col xs={24} lg={24}>
-                  <Card style={{ border: "1px solid #8c8c8c" }} title="Thuế & Tồn kho">
+                {/* BIỂU ĐỒ TRÒN BÊN TRÁI */}
+                <Col xs={24} lg={12}>
+                  <Card style={{ border: "1px solid #8c8c8c" }} title="Doanh thu & Giá trị hàng tồn kho">
                     <ResponsiveContainer width="100%" height={320}>
                       <PieChart>
                         <Pie
                           data={[
-                            { name: "Thuế GTGT", value: data.totalVAT, fill: COLORS.vat },
-                            { name: "Tồn kho", value: data.stockValue, fill: COLORS.stockValue },
+                            { name: "Doanh thu", value: data.totalRevenue, fill: COLORS.totalRevenue },
+                            { name: "Hàng tồn kho", value: data.stockValue, fill: COLORS.stockValue },
                           ]}
                           cx="50%"
                           cy="50%"
@@ -420,94 +449,378 @@ const ReportDashboard = () => {
                         <Tooltip formatter={formatVND} />
                       </PieChart>
                     </ResponsiveContainer>
-
-                    {/* Hiển thị chi tiết giá trị */}
-                    <div style={{ marginTop: 16, fontSize: 13, lineHeight: 1.6 }}>
+                    {/* BOX Ở GIỮA – TỶ LỆ HÀNG TỒN VỚI DOANH THU */}
+                    <div
+                      style={{
+                        marginTop: 10,
+                        padding: "16px 20px",
+                        background: "linear-gradient(120deg, #e6f7ff 0%, #bae7ff 100%)",
+                        borderRadius: 12,
+                        border: "2px dashed #1890ff",
+                        textAlign: "center",
+                      }}
+                    >
+                      <Text strong style={{ fontSize: 14, color: "#1890ff", display: "block" }}>
+                        Tỷ lệ hàng tồn so với doanh thu
+                      </Text>
+                      <Text
+                        style={{
+                          fontSize: 20,
+                          fontWeight: "bold",
+                          color: "#1890ff",
+                          textShadow: "0 2px 4px rgba(24, 144, 255, 0.3)",
+                        }}
+                      >
+                        {data.totalRevenue > 0 ? ((data.stockValue / data.totalRevenue) * 100).toFixed(1) : 0}%
+                      </Text>
+                      <div style={{ marginTop: 8 }}>
+                        <Tag color="blue" style={{ fontSize: 14, padding: "4px 12px" }}>
+                          {data.totalRevenue > 0 && data.stockValue / data.totalRevenue < 0.5
+                            ? "Tốt – Hàng hóa luân chuyển nhanh"
+                            : data.stockValue / data.totalRevenue < 1
+                            ? "Bình thường – Cần theo dõi"
+                            : "Cảnh báo – Hàng tồn quá nhiều"}
+                        </Tag>
+                      </div>
+                    </div>
+                    <div style={{ marginTop: 16, fontSize: 15, lineHeight: 1.6 }}>
                       <div>
                         <span style={{ color: COLORS.vat, marginRight: 4 }}>●</span>
-                        <strong style={{ color: COLORS.vat }}>Thuế GTGT:</strong> {formatVND(data.totalVAT)}
+                        <strong style={{ color: COLORS.vat }}>Doanh thu:</strong> {formatVND(data.totalRevenue)}
+                        <Tag color="#f5222d" style={{ fontSize: 14, lineHeight: 1.2, marginLeft: 8, padding: "2px 10px" }}>
+                          Tổng số tiền thu được từ việc bán hàng
+                        </Tag>
                       </div>
-                      <div>
-                        <span style={{ color: COLORS.stockValue, marginRight: 4 }}>●</span>
-                        <strong style={{ color: COLORS.stockValue }}>Tồn kho:</strong> {formatVND(data.stockValue)}
+                      <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4 }}>
+                        <span style={{ color: COLORS.stockValue }}>●</span>
+                        <strong style={{ color: COLORS.stockValue }}>Hàng tồn kho:</strong>
+                        <span>{formatVND(data.stockValue)}</span>
+                        <Tag color="#13c2c2" style={{ fontSize: 14, lineHeight: 1.2, marginLeft: 8, padding: "2px 10px" }}>
+                          Tổng số lượng hàng tồn × Giá vốn nhập hàng
+                        </Tag>
+                      </div>
+                    </div>
+                  </Card>
+                </Col>
+
+                {/* BIỂU ĐỒ TRÒN BÊN PHẢI */}
+                <Col xs={24} lg={12}>
+                  <Card title="Giá trị hàng tồn kho: Giá vốn & Giá bán" style={{ border: "1px solid #8c8c8c" }}>
+                    <ResponsiveContainer width="100%" height={320}>
+                      <PieChart>
+                        <Pie
+                          data={[
+                            { name: "Tồn kho (giá vốn)", value: data.stockValue, fill: COLORS.stockValue },
+                            { name: "Tồn kho (giá bán)", value: data.stockValueAtSalePrice, fill: COLORS.stockValueAtSalePrice },
+                          ]}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={60}
+                          outerRadius={100}
+                          label={(entry) => `${entry.name}: ${formatVND(entry.value)}`}
+                          dataKey="value"
+                          onMouseEnter={(e, idx) => {
+                            e.target.outerRadius = 110;
+                          }}
+                          onMouseLeave={(e, idx) => {
+                            e.target.outerRadius = 100;
+                          }}
+                        >
+                          <Cell fill={COLORS.stockValue} />
+                          <Cell fill={COLORS.stockValueAtSalePrice} />
+                        </Pie>
+                        <Tooltip formatter={formatVND} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    {/* LÃI TIỀM NĂNG – BOX Ở GIỮA */}
+                    <div
+                      style={{
+                        marginTop: 10,
+                        padding: "16px 20px",
+                        background: "linear-gradient(120deg, #fdfbfb 0%, #ebedee 100%)",
+                        borderRadius: 12,
+                        border: "2px dashed #52c41a",
+                        textAlign: "center",
+                      }}
+                    >
+                      <Text strong style={{ fontSize: 14, color: "#52c41a", display: "block" }}>
+                        Lãi tiềm năng nếu bán hết hàng tồn kho
+                      </Text>
+                      <Text
+                        style={{
+                          fontSize: 20,
+                          fontWeight: "bold",
+                          color: "#52c41a",
+                          textShadow: "0 2px 4px rgba(82, 196, 26, 0.3)",
+                        }}
+                      >
+                        {formatVND(data.stockValueAtSalePrice - data.stockValue)}
+                      </Text>
+                      <div style={{ marginTop: 8 }}>
+                        <Tag color="green" style={{ fontSize: 14, padding: "4px 12px" }}>
+                          {data.stockValue > 0 ? (((data.stockValueAtSalePrice - data.stockValue) / data.stockValue) * 100).toFixed(1) : 0}% biên lợi nhuận gộp trung bình
+                        </Tag>
+                      </div>
+                    </div>
+                    {/* Hiển thị chi tiết giá trị */}
+                    <div style={{ marginTop: 16, fontSize: 15, lineHeight: 1.6 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <span style={{ color: COLORS.stockValue }}>●</span>
+                        <strong style={{ color: COLORS.stockValue }}>Hàng tồn kho (giá vốn):</strong>
+                        <span>{formatVND(data.stockValue)}</span>
+                        <Tag color="#13c2c2" style={{ fontSize: 14, lineHeight: 1.2, marginLeft: 8, padding: "2px 10px" }}>
+                          Tổng số lượng hàng tồn × Giá vốn nhập hàng
+                        </Tag>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4 }}>
+                        <span style={{ color: COLORS.stockValueAtSalePrice }}>●</span>
+                        <strong style={{ color: COLORS.stockValueAtSalePrice }}>Hàng tồn kho (giá bán):</strong>
+                        <span>{formatVND(data.stockValueAtSalePrice)}</span>
+                        <Tag color="#e90c77ff" style={{ fontSize: 14, lineHeight: 1.2, marginLeft: 8, padding: "2px 10px" }}>
+                          Tổng số lượng hàng tồn × Giá bán thị trường
+                        </Tag>
                       </div>
                     </div>
                   </Card>
                 </Col>
               </Row>
 
-              {/* CHI TIẾT */}
+              {/* TOP NHÓM HÀNG HÓA */}
               <Row gutter={[16, 16]}>
-                <Col span={12}>
-                  <Card style={{ border: "1px solid #8c8c8c" }} title="Chi tiết">
-                    <p>
-                      <strong>Chi phí nhập hàng (COGS):</strong> {formatVND(data.totalCOGS)}
-                    </p>
-                    <p>
-                      <strong>Điều chỉnh tồn kho:</strong> {formatVND(data.stockAdjustmentValue)}
-                    </p>
-                    <p>
-                      <strong>Chi phí hàng hoá huỷ:</strong> {formatVND(data.stockDisposalCost)}
-                    </p>
+                <Col span={24}>
+                  <Card title="Thống Kê Nhóm Hàng Hóa Theo Doanh Thu" style={{ border: "1px solid #8c8c8c" }}>
+                    <Table
+                      dataSource={data.groupStats || []}
+                      rowKey="_id"
+                      pagination={{
+                        ...groupPagination,
+                        total: data.groupStats?.length || 0,
+                        showSizeChanger: true,
+                        showQuickJumper: true,
+                        pageSizeOptions: ["10", "20", "50", "100"],
+                        showTotal: (total, range) => (
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              width: "100%",
+                              fontSize: 14,
+                              color: "#595959",
+                            }}
+                          >
+                            <div>
+                              Đang xem{" "}
+                              <span style={{ color: "#1677ff", fontWeight: 600 }}>
+                                {range[0]} – {range[1]}
+                              </span>{" "}
+                              trên tổng số <span style={{ color: "#fa541c", fontWeight: 600 }}>{total}</span> nhóm hàng hóa
+                            </div>
+                          </div>
+                        ),
+                        onChange: (page, pageSize) => {
+                          setGroupPagination({
+                            current: page,
+                            pageSize: pageSize || 10,
+                            total: data.groupStats?.length || 0,
+                          });
+                        },
+                      }}
+                      columns={[
+                        {
+                          title: "Nhóm hàng hoá",
+                          dataIndex: "groupName",
+                          render: (text) => <strong style={{ fontSize: 15 }}>{text}</strong>,
+                        },
+                        {
+                          title: "Doanh thu",
+                          dataIndex: "revenue",
+                          align: "right",
+                          render: (value) => (
+                            <Text strong style={{ color: "#1890ff" }}>
+                              {formatVND(value)}
+                            </Text>
+                          ),
+                          sorter: (a, b) => a.revenue - b.revenue,
+                        },
+                        {
+                          title: "SL bán",
+                          dataIndex: "quantitySold",
+                          align: "center",
+                          render: (value) => <Tag color="blue">{value}</Tag>,
+                        },
+                        {
+                          title: "Tồn kho (giá bán)",
+                          dataIndex: "stockValueSale",
+                          align: "right",
+                          render: (value) => formatVND(value),
+                        },
+                        {
+                          title: "Tồn kho (giá vốn)",
+                          dataIndex: "stockValueCost",
+                          align: "right",
+                          render: (value) => (
+                            <Text strong style={{ color: value > 1000000000 ? "#ff4d4f" : "#fa8c16" }}>
+                              {formatVND(value)}
+                            </Text>
+                          ),
+                        },
+                        {
+                          title: "Số mặt hàng",
+                          dataIndex: "productCount",
+                          align: "center",
+                          render: (value) => <Tag color="purple">{value}</Tag>,
+                          sorter: (a, b) => a.productCount - b.productCount,
+                        },
+                        {
+                          title: "Lãi tiềm năng",
+                          dataIndex: "potentialProfit",
+                          align: "right",
+                          render: (value) => (
+                            <Text strong style={{ color: value > 200000000 ? "#52c41a" : "#faad14" }}>
+                              {formatVND(value)}
+                            </Text>
+                          ),
+                        },
+                        {
+                          title: "Tỷ lệ tồn/doanh thu",
+                          dataIndex: "stockToRevenueRatio",
+                          align: "center",
+                          render: (value, record) => {
+                            // Nếu doanh thu = 0 → nhóm hàng hoá này chưa bán gì hoặc chưa có sản phẩm gì
+                            if (record.revenue === 0) {
+                              return (
+                                <Tag
+                                  icon={<ClockCircleOutlined />}
+                                  color="default"
+                                  style={{ background: "#f5f5f5", borderColor: "#d9d9d9", color: "#8c8c8c" }}
+                                >
+                                  Chưa sử dụng
+                                </Tag>
+                              );
+                            }
+                            // Nếu có doanh thu → đánh giá như thường
+                            if (value > 5) return <Tag icon={<ExclamationCircleOutlined />} color="red">TỒN NẶNG</Tag>;
+                            if (value > 2) return <Tag icon={<ExclamationCircleOutlined />} color="orange">CẦN ĐẨY HÀNG</Tag>;
+                            if (value > 1)return (<Tag icon={<WarningOutlined />} color="warning"> Cần theo dõi</Tag>);
+                            return (
+                              <Tag icon={<CheckCircleOutlined />} color="green">TỐT</Tag>
+                            );
+                          },
+                        },
+                      ]}
+                    />
                   </Card>
                 </Col>
-                <Col span={12}>
-                  <Card style={{ border: "1px solid #8c8c8c" }} title="Hiệu suất">
-                    <p>
-                      <Popover
-                        content={
-                          <>
-                            <strong>Lợi nhuận gộp</strong> = Doanh thu - Giá vốn hàng bán.
-                            <br />
-                            Cho biết bạn lời bao nhiêu sau khi trừ chi phí nhập hàng.
-                          </>
-                        }
-                      >
-                        <strong style={{ cursor: "help" }}>
-                          Lợi nhuận gộp <InfoCircleOutlined style={{ fontSize: 14, marginLeft: 4 }} />
-                        </strong>
-                      </Popover>
-                      :{" "}
-                      <span
-                        style={{
-                          color: getProfitColorByValue(data?.grossProfit),
-                          fontWeight: "bold",
-                          transition: "color 0.4s ease",
-                        }}
-                      >
-                        {data?.totalRevenue ? ((data.grossProfit / data.totalRevenue) * 100).toFixed(1) : 0}%
-                      </span>
-                    </p>
-
-                    <p>
-                      <Popover
-                        content={
-                          <>
-                            <strong>Lợi nhuận ròng</strong> = Lợi nhuận gộp - Chi phí vận hành - Thuế.
-                            <br />
-                            Đây là phần tiền bạn thực sự lãi sau khi trừ hết mọi chi phí.
-                          </>
-                        }
-                      >
-                        <strong style={{ cursor: "help" }}>
-                          Lợi nhuận ròng <InfoCircleOutlined style={{ fontSize: 14, marginLeft: 4 }} />
-                        </strong>
-                      </Popover>
-                      :{" "}
-                      <span
-                        style={{
-                          color: getProfitColorByValue(data?.netProfit),
-                          fontWeight: "bold",
-                          transition: "color 0.4s ease",
-                        }}
-                      >
-                        {data?.totalRevenue ? ((data.netProfit / data.totalRevenue) * 100).toFixed(1) : 0}%
-                      </span>
-                    </p>
-                  </Card>
-                </Col>
-                {/* Hết */}
               </Row>
+
+              {/* 2 THẺ CARD CHI TIẾT Ở CUỐI */}
+              <Row gutter={[16, 16]}>
+                {/* CỘT TRÁI */}
+                {/* CỘT TRÁI */}
+                <Col span={12}>
+                  <Card title="Chi tiết tài chính" style={{ border: "1px solid #8c8c8c", height: "100%" }} extra={<Text type="secondary">Đơn vị: VND</Text>}>
+                    <Space direction="vertical" style={{ width: "100%", fontSize: 15 }}>
+                      <div>
+                        <strong>Thuế GTGT:</strong> {formatVND(data.totalVAT)}
+                      </div>
+                      <div>
+                        <strong>Chi phí nhập hàng (COGS):</strong> {formatVND(data.totalCOGS)}
+                      </div>
+                      <div>
+                        <strong>Điều chỉnh tồn kho:</strong> {formatVND(data.stockAdjustmentValue)}
+                      </div>
+                      <div>
+                        <strong>Chi phí hàng hóa hủy:</strong> {formatVND(data.stockDisposalCost)}
+                      </div>
+
+                      <Divider style={{ margin: "5px 0" }} />
+
+                      {/* Lãi tiềm năng — dạng dòng bình thường */}
+                      <div>
+                        <Popover content="Nếu bán hết hàng tồn kho theo giá bán hiện tại">
+                          <strong style={{ cursor: "help", color: "#52c41a" }}>
+                            Lãi tiềm năng từ tồn kho <InfoCircleOutlined />{" "}
+                          </strong>
+                        </Popover>
+                        : <strong style={{ color: "#52c41a" }}>{formatVND(data.stockValueAtSalePrice - data.stockValue)}</strong>
+                      </div>
+                    </Space>
+                  </Card>
+                </Col>
+
+                {/* CỘT PHẢI: HIỆU SUẤT */}
+                <Col span={12}>
+                  <Card title="Hiệu suất kinh doanh" style={{ border: "1px solid #8c8c8c", height: "100%" }} extra={<Text type="secondary">Đơn vị: %</Text>}>
+                    <Space direction="vertical" style={{ width: "100%", fontSize: 16 }}>
+                      <div>
+                        <Popover content="Lợi nhuận gộp = Doanh thu - Giá vốn hàng bán">
+                          <strong style={{ cursor: "help" }}>
+                            Lợi nhuận gộp <InfoCircleOutlined style={{ fontSize: 14, marginLeft: 4 }} />{" "}
+                          </strong>
+                        </Popover>
+                        :{" "}
+                        <strong style={{ color: getProfitColorByValue(data?.grossProfit) }}>
+                          {data?.totalRevenue ? ((data.grossProfit / data.totalRevenue) * 100).toFixed(1) : 0}%
+                        </strong>
+                      </div>
+
+                      <div>
+                        <Popover content="Chi phí vận hành / doanh thu – càng thấp càng tốt">
+                          <strong style={{ cursor: "help" }}>
+                            Tỷ lệ chi phí vận hành <InfoCircleOutlined style={{ fontSize: 14, marginLeft: 4 }} />{" "}
+                          </strong>
+                        </Popover>
+                        :{" "}
+                        <strong
+                          style={{
+                            color: data?.operatingCost / data?.totalRevenue > 0.7 ? "#ff4d4f" : "#faad14",
+                          }}
+                        >
+                          {data?.totalRevenue ? ((data.operatingCost / data.totalRevenue) * 100).toFixed(1) : 0}%
+                        </strong>
+                      </div>
+
+                      <div>
+                        <Popover content="Tỷ lệ hàng tồn / doanh thu – nhỏ hơn 50% là tốt, lớn hơn 100% là tồn nặng">
+                          <strong style={{ cursor: "help" }}>
+                            Tỷ lệ hàng tồn / doanh thu <InfoCircleOutlined style={{ fontSize: 14, marginLeft: 4 }} />{" "}
+                          </strong>
+                        </Popover>
+                        :{" "}
+                        <strong
+                          style={{
+                            color: data.stockValue / data.totalRevenue > 1 ? "#ff4d4f" : data.stockValue / data.totalRevenue > 0.5 ? "#faad14" : "#52c41a",
+                          }}
+                        >
+                          {data?.totalRevenue ? ((data.stockValue / data.totalRevenue) * 100).toFixed(1) : 0}%
+                        </strong>
+                      </div>
+
+                      <Divider style={{ margin: "5px 0" }} />
+
+                      {/* Lợi nhuận ròng — hiển thị như dòng bình thường */}
+                      <div>
+                        <Popover content="Lợi nhuận ròng = Lợi nhuận gộp - Chi phí vận hành - Thuế">
+                          <strong style={{ cursor: "help", fontSize: 16, color: "#ff1038ff" }}>
+                            Lợi nhuận ròng cuối cùng <InfoCircleOutlined />{" "}
+                          </strong>
+                        </Popover>
+                        :{" "}
+                        <strong
+                          style={{
+                            color: getProfitColorByValue(data?.netProfit),
+                            fontSize: 20,
+                          }}
+                        >
+                          {data?.totalRevenue ? ((data.netProfit / data.totalRevenue) * 100).toFixed(1) : 0}%
+                        </strong>
+                      </div>
+                    </Space>
+                  </Card>
+                </Col>
+              </Row>
+              {/* ======= Hết ====== */}
+              
             </>
           )}
         </Space>

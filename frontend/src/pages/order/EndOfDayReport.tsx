@@ -126,7 +126,7 @@ interface ReportData {
 
 // Màu sắc cho biểu đồ
 const COLORS = [
-  "#52c41a",
+  "#55ed09ff",
   "#1890ff",
   "#faad14",
   "#f5222d",
@@ -434,7 +434,7 @@ const EndOfDayReport: React.FC = () => {
             <Statistic
               title={
                 <span style={{ color: "#fff", opacity: 0.9 }}>
-                  Doanh Thu Trong Ngày
+                  Doanh Thu
                 </span>
               }
               value={reportData.summary.totalRevenue}

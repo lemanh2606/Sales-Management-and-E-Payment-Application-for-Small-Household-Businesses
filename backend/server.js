@@ -17,16 +17,9 @@ const swaggerUi = require("swagger-ui-express");
 const YAML = require("yamljs");
 const swaggerDocument = YAML.load(path.join(__dirname, "swagger.yaml")); // 👈 nhớ tạo file swagger.yaml
 // --- LOAD MODELS ---
-[
-  "Product",
-  "ProductGroup",
-  "Supplier",
-  "Employee",
-  "StockDisposal",
-  "StockCheck",
-  "PurchaseOrder",
-  "PurchaseReturn",
-].forEach((model) => require(`./models/${model}`));
+["Product", "ProductGroup", "Supplier", "Employee", "StockDisposal", "StockCheck", "PurchaseOrder", "PurchaseReturn"].forEach((model) =>
+  require(`./models/${model}`)
+);
 
 const app = express();
 
@@ -50,13 +43,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage, limits: { fileSize: 20 * 1024 * 1024 } });
 
 // ✅ Danh sách origins được phép
-const allowedOrigins = [
-  "http://localhost:3000",
-  "http://menup.shop",
-  "http://skinanalysis.life",
-  "https://skinanalysis.life",
-  "https://menup.shop",
-];
+const allowedOrigins = ["http://localhost:3000", "http://menup.shop", "http://skinanalysis.life", "https://skinanalysis.life", "https://menup.shop"];
 
 // =====Socket.io=====
 const server = http.createServer(app); //  Tạo server http để gắn socket.io
@@ -66,12 +53,7 @@ const io = new Server(server, {
     origin: allowedOrigins, //  ✅ Sử dụng allowedOrigins
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-      "Cache-Control",
-      "Pragma",
-    ],
+    allowedHeaders: ["Content-Type", "Authorization", "Cache-Control", "Pragma"],
   },
 });
 
@@ -90,16 +72,8 @@ require("./services/cronJobs");
 // Webhook PayOS phải viết trước express.json()
 const orderWebhookHandler = require("./routers/orderWebhookHandler");
 const subscriptionWebhookHandler = require("./routers/subscriptionWebhookHandler");
-app.post(
-  "/api/orders/vietqr-webhook",
-  express.raw({ type: "*/*" }),
-  orderWebhookHandler
-);
-app.post(
-  "/api/subscriptions/webhook",
-  express.raw({ type: "*/*" }),
-  subscriptionWebhookHandler
-);
+app.post("/api/orders/vietqr-webhook", express.raw({ type: "*/*" }), orderWebhookHandler);
+app.post("/api/subscriptions/webhook", express.raw({ type: "*/*" }), subscriptionWebhookHandler);
 
 // --- MIDDLEWARE ---
 app.use(
@@ -107,12 +81,7 @@ app.use(
     origin: allowedOrigins, // ✅ ĐÃ SỬA - dùng allowedOrigins thay vì hardcode
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-      "Cache-Control",
-      "Pragma",
-    ],
+    allowedHeaders: ["Content-Type", "Authorization", "Cache-Control", "Pragma"],
   })
 );
 app.use(express.json());
@@ -171,7 +140,7 @@ app.use("/api/export", exportRouters);
 
 // --- ROOT ---
 app.get("/", (req, res) => {
-  res.send("✅ Backend đang chạy ổn định 🚀");
+  res.send("👀 Ai vừa ping tui đó? Tui thấy rồi nha! From SmartRetail team with Love 🫶");
 });
 
 // --- API OVERVIEW (JSON) ---

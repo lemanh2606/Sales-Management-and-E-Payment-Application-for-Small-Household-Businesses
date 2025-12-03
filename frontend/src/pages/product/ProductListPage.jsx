@@ -1026,7 +1026,7 @@ export default function ProductListPage() {
                 loading={isImporting}
                 onClick={handleExcelButtonClick}
               >
-                Import
+                Tải lên Sản phẩm
               </Button>
 
               <Button
@@ -1121,7 +1121,7 @@ export default function ProductListPage() {
             setImportModalOpen(false);
             resetImportState();
           }}
-          title={<span style={{ fontSize: "clamp(14px, 3.5vw, 16px)" }}>Import sản phẩm bằng Excel</span>}
+          title={<span style={{ fontSize: "clamp(14px, 3.5vw, 16px)" }}>Tải lên sản phẩm bằng Excel</span>}
           width={isMobile ? "95%" : 720}
           centered
           okText="Xác nhận import"
