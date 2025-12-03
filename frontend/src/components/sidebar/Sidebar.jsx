@@ -122,6 +122,7 @@ export default function Sidebar({ onCollapsedChange }) {
           {
             key: "/suppliers",
             label: <span style={{ fontSize: 13.5 }}>Nhà cung cấp</span>,
+            permission: "supplier:view",
           },
           {
             key: "/product-groups",
@@ -343,12 +344,7 @@ export default function Sidebar({ onCollapsedChange }) {
       return filterMenuItems(allowedItems);
     }
 
-    let filtered = baseItems;
-    if (isStaff) {
-      filtered = filtered.filter((it) => it.key !== "store");
-    }
-
-    return filterMenuItems(filtered);
+    return filterMenuItems(baseItems);
   }, [baseItems, filterMenuItems, user, managerSubscriptionExpired]);
 
   const handleLogout = () => {
