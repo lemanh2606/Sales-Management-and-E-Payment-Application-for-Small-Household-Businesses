@@ -18,16 +18,7 @@ const { v2: cloudinary } = require("cloudinary");
 
 const createOrder = async (req, res) => {
   try {
-    const {
-      storeId: bodyStoreId,
-      employeeId,
-      customerInfo,
-      items,
-      paymentMethod,
-      isVATInvoice,
-      vatInfo,
-      usedPoints,
-    } = req.body;
+    const { storeId: bodyStoreId, employeeId, customerInfo, items, paymentMethod, isVATInvoice, vatInfo, usedPoints } = req.body;
 
     const storeId =
       bodyStoreId ||
@@ -59,12 +50,34 @@ const createOrder = async (req, res) => {
           // Kiểm tra stock đủ trước, nhưng ko trừ - chỉ warn nếu thiếu
           throw new Error(`Sản phẩm ${prod?.name || "không tồn tại"} hết hàng hoặc không tồn tại trong cửa hàng`);
         }
-        const priceAtTime = prod.price;
-        const subtotal = (parseFloat(priceAtTime) * item.quantity).toFixed(2);
+
+        // --- TÍNH GIÁ DỰA THEO saleType, bổ sung để làm báo cáo chuẩn ---
+        let priceAtTime;
+        switch (item.saleType) {
+          case "AT_COST":
+          case "CLEARANCE":
+            priceAtTime = prod.cost_price; // bán bằng giá vốn
+            break;
+          case "VIP":
+            // FE có thể gửi customPrice, nếu không thì lấy price gốc
+            priceAtTime = item.customPrice ?? prod.price;
+            break;
+          case "FREE":
+            priceAtTime = 0;
+            break;
+          case "NORMAL":
+          default:
+            priceAtTime = prod.price;
+        }
+        // Chuyển đổi sang Decimal128 => float
+        const priceNum = parseFloat(priceAtTime);
+        const subtotal = (priceNum * item.quantity).toFixed(2);
+
         total += parseFloat(subtotal);
+        // Lưu vào validatedItems
         validatedItems.push({
           ...item,
-          priceAtTime: priceAtTime.toString(),
+          priceAtTime: priceNum.toString(),
           subtotal: subtotal.toString(),
         });
       }
@@ -231,8 +244,8 @@ const createOrder = async (req, res) => {
           paymentLinkUrl: qrData?.paymentLinkUrl || null,
           qrExpiry: paymentMethod === "qr" ? newOrder.qrExpiry : null,
           bankInfo: {
-            bankName: defaultBank.bankName,
-            accountNumber: defaultBank.accountNumber,
+            bankName: defaultBank?.bankName || null,
+            accountNumber: defaultBank?.accountNumber || null,
           },
         });
       } catch (format_err) {
@@ -555,7 +568,6 @@ const refundOrder = async (req, res) => {
     const { orderId: mongoId } = req.params; // _id từ params
     let { employeeId, refundReason, items } = req.body; // Body: employeeId + lý do hoàn + danh sách sản phẩm
 
-    // 👇 SỬA LẠI ĐOẠN NÀY
     // Parse items nếu là string
     if (typeof items === "string") {
       try {
@@ -571,7 +583,6 @@ const refundOrder = async (req, res) => {
         });
       }
     }
-
     // Kiểm tra items sau khi parse
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({
@@ -696,6 +707,13 @@ const refundOrder = async (req, res) => {
       } else {
         order.status = "partially_refunded";
       }
+      // 🔥 THÊM ĐOẠN NÀY ĐỂ TRỪ ĐI TIỀN DOANH THU:
+      const oldTotal = Number(order.totalAmount || 0);
+      const newTotal = oldTotal - refundTotal;
+      order.totalAmount = mongoose.Types.Decimal128.fromString((oldTotal - refundTotal).toFixed(2));
+      // Đơn trả bằng tiền mặt thì làm log (offline) - Nếu là QR / online thì ở đây mới gọi API hoàn tiền (nhưng mình k có cách này nên bỏ qua)
+      console.log(`🔄 Cập nhật tổng tiền đơn #${order._id}: ${oldTotal} → ${newTotal}`);
+      // 🔥 HẾT ĐOẠN THÊM
 
       order.refundId = refund[0]._id;
       await order.save({ session });

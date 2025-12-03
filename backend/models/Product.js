@@ -7,7 +7,7 @@ const productSchema = new mongoose.Schema(
     description: { type: String, maxlength: 500, trim: true },
     sku: { type: String, maxlength: 100, trim: true }, // Mã SKU sản phẩm - unique per store
     price: { type: mongoose.Schema.Types.Decimal128, required: true },
-    //thêm 1 ô là giá có thể 
+    //thêm 1 ô là giá có thể
     cost_price: { type: mongoose.Schema.Types.Decimal128, required: true },
     stock_quantity: { type: Number, required: true, default: 0 },
     min_stock: { type: Number, default: 0 }, // Tồn kho tối thiểu
@@ -39,10 +39,7 @@ const productSchema = new mongoose.Schema(
 
 // Pre-save hook reset lowStockAlerted nếu stock > min_stock khi update
 productSchema.pre("save", function (next) {
-  if (
-    this.isModified("stock_quantity") &&
-    this.stock_quantity > this.min_stock
-  ) {
+  if (this.isModified("stock_quantity") && this.stock_quantity > this.min_stock) {
     this.lowStockAlerted = false; // Reset cảnh báo nếu stock tăng > min_stock
   }
   // Đảm bảo isDeleted được set khi save document cũ
@@ -62,17 +59,7 @@ productSchema.pre(/^find/, function (next) {
 });
 
 // Index compound để đảm bảo SKU unique trong phạm vi cửa hàng
-productSchema.index(
-  { store_id: 1, sku: 1 },
-  { unique: true, name: "store_sku_unique" }
-);
-
-// Index cho query low stock nhanh
-productSchema.index({
-  stock_quantity: 1,
-  min_stock: 1,
-  status: 1,
-  lowStockAlerted: 1,
-});
+productSchema.index({ store_id: 1, sku: 1 }, { unique: true, name: "store_sku_unique" });
+productSchema.index({ stock_quantity: 1, min_stock: 1, status: 1, lowStockAlerted: 1 });
 
 module.exports = mongoose.model("Product", productSchema);

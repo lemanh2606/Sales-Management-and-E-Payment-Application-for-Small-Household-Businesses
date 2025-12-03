@@ -692,7 +692,7 @@ const searchProducts = async (req, res) => {
     };
 
     const products = await Product.find(searchQuery)
-      .select("name sku price stock_quantity unit") // Chỉ lấy field cần thiết
+      .select("image name sku price cost_price stock_quantity unit") // Chỉ lấy field cần thiết
       .sort({ name: 1 }) // Sắp xếp theo tên A-Z
       .limit(parseInt(limit)) // Limit số kết quả
       .lean(); // Lean cho nhanh
