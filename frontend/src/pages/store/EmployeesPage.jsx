@@ -26,8 +26,8 @@ import Layout from "../../components/Layout";
 import { getPermissionCatalog, updateUserById } from "../../api/userApi";
 
 const { Search } = Input;
-
-const API_BASE = "http://localhost:9999/api";
+const apiUrl = import.meta.env.VITE_API_URL;
+const API_BASE = `${apiUrl}`;
 
 const filterEmployees = (list = [], text = "") => {
   const normalized = text.toLowerCase();

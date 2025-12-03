@@ -1,7 +1,23 @@
 // src/pages/order/ListPendingOrders.tsx
 import React, { useState, useEffect, useCallback } from "react";
-import { Card, Table, Input, Select, DatePicker, Space, Tag, Typography, Row, Col, Spin } from "antd";
-import { SearchOutlined, ClockCircleOutlined, FileTextOutlined } from "@ant-design/icons";
+import {
+  Card,
+  Table,
+  Input,
+  Select,
+  DatePicker,
+  Space,
+  Tag,
+  Typography,
+  Row,
+  Col,
+  Spin,
+} from "antd";
+import {
+  SearchOutlined,
+  ClockCircleOutlined,
+  FileTextOutlined,
+} from "@ant-design/icons";
 import axios from "axios";
 import dayjs, { Dayjs } from "dayjs";
 import Swal from "sweetalert2";
@@ -11,8 +27,8 @@ import debounce from "../../utils/debounce";
 const { RangePicker } = DatePicker;
 const { Option } = Select;
 const { Title, Text } = Typography;
-
-const API_BASE = "http://localhost:9999/api";
+const apiUrl = import.meta.env.VITE_API_URL;
+const API_BASE = `${apiUrl}`;
 
 interface MongoDecimal {
   $numberDecimal: string;
@@ -59,14 +75,19 @@ const ListPendingOrders: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchText, setSearchText] = useState("");
-  const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null]>([null, null]);
+  const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null]>([
+    null,
+    null,
+  ]);
 
   const [pagination, setPagination] = useState({ current: 1, pageSize: 10 });
 
   // Helper
   const formatCurrency = (value: MongoDecimal | number): string => {
     const numValue =
-      typeof value === "object" && value.$numberDecimal ? parseFloat(value.$numberDecimal) : Number(value);
+      typeof value === "object" && value.$numberDecimal
+        ? parseFloat(value.$numberDecimal)
+        : Number(value);
     return numValue.toLocaleString("vi-VN") + "₫";
   };
 
@@ -78,11 +99,16 @@ const ListPendingOrders: React.FC = () => {
   const loadOrders = async () => {
     setLoading(true);
     try {
-      const res = await axios.get<OrderListResponse>(`${API_BASE}/orders/list-all`, {
-        params: { storeId },
-        headers,
-      });
-      const pendingOrders = res.data.orders.filter((o) => o.status === "pending");
+      const res = await axios.get<OrderListResponse>(
+        `${API_BASE}/orders/list-all`,
+        {
+          params: { storeId },
+          headers,
+        }
+      );
+      const pendingOrders = res.data.orders.filter(
+        (o) => o.status === "pending"
+      );
       setOrders(pendingOrders);
     } catch (err: any) {
       Swal.fire({
@@ -108,14 +134,17 @@ const ListPendingOrders: React.FC = () => {
   const filteredOrders = orders.filter((order) => {
     const matchSearch = searchText
       ? order._id.toLowerCase().includes(searchText.toLowerCase()) ||
-        order.customer?.name?.toLowerCase().includes(searchText.toLowerCase()) ||
+        order.customer?.name
+          ?.toLowerCase()
+          .includes(searchText.toLowerCase()) ||
         order.customer?.phone?.includes(searchText)
       : true;
 
     let matchDate = true;
     if (dateRange[0] && dateRange[1]) {
       const orderDate = dayjs(order.createdAt);
-      matchDate = orderDate.isAfter(dateRange[0]) && orderDate.isBefore(dateRange[1]);
+      matchDate =
+        orderDate.isAfter(dateRange[0]) && orderDate.isBefore(dateRange[1]);
     }
 
     return matchSearch && matchDate;
@@ -134,10 +163,13 @@ const ListPendingOrders: React.FC = () => {
         <span style={{ color: "#1890ff", fontWeight: 600 }}>
           {range[0]} – {range[1]}
         </span>{" "}
-        trên tổng số <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> đơn hàng
+        trên tổng số{" "}
+        <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> đơn
+        hàng
       </div>
     ),
-    onChange: (page: number, pageSize: number) => setPagination({ current: page, pageSize }),
+    onChange: (page: number, pageSize: number) =>
+      setPagination({ current: page, pageSize }),
   };
 
   return (
@@ -174,7 +206,15 @@ const ListPendingOrders: React.FC = () => {
           style={{ borderRadius: 12 }}
         >
           {/* Bộ lọc hàng ngang */}
-          <Space direction="horizontal" style={{ width: "100%", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
+          <Space
+            direction="horizontal"
+            style={{
+              width: "100%",
+              marginBottom: 16,
+              flexWrap: "wrap",
+              gap: 12,
+            }}
+          >
             <Input
               placeholder="Tìm mã đơn hàng, tên khách, SĐT..."
               prefix={<SearchOutlined />}
@@ -187,7 +227,9 @@ const ListPendingOrders: React.FC = () => {
               style={{ flex: 1, minWidth: 440 }}
               placeholder={["Từ ngày", "Đến ngày"]}
               format="DD/MM/YYYY"
-              onChange={(dates) => setDateRange(dates as [Dayjs | null, Dayjs | null])}
+              onChange={(dates) =>
+                setDateRange(dates as [Dayjs | null, Dayjs | null])
+              }
               size="large"
             />
           </Space>

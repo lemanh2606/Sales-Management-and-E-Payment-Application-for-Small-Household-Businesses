@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>Tờ khai thuế</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      @page {
+        size: A4;
+        margin: 20mm;
+      }
+      body {
+        font-family: "Noto Sans", sans-serif;
+        font-size: 12px;
+        line-height: 1.5;
+      }
+      .center {
+        text-align: center;
+      }
+      .right {
+        text-align: right;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 8px;
+      }
+      th,
+      td {
+        border: 1px solid #000;
+        padding: 4px 6px;
+      }
+      th {
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="right">Mẫu số: 01/CNKD</div>
+    <h3 class="center">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</h3>
+    <div class="center">Độc lập - Tự do - Hạnh phúc</div>
+    <div class="center">---------------</div>
+
+    <h3 class="center">
+      TỜ KHAI THUẾ ĐỐI VỚI HỘ KINH DOANH, CÁ NHÂN KINH DOANH
+    </h3>
+    <p>☑ HKD, CNKD nộp thuế theo phương pháp kê khai</p>
+
+    <p>[01] Kỳ tính thuế: {{periodKey}} ({{periodTypeLabel}})</p>
+    <p>[02] Lần đầu: {{firstTimeText}}</p>
+    <p>[03] Bổ sung lần thứ: {{supplementNumber}}</p>
+
+    <p>[04] Người nộp thuế: {{name}}</p>
+    <p>[05] Tên cửa hàng/thương hiệu: {{storeName}}</p>
+    <p>[06] Tài khoản ngân hàng: {{bankAccount}}</p>
+    <p>[07] Mã số thuế: {{taxCode}}</p>
+    <p>[08] Ngành nghề kinh doanh: {{businessSector}}</p>
+    <p>[09] Diện tích kinh doanh: {{businessArea}} m²</p>
+    <p>[10] Số lượng lao động: {{employeeCount}}</p>
+    <p>[11] Thời gian hoạt động: {{fromHour}} giờ đến {{toHour}} giờ</p>
+    <p>[12] Địa chỉ kinh doanh: {{businessAddress}}</p>
+    <p>[14] Điện thoại: {{phone}}</p>
+    <p>[16] Email: {{email}}</p>
+
+    <h4>
+      A. KÊ KHAI THUẾ GIÁ TRỊ GIA TĂNG (GTGT), THUẾ THU NHẬP CÁ NHÂN (TNCN)
+    </h4>
+    <p>Đơn vị tiền: Đồng Việt Nam</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>STT</th>
+          <th>Nhóm ngành nghề</th>
+          <th>Doanh thu (GTGT)</th>
+          <th>Số thuế (TNCN)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{rowsHtml}}
+        <tr>
+          <td colspan="2"><strong>[32] Tổng cộng:</strong></td>
+          <td>{{totalRevenue}}</td>
+          <td>{{totalTax}}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p style="margin-top: 16px">
+      Tôi cam đoan số liệu khai trên là đúng và chịu trách nhiệm trước pháp luật
+      về những số liệu đã khai./.
+    </p>
+
+    <div class="right" style="margin-top: 24px">
+      Ngày {{day}} tháng {{month}} năm {{year}}<br />
+      NGƯỜI NỘP THUẾ<br />
+      (Ký, ghi rõ họ tên)<br /><br /><br />
+      {{name}}
+    </div>
+  </body>
+</html>

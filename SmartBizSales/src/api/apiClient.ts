@@ -21,8 +21,11 @@ function getDevHost(): string {
     return "localhost";
 }
 
+// 🚀 Lấy API URL: Ưu tiên .env, fallback về auto-detect
 const API_PORT = 9999;
-const API_URL = `http://${getDevHost()}:${API_PORT}/api`;
+const API_URL =
+    // process.env.EXPO_PUBLIC_API_URL ||
+    `http://${getDevHost()}:${API_PORT}/api`;
 
 console.log("🔥 API_URL động:", API_URL);
 

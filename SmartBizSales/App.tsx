@@ -10,6 +10,7 @@ import {
 } from "./src/navigation/RootNavigation";
 import FlashMessage from "react-native-flash-message";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
+import MemoryMonitor from "./src/components/MemoryMonitor";
 
 // Màn hình loading khi đang kiểm tra đăng nhập
 function LoadingScreen(): React.JSX.Element {
@@ -48,6 +49,7 @@ export default function App(): React.JSX.Element {
           <RootNavigator />
           <FlashMessage position="top" />
         </NavigationContainer>
+        {/* {__DEV__ && <MemoryMonitor />} */}
       </AuthProvider>
     </SafeAreaProvider>
   );

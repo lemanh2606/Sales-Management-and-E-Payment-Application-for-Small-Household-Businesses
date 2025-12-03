@@ -11,6 +11,7 @@ const PAYOS_CHECKSUM_KEY = process.env.PAYOS_CHECKSUM_KEY;
 const VIETQR_ACQ_ID = process.env.VIETQR_ACQ_ID;
 const VIETQR_ACCOUNT_NO = process.env.VIETQR_ACCOUNT_NO;
 const VIETQR_ACCOUNT_NAME = process.env.VIETQR_ACCOUNT_NAME;
+const API_URL = process.env.API_URL;
 
 /**
  * 🧩 Tạo QR thanh toán qua PayOS (nhưng render ảnh bằng VietQR vì 2 cái này là đối tác)
@@ -22,18 +23,14 @@ async function generateQRWithPayOS(input = {}) {
 
   const payload = input.body || input; // chấp nhận req Express hoặc object thuần
 
-  const amount = Number(
-    payload.amount ??
-      input.amount
-  ) || 1000;
+  const amount = Number(payload.amount ?? input.amount) || 1000;
 
   const providedOrderCode =
-    payload.orderCode ||
-    payload.txnRef ||
-    input.orderCode ||
-    input.txnRef;
+    payload.orderCode || payload.txnRef || input.orderCode || input.txnRef;
 
-  const txnRef = providedOrderCode ? Number(providedOrderCode) : Math.floor(Date.now() / 1000);
+  const txnRef = providedOrderCode
+    ? Number(providedOrderCode)
+    : Math.floor(Date.now() / 1000);
 
   const rawInfo =
     payload.orderInfo ||
@@ -49,23 +46,19 @@ async function generateQRWithPayOS(input = {}) {
     payload.returnUrl ||
     input.returnUrl ||
     process.env.PAYOS_RETURN_URL ||
-    "http://localhost:9999/api/orders/payments/vietqr_return";
+    `${API_URL}/api/orders/payments/vietqr_return`;
 
   const cancelUrl =
     payload.cancelUrl ||
     input.cancelUrl ||
     process.env.PAYOS_CANCEL_URL ||
-    "http://localhost:9999/api/orders/payments/vietqr_cancel";
+    `${API_URL}/api/orders/payments/vietqr_cancel`;
 
   const webhookUrl =
-    payload.webhookUrl ||
-    input.webhookUrl ||
-    process.env.PAYOS_WEBHOOK_URL;
+    payload.webhookUrl || input.webhookUrl || process.env.PAYOS_WEBHOOK_URL;
 
   const simulateWebhook =
-    payload.simulateWebhook ??
-    input.simulateWebhook ??
-    true;
+    payload.simulateWebhook ?? input.simulateWebhook ?? true;
 
   const bodyData = {
     orderCode: txnRef,
@@ -258,4 +251,8 @@ function computePayOSSignatureFromData(data, secret) {
     .toUpperCase();
 }
 
-module.exports = { generateQRWithPayOS, verifyPaymentWithPayOS, computePayOSSignatureFromData };
+module.exports = {
+  generateQRWithPayOS,
+  verifyPaymentWithPayOS,
+  computePayOSSignatureFromData,
+};

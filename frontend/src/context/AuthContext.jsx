@@ -1,5 +1,5 @@
 // src/context/AuthContext.jsx
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState, useRef } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { apiClient, userApi, subscriptionApi } from "../api";
@@ -19,6 +19,23 @@ export const AuthProvider = ({ children }) => {
         const s = localStorage.getItem("currentStore");
         return s ? JSON.parse(s) : null;
     });
+
+    // ✅ Token Refresh Queue - Tránh multiple refresh cùng lúc
+    const isRefreshing = useRef(false);
+    const failedQueue = useRef([]);
+
+    const processQueue = (error, token = null) => {
+        failedQueue.current.forEach(prom => {
+            if (error) {
+                prom.reject(error);
+            } else {
+                prom.resolve(token);
+            }
+        });
+
+        failedQueue.current = [];
+    };
+
     const managerSubscriptionKey = "managerSubscriptionExpired";
     const [managerSubscriptionExpired, setManagerSubscriptionExpiredState] = useState(() => {
         if (typeof window === "undefined") {
@@ -45,8 +62,15 @@ export const AuthProvider = ({ children }) => {
             const storedUser = localStorage.getItem("user");
 
             if (storedToken && storedUser) {
-                setUser(JSON.parse(storedUser));
-                setToken(storedToken);
+                try {
+                    const parsedUser = JSON.parse(storedUser);
+                    setUser(parsedUser);
+                    setToken(storedToken);
+                } catch (e) {
+                    console.error("❌ Failed to parse stored user:", e);
+                    localStorage.removeItem("user");
+                    localStorage.removeItem("token");
+                }
             }
 
             setLoading(false);
@@ -55,7 +79,6 @@ export const AuthProvider = ({ children }) => {
         initAuth();
     }, []);
 
-    // Persist auth state
     const persist = (u, t, store) => {
         if (u) localStorage.setItem("user", JSON.stringify(u));
         else localStorage.removeItem("user");
@@ -67,21 +90,38 @@ export const AuthProvider = ({ children }) => {
         else localStorage.removeItem("currentStore");
     };
 
-    // ✅ LOGOUT FUNCTION - Clear all auth data
     const logout = async () => {
-        console.log("🚪 Logging out...");
+        console.log("🚪 Logging out and clearing all data...");
 
-        // Clear state
+        // Clear state immediately
         setUser(null);
         setToken(null);
         setCurrentStore(null);
         updateManagerSubscriptionExpired(false);
 
-        // Clear localStorage
-        localStorage.removeItem("user");
-        localStorage.removeItem("token");
-        localStorage.removeItem("currentStore");
-        localStorage.removeItem(managerSubscriptionKey);
+        // Reset refresh queue
+        isRefreshing.current = false;
+        failedQueue.current = [];
+
+        // Clear ALL localStorage keys related to auth
+        const keysToRemove = [
+            "user",
+            "token",
+            "currentStore",
+            managerSubscriptionKey,
+            "productVisibleColumns",
+        ];
+
+        keysToRemove.forEach(key => {
+            localStorage.removeItem(key);
+        });
+
+        // Clear keys with prefix
+        Object.keys(localStorage).forEach(storageKey => {
+            if (storageKey.startsWith("onboardingSteps_")) {
+                localStorage.removeItem(storageKey);
+            }
+        });
 
         // Clear axios headers
         delete axios.defaults.headers.common["Authorization"];
@@ -90,17 +130,17 @@ export const AuthProvider = ({ children }) => {
         }
 
         // Optional: Call logout API
-        // try {
-        //     await apiClient.post("/users/logout");
-        // } catch (e) {
-        //     console.warn("Logout API failed (ignored):", e?.message || e);
-        // }
+        try {
+            await apiClient.post("/users/logout");
+            console.log("✅ Logout API called successfully");
+        } catch (e) {
+            console.warn("⚠️ Logout API failed (ignored):", e?.message || e);
+        }
 
-        // Navigate to login
+        // Navigate to login page
         navigate("/login", { replace: true });
     };
 
-    // Set bearer header for axios & apiClient
     useEffect(() => {
         const setAuthHeader = (t) => {
             if (t) {
@@ -117,18 +157,18 @@ export const AuthProvider = ({ children }) => {
         };
         setAuthHeader(token);
 
-        // ✅ AXIOS INTERCEPTOR - Auto refresh token or logout
+        // ✅ IMPROVED AXIOS INTERCEPTOR với Token Refresh Queue
         const interceptor = apiClient.interceptors.response.use(
             (response) => response,
             async (error) => {
                 const originalRequest = error.config;
 
-                // Nếu request đánh dấu bỏ qua refresh thì trả lỗi ngay
+                // Skip if marked
                 if (originalRequest?.skipAuthRefresh) {
                     return Promise.reject(error);
                 }
 
-                // 🛑 Bỏ qua refresh-token cho các endpoint công khai
+                // Public endpoints
                 const isPublicAuthRequest = (() => {
                     if (!originalRequest?.url) return false;
                     const skipPaths = [
@@ -142,18 +182,34 @@ export const AuthProvider = ({ children }) => {
                         "/users/password/change",
                         "/users/refresh-token",
                         "/users/resend-register-otp",
+                        "/users/logout",
                     ];
                     return skipPaths.some((path) => originalRequest.url.includes(path));
                 })();
 
-                // ✅ HANDLE 401 - Token expired or invalid
+                // ✅ HANDLE 401 với Token Refresh Queue
                 if (
                     !isPublicAuthRequest &&
                     error.response &&
                     error.response.status === 401 &&
                     !originalRequest._retry
                 ) {
+                    // Nếu đang refresh, đưa request vào queue
+                    if (isRefreshing.current) {
+                        return new Promise((resolve, reject) => {
+                            failedQueue.current.push({ resolve, reject });
+                        })
+                            .then(token => {
+                                originalRequest.headers['Authorization'] = `Bearer ${token}`;
+                                return apiClient(originalRequest);
+                            })
+                            .catch(err => {
+                                return Promise.reject(err);
+                            });
+                    }
+
                     originalRequest._retry = true;
+                    isRefreshing.current = true;
 
                     console.warn("⚠️ 401 Unauthorized - Attempting token refresh...");
 
@@ -164,27 +220,36 @@ export const AuthProvider = ({ children }) => {
                         console.log("✅ Token refreshed successfully");
 
                         // Update token
-                        setToken(data.token);
-                        persist(user, data.token, currentStore);
+                        const newToken = data.token;
+                        setToken(newToken);
+                        persist(user, newToken, currentStore);
 
                         // Update headers
-                        apiClient.defaults.headers.common["Authorization"] = `Bearer ${data.token}`;
-                        originalRequest.headers["Authorization"] = `Bearer ${data.token}`;
+                        apiClient.defaults.headers.common["Authorization"] = `Bearer ${newToken}`;
+                        originalRequest.headers["Authorization"] = `Bearer ${newToken}`;
+
+                        // Process queued requests
+                        processQueue(null, newToken);
 
                         // Retry original request
                         return apiClient(originalRequest);
                     } catch (refreshError) {
                         console.error("❌ Token refresh failed:", refreshError);
 
-                        // ✅ AUTO LOGOUT - Token refresh failed
-                        console.log("🔒 Auto logout due to invalid/expired token");
-                        logout();
+                        // Process queue with error
+                        processQueue(refreshError, null);
+
+                        // Auto logout
+                        console.log("🔒 Auto logout: Token refresh failed");
+                        await logout();
 
                         return Promise.reject(refreshError);
+                    } finally {
+                        isRefreshing.current = false;
                     }
                 }
 
-                // ✅ HANDLE 403 - Forbidden (could be expired subscription or invalid token)
+                // ✅ HANDLE 403
                 if (
                     !isPublicAuthRequest &&
                     error.response &&
@@ -192,21 +257,21 @@ export const AuthProvider = ({ children }) => {
                 ) {
                     const errorData = error.response.data || {};
 
-                    // Check if it's a token-related 403
                     const isTokenError =
                         errorData.message?.toLowerCase().includes("token") ||
                         errorData.message?.toLowerCase().includes("unauthorized") ||
                         errorData.message?.toLowerCase().includes("invalid token") ||
-                        errorData.message?.toLowerCase().includes("jwt");
+                        errorData.message?.toLowerCase().includes("jwt") ||
+                        errorData.message?.toLowerCase().includes("expired") ||
+                        errorData.message?.toLowerCase().includes("authentication");
 
                     if (isTokenError) {
-                        console.error("❌ 403 Forbidden - Invalid token");
-                        console.log("🔒 Auto logout due to token error");
-                        logout();
+                        console.error("❌ 403 Forbidden - Invalid/Expired token");
+                        console.log("🔒 Auto logout: Token authentication error");
+                        await logout();
                         return Promise.reject(error);
                     }
 
-                    // Otherwise, it might be subscription-related, let it pass
                     console.warn("⚠️ 403 Forbidden - Not token related:", errorData.message);
                 }
 
@@ -224,15 +289,12 @@ export const AuthProvider = ({ children }) => {
         setLoading(true);
 
         try {
-            // Set immediate auth state
             setUser(userData);
             setToken(tokenData);
 
-            // Nếu user là STAFF và có currentStore, giữ lại store đó
             const initialStore = (userData?.role === "STAFF" && currentStore) ? currentStore : null;
             persist(userData, tokenData, initialStore);
 
-            // Try to prepare store info
             let resolvedStore = null;
             try {
                 const res = await ensureStore();
@@ -247,13 +309,10 @@ export const AuthProvider = ({ children }) => {
                 console.warn("ensureStore error in login (ignored):", err);
             }
 
-            // Wait for state update
             await new Promise(resolve => setTimeout(resolve, 100));
 
-            // Navigate based on role
             if (userData?.role === "STAFF") {
                 try {
-                    // Gọi API để trigger middleware check
                     const response = await apiClient.get('/products', {
                         params: { limit: 1 }
                     });
@@ -263,7 +322,6 @@ export const AuthProvider = ({ children }) => {
                     if (err.response?.status === 403) {
                         const errorData = err.response.data;
 
-                        // Check nếu là lỗi Manager expired
                         if (errorData.manager_expired || errorData.is_staff) {
                             navigate("/dashboard");
                             return;
@@ -277,7 +335,6 @@ export const AuthProvider = ({ children }) => {
             }
 
             if (userData?.role === "MANAGER") {
-                // Check subscription
                 try {
                     const subResponse = await subscriptionApi.getCurrentSubscription();
                     const subData = subResponse.data || subResponse;
@@ -302,15 +359,13 @@ export const AuthProvider = ({ children }) => {
                 return;
             }
 
-            // Default for other roles
             navigate("/dashboard");
         } catch (error) {
-            console.error("Login failed:", error);
-            // Rollback nếu lỗi
+            console.error("❌ Login failed:", error);
             setUser(null);
             setToken(null);
             persist(null, null, null);
-            navigate("/login");
+            await logout();
         } finally {
             setTimeout(() => {
                 setLoading(false);

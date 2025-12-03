@@ -39,6 +39,7 @@ dayjs.locale("vi");
 const { Option } = Select;
 const { RangePicker } = DatePicker;
 const { Text } = Typography;
+const apiUrl = import.meta.env.VITE_API_URL;
 
 const ActivityLog = () => {
   const [loading, setLoading] = useState(false);
@@ -47,16 +48,16 @@ const ActivityLog = () => {
   const [stats, setStats] = useState(null);
   const [users, setUsers] = useState([]);
   const [entities, setEntities] = useState([]);
-  const [actions] = useState(["create", "update", "delete", "restore", "other"]);
+  const [actions] = useState(["create", "update", "delete", "restore", "auth", "other"]);
   const [detailVisible, setDetailVisible] = useState(false);
   const [selectedLog, setSelectedLog] = useState(null);
   const [filterApplied, setFilterApplied] = useState(false);
-  const [viewMode, setViewMode] = useState("table"); // table / timeline
+  const [viewMode, setViewMode] = useState("table"); // table / timeline / attendance
   const [attendance, setAttendance] = useState([]);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [statsCollapsed, setStatsCollapsed] = useState(false);
 
-  // state phân trang
+  // 🚀 State phân trang
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [totalLogs, setTotalLogs] = useState(0);
@@ -85,23 +86,23 @@ const ActivityLog = () => {
     }).format(value);
   };
 
-  // LOAD USERS & ENTITIES (unique từ logs) - giữ cách bạn sẵn có
+  // LOAD USERS & ENTITIES (unique từ logs)
   useEffect(() => {
     const fetchLogsForFilters = async () => {
       try {
         const token = localStorage.getItem("token");
-        const url = `http://localhost:9999/api/activity-logs?storeId=${currentStore._id}&limit=1000`;
+        const url = `${apiUrl}/activity-logs?storeId=${currentStore._id}&limit=1000`;
         const res = await axios.get(url, {
           headers: { Authorization: `Bearer ${token}` },
         });
 
-        const logsData = res.data.data.logs || [];
+        const logsData = res.data.data || [];
 
         // Unique entities
         const uniqueEntities = [...new Set(logsData.map((l) => l.entity).filter(Boolean))];
         setEntities(uniqueEntities);
 
-        // Unique users (dựa vào userName)
+        // Unique users
         const uniqueUsers = [...new Set(logsData.map((l) => l.userName).filter(Boolean))];
         setUsers(uniqueUsers);
       } catch (err) {
@@ -117,7 +118,7 @@ const ActivityLog = () => {
     const fetchStats = async () => {
       try {
         const token = localStorage.getItem("token");
-        const url = `http://localhost:9999/api/activity-logs/stats?storeId=${currentStore._id}`;
+        const url = `${apiUrl}/activity-logs/stats?storeId=${currentStore._id}`;
         const res = await axios.get(url, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -129,19 +130,18 @@ const ActivityLog = () => {
     if (currentStore._id) fetchStats();
   }, [currentStore._id]);
 
-  // BUILD params helper: chỉ append khi có giá trị (non-empty)
+  // 🚀 BUILD params helper
   const buildParamsFromFilters = (f) => {
     const params = new URLSearchParams();
     Object.entries(f).forEach(([k, v]) => {
       if (v === undefined || v === null) return;
-      // treat empty string as skip
       if (typeof v === "string" && v.trim() === "") return;
       params.append(k, v);
     });
     return params;
   };
 
-  // FETCH LOGS
+  // 🚀 FETCH LOGS - TỐI ƯU HÓA
   const fetchLogs = async (overrideFilters = null) => {
     if (!currentStore?._id) {
       setError("Vui lòng chọn cửa hàng");
@@ -150,39 +150,39 @@ const ActivityLog = () => {
     setLoading(true);
     setError(null);
     try {
-      // if overrideFilters passed, merge it
       const mergedFilters = overrideFilters ? { ...filters, ...overrideFilters } : filters;
-      // ensure page/limit reflect current pagination state
       mergedFilters.page = mergedFilters.page || currentPage || 1;
       mergedFilters.limit = mergedFilters.limit || pageSize || 20;
 
       const token = localStorage.getItem("token");
       const params = buildParamsFromFilters({
-        ...mergedFilters, // 👈 giải phẳng object ra
-        storeId: currentStore._id, // 👈 thêm storeId vào cùng cấp
+        ...mergedFilters,
+        storeId: currentStore._id,
       });
-      if (currentStore?._id);
-      const url = `http://localhost:9999/api/activity-logs?${params.toString()}`;
+
+      const url = `${apiUrl}/activity-logs?${params.toString()}`;
       const res = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } });
 
-      const respLogs = res.data.data.logs || [];
-      const pagination = res.data.data.pagination || {};
+      // 🚀 RESPONSE MỚI TỪ BACKEND
+      const respLogs = res.data.data || []; // data trực tiếp là array
+      const pagination = res.data.pagination || {};
 
-      // NẾU GỌI VỚI action=auth → LƯU VÀO attendance
+      // Nếu gọi với action=auth → lưu vào attendance
       if (overrideFilters?.action === "auth" && overrideFilters?.entity === "Store") {
         setAttendance(respLogs);
       } else {
         setLogs(respLogs);
       }
-      // xét logic phân trang (fallbacks)
-      setCurrentPage(pagination.current || mergedFilters.page || 1);
-      setPageSize(pagination.pageSize || pagination.limit || mergedFilters.limit || 20);
+
+      // 🚀 CÂP NHẬT PAGINATION
+      setCurrentPage(pagination.current || 1);
+      setPageSize(pagination.pageSize || 20);
       setTotalLogs(pagination.total || 0);
-      // also reflect into filters so next requests use correct page/limit
+
       setFilters((prev) => ({
         ...prev,
-        page: pagination.current || mergedFilters.page || 1,
-        limit: pagination.limit || mergedFilters.limit || 20,
+        page: pagination.current || 1,
+        limit: pagination.pageSize || 20,
       }));
     } catch (err) {
       setError(err.response?.data?.message || "Lỗi tải nhật ký");
@@ -191,12 +191,11 @@ const ActivityLog = () => {
     }
   };
 
-  //hàm fetch lấy thông tin điểm danh
+  // 🚀 FETCH ATTENDANCE
   const fetchAttendance = async () => {
     if (!currentStore?._id) return;
     setAttendanceLoading(true);
     try {
-      // DÙNG CHUNG fetchLogs → ĐÃ PASS checkStoreAccess
       await fetchLogs({
         action: "auth",
         entity: "Store",
@@ -218,35 +217,34 @@ const ActivityLog = () => {
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const url = `http://localhost:9999/api/activity-logs/${id}?storeId=${currentStore._id}`;
+      const url = `${apiUrl}/activity-logs/${id}?storeId=${currentStore._id}`;
       const res = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } });
       setSelectedLog(res.data.data);
       setDetailVisible(true);
     } catch (err) {
-      // use console since message might not be imported in this scope
       console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
-  // Auto-fetch logs on component mount if store exists
+  // Auto-fetch logs on mount
   useEffect(() => {
     if (currentStore?._id) {
-      fetchLogs();
       if (viewMode === "attendance") {
-        fetchAttendance(); // ← GỌI NGAY KHI CHỌN STORE VÀ ĐANG Ở TAB VÀO CA
+        fetchAttendance();
+      } else {
+        fetchLogs();
       }
     }
   }, [currentStore._id, viewMode]);
 
-  // helper: when user changes filters in UI
+  // Filter handlers
   const handleFilterChange = (key, value) => {
-    // if user chose the "Tất cả" option (value === ""), we want to clear that filter
     const val = value === "" ? "" : value;
     setFilters((prev) => ({ ...prev, [key]: val, page: 1 }));
   };
-  // hàm chọn ngày tháng đến ngày tháng
+
   const handleDateRange = (dates) => {
     if (dates) {
       setFilters((prev) => ({
@@ -259,7 +257,8 @@ const ActivityLog = () => {
       setFilters((prev) => ({ ...prev, fromDate: "", toDate: "", page: 1 }));
     }
   };
-  // Table columns
+
+  // 🚀 TABLE COLUMNS
   const columns = [
     {
       title: "Thời gian",
@@ -268,9 +267,7 @@ const ActivityLog = () => {
       width: 130,
       sorter: (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
       render: (date) => dayjs(date).format("DD/MM/YYYY HH:mm:ss"),
-      onCell: () => ({
-        style: { cursor: "pointer" }, // cursor pointer cho body cell
-      }),
+      onCell: () => ({ style: { cursor: "pointer" } }),
     },
     {
       title: "Người dùng",
@@ -278,9 +275,7 @@ const ActivityLog = () => {
       key: "userName",
       width: 180,
       render: (name) => <Text strong>{name}</Text>,
-      onCell: () => ({
-        style: { cursor: "pointer" }, // cursor pointer cho body cell
-      }),
+      onCell: () => ({ style: { cursor: "pointer" } }),
     },
     {
       title: "Vai trò",
@@ -288,9 +283,7 @@ const ActivityLog = () => {
       key: "userRole",
       width: 85,
       render: (role) => <Tag color={role === "MANAGER" ? "blue" : "green"}>{role}</Tag>,
-      onCell: () => ({
-        style: { cursor: "pointer" }, // cursor pointer cho body cell
-      }),
+      onCell: () => ({ style: { cursor: "pointer" } }),
     },
     {
       title: "Hành động",
@@ -298,9 +291,7 @@ const ActivityLog = () => {
       key: "action",
       width: 85,
       render: (action) => <Tag color="volcano">{action.toUpperCase()}</Tag>,
-      onCell: () => ({
-        style: { cursor: "pointer" }, // cursor pointer cho body cell
-      }),
+      onCell: () => ({ style: { cursor: "pointer" } }),
     },
     {
       title: "Đối tượng",
@@ -308,9 +299,7 @@ const ActivityLog = () => {
       key: "entity",
       width: 95,
       render: (entity) => <Tag color="cyan">{entity}</Tag>,
-      onCell: () => ({
-        style: { cursor: "pointer" }, // cursor pointer cho body cell
-      }),
+      onCell: () => ({ style: { cursor: "pointer" } }),
     },
     {
       title: "Tên đối tượng",
@@ -318,9 +307,7 @@ const ActivityLog = () => {
       key: "entityName",
       width: 180,
       ellipsis: { showTitle: false },
-      onCell: () => ({
-        style: { cursor: "pointer" }, // cursor pointer cho body cell
-      }),
+      onCell: () => ({ style: { cursor: "pointer" } }),
     },
     {
       title: "Mô tả",
@@ -328,9 +315,7 @@ const ActivityLog = () => {
       key: "description",
       width: 280,
       ellipsis: { showTitle: false },
-      onCell: () => ({
-        style: { cursor: "pointer" }, // cursor pointer cho body cell
-      }),
+      onCell: () => ({ style: { cursor: "pointer" } }),
     },
     {
       title: "Hành động",
@@ -342,24 +327,23 @@ const ActivityLog = () => {
           <Button type="link" icon={<InfoCircleOutlined />} onClick={() => fetchLogDetail(record._id)} />
         </Tooltip>
       ),
-      onCell: () => ({
-        style: { cursor: "pointer" }, // cursor pointer cho body cell
-      }),
+      onCell: () => ({ style: { cursor: "pointer" } }),
     },
   ];
-  //hàm tạo cách hiển thị timeline
+
+  // 🚀 TIMELINE ITEMS
   const timelineItems = logs.map((log) => ({
     label: formatDate(log.createdAt),
     color:
       log.action === "create"
         ? "green"
         : log.action === "update"
-        ? "blue"
-        : log.action === "delete"
-        ? "red"
-        : log.action === "auth"
-        ? "purple"
-        : "gray",
+          ? "blue"
+          : log.action === "delete"
+            ? "red"
+            : log.action === "auth"
+              ? "purple"
+              : "gray",
     children: (
       <div>
         <Text strong>{log.userName}</Text>
@@ -385,16 +369,35 @@ const ActivityLog = () => {
     ),
   }));
 
-  // Callbacks lại cho các điều khiển phân trang (Table)
+  // 🚀 TABLE PAGINATION HANDLER
   const handleTableChange = (page, size) => {
-    // cập nhật trạng thái phân trang cục bộ và bộ lọc, sau đó lấy trang mới
     setFilterApplied(true);
     setCurrentPage(page);
     setPageSize(size);
-    // cập nhật bộ lọc và chạy fetch
     const newFilters = { ...filters, page, limit: size };
     setFilters(newFilters);
     fetchLogs(newFilters);
+  };
+
+  // 🚀 LOAD MORE FOR TIMELINE
+  const handleLoadMore = async () => {
+    const nextPage = currentPage + 1;
+    const newFilters = { ...filters, page: nextPage, limit: pageSize };
+    setLoading(true);
+    try {
+      const token = localStorage.getItem("token");
+      const params = buildParamsFromFilters({ ...newFilters, storeId: currentStore._id });
+      const res = await axios.get(`${apiUrl}/activity-logs?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const newLogs = res.data.data || [];
+      setLogs((prev) => [...prev, ...newLogs]);
+      setCurrentPage(nextPage);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -408,7 +411,7 @@ const ActivityLog = () => {
           </Card>
         ) : (
           <Space direction="vertical" size="large" style={{ width: "100%" }}>
-            {/* HEADER: TIÊU ĐỀ + CHẾ ĐỘ XEM */}
+            {/* HEADER */}
             <Card style={{ border: "1px solid #8c8c8c" }}>
               <Row justify="space-between" align="middle">
                 <Col>
@@ -425,10 +428,7 @@ const ActivityLog = () => {
                       type={viewMode === "table" ? "primary" : "default"}
                       icon={<UnorderedListOutlined />}
                       onClick={() => setViewMode("table")}
-                      style={{
-                        borderRadius: 8,
-                        fontWeight: 500,
-                      }}
+                      style={{ borderRadius: 8, fontWeight: 500 }}
                     >
                       Nhật ký chung
                     </Button>
@@ -439,10 +439,7 @@ const ActivityLog = () => {
                         setViewMode("attendance");
                         fetchAttendance();
                       }}
-                      style={{
-                        borderRadius: 8,
-                        fontWeight: 500,
-                      }}
+                      style={{ borderRadius: 8, fontWeight: 500 }}
                     >
                       Vào ca hôm nay
                     </Button>
@@ -450,10 +447,7 @@ const ActivityLog = () => {
                       type={viewMode === "timeline" ? "primary" : "default"}
                       icon={<ClockCircleOutlined />}
                       onClick={() => setViewMode("timeline")}
-                      style={{
-                        borderRadius: 8,
-                        fontWeight: 500,
-                      }}
+                      style={{ borderRadius: 8, fontWeight: 500 }}
                     >
                       Timeline
                     </Button>
@@ -462,7 +456,7 @@ const ActivityLog = () => {
               </Row>
             </Card>
 
-            {/* FILTERS - CHỈ HIỆN KHI Ở CHẾ ĐỘ TABLE HOẶC TIMELINE */}
+            {/* FILTERS */}
             {(viewMode === "table" || viewMode === "timeline") && (
               <Card style={{ border: "1px solid #8c8c8c" }}>
                 <Row gutter={16} align="middle">
@@ -576,7 +570,7 @@ const ActivityLog = () => {
                   <Col span={6}>
                     <Statistic
                       title="Hành động phổ biến"
-                      value={Object.keys(stats.actionCounts)[0] || "N/A"}
+                      value={Object.keys(stats.actionCounts || {})[0] || "N/A"}
                       formatter={(val) => (
                         <Tag color="volcano" style={{ fontSize: 20, padding: "0 8px" }}>
                           {(val || "N/A").toUpperCase()}
@@ -587,7 +581,7 @@ const ActivityLog = () => {
                   <Col span={6}>
                     <Statistic
                       title="Đối tượng phổ biến"
-                      value={Object.keys(stats.entityCounts)[0] || "N/A"}
+                      value={Object.keys(stats.entityCounts || {})[0] || "N/A"}
                       formatter={(val) => (
                         <Tag color="cyan" style={{ fontSize: 20, padding: "0 8px" }}>
                           {(val || "N/A").toUpperCase()}
@@ -614,43 +608,33 @@ const ActivityLog = () => {
                     pageSize,
                     total: totalLogs,
                     showSizeChanger: true,
+                    pageSizeOptions: ["10", "20", "50", "100"],
                     onChange: handleTableChange,
                     onShowSizeChange: (current, size) => handleTableChange(1, size),
                     showTotal: (total, range) => (
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          width: "100%",
-                          fontSize: 14,
-                          color: "#555",
-                        }}
-                      >
-                        <div>
-                          Đang xem{" "}
-                          <span style={{ color: "#1890ff", fontWeight: 600 }}>
-                            {range[0]} – {range[1]}
-                          </span>{" "}
-                          trên tổng số <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> nhật ký
-                        </div>
+                      <div style={{ fontSize: 14, color: "#555" }}>
+                        Đang xem{" "}
+                        <span style={{ color: "#1890ff", fontWeight: 600 }}>
+                          {range[0]} – {range[1]}
+                        </span>{" "}
+                        trên tổng số <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> nhật ký
                       </div>
                     ),
                   }}
                   scroll={{ x: 1200 }}
                   locale={{
-                    emptyText:
-                      logs.length === 0 ? (
-                        <div style={{ color: "#f45a07f7" }}>
-                          {filterApplied ? "Phần này chưa có nhật ký" : "Chưa có nhật ký. Hãy lọc và xem!"}
-                        </div>
-                      ) : null,
+                    emptyText: (
+                      <div style={{ color: "#f45a07f7" }}>
+                        {filterApplied ? "Phần này chưa có nhật ký" : "Chưa có nhật ký. Hãy lọc và xem!"}
+                      </div>
+                    ),
                   }}
                   onRow={(record) => ({ onClick: () => fetchLogDetail(record._id) })}
                 />
               </Card>
             )}
 
-            {/* VIEW MODE: ATTENDANCE (VÀO CA HÔM NAY) */}
+            {/* VIEW MODE: ATTENDANCE */}
             {viewMode === "attendance" && (
               <Card
                 title={
@@ -755,27 +739,7 @@ const ActivityLog = () => {
                 <Timeline mode="alternate" items={timelineItems} />
                 {totalLogs > logs.length && (
                   <div style={{ textAlign: "center", marginTop: 16 }}>
-                    <Button
-                      onClick={async () => {
-                        const nextPage = currentPage + 1;
-                        const newFilters = { ...filters, page: nextPage, limit: pageSize };
-                        setLoading(true);
-                        try {
-                          const token = localStorage.getItem("token");
-                          const params = new URLSearchParams({ ...newFilters, storeId: currentStore._id });
-                          const res = await axios.get(`http://localhost:9999/api/activity-logs?${params.toString()}`, {
-                            headers: { Authorization: `Bearer ${token}` },
-                          });
-                          const newLogs = res.data.data.logs || [];
-                          setLogs((prev) => [...prev, ...newLogs]);
-                          setCurrentPage(nextPage);
-                        } catch (err) {
-                          console.error(err);
-                        } finally {
-                          setLoading(false);
-                        }
-                      }}
-                    >
+                    <Button onClick={handleLoadMore} loading={loading}>
                       Xem thêm
                     </Button>
                   </div>

@@ -24,7 +24,7 @@ import "dayjs/locale/vi"; // ✅ LOCALE VI
 dayjs.locale("vi"); // ✅ SET LOCALE VI
 dayjs.extend(localizedFormat);
 dayjs.extend(quarterOfYear);
-
+const apiUrl = import.meta.env.VITE_API_URL;
 // CUSTOM LOCALE CHO TIẾNG VIỆT ĐẸP
 const vietnameseLocale = {
   ...dayjs.Ls.vi,
@@ -118,7 +118,7 @@ const ReportDashboard = () => {
         params.append("extraExpense", extraExpenses.join(","));
       }
 
-      const url = `http://localhost:9999/api/financials?${params.toString()}`;
+      const url = `${apiUrl}/financials?${params.toString()}`;
       console.log("URL:", url);
 
       const res = await axios.get(url, {
