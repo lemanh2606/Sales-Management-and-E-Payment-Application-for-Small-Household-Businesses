@@ -9,12 +9,7 @@ const Supplier = require("../../models/Supplier");
 const logActivity = require("../../utils/logActivity");
 const path = require("path");
 const { cloudinary, deleteFromCloudinary } = require("../../utils/cloudinary");
-const {
-  parseExcelToJSON,
-  validateRequiredFields,
-  validateNumericField,
-  sanitizeData,
-} = require("../../utils/fileImport");
+const { parseExcelToJSON, validateRequiredFields, validateNumericField, sanitizeData } = require("../../utils/fileImport");
 
 // ============= HELPER FUNCTIONS =============
 const generateSKU = async (storeId) => {
@@ -29,8 +24,7 @@ const generateSKU = async (storeId) => {
   }
 
   let paddingLength = 6;
-  if (nextNumber > 999999)
-    paddingLength = Math.max(6, nextNumber.toString().length);
+  if (nextNumber > 999999) paddingLength = Math.max(6, nextNumber.toString().length);
 
   return `SP${nextNumber.toString().padStart(paddingLength, "0")}`;
 };
@@ -38,94 +32,55 @@ const generateSKU = async (storeId) => {
 // ============= CREATE - Tạo sản phẩm mới =============
 const createProduct = async (req, res) => {
   try {
+    console.log("----- CREATE PRODUCT REQUEST -----");
+    console.log("User:", req.user?.id || req.user?._id);
+    console.log("storeId param:", req.params.storeId);
+    console.log("req.body keys:", Object.keys(req.body || {}));
+    console.log("req.body sample:", req.body);
+    console.log("req.file (multer):", req.file);
+
     if (!req.body || Object.keys(req.body).length === 0) {
       return res.status(400).json({
-        message:
-          "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json",
+        message: "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json",
       });
     }
 
-    const {
-      name,
-      description,
-      sku,
-      price,
-      cost_price,
-      stock_quantity,
-      min_stock,
-      max_stock,
-      unit,
-      status,
-      supplier_id,
-      group_id,
-    } = req.body;
+    const { name, description, sku, price, cost_price, stock_quantity, min_stock, max_stock, unit, status, supplier_id, group_id } = req.body;
     const { storeId } = req.params;
     const userId = req.user.id || req.user._id;
 
-    if (!name || !price || !cost_price)
-      return res
-        .status(400)
-        .json({ message: "Tên sản phẩm, giá bán và giá vốn là bắt buộc" });
-    if (isNaN(price) || price < 0)
-      return res.status(400).json({ message: "Giá bán phải là số dương" });
-    if (isNaN(cost_price) || cost_price < 0)
-      return res.status(400).json({ message: "Giá vốn phải là số dương" });
+    if (!name || !price || !cost_price) return res.status(400).json({ message: "Tên sản phẩm, giá bán và giá vốn là bắt buộc" });
+    if (isNaN(price) || price < 0) return res.status(400).json({ message: "Giá bán phải là số dương" });
+    if (isNaN(cost_price) || cost_price < 0) return res.status(400).json({ message: "Giá vốn phải là số dương" });
 
-    if (
-      stock_quantity !== undefined &&
-      (isNaN(stock_quantity) || stock_quantity < 0)
-    )
-      return res
-        .status(400)
-        .json({ message: "Số lượng tồn kho phải là số không âm" });
+    if (stock_quantity !== undefined && (isNaN(stock_quantity) || stock_quantity < 0))
+      return res.status(400).json({ message: "Số lượng tồn kho phải là số không âm" });
     if (min_stock !== undefined && (isNaN(min_stock) || min_stock < 0))
-      return res
-        .status(400)
-        .json({ message: "Tồn kho tối thiểu phải là số không âm" });
+      return res.status(400).json({ message: "Tồn kho tối thiểu phải là số không âm" });
     if (max_stock !== undefined && (isNaN(max_stock) || max_stock < 0))
-      return res
-        .status(400)
-        .json({ message: "Tồn kho tối đa phải là số không âm" });
-    if (
-      min_stock !== undefined &&
-      max_stock !== undefined &&
-      min_stock > max_stock
-    )
+      return res.status(400).json({ message: "Tồn kho tối đa phải là số không âm" });
+    if (min_stock !== undefined && max_stock !== undefined && min_stock > max_stock)
       return res.status(400).json({
         message: "Tồn kho tối thiểu không thể lớn hơn tồn kho tối đa",
       });
 
-    if (
-      status &&
-      !["Đang kinh doanh", "Ngừng kinh doanh", "Ngừng bán"].includes(status)
-    ) {
-      return res
-        .status(400)
-        .json({ message: "Trạng thái sản phẩm không hợp lệ" });
+    if (status && !["Đang kinh doanh", "Ngừng kinh doanh", "Ngừng bán"].includes(status)) {
+      return res.status(400).json({ message: "Trạng thái sản phẩm không hợp lệ" });
     }
 
     const user = await User.findById(userId);
-    if (!user)
-      return res.status(404).json({ message: "Người dùng không tồn tại" });
+    if (!user) return res.status(404).json({ message: "Người dùng không tồn tại" });
 
     const store = await Store.findById(storeId);
-    if (!store)
-      return res.status(404).json({ message: "Cửa hàng không tồn tại" });
-
-    // ĐÃ LOẠI BỎ CHECK ROLE - Chỉ kiểm tra user và store tồn tại
-    // Mọi user đã xác thực đều có thể tạo sản phẩm
+    if (!store) return res.status(404).json({ message: "Cửa hàng không tồn tại" });
 
     if (group_id) {
       const productGroup = await ProductGroup.findOne({
         _id: group_id,
         isDeleted: false,
       });
-      if (!productGroup)
-        return res.status(404).json({ message: "Nhóm sản phẩm không tồn tại" });
-      if (productGroup.storeId.toString() !== storeId)
-        return res
-          .status(400)
-          .json({ message: "Nhóm sản phẩm không thuộc cửa hàng này" });
+      if (!productGroup) return res.status(404).json({ message: "Nhóm sản phẩm không tồn tại" });
+      if (productGroup.storeId.toString() !== storeId) return res.status(400).json({ message: "Nhóm sản phẩm không thuộc cửa hàng này" });
     }
 
     if (supplier_id) {
@@ -133,12 +88,8 @@ const createProduct = async (req, res) => {
         _id: supplier_id,
         isDeleted: false,
       });
-      if (!supplier)
-        return res.status(404).json({ message: "Nhà cung cấp không tồn tại" });
-      if (supplier.store_id.toString() !== storeId)
-        return res
-          .status(400)
-          .json({ message: "Nhà cung cấp không thuộc cửa hàng này" });
+      if (!supplier) return res.status(404).json({ message: "Nhà cung cấp không tồn tại" });
+      if (supplier.store_id.toString() !== storeId) return res.status(400).json({ message: "Nhà cung cấp không thuộc cửa hàng này" });
     }
 
     if (sku) {
@@ -147,23 +98,11 @@ const createProduct = async (req, res) => {
         store_id: storeId,
         isDeleted: false,
       });
-      if (existingProduct)
-        return res
-          .status(409)
-          .json({ message: "Mã SKU này đã tồn tại trong cửa hàng" });
+      if (existingProduct) return res.status(409).json({ message: "Mã SKU này đã tồn tại trong cửa hàng" });
     }
-
     const productSKU = sku || (await generateSKU(storeId));
 
-    let imageData = null;
-    if (req.file) {
-      imageData = {
-        url: req.file.path || req.file.secure_url,
-        public_id: req.file.filename || req.file.public_id,
-      };
-    }
-
-    const newProduct = new Product({
+    const productData = {
       name,
       description,
       sku: productSKU,
@@ -177,9 +116,22 @@ const createProduct = async (req, res) => {
       store_id: storeId,
       supplier_id: supplier_id || null,
       group_id: group_id || null,
-      image: imageData,
       createdBy: userId,
-    });
+    };
+
+    if (req.file) {
+      productData.image = {
+        url: req.file.path,
+        public_id: req.file.filename || req.file.path.split("/").pop().split(".")[0],
+      };
+      console.log("Ảnh sản phẩm đã upload lên Cloudinary:", productData.image);
+      console.log("---- MULTER REQ.FILE ----");
+      console.log(req.file);
+      console.log("---- REQ.BODY ----");
+      console.log(req.body);
+    }
+
+    const newProduct = new Product(productData);
 
     await newProduct.save();
 
@@ -203,9 +155,7 @@ const createProduct = async (req, res) => {
       description: `Tạo mới sản phẩm ${newProduct.name} (SKU: ${newProduct.sku}) tại cửa hàng ${storeId}`,
     });
 
-    res
-      .status(201)
-      .json({ message: "Tạo sản phẩm thành công", product: populatedProduct });
+    res.status(201).json({ message: "Tạo sản phẩm thành công", product: populatedProduct });
   } catch (error) {
     console.error("❌ Lỗi createProduct:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
@@ -215,74 +165,39 @@ const createProduct = async (req, res) => {
 // ============= UPDATE - Cập nhật sản phẩm đầy đủ =============
 const updateProduct = async (req, res) => {
   try {
-    if (!req.body || Object.keys(req.body).length === 0)
-      return res.status(400).json({ message: "Dữ liệu request body trống" });
+    if (!req.body || Object.keys(req.body).length === 0) return res.status(400).json({ message: "Dữ liệu request body trống" });
 
     const { productId } = req.params;
+    const { storeId } = req.query;
     const userId = req.user.id || req.user._id;
-    const {
-      name,
-      description,
-      sku,
-      price,
-      cost_price,
-      stock_quantity,
-      min_stock,
-      max_stock,
-      unit,
-      status,
-      supplier_id,
-      group_id,
-    } = req.body;
+    const { name, description, sku, price, cost_price, stock_quantity, min_stock, max_stock, unit, status, supplier_id, group_id } = req.body;
 
     const product = await Product.findOne({
       _id: productId,
       isDeleted: false,
     }).populate("store_id", "owner_id");
-    if (!product)
-      return res.status(404).json({ message: "Sản phẩm không tồn tại" });
+    if (!product) return res.status(404).json({ message: "Sản phẩm không tồn tại" });
 
     // ĐÃ LOẠI BỎ CHECK ROLE - Chỉ kiểm tra user tồn tại
     const user = await User.findById(userId);
-    if (!user)
-      return res.status(404).json({ message: "Người dùng không tồn tại" });
+    if (!user) return res.status(404).json({ message: "Người dùng không tồn tại" });
 
     // Validate numeric fields
-    if (price !== undefined && (isNaN(price) || price < 0))
-      return res.status(400).json({ message: "Giá bán phải là số dương" });
-    if (cost_price !== undefined && (isNaN(cost_price) || cost_price < 0))
-      return res.status(400).json({ message: "Giá vốn phải là số dương" });
-    if (
-      stock_quantity !== undefined &&
-      (isNaN(stock_quantity) || stock_quantity < 0)
-    )
-      return res
-        .status(400)
-        .json({ message: "Số lượng tồn kho phải là số không âm" });
+    if (price !== undefined && (isNaN(price) || price < 0)) return res.status(400).json({ message: "Giá bán phải là số dương" });
+    if (cost_price !== undefined && (isNaN(cost_price) || cost_price < 0)) return res.status(400).json({ message: "Giá vốn phải là số dương" });
+    if (stock_quantity !== undefined && (isNaN(stock_quantity) || stock_quantity < 0))
+      return res.status(400).json({ message: "Số lượng tồn kho phải là số không âm" });
     if (min_stock !== undefined && (isNaN(min_stock) || min_stock < 0))
-      return res
-        .status(400)
-        .json({ message: "Tồn kho tối thiểu phải là số không âm" });
+      return res.status(400).json({ message: "Tồn kho tối thiểu phải là số không âm" });
     if (max_stock !== undefined && (isNaN(max_stock) || max_stock < 0))
-      return res
-        .status(400)
-        .json({ message: "Tồn kho tối đa phải là số không âm" });
-    if (
-      min_stock !== undefined &&
-      max_stock !== undefined &&
-      min_stock > max_stock
-    )
+      return res.status(400).json({ message: "Tồn kho tối đa phải là số không âm" });
+    if (min_stock !== undefined && max_stock !== undefined && min_stock > max_stock)
       return res.status(400).json({
         message: "Tồn kho tối thiểu không thể lớn hơn tồn kho tối đa",
       });
 
-    if (
-      status &&
-      !["Đang kinh doanh", "Ngừng kinh doanh", "Ngừng bán"].includes(status)
-    )
-      return res
-        .status(400)
-        .json({ message: "Trạng thái sản phẩm không hợp lệ" });
+    if (status && !["Đang kinh doanh", "Ngừng kinh doanh", "Ngừng bán"].includes(status))
+      return res.status(400).json({ message: "Trạng thái sản phẩm không hợp lệ" });
 
     if (sku !== undefined && sku !== product.sku) {
       const existingProduct = await Product.findOne({
@@ -291,10 +206,7 @@ const updateProduct = async (req, res) => {
         _id: { $ne: productId },
         isDeleted: false,
       });
-      if (existingProduct)
-        return res
-          .status(409)
-          .json({ message: "Mã SKU này đã tồn tại trong cửa hàng" });
+      if (existingProduct) return res.status(409).json({ message: "Mã SKU này đã tồn tại trong cửa hàng" });
     }
 
     if (group_id) {
@@ -302,12 +214,9 @@ const updateProduct = async (req, res) => {
         _id: group_id,
         isDeleted: false,
       });
-      if (!productGroup)
-        return res.status(404).json({ message: "Nhóm sản phẩm không tồn tại" });
+      if (!productGroup) return res.status(404).json({ message: "Nhóm sản phẩm không tồn tại" });
       if (productGroup.storeId.toString() !== product.store_id._id.toString())
-        return res
-          .status(400)
-          .json({ message: "Nhóm sản phẩm không thuộc cửa hàng này" });
+        return res.status(400).json({ message: "Nhóm sản phẩm không thuộc cửa hàng này" });
     }
 
     if (supplier_id) {
@@ -315,12 +224,9 @@ const updateProduct = async (req, res) => {
         _id: supplier_id,
         isDeleted: false,
       });
-      if (!supplier)
-        return res.status(404).json({ message: "Nhà cung cấp không tồn tại" });
+      if (!supplier) return res.status(404).json({ message: "Nhà cung cấp không tồn tại" });
       if (supplier.store_id.toString() !== product.store_id._id.toString())
-        return res
-          .status(400)
-          .json({ message: "Nhà cung cấp không thuộc cửa hàng này" });
+        return res.status(400).json({ message: "Nhà cung cấp không thuộc cửa hàng này" });
     }
 
     const updateData = {
@@ -337,24 +243,19 @@ const updateProduct = async (req, res) => {
       supplier_id,
       group_id,
     };
-    Object.keys(updateData).forEach(
-      (k) => updateData[k] === undefined && delete updateData[k]
-    );
+    Object.keys(updateData).forEach((k) => updateData[k] === undefined && delete updateData[k]);
 
     if (req.file) {
-      if (product.image && product.image.public_id)
+      // XÓA ảnh cũ nếu có
+      if (product.image?.public_id) {
         await deleteFromCloudinary(product.image.public_id);
+      }
       updateData.image = {
-        url: req.file.path || req.file.secure_url,
-        public_id: req.file.filename || req.file.public_id,
+        url: req.file.path,
+        public_id: req.file.filename,
       };
     }
-
-    const updatedProduct = await Product.findByIdAndUpdate(
-      productId,
-      updateData,
-      { new: true }
-    )
+    const updatedProduct = await Product.findByIdAndUpdate(productId, updateData, { new: true })
       .populate("supplier_id", "name")
       .populate("store_id", "name")
       .populate("group_id", "name");
@@ -391,13 +292,11 @@ const deleteProduct = async (req, res) => {
       _id: productId,
       isDeleted: false,
     }).populate("store_id", "owner_id");
-    if (!product)
-      return res.status(404).json({ message: "Sản phẩm không tồn tại" });
+    if (!product) return res.status(404).json({ message: "Sản phẩm không tồn tại" });
 
     // ĐÃ LOẠI BỎ CHECK ROLE - Chỉ kiểm tra user tồn tại
     const user = await User.findById(userId);
-    if (!user)
-      return res.status(404).json({ message: "Người dùng không tồn tại" });
+    if (!user) return res.status(404).json({ message: "Người dùng không tồn tại" });
 
     product.isDeleted = true;
     await product.save();
@@ -442,11 +341,7 @@ const getProductsByStore = async (req, res) => {
     // Thêm filter theo query tìm kiếm
     if (query && query.trim() !== "") {
       const searchRegex = new RegExp(query.trim(), "i");
-      filter.$or = [
-        { name: searchRegex },
-        { sku: searchRegex },
-        { description: searchRegex },
-      ];
+      filter.$or = [{ name: searchRegex }, { sku: searchRegex }, { description: searchRegex }];
     }
 
     // Thêm filter theo status
@@ -551,8 +446,7 @@ const updateProductPrice = async (req, res) => {
     // Kiểm tra xem request body có tồn tại không
     if (!req.body || Object.keys(req.body).length === 0) {
       return res.status(400).json({
-        message:
-          "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json",
+        message: "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json",
       });
     }
 
@@ -581,11 +475,7 @@ const updateProductPrice = async (req, res) => {
     }
 
     // Cập nhật giá bán sản phẩm
-    const updatedProduct = await Product.findByIdAndUpdate(
-      productId,
-      { price: price },
-      { new: true }
-    )
+    const updatedProduct = await Product.findByIdAndUpdate(productId, { price: price }, { new: true })
       .populate("supplier_id", "name")
       .populate("store_id", "name")
       .populate("group_id", "name");
@@ -643,9 +533,7 @@ const getLowStockProducts = async (req, res) => {
       status: "Đang kinh doanh", // Chỉ sản phẩm đang bán
       min_stock: { $gt: 0 }, // Min stock > 0 tránh cảnh báo ảo
       lowStockAlerted: false, // Chưa cảnh báo
-      store_id: storeId
-        ? new mongoose.Types.ObjectId(storeId)
-        : { $exists: true }, // Filter store nếu có
+      store_id: storeId ? new mongoose.Types.ObjectId(storeId) : { $exists: true }, // Filter store nếu có
       isDeleted: false, // Chỉ lấy sản phẩm chưa bị xóa
     };
 
@@ -655,11 +543,7 @@ const getLowStockProducts = async (req, res) => {
       .limit(20) // Limit 20 để tránh query lớn
       .lean(); // Lean cho nhanh
 
-    console.log(
-      `Query low stock thành công, số lượng: ${
-        lowStockProds.length
-      } sản phẩm cho store ${storeId || "tất cả"}`
-    );
+    console.log(`Query low stock thành công, số lượng: ${lowStockProds.length} sản phẩm cho store ${storeId || "tất cả"}`);
     res.json({
       message: "Lấy danh sách tồn kho thấp thành công",
       products: lowStockProds,
@@ -676,9 +560,7 @@ const searchProducts = async (req, res) => {
     const { query, storeId, limit = 10 } = req.query; // Params: query (tên/SKU), storeId, limit (default 10)
 
     if (!query || query.trim().length === 0) {
-      return res
-        .status(400)
-        .json({ message: "Query tìm kiếm không được để trống" });
+      return res.status(400).json({ message: "Query tìm kiếm không được để trống" });
     }
 
     const searchQuery = {
@@ -697,9 +579,7 @@ const searchProducts = async (req, res) => {
       .limit(parseInt(limit)) // Limit số kết quả
       .lean(); // Lean cho nhanh
 
-    console.log(
-      `Tìm kiếm sản phẩm thành công: "${query}" trong store ${storeId}, kết quả: ${products.length} sản phẩm`
-    );
+    console.log(`Tìm kiếm sản phẩm thành công: "${query}" trong store ${storeId}, kết quả: ${products.length} sản phẩm`);
     res.json({ message: `Tìm thấy ${products.length} sản phẩm`, products });
   } catch (err) {
     console.error("Lỗi search sản phẩm:", err.message);
@@ -774,12 +654,10 @@ const importProducts = async (req, res) => {
     }
 
     const user = await User.findById(userId);
-    if (!user)
-      return res.status(404).json({ message: "Người dùng không tồn tại" });
+    if (!user) return res.status(404).json({ message: "Người dùng không tồn tại" });
 
     const store = await Store.findById(storeId);
-    if (!store)
-      return res.status(404).json({ message: "Cửa hàng không tồn tại" });
+    if (!store) return res.status(404).json({ message: "Cửa hàng không tồn tại" });
 
     // quyền: owner hoặc nhân viên thuộc store
     const storeOwnerId = store.owner_id ? store.owner_id.toString() : null;
@@ -799,9 +677,7 @@ const importProducts = async (req, res) => {
 
     const data = await parseExcelToJSON(req.file.buffer);
     if (!Array.isArray(data) || data.length === 0) {
-      return res
-        .status(400)
-        .json({ message: "File không chứa dữ liệu hợp lệ" });
+      return res.status(400).json({ message: "File không chứa dữ liệu hợp lệ" });
     }
 
     const results = {
@@ -837,10 +713,7 @@ const importProducts = async (req, res) => {
     const existingSKUs = new Set(existingProducts.map((p) => p.sku));
     const usedSKUsInThisImport = new Set(); // Để theo dõi SKU đã dùng trong import này
 
-    const lastProductGlobal = await Product.findOne({ isDeleted: false })
-      .sort({ sku: -1 })
-      .select("sku")
-      .lean();
+    const lastProductGlobal = await Product.findOne({ isDeleted: false }).sort({ sku: -1 }).select("sku").lean();
 
     const extractSkuNumber = (sku) => {
       if (!sku) return 0;
@@ -951,9 +824,7 @@ const importProducts = async (req, res) => {
         return newSupplier._id;
       } catch (error) {
         console.error(`Lỗi khi tạo nhà cung cấp ${supplierName}:`, error);
-        throw new Error(
-          `Không thể tạo nhà cung cấp: ${supplierName} - ${error.message}`
-        );
+        throw new Error(`Không thể tạo nhà cung cấp: ${supplierName} - ${error.message}`);
       }
     };
 
@@ -1012,19 +883,12 @@ const importProducts = async (req, res) => {
         return newProductGroup._id;
       } catch (error) {
         console.error(`Lỗi khi tạo nhóm sản phẩm ${groupName}:`, error);
-        throw new Error(
-          `Không thể tạo nhóm sản phẩm: ${groupName} - ${error.message}`
-        );
+        throw new Error(`Không thể tạo nhóm sản phẩm: ${groupName} - ${error.message}`);
       }
     };
 
-    console.log(
-      `🟢 Bắt đầu import ${data.length} sản phẩm cho store: ${storeId}`
-    );
-    console.log(
-      `📊 SKU hiện có trong cửa hàng:`,
-      Array.from(existingSKUs).slice(0, 5)
-    );
+    console.log(`🟢 Bắt đầu import ${data.length} sản phẩm cho store: ${storeId}`);
+    console.log(`📊 SKU hiện có trong cửa hàng:`, Array.from(existingSKUs).slice(0, 5));
 
     for (let i = 0; i < data.length; i++) {
       results.debug.processedRows++;
@@ -1039,15 +903,9 @@ const importProducts = async (req, res) => {
 
       try {
         // required
-        const validation = validateRequiredFields(row, [
-          "Tên sản phẩm",
-          "Giá bán",
-          "Giá vốn",
-        ]);
+        const validation = validateRequiredFields(row, ["Tên sản phẩm", "Giá bán", "Giá vốn"]);
         if (!validation.isValid) {
-          const errorMsg = `Thiếu trường bắt buộc: ${validation.missingFields.join(
-            ", "
-          )}`;
+          const errorMsg = `Thiếu trường bắt buộc: ${validation.missingFields.join(", ")}`;
           console.log(`❌ Dòng ${rowNumber} lỗi:`, errorMsg);
           results.failed.push({
             row: rowNumber,
@@ -1098,15 +956,9 @@ const importProducts = async (req, res) => {
           continue;
         }
 
-        const minStockVal = validateNumericField(
-          row["Tồn kho tối thiểu"] || 0,
-          { min: 0, allowDecimal: false }
-        );
+        const minStockVal = validateNumericField(row["Tồn kho tối thiểu"] || 0, { min: 0, allowDecimal: false });
         if (!minStockVal.isValid) {
-          console.log(
-            `❌ Dòng ${rowNumber} lỗi tồn kho tối thiểu:`,
-            minStockVal.error
-          );
+          console.log(`❌ Dòng ${rowNumber} lỗi tồn kho tối thiểu:`, minStockVal.error);
           results.failed.push({
             row: rowNumber,
             data: row,
@@ -1116,15 +968,9 @@ const importProducts = async (req, res) => {
           continue;
         }
 
-        const maxStockVal = validateNumericField(
-          row["Tồn kho tối đa"] || null,
-          { min: 0, allowDecimal: false }
-        );
+        const maxStockVal = validateNumericField(row["Tồn kho tối đa"] || null, { min: 0, allowDecimal: false });
         if (!maxStockVal.isValid) {
-          console.log(
-            `❌ Dòng ${rowNumber} lỗi tồn kho tối đa:`,
-            maxStockVal.error
-          );
+          console.log(`❌ Dòng ${rowNumber} lỗi tồn kho tối đa:`, maxStockVal.error);
           results.failed.push({
             row: rowNumber,
             data: row,
@@ -1136,9 +982,7 @@ const importProducts = async (req, res) => {
 
         // status
         const status = row["Trạng thái"] || "Đang kinh doanh";
-        if (
-          !["Đang kinh doanh", "Ngừng kinh doanh", "Ngừng bán"].includes(status)
-        ) {
+        if (!["Đang kinh doanh", "Ngừng kinh doanh", "Ngừng bán"].includes(status)) {
           const errorMsg = `Trạng thái không hợp lệ: ${status}`;
           console.log(`❌ Dòng ${rowNumber} lỗi trạng thái:`, errorMsg);
           results.failed.push({
@@ -1155,14 +999,9 @@ const importProducts = async (req, res) => {
         if (row["Nhà cung cấp"]) {
           try {
             supplierId = await createSupplierIfNotExists(row["Nhà cung cấp"]);
-            console.log(
-              `✅ Đã xử lý nhà cung cấp "${row["Nhà cung cấp"]}": ${supplierId}`
-            );
+            console.log(`✅ Đã xử lý nhà cung cấp "${row["Nhà cung cấp"]}": ${supplierId}`);
           } catch (supplierError) {
-            console.log(
-              `❌ Dòng ${rowNumber} lỗi nhà cung cấp:`,
-              supplierError.message
-            );
+            console.log(`❌ Dòng ${rowNumber} lỗi nhà cung cấp:`, supplierError.message);
             results.failed.push({
               row: rowNumber,
               data: row,
@@ -1178,14 +1017,9 @@ const importProducts = async (req, res) => {
         if (row["Nhóm sản phẩm"]) {
           try {
             groupId = await createProductGroupIfNotExists(row["Nhóm sản phẩm"]);
-            console.log(
-              `✅ Đã xử lý nhóm sản phẩm "${row["Nhóm sản phẩm"]}": ${groupId}`
-            );
+            console.log(`✅ Đã xử lý nhóm sản phẩm "${row["Nhóm sản phẩm"]}": ${groupId}`);
           } catch (groupError) {
-            console.log(
-              `❌ Dòng ${rowNumber} lỗi nhóm sản phẩm:`,
-              groupError.message
-            );
+            console.log(`❌ Dòng ${rowNumber} lỗi nhóm sản phẩm:`, groupError.message);
             results.failed.push({
               row: rowNumber,
               data: row,
@@ -1236,10 +1070,7 @@ const importProducts = async (req, res) => {
             sku = await generateUniqueSKU(usedSKUsInThisImport);
             console.log(`✅ Đã generate SKU mới: ${sku}`);
           } catch (error) {
-            console.log(
-              `❌ Dòng ${rowNumber} lỗi generate SKU:`,
-              error.message
-            );
+            console.log(`❌ Dòng ${rowNumber} lỗi generate SKU:`, error.message);
             results.failed.push({
               row: rowNumber,
               data: row,
@@ -1269,9 +1100,7 @@ const importProducts = async (req, res) => {
 
         try {
           await newProduct.save();
-          console.log(
-            `✅ Đã tạo sản phẩm thành công: ${newProduct.name} (${newProduct.sku})`
-          );
+          console.log(`✅ Đã tạo sản phẩm thành công: ${newProduct.name} (${newProduct.sku})`);
 
           // Thêm SKU vào danh sách đã tồn tại TRONG CỬA HÀNG NÀY để tránh trùng trong tương lai
           existingSKUs.add(sku);
@@ -1311,9 +1140,7 @@ const importProducts = async (req, res) => {
               newProduct.sku = newSKU;
               await newProduct.save();
 
-              console.log(
-                `✅ Đã tạo sản phẩm thành công với SKU mới: ${newProduct.name} (${newSKU})`
-              );
+              console.log(`✅ Đã tạo sản phẩm thành công với SKU mới: ${newProduct.name} (${newSKU})`);
 
               results.success.push({
                 row: rowNumber,
@@ -1327,10 +1154,7 @@ const importProducts = async (req, res) => {
                 },
               });
             } catch (retryError) {
-              console.log(
-                `❌ Lỗi khi thử lại với SKU mới:`,
-                retryError.message
-              );
+              console.log(`❌ Lỗi khi thử lại với SKU mới:`, retryError.message);
               results.failed.push({
                 row: rowNumber,
                 data: row,
@@ -1349,8 +1173,7 @@ const importProducts = async (req, res) => {
           data: row,
           error: errRow.message || String(errRow),
           type: "UNKNOWN_ERROR",
-          stack:
-            process.env.NODE_ENV === "development" ? errRow.stack : undefined,
+          stack: process.env.NODE_ENV === "development" ? errRow.stack : undefined,
         });
       }
     }
@@ -1400,17 +1223,13 @@ const importProducts = async (req, res) => {
 };
 // Download Product Template
 const downloadProductTemplate = (req, res) => {
-  const filePath = path.resolve(
-    __dirname,
-    "../../templates/product_template.xlsx"
-  );
+  const filePath = path.resolve(__dirname, "../../templates/product_template.xlsx");
 
   return res.sendFile(
     filePath,
     {
       headers: {
-        "Content-Type":
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "Content-Disposition": "attachment; filename=product_template.xlsx",
       },
     },
@@ -1431,9 +1250,7 @@ const exportProducts = async (req, res) => {
     const { storeId } = req.params;
     const userId = req.user.id || req.user._id;
 
-    console.log(
-      `🔄 Export products request for store: ${storeId}, user: ${userId}`
-    );
+    console.log(`🔄 Export products request for store: ${storeId}, user: ${userId}`);
 
     // Kiểm tra cửa hàng tồn tại
     const store = await Store.findById(storeId);
@@ -1467,9 +1284,7 @@ const exportProducts = async (req, res) => {
       "Mô tả": product.description || "",
       "Mã SKU": product.sku || "",
       "Giá bán": product.price ? parseFloat(product.price.toString()) : 0,
-      "Giá vốn": product.cost_price
-        ? parseFloat(product.cost_price.toString())
-        : 0,
+      "Giá vốn": product.cost_price ? parseFloat(product.cost_price.toString()) : 0,
       "Tồn kho": product.stock_quantity || 0,
       "Tồn kho tối thiểu": product.min_stock || 0,
       "Tồn kho tối đa": product.max_stock || "",
@@ -1532,37 +1347,21 @@ const exportProducts = async (req, res) => {
     });
 
     // Tạo tên file an toàn (loại bỏ ký tự đặc biệt)
-    const timestamp = new Date()
-      .toISOString()
-      .slice(0, 19)
-      .replace(/[:]/g, "-");
-    const safeStoreName = store.name
-      .replace(/[^a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF\s]/g, "")
-      .trim();
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/[:]/g, "-");
+    const safeStoreName = store.name.replace(/[^a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF\s]/g, "").trim();
     const filename = `danh_sach_san_pham_${safeStoreName}_${timestamp}.xlsx`;
 
     // Encode filename cho an toàn
-    const encodedFilename = encodeURIComponent(filename).replace(
-      /['()]/g,
-      escape
-    );
+    const encodedFilename = encodeURIComponent(filename).replace(/['()]/g, escape);
 
     // Thiết lập headers cho response
-    res.setHeader(
-      "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    );
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="${encodedFilename}"; filename*=UTF-8''${encodedFilename}`
-    );
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${encodedFilename}"; filename*=UTF-8''${encodedFilename}`);
     res.setHeader("Content-Length", excelBuffer.length);
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Pragma", "no-cache");
 
-    console.log(
-      `✅ Export successful: ${filename}, ${products.length} products`
-    );
+    console.log(`✅ Export successful: ${filename}, ${products.length} products`);
 
     // Ghi log hoạt động
     try {
@@ -1578,10 +1377,7 @@ const exportProducts = async (req, res) => {
       });
       console.log("✅ Activity log created for export");
     } catch (logError) {
-      console.error(
-        "❌ Lỗi ghi Activity Log (không ảnh hưởng export):",
-        logError.message
-      );
+      console.error("❌ Lỗi ghi Activity Log (không ảnh hưởng export):", logError.message);
     }
 
     // Gửi file về client
@@ -1618,12 +1414,7 @@ const getAllProducts = async (req, res) => {
 
     const [total, products] = await Promise.all([
       Product.countDocuments(filter),
-      Product.find(filter)
-        .populate("supplier_id", "name")
-        .populate("group_id", "name")
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(Number(limit)),
+      Product.find(filter).populate("supplier_id", "name").populate("group_id", "name").sort({ createdAt: -1 }).skip(skip).limit(Number(limit)),
     ]);
 
     const formattedProducts = products.map((p) => ({

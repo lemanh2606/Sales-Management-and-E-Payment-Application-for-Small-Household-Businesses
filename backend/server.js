@@ -59,7 +59,7 @@ const io = new Server(server, {
     origin: allowedOrigins, //  ✅ Sử dụng allowedOrigins
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "Cache-Control", "Pragma"],
+    allowedHeaders: ["Content-Type", "Authorization", "Cache-Control", "Pragma", "X-XSRF-TOKEN", "XSRF-TOKEN"],
   },
 });
 

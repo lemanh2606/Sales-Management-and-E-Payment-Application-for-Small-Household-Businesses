@@ -35,9 +35,7 @@ const productImageStorage = new CloudinaryStorage({
 // 🧩 Multer middleware cho upload ảnh sản phẩm
 const uploadProductImage = multer({
   storage: productImageStorage,
-  limits: {
-    fileSize: 5 * 1024 * 1024, // Giới hạn 5MB
-  },
+  limits: { fileSize: 5 * 1024 * 1024 }, // Giới hạn 5MB
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith("image/")) {
       cb(null, true);
@@ -69,13 +67,10 @@ const uploadToCloudinary = async (filePath, folder = "uploads", resource_type = 
     console.log("📂 Folder đích:", folder);
 
     const uploadResult = await new Promise((resolve, reject) => {
-      const stream = cloudinary.uploader.upload_stream(
-        { folder, resource_type, public_id: baseName },
-        (error, result) => {
-          if (error) reject(error);
-          else resolve(result);
-        }
-      );
+      const stream = cloudinary.uploader.upload_stream({ folder, resource_type, public_id: baseName }, (error, result) => {
+        if (error) reject(error);
+        else resolve(result);
+      });
       fs.createReadStream(filePath).pipe(stream);
     });
 
