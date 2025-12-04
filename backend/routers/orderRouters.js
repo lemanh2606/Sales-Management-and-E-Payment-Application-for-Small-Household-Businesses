@@ -23,6 +23,7 @@ const {
   getOrderRefundDetail,
   getOrderListAll,
   getOrderStats,
+  exportTopFrequentCustomers,
 } = require("../controllers/order/orderController");
 const { getPaidNotPrintedOrders, verifyInvoicePdf, verifyInvoicePdfAuto } = require("../controllers/order/orderReconciliationController");
 
@@ -88,20 +89,14 @@ router.post(
 router.get("/top-products", verifyToken, checkSubscriptionExpiry, isManager, checkStoreAccess, getTopSellingProducts);
 //xuất file
 router.get("/top-products/export", verifyToken, checkSubscriptionExpiry, isManager, exportTopSellingProducts);
-
+//xuất file top khách hàng thân thiết
+router.get("/top-customers/export", verifyToken, checkStoreAccess, exportTopFrequentCustomers);
 //lấy danh sách mọi Order đã thanh toán thành công, có status là 'paid'
 router.get("/list-paid", verifyToken, checkSubscriptionExpiry, checkStoreAccess, requirePermission("orders:view"), getListPaidOrders);
 // lấy danh sách các Order đã hoàn trả thành công, 2 status là 'refunded' và 'partially_refunded'
 router.get("/list-refund", verifyToken, checkSubscriptionExpiry, checkStoreAccess, requirePermission("orders:view"), getListRefundOrders);
 //xem chi tiết 1 Order đã hoàn trả thành công
-router.get(
-  "/order-refund/:orderId",
-  verifyToken,
-  checkSubscriptionExpiry,
-  checkStoreAccess,
-  requirePermission("orders:view"),
-  getOrderRefundDetail
-);
+router.get("/order-refund/:orderId", verifyToken, checkSubscriptionExpiry, checkStoreAccess, requirePermission("orders:view"), getOrderRefundDetail);
 //xem chi tiết 1 order chung
 router.get("/:orderId", verifyToken, checkSubscriptionExpiry, checkStoreAccess, requirePermission("orders:view"), getOrderById);
 
