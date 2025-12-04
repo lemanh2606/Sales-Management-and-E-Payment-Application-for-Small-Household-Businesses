@@ -52,6 +52,15 @@ export const importProductsByExcel = async (storeId, file) => {
 };
 
 // ========================= EXPORT =========================
+// Xuất danh sách sản phẩm ra Excel
+export const exportProducts = async (storeId) => {
+  const response = await apiClient.get(`/products/store/${storeId}/export`, {
+    responseType: "blob", // quan trọng!!! để nhận file nhị phân
+  });
+
+  return response; // không .data vì blob nằm trong response
+};
+
 export default {
   createProduct,
   updateProduct,
@@ -59,4 +68,5 @@ export default {
   getProductsByStore,
   getProductById,
   importProductsByExcel,
+  exportProducts,
 };

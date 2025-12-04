@@ -1,21 +1,6 @@
 // src/pages/store/InformationStore.tsx
 import React, { useEffect, useState } from "react";
-import {
-  Form,
-  Input,
-  Button,
-  Space,
-  Card,
-  Row,
-  Col,
-  Typography,
-  Avatar,
-  Upload,
-  Select,
-  Divider,
-  Spin,
-  Badge,
-} from "antd";
+import { Form, Input, Button, Space, Card, Row, Col, Typography, Avatar, Upload, Select, Divider, Spin, Badge } from "antd";
 import {
   ShopOutlined,
   PhoneOutlined,
@@ -114,10 +99,7 @@ const InformationStore: React.FC = () => {
 
     setLoading(true);
     try {
-      const res = await axios.get<StoreResponse>(
-        `${apiUrl}/stores/${storeId}`,
-        { headers }
-      );
+      const res = await axios.get<StoreResponse>(`${apiUrl}/stores/${storeId}`, { headers });
 
       const data = res.data?.store || res.data;
       setStore(data);
@@ -246,19 +228,8 @@ const InformationStore: React.FC = () => {
 
   return (
     <Layout>
-      <div
-        style={{
-          minHeight: "100vh",
-          background: COLORS.white,
-        }}
-      >
-        <div
-          style={{
-            maxWidth: "auto",
-            margin: "0 auto",
-            padding: 2,
-          }}
-        >
+      <div style={{ background: COLORS.white }}>
+        <div style={{ maxWidth: "auto", margin: "0 auto" }}>
           {/* HEADER */}
           <Card
             style={{
@@ -269,14 +240,7 @@ const InformationStore: React.FC = () => {
               boxShadow: "0 4px 20px rgba(82, 196, 26, 0.15)",
             }}
           >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 16,
-                flexWrap: "wrap",
-              }}
-            >
+            <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
               <div
                 style={{
                   width: 56,
@@ -294,9 +258,7 @@ const InformationStore: React.FC = () => {
                 <Title level={3} style={{ margin: 0, color: COLORS.white }}>
                   Thông Tin Cửa Hàng
                 </Title>
-                <Text style={{ color: "rgba(255,255,255,0.9)", fontSize: 15 }}>
-                  Quản lý và cập nhật thông tin chi tiết về cửa hàng của bạn
-                </Text>
+                <Text style={{ color: "rgba(255,255,255,0.9)", fontSize: 15 }}>Quản lý và cập nhật thông tin chi tiết về cửa hàng của bạn</Text>
               </div>
               <Space wrap>
                 <Button
@@ -405,9 +367,7 @@ const InformationStore: React.FC = () => {
                           boxShadow: "0 2px 8px rgba(82, 196, 26, 0.3)",
                         }}
                       >
-                        <CameraOutlined
-                          style={{ color: COLORS.white, fontSize: 18 }}
-                        />
+                        <CameraOutlined style={{ color: COLORS.white, fontSize: 18 }} />
                       </div>
                     </div>
                   </Upload>
@@ -415,10 +375,7 @@ const InformationStore: React.FC = () => {
                   {uploadingAvatar && (
                     <div style={{ marginTop: 12 }}>
                       <Spin size="small" />
-                      <Text
-                        type="secondary"
-                        style={{ display: "block", marginTop: 8 }}
-                      >
+                      <Text type="secondary" style={{ display: "block", marginTop: 8 }}>
                         Đang upload...
                       </Text>
                     </div>
@@ -426,10 +383,7 @@ const InformationStore: React.FC = () => {
 
                   {/* Store Name & Status */}
                   <div style={{ marginTop: 20 }}>
-                    <Title
-                      level={4}
-                      style={{ marginBottom: 8, color: COLORS.textPrimary }}
-                    >
+                    <Title level={4} style={{ marginBottom: 8, color: COLORS.textPrimary }}>
                       {store?.name || "Tên cửa hàng"}
                     </Title>
                     <Badge
@@ -450,11 +404,7 @@ const InformationStore: React.FC = () => {
                   <Divider style={{ margin: "24px 0" }} />
 
                   {/* Contact Info */}
-                  <Space
-                    direction="vertical"
-                    style={{ width: "100%" }}
-                    size="middle"
-                  >
+                  <Space direction="vertical" style={{ width: "100%" }} size="middle">
                     {/* Phone */}
                     <div
                       style={{
@@ -478,9 +428,7 @@ const InformationStore: React.FC = () => {
                           justifyContent: "center",
                         }}
                       >
-                        <PhoneOutlined
-                          style={{ color: COLORS.primary, fontSize: 18 }}
-                        />
+                        <PhoneOutlined style={{ color: COLORS.primary, fontSize: 18 }} />
                       </div>
                       <div style={{ flex: 1, textAlign: "left" }}>
                         <Text type="secondary" style={{ fontSize: 12 }}>
@@ -518,9 +466,7 @@ const InformationStore: React.FC = () => {
                           flexShrink: 0,
                         }}
                       >
-                        <EnvironmentOutlined
-                          style={{ color: COLORS.secondary, fontSize: 18 }}
-                        />
+                        <EnvironmentOutlined style={{ color: COLORS.secondary, fontSize: 18 }} />
                       </div>
                       <div style={{ flex: 1, textAlign: "left" }}>
                         <Text type="secondary" style={{ fontSize: 12 }}>
@@ -557,9 +503,7 @@ const InformationStore: React.FC = () => {
                           justifyContent: "center",
                         }}
                       >
-                        <ClockCircleOutlined
-                          style={{ color: COLORS.accent, fontSize: 18 }}
-                        />
+                        <ClockCircleOutlined style={{ color: COLORS.accent, fontSize: 18 }} />
                       </div>
                       <div style={{ flex: 1, textAlign: "left" }}>
                         <Text type="secondary" style={{ fontSize: 12 }}>
@@ -567,8 +511,7 @@ const InformationStore: React.FC = () => {
                         </Text>
                         <div>
                           <Text strong style={{ fontSize: 15 }}>
-                            {store?.openingHours?.open || "00:00"} -{" "}
-                            {store?.openingHours?.close || "00:00"}
+                            {store?.openingHours?.open || "00:00"} - {store?.openingHours?.close || "00:00"}
                           </Text>
                         </div>
                       </div>
@@ -591,11 +534,7 @@ const InformationStore: React.FC = () => {
                     </Text>
                     <div>
                       <Text strong style={{ fontSize: 14 }}>
-                        {store?.createdAt
-                          ? new Date(store.createdAt).toLocaleDateString(
-                              "vi-VN"
-                            )
-                          : "N/A"}
+                        {store?.createdAt ? new Date(store.createdAt).toLocaleDateString("vi-VN") : "N/A"}
                       </Text>
                     </div>
                   </div>
@@ -631,9 +570,7 @@ const InformationStore: React.FC = () => {
                         justifyContent: "center",
                       }}
                     >
-                      <EnvironmentOutlined
-                        style={{ color: COLORS.primary, fontSize: 18 }}
-                      />
+                      <EnvironmentOutlined style={{ color: COLORS.primary, fontSize: 18 }} />
                     </div>
                     <Title level={5} style={{ margin: 0 }}>
                       Vị trí trên bản đồ
@@ -667,9 +604,7 @@ const InformationStore: React.FC = () => {
                           boxShadow: "0 4px 16px rgba(82, 196, 26, 0.3)",
                         }}
                       >
-                        <EnvironmentOutlined
-                          style={{ fontSize: 32, color: COLORS.white }}
-                        />
+                        <EnvironmentOutlined style={{ fontSize: 32, color: COLORS.white }} />
                       </div>
                       <div style={{ marginBottom: 12 }}>
                         <Text strong style={{ display: "block", fontSize: 13 }}>
@@ -744,9 +679,7 @@ const InformationStore: React.FC = () => {
                         justifyContent: "center",
                       }}
                     >
-                      <ShopOutlined
-                        style={{ color: COLORS.primary, fontSize: 20 }}
-                      />
+                      <ShopOutlined style={{ color: COLORS.primary, fontSize: 20 }} />
                     </div>
                     <Title level={5} style={{ margin: 0 }}>
                       Thông Tin Cơ Bản
@@ -767,9 +700,7 @@ const InformationStore: React.FC = () => {
                       >
                         <Input
                           placeholder="Nhập tên cửa hàng"
-                          prefix={
-                            <ShopOutlined style={{ color: COLORS.primary }} />
-                          }
+                          prefix={<ShopOutlined style={{ color: COLORS.primary }} />}
                           size="large"
                           style={{ borderRadius: 8 }}
                         />
@@ -789,9 +720,7 @@ const InformationStore: React.FC = () => {
                       >
                         <Input
                           placeholder="Nhập số điện thoại"
-                          prefix={
-                            <PhoneOutlined style={{ color: COLORS.primary }} />
-                          }
+                          prefix={<PhoneOutlined style={{ color: COLORS.primary }} />}
                           size="large"
                           style={{ borderRadius: 8 }}
                         />
@@ -802,24 +731,14 @@ const InformationStore: React.FC = () => {
                   <Form.Item label="Địa chỉ" name="address">
                     <Input
                       placeholder="Nhập địa chỉ cửa hàng"
-                      prefix={
-                        <EnvironmentOutlined
-                          style={{ color: COLORS.secondary }}
-                        />
-                      }
+                      prefix={<EnvironmentOutlined style={{ color: COLORS.secondary }} />}
                       size="large"
                       style={{ borderRadius: 8 }}
                     />
                   </Form.Item>
 
                   <Form.Item label="Mô tả" name="description">
-                    <TextArea
-                      rows={4}
-                      placeholder="Nhập mô tả về cửa hàng..."
-                      showCount
-                      maxLength={500}
-                      style={{ borderRadius: 8 }}
-                    />
+                    <TextArea rows={4} placeholder="Nhập mô tả về cửa hàng..." showCount maxLength={500} style={{ borderRadius: 8 }} />
                   </Form.Item>
 
                   <Divider style={{ margin: "32px 0" }} />
@@ -846,9 +765,7 @@ const InformationStore: React.FC = () => {
                         justifyContent: "center",
                       }}
                     >
-                      <ClockCircleOutlined
-                        style={{ color: COLORS.accent, fontSize: 20 }}
-                      />
+                      <ClockCircleOutlined style={{ color: COLORS.accent, fontSize: 20 }} />
                     </div>
                     <Title level={5} style={{ margin: 0 }}>
                       Giờ Hoạt Động
@@ -857,27 +774,13 @@ const InformationStore: React.FC = () => {
 
                   <Row gutter={16}>
                     <Col xs={24} sm={12}>
-                      <Form.Item
-                        label="Giờ mở cửa"
-                        name={["openingHours", "open"]}
-                      >
-                        <Input
-                          type="time"
-                          size="large"
-                          style={{ borderRadius: 8 }}
-                        />
+                      <Form.Item label="Giờ mở cửa" name={["openingHours", "open"]}>
+                        <Input type="time" size="large" style={{ borderRadius: 8, cursor: "pointer" }} />
                       </Form.Item>
                     </Col>
                     <Col xs={24} sm={12}>
-                      <Form.Item
-                        label="Giờ đóng cửa"
-                        name={["openingHours", "close"]}
-                      >
-                        <Input
-                          type="time"
-                          size="large"
-                          style={{ borderRadius: 8 }}
-                        />
+                      <Form.Item label="Giờ đóng cửa" name={["openingHours", "close"]}>
+                        <Input type="time" size="large" style={{ borderRadius: 8, cursor: "pointer" }} />
                       </Form.Item>
                     </Col>
                   </Row>
@@ -906,9 +809,7 @@ const InformationStore: React.FC = () => {
                         justifyContent: "center",
                       }}
                     >
-                      <EnvironmentOutlined
-                        style={{ color: COLORS.secondary, fontSize: 20 }}
-                      />
+                      <EnvironmentOutlined style={{ color: COLORS.secondary, fontSize: 20 }} />
                     </div>
                     <Title level={5} style={{ margin: 0 }}>
                       Tọa Độ Địa Lý
@@ -917,31 +818,13 @@ const InformationStore: React.FC = () => {
 
                   <Row gutter={16}>
                     <Col xs={24} sm={12}>
-                      <Form.Item
-                        label="Vĩ độ (Latitude)"
-                        name={["location", "lat"]}
-                      >
-                        <Input
-                          type="number"
-                          step="any"
-                          placeholder="21.0120439"
-                          size="large"
-                          style={{ borderRadius: 8 }}
-                        />
+                      <Form.Item label="Vĩ độ (Latitude)" name={["location", "lat"]}>
+                        <Input type="number" step="any" placeholder="21.0120439" size="large" style={{ borderRadius: 8 }} />
                       </Form.Item>
                     </Col>
                     <Col xs={24} sm={12}>
-                      <Form.Item
-                        label="Kinh độ (Longitude)"
-                        name={["location", "lng"]}
-                      >
-                        <Input
-                          type="number"
-                          step="any"
-                          placeholder="105.5252407"
-                          size="large"
-                          style={{ borderRadius: 8 }}
-                        />
+                      <Form.Item label="Kinh độ (Longitude)" name={["location", "lng"]}>
+                        <Input type="number" step="any" placeholder="105.5252407" size="large" style={{ borderRadius: 8 }} />
                       </Form.Item>
                     </Col>
                   </Row>
@@ -970,20 +853,14 @@ const InformationStore: React.FC = () => {
                         justifyContent: "center",
                       }}
                     >
-                      <TagsOutlined
-                        style={{ color: COLORS.primaryLight, fontSize: 20 }}
-                      />
+                      <TagsOutlined style={{ color: COLORS.primaryLight, fontSize: 20 }} />
                     </div>
                     <Title level={5} style={{ margin: 0 }}>
                       Tags
                     </Title>
                   </div>
 
-                  <Form.Item
-                    label="Tags mô tả cửa hàng"
-                    name="tags"
-                    tooltip="Nhập các tag và nhấn Enter"
-                  >
+                  <Form.Item label="Tags mô tả cửa hàng" name="tags" tooltip="Nhập các tag và nhấn Enter">
                     <Select
                       mode="tags"
                       style={{ width: "100%" }}
