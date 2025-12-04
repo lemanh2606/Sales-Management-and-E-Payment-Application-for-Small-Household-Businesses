@@ -17,12 +17,14 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
+import * as FileSystem from "expo-file-system";
 import { useAuth } from "../../context/AuthContext";
 import {
   updateProfile,
   sendPasswordOTP,
   changePassword,
 } from "../../api/userApi";
+import { UserPublic } from "@/type/user";
 
 // ========== TYPES ==========
 interface UserProfile {
@@ -62,9 +64,9 @@ const ProfileScreen: React.FC = () => {
     phone: "",
   });
 
-  // Avatar
+  // Avatar (URI local, không còn base64)
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null); // local file URI
   const [compressing, setCompressing] = useState<boolean>(false);
 
   // Password change
@@ -111,6 +113,7 @@ const ProfileScreen: React.FC = () => {
   };
 
   // ========== IMAGE COMPRESSION ==========
+  // Trả về URI file sau khi nén, không base64
   const compressImage = async (uri: string): Promise<string> => {
     try {
       console.log("🔄 Compressing image...");
@@ -118,29 +121,34 @@ const ProfileScreen: React.FC = () => {
 
       const manipResult = await ImageManipulator.manipulateAsync(
         uri,
-        [{ resize: { width: 800 } }], // Resize to 800px width
+        [{ resize: { width: 800 } }],
         {
           compress: 0.7,
           format: ImageManipulator.SaveFormat.JPEG,
-          base64: true,
+          base64: false,
         }
       );
 
-      if (!manipResult.base64) {
-        throw new Error("Failed to convert image to base64");
+      if (!manipResult.uri) {
+        throw new Error("Không thể xử lý ảnh");
       }
 
-      const base64Image = `data:image/jpeg;base64,${manipResult.base64}`;
-
-      // Calculate size
-      const sizeInMB = (base64Image.length * 0.75) / (1024 * 1024);
-      console.log(`✅ Compressed image size: ${sizeInMB.toFixed(2)}MB`);
-
-      if (sizeInMB > 5) {
-        throw new Error("Ảnh vẫn quá lớn sau khi nén. Vui lòng chọn ảnh khác");
+      // Kiểm tra kích thước file (<= 5MB)
+      const info = await FileSystem.getInfoAsync(manipResult.uri);
+      let sizeInMB = 0;
+      if (info.exists && typeof info.size === "number") {
+        sizeInMB = info.size / (1024 * 1024);
+        console.log(`✅ Compressed image size: ${sizeInMB.toFixed(2)}MB`);
+        if (sizeInMB > 5) {
+          throw new Error(
+            "Ảnh vẫn quá lớn sau khi nén. Vui lòng chọn ảnh khác"
+          );
+        }
+      } else {
+        throw new Error("Không thể xác định kích thước ảnh");
       }
 
-      return base64Image;
+      return manipResult.uri;
     } catch (error: any) {
       console.error("❌ Image compression error:", error);
       throw error;
@@ -168,11 +176,10 @@ const ProfileScreen: React.FC = () => {
 
     if (!result.canceled && result.assets[0].uri) {
       try {
-        // ✅ Compress image
-        const compressedBase64 = await compressImage(result.assets[0].uri);
+        const compressedUri = await compressImage(result.assets[0].uri);
 
-        setSelectedImage(compressedBase64);
-        setImagePreview(compressedBase64);
+        setSelectedImage(compressedUri); // lưu URI local
+        setImagePreview(compressedUri);
 
         Alert.alert(
           "Thành công",
@@ -195,14 +202,25 @@ const ProfileScreen: React.FC = () => {
           try {
             console.log("🗑️ Removing image...");
 
-            // ✅ Call API with removeImage option
             const response = await updateProfile(profileData, {
               removeImage: true,
             });
 
             console.log("✅ Image removed:", response);
 
-            const updatedUser = response.user;
+            const updatedUserRaw = response.user as any;
+            const updatedUser: UserPublic = {
+              id: updatedUserRaw._id || updatedUserRaw.id,
+              username: updatedUserRaw.username,
+              fullname: updatedUserRaw.fullname,
+              email: updatedUserRaw.email,
+              phone: updatedUserRaw.phone,
+              role: updatedUserRaw.role,
+              isVerified: updatedUserRaw.isVerified,
+              isDeleted: updatedUserRaw.isDeleted,
+              image: updatedUserRaw.image,
+              menu: updatedUserRaw.menu || [],
+            };
             setUser(updatedUser);
             await AsyncStorage.setItem("user", JSON.stringify(updatedUser));
 
@@ -238,19 +256,41 @@ const ProfileScreen: React.FC = () => {
         phone: profileData.phone,
       });
 
-      // ✅ Call API with imageBase64 option if image is selected
+      let options: any = {};
+
+      if (selectedImage) {
+        // Tạo object file cho React Native FormData (uri, type, name)
+        options.imageFile = {
+          uri: selectedImage,
+          type: "image/jpeg",
+          name: `avatar-${Date.now()}.jpg`,
+        };
+      }
+
       const response = await updateProfile(
         {
           fullname: profileData.fullname,
           email: profileData.email,
           phone: profileData.phone,
         },
-        selectedImage ? { imageBase64: selectedImage } : {}
+        options
       );
 
       console.log("✅ Profile updated:", response);
 
-      const updatedUser = response.user;
+      const updatedUserRaw = response.user as any;
+      const updatedUser: UserPublic = {
+        id: updatedUserRaw._id || updatedUserRaw.id,
+        username: updatedUserRaw.username,
+        fullname: updatedUserRaw.fullname,
+        email: updatedUserRaw.email,
+        phone: updatedUserRaw.phone,
+        role: updatedUserRaw.role,
+        isVerified: updatedUserRaw.isVerified,
+        isDeleted: updatedUserRaw.isDeleted,
+        image: updatedUserRaw.image,
+        menu: updatedUserRaw.menu || [],
+      };
       setUser(updatedUser);
       await AsyncStorage.setItem("user", JSON.stringify(updatedUser));
 
@@ -287,7 +327,6 @@ const ProfileScreen: React.FC = () => {
     try {
       console.log("📧 Sending OTP to:", profileData.email);
 
-      // ✅ Call API
       const res = await sendPasswordOTP({ email: profileData.email });
 
       console.log("✅ OTP sent:", res);
@@ -326,7 +365,6 @@ const ProfileScreen: React.FC = () => {
     try {
       console.log("🔐 Changing password...");
 
-      // ✅ Call API
       await changePassword({
         password: passwordData.newPassword,
         confirmPassword: passwordData.confirmPassword,
@@ -398,7 +436,9 @@ const ProfileScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
           <Text style={styles.avatarHint}>
-            {compressing ? "Đang nén ảnh..." : "Nhấn để thay đổi ảnh"}
+            {compressing
+              ? "Đang nén ảnh..."
+              : "Nhấn để thay đổi ảnh (tối đa ~5MB)"}
           </Text>
           {imagePreview && !compressing && (
             <TouchableOpacity
@@ -626,7 +666,10 @@ const ProfileScreen: React.FC = () => {
                       style={styles.inputText}
                       value={passwordData.newPassword}
                       onChangeText={(text) =>
-                        setPasswordData({ ...passwordData, newPassword: text })
+                        setPasswordData({
+                          ...passwordData,
+                          newPassword: text,
+                        })
                       }
                       placeholder="Nhập mật khẩu mới (ít nhất 6 ký tự)"
                       placeholderTextColor="#9ca3af"

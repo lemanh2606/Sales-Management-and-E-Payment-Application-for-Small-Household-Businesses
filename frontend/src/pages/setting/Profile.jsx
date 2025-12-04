@@ -24,7 +24,11 @@ import {
 import Swal from "sweetalert2";
 import { useAuth } from "../../context/AuthContext";
 import Layout from "../../components/Layout";
-import { updateProfile, sendPasswordOTP, changePassword } from "../../api/userApi";
+import {
+  updateProfile,
+  sendPasswordOTP,
+  changePassword,
+} from "../../api/userApi";
 
 const { useForm } = Form;
 
@@ -51,11 +55,13 @@ export default function Profile() {
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
 
-  const otpExpireMinutes = Number(import.meta.env.VITE_OTP_EXPIRE_MINUTES || 5);
+  const otpExpireMinutes = Number(
+    import.meta.env.VITE_OTP_EXPIRE_MINUTES || 5
+  );
 
   // ==================== EFFECTS ====================
 
-  // Load user data
+  // Load user data khi mount / user thay đổi
   useEffect(() => {
     if (user) {
       form.setFieldsValue({
@@ -65,15 +71,12 @@ export default function Profile() {
         phone: user.phone || "",
       });
 
-      // Set avatar preview
       if (user.image) {
         setImagePreview(user.image);
       }
-
-      setLoading(false);
-    } else {
-      setLoading(false);
     }
+
+    setLoading(false);
   }, [user, form]);
 
   // Timer countdown
@@ -87,29 +90,51 @@ export default function Profile() {
 
   const formatTime = (sec) => {
     if (!sec || sec <= 0) return "00:00";
-    return `${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(sec % 60).padStart(2, "0")}`;
+    const mm = String(Math.floor(sec / 60)).padStart(2, "0");
+    const ss = String(sec % 60).padStart(2, "0");
+    return `${mm}:${ss}`;
+  };
+
+  const normalizeError = (err, defaultMsg) => {
+    const msgFromBackend = err?.response?.data?.message;
+    const status = err?.response?.status;
+
+    if (status === 503) {
+      return (
+        msgFromBackend ||
+        "Máy chủ đang quá tải hoặc tạm thời không phản hồi. Vui lòng thử lại sau."
+      );
+    }
+
+    if (status === 413) {
+      return (
+        msgFromBackend ||
+        "File tải lên quá lớn. Vui lòng chọn ảnh nhỏ hơn giới hạn cho phép."
+      );
+    }
+
+    return msgFromBackend || err?.message || defaultMsg;
   };
 
   // ==================== IMAGE HANDLERS ====================
 
   const handleImageSelect = (file) => {
     // Validate file type
-    const isImage = file.type.startsWith("image/");
-    if (!isImage) {
-      message.error("Chỉ được chọn file ảnh!");
-      return false;
+    if (!file.type.startsWith("image/")) {
+      message.error("Chỉ được chọn file ảnh (JPG, PNG...)");
+      return Upload.LIST_IGNORE;
     }
 
     // Validate file size (5MB)
     const isLt5M = file.size / 1024 / 1024 < 5;
     if (!isLt5M) {
       message.error("Ảnh phải nhỏ hơn 5MB!");
-      return false;
+      return Upload.LIST_IGNORE;
     }
 
     setSelectedImage(file);
 
-    // Create preview
+    // Tạo preview
     const reader = new FileReader();
     reader.onload = (e) => {
       setImagePreview(e.target.result);
@@ -117,21 +142,18 @@ export default function Profile() {
     reader.readAsDataURL(file);
 
     message.success(`Đã chọn: ${file.name}`);
-    return false; // Prevent auto upload
+    // return false để Upload không auto gửi lên server
+    return false;
   };
 
   const removeImage = async () => {
     try {
       const values = form.getFieldsValue();
 
-      // ✅ Call API với removeImage option
       const response = await updateProfile(values, {
         removeImage: true,
       });
 
-      console.log("✅ Image removed:", response);
-
-      // Update state
       setUser(response.user);
       localStorage.setItem("user", JSON.stringify(response.user));
       setImagePreview(null);
@@ -140,7 +162,11 @@ export default function Profile() {
       message.success("Đã xóa ảnh đại diện!");
     } catch (err) {
       console.error("❌ Remove image error:", err);
-      message.error(err.response?.data?.message || "Không thể xóa ảnh đại diện");
+      const errorMessage = normalizeError(
+        err,
+        "Không thể xóa ảnh đại diện, vui lòng thử lại."
+      );
+      message.error(errorMessage);
     }
   };
 
@@ -151,9 +177,11 @@ export default function Profile() {
     setInfoError(null);
 
     try {
-      console.log("📝 Updating profile...", { values, selectedImage: !!selectedImage });
+      console.log("📝 Updating profile...", {
+        values,
+        hasImage: !!selectedImage,
+      });
 
-      // ✅ Call API với imageFile option nếu có ảnh
       const response = await updateProfile(
         {
           fullname: values.fullname,
@@ -173,15 +201,16 @@ export default function Profile() {
         timer: 3000,
       });
 
-      // Update context và localStorage
       setUser(response.user);
       localStorage.setItem("user", JSON.stringify(response.user));
 
-      // Reset selected image
       setSelectedImage(null);
     } catch (err) {
       console.error("❌ Update profile error:", err);
-      const errorMessage = err.response?.data?.message || err.message || "Lỗi cập nhật thông tin";
+      const errorMessage = normalizeError(
+        err,
+        "Lỗi cập nhật thông tin cá nhân."
+      );
 
       setInfoError(errorMessage);
 
@@ -208,12 +237,13 @@ export default function Profile() {
     try {
       const email = form.getFieldValue("email");
       if (!email) {
-        throw new Error("Cần email để gửi OTP, vui lòng cập nhật thông tin trước");
+        throw new Error(
+          "Cần email để gửi OTP, vui lòng cập nhật thông tin trước."
+        );
       }
 
       console.log("📧 Sending OTP to:", email);
 
-      // ✅ Call API gửi OTP
       const res = await sendPasswordOTP({ email });
 
       console.log("✅ OTP sent:", res);
@@ -223,14 +253,19 @@ export default function Profile() {
 
       Swal.fire({
         title: "Gửi OTP thành công",
-        text: res.message || "Kiểm tra email để lấy mã OTP (hết hạn sau 5 phút)",
+        text:
+          res.message ||
+          "Kiểm tra email để lấy mã OTP (hết hạn sau vài phút).",
         icon: "success",
         confirmButtonText: "OK",
         timer: 4000,
       });
     } catch (err) {
       console.error("❌ Send OTP error:", err);
-      const errorMessage = err.response?.data?.message || err.message || "Không thể gửi OTP";
+      const errorMessage = normalizeError(
+        err,
+        "Không thể gửi OTP, vui lòng thử lại sau."
+      );
 
       setOtpSent(false);
       setPassError(errorMessage);
@@ -252,7 +287,6 @@ export default function Profile() {
     setPassError(null);
 
     try {
-      // Validate password match
       if (values.newPassword !== values.confirmPassword) {
         Swal.fire({
           icon: "error",
@@ -263,7 +297,6 @@ export default function Profile() {
         return;
       }
 
-      // Validate password length
       if (values.newPassword.length < 6) {
         setPassError("Mật khẩu mới phải ít nhất 6 ký tự");
         setChangingPass(false);
@@ -272,7 +305,6 @@ export default function Profile() {
 
       console.log("🔐 Changing password...");
 
-      // ✅ Call API đổi mật khẩu
       const response = await changePassword({
         password: values.newPassword,
         confirmPassword: values.confirmPassword,
@@ -281,7 +313,6 @@ export default function Profile() {
 
       console.log("✅ Password changed:", response);
 
-      // Reset form
       passForm.resetFields();
       setOtpSent(false);
       setTimer(0);
@@ -295,7 +326,10 @@ export default function Profile() {
       });
     } catch (err) {
       console.error("❌ Change password error:", err);
-      const errorMessage = err.response?.data?.message || err.message || "Lỗi đổi mật khẩu";
+      const errorMessage = normalizeError(
+        err,
+        "Lỗi đổi mật khẩu, vui lòng thử lại."
+      );
 
       setPassError(errorMessage);
 
@@ -333,7 +367,9 @@ export default function Profile() {
         title={
           <div className="flex items-center gap-3">
             <UserOutlined className="text-green-600 text-xl" />
-            <span className="text-3xl font-bold text-gray-800">Hồ Sơ Cá Nhân</span>
+            <span className="text-3xl font-bold text-gray-800">
+              Hồ Sơ Cá Nhân
+            </span>
           </div>
         }
         style={{ border: "none" }}
@@ -344,7 +380,6 @@ export default function Profile() {
           </div>
         ) : (
           <>
-            {/* Error Alert */}
             {infoError && (
               <Alert
                 message="Lỗi"
@@ -366,7 +401,11 @@ export default function Profile() {
               className="space-y-4 mb-8"
             >
               <Card
-                title={<span className="font-semibold text-gray-800">Thông Tin Cá Nhân</span>}
+                title={
+                  <span className="font-semibold text-gray-800">
+                    Thông Tin Cá Nhân
+                  </span>
+                }
                 className="bg-white"
               >
                 <Row gutter={24}>
@@ -402,13 +441,17 @@ export default function Profile() {
                             showUploadList={false}
                             accept="image/*"
                           >
-                            <Button icon={<CameraOutlined />} className="flex items-center gap-2">
+                            <Button
+                              icon={<CameraOutlined />}
+                              className="flex items-center gap-2"
+                            >
                               Chọn ảnh
                             </Button>
                           </Upload>
                         </div>
                         <p className="text-xs text-gray-500">
-                          Chọn ảnh JPG, PNG nhỏ hơn 5MB. Ảnh sẽ được upload lên ImgBB
+                          Chọn ảnh JPG, PNG nhỏ hơn 5MB. Ảnh sẽ được upload qua
+                          backend lên Cloudinary.
                         </p>
                         {selectedImage && (
                           <p className="text-sm text-green-600 mt-1">
@@ -424,7 +467,12 @@ export default function Profile() {
                     <Form.Item
                       name="username"
                       label="Tên đăng nhập"
-                      rules={[{ required: true, message: "Vui lòng nhập tên đăng nhập" }]}
+                      rules={[
+                        {
+                          required: true,
+                          message: "Vui lòng nhập tên đăng nhập",
+                        },
+                      ]}
                     >
                       <Input
                         placeholder="Tên đăng nhập"
@@ -439,7 +487,7 @@ export default function Profile() {
                     <Form.Item
                       name="fullname"
                       label="Họ và tên"
-                      rules={[{ required: false, message: "Vui lòng nhập họ và tên" }]}
+                      rules={[]}
                     >
                       <Input
                         placeholder="Họ và tên"
@@ -464,14 +512,22 @@ export default function Profile() {
 
                   {/* Phone */}
                   <Col xs={24} md={12} lg={8}>
-                    <Form.Item name="phone" label={<span className="font-medium">Số điện thoại</span>}>
-                      <Input placeholder="Số điện thoại" className="h-11 text-base rounded-lg" />
+                    <Form.Item
+                      name="phone"
+                      label={<span className="font-medium">Số điện thoại</span>}
+                    >
+                      <Input
+                        placeholder="Số điện thoại"
+                        className="h-11 text-base rounded-lg"
+                      />
                     </Form.Item>
                   </Col>
 
                   {/* Role */}
                   <Col xs={24} md={12} lg={8}>
-                    <Form.Item label={<span className="font-medium">Vai trò</span>}>
+                    <Form.Item
+                      label={<span className="font-medium">Vai trò</span>}
+                    >
                       <div className="flex items-center gap-2 h-11 px-3 bg-blue-50 rounded-lg border border-blue-200">
                         <span className="w-3 h-3 bg-blue-500 rounded-full"></span>
                         <span className="font-semibold text-blue-700">
@@ -483,7 +539,9 @@ export default function Profile() {
 
                   {/* Email Verified */}
                   <Col xs={24} md={12} lg={8}>
-                    <Form.Item label={<span className="font-medium">Xác thực Email</span>}>
+                    <Form.Item
+                      label={<span className="font-medium">Xác thực Email</span>}
+                    >
                       <div
                         className={`flex items-center gap-2 h-11 px-3 rounded-lg border ${user?.isVerified
                           ? "bg-green-50 border-green-200"
@@ -506,7 +564,11 @@ export default function Profile() {
 
                   {/* Account Status */}
                   <Col xs={24} md={12} lg={8}>
-                    <Form.Item label={<span className="font-medium">Trạng thái tài khoản</span>}>
+                    <Form.Item
+                      label={
+                        <span className="font-medium">Trạng thái tài khoản</span>
+                      }
+                    >
                       <div
                         className={`flex items-center gap-2 h-11 px-3 rounded-lg border ${user?.isDeleted
                           ? "bg-red-50 border-red-200"
@@ -549,14 +611,17 @@ export default function Profile() {
               title={
                 <div className="flex items-center gap-2">
                   <LockOutlined className="text-red-600" />
-                  <span className="font-semibold text-gray-800">Đổi Mật Khẩu</span>
-                  <small className="text-blue-500 font-normal">(Yêu cầu gửi OTP qua email)</small>
+                  <span className="font-semibold text-gray-800">
+                    Đổi Mật Khẩu
+                  </span>
+                  <small className="text-blue-500 font-normal">
+                    (Yêu cầu gửi OTP qua email)
+                  </small>
                 </div>
               }
               style={{ marginTop: "30px", backgroundColor: "white" }}
             >
               <div className="space-y-4">
-                {/* Password Error */}
                 {passError && (
                   <Alert
                     message="Lỗi"
@@ -601,12 +666,13 @@ export default function Profile() {
                     className="space-y-4"
                   >
                     <Row gutter={24}>
-                      {/* OTP Input */}
                       <Col span={12}>
                         <Form.Item
                           name="otp"
                           label="Mã OTP"
-                          rules={[{ required: true, message: "Vui lòng nhập mã OTP" }]}
+                          rules={[
+                            { required: true, message: "Vui lòng nhập mã OTP" },
+                          ]}
                         >
                           <Input
                             placeholder="Nhập mã OTP từ email"
@@ -616,14 +682,19 @@ export default function Profile() {
                         </Form.Item>
                       </Col>
 
-                      {/* New Password Input */}
                       <Col span={12}>
                         <Form.Item
                           name="newPassword"
                           label="Mật khẩu mới"
                           rules={[
-                            { required: true, message: "Vui lòng nhập mật khẩu mới" },
-                            { min: 6, message: "Mật khẩu phải ít nhất 6 ký tự" },
+                            {
+                              required: true,
+                              message: "Vui lòng nhập mật khẩu mới",
+                            },
+                            {
+                              min: 6,
+                              message: "Mật khẩu phải ít nhất 6 ký tự",
+                            },
                           ]}
                         >
                           <Input.Password
@@ -635,12 +706,16 @@ export default function Profile() {
                     </Row>
 
                     <Row gutter={24}>
-                      {/* Confirm Password Input */}
                       <Col span={12}>
                         <Form.Item
                           name="confirmPassword"
                           label="Xác nhận mật khẩu mới"
-                          rules={[{ required: true, message: "Vui lòng xác nhận mật khẩu" }]}
+                          rules={[
+                            {
+                              required: true,
+                              message: "Vui lòng xác nhận mật khẩu",
+                            },
+                          ]}
                         >
                           <Input.Password
                             placeholder="Xác nhận mật khẩu"
@@ -650,7 +725,6 @@ export default function Profile() {
                       </Col>
                     </Row>
 
-                    {/* Submit Button */}
                     <div className="flex justify-end pt-4">
                       <Button
                         type="primary"
@@ -674,3 +748,5 @@ export default function Profile() {
     </Layout>
   );
 }
+
+

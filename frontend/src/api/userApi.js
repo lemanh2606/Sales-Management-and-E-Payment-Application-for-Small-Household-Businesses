@@ -57,27 +57,40 @@ export const getProfile = async () =>
  * Cập nhật thông tin cá nhân
  * Supports:
  * - Text fields only (JSON)
- * - File upload from Web (FormData with multer)
- * - Base64 image from React Native (JSON with image field)
+ * - File upload from Web (FormData với field "avatar")
+ * - Xóa ảnh bằng cờ removeImage
  */
 export const updateProfile = async (data, options = {}) => {
   try {
-    // ✅ Case 1: File upload từ Web (dùng FormData)
+    // ✅ Case 1: Xóa ảnh
+    if (options?.removeImage) {
+      console.log("🗑️ Removing avatar via backend...");
+
+      const response = await apiClient.put("/users/profile", {
+        ...data,
+        removeImage: true, // backend sẽ xoá avatar trên Cloudinary [file:313]
+      });
+
+      console.log("✅ Avatar removed:", response.data);
+      return response.data;
+    }
+
+    // ✅ Case 2: Upload file avatar (FormData)
     if (options?.imageFile) {
       const formData = new FormData();
 
-      // Thêm các trường dữ liệu text
-      Object.keys(data).forEach((key) => {
+      // Thêm các trường text
+      Object.keys(data || {}).forEach((key) => {
         const value = data[key];
         if (value !== undefined && value !== null && value !== "") {
           formData.append(key, value);
         }
       });
 
-      // Thêm file ảnh
+      // Thêm file ảnh với field "avatar"
       formData.append("avatar", options.imageFile);
 
-      console.log("📤 Uploading file to ImgBB via backend...");
+      console.log("📤 Uploading avatar file via backend (Cloudinary)...");
 
       const response = await apiClient.put("/users/profile", formData, {
         headers: {
@@ -86,38 +99,12 @@ export const updateProfile = async (data, options = {}) => {
         timeout: 30000,
       });
 
-      console.log("✅ Profile updated with image:", response.data);
+      console.log("✅ Profile updated with avatar:", response.data);
       return response.data;
     }
 
-    // ✅ Case 2: Base64 image từ React Native hoặc Web canvas
-    if (options?.imageBase64) {
-      console.log("📤 Uploading base64 image to ImgBB via backend...");
-
-      const response = await apiClient.put("/users/profile", {
-        ...data,
-        image: options.imageBase64, // Backend sẽ upload lên ImgBB
-      });
-
-      console.log("✅ Profile updated with base64 image:", response.data);
-      return response.data;
-    }
-
-    // ✅ Case 3: Xóa ảnh
-    if (options?.removeImage) {
-      console.log("🗑️ Removing image...");
-
-      const response = await apiClient.put("/users/profile", {
-        ...data,
-        image: null, // Backend sẽ xóa ảnh trên ImgBB
-      });
-
-      console.log("✅ Image removed:", response.data);
-      return response.data;
-    }
-
-    // ✅ Case 4: Không có ảnh, chỉ update text fields
-    console.log("📝 Updating text fields only...");
+    // ✅ Case 3: Không có ảnh, chỉ update text fields
+    console.log("📝 Updating profile text fields only...");
 
     const response = await apiClient.put("/users/profile", data);
 
