@@ -135,8 +135,10 @@ const ReportDashboard = () => {
       if (extraExpenses.length > 0) {
         params.append("extraExpense", extraExpenses.join(","));
       }
-
-      const url = `${apiUrl}/financials?${params.toString()}`;
+      // Mạnh vừa deploy domain nên đang dùng domain mới
+      // const apiUrl = import.meta.env.VITE_API_URL;
+      const url = `${apiUrl}/financials?${params.toString()}`; //apiUrl từ .env là https://skinanalysis.life/api
+      // const url = `http://localhost:9999/api/financials?${params.toString()}`; // http://localhost:9999/api là domain cũ
       console.log("URL:", url);
 
       const res = await axios.get(url, {

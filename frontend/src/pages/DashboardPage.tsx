@@ -1306,7 +1306,7 @@ export default function DashboardPage() {
                   Top 5 sản phẩm bán chạy tháng {dayjs().format("MM/YYYY")}
                 </Text>
                 <Link
-                  to="/reports/products"
+                  to="/reports/top-products"
                   style={{ fontSize: "clamp(12px, 3vw, 14px)" }}
                 >
                   Xem chi tiết

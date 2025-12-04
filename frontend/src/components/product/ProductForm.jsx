@@ -1,6 +1,6 @@
 // src/components/product/ProductForm.jsx
 import React, { useState, useEffect } from "react";
-import { Form, Input, InputNumber, Select, Button, Space, Row, Col, Divider, Collapse, message, Card } from "antd";
+import { Form, Input, InputNumber, Select, Button, Space, Row, Col, Divider, Collapse, Upload, message, Card } from "antd";
 import {
   SaveOutlined,
   CloseOutlined,
@@ -10,7 +10,9 @@ import {
   AppstoreOutlined,
   CaretRightOutlined,
   CheckCircleOutlined,
+  InboxOutlined,
 } from "@ant-design/icons";
+import ImgCrop from "antd-img-crop"; // Optional: để crop ảnh trước khi upload
 import { getSuppliers } from "../../api/supplierApi";
 import { getProductGroupsByStore } from "../../api/productGroupApi";
 import { createProduct, updateProduct } from "../../api/productApi";
@@ -24,15 +26,13 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
   const [loading, setLoading] = useState(false);
   const [suppliers, setSuppliers] = useState([]);
   const [groups, setGroups] = useState([]);
+  const [fileList, setFileList] = useState([]);
 
   // Load suppliers & groups
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [suppliersData, groupsData] = await Promise.all([
-          getSuppliers(storeId),
-          getProductGroupsByStore(storeId),
-        ]);
+        const [suppliersData, groupsData] = await Promise.all([getSuppliers(storeId), getProductGroupsByStore(storeId)]);
         setSuppliers(suppliersData?.suppliers || []);
         setGroups(groupsData?.productGroups || []);
       } catch (err) {
@@ -52,6 +52,19 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
   // Load product data if editing
   useEffect(() => {
     if (product) {
+      const defaultImage = product.image
+        ? [
+            {
+              uid: "-1",
+              name: product.image.public_id || "image",
+              status: "done",
+              url: product.image.url,
+            },
+          ]
+        : [];
+
+      setFileList(defaultImage);
+
       form.setFieldsValue({
         name: product.name || "",
         sku: product.sku || "",
@@ -64,54 +77,68 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
         status: product.status || "Đang kinh doanh",
         supplier_id: product.supplier?._id || "",
         group_id: product.group?._id || "",
-        image: product.image || "",
+        image: defaultImage, // cái này quan trọng
         description: product.description || "",
       });
     } else {
       form.resetFields();
+      setFileList([]);
     }
-  }, [product, form]);
+  }, [product]);
 
   const handleSubmit = async (values) => {
+    const formData = new FormData();
+    // Append tất cả các field (trừ image)
+    Object.keys(values).forEach((key) => {
+      if (key !== "image" && values[key] !== undefined && values[key] !== null) {
+        formData.append(key, values[key]);
+      }
+    });
+    // Append file ảnh (nếu có)
+    if (values.image && values.image[0]?.originFileObj) {
+      formData.append("image", values.image[0].originFileObj);
+    }
+    // Nếu đang sửa sản phẩm và người dùng xóa ảnh → gửi flag để backend biết
+    if (product && values.image && values.image.length === 0) {
+      formData.append("removeImage", "true");
+    }
     setLoading(true);
     try {
-      const payload = { ...values };
-      if (!payload.supplier_id) delete payload.supplier_id;
-      if (!payload.group_id) delete payload.group_id;
-
       if (product) {
-        await updateProduct(product._id, payload);
-        Swal.fire({
-          title: "🎉 Thành công!",
-          text: "Cập nhật sản phẩm thành công!",
-          icon: "success",
-          confirmButtonText: "OK",
-          confirmButtonColor: "#52c41a",
-        });
+        await updateProduct(product._id, storeId, formData); // ← Gửi formData
       } else {
-        await createProduct(storeId, payload);
-        Swal.fire({
-          title: "🎉 Thành công!",
-          text: "Tạo sản phẩm thành công!",
-          icon: "success",
-          confirmButtonText: "OK",
-          confirmButtonColor: "#52c41a",
-        });
+        await createProduct(storeId, formData); // ← Gửi formData
       }
-      onSuccess && onSuccess();
+      Swal.fire({
+        title: "Thành công!",
+        text: product ? `Cập nhật sản phẩm "${product.name}" thành công!` : `Tạo sản phẩm "${values.name}" thành công!`,
+        icon: "success",
+        timer: 2000,
+        timerProgressBar: true,
+        showConfirmButton: false,
+      });
+
+      onSuccess?.();
     } catch (err) {
       console.error("Lỗi:", err);
       Swal.fire({
-        title: "❌ Lỗi!",
+        title: "Lỗi!",
         text: err?.response?.data?.message || "Có lỗi xảy ra",
         icon: "error",
-        confirmButtonText: "OK",
         confirmButtonColor: "#ff4d4f",
-        timer: 2000,
       });
     } finally {
       setLoading(false);
     }
+  };
+
+  // Hàm này sẽ được gọi khi submit form
+  const normFile = (e) => {
+    if (Array.isArray(e)) return e;
+    return e?.fileList?.map((file) => ({
+      ...file,
+      originFileObj: file.originFileObj || file, // đảm bảo vẫn giữ file gốc
+    }));
   };
 
   return (
@@ -236,9 +263,7 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
         {/* Optional Fields - Collapsible */}
         <Collapse
           bordered={false}
-          expandIcon={({ isActive }) => (
-            <CaretRightOutlined rotate={isActive ? 90 : 0} style={{ fontSize: "16px", color: "#1890ff" }} />
-          )}
+          expandIcon={({ isActive }) => <CaretRightOutlined rotate={isActive ? 90 : 0} style={{ fontSize: "16px", color: "#1890ff" }} />}
           style={{
             background: "#ffffff",
             borderRadius: "8px",
@@ -293,11 +318,7 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
 
               {/* Status */}
               <Col xs={24} md={12}>
-                <Form.Item
-                  name="status"
-                  label={<span style={{ fontWeight: 600 }}>Trạng thái</span>}
-                  initialValue="Đang kinh doanh"
-                >
+                <Form.Item name="status" label={<span style={{ fontWeight: 600 }}>Trạng thái</span>} initialValue="Đang kinh doanh">
                   <Select
                     style={{ borderRadius: "8px" }}
                     options={[
@@ -311,11 +332,7 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
               {/* Min Stock & Max Stock */}
               <Col xs={24} md={12}>
                 <Form.Item name="min_stock" label={<span style={{ fontWeight: 600 }}>Tồn tối thiểu</span>}>
-                  <InputNumber
-                    placeholder="Số lượng tối thiểu"
-                    style={{ width: "100%", borderRadius: "8px" }}
-                    min={0}
-                  />
+                  <InputNumber placeholder="Số lượng tối thiểu" style={{ width: "100%", borderRadius: "8px" }} min={0} />
                 </Form.Item>
               </Col>
 
@@ -328,11 +345,56 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
               {/* Image URL */}
               <Col xs={24}>
                 <Form.Item
+                  label={<span style={{ fontWeight: 600 }}>Hình ảnh sản phẩm</span>}
                   name="image"
-                  label={<span style={{ fontWeight: 600 }}>Hình ảnh (URL)</span>}
-                  rules={[{ type: "url", message: "URL không hợp lệ!" }]}
+                  valuePropName="fileList"
+                  getValueFromEvent={normFile}
+                  extra="Kéo thả hoặc click để upload (tối đa 5MB, JPG/PNG)"
                 >
-                  <Input placeholder="https://example.com/image.jpg" style={{ borderRadius: "8px" }} />
+                  <ImgCrop rotationSlider quality={0.8}>
+                    <Upload.Dragger
+                      listType="picture-card"
+                      fileList={fileList}
+                      onChange={({ fileList: newList }) => {
+                        setFileList(newList);
+                        form.setFieldsValue({ image: newList });
+                      }}
+                      beforeUpload={(file) => {
+                        const isValid = ["image/jpeg", "image/png"].includes(file.type);
+                        if (!isValid) {
+                          message.error("Chỉ chấp nhận file JPG/PNG!");
+                          return Upload.LIST_IGNORE;
+                        }
+                        if (file.size / 1024 / 1024 > 5) {
+                          message.error("Ảnh phải nhỏ hơn 5MB!");
+                          return Upload.LIST_IGNORE;
+                        }
+                        return false;
+                      }}
+                      onPreview={async (file) => {
+                        let src = file.url;
+                        if (!src) {
+                          src = await new Promise((resolve) => {
+                            const reader = new FileReader();
+                            reader.readAsDataURL(file.originFileObj);
+                            reader.onload = () => resolve(reader.result);
+                          });
+                        }
+                        const image = new Image();
+                        image.src = src;
+                        const imgWindow = window.open(src);
+                        imgWindow?.document.write(image.outerHTML);
+                      }}
+                      style={{ borderRadius: "8px" }}
+                    >
+                      {/* Không dùng fileList từ state nữa */}
+                      <div>
+                        <InboxOutlined style={{ fontSize: 48, color: "#1890ff" }} />
+                        <p className="ant-upload-text">Kéo & thả ảnh vào đây</p>
+                        <p className="ant-upload-hint">hoặc click để chọn file</p>
+                      </div>
+                    </Upload.Dragger>
+                  </ImgCrop>
                 </Form.Item>
               </Col>
 
