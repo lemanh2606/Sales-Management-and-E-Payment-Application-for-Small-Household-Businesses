@@ -597,9 +597,9 @@ export default function ProductListPage() {
         width: 100,
         align: "center",
         render: (value, record) =>
-          value ? (
+          value?.url ? (
             <Image
-              src={value}
+              src={value.url}
               alt={record.name}
               width={isMobile ? 40 : 50}
               height={isMobile ? 40 : 50}
