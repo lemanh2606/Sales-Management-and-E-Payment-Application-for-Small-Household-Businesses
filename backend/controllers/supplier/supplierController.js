@@ -1,16 +1,18 @@
+// backend/controllers/supplier/supplierController.js
 const Supplier = require("../../models/Supplier");
 const Store = require("../../models/Store");
 const User = require("../../models/User");
 const Employee = require("../../models/Employee");
 const mongoose = require("mongoose");
 const logActivity = require("../../utils/logActivity");
+const XLSX = require("xlsx");
+
 // ============= CREATE - Tạo nhà cung cấp (kiểm tra quyền đã có ở tầng menu) =============
 const createSupplier = async (req, res) => {
   try {
     if (!req.body || Object.keys(req.body).length === 0) {
       return res.status(400).json({
-        message:
-          "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json",
+        message: "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json",
       });
     }
 
@@ -31,8 +33,7 @@ const createSupplier = async (req, res) => {
     // Kiểm tra status hợp lệ nếu có
     if (status && !["đang hoạt động", "ngừng hoạt động"].includes(status)) {
       return res.status(400).json({
-        message:
-          "Trạng thái không hợp lệ. Chỉ chấp nhận 'đang hoạt động' hoặc 'ngừng hoạt động'",
+        message: "Trạng thái không hợp lệ. Chỉ chấp nhận 'đang hoạt động' hoặc 'ngừng hoạt động'",
       });
     }
 
@@ -75,37 +76,26 @@ const createSupplier = async (req, res) => {
       const conflictFields = [];
 
       // check tên (case-insensitive)
-      if (
-        existingSupplier.name &&
-        existingSupplier.name.toLowerCase() === trimmedName.toLowerCase()
-      ) {
+      if (existingSupplier.name && existingSupplier.name.toLowerCase() === trimmedName.toLowerCase()) {
         conflictFields.push("tên");
       }
 
       // check phone
       if (normalizedPhone) {
-        const existingPhoneNormalized = existingSupplier.phone
-          ? existingSupplier.phone.replace(/\D/g, "")
-          : "";
+        const existingPhoneNormalized = existingSupplier.phone ? existingSupplier.phone.replace(/\D/g, "") : "";
         if (existingPhoneNormalized === normalizedPhone) {
           conflictFields.push("số điện thoại");
         }
       }
 
       // check email
-      if (
-        trimmedEmail &&
-        existingSupplier.email &&
-        existingSupplier.email.toLowerCase() === trimmedEmail
-      ) {
+      if (trimmedEmail && existingSupplier.email && existingSupplier.email.toLowerCase() === trimmedEmail) {
         conflictFields.push("email");
       }
 
       const conflictMsg =
         conflictFields.length > 0
-          ? `Nhà cung cấp đã tồn tại trong cửa hàng (trùng ${conflictFields.join(
-              ", "
-            )})`
+          ? `Nhà cung cấp đã tồn tại trong cửa hàng (trùng ${conflictFields.join(", ")})`
           : "Nhà cung cấp đã tồn tại trong cửa hàng";
 
       return res.status(400).json({ message: conflictMsg });
@@ -129,9 +119,7 @@ const createSupplier = async (req, res) => {
     } catch (saveErr) {
       // Nếu có duplicate key race condition (E11000), trả lỗi thân thiện
       if (saveErr.code === 11000) {
-        return res
-          .status(400)
-          .json({ message: "Nhà cung cấp đã tồn tại (duplicate key)" });
+        return res.status(400).json({ message: "Nhà cung cấp đã tồn tại (duplicate key)" });
       }
       throw saveErr;
     }
@@ -168,9 +156,7 @@ const createSupplier = async (req, res) => {
     });
   } catch (error) {
     console.error("Lỗi createSupplier:", error);
-    return res
-      .status(500)
-      .json({ message: "Lỗi server", error: error.message });
+    return res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
 
@@ -194,9 +180,7 @@ const getSuppliersByStore = async (req, res) => {
       store_id: new mongoose.Types.ObjectId(storeId),
       isDeleted: false,
     })
-      .select(
-        "name phone email address taxcode notes status createdAt updatedAt store_id"
-      )
+      .select("name phone email address taxcode notes status createdAt updatedAt store_id")
       .populate("store_id", "name") // có thể comment nếu lỗi populate
       .sort({ name: 1 })
       .lean();
@@ -210,9 +194,7 @@ const getSuppliersByStore = async (req, res) => {
     // Nếu là CastError của mongoose, trả 400
     if (error.name === "CastError") {
       console.error("CastError getSuppliersByStore:", error.stack);
-      return res
-        .status(400)
-        .json({ message: "storeId không hợp lệ (cast error)" });
+      return res.status(400).json({ message: "storeId không hợp lệ (cast error)" });
     }
 
     // Log đầy đủ để dev xem stacktrace
@@ -240,26 +222,17 @@ const getSupplierById = async (req, res) => {
 
     // Kiểm tra quyền truy cập
     const user = await User.findById(userId);
-    if (
-      user.role === "MANAGER" &&
-      !supplier.store_id.owner_id.equals(user._id)
-    ) {
-      return res
-        .status(403)
-        .json({ message: "Bạn không có quyền truy cập nhà cung cấp này" });
+    if (user.role === "MANAGER" && !supplier.store_id.owner_id.equals(user._id)) {
+      return res.status(403).json({ message: "Bạn không có quyền truy cập nhà cung cấp này" });
     }
 
     if (user.role === "STAFF") {
       const employee = await Employee.findOne({ user_id: userId });
       if (!employee) {
-        return res
-          .status(404)
-          .json({ message: "Không tìm thấy thông tin nhân viên" });
+        return res.status(404).json({ message: "Không tìm thấy thông tin nhân viên" });
       }
       if (employee.store_id.toString() !== supplier.store_id._id.toString()) {
-        return res
-          .status(403)
-          .json({ message: "Bạn không có quyền truy cập nhà cung cấp này" });
+        return res.status(403).json({ message: "Bạn không có quyền truy cập nhà cung cấp này" });
       }
     }
 
@@ -290,8 +263,7 @@ const updateSupplier = async (req, res) => {
   try {
     if (!req.body || Object.keys(req.body).length === 0) {
       return res.status(400).json({
-        message:
-          "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json",
+        message: "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json",
       });
     }
 
@@ -302,9 +274,7 @@ const updateSupplier = async (req, res) => {
     // Kiểm tra user là manager
     const user = await User.findById(userId);
     if (!user || user.role !== "MANAGER") {
-      return res
-        .status(403)
-        .json({ message: "Chỉ Manager mới được cập nhật nhà cung cấp" });
+      return res.status(403).json({ message: "Chỉ Manager mới được cập nhật nhà cung cấp" });
     }
 
     // Tìm nhà cung cấp và kiểm tra quyền (chỉ tìm nhà cung cấp chưa bị xóa)
@@ -326,9 +296,7 @@ const updateSupplier = async (req, res) => {
     const updateData = {};
     if (name !== undefined) {
       if (!name || name.trim() === "") {
-        return res
-          .status(400)
-          .json({ message: "Tên nhà cung cấp không được để trống" });
+        return res.status(400).json({ message: "Tên nhà cung cấp không được để trống" });
       }
 
       // Kiểm tra trùng tên (trừ chính nó, chỉ kiểm tra nhà cung cấp chưa bị xóa)
@@ -340,19 +308,15 @@ const updateSupplier = async (req, res) => {
       });
 
       if (existingSupplier) {
-        return res
-          .status(400)
-          .json({ message: "Tên nhà cung cấp này đã tồn tại trong cửa hàng" });
+        return res.status(400).json({ message: "Tên nhà cung cấp này đã tồn tại trong cửa hàng" });
       }
 
       updateData.name = name.trim();
     }
 
     if (phone !== undefined) updateData.phone = phone ? phone.trim() : "";
-    if (address !== undefined)
-      updateData.address = address ? address.trim() : "";
-    if (taxcode !== undefined)
-      updateData.taxcode = taxcode ? taxcode.trim() : "";
+    if (address !== undefined) updateData.address = address ? address.trim() : "";
+    if (taxcode !== undefined) updateData.taxcode = taxcode ? taxcode.trim() : "";
     if (notes !== undefined) updateData.notes = notes ? notes.trim() : "";
 
     if (email !== undefined) {
@@ -370,19 +334,14 @@ const updateSupplier = async (req, res) => {
     if (status !== undefined) {
       if (!["đang hoạt động", "ngừng hoạt động"].includes(status)) {
         return res.status(400).json({
-          message:
-            "Trạng thái không hợp lệ. Chỉ chấp nhận: 'đang hoạt động', 'ngừng hoạt động'",
+          message: "Trạng thái không hợp lệ. Chỉ chấp nhận: 'đang hoạt động', 'ngừng hoạt động'",
         });
       }
       updateData.status = status;
     }
 
     // Cập nhật nhà cung cấp
-    const updatedSupplier = await Supplier.findByIdAndUpdate(
-      supplierId,
-      updateData,
-      { new: true }
-    ).populate("store_id", "name address");
+    const updatedSupplier = await Supplier.findByIdAndUpdate(supplierId, updateData, { new: true }).populate("store_id", "name address");
 
     // log hoạt động
     await logActivity({
@@ -427,9 +386,7 @@ const deleteSupplier = async (req, res) => {
     // Kiểm tra user là manager
     const user = await User.findById(userId);
     if (!user || user.role !== "MANAGER") {
-      return res
-        .status(403)
-        .json({ message: "Chỉ Manager mới được xóa nhà cung cấp" });
+      return res.status(403).json({ message: "Chỉ Manager mới được xóa nhà cung cấp" });
     }
 
     // Tìm nhà cung cấp và kiểm tra quyền (chỉ tìm nhà cung cấp chưa bị xóa)
@@ -485,10 +442,60 @@ const deleteSupplier = async (req, res) => {
   }
 };
 
+// ==================== EXPORT EXCEL ====================
+const exportSuppliersByStore = async (req, res) => {
+  try {
+    const { storeId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(storeId)) {
+      return res.status(400).json({ message: "storeId không hợp lệ" });
+    }
+
+    // Lấy danh sách supplier theo store
+    const suppliers = await Supplier.find({ store_id: storeId }).lean();
+
+    if (!suppliers || suppliers.length === 0) {
+      return res.status(404).json({ message: "Không có nhà cung cấp để xuất" });
+    }
+
+    // Chuẩn bị dữ liệu cho Excel
+    const data = suppliers.map((s) => ({
+      Tên: s.name,
+      SĐT: s.phone || "",
+      Email: s.email || "",
+      Địa_chỉ: s.address || "",
+      Mã_số_thuế: s.taxcode || "",
+      Ghi_chú: s.notes || "",
+      Trạng_thái: s.status,
+      Ngày_tạo: s.createdAt ? s.createdAt.toISOString().split("T")[0] : "",
+      Ngày_cập_nhật: s.updatedAt ? s.updatedAt.toISOString().split("T")[0] : "",
+    }));
+
+    // Tạo workbook & worksheet
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(data);
+
+    XLSX.utils.book_append_sheet(wb, ws, "Suppliers");
+
+    // Viết file Excel vào buffer
+    const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+
+    // Trả về file để download
+    res.setHeader("Content-Disposition", `attachment; filename="suppliers.xlsx"`);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+
+    return res.send(buf);
+  } catch (error) {
+    console.error("Lỗi exportSuppliersByStore:", error);
+    return res.status(500).json({ message: "Lỗi server", error: error.message });
+  }
+};
+
 module.exports = {
   createSupplier,
   updateSupplier,
   deleteSupplier,
   getSuppliersByStore,
   getSupplierById,
+  exportSuppliersByStore,
 };
