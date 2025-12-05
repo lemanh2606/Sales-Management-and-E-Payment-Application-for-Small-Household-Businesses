@@ -6,6 +6,8 @@ const User = require("../../models/User");
 const logActivity = require("../../utils/logActivity");
 const bcrypt = require("bcryptjs");
 const { STAFF_DEFAULT_MENU } = require("../../config/constants/permissions");
+const XLSX = require("xlsx");
+const dayjs = require("dayjs");
 
 /**
  * Tạo store mới (MANAGER)
@@ -17,8 +19,7 @@ const { STAFF_DEFAULT_MENU } = require("../../config/constants/permissions");
  */
 const createStore = async (req, res) => {
   try {
-    const { name, address, phone, description, imageUrl, tags, staff_ids, location, openingHours, isDefault } =
-      req.body;
+    const { name, address, phone, description, imageUrl, tags, staff_ids, location, openingHours, isDefault } = req.body;
     const userId = req.user.id || req.user._id;
 
     const user = await User.findById(userId);
@@ -62,9 +63,7 @@ const createStore = async (req, res) => {
     await user.save();
 
     // Populate before trả về để front-end có thể dùng ngay
-    const populatedStore = await Store.findById(newStore._id)
-      .populate("owner_id", "_id name email")
-      .populate("staff_ids", "_id name email");
+    const populatedStore = await Store.findById(newStore._id).populate("owner_id", "_id name email").populate("staff_ids", "_id name email");
 
     // log hoạt động
     await logActivity({
@@ -112,8 +111,7 @@ const getStoreById = async (req, res) => {
 const updateStore = async (req, res) => {
   try {
     const { storeId } = req.params;
-    const { name, address, phone, description, imageUrl, tags, staff_ids, location, openingHours, isDefault } =
-      req.body;
+    const { name, address, phone, description, imageUrl, tags, staff_ids, location, openingHours, isDefault } = req.body;
     const userId = req.user.id || req.user._id;
 
     const store = await Store.findById(storeId);
@@ -133,9 +131,7 @@ const updateStore = async (req, res) => {
 
     await store.save();
 
-    const populatedStore = await Store.findById(store._id)
-      .populate("owner_id", "_id name email")
-      .populate("staff_ids", "_id name email");
+    const populatedStore = await Store.findById(store._id).populate("owner_id", "_id name email").populate("staff_ids", "_id name email");
 
     //log hoạt động
     await logActivity({
@@ -179,9 +175,7 @@ const deleteStore = async (req, res) => {
       console.warn("Failed to pull store ref from user:", e);
     }
 
-    const populatedStore = await Store.findById(store._id)
-      .populate("owner_id", "_id name email")
-      .populate("staff_ids", "_id name email");
+    const populatedStore = await Store.findById(store._id).populate("owner_id", "_id name email").populate("staff_ids", "_id name email");
 
     //log hoạt động
     await logActivity({
@@ -226,11 +220,7 @@ const getStoresByManager = async (req, res) => {
     const filter = { owner_id: userId, deleted: false };
     if (q) {
       // tìm theo name / address / tags
-      filter.$or = [
-        { name: { $regex: q, $options: "i" } },
-        { address: { $regex: q, $options: "i" } },
-        { tags: { $regex: q, $options: "i" } },
-      ];
+      filter.$or = [{ name: { $regex: q, $options: "i" } }, { address: { $regex: q, $options: "i" } }, { tags: { $regex: q, $options: "i" } }];
     }
 
     const total = await Store.countDocuments(filter);
@@ -334,9 +324,7 @@ const ensureStore = async (req, res) => {
         return res.status(201).json({ created: true, store: defaultStore });
       }
     } else {
-      const assignedStoreIds = (user.store_roles || [])
-        .filter((entry) => entry?.store)
-        .map((entry) => entry.store);
+      const assignedStoreIds = (user.store_roles || []).filter((entry) => entry?.store).map((entry) => entry.store);
 
       if (!assignedStoreIds.length) {
         return res.status(403).json({ message: "Bạn chưa được phân vào cửa hàng nào" });
@@ -576,10 +564,7 @@ const getEmployeesByStore = async (req, res) => {
     const isDeleted = deleted === "true";
 
     const employees = (
-      await Employee.find({ store_id: storeId, isDeleted })
-        .populate("user_id", "username email phone role menu")
-        .populate("store_id", "name")
-        .lean()
+      await Employee.find({ store_id: storeId, isDeleted }).populate("user_id", "username email phone role menu").populate("store_id", "name").lean()
     ).map((emp) => ({
       ...emp,
       salary: emp.salary ? Number(emp.salary.toString()) : 0,
@@ -791,6 +776,79 @@ const restoreEmployee = async (req, res) => {
   }
 };
 
+const exportEmployeesToExcel = async (req, res) => {
+  try {
+    const { storeId } = req.params;
+
+    // Kiểm tra store tồn tại và user có quyền
+    const store = await Store.findById(storeId);
+    if (!store) return res.status(404).json({ message: "Cửa hàng không tồn tại" });
+
+    // Lấy danh sách nhân viên (chỉ những người chưa xóa mềm)
+    const employees = await Employee.find({
+      store_id: storeId,
+      isDeleted: false,
+    })
+      .populate("user_id", "name email phone")
+      .lean();
+
+    if (!employees || employees.length === 0) {
+      return res.status(404).json({ message: "Không có nhân viên để xuất" });
+    }
+
+    const toNumber = (val) => {
+      if (!val) return 0;
+      if (typeof val === "number") return val;
+      if (val.$numberDecimal) return parseFloat(val.$numberDecimal);
+      return parseFloat(val.toString());
+    };
+
+    const data = employees.map((emp) => ({
+      "Họ và tên": emp.fullName || "",
+      "Số điện thoại": emp.user_id?.phone || emp.phone || "",
+      Email: emp.user_id?.email || "",
+      "Lương cơ bản": toNumber(emp.salary),
+      "Ca làm việc": emp.shift || "",
+      "Tỷ lệ hoa hồng (%)": toNumber(emp.commission_rate),
+      "Ngày tuyển dụng": emp.hired_date ? dayjs(emp.hired_date).format("DD/MM/YYYY") : "",
+      "Trạng thái": "Đang làm việc",
+    }));
+
+    // Tạo workbook
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(data);
+    // Tự động điều chỉnh độ rộng cột
+    const colWidths = [
+      { wch: 20 }, // Họ và tên
+      { wch: 15 }, // SĐT
+      { wch: 25 }, // Email
+      { wch: 15 }, // Lương
+      { wch: 12 }, // Ca
+      { wch: 15 }, // Hoa hồng
+      { wch: 15 }, // Ngày tuyển
+      { wch: 12 }, // Trạng thái
+      { wch: 20 }, // Ghi chú
+    ];
+    ws["!cols"] = colWidths;
+
+    XLSX.utils.book_append_sheet(wb, ws, "NhanVien");
+    // Xuất buffer
+    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+    const safeStoreName = store.name.replace(/[\/\\:*?"<>|]/g, "_");
+    res.setHeader("Content-Disposition", `attachment; filename="Danh_Sach_Nhan_Vien_${safeStoreName}_${dayjs().format("DD-MM-YYYY")}.xlsx"`);
+    // Trả file
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="Danh_Sach_Nhan_Vien_${store.name.replace(/ /g, "_")}_${dayjs().format("DD-MM-YYYY")}.xlsx"`
+    );
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.send(buffer);
+  } catch (error) {
+    console.error("Lỗi export nhân viên:", error);
+    res.status(500).json({ message: "Lỗi server khi xuất Excel" });
+  }
+};
+
 module.exports = {
   createStore,
   updateStore,
@@ -808,4 +866,5 @@ module.exports = {
   updateEmployee,
   softDeleteEmployee,
   restoreEmployee,
+  exportEmployeesToExcel,
 };

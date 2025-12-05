@@ -10,8 +10,7 @@ export const getSuppliers = async (storeId) => {
 
 // Lấy chi tiết một nhà cung cấp
 export const getSupplierById = async (supplierId) => {
-  if (!supplierId)
-    throw new Error("Thiếu supplierId khi lấy chi tiết nhà cung cấp");
+  if (!supplierId) throw new Error("Thiếu supplierId khi lấy chi tiết nhà cung cấp");
   const res = await apiClient.get(`/suppliers/${supplierId}`);
   return res.data;
 };
@@ -26,8 +25,7 @@ export const createSupplier = async (storeId, data) => {
 
 // Cập nhật thông tin nhà cung cấp
 export const updateSupplier = async (supplierId, data) => {
-  if (!supplierId)
-    throw new Error("Thiếu supplierId khi cập nhật nhà cung cấp");
+  if (!supplierId) throw new Error("Thiếu supplierId khi cập nhật nhà cung cấp");
   const res = await apiClient.put(`/suppliers/${supplierId}`, data);
   return res.data;
 };
@@ -37,4 +35,22 @@ export const deleteSupplier = async (supplierId) => {
   if (!supplierId) throw new Error("Thiếu supplierId khi xóa nhà cung cấp");
   const res = await apiClient.delete(`/suppliers/${supplierId}`);
   return res.data;
+};
+
+// Xuất danh sách nhà cung cấp ra Excel
+export const exportSuppliers = async (storeId) => {
+  if (!storeId) throw new Error("Thiếu storeId khi xuất danh sách nhà cung cấp");
+
+  const res = await apiClient.get(`/suppliers/stores/${storeId}/export`, {
+    responseType: "blob", // rất quan trọng
+  });
+
+  // Tạo link download
+  const url = window.URL.createObjectURL(new Blob([res.data]));
+  const link = document.createElement("a");
+  link.href = url;
+  link.setAttribute("download", "suppliers.xlsx"); // tên file khi download
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
 };

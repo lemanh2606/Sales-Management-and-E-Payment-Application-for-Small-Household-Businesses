@@ -15,6 +15,8 @@ const Notification = require("../../models/Notification");
 const StorePaymentConfig = require("../../models/StorePaymentConfig");
 const { periodToRange } = require("../../utils/period");
 const { v2: cloudinary } = require("cloudinary");
+const XLSX = require("xlsx");
+const dayjs = require("dayjs");
 
 const createOrder = async (req, res) => {
   try {
@@ -152,6 +154,7 @@ const createOrder = async (req, res) => {
         vatInfo,
         vatAmount: vatAmountStr,
         beforeTaxAmount: beforeTaxStr,
+        usedPoints: req.body.usedPoints || 0, // ← thêm dòng này
       });
 
       await newOrder.save({ session });
@@ -326,8 +329,8 @@ const printBill = async (req, res) => {
     const order = await Order.findById(mongoId)
       .populate("storeId", "name") // Populate tên cửa hàng
       .populate("employeeId", "fullName") // Tên nhân viên
-      .populate("customer", "name phone") // Populate tên/SĐT khách từ Customer ref
-      .lean();
+      .populate("customer", "name phone"); // Populate tên/SĐT khách từ Customer ref
+    // .lean(); //bỏ đi để không thành plain object, còn save()
 
     if (!order || order.status !== "paid") {
       console.log("Hóa đơn chưa paid, không thể in bill:", mongoId);
@@ -345,8 +348,11 @@ const printBill = async (req, res) => {
     // Lấy loyalty config store (cho earnedPoints khi in bill)
     const loyalty = await LoyaltySetting.findOne({ storeId: order.storeId });
     let earnedPoints = 0;
-    if ((isFirstPrint && loyalty && loyalty.isActive && order.totalAmount >= loyalty.minOrderValue, order.customer)) {
+    let roundedEarnedPoints = 0;
+    if (isFirstPrint && loyalty && loyalty.isActive && order.totalAmount >= loyalty.minOrderValue && order.customer) {
       earnedPoints = parseFloat(order.totalAmount) * loyalty.pointsPerVND; // Tích điểm = total * tỉ lệ
+      // 🎯 Làm tròn điểm thưởng (chỉ lấy số nguyên, bỏ lẻ)
+      roundedEarnedPoints = Math.round(earnedPoints);
       // Cộng điểm vào customer (atomic session)
       const session = await mongoose.startSession();
       session.startTransaction();
@@ -357,9 +363,6 @@ const printBill = async (req, res) => {
           const prevSpent = parseFloat(customer.totalSpent?.toString() || 0);
           const currentSpent = parseFloat(order.totalAmount?.toString() || 0);
           const newSpent = prevSpent + currentSpent;
-
-          // 🎯 Làm tròn điểm thưởng (chỉ lấy số nguyên, bỏ lẻ)
-          const roundedEarnedPoints = Math.floor(earnedPoints);
 
           // 💾 Cập nhật dữ liệu khách hàng
           customer.loyaltyPoints = (customer.loyaltyPoints || 0) + roundedEarnedPoints; // 🎁 Cộng điểm mới (làm tròn)
@@ -375,6 +378,20 @@ const printBill = async (req, res) => {
           );
         }
 
+        // THÊM 2 DÒNG NÀY – LƯU ĐIỂM VÀO ORDER (CHỈ KHI IN LẦN ĐẦU)
+        if (isFirstPrint) {
+          // Lấy usedPoints từ DB thật (vì createOrder đã lưu rồi)
+          const realOrder = await Order.findById(mongoId).select("usedPoints");
+          await Order.findByIdAndUpdate(
+            mongoId,
+            {
+              earnedPoints: roundedEarnedPoints, // Lưu điểm cộng lần này
+              //usedPoints: order.usedPoints || 0, // bỏ đi vì đã lưu ở createOrder
+            },
+            { session }
+          );
+        }
+        // ===============================================
         await session.commitTransaction();
         session.endSession();
       } catch (err) {
@@ -454,7 +471,12 @@ const printBill = async (req, res) => {
         item.subtotal
       } VND\n`;
     });
-    bill += `\nTỔNG TIỀN: ${order.totalAmount.toString()} VND\n`; // toString() cho Decimal128 clean
+    bill += `\nTỔNG TIỀN: ${(parseFloat(order.beforeTaxAmount.toString()) || 0).toFixed(2)} VND\n`; // Tổng trước giảm
+    if (order.usedPoints && order.usedPoints > 0) {
+      const discountAmount = (order.usedPoints / 10).toFixed(2); // ví dụ 10 points = 1k VND
+      bill += `Giảm từ điểm: ${discountAmount} VND\n`;
+    }
+    bill += `Thanh toán: ${order.totalAmount.toString()} VND\n`; // Số tiền khách trả thật
     bill += `Phương thức: ${order.paymentMethod === "cash" ? "TIỀN MẶT" : "QR CODE"}\n`; // Rõ ràng hơn cho bill
     if (earnedPoints > 0) bill += `Điểm tích lũy lần này: ${earnedPoints.toFixed(0)} điểm\n`; // Thêm điểm tích nếu có
     bill += `Trạng thái: Đã thanh toán\n`;
@@ -889,55 +911,65 @@ const getTopSellingProducts = async (req, res) => {
   }
 };
 
-//http://localhost:9999/api/orders/top-customers?limit=5&range=thisMonth&storeId=68f8f19a4d723cad0bda9fa5
+//http://localhost:9999/api/orders/top-customers?limit=5&range=thisYear&storeId=68f8f19a4d723cad0bda9fa5
 const getTopFrequentCustomers = async (req, res) => {
   try {
-    const { limit = 10, storeId, range } = req.query;
+    const { storeId, periodType = "month", periodKey, monthFrom, monthTo, limit = 10, range } = req.query;
 
     if (!storeId) {
       return res.status(400).json({ message: "Thiếu storeId" });
     }
 
-    // 🔹 Xác định khoảng thời gian theo range
-    const now = new Date();
-    let matchDate = {};
+    let start, end;
 
-    switch (range) {
-      case "thisWeek": {
-        const currentDay = now.getDay(); // 0 (CN) -> 6 (T7)
-        const diffToMonday = currentDay === 0 ? 6 : currentDay - 1;
-        const monday = new Date(now);
-        monday.setDate(now.getDate() - diffToMonday);
-        matchDate = { $gte: new Date(monday.setHours(0, 0, 0, 0)) };
-        break;
+    // ƯU TIÊN DÙNG periodType + periodKey (UI mới)
+    if (periodType && periodKey) {
+      ({ start, end } = periodToRange(periodType, periodKey, monthFrom, monthTo));
+    }
+    // FALLBACK: nếu vẫn dùng UI cũ (range=thisMonth...)
+    else if (range) {
+      const now = new Date();
+      switch (range) {
+        case "thisWeek": {
+          const currentDay = now.getDay();
+          const diffToMonday = currentDay === 0 ? 6 : currentDay - 1;
+          start = new Date(now);
+          start.setDate(now.getDate() - diffToMonday);
+          start.setHours(0, 0, 0, 0);
+          end = new Date(); // đến hiện tại
+          break;
+        }
+        case "thisYear": {
+          start = new Date(now.getFullYear(), 0, 1);
+          start.setHours(0, 0, 0, 0);
+          end = new Date();
+          break;
+        }
+        case "thisMonth":
+        default: {
+          start = new Date(now.getFullYear(), now.getMonth(), 1);
+          start.setHours(0, 0, 0, 0);
+          end = new Date();
+          break;
+        }
       }
-
-      case "thisYear": {
-        const yearStart = new Date(now.getFullYear(), 0, 1);
-        matchDate = { $gte: new Date(yearStart.setHours(0, 0, 0, 0)) };
-        break;
-      }
-
-      case "thisMonth":
-      default: {
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-        matchDate = { $gte: new Date(monthStart.setHours(0, 0, 0, 0)) };
-        break;
-      }
+    } else {
+      // mặc định tháng này
+      const now = new Date();
+      start = new Date(now.getFullYear(), now.getMonth(), 1);
+      start.setHours(0, 0, 0, 0);
+      end = new Date();
     }
 
-    // 🔹 Lọc theo cửa hàng + đơn đã thanh toán + thời gian
     const matchStage = {
       status: "paid",
       storeId: new mongoose.Types.ObjectId(storeId),
-      createdAt: matchDate,
+      createdAt: { $gte: start, ...(end ? { $lte: end } : {}) },
+      customer: { $ne: null }, // loại khách lẻ luôn từ đầu cho nhanh
     };
 
-    // 🔹 Aggregate pipeline
     const topCustomers = await Order.aggregate([
       { $match: matchStage },
-
-      // Gom nhóm theo customer ref
       {
         $group: {
           _id: "$customer",
@@ -946,50 +978,118 @@ const getTopFrequentCustomers = async (req, res) => {
           latestOrder: { $max: "$createdAt" },
         },
       },
-
-      { $match: { _id: { $ne: null } } }, // ← Loại bỏ hoàn toàn khách lẻ
-      { $sort: { totalAmount: -1 } },
-      { $limit: parseInt(limit) },
-
-      // Join sang bảng customers
+      { $sort: { totalAmount: -1, orderCount: -1 } },
+      { $limit: parseInt(limit) || 10 },
       {
         $lookup: {
           from: "customers",
           localField: "_id",
           foreignField: "_id",
-          as: "customer",
+          as: "customerInfo",
         },
       },
-      { $unwind: "$customer" },
-
-      // Lọc khách đã xóa
-      { $match: { "customer.isDeleted": { $ne: true } } },
-
-      // 🔸 Trả nhiều field hơn để FE dùng
+      { $unwind: { path: "$customerInfo", preserveNullAndEmptyArrays: false } },
+      { $match: { "customerInfo.isDeleted": { $ne: true } } },
       {
         $project: {
-          customerId: "$customer._id",
-          customerName: "$customer.name",
-          customerPhone: "$customer.phone",
-          address: "$customer.address",
-          note: "$customer.note",
-          loyaltyPoints: "$customer.loyaltyPoints",
-          totalSpentAllTime: "$customer.totalSpent",
-          totalOrdersAllTime: "$customer.totalOrders",
-          totalAmount: 1, // trong khoảng range được chọn
-          orderCount: 1, // trong khoảng range được chọn
+          _id: 0,
+          customerId: "$_id",
+          customerName: "$customerInfo.name",
+          customerPhone: "$customerInfo.phone",
+          address: "$customerInfo.address",
+          note: "$customerInfo.note",
+          loyaltyPoints: { $ifNull: ["$customerInfo.loyaltyPoints", 0] },
+          totalSpent: { $toDouble: "$totalAmount" },
+          orderCount: 1,
           latestOrder: 1,
         },
       },
     ]);
 
-    res.json({
-      message: `Top khách hàng thường xuyên (${range || "thisMonth"})`,
+    return res.json({
+      success: true,
+      message: "Lấy top khách hàng thành công",
+      count: topCustomers.length,
       data: topCustomers,
     });
   } catch (err) {
-    console.error("Lỗi top khách hàng:", err.message);
-    res.status(500).json({ message: "Lỗi server khi lấy top khách hàng" });
+    console.error("Lỗi top khách hàng:", err);
+    return res.status(500).json({ message: "Lỗi server", error: err.message });
+  }
+};
+
+// =============== EXPORT TOP CUSTOMERS (sửa xong) ===============
+const exportTopFrequentCustomers = async (req, res) => {
+  try {
+    const { storeId, periodType = "month", periodKey, monthFrom, monthTo, limit = 500, format = "xlsx" } = req.query;
+
+    if (!storeId) return res.status(400).json({ message: "Thiếu storeId" });
+
+    const { start, end } = periodToRange(
+      periodType,
+      periodKey || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`,
+      monthFrom,
+      monthTo
+    );
+
+    const matchStage = {
+      status: "paid",
+      storeId: new mongoose.Types.ObjectId(storeId),
+      createdAt: { $gte: start, $lte: end },
+      customer: { $ne: null },
+    };
+
+    const data = await Order.aggregate([
+      { $match: matchStage },
+      {
+        $group: {
+          _id: "$customer",
+          totalAmount: { $sum: "$totalAmount" }, // giống GET
+          orderCount: { $sum: 1 },
+          latestOrder: { $max: "$createdAt" }, // giống GET
+        },
+      },
+      { $sort: { totalAmount: -1, orderCount: -1 } },
+      { $limit: parseInt(limit) || 500 },
+      {
+        $lookup: {
+          from: "customers",
+          localField: "_id",
+          foreignField: "_id",
+          as: "c",
+        },
+      },
+      { $unwind: "$c" },
+      { $match: { "c.isDeleted": { $ne: true } } },
+      {
+        $project: {
+          "ID khách": "$_id",
+          "Tên khách hàng": "$c.name",
+          "Số điện thoại": "$c.phone",
+          "Địa chỉ": "$c.address",
+          "Ghi chú": "$c.note",
+          "Tổng chi tiêu (VND)": { $toDouble: "$totalAmount" }, // GIỐNG GET
+          "Số đơn hàng": "$orderCount",
+          "Lần mua gần nhất": "$latestOrder", // GIỐNG GET
+          "Điểm tích lũy": { $ifNull: ["$c.loyaltyPoints", 0] }, // GIỐNG GET
+        },
+      },
+    ]);
+
+    // export xlsx
+    if (format === "xlsx") {
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Top Khach Hang");
+      const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+
+      res.setHeader("Content-Disposition", `attachment; filename=Top_Khach_Hang_${periodKey || "hien_tai"}.xlsx`);
+      res.type("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.send(buffer);
+    }
+  } catch (err) {
+    console.error("Export top customers error:", err);
+    res.status(500).json({ message: "Lỗi xuất file" });
   }
 };
 
@@ -1276,6 +1376,95 @@ const getOrderListAll = async (req, res) => {
   }
 };
 
+const exportAllOrdersToExcel = async (req, res) => {
+  try {
+    const { storeId } = req.query;
+
+    if (!storeId) {
+      return res.status(400).json({ message: "Thiếu storeId" });
+    }
+
+    const orders = await Order.find({ storeId })
+      .populate("storeId", "name")
+      .populate("employeeId", "fullName")
+      .populate("customer", "name phone")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    if (!orders || orders.length === 0) {
+      return res.status(404).json({ message: "Không có đơn hàng để xuất" });
+    }
+    // Hàm convert Decimal128 → number an toàn tuyệt đối
+    const decimalToNumber = (decimal) => {
+      if (!decimal) return 0;
+      if (typeof decimal === "number") return decimal;
+      if (decimal.$numberDecimal) return parseFloat(decimal.$numberDecimal);
+      return parseFloat(decimal.toString());
+    };
+
+    const data = orders.map((order) => ({
+      "Mã đơn": order._id.toString().slice(-8),
+      "Thời gian": dayjs(order.createdAt).format("DD/MM/YYYY HH:mm"),
+      "Nhân viên": order.employeeId?.fullName || "—",
+      "Khách hàng": order.customer?.name || "Khách lẻ",
+      "Số điện thoại": order.customer?.phone || "—",
+      "Tổng tiền": decimalToNumber(order.totalAmount),
+      "Phương thức": order.paymentMethod === "cash" ? "Tiền mặt" : "Chuyển khoản",
+      "Trạng thái":
+        {
+          pending: "Chờ thanh toán",
+          paid: "Đã thanh toán",
+          refunded: "Đã hoàn tiền",
+          partially_refunded: "Hoàn 1 phần",
+        }[order.status] || order.status,
+      "In hóa đơn": order.printCount > 0 ? `Có (${order.printCount} lần)` : "Chưa",
+      "Ghi chú": order.isVATInvoice ? "Có VAT" : "",
+    }));
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(data);
+
+    // Đẹp cột
+    ws["!cols"] = [
+      { wch: 12 }, // Mã đơn
+      { wch: 18 }, // Thời gian
+      { wch: 22 }, // Nhân viên
+      { wch: 22 }, // Khách hàng
+      { wch: 15 }, // SĐT
+      { wch: 18 }, // Tổng tiền
+      { wch: 14 }, // Phương thức
+      { wch: 16 }, // Trạng thái
+      { wch: 14 }, // In hóa đơn
+      { wch: 20 }, // Ghi chú
+    ];
+    // ---- Format cột Tổng tiền ----
+    // Đặt định dạng số cho cột "Tổng tiền" (cột F)
+    // Giữ kiểu number để Excel vẫn hiểu là số, có thể sort/tính toán
+    // 'z = "#,##0"' sẽ hiển thị dấu phân cách hàng nghìn (ví dụ: 1,234,567)
+    const range = XLSX.utils.decode_range(ws["!ref"]);
+    for (let R = 1; R <= range.e.r; ++R) {
+      // bắt đầu từ row 2, bỏ header
+      const cell_address = { c: 5, r: R }; // cột F
+      const cell_ref = XLSX.utils.encode_cell(cell_address);
+      if (ws[cell_ref]) ws[cell_ref].z = "#,##0"; // dấu phân cách hàng nghìn
+    }
+    // ---- Hết ----
+
+    XLSX.utils.book_append_sheet(wb, ws, "Danh_Sach_Don_Hang");
+    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+
+    const storeName = orders[0]?.storeId?.name || "Cua_Hang";
+    const fileName = `Danh_Sach_Don_Hang_${storeName.replace(/ /g, "_")}_${dayjs().format("DD-MM-YYYY")}.xlsx`;
+
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    res.send(buffer);
+  } catch (err) {
+    console.error("Lỗi export đơn hàng:", err);
+    res.status(500).json({ message: "Lỗi server khi xuất Excel" });
+  }
+};
+
 const getOrderStats = async (req, res) => {
   try {
     const { storeId, periodType = "year", periodKey, monthFrom, monthTo } = req.query;
@@ -1343,11 +1532,16 @@ module.exports = {
   createOrder,
   setPaidCash,
   printBill,
+  //phần của thanh toán QR
   vietqrReturn,
   vietqrCancel,
+  //phần của top sản phẩm và export
   getTopSellingProducts,
-  getTopFrequentCustomers,
   exportTopSellingProducts,
+  //phần của top khách hàng và export
+  getTopFrequentCustomers,
+  exportTopFrequentCustomers,
+
   getOrderById,
   getOrderStats,
   refundOrder,
@@ -1355,4 +1549,5 @@ module.exports = {
   getListRefundOrders,
   getOrderRefundDetail,
   getOrderListAll,
+  exportAllOrdersToExcel,
 };

@@ -43,7 +43,7 @@ import {
 } from "@ant-design/icons";
 import Layout from "../../components/Layout";
 import ProductForm from "../../components/product/ProductForm";
-import { getProductsByStore, importProductsByExcel } from "../../api/productApi";
+import { getProductsByStore, importProductsByExcel, exportProducts } from "../../api/productApi";
 import * as XLSX from "xlsx";
 
 const { Title, Text } = Typography;
@@ -66,9 +66,7 @@ export default function ProductListPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [drawerVisible, setDrawerVisible] = useState(false);
-  const [isMobile, setIsMobile] = useState(
-    typeof window !== "undefined" ? window.innerWidth < 768 : false
-  );
+  const [isMobile, setIsMobile] = useState(typeof window !== "undefined" ? window.innerWidth < 768 : false);
 
   const allColumns = [
     { key: "name", label: "Tên sản phẩm", default: true },
@@ -220,12 +218,7 @@ export default function ProductListPage() {
       const supplierName = (product.supplier?.name || "").toLowerCase();
       const groupName = (product.group?.name || "").toLowerCase();
 
-      return (
-        name.includes(searchLower) ||
-        sku.includes(searchLower) ||
-        supplierName.includes(searchLower) ||
-        groupName.includes(searchLower)
-      );
+      return name.includes(searchLower) || sku.includes(searchLower) || supplierName.includes(searchLower) || groupName.includes(searchLower);
     });
 
     setFilteredProducts(filtered);
@@ -419,9 +412,7 @@ export default function ProductListPage() {
 
   useEffect(() => {
     if (allProducts.length > 0) {
-      const lowStockProducts = allProducts.filter(
-        (p) => p.stock_quantity > 0 && p.min_stock && p.stock_quantity <= p.min_stock
-      );
+      const lowStockProducts = allProducts.filter((p) => p.stock_quantity > 0 && p.min_stock && p.stock_quantity <= p.min_stock);
 
       if (lowStockProducts.length > 0) {
         api.warning({
@@ -472,7 +463,11 @@ export default function ProductListPage() {
         dataIndex: "sku",
         key: "sku",
         width: isMobile ? 100 : 150,
-        render: (text) => <Tag color="cyan" style={{ fontSize: "clamp(10px, 2vw, 12px)" }}>{text || "-"}</Tag>,
+        render: (text) => (
+          <Tag color="cyan" style={{ fontSize: "clamp(10px, 2vw, 12px)" }}>
+            {text || "-"}
+          </Tag>
+        ),
       },
       price: {
         title: (
@@ -617,22 +612,14 @@ export default function ProductListPage() {
         dataIndex: "createdAt",
         key: "createdAt",
         width: 120,
-        render: (value) => (
-          <span style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
-            {value ? new Date(value).toLocaleDateString("vi-VN") : "-"}
-          </span>
-        ),
+        render: (value) => <span style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>{value ? new Date(value).toLocaleDateString("vi-VN") : "-"}</span>,
       },
       updatedAt: {
         title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Cập nhật</span>,
         dataIndex: "updatedAt",
         key: "updatedAt",
         width: 120,
-        render: (value) => (
-          <span style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
-            {value ? new Date(value).toLocaleDateString("vi-VN") : "-"}
-          </span>
-        ),
+        render: (value) => <span style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>{value ? new Date(value).toLocaleDateString("vi-VN") : "-"}</span>,
       },
     };
 
@@ -664,10 +651,7 @@ export default function ProductListPage() {
   };
 
   const columnSelectorContent = (
-    <Card
-      style={{ width: "100%", maxHeight: isMobile ? "70vh" : 400, overflowY: "auto" }}
-      styles={{ body: { padding: 16 } }}
-    >
+    <Card style={{ width: "100%", maxHeight: isMobile ? "70vh" : 400, overflowY: "auto" }} styles={{ body: { padding: 16 } }}>
       <Text strong style={{ fontSize: "clamp(13px, 3vw, 14px)" }}>
         Chọn cột hiển thị
       </Text>
@@ -799,6 +783,51 @@ export default function ProductListPage() {
     }
   };
 
+  const handleExportExcel = async () => {
+    if (!storeId) {
+      return api.warning({
+        message: "⚠️ Chưa chọn cửa hàng",
+        description: "Vui lòng chọn cửa hàng trước khi xuất Excel",
+        placement: "topRight",
+      });
+    }
+
+    try {
+      api.info({
+        message: "⏳ Đang xuất file...",
+        description: "Vui lòng đợi trong giây lát",
+        placement: "topRight",
+        duration: 1.5,
+      });
+
+      const response = await exportProducts(storeId);
+
+      const blob = new Blob([response.data], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `products_${storeId}.xlsx`;
+      link.click();
+      window.URL.revokeObjectURL(url);
+
+      api.success({
+        message: "🎉 Xuất Excel thành công",
+        description: "File đã được tải xuống",
+        placement: "topRight",
+      });
+    } catch (error) {
+      console.error("Export Excel error:", error);
+      api.error({
+        message: "❌ Xuất Excel thất bại",
+        description: error?.message || "Không thể xuất file",
+        placement: "topRight",
+      });
+    }
+  };
+
   if (!storeId) {
     return (
       <Layout>
@@ -868,11 +897,7 @@ export default function ProductListPage() {
                 styles={{ body: { padding: isMobile ? 12 : 20 } }}
               >
                 <Statistic
-                  title={
-                    <span style={{ color: "#fff", fontSize: "clamp(10px, 2.5vw, 14px)", fontWeight: 500 }}>
-                      Tổng SP
-                    </span>
-                  }
+                  title={<span style={{ color: "#fff", fontSize: "clamp(10px, 2.5vw, 14px)", fontWeight: 500 }}>Tổng SP</span>}
                   value={filteredProducts.length}
                   prefix={<AppstoreOutlined style={{ fontSize: "clamp(14px, 4vw, 20px)" }} />}
                   valueStyle={{
@@ -893,11 +918,7 @@ export default function ProductListPage() {
                 styles={{ body: { padding: isMobile ? 12 : 20 } }}
               >
                 <Statistic
-                  title={
-                    <span style={{ color: "#fff", fontSize: "clamp(10px, 2.5vw, 14px)", fontWeight: 500 }}>
-                      Đang KD
-                    </span>
-                  }
+                  title={<span style={{ color: "#fff", fontSize: "clamp(10px, 2.5vw, 14px)", fontWeight: 500 }}>Đang KD</span>}
                   value={activeProducts}
                   prefix={<CheckCircleOutlined style={{ fontSize: "clamp(14px, 4vw, 20px)" }} />}
                   valueStyle={{
@@ -918,11 +939,7 @@ export default function ProductListPage() {
                 styles={{ body: { padding: isMobile ? 12 : 20 } }}
               >
                 <Statistic
-                  title={
-                    <span style={{ color: "#fff", fontSize: "clamp(10px, 2.5vw, 14px)", fontWeight: 500 }}>
-                      Tồn kho
-                    </span>
-                  }
+                  title={<span style={{ color: "#fff", fontSize: "clamp(10px, 2.5vw, 14px)", fontWeight: 500 }}>Tồn kho</span>}
                   value={totalStock}
                   prefix={<StockOutlined style={{ fontSize: "clamp(14px, 4vw, 20px)" }} />}
                   valueStyle={{
@@ -945,11 +962,7 @@ export default function ProductListPage() {
                   styles={{ body: { padding: isMobile ? 12 : 20 } }}
                 >
                   <Statistic
-                    title={
-                      <span style={{ color: "#fff", fontSize: "clamp(10px, 2.5vw, 14px)", fontWeight: 500 }}>
-                        Giá trị
-                      </span>
-                    }
+                    title={<span style={{ color: "#fff", fontSize: "clamp(10px, 2.5vw, 14px)", fontWeight: 500 }}>Giá trị</span>}
                     value={totalValue}
                     prefix={<DollarOutlined style={{ fontSize: "clamp(14px, 4vw, 20px)" }} />}
                     suffix="₫"
@@ -966,6 +979,7 @@ export default function ProductListPage() {
 
           {!isMobile && <Divider />}
 
+          {/* Thanh tìm kiếm và 4 nút hành động chính */}
           <Space
             direction={isMobile ? "vertical" : "horizontal"}
             style={{
@@ -1004,6 +1018,18 @@ export default function ProductListPage() {
                 {!isMobile && "Làm mới"}
               </Button>
 
+              <Button
+                size={isMobile ? "middle" : "large"}
+                icon={<FileExcelOutlined />}
+                onClick={handleExportExcel}
+                style={{
+                  borderColor: "#52c41a",
+                  color: "#52c41a",
+                }}
+              >
+                {!isMobile ? "Xuất Excel" : "Xuất"}
+              </Button>
+
               {isMobile ? (
                 <Button size="middle" icon={<MenuOutlined />} onClick={() => setDrawerVisible(true)}>
                   Cột
@@ -1020,12 +1046,7 @@ export default function ProductListPage() {
                 </Dropdown>
               )}
 
-              <Button
-                size={isMobile ? "middle" : "large"}
-                icon={<FileExcelOutlined />}
-                loading={isImporting}
-                onClick={handleExcelButtonClick}
-              >
+              <Button size={isMobile ? "middle" : "large"} icon={<FileExcelOutlined />} loading={isImporting} onClick={handleExcelButtonClick}>
                 Tải lên Sản phẩm
               </Button>
 
@@ -1044,6 +1065,7 @@ export default function ProductListPage() {
               </Button>
             </Space>
           </Space>
+          {/* Hết thanh tìm kiếm và 4 nút */}
 
           <div style={{ overflowX: "auto" }}>
             <Table
@@ -1056,8 +1078,21 @@ export default function ProductListPage() {
                 pageSize: itemsPerPage,
                 total: filteredProducts.length,
                 showSizeChanger: !isMobile,
-                showTotal: (total, range) =>
-                  isMobile ? `${range[0]}-${range[1]}/${total}` : `${range[0]}-${range[1]} của ${total} sản phẩm`,
+                showTotal: (total, range) => (
+                  <div
+                    style={{
+                      fontSize: isMobile ? 12 : 14,
+                      textAlign: isMobile ? "center" : "left",
+                      padding: isMobile ? "0 8px" : 0,
+                    }}
+                  >
+                    Đang xem{" "}
+                    <span style={{ color: "#1890ff", fontWeight: 600 }}>
+                      {range[0]} – {range[1]}
+                    </span>{" "}
+                    trên tổng số <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> sản phẩm
+                  </div>
+                ),
                 pageSizeOptions: ["5", "10", "20", "50", "100"],
                 style: { marginTop: 16 },
               }}
@@ -1070,9 +1105,7 @@ export default function ProductListPage() {
                   <div style={{ padding: isMobile ? "24px 0" : "48px 0" }}>
                     <ShoppingOutlined style={{ fontSize: isMobile ? 32 : 48, color: "#d9d9d9" }} />
                     <div style={{ marginTop: 16, color: "#999", fontSize: "clamp(12px, 3vw, 14px)" }}>
-                      {searchValue
-                        ? `Không tìm thấy sản phẩm nào với từ khóa "${searchValue}"`
-                        : "Chưa có sản phẩm nào"}
+                      {searchValue ? `Không tìm thấy sản phẩm nào với từ khóa "${searchValue}"` : "Chưa có sản phẩm nào"}
                     </div>
                   </div>
                 ),
@@ -1095,9 +1128,7 @@ export default function ProductListPage() {
           title={
             <Space>
               <ShoppingOutlined style={{ color: "#1890ff" }} />
-              <span style={{ fontSize: "clamp(14px, 3.5vw, 16px)" }}>
-                {modalProduct ? "Cập nhật sản phẩm" : "Thêm sản phẩm"}
-              </span>
+              <span style={{ fontSize: "clamp(14px, 3.5vw, 16px)" }}>{modalProduct ? "Cập nhật sản phẩm" : "Thêm sản phẩm"}</span>
             </Space>
           }
           open={isModalOpen}
@@ -1135,13 +1166,7 @@ export default function ProductListPage() {
             },
           }}
         >
-          <input
-            type="file"
-            accept=".xlsx,.xls,.csv"
-            ref={fileInputRef}
-            style={{ display: "none" }}
-            onChange={handleExcelFileChange}
-          />
+          <input type="file" accept=".xlsx,.xls,.csv" ref={fileInputRef} style={{ display: "none" }} onChange={handleExcelFileChange} />
 
           <Space direction="vertical" style={{ width: "100%" }} size={16}>
             <Text style={{ fontSize: "clamp(12px, 3vw, 14px)" }}>

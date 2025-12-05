@@ -103,7 +103,7 @@ const ReportDashboard = () => {
       { name: "Doanh thu", value: data.totalRevenue, fill: COLORS.revenue },
       { name: "Lợi nhuận gộp", value: data.grossProfit, fill: COLORS.grossProfit },
       { name: "Chi phí vận hành", value: data.operatingCost, fill: COLORS.operatingCost },
-      { name: "Thuế VAT", value: data.totalVAT, fill: COLORS.totalVAT },
+      { name: "VAT", value: data.totalVAT, fill: COLORS.totalVAT },
       { name: "Lợi nhuận ròng", value: data.netProfit, fill: COLORS.netProfit },
     ];
   };
@@ -246,7 +246,20 @@ const ReportDashboard = () => {
                         locale: "vi_VN",
                         monthFormat: "MMMM",
                         shortMonths: ["Th 1", "Th 2", "Th 3", "Th 4", "Th 5", "Th 6", "Th 7", "Th 8", "Th 9", "Th 10", "Th 11", "Th 12"],
-                        months: ["Tháng 1", "Tháng 2", "Tháng 3", "Tháng 4", "Tháng 5", "Tháng 6", "Tháng 7", "Tháng 8", "Tháng 9", "Tháng 10", "Tháng 11", "Tháng 12"],
+                        months: [
+                          "Tháng 1",
+                          "Tháng 2",
+                          "Tháng 3",
+                          "Tháng 4",
+                          "Tháng 5",
+                          "Tháng 6",
+                          "Tháng 7",
+                          "Tháng 8",
+                          "Tháng 9",
+                          "Tháng 10",
+                          "Tháng 11",
+                          "Tháng 12",
+                        ],
                       },
                     }}
                   />
@@ -300,7 +313,9 @@ const ReportDashboard = () => {
                     </span>
                   ))}
                 </div>
-                <small style={{ display: "block", color: "blue", marginBottom: 4 }}>(Chi phí không nằm trong hệ thống, VD: mặt bằng, điện-nước, marketing,...)</small>
+                <small style={{ display: "block", color: "blue", marginBottom: 4 }}>
+                  (Chi phí không nằm trong hệ thống, VD: mặt bằng, điện-nước, marketing,...)
+                </small>
               </Col>
             </Row>
           </Card>
@@ -321,7 +336,7 @@ const ReportDashboard = () => {
                     <Statistic
                       title={
                         <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          Doanh thu
+                          <span style={{color:"black"}}>Doanh thu</span>
                           <AntTooltip title="Doanh thu là tổng số tiền thu được từ việc bán hàng (chưa trừ chi phí).">
                             <InfoCircleOutlined style={{ color: "#178fff", cursor: "pointer" }} />
                           </AntTooltip>
@@ -338,7 +353,7 @@ const ReportDashboard = () => {
                     <Statistic
                       title={
                         <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          Lợi nhuận gộp
+                          <span style={{color:"black"}}>Lợi nhuận gộp</span>
                           <AntTooltip title="Lợi nhuận gộp = Doanh thu − Chi phí nhập hàng(COGS).">
                             <InfoCircleOutlined style={{ color: "#178fff", cursor: "pointer" }} />
                           </AntTooltip>
@@ -355,7 +370,7 @@ const ReportDashboard = () => {
                     <Statistic
                       title={
                         <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          Chi phí vận hành
+                          <span style={{color:"black"}}>Chi phí vận hành</span>
                           <AntTooltip title="Chi phí vận hành bao gồm = lương nhân viên + chi phí duy trì hoạt động bên ngoài được nhập ở ô Chi phí ngoài bên trên.">
                             <InfoCircleOutlined style={{ color: "#178fff", cursor: "pointer" }} />
                           </AntTooltip>
@@ -372,9 +387,9 @@ const ReportDashboard = () => {
                     <Statistic
                       title={
                         <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          Thuế VAT
+                          <span style={{color:"black"}}>VAT</span>
                           <AntTooltip title="Tổng số tiền thuế giá trị gia tăng (VAT) đã thu từ các đơn hàng trong kỳ báo cáo.">
-                            <InfoCircleOutlined style={{ color: "#888", cursor: "pointer" }} />
+                            <InfoCircleOutlined style={{ color: "#178fff", cursor: "pointer" }} />
                           </AntTooltip>
                         </span>
                       }
@@ -389,7 +404,7 @@ const ReportDashboard = () => {
                     <Statistic
                       title={
                         <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          Lợi nhuận ròng
+                          <span style={{color:"black"}}>Lợi nhuận ròng</span>
                           <AntTooltip title="Lợi nhuận ròng = Lợi nhuận gộp − Chi phí vận hành - Thuế VAT. Đây là số tiền thật sự bạn kiếm được.">
                             <InfoCircleOutlined style={{ color: "#178fff", cursor: "pointer" }} />
                           </AntTooltip>
@@ -560,7 +575,8 @@ const ReportDashboard = () => {
                       </Text>
                       <div style={{ marginTop: 8 }}>
                         <Tag color="green" style={{ fontSize: 14, padding: "4px 12px" }}>
-                          {data.stockValue > 0 ? (((data.stockValueAtSalePrice - data.stockValue) / data.stockValue) * 100).toFixed(1) : 0}% biên lợi nhuận gộp trung bình
+                          {data.stockValue > 0 ? (((data.stockValueAtSalePrice - data.stockValue) / data.stockValue) * 100).toFixed(1) : 0}% biên lợi
+                          nhuận gộp trung bình
                         </Tag>
                       </div>
                     </div>
@@ -701,11 +717,29 @@ const ReportDashboard = () => {
                               );
                             }
                             // Nếu có doanh thu → đánh giá như thường
-                            if (value > 5) return <Tag icon={<ExclamationCircleOutlined />} color="red">TỒN NẶNG</Tag>;
-                            if (value > 2) return <Tag icon={<ExclamationCircleOutlined />} color="orange">CẦN ĐẨY HÀNG</Tag>;
-                            if (value > 1)return (<Tag icon={<WarningOutlined />} color="warning"> Cần theo dõi</Tag>);
+                            if (value > 5)
+                              return (
+                                <Tag icon={<ExclamationCircleOutlined />} color="red">
+                                  TỒN NẶNG
+                                </Tag>
+                              );
+                            if (value > 2)
+                              return (
+                                <Tag icon={<ExclamationCircleOutlined />} color="orange">
+                                  CẦN ĐẨY HÀNG
+                                </Tag>
+                              );
+                            if (value > 1)
+                              return (
+                                <Tag icon={<WarningOutlined />} color="warning">
+                                  {" "}
+                                  Cần theo dõi
+                                </Tag>
+                              );
                             return (
-                              <Tag icon={<CheckCircleOutlined />} color="green">TỐT</Tag>
+                              <Tag icon={<CheckCircleOutlined />} color="green">
+                                TỐT
+                              </Tag>
                             );
                           },
                         },
@@ -720,10 +754,14 @@ const ReportDashboard = () => {
                 {/* CỘT TRÁI */}
                 {/* CỘT TRÁI */}
                 <Col span={12}>
-                  <Card title="Chi tiết tài chính" style={{ border: "1px solid #8c8c8c", height: "100%" }} extra={<Text type="secondary">Đơn vị: VND</Text>}>
+                  <Card
+                    title="Chi tiết tài chính"
+                    style={{ border: "1px solid #8c8c8c", height: "100%" }}
+                    extra={<Text type="secondary">Đơn vị: VND</Text>}
+                  >
                     <Space direction="vertical" style={{ width: "100%", fontSize: 15 }}>
                       <div>
-                        <strong>Thuế GTGT:</strong> {formatVND(data.totalVAT)}
+                        <strong>VAT:</strong> {formatVND(data.totalVAT)}
                       </div>
                       <div>
                         <strong>Chi phí nhập hàng (COGS):</strong> {formatVND(data.totalCOGS)}
@@ -752,7 +790,11 @@ const ReportDashboard = () => {
 
                 {/* CỘT PHẢI: HIỆU SUẤT */}
                 <Col span={12}>
-                  <Card title="Hiệu suất kinh doanh" style={{ border: "1px solid #8c8c8c", height: "100%" }} extra={<Text type="secondary">Đơn vị: %</Text>}>
+                  <Card
+                    title="Hiệu suất kinh doanh"
+                    style={{ border: "1px solid #8c8c8c", height: "100%" }}
+                    extra={<Text type="secondary">Đơn vị: %</Text>}
+                  >
                     <Space direction="vertical" style={{ width: "100%", fontSize: 16 }}>
                       <div>
                         <Popover content="Lợi nhuận gộp = Doanh thu - Giá vốn hàng bán">
@@ -791,7 +833,8 @@ const ReportDashboard = () => {
                         :{" "}
                         <strong
                           style={{
-                            color: data.stockValue / data.totalRevenue > 1 ? "#ff4d4f" : data.stockValue / data.totalRevenue > 0.5 ? "#faad14" : "#52c41a",
+                            color:
+                              data.stockValue / data.totalRevenue > 1 ? "#ff4d4f" : data.stockValue / data.totalRevenue > 0.5 ? "#faad14" : "#52c41a",
                           }}
                         >
                           {data?.totalRevenue ? ((data.stockValue / data.totalRevenue) * 100).toFixed(1) : 0}%
@@ -822,7 +865,6 @@ const ReportDashboard = () => {
                 </Col>
               </Row>
               {/* ======= Hết ====== */}
-              
             </>
           )}
         </Space>

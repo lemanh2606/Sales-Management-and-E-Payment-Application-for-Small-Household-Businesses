@@ -32,11 +32,12 @@ import {
   CloseCircleOutlined,
   ReloadOutlined,
   UserOutlined,
+  FileExcelOutlined,
 } from "@ant-design/icons";
 import Layout from "../../components/Layout";
 import SupplierFormModal from "../../components/supplier/SupplierFormModal";
 import SupplierDetailModal from "../../components/supplier/SupplierDetailModal";
-import { getSuppliers, deleteSupplier } from "../../api/supplierApi";
+import { getSuppliers, deleteSupplier, exportSuppliers } from "../../api/supplierApi";
 import { useAuth } from "../../context/AuthContext";
 
 const { Title, Text } = Typography;
@@ -83,11 +84,7 @@ export default function SupplierListPage() {
     try {
       setLoading(true);
       const data = await getSuppliers(storeId);
-      const supplierList = Array.isArray(data?.suppliers)
-        ? data.suppliers
-        : Array.isArray(data)
-          ? data
-          : [];
+      const supplierList = Array.isArray(data?.suppliers) ? data.suppliers : Array.isArray(data) ? data : [];
 
       setAllSuppliers(supplierList);
       setFilteredSuppliers(supplierList);
@@ -132,12 +129,7 @@ export default function SupplierListPage() {
       const email = (supplier.email || "").toLowerCase();
       const address = (supplier.address || "").toLowerCase();
 
-      return (
-        name.includes(searchLower) ||
-        phone.includes(searchLower) ||
-        email.includes(searchLower) ||
-        address.includes(searchLower)
-      );
+      return name.includes(searchLower) || phone.includes(searchLower) || email.includes(searchLower) || address.includes(searchLower);
     });
 
     setFilteredSuppliers(filtered);
@@ -209,9 +201,7 @@ export default function SupplierListPage() {
 
     api.info({
       message: supplierId ? "✏️ Chỉnh sửa nhà cung cấp" : "📝 Thêm nhà cung cấp mới",
-      description: supplierId
-        ? "Vui lòng cập nhật thông tin nhà cung cấp"
-        : "Vui lòng điền đầy đủ thông tin nhà cung cấp",
+      description: supplierId ? "Vui lòng cập nhật thông tin nhà cung cấp" : "Vui lòng điền đầy đủ thông tin nhà cung cấp",
       placement: "topRight",
       duration: 2,
     });
@@ -251,9 +241,7 @@ export default function SupplierListPage() {
 
     api.success({
       message: editSupplierId ? "🎉 Cập nhật thành công!" : "🎉 Tạo mới thành công!",
-      description: editSupplierId
-        ? "Thông tin nhà cung cấp đã được cập nhật"
-        : "Nhà cung cấp mới đã được thêm vào danh sách",
+      description: editSupplierId ? "Thông tin nhà cung cấp đã được cập nhật" : "Nhà cung cấp mới đã được thêm vào danh sách",
       placement: "topRight",
       duration: 4,
     });
@@ -344,13 +332,7 @@ export default function SupplierListPage() {
       render: (_, record) => (
         <Space size="small">
           <Tooltip title="Xem chi tiết">
-            <Button
-              type="primary"
-              icon={<EyeOutlined />}
-              size="small"
-              onClick={() => openDetail(record._id)}
-              style={{ background: "#1890ff" }}
-            />
+            <Button type="primary" icon={<EyeOutlined />} size="small" onClick={() => openDetail(record._id)} style={{ background: "#1890ff" }} />
           </Tooltip>
 
           <Tooltip title="Chỉnh sửa">
@@ -383,6 +365,44 @@ export default function SupplierListPage() {
   const handleTableChange = (pagination) => {
     setCurrentPage(pagination.current);
     setItemsPerPage(pagination.pageSize);
+  };
+
+  const handleExportSuppliersExcel = async () => {
+    if (!storeId) {
+      api.warning({
+        message: "⚠️ Không tìm thấy cửa hàng",
+        description: "Vui lòng chọn cửa hàng trước khi xuất Excel",
+        placement: "topRight",
+      });
+      return;
+    }
+
+    const key = "exporting";
+    api.info({
+      message: "📤 Đang xuất danh sách nhà cung cấp...",
+      placement: "topRight",
+      key,
+    });
+
+    try {
+      await exportSuppliers(storeId);
+      // api.success({
+      //   message: "✅ Xuất Excel thành công",
+      //   description: "Danh sách nhà cung cấp đã được tải xuống",
+      //   placement: "topRight",
+      //   key,
+      //   duration: 3,
+      // });
+    } catch (error) {
+      console.error("Lỗi xuất Excel:", error);
+      api.error({
+        message: "❌ Xuất Excel thất bại",
+        description: error?.message || "Vui lòng thử lại",
+        placement: "topRight",
+        key,
+        duration: 5,
+      });
+    }
   };
 
   if (!storeId) {
@@ -517,6 +537,18 @@ export default function SupplierListPage() {
               </Button>
 
               <Button
+                size={isMobile ? "middle" : "large"}
+                icon={<FileExcelOutlined />}
+                onClick={handleExportSuppliersExcel}
+                style={{
+                  borderColor: "#52c41a",
+                  color: "#52c41a",
+                }}
+              >
+                {!isMobile ? "Xuất Excel" : "Xuất"}
+              </Button>
+
+              <Button
                 type="primary"
                 size="large"
                 icon={<PlusOutlined />}
@@ -572,11 +604,7 @@ export default function SupplierListPage() {
           onSuccess={onFormSuccess}
         />
 
-        <SupplierDetailModal
-          open={detailModalOpen}
-          onOpenChange={setDetailModalOpen}
-          supplierId={detailSupplierId}
-        />
+        <SupplierDetailModal open={detailModalOpen} onOpenChange={setDetailModalOpen} supplierId={detailSupplierId} />
       </div>
 
       <style jsx>{`

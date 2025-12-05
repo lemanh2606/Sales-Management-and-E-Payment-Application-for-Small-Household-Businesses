@@ -1,8 +1,13 @@
+// backend/controllers/revenueController.js
 const mongoose = require("mongoose");
 const Order = require("../models/Order");
 const { periodToRange } = require("../utils/period");
 const { Parser } = require("json2csv");
 const PDFDocument = require("pdfkit");
+const XLSX = require("xlsx");
+const dayjs = require("dayjs");
+require("dayjs/locale/vi");
+dayjs.locale("vi");
 
 // ========== HÀM TÍNH DOANH THU – CÓ CẢ HOÀN 1 NỬA partially_refunded ==========
 async function calcRevenueByPeriod({ storeId, periodType, periodKey, type = "total" }) {
@@ -121,80 +126,81 @@ const getRevenueByEmployee = async (req, res) => {
 // ========== 3️⃣ GET /api/revenue/export ==========
 const exportRevenue = async (req, res) => {
   try {
-    const { type = "total", periodType, periodKey, storeId, format = "csv" } = req.query;
-    if (!periodType || !storeId || !format) {
-      return res.status(400).json({ message: "Thiếu periodType, storeId hoặc format" });
+    const { periodType, periodKey, storeId, format = "xlsx" } = req.query;
+
+    if (!periodType || !storeId) {
+      return res.status(400).json({ message: "Thiếu periodType hoặc storeId" });
     }
 
-    const data = await calcRevenueByPeriod({ storeId, periodType, periodKey, type });
-
-    if (format === "csv") {
-      const fields = Object.keys(data[0] || {});
-      const parser = new Parser({ fields });
-      const csv = parser.parse(data);
-      res.header("Content-Type", "text/csv");
-      res.attachment(`doanh_thu_${type}_${periodKey}_${periodType}.csv`);
-      return res.send(csv);
+    if (format !== "xlsx") {
+      return res.status(400).json({ message: "Chỉ hỗ trợ xuất Excel (.xlsx)" });
     }
 
-    if (format === "pdf") {
-      try {
-        res.setHeader("Content-Type", "application/pdf");
-        res.setHeader("Content-Disposition", `attachment; filename=doanh_thu_${type}_${periodKey}_${periodType}.pdf`);
+    // LẤY CẢ 2 DỮ LIỆU
+    const [totalData, empData] = await Promise.all([
+      calcRevenueByPeriod({ storeId, periodType, periodKey, type: "total" }),
+      calcRevenueByPeriod({ storeId, periodType, periodKey, type: "employee" }),
+    ]);
 
-        const doc = new PDFDocument({ margin: 50 });
-        doc.pipe(res);
+    const wb = XLSX.utils.book_new();
 
-        doc.fontSize(18).text("BÁO CÁO DOANH THU", { align: "center", underline: true });
-        doc.moveDown();
-        doc.fontSize(12).text(`Kỳ báo cáo: ${periodKey} (${periodType.toUpperCase()})`, { align: "center" });
-        doc.moveDown(2);
+    // Sheet 1: Tổng hợp
+    if (totalData && totalData.length > 0) {
+      const totalSheetData = totalData.map((item) => ({
+        "Kỳ báo cáo": item.periodKey,
+        "Tổng doanh thu (₫)": Number(item.totalRevenue),
+        "Số hóa đơn": item.countOrders,
+      }));
+      const ws1 = XLSX.utils.json_to_sheet(totalSheetData);
+      ws1["!cols"] = [{ wch: 20 }, { wch: 22 }, { wch: 15 }];
+      XLSX.utils.book_append_sheet(wb, ws1, "Tổng hợp");
+    }
 
-        if (type === "total") {
-          doc.fontSize(12).text(`Tổng doanh thu: ${data[0].totalRevenue.toString()} VND`);
-          doc.text(`Số hóa đơn: ${data[0].countOrders}`);
-        } else {
-          doc.fontSize(14).text("Doanh thu theo nhân viên", { underline: true });
-          doc.moveDown();
+    // Sheet 2: Nhân viên
+    if (empData && empData.length > 0) {
+      const empSheetData = empData.map((item) => ({
+        "Nhân viên": item.employeeInfo?.fullName || "Nhân viên đã nghỉ",
+        "Số điện thoại": item.employeeInfo?.phone || "—",
+        "Doanh thu (₫)": Number(item.totalRevenue),
+        "Số hóa đơn": item.countOrders,
+      }));
 
-          const tableTop = doc.y;
-          const col1 = 50,
-            col2 = 280,
-            col3 = 400;
+      const ws2 = XLSX.utils.json_to_sheet(empSheetData);
+      ws2["!cols"] = [
+        { wch: 28 }, // Nhân viên
+        { wch: 16 }, // Số điện thoại
+        { wch: 22 }, // Doanh thu
+        { wch: 14 }, // Số hóa đơn
+      ];
 
-          doc.fontSize(12).text("Nhân viên", col1, tableTop).text("Số HĐ", col2, tableTop).text("Doanh thu (VND)", col3, tableTop);
-          doc
-            .moveTo(50, tableTop + 15)
-            .lineTo(550, tableTop + 15)
-            .stroke();
-
-          let y = tableTop + 25;
-          let totalAll = 0;
-          data.forEach((row) => {
-            const revenue = parseFloat(row.totalRevenue.toString());
-            totalAll += revenue;
-            doc
-              .fontSize(11)
-              .text(row.employeeInfo.fullName, col1, y)
-              .text(row.countOrders.toString(), col2, y)
-              .text(revenue.toLocaleString("vi-VN"), col3, y);
-            y += 20;
-          });
-
-          doc.moveTo(50, y).lineTo(550, y).stroke();
-          doc.fontSize(12).text(`TỔNG DOANH THU: ${totalAll.toLocaleString("vi-VN")} VND`, col1, y + 10);
-        }
-
-        doc.end();
-        return;
-      } catch (pdfErr) {
-        console.error("Lỗi tạo PDF:", pdfErr.message);
-        res.status(500).json({ message: "Lỗi tạo file PDF" });
+      // Tô đậm header
+      const headerRange = XLSX.utils.decode_range(ws2["!ref"]);
+      for (let C = headerRange.s.c; C <= headerRange.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: 0, c: C });
+        if (!ws2[cellAddress]) continue;
+        ws2[cellAddress].s = {
+          font: { bold: true, color: { rgb: "FFFFFF" } },
+          fill: { fgColor: { rgb: "1890ff" } },
+          alignment: { horizontal: "center", vertical: "center" },
+        };
       }
+
+      XLSX.utils.book_append_sheet(wb, ws2, "Nhân viên");
     }
+
+    if (!totalData?.length && !empData?.length) {
+      return res.status(404).json({ message: "Không có dữ liệu để xuất" });
+    }
+
+    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+
+    const fileName = `Bao_Cao_Doanh_Thu_${periodKey || "hien_tai"}_${dayjs().format("DD-MM-YYYY")}.xlsx`;
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    res.send(buffer);
   } catch (err) {
-    console.error("Lỗi export báo cáo doanh thu:", err.message);
-    res.status(500).json({ message: "Lỗi server khi export báo cáo" });
+    console.error("Lỗi export báo cáo doanh thu:", err);
+    res.status(500).json({ message: "Lỗi server khi xuất Excel" });
   }
 };
 

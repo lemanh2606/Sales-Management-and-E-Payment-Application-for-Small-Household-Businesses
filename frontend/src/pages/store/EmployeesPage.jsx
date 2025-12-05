@@ -10,6 +10,7 @@ import {
   Space,
   Typography,
   Tag,
+  message,
   Alert,
   Row,
   Col,
@@ -19,8 +20,10 @@ import {
   Empty,
   Skeleton,
 } from "antd";
+import { FileExcelOutlined } from "@ant-design/icons";
 import Swal from "sweetalert2";
 import axios from "axios";
+import dayjs from "dayjs";
 import EmployeeForm from "../../components/store/EmployeeForm"; // Giữ nguyên form cũ của bạn
 import Layout from "../../components/Layout";
 import { getPermissionCatalog, updateUserById } from "../../api/userApi";
@@ -185,11 +188,9 @@ const STAFF_ALLOWED_PREFIXES = ["customers", "orders", "notifications"];
 const STAFF_ALLOWED_EXACT = ["store:dashboard:view"];
 
 const isAllowedForStaff = (permission = "") =>
-  STAFF_ALLOWED_EXACT.includes(permission) ||
-  STAFF_ALLOWED_PREFIXES.some((prefix) => permission.startsWith(`${prefix}:`));
+  STAFF_ALLOWED_EXACT.includes(permission) || STAFF_ALLOWED_PREFIXES.some((prefix) => permission.startsWith(`${prefix}:`));
 
-const filterStaffPermissions = (list = []) =>
-  Array.from(new Set(list.filter((permission) => isAllowedForStaff(permission))));
+const filterStaffPermissions = (list = []) => Array.from(new Set(list.filter((permission) => isAllowedForStaff(permission))));
 
 const groupPermissions = (permissionList = []) => {
   const groups = {};
@@ -451,11 +452,7 @@ export default function EmployeesPage() {
 
   const syncUpdatedMenus = (userId, newMenu) => {
     const updater = (list) =>
-      list.map((emp) =>
-        String(emp.user_id?._id || emp.user_id) === String(userId)
-          ? { ...emp, user_id: { ...emp.user_id, menu: newMenu } }
-          : emp
-      );
+      list.map((emp) => (String(emp.user_id?._id || emp.user_id) === String(userId) ? { ...emp, user_id: { ...emp.user_id, menu: newMenu } } : emp));
     setActiveEmployees((prev) => updater(prev));
     setFilteredActive((prev) => updater(prev));
   };
@@ -564,6 +561,45 @@ export default function EmployeesPage() {
     setSelectedPermissions([]);
   };
 
+  const handleExportExcel = async () => {
+    if (!currentStore?._id) {
+      message.error("Vui lòng chọn cửa hàng");
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("token");
+      const url = `${apiUrl}/stores/${currentStore._id}/employees/export`;
+
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const err = await response.text();
+        throw new Error(err || "Lỗi tải file");
+      }
+
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.download = `Danh_Sach_Nhan_Vien_${currentStore.name}_${dayjs().format("DD-MM-YYYY")}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+
+      message.success("Xuất Excel thành công!");
+    } catch (err) {
+      console.error(err);
+      message.error("Lỗi xuất Excel: " + err.message);
+    }
+  };
+
   const getColumns = (isDeleted = false) => [
     {
       title: "Tên",
@@ -639,12 +675,7 @@ export default function EmployeesPage() {
           </Button>
 
           {isDeleted ? (
-            <Popconfirm
-              title="Khôi phục nhân viên này?"
-              onConfirm={() => handleRestore(record._id)}
-              okText="Có"
-              cancelText="Không"
-            >
+            <Popconfirm title="Khôi phục nhân viên này?" onConfirm={() => handleRestore(record._id)} okText="Có" cancelText="Không">
               <Button
                 type="default"
                 size="small"
@@ -661,12 +692,7 @@ export default function EmployeesPage() {
               </Button>
             </Popconfirm>
           ) : (
-            <Popconfirm
-              title="Xóa mềm nhân viên này?"
-              onConfirm={() => handleSoftDelete(record._id)}
-              okText="Có"
-              cancelText="Không"
-            >
+            <Popconfirm title="Xóa mềm nhân viên này?" onConfirm={() => handleSoftDelete(record._id)} okText="Có" cancelText="Không">
               <Button
                 type="default"
                 size="small"
@@ -707,19 +733,27 @@ export default function EmployeesPage() {
     <Layout>
       <div className="p-6 bg-white rounded-lg shadow-md">
         <div className="flex justify-between items-center mb-6">
-          <div className="flex items-center space-x-3">
+          {/* LEFT: Title + Store name */}
+          <div className="flex items-center space-x-4">
             <h2 className="text-2xl font-bold text-gray-800">Quản lý nhân viên cửa hàng</h2>
             <span
-              className="px-4 py-2 text-base font-semibold bg-[#e6f4ff] text-[#1890ff] rounded-xl shadow-sm
-                 hover:bg-[#bae0ff] hover:scale-105 transition-all duration-200"
+              className="px-4 py-2 text-base font-semibold bg-[#e6f4ff] text-[#1890ff]
+                 rounded-xl shadow-sm border border-[#91caff]"
             >
               {currentStore?.name}
             </span>
           </div>
 
-          <Button type="primary" size="large" onClick={handleCreate} className="bg-blue-500 hover:bg-blue-600">
-            + Tạo nhân viên mới
-          </Button>
+          {/* RIGHT: Buttons */}
+          <div className="flex items-center space-x-3">
+            <Button icon={<FileExcelOutlined />} onClick={handleExportExcel} style={{ backgroundColor: "#22c55e", color: "white", border: "none" }}>
+              Xuất Excel
+            </Button>
+
+            <Button size="large" onClick={handleCreate} style={{ backgroundColor: "#3b82f6", color: "white", border: "none", marginLeft: 12 }}>
+              + Tạo nhân viên mới
+            </Button>
+          </div>
         </div>
 
         <div className="mb-4">
@@ -831,10 +865,7 @@ export default function EmployeesPage() {
                             onClick: () => handleSelectStaff(record),
                             style: {
                               cursor: "pointer",
-                              backgroundColor:
-                                selectedStaff && String(selectedStaff._id) === String(record._id)
-                                  ? "#f0f5ff"
-                                  : "transparent",
+                              backgroundColor: selectedStaff && String(selectedStaff._id) === String(record._id) ? "#f0f5ff" : "transparent",
                             },
                           })}
                         />

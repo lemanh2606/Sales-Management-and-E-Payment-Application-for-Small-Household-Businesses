@@ -51,7 +51,7 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
   // 2️⃣ VAT
   const vat = await Order.aggregate([
     {
-      $match: { storeId: objectStoreId, status: { $in: ["paid", "partially_refunded"] }, isVATInvoice: true, printDate: { $gte: start, $lte: end } },
+      $match: { storeId: objectStoreId, status: { $in: ["paid", "partially_refunded"] }, createdAt: { $gte: start, $lte: end } },
     },
     { $group: { _id: null, totalVAT: { $sum: "$vatAmount" } } },
   ]);
@@ -355,8 +355,8 @@ const generateEndOfDayReport = async (req, res) => {
       {
         $match: {
           storeId: new mongoose.Types.ObjectId(storeId),
-          createdAt: { $gte: start, $lte: end },
           status: { $in: ["paid", "partially_refunded"] },
+          createdAt: { $gte: start, $lte: end },
         },
       },
       {
@@ -598,21 +598,3 @@ const generateEndOfDayReport = async (req, res) => {
 };
 
 module.exports = { getFinancialSummary, exportFinancial, generateEndOfDayReport };
-
-/*
-Mẫu JSON trả về từ API của báo cáo tổng quan "getFinancialSummary" như sau: period theo YEAR (năm 2025)
-{
-    "message": "Báo cáo tài chính thành công",
-    "data": {
-        "totalRevenue": 69935800,  -> tổng doanh thu
-        "totalVAT": 2450000,       -> thuế giá trị gia tăng phải nộp
-        "totalCOGS": 0,            -> Giá vốn hàng bán (Chi phí nhập hàng)
-        "grossProfit": 69935800,   -> Lợi nhuận gộp
-        "operatingCost": 60034967.9,  -> Chi phí vận hành
-        "netProfit": 7450832.1000000015,  -> lợi nhuận ròng (lãi sau thuế)
-        "stockValue": 55495000,    -> Giá trị hàng tồn kho
-        "stockAdjustmentValue": 0, -> Giá trị điều chỉnh tồn kho
-        "stockDisposalCost": 0     -> Chi phí hàng hóa hủy
-    }
-}
-*/

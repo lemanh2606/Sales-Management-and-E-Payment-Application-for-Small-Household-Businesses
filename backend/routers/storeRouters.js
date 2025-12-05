@@ -32,43 +32,16 @@ const { verifyToken, isManager, checkStoreAccess, requirePermission } = auth;
 //
 
 // Đảm bảo người dùng có store hiện hành (manager tự động vào store đầu tiên nếu có)
-router.post(
-  "/ensure-store",
-  verifyToken,
-  checkSubscriptionExpiry,
-  requirePermission("store:dashboard:view"),
-  storeController.ensureStore
-);
+router.post("/ensure-store", verifyToken, checkSubscriptionExpiry, requirePermission("store:dashboard:view"), storeController.ensureStore);
 
 // Tạo cửa hàng mới (chỉ Manager)
-router.post(
-  "/",
-  verifyToken,
-  checkSubscriptionExpiry,
-  requirePermission("store:create"),
-  isManager,
-  storeController.createStore
-);
+router.post("/", verifyToken, checkSubscriptionExpiry, requirePermission("store:create"), isManager, storeController.createStore);
 
-// Lấy danh sách cửa hàng mà Manager sở hữu
-router.get(
-  "/",
-  verifyToken,
-  // Cho phép Manager xem danh sách cửa hàng ngay cả khi gói hết hạn
-  requirePermission("store:view"),
-  isManager,
-  storeController.getStoresByManager
-);
+// Lấy danh sách cửa hàng mà Manager sở hữu, Cho phép Manager xem danh sách cửa hàng ngay cả khi gói hết hạn
+router.get("/", verifyToken, requirePermission("store:view"), isManager, storeController.getStoresByManager);
 
 // Lấy chi tiết cửa hàng cụ thể
-router.get(
-  "/:storeId",
-  verifyToken,
-  checkSubscriptionExpiry,
-  checkStoreAccess,
-  requirePermission("store:view"),
-  storeController.getStoreById
-);
+router.get("/:storeId", verifyToken, checkSubscriptionExpiry, checkStoreAccess, requirePermission("store:view"), storeController.getStoreById);
 
 // Cập nhật thông tin cửa hàng
 router.put(
@@ -153,6 +126,17 @@ router.get(
   isManager,
   requirePermission("store:employee:view"),
   storeController.getEmployeesByStore
+);
+
+// routers/storeRouters.js
+router.get(
+  "/:storeId/employees/export",
+  verifyToken,
+  checkSubscriptionExpiry,
+  checkStoreAccess,
+  isManager,
+  requirePermission("store:employee:view"),
+  storeController.exportEmployeesToExcel
 );
 
 // Lấy chi tiết nhân viên theo ID

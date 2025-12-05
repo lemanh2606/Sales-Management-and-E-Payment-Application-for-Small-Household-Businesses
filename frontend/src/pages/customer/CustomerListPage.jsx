@@ -11,10 +11,12 @@ import {
   PhoneOutlined,
   EnvironmentOutlined,
   WalletOutlined,
+  FileExcelOutlined,
 } from "@ant-design/icons";
 import Layout from "../../components/Layout";
 import CustomerForm from "../../components/customer/CustomerForm";
-import { searchCustomers, softDeleteCustomer, getCustomersByStore } from "../../api/customerApi";
+import { saveAs } from "file-saver";
+import { searchCustomers, softDeleteCustomer, getCustomersByStore, exportCustomers } from "../../api/customerApi";
 
 const { Title, Text } = Typography;
 const { Search } = Input;
@@ -33,6 +35,14 @@ export default function CustomerListPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [totalItems, setTotalItems] = useState(0);
+
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   // Fetch customers
   const fetchByStore = useCallback(async ({ sId, page = 1, limit = 10, query = "" } = {}) => {
@@ -154,6 +164,24 @@ export default function CustomerListPage() {
     const num = parseFloat(str.replace(/,/g, "")) || 0;
     return sum + num;
   }, 0);
+
+  const handleExportCustomersExcel = async () => {
+    try {
+      if (!storeId) {
+        console.warn("Không có storeId, không thể xuất Excel");
+        return;
+      }
+
+      // Gọi API export
+      const blob = await exportCustomers(storeId);
+
+      // Tạo file Excel và download
+      const fileName = `Danh_sach_khach_hang_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      saveAs(blob, fileName);
+    } catch (error) {
+      console.error("Lỗi xuất danh sách khách hàng:", error);
+    }
+  };
 
   // Table columns
   const columns = [
@@ -424,6 +452,17 @@ export default function CustomerListPage() {
               }}
             >
               Làm mới
+            </Button>
+            <Button
+              size={isMobile ? "middle" : "large"}
+              icon={<FileExcelOutlined />}
+              onClick={handleExportCustomersExcel}
+              style={{
+                borderColor: "#52c41a",
+                color: "#52c41a",
+              }}
+            >
+              {!isMobile ? "Xuất Excel" : "Xuất"}
             </Button>
             <Button
               type="primary"
