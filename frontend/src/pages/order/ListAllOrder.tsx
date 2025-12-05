@@ -1,23 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
-import {
-  Card,
-  Input,
-  Table,
-  Tag,
-  Space,
-  DatePicker,
-  Select,
-  Typography,
-  Spin,
-  Empty,
-} from "antd";
-import {
-  SearchOutlined,
-  FileTextOutlined,
-  ClockCircleOutlined,
-  CheckCircleOutlined,
-  RollbackOutlined,
-} from "@ant-design/icons";
+import { Card, Input, Table, Tag, Space, DatePicker, Select, Typography, Spin, Empty, Button } from "antd";
+import { SearchOutlined, FileTextOutlined, ClockCircleOutlined, CheckCircleOutlined, RollbackOutlined, FileExcelOutlined } from "@ant-design/icons";
 import axios from "axios";
 import dayjs, { Dayjs } from "dayjs";
 import Swal from "sweetalert2";
@@ -29,8 +12,6 @@ const { Option } = Select;
 const { Title, Text } = Typography;
 
 const apiUrl = import.meta.env.VITE_API_URL;
-
-const API_BASE = `${apiUrl}`;
 
 // ========== Interfaces ==========
 interface MongoDecimal {
@@ -61,6 +42,10 @@ interface Order {
   totalAmount: MongoDecimal;
   status: "pending" | "paid" | "refunded" | "partially_refunded";
   createdAt: string;
+  paymentMethod: string;
+  isVATInvoice: boolean;
+  printDate?: string;
+  printCount: number;
 }
 
 interface OrderListResponse {
@@ -79,27 +64,18 @@ const ListAllOrder: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchText, setSearchText] = useState("");
-  const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null]>([
-    null,
-    null,
-  ]);
-  const [selectedStatus, setSelectedStatus] = useState<string | undefined>(
-    undefined
-  );
+  const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null]>([null, null]);
+  const [selectedStatus, setSelectedStatus] = useState<string | undefined>(undefined);
+  const [paymentFilter, setPaymentFilter] = useState<string | undefined>(undefined);
   const [pagination, setPagination] = useState({ current: 1, pageSize: 10 });
 
   // Format currency
-  const formatCurrency = (value: MongoDecimal): string =>
-    parseFloat(value.$numberDecimal).toLocaleString("vi-VN") + "₫";
+  const formatCurrency = (value: MongoDecimal): string => parseFloat(value.$numberDecimal).toLocaleString("vi-VN") + "₫";
 
-  const formatDate = (date: string): string =>
-    new Date(date).toLocaleString("vi-VN");
+  const formatDate = (date: string): string => new Date(date).toLocaleString("vi-VN");
 
   const getStatusConfig = (status: string) => {
-    const configs: Record<
-      string,
-      { color: string; icon: React.ReactNode; text: string }
-    > = {
+    const configs: Record<string, { color: string; icon: React.ReactNode; text: string }> = {
       pending: {
         color: "orange",
         icon: <ClockCircleOutlined />,
@@ -128,14 +104,12 @@ const ListAllOrder: React.FC = () => {
   const loadOrders = async () => {
     setLoading(true);
     try {
-      const res = await axios.get<OrderListResponse>(
-        `${API_BASE}/orders/list-all`,
-        {
-          params: { storeId },
-          headers,
-        }
-      );
+      const res = await axios.get<OrderListResponse>(`${apiUrl}/orders/list-all`, {
+        params: { storeId },
+        headers,
+      });
       setOrders(res.data.orders);
+      //console.log("Orders xem có những gì nhiều:", res.data.orders[0]);
     } catch (err: any) {
       Swal.fire({
         icon: "error",
@@ -163,23 +137,45 @@ const ListAllOrder: React.FC = () => {
   const filteredOrders = orders.filter((order) => {
     const matchSearch = searchText
       ? order._id.toLowerCase().includes(searchText.toLowerCase()) ||
-        order.customer?.name
-          ?.toLowerCase()
-          .includes(searchText.toLowerCase()) ||
+        order.customer?.name?.toLowerCase().includes(searchText.toLowerCase()) ||
         order.customer?.phone?.includes(searchText)
       : true;
 
     const matchStatus = selectedStatus ? order.status === selectedStatus : true;
+    const matchPayment = paymentFilter ? order.paymentMethod === paymentFilter : true;
 
     let matchDate = true;
-    if (dateRange[0] && dateRange[1]) {
+    if (dateRange?.[0] && dateRange?.[1]) {
       const orderDate = dayjs(order.createdAt);
-      matchDate =
-        orderDate.isAfter(dateRange[0]) && orderDate.isBefore(dateRange[1]);
+      matchDate = orderDate.isAfter(dateRange[0]) && orderDate.isBefore(dateRange[1]);
     }
 
-    return matchSearch && matchStatus && matchDate;
+    return matchSearch && matchStatus && matchPayment && matchDate;
   });
+
+  // Export to Excel
+  const handleExportExcel = async () => {
+    if (!storeId) {
+      Swal.fire("Lỗi", "Không tìm thấy cửa hàng", "error");
+      return;
+    }
+    try {
+      const token = localStorage.getItem("token");
+      const url = `${apiUrl}/orders/export-all?storeId=${storeId}`;
+
+      const res = await axios.get(url, {
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: "blob",
+      });
+      const blob = new Blob([res.data], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const link = document.createElement("a");
+      link.href = window.URL.createObjectURL(blob);
+      link.download = `Danh_Sach_Don_Hang_${dayjs().format("DD-MM-YYYY")}.xlsx`;
+      link.click();
+    } catch (err) {
+      Swal.fire("Lỗi!", "Không thể xuất Excel", "error");
+    }
+  };
 
   // Pagination config
   const paginationConfig = {
@@ -194,13 +190,10 @@ const ListAllOrder: React.FC = () => {
         <span style={{ color: "#1890ff", fontWeight: 600 }}>
           {range[0]} – {range[1]}
         </span>{" "}
-        trên tổng số{" "}
-        <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> đơn
-        hàng
+        trên tổng số <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> đơn hàng
       </div>
     ),
-    onChange: (page: number, pageSize: number) =>
-      setPagination({ current: page, pageSize }),
+    onChange: (page: number, pageSize: number) => setPagination({ current: page, pageSize }),
   };
 
   return (
@@ -220,36 +213,60 @@ const ListAllOrder: React.FC = () => {
               gap: 12,
             }}
           >
+            {/* Search */}
             <Input
-              placeholder="Tìm mã đơn hàng, tên khách, SĐT..."
+              placeholder="Tìm mã đơn, tên khách, SĐT,...."
               prefix={<SearchOutlined />}
               onChange={(e) => debouncedSearch(e.target.value)}
               allowClear
               size="large"
-              style={{ flex: 1, minWidth: 450 }}
+              style={{ flex: 1, minWidth: 340 }}
             />
+
+            {/* Date Range */}
             <RangePicker
-              style={{ flex: 1, minWidth: 440 }}
+              style={{ flex: 1, minWidth: 320 }}
               placeholder={["Từ ngày", "Đến ngày"]}
               format="DD/MM/YYYY"
-              onChange={(dates) =>
-                setDateRange(dates as [Dayjs | null, Dayjs | null])
-              }
+              onChange={(dates) => setDateRange(dates ?? [null, null])}
               size="large"
             />
-            <Select
-              placeholder="Lọc theo trạng thái"
-              value={selectedStatus}
-              onChange={setSelectedStatus}
-              allowClear
-              size="large"
-              style={{ flex: 1, minWidth: 300 }}
-            >
-              <Option value="pending">Chờ Thanh Toán</Option>
-              <Option value="paid">Đã Thanh Toán</Option>
-              <Option value="refunded">Hoàn Toàn Bộ</Option>
-              <Option value="partially_refunded">Hoàn 1 Phần</Option>
+
+            {/* Trạng thái */}
+            <Select placeholder="Trạng thái" value={selectedStatus} onChange={setSelectedStatus} allowClear size="large" style={{ width: 200 }}>
+              {["pending", "paid", "refunded", "partially_refunded"].map((status) => {
+                const cfg = getStatusConfig(status);
+                return (
+                  <Option key={status} value={status}>
+                    <Tag color={cfg.color} icon={cfg.icon} style={{ marginRight: 8 }}>
+                      {cfg.text}
+                    </Tag>
+                  </Option>
+                );
+              })}
             </Select>
+
+            {/* Phương thức thanh toán */}
+            <Select placeholder="Phương thức" value={paymentFilter} onChange={setPaymentFilter} allowClear size="large" style={{ width: 200 }}>
+              {["cash", "qr"].map((method) => {
+                const map: Record<string, { label: string; color: string }> = {
+                  cash: { label: "Tiền mặt", color: "green" },
+                  qr: { label: "Chuyển khoản", color: "blue" },
+                };
+                const item = map[method] || { label: method, color: "default" };
+                return (
+                  <Option key={method} value={method}>
+                    <Tag color={item.color} style={{ marginRight: 8 }}>
+                      {item.label}
+                    </Tag>
+                  </Option>
+                );
+              })}
+            </Select>
+
+            <Button type="primary" icon={<FileExcelOutlined />} onClick={handleExportExcel} style={{ marginLeft: 8 }}>
+              Xuất Excel
+            </Button>
           </Space>
 
           {/* Bảng danh sách */}
@@ -265,7 +282,7 @@ const ListAllOrder: React.FC = () => {
               rowKey="_id"
               pagination={paginationConfig}
               size="middle"
-              scroll={{ y: 600 }}
+              scroll={{ y: 800 }}
               columns={[
                 {
                   title: "Mã Đơn",
@@ -281,6 +298,7 @@ const ListAllOrder: React.FC = () => {
                 {
                   title: "Khách Hàng",
                   key: "customer",
+                  width: 210,
                   render: (_, record) => (
                     <Space direction="vertical" size={0}>
                       <Text strong>{record.customer?.name || "Khách lẻ"}</Text>
@@ -294,6 +312,38 @@ const ListAllOrder: React.FC = () => {
                   title: "Nhân Viên",
                   dataIndex: ["employeeId", "fullName"],
                   key: "employee",
+                  width: 240,
+                  align: "start",
+                },
+                {
+                  title: "Phương thức",
+                  dataIndex: "paymentMethod",
+                  key: "paymentMethod",
+                  align: "center",
+                  width: 110,
+                  render: (method: string) => {
+                    const map: Record<string, { label: string; color: string }> = {
+                      cash: { label: "Tiền mặt", color: "green" },
+                      qr: { label: "Chuyển khoản", color: "blue" },
+                    };
+                    const item = map[method] || { label: method, color: "default" };
+                    return <Tag color={item.color}>{item.label}</Tag>;
+                  },
+                },
+                {
+                  title: "VAT",
+                  dataIndex: "isVATInvoice",
+                  key: "isVATInvoice",
+                  align: "center",
+                  width: 90,
+                  render: (val) => (val ? <Tag color="blue">Có</Tag> : <Tag>Không</Tag>),
+                },
+                {
+                  title: "In hoá đơn",
+                  dataIndex: "printCount",
+                  key: "printCount",
+                  align: "center",
+                  width: 80,
                 },
                 {
                   title: "Tổng Tiền",
@@ -301,7 +351,9 @@ const ListAllOrder: React.FC = () => {
                   key: "totalAmount",
                   align: "right",
                   render: (value) => (
-                    <Text strong>{formatCurrency(value)}</Text>
+                    <Text strong style={{ color: "#1677ff" }}>
+                      {formatCurrency(value)}
+                    </Text>
                   ),
                 },
                 {
@@ -309,6 +361,7 @@ const ListAllOrder: React.FC = () => {
                   dataIndex: "status",
                   key: "status",
                   align: "center",
+                  width: 170,
                   render: (status) => {
                     const config = getStatusConfig(status);
                     return (
@@ -322,11 +375,8 @@ const ListAllOrder: React.FC = () => {
                   title: "Ngày Tạo",
                   dataIndex: "createdAt",
                   key: "createdAt",
-                  render: (date) => (
-                    <Text type="secondary" style={{ fontSize: 12 }}>
-                      {formatDate(date)}
-                    </Text>
-                  ),
+                  align: "end",
+                  render: (date) => <Text style={{ fontSize: 12, color: "black" }}>{formatDate(date)}</Text>,
                 },
               ]}
             />

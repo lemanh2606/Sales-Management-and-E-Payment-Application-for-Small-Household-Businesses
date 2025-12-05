@@ -24,6 +24,7 @@ const {
   getOrderListAll,
   getOrderStats,
   exportTopFrequentCustomers,
+  exportAllOrdersToExcel,
 } = require("../controllers/order/orderController");
 const { getPaidNotPrintedOrders, verifyInvoicePdf, verifyInvoicePdfAuto } = require("../controllers/order/orderReconciliationController");
 
@@ -31,6 +32,7 @@ const { getPaidNotPrintedOrders, verifyInvoicePdf, verifyInvoicePdfAuto } = requ
 
 // Lấy toàn bộ danh sách đơn hàng (mọi trạng thái)
 router.get("/list-all", verifyToken, checkSubscriptionExpiry, checkStoreAccess, requirePermission("orders:view"), getOrderListAll);
+router.get("/export-all", verifyToken, checkStoreAccess, requirePermission("orders:view"), exportAllOrdersToExcel);
 // thống kê toàn bộ order đã bán trong năm, số đơn bị hoàn, số đơn chưa 'paid',
 router.get("/stats", verifyToken, checkSubscriptionExpiry, checkStoreAccess, requirePermission("orders:view"), getOrderStats);
 // tạo đơn hàng mới với phương thức 'cash' hoặc 'qr'

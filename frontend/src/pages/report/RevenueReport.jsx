@@ -1,31 +1,20 @@
 // src/pages/report/RevenueReport.jsx
 import React, { useState, useEffect } from "react";
-import {
-  Card,
-  Col,
-  Row,
-  Select,
-  DatePicker,
-  Statistic,
-  Table,
-  Spin,
-  Alert,
-  Space,
-  Button,
-  Dropdown,
-  Menu,
-  message,
-} from "antd";
-import { DownloadOutlined, FileExcelOutlined, FilePdfOutlined } from "@ant-design/icons";
+import { Card, Col, Row, Select, DatePicker, Statistic, Table, Spin, Alert, Space, Button, Dropdown, message, Typography } from "antd";
+import { DownloadOutlined, FileExcelOutlined, DollarOutlined, ShoppingOutlined } from "@ant-design/icons";
 import axios from "axios";
 import dayjs from "dayjs";
 import "dayjs/locale/vi";
 import Layout from "../../components/Layout";
+import { Bold } from "lucide-react";
 
 dayjs.locale("vi");
 
 const { Option } = Select;
+const { Text, Title } = Typography;
+
 const apiUrl = import.meta.env.VITE_API_URL;
+
 const RevenueReport = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -37,9 +26,17 @@ const RevenueReport = () => {
   const currentStore = JSON.parse(localStorage.getItem("currentStore") || "{}");
 
   // Filter
-  const [periodType, setPeriodType] = useState("");
+  const [periodType, setPeriodType] = useState("month");
   const [periodKey, setPeriodKey] = useState("");
   const [pickerValue, setPickerValue] = useState(null);
+  const [monthFrom, setMonthFrom] = useState("");
+  const [monthTo, setMonthTo] = useState("");
+
+  useEffect(() => {
+    setPeriodKey("");
+    setMonthFrom("");
+    setMonthTo("");
+  }, [periodType]);
 
   // Format VND
   const formatVND = (value) => {
@@ -59,26 +56,29 @@ const RevenueReport = () => {
       setEmployeeData([]);
       return;
     }
-
     setLoading(true);
     setError(null);
-
     try {
       const token = localStorage.getItem("token");
       if (!token) throw new Error("Không có token!");
 
+      const params = new URLSearchParams();
+      params.append("storeId", currentStore._id);
+      params.append("periodType", periodType);
+      params.append("periodKey", periodKey);
+      if (periodType === "custom") {
+        params.append("monthFrom", monthFrom);
+        params.append("monthTo", monthTo);
+      }
       // 1. Tổng doanh thu
-      const totalRes = await axios.get(
-        `${apiUrl}/revenues?storeId=${currentStore._id}&periodType=${periodType}&periodKey=${periodKey}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const totalRes = await axios.get(`${apiUrl}/revenues?storeId=${currentStore._id}&periodType=${periodType}&periodKey=${periodKey}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       setSummary(totalRes.data.revenue);
-
-      // 2. Doanh thu nhân viên
-      const empRes = await axios.get(
-        `${apiUrl}/revenues/employee?storeId=${currentStore._id}&periodType=${periodType}&periodKey=${periodKey}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      // 2. Doanh thu theo nhân viên
+      const empRes = await axios.get(`${apiUrl}/revenues/employee?storeId=${currentStore._id}&periodType=${periodType}&periodKey=${periodKey}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const data = empRes.data.data || [];
       setEmployeeData(data);
       setPagination((prev) => ({ ...prev, total: data.length }));
@@ -91,120 +91,88 @@ const RevenueReport = () => {
   };
 
   useEffect(() => {
+    if (periodType !== "custom" && !periodKey) return;
+    if (periodType === "custom" && (!monthFrom || !monthTo)) return;
     fetchData();
-  }, [periodType, periodKey]);
+  }, [periodType, periodKey, monthFrom, monthTo]);
 
-  const handleTypeChange = (value) => {
-    setPeriodType(value);
-    setPeriodKey("");
-    setPickerValue(null);
-    setSummary(null);
-    setEmployeeData([]);
-  };
-
-  const handlePeriodChange = (date) => {
-    if (!date) return;
-    let key = "";
-    if (periodType === "month") key = date.format("YYYY-MM");
-    else if (periodType === "quarter") key = `${date.year()}-Q${date.quarter()}`;
-    else if (periodType === "year") key = date.year().toString();
-    setPeriodKey(key);
-    setPickerValue(date);
-  };
-
-  // EXPORT
-  const handleExport = async (format, type) => {
-    if (!periodType || !periodKey) {
-      Swal.fire({
-        title: "⚠️ Cảnh báo!",
-        text: "Vui lòng chọn kỳ báo cáo",
-        icon: "warning",
-        confirmButtonText: "OK",
-        confirmButtonColor: "#faad14",
-        timer: 2000,
-      });
-
+  // EXPORT ra excel
+  const handleExportExcel = async (exportType) => {
+    if (!periodKey) {
+      message.warning("Vui lòng chọn kỳ báo cáo");
       return;
     }
 
     try {
       const token = localStorage.getItem("token");
-      const url = `${apiUrl}/revenues/export?storeId=${currentStore._id}&periodType=${periodType}&periodKey=${periodKey}&format=${format}&type=${type}`;
+      const params = new URLSearchParams({
+        storeId: currentStore._id,
+        periodType,
+        periodKey,
+        format: "xlsx",
+        type: exportType, // ← QUAN TRỌNG: total hoặc employee
+        ...(periodType === "custom" && { monthFrom, monthTo }),
+      });
+
+      const url = `${apiUrl}/revenues/export?${params.toString()}`;
       const res = await axios.get(url, {
         headers: { Authorization: `Bearer ${token}` },
         responseType: "blob",
       });
 
-      const blob = new Blob([res.data], { type: res.headers["content-type"] });
+      const blob = new Blob([res.data], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
       const link = document.createElement("a");
       link.href = window.URL.createObjectURL(blob);
-      link.download =
-        res.headers["content-disposition"]?.split("filename=")[1]?.replace(/"/g, "") || `doanh_thu.${format}`;
+      link.download = `Bao_Cao_Doanh_Thu_${periodKey.replace(/-/g, "_")}_${dayjs().format("DD-MM-YYYY")}.xlsx`;
       link.click();
-      Swal.fire({
-        title: "🎉 Thành công!",
-        text: "Tải file thành công!",
-        icon: "success",
-        confirmButtonText: "OK",
-        confirmButtonColor: "#52c41a",
-      });
+
+      message.success("Xuất Excel thành công!");
     } catch (err) {
-      Swal.fire({
-        title: "❌ Lỗi!",
-        text: "Lỗi tải file",
-        icon: "error",
-        confirmButtonText: "OK",
-        confirmButtonColor: "#ff4d4f",
-        timer: 2000,
-      });
+      message.error("Lỗi xuất file Excel");
     }
   };
 
-  const exportMenu = (
-    <Menu>
-      <Menu.SubMenu key="total" title="Tổng doanh thu" icon={<FileExcelOutlined />}>
-        <Menu.Item key="csv-total" onClick={() => handleExport("csv", "total")}>
-          <FileExcelOutlined /> Dạng CSV
-        </Menu.Item>
-        <Menu.Item key="pdf-total" onClick={() => handleExport("pdf", "total")}>
-          <FilePdfOutlined /> Dạng PDF
-        </Menu.Item>
-      </Menu.SubMenu>
-      <Menu.SubMenu key="employee" title="Theo nhân viên" icon={<FileExcelOutlined />}>
-        <Menu.Item key="csv-emp" onClick={() => handleExport("csv", "employee")}>
-          <FileExcelOutlined /> Dạng CSV
-        </Menu.Item>
-        <Menu.Item key="pdf-emp" onClick={() => handleExport("pdf", "employee")}>
-          <FilePdfOutlined /> Dạng PDF
-        </Menu.Item>
-      </Menu.SubMenu>
-    </Menu>
-  );
+  const formatPhone = (num) => {
+    if (!num) return "—";
+    const cleaned = num.replace(/\D/g, ""); // loại bỏ ký tự không phải số
+    if (cleaned.length === 10) {
+      return `${cleaned.slice(0, 4)} ${cleaned.slice(4, 7)} ${cleaned.slice(7)}`;
+    }
+    return num; // fallback nếu không đủ 10 số
+  };
 
   // TABLE COLUMNS
   const columns = [
     {
-      title: <span style={{ fontSize: "16px" }}>Nhân viên</span>,
+      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Nhân viên</span>,
       dataIndex: ["employeeInfo", "fullName"],
       key: "name",
-      render: (text) => <strong style={{ fontSize: "16px" }}>{text}</strong>,
+      render: (text) => <strong style={{ fontSize: "16px", color: "#262626" }}>{text}</strong>,
     },
     {
-      title: <span style={{ whiteSpace: "nowrap", fontSize: "16px" }}>Số hoá đơn bán được</span>,
+      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Số điện thoại</span>,
+      dataIndex: ["employeeInfo", "phone"],
+      key: "phone",
+      align: "center",
+      width: 150,
+      render: (text) => <span style={{ fontSize: "16px", color: "#595959", fontWeight: "bold" }}>{formatPhone(text)}</span>,
+    },
+    {
+      title: <span style={{ whiteSpace: "nowrap", fontSize: "16px", fontWeight: 600 }}>Số hoá đơn</span>,
       dataIndex: "countOrders",
       key: "orders",
       align: "center",
       width: 150,
       sorter: (a, b) => a.countOrders - b.countOrders,
-      render: (value) => <span style={{ fontSize: "16px" }}>{value}</span>,
+      render: (value) => <span style={{ fontSize: "16px", color: "#52c41a", fontWeight: 600 }}>{value}</span>,
     },
     {
-      title: <span style={{ fontSize: "16px" }}>Doanh thu</span>,
+      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Doanh thu</span>,
       dataIndex: "totalRevenue",
       key: "revenue",
       align: "right",
       sorter: (a, b) => Number(a.totalRevenue) - Number(b.totalRevenue),
-      render: (value) => <span style={{ fontSize: "16px" }}>{formatVND(value)}</span>,
+      render: (value) => <span style={{ fontSize: "16px", color: "#1890ff", fontWeight: 600 }}>{formatVND(value)}</span>,
     },
   ];
 
@@ -212,117 +180,174 @@ const RevenueReport = () => {
     <Layout>
       <div>
         <Space direction="vertical" size="large" style={{ width: "100%" }}>
-          {/* HEADER */}
+          {/* CARD FILTER */}
           <Card style={{ border: "1px solid #8c8c8c" }}>
-            <Row gutter={16} align="middle">
-              <Col span={6}>
-                <span style={{ color: "#1890ff", fontWeight: "bold", fontSize: "20px" }}>
-                  {currentStore.name || "Đang tải..."}
-                </span>
+            {/* HEADER */}
+            <div style={{ marginBottom: 20, paddingBottom: 16, borderBottom: "1px solid #e8e8e8" }}>
+              <Title level={2} style={{ margin: 0, color: "#1890ff", marginBottom: 4 }}>
+                {currentStore.name || "Đang tải..."}
+              </Title>
+              <Text style={{ color: "#595959", fontSize: "16px" }}>
+                <DollarOutlined /> Báo Cáo Doanh Thu
+              </Text>
+            </div>
+
+            {/* FILTERS */}
+            <Row gutter={[10, 12]} align="bottom">
+              {/* Loại kỳ */}
+              <Col xs={24} sm={12} md={8} lg={5}>
+                <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+                  <Text strong style={{ marginBottom: 8, minHeight: 22 }}>
+                    Loại kỳ báo cáo
+                  </Text>
+                  <Select value={periodType} onChange={setPeriodType} style={{ width: "100%" }} size="middle">
+                    <Option value="day">Theo ngày</Option>
+                    <Option value="month">Theo tháng</Option>
+                    <Option value="quarter">Theo quý</Option>
+                    <Option value="year">Theo năm</Option>
+                    <Option value="custom">Tùy chỉnh</Option>
+                  </Select>
+                </div>
               </Col>
-              <Col span={5}>
-                <label>Kỳ báo cáo:</label>
-                <Select style={{ width: "100%", marginTop: 8 }} value={periodType} onChange={handleTypeChange}>
-                  <Option value="">Chọn loại</Option>
-                  <Option value="month">Theo tháng</Option>
-                  <Option value="quarter">Theo quý</Option>
-                  <Option value="year">Theo năm</Option>
-                </Select>
-              </Col>
-              <Col span={5}>
-                <label>Chọn kỳ:</label>
-                {!periodType && <Alert message="Hãy chọn kỳ báo cáo trước" type="warning" style={{ marginTop: 8 }} />}
-                {periodType && (
-                  <DatePicker
-                    style={{ width: "100%", marginTop: 8 }}
-                    picker={periodType}
-                    value={pickerValue}
-                    onChange={handlePeriodChange}
-                    format={(value) => {
-                      if (periodType === "quarter") return `Q${value.quarter()}/${value.year()}`;
-                      if (periodType === "month") return value.format("MM/YYYY");
-                      return value.format("YYYY");
-                    }}
-                    placeholder={`Chọn ${periodType === "month" ? "tháng" : periodType === "quarter" ? "quý" : "năm"}`}
-                    locale={{
-                      lang: {
-                        locale: "vi_VN",
-                        shortMonths: [
-                          "Th 1",
-                          "Th 2",
-                          "Th 3",
-                          "Th 4",
-                          "Th 5",
-                          "Th 6",
-                          "Th 7",
-                          "Th 8",
-                          "Th 9",
-                          "Th 10",
-                          "Th 11",
-                          "Th 12",
-                        ],
-                        months: [
-                          "Tháng 1",
-                          "Tháng 2",
-                          "Tháng 3",
-                          "Tháng 4",
-                          "Tháng 5",
-                          "Tháng 6",
-                          "Tháng 7",
-                          "Tháng 8",
-                          "Tháng 9",
-                          "Tháng 10",
-                          "Tháng 11",
-                          "Tháng 12",
-                        ],
-                      },
-                    }}
-                  />
-                )}
-              </Col>
-              <Col span={8} style={{ textAlign: "center" }}>
-                <Dropdown overlay={exportMenu} placement="bottomRight" trigger={["click"]}>
-                  <Button type="primary" icon={<DownloadOutlined />}>
-                    Xuất file
+
+              {/* Chọn kỳ - hiện khi không phải custom */}
+              {periodType !== "custom" && (
+                <Col xs={24} sm={12} md={8} lg={6}>
+                  <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+                    <Text strong style={{ marginBottom: 8, minHeight: 22 }}>
+                      Chọn kỳ
+                    </Text>
+                    <DatePicker
+                      style={{ width: "100%" }}
+                      size="middle"
+                      picker={periodType === "day" ? "date" : periodType === "quarter" ? "quarter" : periodType}
+                      value={
+                        !periodKey
+                          ? null
+                          : periodType === "day"
+                          ? dayjs(periodKey, "YYYY-MM-DD")
+                          : periodType === "month"
+                          ? dayjs(periodKey, "YYYY-MM")
+                          : periodType === "quarter"
+                          ? dayjs(periodKey.replace("Q", ""), "YYYY-Q")
+                          : periodType === "year"
+                          ? dayjs(periodKey, "YYYY")
+                          : null
+                      }
+                      onChange={(date) => {
+                        if (!date) {
+                          setPeriodKey("");
+                          setPickerValue(null);
+                          return;
+                        }
+                        let key = "";
+                        if (periodType === "day") key = date.format("YYYY-MM-DD");
+                        else if (periodType === "month") key = date.format("YYYY-MM");
+                        else if (periodType === "quarter") key = `${date.year()}-Q${date.quarter()}`;
+                        else if (periodType === "year") key = date.format("YYYY");
+                        setPeriodKey(key);
+                        setPickerValue(date);
+                      }}
+                      format={(value) => {
+                        if (periodType === "day") return value.format("DD/MM/YYYY");
+                        if (periodType === "month") return value.format("MM/YYYY");
+                        if (periodType === "quarter") return `Quý ${value.quarter()} ${value.year()}`;
+                        if (periodType === "year") return value.format("YYYY");
+                        return "";
+                      }}
+                      placeholder={`Chọn ${
+                        periodType === "day" ? "ngày" : periodType === "month" ? "tháng" : periodType === "quarter" ? "quý" : "năm"
+                      }`}
+                    />
+                  </div>
+                </Col>
+              )}
+
+              {/* Custom - Từ tháng */}
+              {periodType === "custom" && (
+                <Col xs={24} sm={12} md={8} lg={5}>
+                  <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+                    <Text strong style={{ marginBottom: 8, minHeight: 22 }}>
+                      Từ tháng
+                    </Text>
+                    <DatePicker
+                      picker="month"
+                      style={{ width: "100%" }}
+                      size="middle"
+                      placeholder="Từ tháng"
+                      onChange={(d) => setMonthFrom(d?.format("YYYY-MM") || "")}
+                    />
+                  </div>
+                </Col>
+              )}
+
+              {/* Custom - Đến tháng */}
+              {periodType === "custom" && (
+                <Col xs={24} sm={12} md={8} lg={5}>
+                  <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+                    <Text strong style={{ marginBottom: 8, minHeight: 22 }}>
+                      Đến tháng
+                    </Text>
+                    <DatePicker
+                      picker="month"
+                      style={{ width: "100%" }}
+                      size="middle"
+                      placeholder="Đến tháng"
+                      onChange={(d) => setMonthTo(d?.format("YYYY-MM") || "")}
+                    />
+                  </div>
+                </Col>
+              )}
+
+              {/* Nút xuất file */}
+              <Col xs={24} sm={12} md={8} lg={4}>
+                <div style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "flex-end" }}>
+                  <Button
+                    type="primary"
+                    icon={<FileExcelOutlined />}
+                    onClick={() => handleExportExcel("employees")} // hoặc "total", backend sẽ trả đủ 2 sheet
+                  >
+                    Xuất Excel
                   </Button>
-                </Dropdown>
+                </div>
               </Col>
             </Row>
           </Card>
 
+          {/* LOADING */}
           {loading && <Spin tip="Đang tải báo cáo..." style={{ width: "100%", margin: "20px 0" }} />}
+
+          {/* ERROR */}
           {error && <Alert message="Lỗi" description={error} type="error" showIcon style={{ marginBottom: 16 }} />}
 
+          {/* THÔNG BÁO CHƯA CHỌN KỲ */}
           {(!periodType || !periodKey) && !loading && (
-            <Alert
-              message="Vui lòng chọn kỳ báo cáo để xem dữ liệu."
-              type="info"
-              showIcon
-              closable
-              style={{ marginBottom: 16, height: 80 }}
-            />
+            <Alert message="Vui lòng chọn kỳ báo cáo để xem dữ liệu." type="info" showIcon closable style={{ marginBottom: 16 }} />
           )}
 
-          {summary && (
+          {/* HIỂN THỊ DỮ LIỆU KHI ĐÃ CHỌN KỲ */}
+          {periodKey && summary && (
             <>
               {/* TỔNG DOANH THU */}
               <Row gutter={[16, 16]}>
-                <Col xs={24} sm={12} lg={8}>
-                  <Card style={{ border: "1px solid #8c8c8c" }}>
+                <Col xs={24} sm={12} lg={12}>
+                  <Card style={{ border: "1px solid #8c8c8c", borderLeft: "4px solid #1890ff" }}>
                     <Statistic
-                      title="Tổng doanh thu"
+                      title={<span style={{ fontSize: "16px", color: "#595959" }}>Tổng doanh thu</span>}
                       value={summary.totalRevenue?.$numberDecimal || summary.totalRevenue}
                       formatter={formatVND}
-                      valueStyle={{ color: "#1890ff", fontSize: 28 }}
+                      valueStyle={{ color: "#1890ff", fontSize: 32, fontWeight: 700 }}
+                      prefix={<DollarOutlined />}
                     />
                   </Card>
                 </Col>
-                <Col xs={24} sm={12} lg={8}>
-                  <Card style={{ border: "1px solid #8c8c8c" }}>
+                <Col xs={24} sm={12} lg={12}>
+                  <Card style={{ border: "1px solid #8c8c8c", borderLeft: "4px solid #52c41a" }}>
                     <Statistic
-                      title="Số hóa đơn đã bán của cửa hàng"
+                      title={<span style={{ fontSize: "16px", color: "#595959" }}>Số hóa đơn đã bán</span>}
                       value={summary.countOrders}
-                      valueStyle={{ color: "#52c41a", fontSize: 28 }}
+                      valueStyle={{ color: "#52c41a", fontSize: 32, fontWeight: 700 }}
+                      prefix={<ShoppingOutlined />}
                     />
                   </Card>
                 </Col>
@@ -330,8 +355,13 @@ const RevenueReport = () => {
 
               {/* DOANH THU NHÂN VIÊN */}
               <Card
-                title={<span style={{ fontSize: "20px" }}>Doanh thu theo nhân viên</span>}
-                style={{ marginTop: 24, border: "1px solid #8c8c8c" }}
+                title={
+                  <span style={{ fontSize: "18px", color: "#262626", fontWeight: 600 }}>
+                    <DollarOutlined style={{ color: "#1890ff", marginRight: 8 }} />
+                    Doanh thu theo nhân viên
+                  </span>
+                }
+                style={{ border: "1px solid #8c8c8c" }}
               >
                 <Table
                   columns={columns}
@@ -343,18 +373,10 @@ const RevenueReport = () => {
                     showQuickJumper: true,
                     pageSizeOptions: ["10", "20", "50", "100"],
                     showTotal: (total, range) => (
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          width: "100%",
-                          fontSize: 14,
-                          color: "#595959",
-                        }}
-                      >
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: "#595959" }}>
                         <div>
                           Đang xem{" "}
-                          <span style={{ color: "#1677ff", fontWeight: 600 }}>
+                          <span style={{ color: "#1890ff", fontWeight: 600 }}>
                             {range[0]} – {range[1]}
                           </span>{" "}
                           trên tổng số <span style={{ color: "#fa541c", fontWeight: 600 }}>{total}</span> nhân viên
@@ -364,7 +386,9 @@ const RevenueReport = () => {
                   }}
                   onChange={(p) => setPagination(p)}
                   scroll={{ x: 600 }}
-                  locale={{ emptyText: "Không có dữ liệu nhân viên" }}
+                  locale={{
+                    emptyText: <div style={{ color: "#8c8c8c", padding: "20px" }}>Không có dữ liệu nhân viên trong kỳ này</div>,
+                  }}
                 />
               </Card>
             </>

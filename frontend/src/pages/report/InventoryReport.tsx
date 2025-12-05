@@ -260,15 +260,6 @@ const InventoryReport: React.FC = () => {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Báo cáo tồn kho");
     XLSX.writeFile(wb, `BaoCaoTonKho_${dayjs().format("YYYYMMDD")}.xlsx`);
-    Swal.fire({
-      icon: "success",
-      title: "Thành công",
-      text: "Xuất Excel thành công!",
-      confirmButtonText: "Ok",
-      timer: 2000,
-      timerProgressBar: true,
-      confirmButtonColor: "#27ae60",
-    });
   };
 
   // Format period label

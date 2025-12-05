@@ -14,6 +14,7 @@ const { Search } = Input;
 const { RangePicker } = DatePicker;
 
 const TopCustomer = () => {
+  const currentStore = JSON.parse(localStorage.getItem("currentStore") || "{}");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [customers, setCustomers] = useState([]);
@@ -27,29 +28,31 @@ const TopCustomer = () => {
 
   // Thêm state mới
   const [periodType, setPeriodType] = useState("month");
-  const [periodKey, setPeriodKey] = useState(dayjs().format("YYYY-MM"));
+  const [periodKey, setPeriodKey] = useState("");
   const [monthFrom, setMonthFrom] = useState("");
   const [monthTo, setMonthTo] = useState("");
-
-  const currentStore = JSON.parse(localStorage.getItem("currentStore") || "{}");
-  const rangeTextMap = {
-    thisWeek: "tuần này",
-    thisMonth: "tháng này",
-    thisYear: "năm nay",
-  };
+  // Reset thời gian khi đổi loại kỳ
+  useEffect(() => {
+    setPeriodKey("");
+    setMonthFrom("");
+    setMonthTo("");
+  }, [periodType]);
+  // 🟩 NEW: Reset dữ liệu bảng khi đổi loại kỳ
+  useEffect(() => {
+    setCustomers([]);
+    setFiltered([]);
+    setHasFetched(false);
+  }, [periodType]);
 
   const formatVND = (value) => {
     if (value === null || value === undefined || value === "") return "₫0";
-
     let num;
     if (typeof value === "object" && value !== null) {
       num = value.$numberDecimal ? parseFloat(value.$numberDecimal) : parseFloat(value.toString());
     } else {
       num = parseFloat(value);
     }
-
     if (isNaN(num)) return "₫0";
-
     return new Intl.NumberFormat("vi-VN", {
       style: "currency",
       currency: "VND",
@@ -196,7 +199,7 @@ const TopCustomer = () => {
   };
 
   const getPeriodDisplayText = () => {
-    if (!periodType || !periodKey) return "đang tải kỳ...";
+    if (!periodKey) return "Chưa chọn kỳ";
 
     switch (periodType) {
       case "day":
@@ -586,7 +589,7 @@ const TopCustomer = () => {
                 <Search
                   placeholder="Tìm tên hoặc số điện thoại..."
                   allowClear
-                  enterButton="Tìm"
+                  enterButton="Tìm kiếm"
                   size="large"
                   onSearch={setSearchText}
                   onChange={(e) => setSearchText(e.target.value)}

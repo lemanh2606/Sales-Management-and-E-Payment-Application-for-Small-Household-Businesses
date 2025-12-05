@@ -22,6 +22,8 @@ const orderSchema = new mongoose.Schema(
     },
     vatAmount: { type: mongoose.Schema.Types.Decimal128, default: "0" }, // VAT thu (lưu sẵn, default 0)
     beforeTaxAmount: { type: mongoose.Schema.Types.Decimal128, default: "0" }, // Tiền trước thuế (lưu sẵn, default 0)
+    earnedPoints: { type: Number, default: 0, min: 0 }, // Số điểm tích lũy từ đơn hàng này (chỉ cộng khi in bill lần đầu)
+    usedPoints: { type: Number, default: 0, min: 0 }, // Số điểm khách đã dùng để giảm giá đơn này
   },
   {
     timestamps: true,
