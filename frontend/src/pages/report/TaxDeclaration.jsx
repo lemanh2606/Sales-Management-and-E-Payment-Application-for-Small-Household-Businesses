@@ -1222,14 +1222,14 @@ const TaxDeclaration = () => {
                 <Row gutter={24} align="middle">
                   <Col xs={24} lg={6}>
                     <Space direction="vertical">
-                      <Title level={3} style={{ margin: 0, color: "#1890ff" }}>
-                        <ShopOutlined /> {currentStore.name}
+                      <Title level={2} style={{ margin: 0, color: "#1890ff", lineHeight: 1.2 }}>
+                        {currentStore.name}
                       </Title>
-                      <Text type="secondary">
-                        <BankOutlined /> {currentStore.phone}
+                      <Text type="secondary" style={{ color: "#595959", fontSize: "16px", display: "block", marginTop: 4 }}>
+                        Kê khai thuế - {currentStore.phone}
                       </Text>
                       {currentStore.taxCode && (
-                        <Text type="secondary">
+                        <Text type="secondary" style={{ color: "#595959", fontSize: "16px", display: "block", marginTop: 4 }}>
                           <IdcardOutlined /> MST: {currentStore.taxCode}
                         </Text>
                       )}

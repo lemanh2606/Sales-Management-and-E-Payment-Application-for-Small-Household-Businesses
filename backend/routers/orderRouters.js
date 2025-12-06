@@ -25,6 +25,7 @@ const {
   getOrderStats,
   exportTopFrequentCustomers,
   exportAllOrdersToExcel,
+  deletePendingOrder,
 } = require("../controllers/order/orderController");
 const { getPaidNotPrintedOrders, verifyInvoicePdf, verifyInvoicePdfAuto } = require("../controllers/order/orderReconciliationController");
 
@@ -99,6 +100,8 @@ router.get("/list-paid", verifyToken, checkSubscriptionExpiry, checkStoreAccess,
 router.get("/list-refund", verifyToken, checkSubscriptionExpiry, checkStoreAccess, requirePermission("orders:view"), getListRefundOrders);
 //xem chi tiết 1 Order đã hoàn trả thành công
 router.get("/order-refund/:orderId", verifyToken, checkSubscriptionExpiry, checkStoreAccess, requirePermission("orders:view"), getOrderRefundDetail);
+// xoá đơn hàng đang ở trạng thái 'pending'
+router.delete("/delete-pending/:id", verifyToken, checkSubscriptionExpiry, checkStoreAccess, requirePermission("orders:view"), deletePendingOrder);
 //xem chi tiết 1 order chung
 router.get("/:orderId", verifyToken, checkSubscriptionExpiry, checkStoreAccess, requirePermission("orders:view"), getOrderById);
 

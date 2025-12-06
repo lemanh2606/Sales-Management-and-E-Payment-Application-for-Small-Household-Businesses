@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Table, Input, Select, Typography, Spin, Empty, Tag } from "antd";
 import { SearchOutlined } from "@ant-design/icons";
 import axios from "axios";
-import debounce from "../../utils/debounce"; // hoặc "@/utils/debounce"
+import debounce from "../../utils/debounce";
 
 const { Title, Text } = Typography;
 const { Option } = Select;

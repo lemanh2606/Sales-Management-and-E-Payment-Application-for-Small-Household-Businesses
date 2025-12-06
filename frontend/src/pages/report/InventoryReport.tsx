@@ -1,29 +1,11 @@
 // src/pages/reports/InventoryReport.tsx
 import React, { useState, useEffect } from "react";
-import {
-  Card,
-  Row,
-  Col,
-  Select,
-  Button,
-  DatePicker,
-  Table,
-  Tag,
-  Space,
-  Statistic,
-  Input,
-  Empty,
-  Spin,
-  Typography,
-  Tooltip,
-  Alert,
-} from "antd";
+import { Card, Row, Col, Button, Table, Tag, Space, Statistic, Input, Empty, Spin, Typography, Tooltip, Alert } from "antd";
 import {
   FileExcelOutlined,
   ReloadOutlined,
   SearchOutlined,
   WarningOutlined,
-  CalendarOutlined,
   ShopOutlined,
   InboxOutlined,
   DollarOutlined,
@@ -32,29 +14,16 @@ import {
 } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import axios from "axios";
-import dayjs, { Dayjs } from "dayjs";
-import quarterOfYear from "dayjs/plugin/quarterOfYear";
 import * as XLSX from "xlsx";
-import "jspdf-autotable";
 import Layout from "../../components/Layout";
 import Swal from "sweetalert2";
 
-dayjs.extend(quarterOfYear);
 const apiUrl = import.meta.env.VITE_API_URL;
-const { Option } = Select;
-const { RangePicker } = DatePicker;
 const { Title, Text } = Typography;
 
 // ===== INTERFACES =====
 interface MongoDecimal {
   $numberDecimal: string;
-}
-
-interface PeriodInfo {
-  periodType: string;
-  periodKey: string;
-  from: string;
-  to: string;
 }
 
 interface SummaryInfo {
@@ -68,10 +37,6 @@ interface ProductDetail {
   productId: string;
   productName: string;
   sku: string;
-  openingStock: number;
-  importedQty: number;
-  exportedQty: number;
-  returnedQty: number;
   closingStock: number;
   costPrice: MongoDecimal;
   closingValue: number;
@@ -79,7 +44,6 @@ interface ProductDetail {
 }
 
 interface ReportData {
-  period: PeriodInfo;
   summary: SummaryInfo;
   details: ProductDetail[];
 }
@@ -97,132 +61,56 @@ const InventoryReport: React.FC = () => {
   const token = localStorage.getItem("token");
   const headers = { Authorization: `Bearer ${token}` };
 
-  // States
-  const [periodType, setPeriodType] = useState<string>("month");
-  const [selectedMonth, setSelectedMonth] = useState<Dayjs>(dayjs());
-  const [selectedQuarter, setSelectedQuarter] = useState<Dayjs>(dayjs());
-  const [selectedYear, setSelectedYear] = useState<Dayjs>(dayjs());
-  const [customRange, setCustomRange] = useState<[Dayjs | null, Dayjs | null]>([
-    null,
-    null,
-  ]);
   const [reportData, setReportData] = useState<ReportData | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [searchText, setSearchText] = useState("");
 
   // Helper: Format currency
   const formatCurrency = (value: number | MongoDecimal): string => {
-    const numValue =
-      typeof value === "object" && value.$numberDecimal
-        ? parseFloat(value.$numberDecimal)
-        : Number(value);
+    const numValue = typeof value === "object" && value.$numberDecimal ? parseFloat(value.$numberDecimal) : Number(value);
     return numValue.toLocaleString("vi-VN") + "₫";
   };
 
-  // Fetch report data
-  const fetchReport = async () => {
+  // Fetch realtime inventory - gọi ngay khi vào trang
+  const fetchRealtimeReport = async () => {
     if (!storeId) {
-      Swal.fire({
-        icon: "error",
-        title: "Oops...",
-        text: "Không tìm thấy thông tin cửa hàng",
-        timer: 2000, // 2000ms = 2 giây
-        timerProgressBar: true,
-        confirmButtonText: "Ok",
-        confirmButtonColor: "#3085d6",
-      });
+      Swal.fire("Lỗi", "Không tìm thấy cửa hàng", "error");
+      setLoading(false);
       return;
     }
+
     setLoading(true);
     try {
-      const params: any = { storeId };
-
-      // Build params based on periodType
-      if (periodType === "month") {
-        params.periodType = "month";
-        params.periodKey = selectedMonth.format("YYYY-MM");
-      } else if (periodType === "quarter") {
-        params.periodType = "quarter";
-        const q = selectedQuarter.quarter();
-        params.periodKey = `${selectedQuarter.year()}-Q${q}`;
-      } else if (periodType === "year") {
-        params.periodType = "year";
-        params.periodKey = selectedYear.format("YYYY");
-      } else if (periodType === "custom") {
-        if (!customRange[0] || !customRange[1]) {
-          Swal.fire({
-            icon: "warning",
-            title: "Cảnh báo",
-            text: "Vui lòng chọn khoảng thời gian tùy chỉnh!",
-            timer: 2000, // 2000ms = 2 giây
-            timerProgressBar: true,
-            confirmButtonText: "Ok",
-            confirmButtonColor: "#f39c12",
-          });
-          setLoading(false);
-          return;
-        }
-        params.periodType = "custom";
-        params.monthFrom = customRange[0].format("YYYY-MM");
-        params.monthTo = customRange[1].format("YYYY-MM");
-      }
-      // If periodType = "realtime", no extra params needed
-
-      const res = await axios.get<ReportResponse>(
-        `${apiUrl}/inventory-reports`,
-        { params, headers }
-      );
+      const res = await axios.get<ReportResponse>(`${apiUrl}/inventory-reports`, {
+        params: { storeId },
+        headers,
+      });
 
       if (res.data.success) {
         setReportData(res.data.data);
-        // Swal.fire({
-        //   icon: "success",
-        //   title: "Thành công",
-        //   text: "Tải báo cáo thành công!",
-        //   timer: 2000, // 2000ms = 2 giây
-        //   timerProgressBar: true,
-        //   confirmButtonText: "Ok",
-        //   confirmButtonColor: "#27ae60",
-        // });
       }
     } catch (err: any) {
-      Swal.fire({
-        icon: "error",
-        title: "Lỗi",
-        text: err?.response?.data?.message || "Lỗi tải báo cáo",
-        timer: 2000, // 2000ms = 2 giây
-        timerProgressBar: true,
-        confirmButtonText: "Ok",
-        confirmButtonColor: "#c0392b",
-      });
+      Swal.fire("Lỗi", err?.response?.data?.message || "Không thể tải báo cáo tồn kho", "error");
       setReportData(null);
     } finally {
       setLoading(false);
     }
   };
 
+  // Gọi ngay khi component mount
+  useEffect(() => {
+    fetchRealtimeReport();
+  }, [storeId]);
+
   // Export Excel
   const exportExcel = () => {
     if (!reportData) return;
 
-    // Khai báo type rõ ràng: mỗi row là mảng any
     const ws_data: any[][] = [
-      [`BÁO CÁO TỒN KHO - ${currentStore.name}`],
-      [`Kỳ báo cáo: ${formatPeriodLabel()}`],
+      [`BÁO CÁO TỒN KHO HIỆN TẠI - ${currentStore.name}`],
+      [`Thời điểm: ${new Date().toLocaleString("vi-VN")}`],
       [],
-      [
-        "STT",
-        "Tên sản phẩm",
-        "Mã SKU",
-        "Tồn đầu kỳ",
-        "Nhập trong kỳ",
-        "Xuất trong kỳ",
-        "Trả NCC",
-        "Tồn cuối kỳ",
-        "Giá vốn",
-        "Giá trị tồn",
-        "Cảnh báo",
-      ],
+      ["STT", "Tên sản phẩm", "Mã SKU", "Tồn kho", "Giá vốn", "Giá trị tồn", "Cảnh báo"],
     ];
 
     reportData.details.forEach((item) => {
@@ -230,10 +118,6 @@ const InventoryReport: React.FC = () => {
         item.index,
         item.productName,
         item.sku,
-        item.openingStock,
-        item.importedQty,
-        item.exportedQty,
-        item.returnedQty,
         item.closingStock,
         parseFloat(item.costPrice.$numberDecimal),
         item.closingValue,
@@ -242,56 +126,29 @@ const InventoryReport: React.FC = () => {
     });
 
     ws_data.push([]);
-    ws_data.push([
-      "TỔNG CỘNG",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      reportData.summary.totalStock,
-      "",
-      reportData.summary.totalValue,
-      "",
-    ]);
+    ws_data.push(["TỔNG CỘNG", "", "", reportData.summary.totalStock, "", reportData.summary.totalValue, ""]);
 
     const ws = XLSX.utils.aoa_to_sheet(ws_data);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Báo cáo tồn kho");
-    XLSX.writeFile(wb, `BaoCaoTonKho_${dayjs().format("YYYYMMDD")}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, "Tồn kho hiện tại");
+    XLSX.writeFile(wb, `TonKho_HienTai_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
-  // Format period label
-  const formatPeriodLabel = (): string => {
-    if (!reportData || !reportData.period) return "Realtime"; // <--- check null
-    const { periodType, periodKey } = reportData.period;
+  // Filter data
+  const filteredData =
+    reportData?.details.filter(
+      (item) => item.productName.toLowerCase().includes(searchText.toLowerCase()) || item.sku.toLowerCase().includes(searchText.toLowerCase())
+    ) || [];
 
-    if (periodType === "month") return `Tháng ${periodKey}`;
-    if (periodType === "quarter") return `Quý ${periodKey}`;
-    if (periodType === "year") return `Năm ${periodKey}`;
-    if (periodType === "custom") {
-      return `${dayjs(reportData.period.from).format("MM/YYYY")} - ${dayjs(
-        reportData.period.to
-      ).format("MM/YYYY")}`;
-    }
-    return "Realtime";
-  };
+  const lowStockCount = reportData?.details.filter((item) => item.lowStock).length || 0;
 
-  // Filter data by search
-  const filteredData = reportData?.details.filter(
-    (item) =>
-      item.productName.toLowerCase().includes(searchText.toLowerCase()) ||
-      item.sku.toLowerCase().includes(searchText.toLowerCase())
-  );
-
-  // Table columns
+  // Table columns - chỉ còn lại những cột cần thiết cho realtime
   const columns: ColumnsType<ProductDetail> = [
     {
       title: "STT",
       dataIndex: "index",
       key: "index",
-      width: 50,
+      width: 60,
       align: "center",
       fixed: "left",
     },
@@ -299,7 +156,7 @@ const InventoryReport: React.FC = () => {
       title: "Tên sản phẩm",
       dataIndex: "productName",
       key: "productName",
-      width: 190,
+      width: 220,
       fixed: "left",
       render: (text: string, record: ProductDetail) => (
         <Space>
@@ -316,51 +173,18 @@ const InventoryReport: React.FC = () => {
       title: "Mã SKU",
       dataIndex: "sku",
       key: "sku",
-      width: 110,
+      width: 120,
       render: (text: string) => <Text code>{text}</Text>,
     },
     {
-      title: "Tồn đầu kỳ",
-      dataIndex: "openingStock",
-      key: "openingStock",
-      width: 90,
-      align: "center",
-      sorter: (a, b) => a.openingStock - b.openingStock,
-    },
-    {
-      title: "Nhập trong kỳ",
-      dataIndex: "importedQty",
-      key: "importedQty",
-      width: 90,
-      align: "center",
-      render: (val: number) =>
-        val > 0 ? <Tag color="green">+{val}</Tag> : val,
-    },
-    {
-      title: "Xuất trong kỳ",
-      dataIndex: "exportedQty",
-      key: "exportedQty",
-      width: 90,
-      align: "center",
-      render: (val: number) => (val > 0 ? <Tag color="red">-{val}</Tag> : val),
-    },
-    {
-      title: "Trả NCC",
-      dataIndex: "returnedQty",
-      key: "returnedQty",
-      width: 80,
-      align: "center",
-      render: (val: number) => (val > 0 ? <Tag color="blue">+{val}</Tag> : val),
-    },
-    {
-      title: "Tồn cuối kỳ",
+      title: "Tồn kho",
       dataIndex: "closingStock",
       key: "closingStock",
-      width: 90,
+      width: 100,
       align: "center",
       sorter: (a, b) => a.closingStock - b.closingStock,
       render: (val: number, record: ProductDetail) => (
-        <Text strong style={{ color: record.lowStock ? "#ff4d4f" : "#389e0d" }}>
+        <Text strong style={{ color: record.lowStock ? "#ff4d4f" : "#389e0d", fontSize: 15 }}>
           {val}
         </Text>
       ),
@@ -371,361 +195,213 @@ const InventoryReport: React.FC = () => {
       key: "costPrice",
       width: 110,
       align: "right",
-      sorter: (a, b) =>
-        parseFloat(a.costPrice.$numberDecimal) -
-        parseFloat(b.costPrice.$numberDecimal),
       render: (val: MongoDecimal) => formatCurrency(val),
     },
     {
       title: (
-        <Tooltip title="Công thức tính: 'Tồn cuối kỳ' x 'Giá vốn'">
+        <Tooltip title="Tồn kho × Giá vốn">
           <span>
-            <InfoCircleOutlined
-              style={{ color: "#1890ff", cursor: "pointer", marginLeft: 4 }}
-            />{" "}
+            <InfoCircleOutlined style={{ color: "#1890ff", marginRight: 4 }} />
             Giá trị tồn
           </span>
         </Tooltip>
       ),
       dataIndex: "closingValue",
       key: "closingValue",
-      width: 130,
+      width: 140,
       align: "right",
       render: (val: number) => (
-        <Text strong style={{ color: "#1890ff" }}>
+        <Text strong style={{ color: "#faad14", fontSize: 15 }}>
           {formatCurrency(val)}
         </Text>
       ),
     },
     {
-      title: "Cảnh báo",
+      title: "Trạng thái",
       dataIndex: "lowStock",
       key: "lowStock",
       width: 100,
       align: "center",
       render: (val: boolean) =>
         val ? (
-          <Tag color="red" icon={<WarningOutlined />}>
+          <Tag icon={<WarningOutlined />} color="red">
             Tồn thấp
           </Tag>
         ) : (
-          <Tag color="green">OK</Tag>
+          <Tag color="green">Bình thường</Tag>
         ),
     },
   ];
 
-  // Low stock count
-  const lowStockCount =
-    reportData?.details.filter((item) => item.lowStock).length || 0;
-
   return (
     <Layout>
-      <div
-        style={{
-          padding: "0px 10px",
-          background: "#ffffff",
-          minHeight: "100vh",
-          maxWidth: "100%", // Giới hạn chiều rộng nội dung để tránh tràn browser
-          overflowX: "hidden", // Ẩn scroll ngang browser
-        }}
-      >
-        {/* FILTER CARD */}
-        <Card
-          title={
-            <Space>
-              <Title level={3} style={{ margin: 0 }}>
-                Báo cáo tồn kho
+      <div>
+        {/* HEADER CARD */}
+        <Card bodyStyle={{ padding: "20px 24px 24px 24px" }} style={{ borderRadius: 12, border: "1px solid #8c8c8c", marginBottom: 24 }}>
+          {/* HEADER + NÚT + ALERT – TẤT CẢ TRONG MỘT DÒNG ĐẸP ĐẼ */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+            {/* Bên trái: Tên shop + tiêu đề */}
+            <div>
+              <Title level={2} style={{ margin: 0, color: "#1890ff", lineHeight: 1.2 }}>
+                {currentStore.name || "Đang tải..."}
               </Title>
-              <Text type="secondary" style={{ fontSize: 14 }}>
-                - {currentStore.name}
-              </Text>
-            </Space>
-          }
-          bordered={false}
-          style={{
-            borderRadius: 12,
-            border: "1px solid #8c8c8c",
-            marginBottom: 24,
-            maxWidth: "100%", // Giới hạn card filter
-          }}
-        >
-          <Row gutter={[16, 16]} align="middle">
-            <Col xs={24} sm={24} md={6}>
-              <Text strong style={{ display: "block", marginBottom: 8 }}>
-                <CalendarOutlined /> Chọn kỳ báo cáo
-              </Text>
-              <Select
-                value={periodType}
-                onChange={setPeriodType}
-                style={{ width: "100%" }}
+              <Text style={{ color: "#595959", fontSize: "16px", display: "block", marginTop: 5 }}>Báo cáo tồn kho hiện tại</Text>
+            </div>
+
+            {/* Bên phải: 2 nút làm mới + xuất Excel */}
+            <Space size="middle">
+              <Button icon={<ReloadOutlined />} onClick={fetchRealtimeReport} size="large" type="default">
+                Làm mới dữ liệu
+              </Button>
+              <Button
+                type="primary"
+                icon={<FileExcelOutlined />}
+                onClick={exportExcel}
                 size="large"
+                style={{ background: "#52c41a", borderColor: "#52c41a" }}
               >
-                <Option value="realtime">Realtime (tồn hiện tại)</Option>
-                <Option value="month">Theo tháng</Option>
-                <Option value="quarter">Theo quý</Option>
-                <Option value="year">Theo năm</Option>
-                <Option value="custom">Tùy chỉnh khoảng tháng</Option>
-              </Select>
-            </Col>
+                Xuất Excel
+              </Button>
+            </Space>
+          </div>
 
-            <Col xs={24} sm={24} md={8}>
-              <Text strong style={{ display: "block", marginBottom: 8 }}>
-                <CalendarOutlined /> Chọn thời gian
-              </Text>
-              {periodType === "month" && (
-                <DatePicker
-                  picker="month"
-                  value={selectedMonth}
-                  onChange={(date) => date && setSelectedMonth(date)}
-                  format="MM/YYYY"
-                  style={{ width: "100%" }}
-                  size="large"
-                  placeholder="Chọn tháng"
-                />
-              )}
-              {periodType === "quarter" && (
-                <DatePicker
-                  picker="quarter"
-                  value={selectedQuarter}
-                  onChange={(date) => date && setSelectedQuarter(date)}
-                  format="[Q]Q YYYY"
-                  style={{ width: "100%" }}
-                  size="large"
-                  placeholder="Chọn quý"
-                />
-              )}
-              {periodType === "year" && (
-                <DatePicker
-                  picker="year"
-                  value={selectedYear}
-                  onChange={(date) => date && setSelectedYear(date)}
-                  format="YYYY"
-                  style={{ width: "100%" }}
-                  size="large"
-                  placeholder="Chọn năm"
-                />
-              )}
-              {periodType === "custom" && (
-                <RangePicker
-                  picker="month"
-                  value={customRange}
-                  onChange={(dates) =>
-                    setCustomRange(dates as [Dayjs | null, Dayjs | null])
-                  }
-                  format="MM/YYYY"
-                  style={{ width: "100%" }}
-                  size="large"
-                  placeholder={["Từ tháng", "Đến tháng"]}
-                />
-              )}
-            </Col>
+          {/* Đường viền dưới – đẹp như ListAllOrder */}
+          <div style={{ borderBottom: "2px solid #e8e8e8", margin: "16px 0" }} />
 
-            <Col xs={24} sm={24} md={10}>
-              <Space wrap style={{ marginTop: "21px" }}>
-                <Button
-                  type="primary"
-                  size="large"
-                  onClick={fetchReport}
-                  loading={loading}
-                  icon={<SearchOutlined />}
-                >
-                  Xem báo cáo
-                </Button>
-                <Button
-                  icon={<ReloadOutlined />}
-                  size="large"
-                  onClick={fetchReport}
-                  disabled={!reportData}
-                >
-                  Làm mới
-                </Button>
-                <Button
-                  icon={<FileExcelOutlined />}
-                  size="large"
-                  onClick={exportExcel}
-                  disabled={!reportData}
-                  style={{ color: "#52c41a", borderColor: "#52c41a" }}
-                >
-                  Xuất Excel
-                </Button>
-              </Space>
-            </Col>
-          </Row>
+          {/* Alert realtime */}
+          <Alert
+            message="Dữ liệu được cập nhật realtime theo từng giao dịch nhập/xuất hàng"
+            type="info"
+            showIcon
+            style={{ borderRadius: 8, marginBottom: 0 }}
+          />
         </Card>
 
         {loading ? (
-          <Card style={{ textAlign: "center", padding: 60 }}>
-            <Spin size="large" />
-            <div style={{ marginTop: 16, color: "#8c8c8c" }}>
-              Đang tải dữ liệu...
-            </div>
+          <Card style={{ textAlign: "center", padding: 80 }}>
+            <Spin size="large" tip="Đang tải tồn kho hiện tại..." />
           </Card>
-        ) : !reportData ? (
-          <Empty
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description="Chọn kỳ báo cáo và nhấn 'Xem báo cáo' để hiển thị dữ liệu"
-            style={{ marginTop: 60 }}
-          />
+        ) : !reportData || reportData.details.length === 0 ? (
+          <Empty description="Chưa có sản phẩm nào trong cửa hàng" />
         ) : (
           <>
-            {/* SUMMARY CARDS - Giảm rộng bằng cách dùng Col responsive, Card width 100% */}
-            <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
-              <Col xs={12} sm={6} lg={6}>
-                <Card
-                  bordered={false}
-                  style={{
-                    borderRadius: 12,
-                    border: "1px solid #8c8c8c",
-                    width: "100%", // Giới hạn width theo Col
-                  }}
-                >
+            {/* SUMMARY CARDS */}
+            <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+              <Col xs={12} sm={6}>
+                <Card bordered={false} style={{ borderRadius: 12, border: "1px solid #8c8c8c" }}>
                   <Statistic
-                    title="Tổng số sản phẩm"
+                    title="Tổng sản phẩm"
                     value={reportData.summary.totalProducts}
+                    suffix="mặt hàng"
                     prefix={<ShopOutlined />}
                     valueStyle={{ color: "#1890ff" }}
                   />
                 </Card>
               </Col>
-              <Col xs={12} sm={6} lg={6}>
-                <Card
-                  bordered={false}
-                  style={{
-                    borderRadius: 12,
-                    border: "1px solid #8c8c8c",
-                    width: "100%",
-                  }}
-                >
+              <Col xs={12} sm={6}>
+                <Card bordered={false} style={{ borderRadius: 12, border: "1px solid #8c8c8c" }}>
                   <Statistic
                     title="Tổng tồn kho"
                     value={reportData.summary.totalStock}
+                    suffix="sản phẩm"
                     prefix={<InboxOutlined />}
                     valueStyle={{ color: "#52c41a" }}
-                    suffix="sản phẩm"
                   />
                 </Card>
               </Col>
-              <Col xs={12} sm={6} lg={6}>
-                <Card
-                  bordered={false}
-                  style={{
-                    borderRadius: 12,
-                    border: "1px solid #8c8c8c",
-                    width: "100%",
-                  }}
-                >
+              <Col xs={12} sm={6}>
+                <Card bordered={false} style={{ borderRadius: 12, border: "1px solid #8c8c8c" }}>
                   <Statistic
                     title="Tổng giá trị tồn"
                     value={reportData.summary.totalValue}
                     prefix={<DollarOutlined />}
+                    formatter={(v) => formatCurrency(v as number)}
                     valueStyle={{ color: "#faad14" }}
-                    formatter={(value) => formatCurrency(value as number)}
                   />
                 </Card>
               </Col>
-              <Col xs={12} sm={6} lg={6}>
-                <Card
-                  bordered={false}
-                  style={{
-                    borderRadius: 12,
-                    border: "1px solid #8c8c8c",
-                    width: "100%",
-                  }}
-                >
+              <Col xs={12} sm={6}>
+                <Card bordered={false} style={{ borderRadius: 12, border: "1px solid #8c8c8c" }}>
                   <Statistic
-                    title="Sản phẩm tồn thấp"
+                    title="Tồn kho thấp"
                     value={lowStockCount}
                     prefix={<AlertOutlined />}
-                    valueStyle={{
-                      color: lowStockCount > 0 ? "#ff4d4f" : "#52c41a",
-                    }}
                     suffix={`/ ${reportData.summary.totalProducts}`}
+                    valueStyle={{ color: lowStockCount > 0 ? "#ff4d4f" : "#52c41a" }}
                   />
                 </Card>
               </Col>
             </Row>
 
-            {/* ALERT */}
+            {/* LOW STOCK ALERT */}
             {lowStockCount > 0 && (
               <Alert
-                message={`Cảnh báo: Có ${lowStockCount} sản phẩm tồn kho thấp!`}
-                description="Vui lòng kiểm tra và nhập hàng kịp thời để tránh thiếu hụt."
+                message={`Cảnh báo: Có ${lowStockCount} sản phẩm đang tồn kho thấp!`}
+                description="Vui lòng kiểm tra và nhập hàng gấp để tránh hết hàng."
                 type="warning"
                 showIcon
                 icon={<WarningOutlined />}
                 closable
-                style={{ marginBottom: 16 }}
+                style={{ marginBottom: 24 }}
               />
             )}
 
-            {/* TABLE CARD - Thêm overflowX auto để scroll ngang trong card */}
+            {/* TABLE */}
             <Card
               title={
-                <Space>
-                  <Text strong style={{ fontSize: 16 }}>
-                    Chi tiết báo cáo - {formatPeriodLabel()}
-                  </Text>
-                </Space>
+                <Title level={4} style={{ margin: 0 }}>
+                  Chi tiết tồn kho
+                </Title>
               }
               extra={
                 <Input
-                  placeholder="Tìm tên sản phẩm hoặc mã SKU..."
+                  placeholder="Tìm sản phẩm hoặc mã SKU..."
                   prefix={<SearchOutlined />}
                   allowClear
                   value={searchText}
                   onChange={(e) => setSearchText(e.target.value)}
-                  style={{ width: 350 }}
+                  style={{ width: 300 }}
                 />
               }
-              style={{
-                borderRadius: 12,
-                border: "1px solid #8c8c8c",
-                overflowX: "auto", // Scroll ngang trong card
-                maxWidth: "100%", // Giới hạn rộng card theo màn hình
-              }}
+              style={{ borderRadius: 12, border: "1px solid #8c8c8c" }}
             >
               <Table
                 columns={columns}
                 dataSource={filteredData}
                 rowKey="productId"
-                scroll={{ x: 1200, y: 500 }} // Giảm x một chút để fit hơn, nhưng vẫn scroll ngang nếu cần
                 pagination={{
                   pageSize: 20,
                   showSizeChanger: true,
+                  showQuickJumper: true,
                   showTotal: (total, range) => (
-                    <Text>
+                    <div style={{ fontSize: 14, color: "#595959" }}>
                       Đang xem{" "}
-                      <span style={{ color: "#1890ff", fontWeight: 600 }}>
-                        {range[0]} — {range[1]}
+                      <span style={{ color: "#1890ff", fontWeight: 600, fontSize: 15 }}>
+                        {range[0]} – {range[1]}
                       </span>{" "}
-                      trên tổng số{" "}
-                      <span style={{ color: "#d4380d", fontWeight: 600 }}>
-                        {total}
-                      </span>{" "}
-                      sản phẩm
-                    </Text>
+                      trên tổng số <span style={{ color: "#d4380d", fontWeight: 600, fontSize: 15 }}>{total.toLocaleString("vi-VN")}</span> sản phẩm
+                    </div>
                   ),
                 }}
+                scroll={{ x: 1000 }}
                 summary={() => (
                   <Table.Summary fixed>
-                    <Table.Summary.Row style={{ background: "#fafafa" }}>
-                      <Table.Summary.Cell index={0} colSpan={7} align="center">
-                        <Text strong style={{ fontSize: 16 }}>
-                          TỔNG CỘNG
-                        </Text>
+                    <Table.Summary.Row style={{ background: "#fafafa", fontWeight: "bold" }}>
+                      <Table.Summary.Cell index={0} colSpan={3} align="center">
+                        TỔNG CỘNG
                       </Table.Summary.Cell>
-                      <Table.Summary.Cell index={7} align="right">
-                        <Text strong style={{ fontSize: 16, color: "#1890ff" }}>
+                      <Table.Summary.Cell index={3} align="center">
+                        <Text strong style={{ color: "#52c41a" }}>
                           {reportData.summary.totalStock}
                         </Text>
                       </Table.Summary.Cell>
-                      <Table.Summary.Cell index={8} />
-                      <Table.Summary.Cell index={9} align="right">
-                        <Text strong style={{ fontSize: 16, color: "#faad14" }}>
+                      <Table.Summary.Cell index={4} />
+                      <Table.Summary.Cell index={5} align="right">
+                        <Text strong style={{ color: "#faad14" }}>
                           {formatCurrency(reportData.summary.totalValue)}
                         </Text>
                       </Table.Summary.Cell>
-                      <Table.Summary.Cell index={10} />
+                      <Table.Summary.Cell index={6} />
                     </Table.Summary.Row>
                   </Table.Summary>
                 )}

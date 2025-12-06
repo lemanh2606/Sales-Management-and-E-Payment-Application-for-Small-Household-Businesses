@@ -7,11 +7,7 @@ dotenv.config();
 
 // Các quyền mới cần thêm
 const NEW_REPORT_PERMISSIONS = [
-  "reports:endofday:view",
-  "subscription:manage",
-  "subscription:activate",
-  "subscription:cancel",
-  "subscription:history",
+  "orders:delete",
   //thêm nếu có cái mới hoặc nghĩ ra cái mới
 ];
 

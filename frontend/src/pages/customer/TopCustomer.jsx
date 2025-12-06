@@ -1,10 +1,11 @@
 // src/pages/customer/TopCustomer.jsx
-import React, { useState, useEffect } from "react";
-import { Card, Col, Row, Select, InputNumber, Button, Table, Space, Typography, Spin, Alert, Input, Tooltip, DatePicker } from "antd";
-import { SearchOutlined, FileExcelOutlined, UserOutlined, DollarOutlined, ShoppingCartOutlined, CalendarOutlined } from "@ant-design/icons";
+import React, { useState, useEffect, useCallback } from "react";
+import { Card, Col, Row, Select, InputNumber, Button, Table, Space, Typography, Spin, Alert, Input, Tooltip, DatePicker, Tag } from "antd";
+import { FileExcelOutlined, UserOutlined, DollarOutlined, ShoppingCartOutlined, CalendarOutlined } from "@ant-design/icons";
 import axios from "axios";
 import dayjs from "dayjs";
 import Layout from "../../components/Layout";
+import debounce from "../../utils/debounce";
 
 const apiUrl = import.meta.env.VITE_API_URL;
 
@@ -26,17 +27,18 @@ const TopCustomer = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  // Thêm state mới
   const [periodType, setPeriodType] = useState("month");
   const [periodKey, setPeriodKey] = useState("");
   const [monthFrom, setMonthFrom] = useState("");
   const [monthTo, setMonthTo] = useState("");
+
   // Reset thời gian khi đổi loại kỳ
   useEffect(() => {
     setPeriodKey("");
     setMonthFrom("");
     setMonthTo("");
   }, [periodType]);
+
   // 🟩 NEW: Reset dữ liệu bảng khi đổi loại kỳ
   useEffect(() => {
     setCustomers([]);
@@ -44,25 +46,35 @@ const TopCustomer = () => {
     setHasFetched(false);
   }, [periodType]);
 
-  const formatVND = (value) => {
-    if (value === null || value === undefined || value === "") return "₫0";
-    let num;
-    if (typeof value === "object" && value !== null) {
-      num = value.$numberDecimal ? parseFloat(value.$numberDecimal) : parseFloat(value.toString());
-    } else {
-      num = parseFloat(value);
+  //clear bảng khi search hoặc filter bị clear
+  useEffect(() => {
+    if (!isReadyToFetch() && searchText === "") {
+      setCustomers([]);
+      setFiltered([]);
+      setHasFetched(false);
     }
-    if (isNaN(num)) return "₫0";
-    return new Intl.NumberFormat("vi-VN", {
-      style: "currency",
-      currency: "VND",
-      minimumFractionDigits: 0,
-    }).format(num);
+  }, [periodType, periodKey, monthFrom, monthTo, searchText]);
+
+  // Kiểm tra điều kiện đã chọn đủ thông tin chưa
+  const isReadyToFetch = () => {
+    if (!currentStore?._id) return false;
+
+    if (periodType === "custom") {
+      // Custom cần cả monthFrom và monthTo
+      return monthFrom !== "" && monthTo !== "";
+    } else {
+      // Các loại khác chỉ cần periodKey
+      return periodKey !== "";
+    }
   };
 
   const fetchTopCustomers = async () => {
     if (!currentStore?._id) {
       setError("Vui lòng chọn cửa hàng");
+      return;
+    }
+    if (!isReadyToFetch()) {
+      setError("Vui lòng chọn đủ thông tin kỳ báo cáo");
       return;
     }
     setHasFetched(true);
@@ -90,24 +102,58 @@ const TopCustomer = () => {
       });
 
       const data = res.data.data || [];
-      console.log("DATA RAW sau khi lấy từ API:", data); // <-- đây là đúng
-
       setCustomers(data);
       setFiltered(data);
+      setHasFetched(true);
     } catch (err) {
       setError(err.response?.data?.message || "Lỗi tải top khách hàng");
+      setCustomers([]);
+      setFiltered([]);
     } finally {
       setLoading(false);
     }
   };
 
-  // Tìm kiếm
+  // Debounced fetch
+  const debouncedFetch = useCallback(debounce(fetchTopCustomers, 500), [periodType, periodKey, monthFrom, monthTo, limitOption, customLimit]);
+
+  // 🟢 NEW: tự động fetch khi filter thay đổi
+  useEffect(() => {
+    if (isReadyToFetch()) {
+      debouncedFetch();
+    } else {
+      setCustomers([]);
+      setFiltered([]);
+      setHasFetched(false);
+    }
+
+    return () => debouncedFetch.cancel?.();
+  }, [periodType, periodKey, monthFrom, monthTo, limitOption, customLimit]);
+
+  // Tìm kiếm client-side
   useEffect(() => {
     const lower = searchText.toLowerCase();
     const filteredData = customers.filter((c) => c.customerName.toLowerCase().includes(lower) || c.customerPhone.includes(searchText));
     setFiltered(filteredData);
     setCurrentPage(1);
   }, [searchText, customers]);
+
+  // Hàm format tiền VND
+  const formatVND = (value) => {
+    if (value === null || value === undefined || value === "") return "₫0";
+    let num;
+    if (typeof value === "object" && value !== null) {
+      num = value.$numberDecimal ? parseFloat(value.$numberDecimal) : parseFloat(value.toString());
+    } else {
+      num = parseFloat(value);
+    }
+    if (isNaN(num)) return "₫0";
+    return new Intl.NumberFormat("vi-VN", {
+      style: "currency",
+      currency: "VND",
+      minimumFractionDigits: 0,
+    }).format(num);
+  };
 
   // XUẤT FILE
   const handleExport = async (format) => {
@@ -199,30 +245,26 @@ const TopCustomer = () => {
   };
 
   const getPeriodDisplayText = () => {
+    if (periodType === "custom") {
+      if (!monthFrom || !monthTo) return "Chưa chọn kỳ";
+      const from = dayjs(monthFrom, "YYYY-MM").format("MM/YYYY");
+      const to = dayjs(monthTo, "YYYY-MM").format("MM/YYYY");
+      return `Từ tháng ${from} → Tháng ${to}`;
+    }
+
     if (!periodKey) return "Chưa chọn kỳ";
 
     switch (periodType) {
       case "day":
         return dayjs(periodKey, "YYYY-MM-DD").format("DD/MM/YYYY");
-
       case "month":
         return dayjs(periodKey, "YYYY-MM").format("MM/YYYY");
-
       case "quarter": {
-        const year = periodKey.split("-Q")[0];
-        const q = periodKey.split("-Q")[1];
+        const [year, q] = periodKey.split("-Q");
         return `Quý ${q} - ${year}`;
       }
-
       case "year":
         return `Năm ${periodKey}`;
-
-      case "custom":
-        if (!monthFrom || !monthTo) return "Khoảng tùy chỉnh";
-        const from = dayjs(monthFrom, "YYYY-MM").format("MM/YYYY");
-        const to = dayjs(monthTo, "YYYY-MM").format("MM/YYYY");
-        return `${from} → ${to}`;
-
       default:
         return "Kỳ đã chọn";
     }
@@ -370,25 +412,25 @@ const TopCustomer = () => {
         <Space direction="vertical" size="large" style={{ width: "100%" }}>
           {/* CARD FILTER */}
           <Card style={{ border: "1px solid #8c8c8c" }}>
-            {/* HEADER */}
-            <div style={{ marginBottom: 20, paddingBottom: 16, borderBottom: "1px solid #e8e8e8" }}>
-              <Title level={2} style={{ margin: 0, color: "#1890ff", marginBottom: 4 }}>
-                {currentStore.name || "Đang tải..."}
-              </Title>
-              <Text style={{ color: "black", fontSize: "18px" }}>
-                <UserOutlined /> Top Khách Hàng Thân Thiết
-              </Text>
-            </div>
-
             {/* FILTERS ROW 1 */}
-            <Row gutter={[10, 12]} align="bottom">
+            <Row gutter={[10, 12]} align="bottom" style={{ marginBottom: 20, paddingBottom: 16, borderBottom: "1px solid #e8e8e8" }}>
+              <Col xs={24} sm={12} md={8} lg={6}>
+                <div>
+                  <Title level={2} style={{ margin: 0, color: "#1890ff", marginBottom: 4 }}>
+                    {currentStore.name || "Đang tải..."}
+                  </Title>
+                  <Text style={{ color: "black", fontSize: "18px" }}>
+                    <UserOutlined /> Top Khách Hàng Thân Thiết
+                  </Text>
+                </div>
+              </Col>
               {/* Loại kỳ */}
-              <Col xs={24} sm={12} md={6} lg={4}>
+              <Col xs={24} sm={12} md={6} lg={3}>
                 <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
                   <Text strong style={{ marginBottom: 8, minHeight: 22 }}>
                     Loại kỳ
                   </Text>
-                  <Select value={periodType} onChange={setPeriodType} style={{ width: "100%" }} size="middle">
+                  <Select value={periodType} onChange={setPeriodType} allowClear style={{ width: "100%" }} size="middle">
                     <Option value="day">Ngày</Option>
                     <Option value="month">Tháng</Option>
                     <Option value="quarter">Quý</Option>
@@ -399,7 +441,7 @@ const TopCustomer = () => {
               </Col>
 
               {/* Chọn thời gian */}
-              <Col xs={24} sm={12} md={8} lg={5}>
+              <Col xs={24} sm={12} md={8} lg={4}>
                 <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
                   <Text strong style={{ marginBottom: 8, minHeight: 22 }}>
                     {periodType === "day" && "Chọn ngày"}
@@ -414,6 +456,7 @@ const TopCustomer = () => {
                     <DatePicker
                       picker="date"
                       format="DD-MM-YYYY"
+                      allowClear
                       style={{ width: "100%" }}
                       size="middle"
                       placeholder="Chọn ngày"
@@ -435,7 +478,7 @@ const TopCustomer = () => {
 
                   {/* Quý */}
                   {periodType === "quarter" && (
-                    <Select style={{ width: "100%" }} size="middle" placeholder="Chọn quý" onChange={(v) => setPeriodKey(v)}>
+                    <Select style={{ width: "100%" }} allowClear size="middle" placeholder="Chọn quý" onChange={(v) => setPeriodKey(v)}>
                       <Option value={`${dayjs().year()}-Q1`}>Quý 1 - {dayjs().year()}</Option>
                       <Option value={`${dayjs().year()}-Q2`}>Quý 2 - {dayjs().year()}</Option>
                       <Option value={`${dayjs().year()}-Q3`}>Quý 3 - {dayjs().year()}</Option>
@@ -449,6 +492,7 @@ const TopCustomer = () => {
                       picker="year"
                       style={{ width: "100%" }}
                       size="middle"
+                      allowClear
                       placeholder="Chọn năm"
                       value={periodKey ? dayjs(periodKey, "YYYY") : null}
                       onChange={(date) => {
@@ -468,6 +512,7 @@ const TopCustomer = () => {
                       picker="month"
                       style={{ width: "100%" }}
                       size="middle"
+                      allowClear
                       placeholder="Từ tháng"
                       onChange={(d) => setMonthFrom(d?.format("YYYY-MM") || "")}
                     />
@@ -477,7 +522,7 @@ const TopCustomer = () => {
 
               {/* Đến tháng - chỉ hiện khi custom */}
               {periodType === "custom" && (
-                <Col xs={24} sm={12} md={8} lg={5}>
+                <Col xs={24} sm={12} md={8} lg={4}>
                   <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
                     <Text strong style={{ marginBottom: 8, minHeight: 22 }}>
                       Đến tháng
@@ -486,6 +531,7 @@ const TopCustomer = () => {
                       picker="month"
                       style={{ width: "100%" }}
                       size="middle"
+                      allowClear
                       placeholder="Đến tháng"
                       onChange={(d) => setMonthTo(d?.format("YYYY-MM") || "")}
                     />
@@ -532,75 +578,45 @@ const TopCustomer = () => {
                       style={{ width: "100%" }}
                       size="middle"
                       placeholder="VD: 30"
+                      disabled={!hasFetched || customers.length === 0}
                     />
-                  </div>
-                </Col>
-              )}
-
-              {/* Nút Xem kết quả */}
-              <Col xs={24} sm={12} md={6} lg={4}>
-                <div style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "flex-end" }}>
-                  <Button type="primary" icon={<SearchOutlined />} onClick={fetchTopCustomers} style={{ width: "100%" }} size="middle">
-                    Xem kết quả
-                  </Button>
-                </div>
-              </Col>
-
-              {/* Nút Xuất Excel - ẩn khi custom */}
-              {periodType !== "custom" && (
-                <Col xs={24} sm={12} md={6} lg={4}>
-                  <div style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "flex-end" }}>
-                    <Button
-                      icon={<FileExcelOutlined />}
-                      style={{ width: "100%" }}
-                      size="middle"
-                      type="primary"
-                      onClick={() => handleExport("xlsx")}
-                      disabled={filtered.length === 0}
-                    >
-                      Xuất Excel
-                    </Button>
                   </div>
                 </Col>
               )}
             </Row>
 
-            {/* ROW 2 - Nút Excel khi custom */}
-            {periodType === "custom" && (
-              <Row gutter={[10, 12]} style={{ marginTop: 12 }}>
-                <Col xs={24} sm={12} md={8} lg={4} lgOffset={20}>
-                  <Button
-                    icon={<FileExcelOutlined />}
-                    style={{ width: "100%" }}
-                    size="middle"
-                    type="primary"
-                    onClick={() => handleExport("xlsx")}
-                    disabled={filtered.length === 0}
-                  >
-                    Xuất Excel
-                  </Button>
-                </Col>
-              </Row>
-            )}
-
-            {/* TÌM KIẾM */}
-            <Row style={{ marginTop: 16 }}>
-              <Col span={24}>
+            {/* ROW 2 - TÌM KIẾM + NÚT XUẤT EXCEL */}
+            <Row gutter={[10, 12]} style={{ marginTop: 16 }} align="bottom">
+              {/* Search */}
+              <Col xs={24} sm={18}>
                 <Search
                   placeholder="Tìm tên hoặc số điện thoại..."
                   allowClear
-                  enterButton="Tìm kiếm"
                   size="large"
                   onSearch={setSearchText}
+                  disabled={!hasFetched || customers.length === 0}
                   onChange={(e) => setSearchText(e.target.value)}
                   style={{ width: "100%" }}
                 />
+              </Col>
+
+              {/* Nút Xuất Excel */}
+              <Col xs={24} sm={6}>
+                <Button
+                  icon={<FileExcelOutlined />}
+                  style={{ width: "100%" }}
+                  size="large"
+                  type="primary"
+                  onClick={() => handleExport("xlsx")}
+                  disabled={filtered.length === 0}
+                >
+                  Xuất Excel
+                </Button>
               </Col>
             </Row>
           </Card>
 
           {/* LOADING & ERROR */}
-          {loading && <Spin tip="Đang tải top khách hàng..." style={{ width: "100%", margin: "20px 0" }} />}
           {error && <Alert message="Lỗi" description={error} type="error" showIcon />}
 
           {/* BẢNG */}
@@ -610,50 +626,55 @@ const TopCustomer = () => {
               <Space>
                 <DollarOutlined style={{ color: "#d4380d" }} />
                 <Text strong>
-                  Top {filtered.length} khách hàng thân thiết - {getPeriodDisplayText()}
+                  Top {filtered.length} khách hàng thân thiết{" "}
+                  <Text strong>
+                    Top {filtered.length} khách hàng thân thiết - <Tag color="blue">{getPeriodDisplayText()}</Tag>
+                  </Text>
                 </Text>
               </Space>
             }
           >
-            <Table
-              columns={columns}
-              dataSource={filtered}
-              rowKey={(r) => r.customerPhone}
-              pagination={{
-                current: currentPage,
-                pageSize,
-                total: filtered.length,
-                showSizeChanger: true,
-                onChange: (page, size) => {
-                  setCurrentPage(page);
-                  setPageSize(size);
-                },
-                showTotal: (total, range) => (
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: "#555" }}>
-                    <div>
-                      Đang xem{" "}
-                      <span style={{ color: "#1890ff", fontWeight: 600 }}>
-                        {range[0]} – {range[1]}
-                      </span>{" "}
-                      trên tổng số <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> khách hàng
+            <Spin spinning={loading}>
+              <Table
+                columns={columns}
+                dataSource={filtered}
+                rowKey={(r) => r.customerPhone}
+                pagination={{
+                  current: currentPage,
+                  pageSize,
+                  total: filtered.length,
+                  showSizeChanger: true,
+                  onChange: (page, size) => {
+                    setCurrentPage(page);
+                    setPageSize(size);
+                  },
+                  showTotal: (total, range) => (
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: "#555" }}>
+                      <div>
+                        Đang xem{" "}
+                        <span style={{ color: "#1890ff", fontWeight: 600 }}>
+                          {range[0]} – {range[1]}
+                        </span>{" "}
+                        trên tổng số <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> khách hàng
+                      </div>
                     </div>
-                  </div>
-                ),
-              }}
-              locale={{
-                emptyText: (
-                  <div style={{ color: "#f45a07f7", textAlign: "center", padding: "20px" }}>
-                    {hasFetched ? (
-                      <>
-                        Không có dữ liệu khách hàng trong kỳ: <strong>{getPeriodDisplayText()}</strong>
-                      </>
-                    ) : (
-                      "Chưa có dữ liệu. Hãy chọn kỳ thống kê và nhấn 'Xem kết quả' để tải!"
-                    )}
-                  </div>
-                ),
-              }}
-            />
+                  ),
+                }}
+                locale={{
+                  emptyText: (
+                    <div style={{ color: "#f45a07f7", textAlign: "center", padding: "20px" }}>
+                      {hasFetched ? (
+                        <>
+                          Không có dữ liệu khách hàng trong kỳ: <strong>{getPeriodDisplayText()}</strong>
+                        </>
+                      ) : (
+                        "Chưa có dữ liệu. Hãy chọn kỳ thống kê và nhấn 'Xem kết quả' để tải!"
+                      )}
+                    </div>
+                  ),
+                }}
+              />
+            </Spin>
           </Card>
         </Space>
       </div>

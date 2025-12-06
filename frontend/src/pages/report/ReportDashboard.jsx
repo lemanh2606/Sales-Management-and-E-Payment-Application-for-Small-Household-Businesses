@@ -28,7 +28,7 @@ import quarterOfYear from "dayjs/plugin/quarterOfYear";
 import Layout from "../../components/Layout";
 import "dayjs/locale/vi"; // ✅ LOCALE VI
 
-const { Text } = Typography;
+const { Title, Text, Paragraph } = Typography;
 
 dayjs.locale("vi"); // ✅ SET LOCALE VI
 dayjs.extend(localizedFormat);
@@ -209,8 +209,14 @@ const ReportDashboard = () => {
           <Card style={{ border: "1px solid #8c8c8c" }}>
             <Row gutter={16} align="middle">
               <Col span={6}>
-                <span style={{ color: "#1890ff", fontWeight: "bold", fontSize: "20px" }}>{currentStore.name || "Đang tải..."}</span>
+                <Title level={2} style={{ margin: 0, color: "#1890ff", lineHeight: 1.2 }}>
+                  {currentStore.name}
+                </Title>
+                <Text type="secondary" style={{ color: "#595959", fontSize: "16px", display: "block", marginTop: 4 }}>
+                  Báo cáo tổng quan
+                </Text>
               </Col>
+
               <Col span={5}>
                 <label>Kỳ báo cáo:</label>
                 <Select style={{ width: "100%", marginTop: 8 }} value={periodType} onChange={handleTypeChange}>
@@ -336,7 +342,7 @@ const ReportDashboard = () => {
                     <Statistic
                       title={
                         <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <span style={{color:"black"}}>Doanh thu</span>
+                          <span style={{ color: "black" }}>Doanh thu</span>
                           <AntTooltip title="Doanh thu là tổng số tiền thu được từ việc bán hàng (chưa trừ chi phí).">
                             <InfoCircleOutlined style={{ color: "#178fff", cursor: "pointer" }} />
                           </AntTooltip>
@@ -353,7 +359,7 @@ const ReportDashboard = () => {
                     <Statistic
                       title={
                         <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <span style={{color:"black"}}>Lợi nhuận gộp</span>
+                          <span style={{ color: "black" }}>Lợi nhuận gộp</span>
                           <AntTooltip title="Lợi nhuận gộp = Doanh thu − Chi phí nhập hàng(COGS).">
                             <InfoCircleOutlined style={{ color: "#178fff", cursor: "pointer" }} />
                           </AntTooltip>
@@ -370,7 +376,7 @@ const ReportDashboard = () => {
                     <Statistic
                       title={
                         <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <span style={{color:"black"}}>Chi phí vận hành</span>
+                          <span style={{ color: "black" }}>Chi phí vận hành</span>
                           <AntTooltip title="Chi phí vận hành bao gồm = lương nhân viên + chi phí duy trì hoạt động bên ngoài được nhập ở ô Chi phí ngoài bên trên.">
                             <InfoCircleOutlined style={{ color: "#178fff", cursor: "pointer" }} />
                           </AntTooltip>
@@ -387,7 +393,7 @@ const ReportDashboard = () => {
                     <Statistic
                       title={
                         <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <span style={{color:"black"}}>VAT</span>
+                          <span style={{ color: "black" }}>VAT</span>
                           <AntTooltip title="Tổng số tiền thuế giá trị gia tăng (VAT) đã thu từ các đơn hàng trong kỳ báo cáo.">
                             <InfoCircleOutlined style={{ color: "#178fff", cursor: "pointer" }} />
                           </AntTooltip>
@@ -404,7 +410,7 @@ const ReportDashboard = () => {
                     <Statistic
                       title={
                         <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <span style={{color:"black"}}>Lợi nhuận ròng</span>
+                          <span style={{ color: "black" }}>Lợi nhuận ròng</span>
                           <AntTooltip title="Lợi nhuận ròng = Lợi nhuận gộp − Chi phí vận hành - Thuế VAT. Đây là số tiền thật sự bạn kiếm được.">
                             <InfoCircleOutlined style={{ color: "#178fff", cursor: "pointer" }} />
                           </AntTooltip>

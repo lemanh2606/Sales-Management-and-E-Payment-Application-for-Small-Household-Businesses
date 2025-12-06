@@ -223,15 +223,14 @@ export default function ProductListPage() {
 
     setFilteredProducts(filtered);
     setCurrentPage(1);
-
-    if (searchValue.trim()) {
-      api.info({
-        message: `🔍 Kết quả tìm kiếm`,
-        description: `Tìm thấy ${filtered.length} sản phẩm phù hợp với từ khóa "${searchValue}"`,
-        placement: "topRight",
-        duration: 2,
-      });
-    }
+    // if (searchValue.trim()) {
+    //   api.info({
+    //     message: `🔍 Kết quả tìm kiếm`,
+    //     description: `Tìm thấy ${filtered.length} sản phẩm phù hợp với từ khóa "${searchValue}"`,
+    //     placement: "topRight",
+    //     duration: 2,
+    //   });
+    // }
   }, [searchValue, allProducts]);
 
   const searchOptions = useMemo(() => {
@@ -287,12 +286,12 @@ export default function ProductListPage() {
     setVisibleColumns(checkedValues);
     localStorage.setItem("productVisibleColumns", JSON.stringify(checkedValues));
 
-    api.success({
-      message: "✅ Cập nhật cột thành công",
-      description: `Hiện tại hiển thị ${checkedValues.length} cột`,
-      placement: "bottomRight",
-      duration: 2,
-    });
+    // api.success({
+    //   message: "✅ Cập nhật cột thành công",
+    //   description: `Hiện tại hiển thị ${checkedValues.length} cột`,
+    //   placement: "bottomRight",
+    //   duration: 2,
+    // });
   };
 
   const resetImportState = () => {
@@ -518,6 +517,7 @@ export default function ProductListPage() {
         title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Trạng thái</span>,
         dataIndex: "status",
         key: "status",
+        fixed: "right",
         width: isMobile ? 140 : 170,
         align: "center",
         render: (value) => (
@@ -534,16 +534,28 @@ export default function ProductListPage() {
         title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Giá vốn</span>,
         dataIndex: "cost_price",
         key: "cost_price",
-        width: isMobile ? 110 : 150,
-        align: "right",
-        render: (value) => (
-          <Text type="secondary" style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
-            {value ? `${value.toLocaleString()}₫` : "-"}
-          </Text>
-        ),
+        width: isMobile ? 110 : 130,
+        align: "center",
+        render: (value) =>
+          value ? (
+            <Tag
+              color="#a1ec44d2" // xanh lá nhạt trong suốt
+              style={{
+                borderRadius: 6,
+                padding: "2px 8px",
+                border: "1px solid #56AB2F55",
+                color: "black",
+                fontSize: "clamp(11px, 2.5vw, 13px)",
+              }}
+            >
+              {value.toLocaleString()}₫
+            </Tag>
+          ) : (
+            "-"
+          ),
       },
       supplier: {
-        title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>NCC</span>,
+        title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Nhà cung cấp</span>,
         dataIndex: "supplier",
         key: "supplier",
         width: isMobile ? 120 : 150,
@@ -551,7 +563,7 @@ export default function ProductListPage() {
         render: (value) => <Text style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>{value?.name || "-"}</Text>,
       },
       group: {
-        title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Nhóm</span>,
+        title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Nhóm sản phẩm</span>,
         dataIndex: "group",
         key: "group",
         width: isMobile ? 120 : 150,
@@ -563,14 +575,15 @@ export default function ProductListPage() {
         ),
       },
       unit: {
-        title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>ĐV</span>,
+        title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Đơn vị</span>,
         dataIndex: "unit",
+        align: "center",
         key: "unit",
         width: 100,
         render: (value) => <span style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>{value || "-"}</span>,
       },
       min_stock: {
-        title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Min</span>,
+        title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Tồn tối thiểu</span>,
         dataIndex: "min_stock",
         key: "min_stock",
         width: 100,
@@ -578,7 +591,7 @@ export default function ProductListPage() {
         render: (value) => <span style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>{value || 0}</span>,
       },
       max_stock: {
-        title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Max</span>,
+        title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Tồn tối đa</span>,
         dataIndex: "max_stock",
         key: "max_stock",
         width: 100,
@@ -612,6 +625,7 @@ export default function ProductListPage() {
         dataIndex: "createdAt",
         key: "createdAt",
         width: 120,
+        align: "center",
         render: (value) => <span style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>{value ? new Date(value).toLocaleDateString("vi-VN") : "-"}</span>,
       },
       updatedAt: {
@@ -619,11 +633,40 @@ export default function ProductListPage() {
         dataIndex: "updatedAt",
         key: "updatedAt",
         width: 120,
+        align: "center",
         render: (value) => <span style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>{value ? new Date(value).toLocaleDateString("vi-VN") : "-"}</span>,
       },
     };
 
-    const columns = visibleColumns.map((key) => columnConfigs[key]).filter(Boolean);
+    // Thứ tự cố định mong muốn cho các cột chính, từ trái qua phải
+    const leftFixedOrder = ["name", "sku", "price", "stock_quantity"];
+    // các cột luôn phải nằm ngay trước cột hành động
+    const rightFixed = ["status"];
+    // Xây danh sách các cột "middle":
+    // Đây là những cột được chọn hiển thị (visibleColumns),nhưng KHÔNG nằm trong nhóm cố định bên trái (leftFixedOrder)
+    // và KHÔNG phải cột "status" (rightFixed). Những cột này sẽ được chèn vào giữa "tồn kho" và "trạng thái".
+    const middleColumnsKeys = allColumns
+      .map((c) => c.key) // Giữ thứ tự chuẩn theo allColumns để tránh việc các cột bị lộn xộn
+      .filter(
+        (key) =>
+          visibleColumns.includes(key) && // Chỉ lấy các cột mà người dùng đang bật
+          !leftFixedOrder.includes(key) && // Loại bỏ các cột cố định bên trái
+          !rightFixed.includes(key) // Loại bỏ cột trạng thái (sẽ thêm sau)
+      );
+
+    // Xây cấu trúc mảng columns theo thứ tự mong muốn:
+    // 1. Nhóm cố định bên trái (nếu đang được bật)
+    // 2. Các cột middle người dùng chọn thêm
+    // 3. Cột trạng thái (nếu bật)
+    // 4. Cuối cùng sẽ push thêm cột Thao tác ở dưới (ngoài đoạn này)
+    const columns = [
+      // Thêm các cột cố định bên trái (nếu người dùng bật)
+      ...leftFixedOrder.filter((k) => visibleColumns.includes(k)).map((k) => columnConfigs[k]),
+      // Thêm các cột middle (các cột chọn thêm)
+      ...middleColumnsKeys.map((k) => columnConfigs[k]),
+      // Thêm cột trạng thái (nếu có bật)
+      ...(visibleColumns.includes("status") ? [columnConfigs["status"]] : []),
+    ].filter(Boolean); // Lọc bỏ giá trị null/undefined để tránh lỗ
 
     columns.push({
       title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Thao tác</span>,
@@ -813,11 +856,11 @@ export default function ProductListPage() {
       link.click();
       window.URL.revokeObjectURL(url);
 
-      api.success({
-        message: "🎉 Xuất Excel thành công",
-        description: "File đã được tải xuống",
-        placement: "topRight",
-      });
+      // api.success({
+      //   message: "🎉 Xuất Excel thành công",
+      //   description: "File đã được tải xuống",
+      //   placement: "topRight",
+      // });
     } catch (error) {
       console.error("Export Excel error:", error);
       api.error({
@@ -832,7 +875,7 @@ export default function ProductListPage() {
     return (
       <Layout>
         {contextHolder}
-        <Card style={{ margin: isMobile ? 12 : 24, borderRadius: 16 }}>
+        <Card style={{ margin: isMobile ? 12 : 0, borderRadius: 16 }}>
           <Title level={2} style={{ fontSize: "clamp(20px, 5vw, 32px)" }}>
             Danh sách sản phẩm
           </Title>
@@ -852,15 +895,13 @@ export default function ProductListPage() {
 
       <div
         style={{
-          padding: isMobile ? 1 : 5,
-          background: "#ffffff",
+          padding: isMobile ? 1 : 0,
           minHeight: "100vh",
         }}
       >
         <Card
           style={{
             borderRadius: 16,
-            boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
             marginBottom: isMobile ? 10 : 15,
           }}
         >
@@ -871,10 +912,10 @@ export default function ProductListPage() {
                 margin: 0,
                 background: "#ffffff",
                 WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
                 fontSize: "clamp(20px, 6vw, 32px)",
                 fontWeight: 700,
                 marginBottom: isMobile ? 4 : 8,
+                color: "black",
               }}
             >
               📦 Quản lý Sản phẩm
@@ -888,73 +929,10 @@ export default function ProductListPage() {
 
           <Row gutter={[isMobile ? 8 : 16, isMobile ? 8 : 16]} style={{ marginBottom: isMobile ? 16 : 24 }}>
             <Col xs={12} sm={12} md={6}>
-              <Card
-                style={{
-                  background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                  border: "none",
-                  borderRadius: 12,
-                }}
-                styles={{ body: { padding: isMobile ? 12 : 20 } }}
-              >
-                <Statistic
-                  title={<span style={{ color: "#fff", fontSize: "clamp(10px, 2.5vw, 14px)", fontWeight: 500 }}>Tổng SP</span>}
-                  value={filteredProducts.length}
-                  prefix={<AppstoreOutlined style={{ fontSize: "clamp(14px, 4vw, 20px)" }} />}
-                  valueStyle={{
-                    color: "#fff",
-                    fontWeight: "bold",
-                    fontSize: "clamp(16px, 5vw, 24px)",
-                  }}
-                />
-              </Card>
-            </Col>
-            <Col xs={12} sm={12} md={6}>
-              <Card
-                style={{
-                  background: "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
-                  border: "none",
-                  borderRadius: 12,
-                }}
-                styles={{ body: { padding: isMobile ? 12 : 20 } }}
-              >
-                <Statistic
-                  title={<span style={{ color: "#fff", fontSize: "clamp(10px, 2.5vw, 14px)", fontWeight: 500 }}>Đang KD</span>}
-                  value={activeProducts}
-                  prefix={<CheckCircleOutlined style={{ fontSize: "clamp(14px, 4vw, 20px)" }} />}
-                  valueStyle={{
-                    color: "#fff",
-                    fontWeight: "bold",
-                    fontSize: "clamp(16px, 5vw, 24px)",
-                  }}
-                />
-              </Card>
-            </Col>
-            <Col xs={12} sm={12} md={6}>
-              <Card
-                style={{
-                  background: "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",
-                  border: "none",
-                  borderRadius: 12,
-                }}
-                styles={{ body: { padding: isMobile ? 12 : 20 } }}
-              >
-                <Statistic
-                  title={<span style={{ color: "#fff", fontSize: "clamp(10px, 2.5vw, 14px)", fontWeight: 500 }}>Tồn kho</span>}
-                  value={totalStock}
-                  prefix={<StockOutlined style={{ fontSize: "clamp(14px, 4vw, 20px)" }} />}
-                  valueStyle={{
-                    color: "#fff",
-                    fontWeight: "bold",
-                    fontSize: "clamp(16px, 5vw, 24px)",
-                  }}
-                />
-              </Card>
-            </Col>
-            <Col xs={12} sm={12} md={6}>
-              <Tooltip title="Công thức tính: 'Tồn kho' x 'Giá bán'">
+              <Tooltip title="Tổng số sản phẩm trong cửa hàng hiện tại">
                 <Card
                   style={{
-                    background: "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",
+                    background: "#2C5364",
                     border: "none",
                     borderRadius: 12,
                     cursor: "pointer",
@@ -962,7 +940,95 @@ export default function ProductListPage() {
                   styles={{ body: { padding: isMobile ? 12 : 20 } }}
                 >
                   <Statistic
-                    title={<span style={{ color: "#fff", fontSize: "clamp(10px, 2.5vw, 14px)", fontWeight: 500 }}>Giá trị</span>}
+                    title={
+                      <span style={{ color: "#fff", fontSize: "clamp(10px, 2.5vw, 14px)", fontWeight: 500 }}>
+                        Tổng sản phẩm <InfoCircleOutlined style={{ color: "#2196F3", fontSize: 15 }} />{" "}
+                      </span>
+                    }
+                    value={filteredProducts.length}
+                    prefix={<AppstoreOutlined style={{ fontSize: "clamp(14px, 4vw, 20px)" }} />}
+                    valueStyle={{
+                      color: "#fff",
+                      fontWeight: "bold",
+                      fontSize: "clamp(16px, 5vw, 24px)",
+                    }}
+                  />
+                </Card>
+              </Tooltip>
+            </Col>
+            <Col xs={12} sm={12} md={6}>
+              <Tooltip title="Số lượng mặt hàng đang được kinh doanh">
+                <Card
+                  style={{
+                    background: "#2C5364",
+                    border: "none",
+                    borderRadius: 12,
+                    cursor: "pointer",
+                  }}
+                  styles={{ body: { padding: isMobile ? 12 : 20 } }}
+                >
+                  <Statistic
+                    title={
+                      <span style={{ color: "#fff", fontSize: "clamp(10px, 2.5vw, 14px)", fontWeight: 500 }}>
+                        Đang kinh doanh <InfoCircleOutlined style={{ color: "#2196F3", fontSize: 15 }} />
+                      </span>
+                    }
+                    value={activeProducts}
+                    prefix={<CheckCircleOutlined style={{ fontSize: "clamp(14px, 4vw, 20px)" }} />}
+                    valueStyle={{
+                      color: "#fff",
+                      fontWeight: "bold",
+                      fontSize: "clamp(16px, 5vw, 24px)",
+                    }}
+                  />
+                </Card>
+              </Tooltip>
+            </Col>
+            <Col xs={12} sm={12} md={6}>
+              <Tooltip title="Số lượng tồn kho hiện tại của tất cả sản phẩm">
+                <Card
+                  style={{
+                    background: "#2C5364",
+                    border: "none",
+                    borderRadius: 12,
+                    cursor: "pointer",
+                  }}
+                  styles={{ body: { padding: isMobile ? 12 : 20 } }}
+                >
+                  <Statistic
+                    title={
+                      <span style={{ color: "#fff", fontSize: "clamp(10px, 2.5vw, 14px)", fontWeight: 500 }}>
+                        Tồn kho <InfoCircleOutlined style={{ color: "#2196F3", fontSize: 15 }} />{" "}
+                      </span>
+                    }
+                    value={totalStock}
+                    prefix={<StockOutlined style={{ fontSize: "clamp(14px, 4vw, 20px)" }} />}
+                    valueStyle={{
+                      color: "#fff",
+                      fontWeight: "bold",
+                      fontSize: "clamp(16px, 5vw, 24px)",
+                    }}
+                  />
+                </Card>
+              </Tooltip>
+            </Col>
+            <Col xs={12} sm={12} md={6}>
+              <Tooltip title="Công thức tính: 'Tồn kho' x 'Giá bán'">
+                <Card
+                  style={{
+                    background: "#2C5364",
+                    border: "none",
+                    borderRadius: 12,
+                    cursor: "pointer",
+                  }}
+                  styles={{ body: { padding: isMobile ? 12 : 20 } }}
+                >
+                  <Statistic
+                    title={
+                      <span style={{ color: "#fff", fontSize: "clamp(10px, 2.5vw, 14px)", fontWeight: 500 }}>
+                        Giá trị <InfoCircleOutlined style={{ color: "#2196F3", fontSize: 15 }} />{" "}
+                      </span>
+                    }
                     value={totalValue}
                     prefix={<DollarOutlined style={{ fontSize: "clamp(14px, 4vw, 20px)" }} />}
                     suffix="₫"

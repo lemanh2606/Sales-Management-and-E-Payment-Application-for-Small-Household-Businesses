@@ -199,12 +199,12 @@ export default function SupplierListPage() {
     setEditSupplierId(supplierId);
     setFormModalOpen(true);
 
-    api.info({
-      message: supplierId ? "✏️ Chỉnh sửa nhà cung cấp" : "📝 Thêm nhà cung cấp mới",
-      description: supplierId ? "Vui lòng cập nhật thông tin nhà cung cấp" : "Vui lòng điền đầy đủ thông tin nhà cung cấp",
-      placement: "topRight",
-      duration: 2,
-    });
+    // api.info({
+    //   message: supplierId ? "✏️ Chỉnh sửa nhà cung cấp" : "📝 Thêm nhà cung cấp mới",
+    //   description: supplierId ? "Vui lòng cập nhật thông tin nhà cung cấp" : "Vui lòng điền đầy đủ thông tin nhà cung cấp",
+    //   placement: "topRight",
+    //   duration: 2,
+    // });
   };
 
   const openDetail = (supplierId) => {
@@ -448,14 +448,14 @@ export default function SupplierListPage() {
             <Col xs={12} sm={12} md={8}>
               <Card
                 style={{
-                  background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                  background: "#2C5364",
                   border: "none",
                   borderRadius: 12,
                 }}
                 styles={{ body: { padding: isMobile ? 12 : 24 } }}
               >
                 <Statistic
-                  title={<span style={{ color: "#fff", fontSize: isMobile ? 11 : 14 }}>Tổng NCC</span>}
+                  title={<span style={{ color: "#fff", fontSize: isMobile ? 11 : 14 }}>Tổng nhà cung cấp</span>}
                   value={filteredSuppliers.length}
                   prefix={<TeamOutlined style={{ fontSize: isMobile ? 16 : 24 }} />}
                   valueStyle={{ color: "#fff", fontWeight: "bold", fontSize: isMobile ? 18 : 24 }}
@@ -466,7 +466,7 @@ export default function SupplierListPage() {
             <Col xs={12} sm={12} md={8}>
               <Card
                 style={{
-                  background: "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",
+                  background: "#03cc43ff",
                   border: "none",
                   borderRadius: 12,
                 }}
@@ -484,7 +484,7 @@ export default function SupplierListPage() {
             <Col xs={12} sm={12} md={8}>
               <Card
                 style={{
-                  background: "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
+                  background: "#db1111ff",
                   border: "none",
                   borderRadius: 12,
                 }}
