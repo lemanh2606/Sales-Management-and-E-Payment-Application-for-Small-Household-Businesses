@@ -1,26 +1,12 @@
 // src/pages/report/TopProductsReport.jsx
 import React, { useState, useEffect } from "react";
-import {
-  Card,
-  Col,
-  Row,
-  Select,
-  InputNumber,
-  Button,
-  Table,
-  Space,
-  Typography,
-  Spin,
-  Alert,
-  Dropdown,
-  Menu,
-} from "antd";
+import { Card, Col, Row, Select, InputNumber, Button, Table, Space, Typography, Spin, Alert, Dropdown, Menu } from "antd";
 import { SearchOutlined, FileExcelOutlined, FilePdfOutlined, DownloadOutlined } from "@ant-design/icons";
 import axios from "axios";
 import Layout from "../../components/Layout";
 
 const { Option } = Select;
-const { Text } = Typography;
+const { Title, Text, Paragraph } = Typography;
 const apiUrl = import.meta.env.VITE_API_URL;
 const TopProductsReport = () => {
   const [loading, setLoading] = useState(false);
@@ -218,8 +204,11 @@ const TopProductsReport = () => {
           <Card style={{ border: "1px solid #8c8c8c" }}>
             <Row gutter={16} align="middle">
               <Col span={6}>
-                <Text strong style={{ fontSize: 20, color: "#1890ff" }}>
+                <Title level={2} style={{ margin: 0, color: "#1890ff", lineHeight: 1.2 }}>
                   {currentStore.name || "Đang tải..."}
+                </Title>
+                <Text type="secondary" style={{ color: "#595959", fontSize: "16px", display: "block", marginTop: 4 }}>
+                  Danh sách các sản phẩm bán chạy
                 </Text>
               </Col>
 
@@ -267,12 +256,7 @@ const TopProductsReport = () => {
               )}
 
               <Col span={3}>
-                <Button
-                  type="primary"
-                  icon={<SearchOutlined />}
-                  onClick={fetchTopProducts}
-                  style={{ marginTop: 32, width: "100%" }}
-                >
+                <Button type="primary" icon={<SearchOutlined />} onClick={fetchTopProducts} style={{ marginTop: 32, width: "100%" }}>
                   Xem kết quả
                 </Button>
               </Col>
@@ -328,10 +312,7 @@ const TopProductsReport = () => {
                 emptyText: (
                   <div style={{ color: "#f45a07f7" }}>
                     {hasFetched
-                      ? `${rangeTextMap[range]
-                        ? rangeTextMap[range][0].toUpperCase() + rangeTextMap[range].slice(1)
-                        : range
-                      } chưa có dữ liệu nào!`
+                      ? `${rangeTextMap[range] ? rangeTextMap[range][0].toUpperCase() + rangeTextMap[range].slice(1) : range} chưa có dữ liệu nào!`
                       : "Chưa có dữ liệu. Hãy chọn kỳ thống kê và nhấn 'Xem kết quả' để tải!"}
                   </div>
                 ),

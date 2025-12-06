@@ -133,7 +133,8 @@ export const getInventoryReport = async (req, res) => {
 
       // Tồn đầu kỳ (chỉ có khi chọn kỳ)
       // Tồn đầu kỳ = tồn cuối kỳ + xuất - nhập + trả (tạm tính, chưa có phiếu nhập kho lịch sử)
-      const openingStock = from ? closingStock + exportedQty + returnedQty - importedQty : null;
+      // const openingStock = from ? closingStock + exportedQty + returnedQty - importedQty : null;
+      const openingStock = from && to ? closingStock - importedQty + exportedQty - returnedQty : null;
 
       report.push({
         index: index + 1,

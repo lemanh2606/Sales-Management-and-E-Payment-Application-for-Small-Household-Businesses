@@ -1,30 +1,7 @@
 // src/pages/setting/Notification.tsx
 import React, { useState, useEffect, useCallback } from "react";
-import {
-  Card,
-  Table,
-  Input,
-  Select,
-  Button,
-  Space,
-  Tag,
-  Dropdown,
-  Menu,
-  Empty,
-  Badge,
-  DatePicker,
-  Tooltip,
-  Modal,
-} from "antd";
-import {
-  SearchOutlined,
-  BellOutlined,
-  CheckOutlined,
-  DeleteOutlined,
-  MoreOutlined,
-  ReloadOutlined,
-  CloseCircleOutlined,
-} from "@ant-design/icons";
+import { Card, Table, Input, Select, Button, Space, Tag, Dropdown, Menu, Empty, Badge, DatePicker, Tooltip, Modal } from "antd";
+import { SearchOutlined, BellOutlined, CheckOutlined, DeleteOutlined, MoreOutlined, ReloadOutlined, CloseCircleOutlined } from "@ant-design/icons";
 import type { ColumnsType, TablePaginationConfig } from "antd/es/table";
 import axios from "axios";
 import dayjs, { Dayjs } from "dayjs";
@@ -92,7 +69,8 @@ const READ_STATUS = {
 
 // ===== COMPONENT =====
 const Notification: React.FC = () => {
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [rawNotifications, setRawNotifications] = useState<NotificationItem[]>([]); // Dữ liệu gốc từ server
+  const [filteredNotifications, setFilteredNotifications] = useState<NotificationItem[]>([]); // Dữ liệu sau khi lọc
   const [loading, setLoading] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [filters, setFilters] = useState<FilterState>({
@@ -137,42 +115,16 @@ const Notification: React.FC = () => {
         if (filters.type !== "all") params.append("type", filters.type);
         if (filters.read !== "all") params.append("read", filters.read);
 
-        const res = await axios.get<NotificationResponse>(
-          `${apiUrl}/notifications?${params}`,
-          {
-            headers,
-          }
-        );
+        const res = await axios.get<NotificationResponse>(`${apiUrl}/notifications?${params}`, { headers });
 
-        let data = res.data.data;
+        // Chỉ set dữ liệu gốc, không lọc ở đây nữa!
+        setRawNotifications(res.data.data);
 
-        // Search filter (client-side)
-        if (searchText.trim()) {
-          const search = searchText.toLowerCase().trim();
-          data = data.filter(
-            (item) =>
-              item.title.toLowerCase().includes(search) ||
-              item.message.toLowerCase().includes(search)
-          );
-        }
-
-        // Date range filter (client-side)
-        if (filters.dateRange && filters.dateRange[0] && filters.dateRange[1]) {
-          const [start, end] = filters.dateRange;
-          data = data.filter((item) => {
-            const date = dayjs(item.createdAt);
-            return (
-              date.isAfter(start.startOf("day")) &&
-              date.isBefore(end.endOf("day"))
-            );
-          });
-        }
-
-        setNotifications(data);
+        // Cập nhật pagination bằng meta từ server (QUAN TRỌNG NHẤT!!!)
         setPagination({
           current: res.data.meta.page,
           pageSize: res.data.meta.limit,
-          total: res.data.meta.total,
+          total: res.data.meta.total, // ← Đây là tổng thật từ server (50+)
         });
       } catch (err: any) {
         Swal.fire({
@@ -185,8 +137,29 @@ const Notification: React.FC = () => {
         setLoading(false);
       }
     },
-    [storeId, filters, searchText, headers]
+    [storeId, filters.type, filters.read, headers] // ← searchText và dateRange KHÔNG nằm ở đây nữa
   );
+
+  useEffect(() => {
+    let data = [...rawNotifications];
+
+    // Search filter
+    if (searchText.trim()) {
+      const search = searchText.toLowerCase().trim();
+      data = data.filter((item) => item.title.toLowerCase().includes(search) || item.message.toLowerCase().includes(search));
+    }
+
+    // Date range filter
+    if (filters.dateRange && filters.dateRange[0] && filters.dateRange[1]) {
+      const [start, end] = filters.dateRange;
+      data = data.filter((item) => {
+        const date = dayjs(item.createdAt);
+        return date.isAfter(start.startOf("day")) && date.isBefore(end.endOf("day"));
+      });
+    }
+
+    setFilteredNotifications(data);
+  }, [rawNotifications, searchText, filters.dateRange]);
 
   useEffect(() => {
     fetchNotifications(pagination.current, pagination.pageSize);
@@ -197,13 +170,10 @@ const Notification: React.FC = () => {
     fetchNotifications(newPagination.current, newPagination.pageSize);
   };
 
+  //Hàm đánh dấu đã đọc/chưa đọc
   const markAsRead = async (id: string, read: boolean) => {
     try {
-      await axios.patch(
-        `${apiUrl}/notifications/${id}/read`,
-        { read },
-        { headers }
-      );
+      await axios.patch(`${apiUrl}/notifications/${id}/read`, { read }, { headers });
       Swal.fire({
         icon: "success",
         title: read ? "Đã đánh dấu đã đọc" : "Đã đánh dấu chưa đọc",
@@ -221,6 +191,7 @@ const Notification: React.FC = () => {
     }
   };
 
+  //Hàm xoá thông báo
   const deleteNotification = async (id: string) => {
     const result = await Swal.fire({
       title: "Xác nhận xóa?",
@@ -254,6 +225,7 @@ const Notification: React.FC = () => {
     }
   };
 
+  //hàm đánh dấu tất cả là đã đọc
   const markAllAsRead = async () => {
     try {
       await axios.patch(`${apiUrl}/notifications/read-all`, {}, { headers });
@@ -274,9 +246,9 @@ const Notification: React.FC = () => {
     }
   };
 
+  //Hàm xoá nhiều thông báo cùng lúc
   const bulkDelete = async () => {
     if (selectedRowKeys.length === 0) return;
-
     const result = await Swal.fire({
       title: `Xóa ${selectedRowKeys.length} thông báo?`,
       text: "Hành động này không thể hoàn tác!",
@@ -290,11 +262,7 @@ const Notification: React.FC = () => {
 
     if (result.isConfirmed) {
       try {
-        await Promise.all(
-          selectedRowKeys.map((id) =>
-            axios.delete(`${apiUrl}/notifications/${id}`, { headers })
-          )
-        );
+        await Promise.all(selectedRowKeys.map((id) => axios.delete(`${apiUrl}/notifications/${id}`, { headers })));
         Swal.fire({
           icon: "success",
           title: `Đã xóa ${selectedRowKeys.length} thông báo`,
@@ -314,6 +282,40 @@ const Notification: React.FC = () => {
     }
   };
 
+  // ===== Đánh dấu nhiều thông báo đã đọc/chưa đọc: TỰ ĐỘNG PHÁT HIỆN TRẠNG THÁI ĐỂ ĐỔI =====
+  const bulkMarkAsRead = async () => {
+    if (selectedRowKeys.length === 0) return;
+    // Lấy danh sách các thông báo đang được chọn (từ filteredNotifications)
+    const selectedNotifications = filteredNotifications.filter((n) => selectedRowKeys.includes(n._id));
+    // Xác định trạng thái chung: nếu TẤT CẢ đều đã đọc → thì sẽ đổi thành "chưa đọc"
+    // Nếu có ít nhất 1 cái chưa đọc → ưu tiên đổi thành "đã đọc"
+    const allRead = selectedNotifications.every((n) => n.read);
+    const targetReadStatus = !allRead; // Nếu tất cả đã đọc → đổi thành chưa đọc, ngược lại → đã đọc
+    try {
+      await Promise.all(selectedRowKeys.map((id) => axios.patch(`${apiUrl}/notifications/${id}/read`, { read: targetReadStatus }, { headers })));
+      // Cập nhật UI
+      const newStatusText = targetReadStatus ? "đã đọc" : "chưa đọc";
+      setFilteredNotifications((prev) => prev.map((n) => (selectedRowKeys.includes(n._id) ? { ...n, read: targetReadStatus } : n)));
+      setRawNotifications((prev) => prev.map((n) => (selectedRowKeys.includes(n._id) ? { ...n, read: targetReadStatus } : n)));
+      setSelectedRowKeys([]);
+      Swal.fire({
+        icon: "success",
+        title: "Thành công!",
+        text: `Đã đánh dấu ${selectedRowKeys.length} thông báo là ${newStatusText}`,
+        timer: 2000,
+        timerProgressBar: true,
+      });
+    } catch (err) {
+      Swal.fire({
+        icon: "error",
+        title: "Lỗi",
+        text: "Không thể cập nhật trạng thái",
+        timer: 2000,
+      });
+    }
+  };
+
+  //Hàm xoá các bộ lọc đã chọn
   const clearFilters = () => {
     setFilters({ type: "all", read: "all", dateRange: null });
     setSearchText("");
@@ -328,11 +330,7 @@ const Notification: React.FC = () => {
       width: 120,
       align: "center",
       render: (read: boolean) => (
-        <Badge
-          status={read ? "default" : "processing"}
-          text={read ? "Đã đọc" : "Chưa đọc"}
-          style={{ fontWeight: read ? 400 : 600 }}
-        />
+        <Badge status={read ? "default" : "processing"} text={read ? "Đã đọc" : "Chưa đọc"} style={{ fontWeight: read ? 400 : 600 }} />
       ),
     },
     {
@@ -340,11 +338,7 @@ const Notification: React.FC = () => {
       dataIndex: "type",
       key: "type",
       width: 120,
-      render: (type: keyof typeof NOTIFICATION_TYPES) => (
-        <Tag color={NOTIFICATION_TYPES[type].color}>
-          {NOTIFICATION_TYPES[type].label}
-        </Tag>
-      ),
+      render: (type: keyof typeof NOTIFICATION_TYPES) => <Tag color={NOTIFICATION_TYPES[type].color}>{NOTIFICATION_TYPES[type].label}</Tag>,
     },
     {
       title: "Thông báo",
@@ -388,9 +382,7 @@ const Notification: React.FC = () => {
       render: (date: string) => (
         <div>
           <div>{dayjs(date).format("DD/MM/YYYY HH:mm")}</div>
-          <div style={{ fontSize: 12, color: "#8c8c8c" }}>
-            {dayjs(date).fromNow()}
-          </div>
+          <div style={{ fontSize: 12, color: "#8c8c8c" }}>{dayjs(date).fromNow()}</div>
         </div>
       ),
     },
@@ -404,20 +396,11 @@ const Notification: React.FC = () => {
         <Dropdown
           overlay={
             <Menu>
-              <Menu.Item
-                key="toggle"
-                icon={<CheckOutlined />}
-                onClick={() => markAsRead(record._id, !record.read)}
-              >
+              <Menu.Item key="toggle" icon={<CheckOutlined />} onClick={() => markAsRead(record._id, !record.read)}>
                 {record.read ? "Đánh dấu chưa đọc" : "Đánh dấu đã đọc"}
               </Menu.Item>
               <Menu.Divider />
-              <Menu.Item
-                key="delete"
-                icon={<DeleteOutlined />}
-                danger
-                onClick={() => deleteNotification(record._id)}
-              >
+              <Menu.Item key="delete" icon={<DeleteOutlined />} danger onClick={() => deleteNotification(record._id)}>
                 Xóa
               </Menu.Item>
             </Menu>
@@ -441,15 +424,13 @@ const Notification: React.FC = () => {
         <span style={{ color: "#1890ff", fontWeight: 600 }}>
           {range[0]} – {range[1]}
         </span>{" "}
-        trên tổng số{" "}
-        <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> sản
-        phẩm
+        trên tổng số <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> thông báo
       </div>
     ),
   };
 
-  // ===== RENDER =====
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  // ===== RENDER, phần số thông báo chưa đọc, để ở tiêu đề =====
+  const unreadCount = rawNotifications.filter((n) => !n.read).length;
 
   return (
     <Layout>
@@ -457,32 +438,17 @@ const Notification: React.FC = () => {
         title={
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <BellOutlined style={{ fontSize: 24, color: "#1890ff" }} />
-            <span style={{ fontSize: 20, fontWeight: 600 }}>
-              Quản lý thông báo
-            </span>
-            {unreadCount > 0 && (
-              <Badge
-                count={unreadCount}
-                style={{ backgroundColor: "#ff4d4f" }}
-                overflowCount={99}
-              />
-            )}
+            <span style={{ fontSize: 20, fontWeight: 600 }}>Quản lý thông báo</span>
+            {unreadCount > 0 && <Badge count={unreadCount} style={{ backgroundColor: "#ff4d4f" }} overflowCount={99} />}
           </div>
         }
         extra={
           <Space>
-            <Button
-              icon={<ReloadOutlined />}
-              onClick={() => fetchNotifications(1, 10)}
-            >
+            <Button icon={<ReloadOutlined />} onClick={() => fetchNotifications(1, 10)}>
               Làm mới
             </Button>
             {unreadCount > 0 && (
-              <Button
-                type="primary"
-                icon={<CheckOutlined />}
-                onClick={markAllAsRead}
-              >
+              <Button type="primary" icon={<CheckOutlined />} onClick={markAllAsRead}>
                 Đánh dấu tất cả đã đọc
               </Button>
             )}
@@ -491,11 +457,7 @@ const Notification: React.FC = () => {
         bordered={false}
       >
         {/* FILTERS */}
-        <Space
-          direction="vertical"
-          size="middle"
-          style={{ width: "100%", marginBottom: 16 }}
-        >
+        <Space direction="vertical" size="middle" style={{ width: "100%", marginBottom: 16 }}>
           <Space wrap size="middle">
             <Input
               placeholder="Tìm kiếm thông báo theo nội dung..."
@@ -541,32 +503,33 @@ const Notification: React.FC = () => {
               style={{ width: 260 }}
             />
 
-            {(filters.type !== "all" ||
-              filters.read !== "all" ||
-              searchText ||
-              filters.dateRange) && (
-              <Button
-                icon={<CloseCircleOutlined />}
-                onClick={clearFilters}
-                danger
-                type="text"
-              >
+            {(filters.type !== "all" || filters.read !== "all" || searchText || filters.dateRange) && (
+              <Button icon={<CloseCircleOutlined />} onClick={clearFilters} danger type="text">
                 Xóa bộ lọc
               </Button>
             )}
           </Space>
 
-          {/* BULK ACTIONS */}
+          {/* NÚT SIÊU THÔNG MINH – TỰ ĐỔI CHỮ THEO TRẠNG THÁI HIỆN TẠI */}
           {selectedRowKeys.length > 0 && (
-            <Space>
-              <Button
-                type="primary"
-                danger
-                icon={<DeleteOutlined />}
-                onClick={bulkDelete}
-              >
-                Xóa {selectedRowKeys.length} thông báo
+            <Space size="middle">
+              {/* Lấy danh sách đã chọn để kiểm tra trạng thái */}
+              {(() => {
+                const selectedNotifs = filteredNotifications.filter((n) => selectedRowKeys.includes(n._id));
+                const allRead = selectedNotifs.length > 0 && selectedNotifs.every((n) => n.read);
+                const buttonText = allRead ? "chưa đọc" : "đã đọc";
+
+                return (
+                  <Button type="primary" icon={<CheckOutlined />} onClick={bulkMarkAsRead} style={{ background: "#52c41a", borderColor: "#52c41a" }}>
+                    Đánh dấu ({selectedRowKeys.length}) là {buttonText}
+                  </Button>
+                );
+              })()}
+
+              <Button type="primary" danger icon={<DeleteOutlined />} onClick={bulkDelete}>
+                Xóa ({selectedRowKeys.length})
               </Button>
+
               <Button onClick={() => setSelectedRowKeys([])}>Bỏ chọn</Button>
             </Space>
           )}
@@ -575,15 +538,14 @@ const Notification: React.FC = () => {
         {/* TABLE */}
         <Table
           columns={columns}
-          dataSource={notifications}
+          dataSource={filteredNotifications}
           rowKey="_id"
           loading={loading}
           pagination={{
             ...paginationConfig,
             current: pagination.current,
             pageSize: pagination.pageSize,
-            onChange: (page, pageSize) =>
-              setPagination({ current: page, pageSize }),
+            total: pagination.total, // ← VẪN LÀ TỔNG THẬT TỪ SERVER (50+)
           }}
           onChange={handleTableChange}
           scroll={{ x: 1200 }}
@@ -592,12 +554,7 @@ const Notification: React.FC = () => {
             onChange: (keys) => setSelectedRowKeys(keys),
           }}
           locale={{
-            emptyText: (
-              <Empty
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description="Không có thông báo nào"
-              />
-            ),
+            emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Không có thông báo nào" />,
           }}
         />
       </Card>

@@ -187,9 +187,7 @@ const RevenueReport = () => {
               <Title level={2} style={{ margin: 0, color: "#1890ff", marginBottom: 4 }}>
                 {currentStore.name || "Đang tải..."}
               </Title>
-              <Text style={{ color: "#595959", fontSize: "16px" }}>
-                <DollarOutlined /> Báo Cáo Doanh Thu
-              </Text>
+              <Text style={{ color: "#595959", fontSize: "16px" }}>Báo Cáo Doanh Thu</Text>
             </div>
 
             {/* FILTERS */}

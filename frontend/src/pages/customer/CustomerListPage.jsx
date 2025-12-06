@@ -369,7 +369,7 @@ export default function CustomerListPage() {
           <Col xs={24} sm={12} md={8}>
             <Card
               style={{
-                background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                background: "#2C5364",
                 border: "none",
                 borderRadius: "12px",
               }}
@@ -385,7 +385,7 @@ export default function CustomerListPage() {
           <Col xs={24} sm={12} md={8}>
             <Card
               style={{
-                background: "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
+                background: "#2C5364",
                 border: "none",
                 borderRadius: "12px",
               }}
@@ -401,13 +401,13 @@ export default function CustomerListPage() {
           <Col xs={24} sm={24} md={8}>
             <Card
               style={{
-                background: "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",
+                background: "#2C5364",
                 border: "none",
                 borderRadius: "12px",
               }}
             >
               <Statistic
-                title={<span style={{ color: "#fff" }}>Tổng doanh thu</span>}
+                title={<span style={{ color: "#fff" }}>Tổng chi tiêu của khách</span>}
                 value={totalSpending}
                 prefix={<WalletOutlined />}
                 suffix="₫"

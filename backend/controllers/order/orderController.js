@@ -1355,16 +1355,28 @@ const getOrderRefundDetail = async (req, res) => {
 // Lấy toàn bộ danh sách đơn hàng (mọi trạng thái)
 const getOrderListAll = async (req, res) => {
   try {
-    const { storeId } = req.query;
-
-    // Query toàn bộ đơn của cửa hàng hiện tại
-    const orders = await Order.find({ storeId })
-      .populate("storeId", "name") // tên cửa hàng
-      .populate("employeeId", "fullName") // nhân viên
-      .populate("customer", "name phone") // khách hàng
-      .sort({ createdAt: -1 }) // mới nhất lên đầu
+    const { storeId, periodType, periodKey, monthFrom, monthTo } = req.query;
+    if (!storeId) {
+      return res.status(400).json({ message: "Thiếu storeId" });
+    }
+    let dateFilter = {};
+    // Nếu FE gửi filter theo thời gian
+    if (periodType) {
+      const { start, end } = periodToRange(periodType, periodKey, monthFrom, monthTo);
+      dateFilter.createdAt = {
+        $gte: start,
+        $lte: end,
+      };
+    }
+    const orders = await Order.find({
+      storeId,
+      ...dateFilter,
+    })
+      .populate("storeId", "name")
+      .populate("employeeId", "fullName")
+      .populate("customer", "name phone")
+      .sort({ createdAt: -1 })
       .lean();
-
     res.json({
       message: "Lấy danh sách tất cả đơn hàng thành công",
       total: orders.length,
@@ -1528,6 +1540,37 @@ const getOrderStats = async (req, res) => {
   }
 };
 
+// Xóa đơn hàng đang pending
+const deletePendingOrder = async (req, res) => {
+  try {
+    const { id } = req.params;
+    // Tìm đơn
+    const order = await Order.findById(id);
+    if (!order) {
+      return res.status(404).json({
+        message: "Không tìm thấy đơn hàng",
+      });
+    }
+    // Chỉ cho xoá đơn pending
+    if (order.status !== "pending") {
+      return res.status(400).json({
+        message: "Chỉ có thể xoá đơn hàng ở trạng thái pending",
+      });
+    }
+    // Xoá
+    await Order.findByIdAndDelete(id);
+    return res.json({
+      message: "Xoá đơn pending thành công",
+    });
+  } catch (err) {
+    console.error("Lỗi xoá đơn pending:", err.message);
+    return res.status(500).json({
+      message: "Lỗi server khi xoá đơn hàng",
+    });
+  }
+};
+
+
 module.exports = {
   createOrder,
   setPaidCash,
@@ -1550,4 +1593,5 @@ module.exports = {
   getOrderRefundDetail,
   getOrderListAll,
   exportAllOrdersToExcel,
+  deletePendingOrder,
 };

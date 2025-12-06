@@ -1,23 +1,6 @@
 // src/pages/ProductGroupsPage.jsx
 import React, { useEffect, useState } from "react";
-import {
-  Card,
-  Button,
-  Space,
-  Empty,
-  Spin,
-  Row,
-  Col,
-  Typography,
-  Tag,
-  Modal,
-  message,
-  Statistic,
-  Tooltip,
-  Badge,
-  Progress,
-  notification,
-} from "antd";
+import { Card, Button, Space, Empty, Spin, Row, Col, Typography, Tag, Modal, message, Statistic, Tooltip, Badge, Progress, notification } from "antd";
 import {
   PlusOutlined,
   EditOutlined,
@@ -121,8 +104,7 @@ export default function ProductGroupsPage() {
           </Paragraph>
           {productCount > 0 && (
             <Paragraph type="warning" style={{ marginTop: 8 }}>
-              ⚠️ Nhóm này đang có <Text strong>{productCount} sản phẩm</Text>. Các sản phẩm sẽ không bị xóa
-              nhưng sẽ không còn thuộc nhóm này.
+              ⚠️ Nhóm này đang có <Text strong>{productCount} sản phẩm</Text>. Các sản phẩm sẽ không bị xóa nhưng sẽ không còn thuộc nhóm này.
             </Paragraph>
           )}
           <Paragraph type="secondary" style={{ fontSize: 13, marginTop: 8 }}>
@@ -147,11 +129,11 @@ export default function ProductGroupsPage() {
             message: "✅ Xóa thành công",
             description: (
               <div>
-                <div>Đã xóa nhóm <Text strong>"{groupName}"</Text></div>
+                <div>
+                  Đã xóa nhóm <Text strong>"{groupName}"</Text>
+                </div>
                 {productCount > 0 && (
-                  <div style={{ fontSize: 12, marginTop: 4, color: "#8c8c8c" }}>
-                    {productCount} sản phẩm đã được giải phóng khỏi nhóm
-                  </div>
+                  <div style={{ fontSize: 12, marginTop: 4, color: "#8c8c8c" }}>{productCount} sản phẩm đã được giải phóng khỏi nhóm</div>
                 )}
               </div>
             ),
@@ -172,9 +154,7 @@ export default function ProductGroupsPage() {
               <div>
                 <div>{err?.response?.data?.message || "Không thể xóa nhóm sản phẩm"}</div>
                 {err?.response?.data?.error && (
-                  <div style={{ fontSize: 12, marginTop: 4, color: "#8c8c8c" }}>
-                    Chi tiết: {err.response.data.error}
-                  </div>
+                  <div style={{ fontSize: 12, marginTop: 4, color: "#8c8c8c" }}>Chi tiết: {err.response.data.error}</div>
                 )}
               </div>
             ),
@@ -200,9 +180,7 @@ export default function ProductGroupsPage() {
     setModalOpen(false);
     notification.success({
       message: editingGroup ? "✅ Cập nhật thành công" : "✅ Tạo mới thành công",
-      description: editingGroup
-        ? `Đã cập nhật nhóm "${editingGroup.name}"`
-        : "Đã tạo nhóm sản phẩm mới",
+      description: editingGroup ? `Đã cập nhật nhóm "${editingGroup.name}"` : "Đã tạo nhóm sản phẩm mới",
       placement: "topRight",
       duration: 3,
     });
@@ -216,7 +194,7 @@ export default function ProductGroupsPage() {
 
   return (
     <Layout>
-      <div style={{ padding: "24px", maxWidth: 1600, margin: "0 auto" }}>
+      <div style={{ maxWidth: 1600, margin: "0 auto" }}>
         {/* Header Card */}
         <Card
           style={{
@@ -257,7 +235,7 @@ export default function ProductGroupsPage() {
                   boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
                 }}
               >
-                Tạo nhóm mới
+                Tạo nhóm sản phẩm mới
               </Button>
             </Col>
           </Row>
@@ -279,7 +257,11 @@ export default function ProductGroupsPage() {
                   value={groups.length}
                   prefix={<AppstoreOutlined />}
                   valueStyle={{ color: "#52c41a", fontSize: 28, fontWeight: 700 }}
-                  suffix={<Text type="secondary" style={{ fontSize: 14 }}>nhóm</Text>}
+                  suffix={
+                    <Text type="secondary" style={{ fontSize: 14 }}>
+                      nhóm
+                    </Text>
+                  }
                 />
               </Col>
               <Col xs={12} sm={6}>
@@ -288,25 +270,37 @@ export default function ProductGroupsPage() {
                   value={totalProducts}
                   prefix={<ShoppingOutlined />}
                   valueStyle={{ color: "#1890ff", fontSize: 28, fontWeight: 700 }}
-                  suffix={<Text type="secondary" style={{ fontSize: 14 }}>SP</Text>}
+                  suffix={
+                    <Text type="secondary" style={{ fontSize: 14 }}>
+                      Sản phẩm
+                    </Text>
+                  }
                 />
               </Col>
               <Col xs={12} sm={6}>
                 <Statistic
-                  title="TB SP/nhóm"
+                  title="Trung bình sản phẩm/nhóm"
                   value={avgProducts}
                   prefix={<BarChartOutlined />}
                   valueStyle={{ color: "#faad14", fontSize: 28, fontWeight: 700 }}
-                  suffix={<Text type="secondary" style={{ fontSize: 14 }}>SP</Text>}
+                  suffix={
+                    <Text type="secondary" style={{ fontSize: 14 }}>
+                      Sản phẩm
+                    </Text>
+                  }
                 />
               </Col>
               <Col xs={12} sm={6}>
                 <Statistic
-                  title="Max SP/nhóm"
+                  title="Tối đa sản phẩm/nhóm"
                   value={maxProducts}
                   prefix={<FileTextOutlined />}
                   valueStyle={{ color: "#f5222d", fontSize: 28, fontWeight: 700 }}
-                  suffix={<Text type="secondary" style={{ fontSize: 14 }}>SP</Text>}
+                  suffix={
+                    <Text type="secondary" style={{ fontSize: 14 }}>
+                      Sản phẩm
+                    </Text>
+                  }
                 />
               </Col>
             </Row>
@@ -417,10 +411,7 @@ export default function ProductGroupsPage() {
                         <Text type="secondary" style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase" }}>
                           Mô tả
                         </Text>
-                        <Paragraph
-                          ellipsis={{ rows: 2 }}
-                          style={{ margin: "4px 0 0", fontSize: 13, color: "#595959", minHeight: 38 }}
-                        >
+                        <Paragraph ellipsis={{ rows: 2 }} style={{ margin: "4px 0 0", fontSize: 13, color: "#595959", minHeight: 38 }}>
                           {group.description || "Không có mô tả"}
                         </Paragraph>
                       </div>
@@ -429,10 +420,10 @@ export default function ProductGroupsPage() {
                       <div>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                           <Text type="secondary" style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase" }}>
-                            Số lượng SP
+                            Số lượng Sản phẩm
                           </Text>
                           <Text strong style={{ fontSize: 13, color: "#52c41a" }}>
-                            {group.productCount || 0} SP
+                            {group.productCount || 0} Sản phẩm
                           </Text>
                         </div>
                         <Progress
@@ -449,18 +440,49 @@ export default function ProductGroupsPage() {
                       {/* Meta Info */}
                       <div style={{ background: "#fafafa", borderRadius: 8, padding: "10px 12px" }}>
                         <Space direction="vertical" size={4} style={{ width: "100%" }}>
+                          {/* Ngày tạo */}
                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                             <CalendarOutlined style={{ color: "#8c8c8c", fontSize: 13 }} />
-                            <Text type="secondary" style={{ fontSize: 12 }}>
-                              Tạo: {createdDate}
+
+                            <Text type="primary" style={{ fontSize: 12 }}>
+                              Ngày tạo:
                             </Text>
+
+                            <Tag
+                              style={{
+                                background: "#E6F4FF",
+                                border: "1px solid #1677FF",
+                                color: "#1677FF",
+                                borderRadius: 6,
+                                padding: "0px 6px",
+                                fontSize: 11,
+                              }}
+                            >
+                              {createdDate}
+                            </Tag>
                           </div>
+
+                          {/* Mã nhóm */}
                           {group._id && (
                             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                               <InfoCircleOutlined style={{ color: "#8c8c8c", fontSize: 13 }} />
-                              <Text type="secondary" style={{ fontSize: 11 }} ellipsis>
-                                ID: {group._id.slice(-8)}
+
+                              <Text type="primary" style={{ fontSize: 11 }}>
+                                Mã nhóm:
                               </Text>
+
+                              <Tag
+                                style={{
+                                  background: "#E6F4FF",
+                                  border: "1px solid #1677FF",
+                                  color: "#1677FF",
+                                  borderRadius: 6,
+                                  padding: "0px 6px",
+                                  fontSize: 11,
+                                }}
+                              >
+                                {group._id.slice(-8)}
+                              </Tag>
                             </div>
                           )}
                         </Space>
@@ -515,12 +537,7 @@ export default function ProductGroupsPage() {
           }}
           destroyOnClose
         >
-          <ProductGroupForm
-            storeId={storeId}
-            group={editingGroup}
-            onSuccess={handleFormSuccess}
-            onCancel={() => setModalOpen(false)}
-          />
+          <ProductGroupForm storeId={storeId} group={editingGroup} onSuccess={handleFormSuccess} onCancel={() => setModalOpen(false)} />
         </Modal>
       </div>
 
