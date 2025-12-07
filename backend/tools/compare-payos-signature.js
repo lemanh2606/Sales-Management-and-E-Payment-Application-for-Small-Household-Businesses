@@ -8,15 +8,15 @@ const rawBody = `{
   "code": "00",
   "desc": "success",
   "data": {
-    "orderCode": 123,
-    "amount": 3000,
-    "description": "VQRIO123",
-    "accountNumber": "12345678",
-    "reference": "TF230204212323",
-    "transactionDateTime": "2023-02-04 18:25:00",
-    "paymentLinkId": "124c33293c43417ab7879e14c8d9eb18"
+    "orderCode": 1760177888,
+    "amount": 5000,
+    "description": "HD1760177888",
+    "accountNumber": "3863666898666",
+    "reference": "TF250101010101",
+    "transactionDateTime": "2025-10-11 10:30:00",
+    "paymentLinkId": "48dc259d905d4209a0d0b694b3220c40"
   },
-  "signature": "1FF909E84DEC9140BD08C03949604E63F0F344FA42AA2EC0C85838AFA912D4EE"
+  "signature": "A8B7A519AEEC47256ACEF1F30460ADA94A71B47E1D0B2086B7C2AE3E9D79E26F"
 }`;
 
 // ==== PASTE PAYOS_CHECKSUM_KEY (secret) từ .env ====

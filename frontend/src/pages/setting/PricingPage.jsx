@@ -67,10 +67,7 @@ const PricingPage = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [plansRes, subRes] = await Promise.all([
-        subscriptionApi.getPlans(),
-        subscriptionApi.getCurrentSubscription().catch(() => null),
-      ]);
+      const [plansRes, subRes] = await Promise.all([subscriptionApi.getPlans(), subscriptionApi.getCurrentSubscription().catch(() => null)]);
 
       setPlans(plansRes.data.plans || []);
       setCurrentSub(subRes?.data || null);
@@ -89,11 +86,11 @@ const PricingPage = () => {
         {
           duration: 1,
           label: "1 tháng",
-          price: 199000,
-          original_price: 199000,
+          price: 5000,
+          original_price: 5000,
           discount: 0,
           discount_percent: 0,
-          price_per_month: 199000,
+          price_per_month: 5000,
           badge: null,
         },
         {
@@ -198,9 +195,7 @@ const PricingPage = () => {
               : ""
           }
           <p style="margin-top: 12px;">
-            Giá: <strong style="color: #22c55e; font-size: 18px;">${selectedPlan.price.toLocaleString(
-              "vi-VN"
-            )}đ</strong>
+            Giá: <strong style="color: #22c55e; font-size: 18px;">${selectedPlan.price.toLocaleString("vi-VN")}đ</strong>
           </p>
           <p style="margin-top: 8px; font-size: 13px; color: #999;">
             Sau khi xác nhận, hệ thống sẽ tạo mã QR PayOS để bạn quét và thanh toán.
@@ -341,17 +336,10 @@ const PricingPage = () => {
                   Mã giao dịch: <strong>{pendingCheckoutInfo.transactionId}</strong>
                 </Text>
                 <Space wrap>
-                  <Button
-                    type="primary"
-                    icon={<QrcodeOutlined />}
-                    onClick={() => handleOpenCheckoutModal(pendingCheckoutInfo)}
-                  >
+                  <Button type="primary" icon={<QrcodeOutlined />} onClick={() => handleOpenCheckoutModal(pendingCheckoutInfo)}>
                     Tiếp tục thanh toán
                   </Button>
-                  <Button
-                    icon={<CopyOutlined />}
-                    onClick={() => handleCopyTransactionId(pendingCheckoutInfo.transactionId)}
-                  >
+                  <Button icon={<CopyOutlined />} onClick={() => handleCopyTransactionId(pendingCheckoutInfo.transactionId)}>
                     Sao chép mã giao dịch
                   </Button>
                   <Button icon={<ReloadOutlined />} onClick={handlePaymentCompleted}>
@@ -397,9 +385,7 @@ const PricingPage = () => {
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.border = isSelected ? `3px solid ${color}` : "2px solid #e0e0e0";
-                    e.currentTarget.style.boxShadow = isSelected
-                      ? "0 8px 24px rgba(0,0,0,0.12)"
-                      : "0 2px 8px rgba(0,0,0,0.08)";
+                    e.currentTarget.style.boxShadow = isSelected ? "0 8px 24px rgba(0,0,0,0.12)" : "0 2px 8px rgba(0,0,0,0.08)";
                     e.currentTarget.style.transform = "translateY(0)";
                   }}
                 >
@@ -442,9 +428,7 @@ const PricingPage = () => {
                         {plan.price.toLocaleString("vi-VN")}đ
                       </Text>
                     </div>
-                    <Text style={{ fontSize: 14, color: "#666" }}>
-                      {plan.price_per_month.toLocaleString("vi-VN")}đ/tháng
-                    </Text>
+                    <Text style={{ fontSize: 14, color: "#666" }}>{plan.price_per_month.toLocaleString("vi-VN")}đ/tháng</Text>
                     {plan.discount_percent > 0 && (
                       <Badge
                         count={`-${plan.discount_percent}%`}
@@ -570,12 +554,7 @@ const PricingPage = () => {
           <Button key="refresh" icon={<ReloadOutlined />} onClick={handlePaymentCompleted}>
             Tôi đã thanh toán
           </Button>,
-          <Button
-            key="pay"
-            type="primary"
-            icon={<LinkOutlined />}
-            onClick={() => handleOpenPaymentLink(checkoutInfo?.checkoutUrl)}
-          >
+          <Button key="pay" type="primary" icon={<LinkOutlined />} onClick={() => handleOpenPaymentLink(checkoutInfo?.checkoutUrl)}>
             Mở link PayOS
           </Button>,
         ]}
@@ -609,8 +588,7 @@ const PricingPage = () => {
               </Text>
               {checkoutInfo.createdAt && (
                 <Text type="secondary">
-                  <FieldTimeOutlined /> {" "}
-                  Tạo lúc {dayjs(checkoutInfo.createdAt).format("DD/MM/YYYY HH:mm")}
+                  <FieldTimeOutlined /> Tạo lúc {dayjs(checkoutInfo.createdAt).format("DD/MM/YYYY HH:mm")}
                 </Text>
               )}
             </Space>

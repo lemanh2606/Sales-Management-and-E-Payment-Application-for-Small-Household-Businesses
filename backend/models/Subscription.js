@@ -3,84 +3,26 @@ const mongoose = require("mongoose");
 
 const subscriptionSchema = new mongoose.Schema(
   {
-    user_id: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
-      index: true,
-    },
+    user_id: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    // Subscription status
+    status: { type: String, enum: ["TRIAL", "PENDING", "ACTIVE", "EXPIRED", "CANCELLED"], default: "TRIAL", required: true },
+    // Trial info
+    trial_started_at: { type: Date, default: null },
+    trial_ends_at: { type: Date, default: null },
+    // Premium info
+    plan_duration: { type: Number, enum: [1, 3, 6], default: null },
+    duration_months: { type: Number, enum: [1, 3, 6], default: null },
+    started_at: { type: Date, default: null },
+    expires_at: { type: Date, default: null, index: true },
 
-    // Trạng thái subscription
-    status: {
-      type: String,
-      enum: ["TRIAL", "PENDING", "ACTIVE", "EXPIRED", "CANCELLED"],
-      default: "TRIAL",
-      required: true,
-    },
-
-    // === TRIAL INFO ===
-    trial_started_at: {
-      type: Date,
-      default: null,
-    },
-    trial_ends_at: {
-      type: Date,
-      default: null,
-    },
-
-    // === PREMIUM INFO ===
-    plan_duration: {
-      type: Number, // 1, 3, hoặc 6 (tháng)
-      enum: [1, 3, 6],
-      default: null,
-    },
-    duration_months: {
-      type: Number, // Alias cho plan_duration để webhook query
-      enum: [1, 3, 6],
-      default: null,
-    },
-    started_at: {
-      type: Date, // Khi nào bắt đầu premium
-      default: null,
-    },
-    expires_at: {
-      type: Date, // Khi nào hết hạn premium
-      default: null,
-      index: true, // Index để query expiry
-    },
-
-    auto_renew: {
-      type: Boolean,
-      default: false,
-    },
-
-    // === PAYMENT STATE ===
-    pending_order_code: {
-      type: String,
-      default: null,
-      index: true,
-    },
-    pending_plan_duration: {
-      type: Number,
-      enum: [1, 3, 6],
-      default: null,
-    },
-    pending_amount: {
-      type: Number,
-      default: null,
-    },
-    pending_checkout_url: {
-      type: String,
-      default: null,
-    },
-    pending_qr_url: {
-      type: String,
-      default: null,
-    },
-    pending_created_at: {
-      type: Date,
-      default: null,
-    },
+    auto_renew: { type: Boolean, default: false },
+    // Payment state
+    pending_order_code: { type: String, default: null, index: true },
+    pending_plan_duration: { type: Number, enum: [1, 3, 6], default: null },
+    pending_amount: { type: Number, default: null },
+    pending_checkout_url: { type: String, default: null },
+    pending_qr_url: { type: String, default: null },
+    pending_created_at: { type: Date, default: null },
   },
   {
     timestamps: true,
@@ -171,13 +113,7 @@ subscriptionSchema.methods.extendPremium = function (planDuration) {
   return this;
 };
 
-subscriptionSchema.methods.markPendingPayment = function ({
-  orderCode,
-  amount,
-  planDuration,
-  checkoutUrl,
-  qrUrl,
-}) {
+subscriptionSchema.methods.markPendingPayment = function ({ orderCode, amount, planDuration, checkoutUrl, qrUrl }) {
   this.pending_order_code = orderCode ? orderCode.toString() : null;
   this.pending_amount = amount ?? null;
   this.pending_plan_duration = planDuration ?? null;
@@ -202,14 +138,13 @@ subscriptionSchema.statics.createTrial = async function (userId) {
   const now = new Date();
   const trialEnds = new Date(now);
   trialEnds.setDate(trialEnds.getDate() + 14); // 14 ngày trial
-
+  
   const subscription = new this({
     user_id: userId,
     status: "TRIAL",
     trial_started_at: now,
     trial_ends_at: trialEnds,
   });
-
   await subscription.save();
   return subscription;
 };
