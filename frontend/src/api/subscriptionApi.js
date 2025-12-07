@@ -1,4 +1,4 @@
-// api/subscriptionApi.js
+// frontend/src/api/subscriptionApi.js
 import apiClient from "./apiClient";
 
 const subscriptionApi = {

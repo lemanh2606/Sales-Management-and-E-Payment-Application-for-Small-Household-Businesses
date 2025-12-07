@@ -1,21 +1,6 @@
 // pages/SubscriptionPage.jsx
 import React, { useState, useEffect } from "react";
-import {
-  Card,
-  Button,
-  Typography,
-  Space,
-  Spin,
-  message,
-  Row,
-  Col,
-  Statistic,
-  Progress,
-  Timeline,
-  Tag,
-  Modal,
-  Badge,
-} from "antd";
+import { Card, Button, Typography, Space, Spin, message, Row, Col, Statistic, Progress, Timeline, Tag, Modal, Badge } from "antd";
 import {
   CrownOutlined,
   RocketOutlined,
@@ -188,9 +173,7 @@ const SubscriptionPage = () => {
           <Card style={{ textAlign: "center" }}>
             <WarningOutlined style={{ fontSize: 64, color: "#faad14", marginBottom: 20 }} />
             <Title level={2}>Chưa có gói dịch vụ</Title>
-            <Paragraph style={{ fontSize: 16, color: "#666" }}>
-              Nâng cấp lên Premium để sử dụng đầy đủ tính năng
-            </Paragraph>
+            <Paragraph style={{ fontSize: 16, color: "#666" }}>Nâng cấp lên Premium để sử dụng đầy đủ tính năng</Paragraph>
             <Button type="primary" size="large" icon={<CrownOutlined />} onClick={handleUpgrade}>
               Xem các gói Premium
             </Button>
@@ -251,17 +234,10 @@ const SubscriptionPage = () => {
                 </div>
               )}
               <Space wrap style={{ marginTop: 12 }}>
-                <Button
-                  type="primary"
-                  icon={<LinkOutlined />}
-                  onClick={() => handleOpenPendingLink(pendingPayment.checkout_url)}
-                >
+                <Button type="primary" icon={<LinkOutlined />} onClick={() => handleOpenPendingLink(pendingPayment.checkout_url)}>
                   Mở link PayOS
                 </Button>
-                <Button
-                  icon={<CopyOutlined />}
-                  onClick={() => handleCopyValue(pendingPayment.order_code, "mã giao dịch")}
-                >
+                <Button icon={<CopyOutlined />} onClick={() => handleCopyValue(pendingPayment.order_code, "mã giao dịch")}>
                   Sao chép mã giao dịch
                 </Button>
                 <Button icon={<ReloadOutlined />} onClick={handlePendingPaymentDone}>
@@ -286,12 +262,7 @@ const SubscriptionPage = () => {
               extra={
                 <Space>
                   {isTrial && (
-                    <Button
-                      type="primary"
-                      icon={<CrownOutlined />}
-                      onClick={handleUpgrade}
-                      style={{ background: "#22c55e", borderColor: "#22c55e" }}
-                    >
+                    <Button type="primary" icon={<CrownOutlined />} onClick={handleUpgrade} style={{ background: "#22c55e", borderColor: "#22c55e" }}>
                       Nâng cấp Premium
                     </Button>
                   )}
@@ -340,9 +311,7 @@ const SubscriptionPage = () => {
                     }}
                   >
                     <Space direction="vertical" size={8}>
-                      <Text strong>
-                        {daysRemaining <= 3 ? "⚠️ Gói dùng thử sắp hết hạn!" : "ℹ️ Thông tin dùng thử"}
-                      </Text>
+                      <Text strong>{daysRemaining <= 3 ? "⚠️ Gói dùng thử sắp hết hạn!" : "ℹ️ Thông tin dùng thử"}</Text>
                       <Text>
                         Bạn có thể sử dụng <strong>TẤT CẢ</strong> tính năng Premium trong thời gian dùng thử.
                       </Text>
@@ -392,11 +361,7 @@ const SubscriptionPage = () => {
                         {dayjs(subscription.premium.expires_at).format("DD/MM/YYYY")}
                       </Text>
                     </div>
-                    <Progress
-                      percent={progressPercent}
-                      strokeColor={getProgressColor(daysRemaining)}
-                      style={{ marginTop: 12 }}
-                    />
+                    <Progress percent={progressPercent} strokeColor={getProgressColor(daysRemaining)} style={{ marginTop: 12 }} />
                   </Space>
 
                   {daysRemaining <= 7 && (
@@ -441,9 +406,7 @@ const SubscriptionPage = () => {
                         <Card style={{ background: "#fff7e6", border: "1px solid #ffd591" }}>
                           <Statistic
                             title="Gói trước đây"
-                            value={
-                              subscription?.premium?.plan_duration || subscription?.trial_ends_at ? "Trial" : "N/A"
-                            }
+                            value={subscription?.premium?.plan_duration || subscription?.trial_ends_at ? "Trial" : "N/A"}
                             suffix={subscription?.premium?.plan_duration ? "tháng" : ""}
                             prefix={<CrownOutlined style={{ color: "#faad14" }} />}
                           />
@@ -510,11 +473,7 @@ const SubscriptionPage = () => {
               {paymentHistory.length > 0 ? (
                 <Timeline>
                   {paymentHistory.map((payment, index) => (
-                    <Timeline.Item
-                      key={index}
-                      color={index === 0 ? "green" : "gray"}
-                      dot={index === 0 ? <CheckCircleOutlined /> : undefined}
-                    >
+                    <Timeline.Item key={index} color={index === 0 ? "green" : "gray"} dot={index === 0 ? <CheckCircleOutlined /> : undefined}>
                       <Space direction="vertical" size={4}>
                         <Text strong>
                           Gói {payment.plan_duration} tháng - {formatCurrency(payment.amount)}đ
@@ -527,13 +486,7 @@ const SubscriptionPage = () => {
                         </Text>
                         {payment.status && (
                           <Tag
-                            color={
-                              payment.status === "SUCCESS"
-                                ? "green"
-                                : payment.status === "PENDING"
-                                ? "orange"
-                                : "red"
-                            }
+                            color={payment.status === "SUCCESS" ? "green" : payment.status === "PENDING" ? "orange" : "red"}
                             style={{ width: "fit-content" }}
                           >
                             {payment.status}
@@ -568,12 +521,7 @@ const SubscriptionPage = () => {
                     <Statistic title="Tổng đơn hàng" value={usageStats.total_orders} prefix={<ShoppingOutlined />} />
                   </Card>
                   <Card style={{ background: "#fff7e6" }}>
-                    <Statistic
-                      title="Doanh thu"
-                      value={usageStats.total_revenue}
-                      prefix={<DollarOutlined />}
-                      suffix="đ"
-                    />
+                    <Statistic title="Doanh thu" value={usageStats.total_revenue} prefix={<DollarOutlined />} suffix="đ" />
                   </Card>
                   <Card style={{ background: "#f6ffed" }}>
                     <Statistic title="Sản phẩm" value={usageStats.total_products} prefix={<CrownOutlined />} />
