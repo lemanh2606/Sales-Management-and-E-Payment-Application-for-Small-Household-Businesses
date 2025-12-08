@@ -462,10 +462,10 @@ const getPaymentHistory = async (req, res) => {
       .sort({ paid_at: -1 }) // Sắp xếp mới nhất lên đầu
       .lean();
 
-    console.log("📊 Found payment history:", history.length, "records");
-    if (history.length > 0) {
-      console.log("Sample record:", JSON.stringify(history[0], null, 2));
-    }
+    // console.log("📊 Found payment history:", history.length, "records");
+    // if (history.length > 0) {
+    //   console.log("Sample record:", JSON.stringify(history[0], null, 2));
+    // }
 
     // Chuyển đổi format cho frontend
     const formattedHistory = history.map((item) => ({

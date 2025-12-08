@@ -8,9 +8,9 @@ const secret =
 
 // Dữ liệu mẫu giống PayOS gửi về, có thể tự tạo Order ở trang orderController rồi past vào để tạo chữ ký và payload vì webhook đang ngủ đông
 const data = {
-  orderCode: 1760177888,
+  orderCode: 1765206432883,
   amount: 5000,
-  description: "HD1760177888",
+  description: "1765206432883 - mô tả tạm thời",
   accountNumber: "3863666898666",
   reference: "TF250101010101",
   transactionDateTime: "2025-10-11 10:30:00",
