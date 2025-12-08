@@ -58,6 +58,10 @@ import Term from "./pages/setting/Term";
 import Privacy from "./pages/setting/Privacy";
 import PaymentGatewaySettingsPage from "./pages/setting/PaymentGatewaySettingsPage";
 
+//Điều hướng thanh toán
+import SubscriptionSuccess from "./pages/SubscriptionSuccess";
+import SubscriptionCancel from "./pages/SubscriptionCancel";
+
 // Loyalty
 import LoyaltySetting from "./pages/loyalty/LoyaltySetting";
 
@@ -307,6 +311,10 @@ function App() {
         <Route path="/terms" element={<ProtectedRoute><Term /></ProtectedRoute>} />
         <Route path="/privacy" element={<ProtectedRoute><Privacy /></ProtectedRoute>} />
         <Route path="/settings/payment-method" element={<ProtectedRoute allowedPermissions="settings:payment-method"><PaymentGatewaySettingsPage /></ProtectedRoute>} />
+
+        {/* ==================== Điều hướng thanh toán ==================== */}
+        <Route path="/subscription/success" element={<SubscriptionSuccess />} />
+        <Route path="/subscription/cancel" element={<SubscriptionCancel />} />
 
         {/* ==================== Orders ==================== */}
         <Route path="/orders/pos" element={<ProtectedRoute allowedPermissions="orders:create"><SidebarPOS /></ProtectedRoute>} />

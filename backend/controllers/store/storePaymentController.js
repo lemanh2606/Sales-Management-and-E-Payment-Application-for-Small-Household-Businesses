@@ -233,7 +233,7 @@ exports.receivePayOSWebhook = async (req, res) => {
     res.status(200).json({ success: true });
   } catch (err) {
     console.error("receivePayOSWebhook error:", err);
-    res.status(500).send("Server error");
+    res.status(500).send("Lỗi server trang storePaymentController.js");
   }
 };
 

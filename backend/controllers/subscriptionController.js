@@ -10,15 +10,26 @@ const PRICING = {
   3: { price: 499000, discount: 98000, label: "3 tháng", badge: "Phổ biến" },
   6: { price: 899000, discount: 295000, label: "6 tháng", badge: "Tiết kiệm nhất" },
 };
+//Hàm chuyển tiếng Việt → không dấu
+function removeVietnameseTones(str) {
+  return str
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .replace(/[^a-zA-Z0-9\s]/g, "")
+    .trim();
+}
 
-const FRONTEND_BASE_URL = resolveBaseUrl(process.env.APP_PORTAL_URL || process.env.FRONTEND_URL, "http://localhost:5173");
+const FRONTEND_BASE_URL = resolveBaseUrl(process.env.APP_PORTAL_URL || process.env.FRONTEND_URL, "http://localhost:3000");
 const API_BASE_URL = resolveBaseUrl(
   process.env.PAYOS_PUBLIC_API_URL || process.env.PUBLIC_API_URL || process.env.API_BASE_URL,
   "http://localhost:9999"
 );
-const SUB_RETURN_URL = process.env.PAYOS_SUB_RETURN_URL || `${FRONTEND_BASE_URL}/subscription/checkout?status=success`;
-const SUB_CANCEL_URL = process.env.PAYOS_SUB_CANCEL_URL || `${FRONTEND_BASE_URL}/subscription/checkout?status=cancel`;
-const SUB_WEBHOOK_URL = process.env.PAYOS_SUBSCRIPTION_WEBHOOK_URL || `${API_BASE_URL}/api/subscriptions/webhook`;
+const SUB_RETURN_URL = process.env.PAYOS_RETURN_URL;
+const SUB_CANCEL_URL = process.env.PAYOS_CANCEL_URL;
+const SUB_WEBHOOK_URL = process.env.PAYOS_WEBHOOK_URL;
+
 const DISABLE_WEBHOOK_SIM = process.env.PAYOS_DISABLE_SIMULATION === "true";
 const PENDING_TIMEOUT_MS = parseInt(process.env.SUBSCRIPTION_PENDING_TIMEOUT, 10) || 15 * 60 * 1000;
 
@@ -55,9 +66,8 @@ const getPlans = async (req, res) => {
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
-
 /**
- * GET /api/subscriptions/current
+ * GET /api/subscriptions/curren
  * Lấy thông tin subscription hiện tại của user
  */
 const getCurrentSubscription = async (req, res) => {
@@ -179,11 +189,11 @@ const createCheckout = async (req, res) => {
     const parsedDuration = parseInt(plan_duration, 10);
 
     // Check role MANAGER
-    const user = await User.findById(userId).select("role");
+    const user = await User.findById(userId).select("role fullname");
+
     if (!user) {
       return res.status(404).json({ message: "Không tìm thấy user" });
     }
-
     if (user.role !== "MANAGER") {
       return res.status(403).json({
         message: "Chỉ MANAGER mới có thể mua subscription",
@@ -228,8 +238,14 @@ const createCheckout = async (req, res) => {
 
     const isRenewal = subscription.status === "ACTIVE" && !subscription.isExpired();
 
-    // Tạo order description
-    const orderInfo = `Premium ${plan.label} - User ${userId}`;
+    // Convert fullname
+    const rawFullname = user.fullname || "";
+    const fullnameNoAccent = removeVietnameseTones(rawFullname);
+    //lấy 6 ký tự cuối của ObjectId
+    const shortId = String(userId).slice(-6);
+
+    // Tạo order description. Mô tả thanh toán mới
+    const orderInfo = `Premium ${plan.label} UID${shortId} ${fullnameNoAccent}`;
     const amount = plan.price;
 
     // Generate payment link với PayOS

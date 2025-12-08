@@ -17,85 +17,73 @@ const swaggerUi = require("swagger-ui-express");
 const YAML = require("yamljs");
 const swaggerDocument = YAML.load(path.join(__dirname, "swagger.yaml")); // 👈 nhớ tạo file swagger.yaml
 // --- LOAD MODELS ---
-["Product", "ProductGroup", "Supplier", "Employee", "StockDisposal", "StockCheck", "PurchaseOrder", "PurchaseReturn"].forEach((model) => require(`./models/${model}`));
+["Product", "ProductGroup", "Supplier", "Employee", "StockDisposal", "StockCheck", "PurchaseOrder", "PurchaseReturn"].forEach((model) =>
+  require(`./models/${model}`)
+);
 
 const app = express();
 
-// ✅ Body parser với limit lớn cho base64
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ limit: "10mb", extended: true }));
-
-// đảm bảo thư mục uploads tồn tại chỉ để đọc tạm
-const uploadDir = path.join(__dirname, "uploads");
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-  console.log("📁 Đã tạo thư mục uploads/");
-}
-// ⚙️ cấu hình Multer storage để giữ nguyên tên file (slug) khi lưu local
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, "uploads/"),
-  filename: (req, file, cb) => {
-    cb(null, file.originalname); // ✅ giữ nguyên tên FE gửi (đã slug)
-  },
-});
-const upload = multer({ storage, limits: { fileSize: 20 * 1024 * 1024 } });
-
-// ✅ Danh sách origins được phép
+//KHAI BÁO allowedOrigins ĐẦU TIÊN
 const allowedOrigins = [
   "http://localhost:3000",
-  "http://menup.shop",
   "http://skinanalysis.life",
-  "https://skinanalysis.life", //đây là backend thay cho http:localhost:9999
+  "https://skinanalysis.life",
   "http://smallbizsales.site",
-  "https://smallbizsales.site", //đây là frontend thay cho http:localhost:3000
-  "https://menup.shop", // production menup.shop của app mobile
+  "https://smallbizsales.site",
 ];
 
-// =====Socket.io=====
-const server = http.createServer(app); //  Tạo server http để gắn socket.io
-// ⚡ Khởi tạo Socket.io
-const io = new Server(server, {
-  cors: {
-    origin: allowedOrigins, //  ✅ Sử dụng allowedOrigins
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "Cache-Control", "Pragma", "X-XSRF-TOKEN", "XSRF-TOKEN"],
-  },
-});
-
-// Lưu io vào app để controller có thể sử dụng (req.app.get("io"))
-app.set("io", io);
-//  Khi có client kết nối socket
-io.on("connection", (socket) => {
-  console.log(`🟢 Client kết nối: ${socket.id}`);
-
-  socket.on("disconnect", () => {
-    console.log(`🔴 Client ngắt kết nối: ${socket.id}`);
-  });
-});
-require("./services/cronJobs");
-
-// Webhook PayOS phải viết trước express.json()
+// --- ĐẶT WEBOOK trước các body parser ---
 const orderWebhookHandler = require("./routers/orderWebhookHandler");
 const subscriptionWebhookHandler = require("./routers/subscriptionWebhookHandler");
 app.post("/api/orders/vietqr-webhook", express.raw({ type: "*/*" }), orderWebhookHandler);
 app.post("/api/subscriptions/webhook", express.raw({ type: "*/*" }), subscriptionWebhookHandler);
 
-// --- MIDDLEWARE ---
-app.use(
-  cors({
-    origin: allowedOrigins, // ✅ ĐÃ SỬA - dùng allowedOrigins thay vì hardcode
+// PHẦN CODE CỦA Multer
+const uploadDir = path.join(__dirname, "uploads");
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, "uploads/"),
+  filename: (req, file, cb) => cb(null, file.originalname),
+});
+const upload = multer({ storage, limits: { fileSize: 20 * 1024 * 1024 } });
+
+// ===== PHẦN CODE CỦA Socket.io =====
+const server = http.createServer(app);
+
+const io = new Server(server, {
+  cors: {
+    origin: allowedOrigins,
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "Cache-Control", "Pragma"],
+    allowedHeaders: ["Content-Type", "Authorization", "Cache-Control", "Pragma", "X-XSRF-TOKEN", "XSRF-TOKEN"],
+  },
+});
+app.set("io", io);
+io.on("connection", (socket) => {
+  console.log(`🟢 Client kết nối: ${socket.id}`);
+  socket.on("disconnect", () => console.log(`🔴 Client ngắt kết nối: ${socket.id}`));
+});
+
+//PHẦN KHAI BÁO THÔNG BÁO BẰNG EMAIL CRONJOB
+require("./services/cronJobs");
+
+// --- CÁC MIDDLEWARE SẼ NẰM Ở DƯỚI NÀY ---
+app.use(
+  cors({
+    origin: allowedOrigins,
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "Cache-Control", "Pragma", "X-XSRF-TOKEN", "XSRF-TOKEN"],
   })
 );
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(cookieParser());
 app.use(morgan("dev"));
 
-// --- ROUTERS ---
+// --- FULL CÁC ROUTERS ---
 const storeRouters = require("./routers/storeRouters");
 const storePaymentRouters = require("./routers/storePaymentRouters");
 const userRouters = require("./routers/userRouters");
@@ -119,7 +107,7 @@ const notificationRouters = require("./routers/notificationRouters");
 const inventoryReportRouters = require("./routers/inventoryReportRouters");
 const exportRouters = require("./routers/exportRouters");
 
-// --- MOUNT ROUTERS ---
+// --- FULL CÁC API ĐÃ MOUNT ROUTERS ---
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/api/stores", storeRouters);
 app.use("/api/stores-config-payment", storePaymentRouters);
@@ -144,12 +132,12 @@ app.use("/api/notifications", notificationRouters);
 app.use("/api/inventory-reports", inventoryReportRouters);
 app.use("/api/export", exportRouters);
 
-// --- ROOT ---
+// --- PHẦN ROOT MẶC ĐỊNH CỦA BACKEND ---
 app.get("/", (req, res) => {
   res.send("👀 Ai vừa ping tui đó? Tui thấy rồi nha! From SmartRetail team with Love 🫶");
 });
 
-// --- API OVERVIEW (JSON) ---
+// --- API TỔNG QUAN (JSON) ---
 app.get("/api", (req, res) => {
   const endpoints = listEndpoints(app);
   const grouped = {};
@@ -171,14 +159,14 @@ app.get("/api", (req, res) => {
   });
 });
 
-// --- SWAGGER UI ---
+// --- PHẦN CỦA SWAGGER UI ---
 app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
-// --- ERROR HANDLERS ---
+// --- PHẦN BÁO LỖI CỦA ERROR HANDLERS ---
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-// --- SERVER START ---
+// --- KHỞI ĐỘNG SERVER ---
 const PORT = process.env.PORT || 9999;
 
 async function bootstrap() {

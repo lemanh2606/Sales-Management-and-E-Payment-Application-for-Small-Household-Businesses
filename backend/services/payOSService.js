@@ -33,10 +33,9 @@ async function generateQRWithPayOS(input = {}) {
 
   const orderInfo = rawInfo.toString();
   const description = orderInfo.slice(0, 25);
-
-  const returnUrl = payload.returnUrl || input.returnUrl || process.env.PAYOS_RETURN_URL || `${API_URL}/api/orders/payments/vietqr_return`;
-
-  const cancelUrl = payload.cancelUrl || input.cancelUrl || process.env.PAYOS_CANCEL_URL || `${API_URL}/api/orders/payments/vietqr_cancel`;
+  //2 đường dẫn quan trọng của webhook khi thanh toán thành công hoặc huỷ
+  const returnUrl = payload.returnUrl || input.returnUrl || process.env.PAYOS_RETURN_URL;
+  const cancelUrl = payload.cancelUrl || input.cancelUrl || process.env.PAYOS_CANCEL_URL;
 
   const webhookUrl = payload.webhookUrl || input.webhookUrl || process.env.PAYOS_WEBHOOK_URL;
 
