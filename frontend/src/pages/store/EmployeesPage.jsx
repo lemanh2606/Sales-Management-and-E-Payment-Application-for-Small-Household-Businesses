@@ -382,7 +382,7 @@ export default function EmployeesPage() {
     } catch (err) {
       Swal.fire({
         title: "❌ Lỗi!",
-        text: "Lỗi khi lưu nhân viên.",
+        text:  err.response?.data?.message,
         icon: "error",
         confirmButtonText: "OK",
         confirmButtonColor: "#ff4d4f",
