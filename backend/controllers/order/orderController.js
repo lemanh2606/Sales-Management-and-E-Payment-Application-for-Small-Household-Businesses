@@ -774,88 +774,57 @@ const refundOrder = async (req, res) => {
   }
 };
 
-// GET http://localhost:9999/api/orders/top-products?limit=5&range=thisYear&storeId=68f8f19a4d723cad0bda9fa5
 //  Top sản phẩm bán chạy (sum quantity/sales từ OrderItem, filter paid + range/date/store)
 const getTopSellingProducts = async (req, res) => {
   try {
-    const { limit = 10, storeId, range, dateFrom, dateTo } = req.query; // nếu ko có limit thì mặc định lấy top 10 sản phẩm
-    // Nếu không có range và không có dateFrom/dateTo thì báo lỗi
-    if (!range && !dateFrom && !dateTo) {
+    const { limit = 10, storeId, periodType, periodKey, monthFrom, monthTo } = req.query;
+
+    // Validate period
+    if (!periodType) {
       return res.status(400).json({
         success: false,
-        message: "Thiếu tham số range hoặc khoảng thời gian (today/yesterday/thisWeek/thisMonth/thisYear)",
+        message: "Thiếu periodType",
       });
     }
-    // Tự lấy storeId từ user nếu không truyền query
+
+    if (periodType !== "custom" && !periodKey) {
+      return res.status(400).json({
+        success: false,
+        message: "Thiếu periodKey cho loại kỳ này (vd: month + 2025-10)",
+      });
+    }
+
+    if (periodType === "custom" && (!req.query.monthFrom || !req.query.monthTo)) {
+      return res.status(400).json({
+        success: false,
+        message: "Thiếu monthFrom hoặc monthTo cho kỳ tùy chỉnh",
+      });
+    }
+
+    // Lấy storeId từ token nếu FE không gửi
     let finalStoreId = storeId;
     if (!finalStoreId && req.user?.storeId) {
       finalStoreId = req.user.storeId;
     }
-    // Nếu vẫn không có storeId thì báo lỗi (tránh leak toàn bộ data)
+
     if (!finalStoreId) {
       return res.status(400).json({
         message: "Thiếu storeId, không thể lấy top sản phẩm.",
       });
     }
-    // Xử lý date range
-    let matchDate = {};
-    const now = new Date();
 
-    if (range) {
-      switch (range) {
-        case "today":
-          matchDate = {
-            $gte: new Date(now.setHours(0, 0, 0, 0)),
-            $lte: new Date(now.setHours(23, 59, 59, 999)),
-          };
-          break;
-        case "yesterday":
-          const yesterday = new Date(now);
-          yesterday.setDate(now.getDate() - 1);
-          matchDate = {
-            $gte: new Date(yesterday.setHours(0, 0, 0, 0)),
-            $lte: new Date(yesterday.setHours(23, 59, 59, 999)),
-          };
-          break;
-        case "thisWeek": // Tuần hiện tại từ Thứ 2, vì việt nam thứ 2 là đầu tuần
-          const currentDay = now.getDay(); // 0 (Sun) -> 6 (Sat)
-          const diffToMonday = currentDay === 0 ? 6 : currentDay - 1; // Nếu chủ nhật -> lùi 6 ngày
-          const monday = new Date(now);
-          monday.setDate(now.getDate() - diffToMonday);
-          matchDate = { $gte: new Date(monday.setHours(0, 0, 0, 0)) };
-          break;
-        case "thisMonth":
-          const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-          matchDate = { $gte: new Date(monthStart.setHours(0, 0, 0, 0)) };
-          break;
-        case "thisYear":
-          const yearStart = new Date(now.getFullYear(), 0, 1);
-          matchDate = { $gte: new Date(yearStart.setHours(0, 0, 0, 0)) };
-          break;
-        default:
-          matchDate = {}; // Default nếu range sai
-      }
-    } else if (dateFrom || dateTo) {
-      if (dateFrom) matchDate.$gte = new Date(dateFrom);
-      if (dateTo) matchDate.$lte = new Date(dateTo);
-    } else {
-      // Default thisMonth nếu ko có range/date
-      const monthStart = new Date();
-      monthStart.setDate(1);
-      monthStart.setHours(0, 0, 0, 0);
-      matchDate.$gte = monthStart;
-    }
+    // --- Dùng periodToRange (đang xài trong hơn 10 hàm order) ---
+    const { start, end } = periodToRange(periodType, periodKey, monthFrom, monthTo);
+
     const match = {
       "order.status": "paid",
-      "order.createdAt": matchDate,
+      "order.createdAt": { $gte: start, $lte: end },
+      "order.storeId": new mongoose.Types.ObjectId(finalStoreId),
     };
 
-    if (storeId) {
-      match["order.storeId"] = new mongoose.Types.ObjectId(storeId); // Filter store nếu có
-    }
-
+    // --- Aggregation ---
     const topProducts = await OrderItem.aggregate([
-      // Join với Order để filter status 'paid' + date/store
+      // Join với Order
       {
         $lookup: {
           from: "orders",
@@ -865,22 +834,27 @@ const getTopSellingProducts = async (req, res) => {
         },
       },
       { $unwind: "$order" },
-      { $match: match }, // Match filter paid + date/store
 
-      // Group by productId, sum quantity/sales/count orders
+      // Filter status + thời gian + storeId
+      { $match: match },
+
+      // Group theo productId
       {
         $group: {
           _id: "$productId",
-          totalQuantity: { $sum: "$quantity" }, // Tổng số lượng bán
-          totalSales: { $sum: "$subtotal" }, // Tổng doanh thu
-          countOrders: { $sum: 1 }, // Số order có sản phẩm này
+          totalQuantity: { $sum: "$quantity" },
+          totalSales: { $sum: "$subtotal" },
+          countOrders: { $sum: 1 },
         },
       },
-      // Sort top (quantity desc)
+
+      // Sort theo số lượng bán
       { $sort: { totalQuantity: -1 } },
-      // Limit
+
+      // Giới hạn top
       { $limit: parseInt(limit) },
-      // Populate product name/sku
+
+      // Join product
       {
         $lookup: {
           from: "products",
@@ -890,9 +864,10 @@ const getTopSellingProducts = async (req, res) => {
         },
       },
       { $unwind: "$product" },
+
+      // Output
       {
         $project: {
-          // Project fields cần
           productName: "$product.name",
           productSku: "$product.sku",
           totalQuantity: 1,
@@ -901,13 +876,14 @@ const getTopSellingProducts = async (req, res) => {
         },
       },
     ]);
-    res.json({
-      message: `Top selling products thành công, limit ${limit}, kết quả: ${topProducts.length} sản phẩm`,
+
+    return res.json({
+      message: `Top selling products thành công (limit ${limit})`,
       data: topProducts,
     });
   } catch (err) {
     console.error("Lỗi top selling products:", err.message);
-    res.status(500).json({ message: "Lỗi server khi lấy top sản phẩm bán chạy" });
+    return res.status(500).json({ message: "Lỗi server khi lấy top sản phẩm bán chạy" });
   }
 };
 
@@ -1569,7 +1545,6 @@ const deletePendingOrder = async (req, res) => {
     });
   }
 };
-
 
 module.exports = {
   createOrder,

@@ -570,12 +570,21 @@ export default function SupplierListPage() {
             dataSource={filteredSuppliers}
             rowKey="_id"
             loading={loading}
+            showSizeChanger={true}
             pagination={{
               current: currentPage,
               pageSize: itemsPerPage,
               total: filteredSuppliers.length,
               showSizeChanger: !isMobile,
-              showTotal: (total, range) => `${range[0]}-${range[1]} của ${total} nhà cung cấp`,
+              showTotal: (total, range) => (
+                <div>
+                  Đang xem{" "}
+                  <span style={{ color: "#1677ff", fontWeight: 600 }}>
+                    {range[0]} – {range[1]}
+                  </span>{" "}
+                  trên tổng số <span style={{ color: "#fa541c", fontWeight: 600 }}>{total}</span> nhà cung cấp
+                </div>
+              ),
               pageSizeOptions: ["5", "10", "20", "50"],
             }}
             onChange={handleTableChange}

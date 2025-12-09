@@ -270,7 +270,7 @@ const InventoryReport: React.FC = () => {
 
           {/* Alert realtime */}
           <Alert
-            message="Dữ liệu được cập nhật realtime theo từng giao dịch nhập/xuất hàng"
+            message="Dữ liệu được cập nhật theo thời gian thực theo từng giao dịch nhập/xuất hàng"
             type="info"
             showIcon
             style={{ borderRadius: 8, marginBottom: 0 }}
