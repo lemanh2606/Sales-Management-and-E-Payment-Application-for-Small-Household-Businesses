@@ -1,6 +1,6 @@
 // pages/SubscriptionPage.jsx
 import React, { useState, useEffect } from "react";
-import { Card, Button, Typography, Space, Spin, message, Row, Col, Statistic, Progress, Timeline, Tag, Modal, Badge } from "antd";
+import { Card, Button, Typography, Space, Spin, message, Row, Col, Statistic, Progress, Timeline, Tag, Modal, Badge, Pagination } from "antd";
 import {
   CrownOutlined,
   RocketOutlined,
@@ -32,6 +32,9 @@ const SubscriptionPage = () => {
   const [subscription, setSubscription] = useState(null);
   const [paymentHistory, setPaymentHistory] = useState([]);
   const [usageStats, setUsageStats] = useState(null);
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(5); // mỗi trang 5 bản ghi
 
   useEffect(() => {
     fetchData();
@@ -191,9 +194,15 @@ const SubscriptionPage = () => {
   const progressPercent = totalDays > 0 ? Math.round((daysRemaining / totalDays) * 100) : 0;
   const pendingPayment = subscription?.pending_payment;
 
+  // Logic phân trang cho lịch sử thanh toán để đỡ dài
+  const total = paymentHistory.length;
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, total);
+  const paginatedHistory = paymentHistory.slice(startIndex, endIndex);
+
   return (
     <Layout>
-      <div style={{ padding: "40px 20px", maxWidth: 1200, margin: "0 auto" }}>
+      <div style={{ maxWidth: 1400, margin: "0 auto" }}>
         {/* Header */}
         <div style={{ marginBottom: 30 }}>
           <Space size="large" align="center">
@@ -469,33 +478,58 @@ const SubscriptionPage = () => {
               }
               style={{ marginTop: 24 }}
             >
-              {console.log("Rendering payment history, length:", paymentHistory?.length, "data:", paymentHistory)}
               {paymentHistory.length > 0 ? (
-                <Timeline>
-                  {paymentHistory.map((payment, index) => (
-                    <Timeline.Item key={index} color={index === 0 ? "green" : "gray"} dot={index === 0 ? <CheckCircleOutlined /> : undefined}>
-                      <Space direction="vertical" size={4}>
-                        <Text strong>
-                          Gói {payment.plan_duration} tháng - {formatCurrency(payment.amount)}đ
-                        </Text>
-                        <Text type="secondary" style={{ fontSize: 13 }}>
-                          {payment.paid_at ? dayjs(payment.paid_at).format("DD/MM/YYYY HH:mm") : "Đang xử lý"}
-                        </Text>
-                        <Text type="secondary" style={{ fontSize: 12 }}>
-                          Mã GD: {payment.transaction_id}
-                        </Text>
-                        {payment.status && (
-                          <Tag
-                            color={payment.status === "SUCCESS" ? "green" : payment.status === "PENDING" ? "orange" : "red"}
-                            style={{ width: "fit-content" }}
-                          >
-                            {payment.status}
-                          </Tag>
-                        )}
-                      </Space>
-                    </Timeline.Item>
-                  ))}
-                </Timeline>
+                <>
+                  {/* Timeline */}
+                  <Timeline>
+                    {paginatedHistory.map((payment, index) => (
+                      <Timeline.Item key={index} color="gray" dot={<CheckCircleOutlined />}>
+                        <Space direction="vertical" size={4}>
+                          <Text strong>
+                            Gói {payment.plan_duration} tháng - {formatCurrency(payment.amount)}đ
+                          </Text>
+                          <Text type="secondary" style={{ fontSize: 13 }}>
+                            {payment.paid_at ? dayjs(payment.paid_at).format("DD/MM/YYYY HH:mm") : "Đang xử lý"}
+                          </Text>
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            Mã GD: {payment.transaction_id}
+                          </Text>
+                          {payment.status && (
+                            <Tag
+                              color={payment.status === "SUCCESS" ? "green" : payment.status === "PENDING" ? "orange" : "red"}
+                              style={{ width: "fit-content" }}
+                            >
+                              {payment.status}
+                            </Tag>
+                          )}
+                        </Space>
+                      </Timeline.Item>
+                    ))}
+                  </Timeline>
+
+                  {/* Pagination */}
+                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20 }}>
+                    <Pagination
+                      current={currentPage}
+                      pageSize={pageSize}
+                      total={total}
+                      showSizeChanger={true}
+                      onChange={(page, size) => {
+                        setCurrentPage(page);
+                        setPageSize(size);
+                      }}
+                      showTotal={(total) => (
+                        <div style={{ textAlign: "end", fontSize: 14, color: "#595959" }}>
+                          Đang xem{" "}
+                          <span style={{ color: "#1890ff", fontWeight: 600 }}>
+                            {total === 0 ? 0 : startIndex + 1} – {endIndex}
+                          </span>{" "}
+                          trên tổng số <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> giao dịch
+                        </div>
+                      )}
+                    />
+                  </div>
+                </>
               ) : (
                 <div style={{ textAlign: "center", padding: "40px 0", color: "#999" }}>
                   <DollarOutlined style={{ fontSize: 48, marginBottom: 16 }} />
