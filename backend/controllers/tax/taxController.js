@@ -1657,7 +1657,6 @@ const exportDeclaration = async (req, res) => {
 
     const info = doc.taxpayerInfo || {};
     const personalInfo = info.personalInfo || {};
-    const categories = doc.revenueByCategory || [];
 
     // ===== HEADER =====
     pdf.fontSize(9).text("Mẫu số: 01/CNKD", 40, 40);
@@ -1684,406 +1683,145 @@ const exportDeclaration = async (req, res) => {
       });
     pdf.moveDown();
 
-    // ===== LOẠI HÌNH KÊ KHAI =====
-    const filingMethod = info.filingMethod || "declaration";
-    const methods = [
-      { code: "fixed", text: "□ HKD, CNKD nộp thuế theo phương pháp khoán" },
-      {
-        code: "per_occurrence",
-        text: "□ CNKD nộp thuế theo từng lần phát sinh",
-      },
-      {
-        code: "proxy",
-        text: "□ Tổ chức, cá nhân khai thuế thay, nộp thuế thay",
-      },
-      {
-        code: "declaration",
-        text: "□ HKD, CNKD nộp thuế theo phương pháp kê khai",
-      },
-      {
-        code: "confirmed_revenue",
-        text: "□ HKD, CNKD trong lĩnh vực ngành nghề có căn cứ xác định được doanh thu theo xác nhận của cơ quan chức năng",
-      },
-      {
-        code: "conversion",
-        text: "□ Hộ khoán chuyển đổi phương pháp tính thuế",
-      },
-    ];
-
-    methods.forEach((method) => {
-      const prefix = method.code === filingMethod ? "☑" : "□";
-      pdf.fontSize(10).text(`${prefix} ${method.text}`);
-    });
+    // Loại hình kê khai
+    pdf
+      .fontSize(10)
+      .font("Roboto")
+      .text("☑ HKD, CNKD nộp thuế theo phương pháp kê khai");
     pdf.moveDown();
 
-    // ===== [01] KỲ TÍNH THUẾ =====
-    pdf.fontSize(10).font("RobotoBold").text("[01] Kỳ tính thuế:");
-    pdf.font("Roboto");
+    // [01] Kỳ tính thuế
+    pdf.text(formatTaxPeriod(doc.periodType, doc.periodKey));
+    pdf.moveDown(0.5);
 
-    const periodInfo = formatTaxPeriod(doc.periodType, doc.periodKey);
-    switch (doc.periodType) {
-      case "year":
-        pdf.text(`[01a] Năm ${doc.periodKey} (${periodInfo})`);
-        break;
-      case "month":
-        pdf.text(`[01b] Tháng ${doc.periodKey}`);
-        break;
-      case "quarter":
-        pdf.text(
-          `[01c] Quý ${doc.periodKey.split("-")[1]} năm ${
-            doc.periodKey.split("-")[0]
-          } (${periodInfo})`
-        );
-        break;
-      case "occurrence":
-        pdf.text(`[01d] Lần phát sinh: Ngày ${formatDate(doc.periodKey)}`);
-        break;
-    }
-    pdf.moveDown();
-
-    // ===== [02] LẦN ĐẦU & [03] BỔ SUNG =====
-    pdf.text(`[02] Lần đầu: ${doc.isFirstTime ? "☑" : "□"}`, {
-      continued: true,
-    });
-    pdf.text(`       [03] Bổ sung lần thứ: ${doc.supplementNumber || "0"}`);
+    // [02] Lần đầu, [03] Bổ sung lần thứ
+    pdf.text(`[02] Lần đầu: ${doc.isFirstTime ? "☑" : "☐"}`);
+    pdf.text(`[03] Bổ sung lần thứ: ${doc.supplementNumber || "0"}`);
     pdf.moveDown();
 
     // ===== THÔNG TIN NGƯỜI NỘP THUẾ =====
-    const drawField = (label, value, x, y, width = 400) => {
-      pdf.text(`${label}`, x, y);
-      pdf.text(`${value}`, x + 120, y, { width: width - 120 });
-    };
+    pdf.fontSize(10).font("RobotoBold").text("THÔNG TIN NGƯỜI NỘP THUẾ");
+    pdf.font("Roboto");
 
-    let yPos = pdf.y;
+    pdf.text(`[04] Người nộp thuế: ${info.name || "..."}`);
+    pdf.text(`[05] Tên cửa hàng/thương hiệu: ${info.storeName || "..."}`);
+    pdf.text(`[06] Tài khoản ngân hàng: ${info.bankAccount || "..."}`);
+    pdf.text(`[07] Mã số thuế: ${info.taxCode || "..."}`);
 
-    drawField(
-      "[04] Người nộp thuế:",
-      info.name || "...........................",
-      40,
-      yPos
-    );
-    yPos += 20;
-
-    drawField(
-      "[05] Tên cửa hàng/thương hiệu:",
-      info.storeName || "...........................",
-      40,
-      yPos
-    );
-    yPos += 20;
-
-    drawField(
-      "[06] Tài khoản ngân hàng:",
-      info.bankAccount || "...........................",
-      40,
-      yPos
-    );
-    yPos += 20;
-
-    drawField(
-      "[07] Mã số thuế:",
-      info.taxCode || "...........................",
-      40,
-      yPos
-    );
-    yPos += 20;
-
-    // [08] Ngành nghề kinh doanh
     pdf.text(
-      `[08] Ngành nghề kinh doanh: ${
-        info.businessSector || "..........................."
-      }`,
-      40,
-      yPos
+      `[08] Ngành nghề kinh doanh: ${info.businessSector || "..."} ${
+        info.businessSectorChanged ? "[08a] Thay đổi thông tin ☑" : ""
+      }`
     );
+
     pdf.text(
-      `[08a] Thay đổi thông tin ${info.businessSectorChanged ? "☑" : "□"}`,
-      450,
-      yPos
+      `[09] Diện tích kinh doanh: ${info.businessArea || "0"} m² ${
+        info.isRented ? "[09a] Đi thuê ☑" : ""
+      }`
     );
-    yPos += 20;
 
-    // [09] Diện tích kinh doanh
     pdf.text(
-      `[09] Diện tích kinh doanh: ${info.businessArea || "0"} m²`,
-      40,
-      yPos
+      `[10] Số lượng lao động sử dụng thường xuyên: ${
+        info.employeeCount || "0"
+      }`
     );
-    pdf.text(`[09a] Đi thuê ${info.isRented ? "☑" : "□"}`, 450, yPos);
-    yPos += 20;
 
-    drawField(
-      "[10] Số lượng lao động sử dụng thường xuyên:",
-      info.employeeCount || "0",
-      40,
-      yPos
+    pdf.text(
+      `[11] Thời gian hoạt động trong ngày từ ${
+        info.workingHours?.from || "..."
+      } giờ đến ${info.workingHours?.to || "..."} giờ`
     );
-    yPos += 20;
 
-    drawField(
-      "[11] Thời gian hoạt động trong ngày từ",
-      `${info.workingHours?.from || "..."} giờ đến ${
-        info.workingHours?.to || "..."
-      } giờ`,
-      40,
-      yPos
-    );
-    yPos += 20;
-
-    // ===== [12] ĐỊA CHỈ KINH DOANH =====
+    // [12] Địa chỉ kinh doanh
     const businessAddr = info.businessAddress || {};
     pdf.text(
-      `[12] Địa chỉ kinh doanh: ${
-        businessAddr.full || "..........................."
-      }`,
-      40,
-      yPos
+      `[12] Địa chỉ kinh doanh: ${businessAddr.full || "..."} ${
+        businessAddr.changed ? "[12a] Thay đổi thông tin ☑" : ""
+      }`
     );
-    pdf.text(
-      `[12a] Thay đổi thông tin ${businessAddr.changed ? "☑" : "□"}`,
-      450,
-      yPos
-    );
-    yPos += 20;
 
     if (businessAddr.street) {
       pdf.text(
-        `     [12b] Số nhà, đường phố/xóm/ấp/thôn: ${businessAddr.street}`,
-        40,
-        yPos
+        `     [12b] Số nhà, đường phố/xóm/ấp/thôn: ${businessAddr.street}`
       );
-      yPos += 20;
     }
-
     if (businessAddr.ward) {
-      pdf.text(`     [12c] Phường/Xã/Thị trấn: ${businessAddr.ward}`, 40, yPos);
-      yPos += 20;
+      pdf.text(`     [12c] Phường/Xã/Thị trấn: ${businessAddr.ward}`);
     }
-
     if (businessAddr.district) {
       pdf.text(
-        `     [12d] Quận/Huyện/Thị xã/Thành phố thuộc tỉnh: ${businessAddr.district}`,
-        40,
-        yPos
+        `     [12d] Quận/Huyện/Thị xã/Thành phố thuộc tỉnh: ${businessAddr.district}`
       );
-      yPos += 20;
     }
-
     if (businessAddr.province) {
-      pdf.text(`     [12đ] Tỉnh/Thành phố: ${businessAddr.province}`, 40, yPos);
-      yPos += 20;
+      pdf.text(`     [12đ] Tỉnh/Thành phố: ${businessAddr.province}`);
     }
-
     if (businessAddr.borderMarket) {
-      pdf.text(
-        `     [12e] Kinh doanh tại chợ biên giới: ${businessAddr.borderMarket} ☑`,
-        40,
-        yPos
-      );
-      yPos += 20;
+      pdf.text("     [12e] Kinh doanh tại chợ biên giới ☑");
     }
 
-    // ===== [13] ĐỊA CHỈ CƯ TRÚ =====
+    // [13] Địa chỉ cư trú
     const residenceAddr = info.residenceAddress || {};
-    pdf.text(
-      `[13] Địa chỉ cư trú: ${
-        residenceAddr.full || "..........................."
-      }`,
-      40,
-      yPos
-    );
-    yPos += 20;
+    pdf.text(`[13] Địa chỉ cư trú: ${residenceAddr.full || "..."}`);
 
     if (residenceAddr.street) {
       pdf.text(
-        `     [13a] Số nhà, đường phố/xóm/ấp/thôn: ${residenceAddr.street}`,
-        40,
-        yPos
+        `     [13a] Số nhà, đường phố/xóm/ấp/thôn: ${residenceAddr.street}`
       );
-      yPos += 20;
     }
-
     if (residenceAddr.ward) {
-      pdf.text(
-        `     [13b] Phường/Xã/Thị trấn: ${residenceAddr.ward}`,
-        40,
-        yPos
-      );
-      yPos += 20;
+      pdf.text(`     [13b] Phường/Xã/Thị trấn: ${residenceAddr.ward}`);
     }
-
     if (residenceAddr.district) {
       pdf.text(
-        `     [13c] Quận/Huyện/Thị xã/Thành phố thuộc tỉnh: ${residenceAddr.district}`,
-        40,
-        yPos
+        `     [13c] Quận/Huyện/Thị xã/Thành phố thuộc tỉnh: ${residenceAddr.district}`
       );
-      yPos += 20;
     }
-
     if (residenceAddr.province) {
-      pdf.text(
-        `     [13d] Tỉnh/Thành phố: ${residenceAddr.province}`,
-        40,
-        yPos
-      );
-      yPos += 20;
+      pdf.text(`     [13d] Tỉnh/Thành phố: ${residenceAddr.province}`);
     }
 
-    // ===== THÔNG TIN LIÊN HỆ =====
-    drawField(
-      "[14] Điện thoại:",
-      info.phone || "...........................",
-      40,
-      yPos
-    );
-    yPos += 20;
-
-    drawField("[15] Fax:", info.fax || "...........................", 40, yPos);
-    yPos += 20;
-
-    drawField(
-      "[16] Email:",
-      info.email || "...........................",
-      40,
-      yPos
-    );
-    yPos += 20;
+    pdf.text(`[14] Điện thoại: ${info.phone || "..."}`);
+    pdf.text(`[15] Fax: ${info.fax || "..."}`);
+    pdf.text(`[16] Email: ${info.email || "..."}`);
 
     // [17] Văn bản ủy quyền
     if (info.taxAuthorizationDoc) {
       pdf.text(
-        `[17] Văn bản ủy quyền khai thuế (nếu có): ${
-          info.taxAuthorizationDoc.number || "..........."
-        } ngày ${formatDate(info.taxAuthorizationDoc.date)}`,
-        40,
-        yPos
+        `[17] Văn bản ủy quyền khai thuế: ${
+          info.taxAuthorizationDoc.number || ""
+        } ngày ${formatDate(info.taxAuthorizationDoc.date)}`
       );
-      yPos += 20;
     }
 
-    // ===== [18] THÔNG TIN CÁ NHÂN (NẾU CHƯA ĐĂNG KÝ THUẾ) =====
-    if (
-      personalInfo.dateOfBirth ||
-      personalInfo.nationality ||
-      personalInfo.idCard?.number
-    ) {
+    // Thông tin cá nhân (nếu có)
+    if (personalInfo.dateOfBirth || personalInfo.idCard?.number) {
+      pdf.moveDown();
       pdf.text(
-        "[18] Trường hợp cá nhân kinh doanh chưa đăng ký thuế thì khai thêm các thông tin sau:",
-        40,
-        yPos
+        "[18] Trường hợp cá nhân kinh doanh chưa đăng ký thuế thì khai thêm các thông tin sau:"
       );
-      yPos += 20;
 
       if (personalInfo.dateOfBirth) {
         pdf.text(
-          `[18a] Ngày sinh: ${formatDate(personalInfo.dateOfBirth)}`,
-          40,
-          yPos
+          `     [18a] Ngày sinh: ${formatDate(personalInfo.dateOfBirth)}`
         );
-        yPos += 20;
       }
-
       if (personalInfo.nationality) {
-        pdf.text(`[18b] Quốc tịch: ${personalInfo.nationality}`, 40, yPos);
-        yPos += 20;
+        pdf.text(`     [18b] Quốc tịch: ${personalInfo.nationality}`);
       }
-
       if (personalInfo.idCard?.number) {
-        pdf.text(`[18c] Số CMND/CCCD: ${personalInfo.idCard.number}`, 40, yPos);
+        pdf.text(`     [18c] Số CMND/CCCD: ${personalInfo.idCard.number}`);
         pdf.text(
-          `[18c.1] Ngày cấp: ${formatDate(personalInfo.idCard.issueDate)}`,
-          240,
-          yPos
+          `     [18c.1] Ngày cấp: ${formatDate(personalInfo.idCard.issueDate)}`
         );
         pdf.text(
-          `[18c.2] Nơi cấp: ${personalInfo.idCard.issuePlace || ""}`,
-          380,
-          yPos
+          `     [18c.2] Nơi cấp: ${personalInfo.idCard.issuePlace || ""}`
         );
-        yPos += 20;
       }
-
-      // Các loại giấy tờ khác (hộ chiếu, giấy thông hành, etc.)
-      if (personalInfo.passport?.number) {
-        pdf.text(
-          `[18d] Số hộ chiếu: ${personalInfo.passport.number}`,
-          40,
-          yPos
-        );
-        pdf.text(
-          `[18d.1] Ngày cấp: ${formatDate(personalInfo.passport.issueDate)}`,
-          240,
-          yPos
-        );
-        pdf.text(
-          `[18d.2] Nơi cấp: ${personalInfo.passport.issuePlace || ""}`,
-          380,
-          yPos
-        );
-        yPos += 20;
-      }
-
-      // Thông tin đăng ký hộ kinh doanh
-      if (personalInfo.businessRegistration) {
-        pdf.text(
-          `[18i] Giấy chứng nhận đăng ký hộ kinh doanh (nếu có): Số: ${personalInfo.businessRegistration.number}`,
-          40,
-          yPos
-        );
-        yPos += 20;
-        pdf.text(
-          `[18i.1] Ngày cấp: ${formatDate(
-            personalInfo.businessRegistration.issueDate
-          )}`,
-          40,
-          yPos
-        );
-        pdf.text(
-          `[18i.2] Cơ quan cấp: ${
-            personalInfo.businessRegistration.issuingAuthority || ""
-          }`,
-          240,
-          yPos
-        );
-        yPos += 20;
-      }
-
-      if (personalInfo.capital) {
-        pdf.text(
-          `[18k] Vốn kinh doanh (đồng): ${formatCurrency(
-            personalInfo.capital
-          )}`,
-          40,
-          yPos
-        );
-        yPos += 20;
-      }
+      // Các loại giấy tờ khác...
     }
 
-    // ===== THÔNG TIN ĐẠI LÝ THUẾ =====
-    if (info.taxAgent) {
-      pdf.text(
-        `[19] Tên đại lý thuế (nếu có): ${info.taxAgent.name || "..."}`,
-        40,
-        yPos
-      );
-      yPos += 20;
-
-      pdf.text(`[20] Mã số thuế: ${info.taxAgent.taxCode || "..."}`, 40, yPos);
-      yPos += 20;
-
-      if (info.taxAgent.contract) {
-        pdf.text(
-          `[21] Hợp đồng đại lý thuế: Số: ${
-            info.taxAgent.contract.number || "..."
-          } Ngày: ${formatDate(info.taxAgent.contract.date)}`,
-          40,
-          yPos
-        );
-        yPos += 20;
-      }
-    }
+    pdf.moveDown();
 
     // ===== PHẦN A – GTGT & TNCN =====
     pdf.addPage();
@@ -2101,7 +1839,7 @@ const exportDeclaration = async (req, res) => {
     const tableWidthA = 515;
     const rowHeightA = 20;
 
-    // Header với 6 cột như mẫu
+    // Header
     pdf
       .rect(40, tableTopA, tableWidthA, rowHeightA)
       .fillAndStroke("#e0e0e0", "#000");
@@ -2110,105 +1848,65 @@ const exportDeclaration = async (req, res) => {
     const colWidthsA = [30, 180, 50, 85, 85, 85];
     let xPos = 40;
 
-    // Header chính
-    const headers = [
-      "STT",
-      "Nhóm ngành nghề",
-      "Mã chỉ tiêu",
-      "Thuế GTGT",
-      "Thuế TNCN",
-    ];
-    headers.forEach((header, index) => {
-      const width = colWidthsA[index];
-      pdf.text(header, xPos + 2, tableTopA + 6, {
-        width: width - 4,
-        align: "center",
-      });
-      xPos += width;
-    });
+    ["STT", "Nhóm ngành nghề", "Mã chỉ tiêu", "Thuế GTGT", "Thuế TNCN"].forEach(
+      (header, index) => {
+        const width = index === 1 ? 180 : index === 0 ? 30 : 85;
+        pdf.text(header, xPos + 2, tableTopA + 6, {
+          width: width - 4,
+          align: "center",
+        });
+        xPos += width;
+      }
+    );
 
     // Sub-header cho doanh thu và số thuế
-    xPos = 40 + 30 + 180 + 50; // Vị trí bắt đầu cột GTGT
-    const subHeaders = ["Doanh thu", "Số thuế", "Doanh thu", "Số thuế"];
-    subHeaders.forEach((subHeader, index) => {
-      pdf.text(subHeader, xPos + 2, tableTopA + 12, {
-        width: 85 - 4,
-        align: "center",
-      });
-      xPos += 85;
+    pdf.text("Doanh thu", 40 + 30 + 180 + 50 + 2, tableTopA + 12, {
+      width: 85 - 4,
+      align: "center",
+    });
+    pdf.text("Số thuế", 40 + 30 + 180 + 50 + 85 + 2, tableTopA + 12, {
+      width: 85 - 4,
+      align: "center",
+    });
+    pdf.text("Doanh thu", 40 + 30 + 180 + 50 + 85 * 2 + 2, tableTopA + 12, {
+      width: 85 - 4,
+      align: "center",
+    });
+    pdf.text("Số thuế", 40 + 30 + 180 + 50 + 85 * 3 + 2, tableTopA + 12, {
+      width: 85 - 4,
+      align: "center",
     });
 
     let yPosA = tableTopA + rowHeightA;
+    const categories = doc.revenueByCategory || [];
+
+    // Dữ liệu các dòng
     pdf.fontSize(8).font("Roboto");
-
-    // Dữ liệu các dòng - theo 4 nhóm ngành nghề như mẫu
-    const categoryGroups = [
-      {
-        name: "Phân phối, cung cấp hàng hóa",
-        code: "[28]",
-        category: "distribution",
-      },
-      {
-        name: "Dịch vụ, xây dựng không bao thầu nguyên vật liệu",
-        code: "[29]",
-        category: "services",
-      },
-      {
-        name: "Sản xuất, vận tải, dịch vụ có gắn với hàng hóa, xây dựng có bao thầu nguyên vật liệu",
-        code: "[30]",
-        category: "production",
-      },
-      {
-        name: "Hoạt động kinh doanh khác",
-        code: "[31]",
-        category: "other",
-      },
-    ];
-
-    categoryGroups.forEach((group, idx) => {
-      const cat = categories.find((c) => c.category === group.category) || {
-        revenue: 0,
-        gtgtTax: 0,
-        tncnTax: 0,
-      };
-
+    categories.forEach((cat, idx) => {
       pdf.rect(40, yPosA, tableWidthA, rowHeightA).stroke();
 
-      // STT
       pdf.text((idx + 1).toString(), 42, yPosA + 6, {
         width: 26,
         align: "center",
       });
-
-      // Nhóm ngành nghề
-      pdf.text(group.name, 72, yPosA + 6, { width: 176 });
-
-      // Mã chỉ tiêu
-      pdf.text(group.code, 252, yPosA + 6, {
+      pdf.text(getCategoryName(cat.category), 72, yPosA + 6, { width: 176 });
+      pdf.text(getCategoryCode(cat.category), 252, yPosA + 6, {
         width: 46,
         align: "center",
       });
-
-      // GTGT - Doanh thu
       pdf.text(formatCurrency(decimalToString(cat.revenue)), 300, yPosA + 6, {
         width: 81,
         align: "right",
       });
-
-      // GTGT - Số thuế
-      pdf.text(formatCurrency(decimalToString(cat.gtgtTax)), 385, yPosA + 6, {
+      pdf.text(formatCurrency(decimalToString(cat.gtgtTax)), 383, yPosA + 6, {
         width: 81,
         align: "right",
       });
-
-      // TNCN - Doanh thu
-      pdf.text(formatCurrency(decimalToString(cat.revenue)), 468, yPosA + 6, {
+      pdf.text(formatCurrency(decimalToString(cat.revenue)), 466, yPosA + 6, {
         width: 81,
         align: "right",
       });
-
-      // TNCN - Số thuế
-      pdf.text(formatCurrency(decimalToString(cat.tncnTax)), 553, yPosA + 6, {
+      pdf.text(formatCurrency(decimalToString(cat.tncnTax)), 549, yPosA + 6, {
         width: 81,
         align: "right",
       });
@@ -2221,39 +1919,34 @@ const exportDeclaration = async (req, res) => {
       .rect(40, yPosA, tableWidthA, rowHeightA)
       .fillAndStroke("#f0f0f0", "#000");
     pdf.fillColor("#000").fontSize(9).font("RobotoBold");
-
-    // Tính tổng
-    const totalRevenue = categories.reduce(
-      (sum, cat) => sum + parseFloat(decimalToString(cat.revenue)),
-      0
-    );
-    const totalGTGT = categories.reduce(
-      (sum, cat) => sum + parseFloat(decimalToString(cat.gtgtTax)),
-      0
-    );
-    const totalTNCN = categories.reduce(
-      (sum, cat) => sum + parseFloat(decimalToString(cat.tncnTax)),
-      0
-    );
-
     pdf.text("Tổng cộng:", 72, yPosA + 6, { width: 176 });
     pdf.text("[32]", 252, yPosA + 6, { width: 46, align: "center" });
-    pdf.text(formatCurrency(totalRevenue), 300, yPosA + 6, {
-      width: 81,
-      align: "right",
-    });
-    pdf.text(formatCurrency(totalGTGT), 385, yPosA + 6, {
-      width: 81,
-      align: "right",
-    });
-    pdf.text(formatCurrency(totalRevenue), 468, yPosA + 6, {
-      width: 81,
-      align: "right",
-    });
-    pdf.text(formatCurrency(totalTNCN), 553, yPosA + 6, {
-      width: 81,
-      align: "right",
-    });
+    pdf.text(
+      formatCurrency(decimalToString(doc.declaredRevenue)),
+      300,
+      yPosA + 6,
+      { width: 81, align: "right" }
+    );
+    pdf.text(
+      formatCurrency(decimalToString(doc.taxAmounts.gtgt)),
+      383,
+      yPosA + 6,
+      { width: 81, align: "right" }
+    );
+    pdf.text(
+      formatCurrency(decimalToString(doc.declaredRevenue)),
+      466,
+      yPosA + 6,
+      { width: 81, align: "right" }
+    );
+    pdf.text(
+      formatCurrency(decimalToString(doc.taxAmounts.tncn)),
+      549,
+      yPosA + 6,
+      { width: 81, align: "right" }
+    );
+
+    pdf.moveDown(2);
 
     // ===== PHẦN B – THUẾ TTĐB =====
     if (doc.specialConsumptionTax && doc.specialConsumptionTax.length > 0) {
@@ -2278,7 +1971,7 @@ const exportDeclaration = async (req, res) => {
       const colWidthsB = [30, 150, 50, 60, 100, 60, 65];
       let xPosB = 40;
 
-      const headersB = [
+      [
         "STT",
         "Hàng hóa, dịch vụ chịu thuế TTĐB",
         "Mã chỉ tiêu",
@@ -2286,9 +1979,7 @@ const exportDeclaration = async (req, res) => {
         "Doanh thu tính thuế TTĐB",
         "Thuế suất",
         "Số thuế",
-      ];
-
-      headersB.forEach((header, index) => {
+      ].forEach((header, index) => {
         const width = colWidthsB[index];
         pdf.text(header, xPosB + 2, tableTopB + 6, {
           width: width - 4,
@@ -2307,41 +1998,29 @@ const exportDeclaration = async (req, res) => {
           width: 26,
           align: "center",
         });
-
         pdf.text(item.itemName, 72, yPosB + 6, { width: 146 });
-
-        // Mã chỉ tiêu theo mẫu: [33a], [33b], ...
-        const letter = String.fromCharCode(97 + idx);
-        pdf.text(`[33${letter}]`, 222, yPosB + 6, {
-          width: 46,
-          align: "center",
-        });
-
-        pdf.text(item.unit, 272, yPosB + 6, { width: 56, align: "center" });
-
+        pdf.text(
+          item.itemCode || `[33${String.fromCharCode(97 + idx)}]`,
+          222,
+          yPosB + 6,
+          { width: 46, align: "center" }
+        );
+        pdf.text(item.unit, 270, yPosB + 6, { width: 56, align: "center" });
         pdf.text(
           formatCurrency(decimalToString(item.revenue)),
-          330,
+          332,
           yPosB + 6,
-          {
-            width: 96,
-            align: "right",
-          }
+          { width: 96, align: "right" }
         );
-
         pdf.text(`${item.taxRate}%`, 430, yPosB + 6, {
           width: 56,
           align: "center",
         });
-
         pdf.text(
           formatCurrency(decimalToString(item.taxAmount)),
           490,
           yPosB + 6,
-          {
-            width: 61,
-            align: "right",
-          }
+          { width: 61, align: "right" }
         );
 
         yPosB += rowHeightB;
@@ -2352,7 +2031,6 @@ const exportDeclaration = async (req, res) => {
         .rect(40, yPosB, tableWidthB, rowHeightB)
         .fillAndStroke("#f0f0f0", "#000");
       pdf.fillColor("#000").fontSize(9).font("RobotoBold");
-
       pdf.text("Tổng cộng:", 72, yPosB + 6, { width: 146 });
       pdf.text("[33]", 222, yPosB + 6, { width: 46, align: "center" });
 
@@ -2365,7 +2043,7 @@ const exportDeclaration = async (req, res) => {
         0
       );
 
-      pdf.text(formatCurrency(totalRevenueB), 330, yPosB + 6, {
+      pdf.text(formatCurrency(totalRevenueB), 332, yPosB + 6, {
         width: 96,
         align: "right",
       });
@@ -2374,6 +2052,8 @@ const exportDeclaration = async (req, res) => {
         width: 61,
         align: "right",
       });
+
+      pdf.moveDown(2);
     }
 
     // ===== PHẦN C – THUẾ MÔI TRƯỜNG/TÀI NGUYÊN =====
@@ -2399,7 +2079,7 @@ const exportDeclaration = async (req, res) => {
       const colWidthsC = [30, 130, 40, 40, 50, 60, 50, 65];
       let xPosC = 40;
 
-      const headersC = [
+      [
         "STT",
         "Tài nguyên, hàng hóa, sản phẩm",
         "Mã CT",
@@ -2408,9 +2088,7 @@ const exportDeclaration = async (req, res) => {
         "Giá tính thuế",
         "Thuế suất",
         "Số thuế",
-      ];
-
-      headersC.forEach((header, index) => {
+      ].forEach((header, index) => {
         const width = colWidthsC[index];
         pdf.text(header, xPosC + 2, tableTopC + 6, {
           width: width - 4,
@@ -2435,9 +2113,8 @@ const exportDeclaration = async (req, res) => {
 
       let rowIndex = 0;
 
-      // 1. Khai thuế tài nguyên
+      // 1. Thuế tài nguyên
       if (resourceTax.length > 0) {
-        pdf.rect(40, yPosC, tableWidthC, rowHeightC).stroke();
         pdf.text("1. Khai thuế tài nguyên", 42, yPosC + 6, { width: 200 });
         yPosC += rowHeightC;
 
@@ -2449,13 +2126,12 @@ const exportDeclaration = async (req, res) => {
             align: "center",
           });
           pdf.text(item.itemName, 72, yPosC + 6, { width: 126 });
-
-          const letter = String.fromCharCode(97 + idx);
-          pdf.text(`[34${letter}]`, 202, yPosC + 6, {
-            width: 36,
-            align: "center",
-          });
-
+          pdf.text(
+            item.itemCode || `[34${String.fromCharCode(97 + idx)}]`,
+            202,
+            yPosC + 6,
+            { width: 36, align: "center" }
+          );
           pdf.text(item.unit, 242, yPosC + 6, { width: 36, align: "center" });
           pdf.text(formatCurrency(item.quantity), 282, yPosC + 6, {
             width: 46,
@@ -2471,33 +2147,20 @@ const exportDeclaration = async (req, res) => {
             width: 46,
             align: "center",
           });
-
-          const taxAmount =
-            parseFloat(decimalToString(item.quantity)) *
-            parseFloat(decimalToString(item.unitPrice)) *
-            (parseFloat(item.taxRate) / 100);
-          pdf.text(formatCurrency(taxAmount), 442, yPosC + 6, {
-            width: 61,
-            align: "right",
-          });
+          pdf.text(
+            formatCurrency(decimalToString(item.taxAmount)),
+            442,
+            yPosC + 6,
+            { width: 61, align: "right" }
+          );
 
           yPosC += rowHeightC;
           rowIndex++;
         });
-
-        // Tổng cộng thuế tài nguyên
-        pdf
-          .rect(40, yPosC, tableWidthC, rowHeightC)
-          .fillAndStroke("#f0f0f0", "#000");
-        pdf.fillColor("#000").fontSize(9).font("RobotoBold");
-        pdf.text("Tổng cộng", 72, yPosC + 6, { width: 126 });
-        pdf.text("[34]", 202, yPosC + 6, { width: 36, align: "center" });
-        yPosC += rowHeightC;
       }
 
-      // 2. Khai thuế bảo vệ môi trường
+      // 2. Thuế bảo vệ môi trường
       if (envTax.length > 0) {
-        pdf.rect(40, yPosC, tableWidthC, rowHeightC).stroke();
         pdf.text("2. Khai thuế bảo vệ môi trường", 42, yPosC + 6, {
           width: 200,
         });
@@ -2511,13 +2174,12 @@ const exportDeclaration = async (req, res) => {
             align: "center",
           });
           pdf.text(item.itemName, 72, yPosC + 6, { width: 126 });
-
-          const letter = String.fromCharCode(97 + idx);
-          pdf.text(`[35${letter}]`, 202, yPosC + 6, {
-            width: 36,
-            align: "center",
-          });
-
+          pdf.text(
+            item.itemCode || `[35${String.fromCharCode(97 + idx)}]`,
+            202,
+            yPosC + 6,
+            { width: 36, align: "center" }
+          );
           pdf.text(item.unit, 242, yPosC + 6, { width: 36, align: "center" });
           pdf.text(formatCurrency(item.quantity), 282, yPosC + 6, {
             width: 46,
@@ -2533,32 +2195,20 @@ const exportDeclaration = async (req, res) => {
             width: 46,
             align: "center",
           });
-
-          const taxAmount =
-            parseFloat(decimalToString(item.quantity)) *
-            parseFloat(decimalToString(item.unitPrice));
-          pdf.text(formatCurrency(taxAmount), 442, yPosC + 6, {
-            width: 61,
-            align: "right",
-          });
+          pdf.text(
+            formatCurrency(decimalToString(item.taxAmount)),
+            442,
+            yPosC + 6,
+            { width: 61, align: "right" }
+          );
 
           yPosC += rowHeightC;
           rowIndex++;
         });
-
-        // Tổng cộng thuế BVMT
-        pdf
-          .rect(40, yPosC, tableWidthC, rowHeightC)
-          .fillAndStroke("#f0f0f0", "#000");
-        pdf.fillColor("#000").fontSize(9).font("RobotoBold");
-        pdf.text("Tổng cộng", 72, yPosC + 6, { width: 126 });
-        pdf.text("[35]", 202, yPosC + 6, { width: 36, align: "center" });
-        yPosC += rowHeightC;
       }
 
-      // 3. Khai phí bảo vệ môi trường
+      // 3. Phí bảo vệ môi trường
       if (envFee.length > 0) {
-        pdf.rect(40, yPosC, tableWidthC, rowHeightC).stroke();
         pdf.text("3. Khai phí bảo vệ môi trường", 42, yPosC + 6, {
           width: 200,
         });
@@ -2572,13 +2222,12 @@ const exportDeclaration = async (req, res) => {
             align: "center",
           });
           pdf.text(item.itemName, 72, yPosC + 6, { width: 126 });
-
-          const letter = String.fromCharCode(97 + idx);
-          pdf.text(`[36${letter}]`, 202, yPosC + 6, {
-            width: 36,
-            align: "center",
-          });
-
+          pdf.text(
+            item.itemCode || `[36${String.fromCharCode(97 + idx)}]`,
+            202,
+            yPosC + 6,
+            { width: 36, align: "center" }
+          );
           pdf.text(item.unit, 242, yPosC + 6, { width: 36, align: "center" });
           pdf.text(formatCurrency(item.quantity), 282, yPosC + 6, {
             width: 46,
@@ -2594,27 +2243,19 @@ const exportDeclaration = async (req, res) => {
             width: 46,
             align: "center",
           });
-
-          const taxAmount =
-            parseFloat(decimalToString(item.quantity)) *
-            parseFloat(decimalToString(item.unitPrice));
-          pdf.text(formatCurrency(taxAmount), 442, yPosC + 6, {
-            width: 61,
-            align: "right",
-          });
+          pdf.text(
+            formatCurrency(decimalToString(item.taxAmount)),
+            442,
+            yPosC + 6,
+            { width: 61, align: "right" }
+          );
 
           yPosC += rowHeightC;
           rowIndex++;
         });
-
-        // Tổng cộng phí BVMT
-        pdf
-          .rect(40, yPosC, tableWidthC, rowHeightC)
-          .fillAndStroke("#f0f0f0", "#000");
-        pdf.fillColor("#000").fontSize(9).font("RobotoBold");
-        pdf.text("Tổng cộng", 72, yPosC + 6, { width: 126 });
-        pdf.text("[36]", 202, yPosC + 6, { width: 36, align: "center" });
       }
+
+      pdf.moveDown(2);
     }
 
     // ===== CAM ĐOAN & CHỮ KÝ =====
@@ -2643,22 +2284,6 @@ const exportDeclaration = async (req, res) => {
       align: "right",
     });
 
-    // Chữ ký đại lý thuế (nếu có)
-    if (info.taxAgent) {
-      pdf.moveDown(5);
-      pdf.text("NHÂN VIÊN ĐẠI LÝ THUẾ", { align: "left" });
-      pdf.text(
-        `Họ và tên: ${info.taxAgent.representative || "..................."}`,
-        { align: "left" }
-      );
-      pdf.text(
-        `Chứng chỉ hành nghề số: ${
-          info.taxAgent.licenseNumber || "..................."
-        }`,
-        { align: "left" }
-      );
-    }
-
     console.log("✅ PDF export successful");
     pdf.end();
   } catch (err) {
@@ -2668,44 +2293,6 @@ const exportDeclaration = async (req, res) => {
       stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
     });
   }
-};
-
-// Hàm helper định dạng ngày
-const formatDate = (dateString) => {
-  if (!dateString) return ".../.../......";
-  const date = new Date(dateString);
-  return `${date.getDate().toString().padStart(2, "0")}/${(date.getMonth() + 1)
-    .toString()
-    .padStart(2, "0")}/${date.getFullYear()}`;
-};
-
-// Hàm helper định dạng tiền tệ
-const formatCurrency = (amount) => {
-  if (!amount) return "0";
-  return parseFloat(amount).toLocaleString("vi-VN");
-};
-
-// Hàm helper chuyển đổi tên nhóm ngành
-const getCategoryName = (category) => {
-  const map = {
-    distribution: "Phân phối, cung cấp hàng hóa",
-    services: "Dịch vụ, xây dựng không bao thầu nguyên vật liệu",
-    production:
-      "Sản xuất, vận tải, dịch vụ có gắn với hàng hóa, xây dựng có bao thầu nguyên vật liệu",
-    other: "Hoạt động kinh doanh khác",
-  };
-  return map[category] || "Hoạt động kinh doanh khác";
-};
-
-// Hàm helper lấy mã chỉ tiêu
-const getCategoryCode = (category) => {
-  const map = {
-    distribution: "[28]",
-    services: "[29]",
-    production: "[30]",
-    other: "[31]",
-  };
-  return map[category] || "[31]";
 };
 module.exports = {
   previewSystemRevenue,
