@@ -1,4 +1,4 @@
-// controllers/tax/taxController.js - ✅ BẢN HOÀN CHỈNH ĐẦY ĐỦ THEO MẪU 01/CNKD
+// controllers/tax/taxController.js - ✅ BẢN ĐÃ SỬA LỖI LƯU DỮ LIỆU
 const mongoose = require("mongoose");
 const PDFDocument = require("pdfkit");
 const Order = require("../../models/Order");
@@ -26,7 +26,7 @@ function isManagerUser(user) {
   return false;
 }
 
-// ✅ VALIDATION HELPER
+// ✅ VALIDATION HELPER - IMPROVED
 function validateRequiredFields(data, requiredFields) {
   const missing = [];
   const invalid = [];
@@ -40,14 +40,23 @@ function validateRequiredFields(data, requiredFields) {
     }
 
     // Type validation
-    if (type === "number" && (isNaN(value) || Number(value) < 0)) {
-      invalid.push({ field, message: `${field} phải là số dương` });
+    if (type === "number") {
+      const numValue = Number(value);
+      if (isNaN(numValue) || numValue < 0) {
+        invalid.push({ field, message: `${field} phải là số dương` });
+      }
     }
     if (type === "string" && typeof value !== "string") {
       invalid.push({ field, message: `${field} phải là chuỗi` });
     }
     if (type === "objectId" && !mongoose.Types.ObjectId.isValid(value)) {
       invalid.push({ field, message: `${field} không phải ObjectId hợp lệ` });
+    }
+    if (type === "email" && typeof value === "string") {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(value)) {
+        invalid.push({ field, message: `${field} không phải email hợp lệ` });
+      }
     }
   });
 
@@ -80,13 +89,13 @@ function successResponse(res, message, data = {}, status = 200) {
   });
 }
 
-// ✅ Lấy thông tin người nộp thuế từ Store
+// ✅ Lấy thông tin người nộp thuế từ Store - IMPROVED
 async function getTaxpayerInfo(storeId) {
   try {
     const store = await Store.findOne({ _id: storeId, deleted: false })
       .populate(
         "owner_id",
-        "_id name fullName email dateOfBirth nationality idCard passport"
+        "_id name fullName email dateOfBirth nationality idCard passport phone"
       )
       .populate("staff_ids", "_id name email")
       .lean();
@@ -97,6 +106,15 @@ async function getTaxpayerInfo(storeId) {
     }
 
     const owner = store.owner_id || {};
+
+    // Đảm bảo email được lấy đầy đủ từ cả store và owner
+    const storeEmail = store.email || "";
+    const ownerEmail = owner.email || "";
+    const finalEmail = storeEmail || ownerEmail;
+
+    console.log(
+      `📧 Email info: store=${storeEmail}, owner=${ownerEmail}, final=${finalEmail}`
+    );
 
     return {
       name: owner.fullName || owner.name || store.owner_name || "",
@@ -128,9 +146,9 @@ async function getTaxpayerInfo(storeId) {
         district: store.ownerResidence?.district || "",
         province: store.ownerResidence?.province || "",
       },
-      phone: store.phone || "",
+      phone: store.phone || owner.phone || "",
       fax: store.fax || "",
-      email: store.email || "",
+      email: finalEmail, // ✅ Sử dụng email đã được xác định
       taxAuthorizationDoc: store.taxAuthorizationDoc || null,
       personalInfo: {
         dateOfBirth: owner.dateOfBirth || null,
@@ -246,7 +264,7 @@ function formatCurrency(amount) {
 // ==================== CONTROLLERS ====================
 
 /**
- * 1. PREVIEW SYSTEM REVENUE
+ * 1. PREVIEW SYSTEM REVENUE - FIXED
  * GET /api/taxs/preview?periodType=...&periodKey=...&storeId=...
  */
 const previewSystemRevenue = async (req, res) => {
@@ -254,7 +272,16 @@ const previewSystemRevenue = async (req, res) => {
   console.log("Query params:", req.query);
 
   try {
-    const { periodType, periodKey, storeId, monthFrom, monthTo } = req.query;
+    const { periodType, storeId, monthFrom, monthTo } = req.query;
+
+    // FIX: Xử lý periodKey khi nó là array
+    let periodKey = req.query.periodKey;
+
+    // Nếu periodKey là array, lấy phần tử đầu tiên
+    if (Array.isArray(periodKey)) {
+      console.log(`⚠️ periodKey is array: ${periodKey}, taking first element`);
+      periodKey = periodKey[0];
+    }
 
     // Validation
     const validation = validateRequiredFields({ periodType, storeId }, [
@@ -305,12 +332,61 @@ const previewSystemRevenue = async (req, res) => {
 
     console.log(`✅ Store found: ${store.name} (${storeId})`);
 
+    // FIX: Kiểm tra periodKey có hợp lệ không trước khi gọi periodToRange
+    if (periodType !== "custom" && periodKey) {
+      // Validate periodKey format
+      if (periodType === "month") {
+        if (!/^\d{4}-\d{2}$/.test(periodKey)) {
+          return errorResponse(
+            res,
+            400,
+            "Định dạng periodKey không hợp lệ cho tháng",
+            {
+              periodKey,
+              expectedFormat: "YYYY-MM",
+              example: "2025-11",
+            }
+          );
+        }
+      } else if (periodType === "quarter") {
+        if (!/^\d{4}-Q[1-4]$/.test(periodKey)) {
+          return errorResponse(
+            res,
+            400,
+            "Định dạng periodKey không hợp lệ cho quý",
+            {
+              periodKey,
+              expectedFormat: "YYYY-Q[1-4]",
+              example: "2025-Q4",
+            }
+          );
+        }
+      } else if (periodType === "year") {
+        if (!/^\d{4}$/.test(periodKey)) {
+          return errorResponse(
+            res,
+            400,
+            "Định dạng periodKey không hợp lệ cho năm",
+            {
+              periodKey,
+              expectedFormat: "YYYY",
+              example: "2025",
+            }
+          );
+        }
+      }
+    }
+
+    console.log(`📅 Period: ${periodType} - ${periodKey}`);
+    console.log(`📅 Custom range: ${monthFrom} -> ${monthTo}`);
+
     const { start, end } = periodToRange(
       periodType,
       periodKey,
       monthFrom,
       monthTo
     );
+
     console.log(`📅 Period range: ${start} -> ${end}`);
 
     const agg = await Order.aggregate([
@@ -358,26 +434,38 @@ const previewSystemRevenue = async (req, res) => {
 };
 
 /**
- * 2. CREATE TAX DECLARATION
+ * 2. CREATE TAX DECLARATION - FIXED (ĐÃ BỎ CHECK TỒN TẠI)
  * POST /api/taxs
  */
 const createTaxDeclaration = async (req, res) => {
-  console.log("\n📋 === CREATE TAX DECLARATION ===");
+  console.log("\n📋 === CREATE TAX DECLARATION (NO DUPLICATE CHECK) ===");
   console.log("Request body keys:", Object.keys(req.body));
-  console.log("StoreId:", req.body.storeId);
-  console.log("PeriodType:", req.body.periodType);
-  console.log("PeriodKey:", req.body.periodKey);
-  console.log("DeclaredRevenue:", req.body.declaredRevenue);
+  console.log("Request body:", JSON.stringify(req.body, null, 2));
 
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
-    const storeId = req.body.storeId || req.query.storeId;
-    const periodType = req.body.periodType || req.query.periodType;
-    let periodKey = req.body.periodKey || req.query.periodKey;
-    const declaredRevenue =
-      req.body.declaredRevenue || req.query.declaredRevenue;
+    // ✅ Lấy dữ liệu từ request body với fallback hợp lý
+    const {
+      storeId,
+      periodType,
+      periodKey,
+      declaredRevenue,
+      monthFrom,
+      monthTo,
+      taxRates = {},
+      revenueByCategory = [],
+      specialConsumptionTax = [],
+      environmentalTax = [],
+      notes = "",
+      internalNotes = "",
+      status = "draft",
+      isFirstTime = true,
+      supplementNumber = 0,
+      taxpayerInfo: customTaxpayerInfo = {}, // Cho phép ghi đè thông tin từ client
+    } = req.body;
+
     const createdBy = req.user?._id;
 
     console.log("📝 Extracted fields:");
@@ -386,8 +474,12 @@ const createTaxDeclaration = async (req, res) => {
     console.log("  - periodKey:", periodKey);
     console.log("  - declaredRevenue:", declaredRevenue);
     console.log("  - createdBy:", createdBy);
+    console.log(
+      "  - customTaxpayerInfo keys:",
+      Object.keys(customTaxpayerInfo)
+    );
 
-    // ✅ VALIDATE REQUIRED FIELDS
+    // ✅ VALIDATE REQUIRED FIELDS - IMPROVED
     const validation = validateRequiredFields(
       { storeId, periodType, periodKey, declaredRevenue },
       [
@@ -421,16 +513,19 @@ const createTaxDeclaration = async (req, res) => {
       });
     }
 
+    // Xử lý periodKey cho kỳ custom
+    let processedPeriodKey = periodKey;
     if (
       periodType === "custom" &&
       typeof periodKey === "string" &&
       periodKey.includes("đến")
     ) {
       const [from, to] = periodKey.split("đến").map((s) => s.trim());
-      periodKey = `${from}_${to}`;
-      console.log("  - periodKey (converted):", periodKey);
+      processedPeriodKey = `${from}_${to}`;
+      console.log("  - periodKey (converted):", processedPeriodKey);
     }
 
+    // Kiểm tra store
     const store = await Store.findOne({ _id: storeId, deleted: false }).session(
       session
     );
@@ -445,10 +540,13 @@ const createTaxDeclaration = async (req, res) => {
 
     console.log(`✅ Store found: ${store.name}`);
 
+    // ❌ BỎ CHECK TỒN TẠI - CHO PHÉP TẠO NHIỀU TỜ KHAI CÙNG KỲ
+    // Comment/Remove the existing duplicate check
+    /*
     const existingOriginal = await TaxDeclaration.findOne({
       shopId: storeId,
       periodType,
-      periodKey,
+      periodKey: processedPeriodKey,
       isClone: false,
     }).session(session);
 
@@ -458,20 +556,21 @@ const createTaxDeclaration = async (req, res) => {
       return errorResponse(res, 409, "Tờ khai cho kỳ này đã tồn tại", {
         existingId: existingOriginal._id,
         periodType,
-        periodKey,
+        periodKey: processedPeriodKey,
         hint: "Vui lòng cập nhật tờ khai hiện có hoặc tạo bản sao",
       });
     }
+    */
 
-    let monthFrom = req.body.monthFrom || req.query.monthFrom;
-    let monthTo = req.body.monthTo || req.query.monthTo;
+    // Tính toán period range
     const { start, end } =
       periodType === "custom"
-        ? periodToRange(periodType, periodKey, monthFrom, monthTo)
-        : periodToRange(periodType, periodKey);
+        ? periodToRange(periodType, processedPeriodKey, monthFrom, monthTo)
+        : periodToRange(periodType, processedPeriodKey);
 
     console.log(`📅 Period range: ${start} -> ${end}`);
 
+    // Tính doanh thu hệ thống
     const agg = await Order.aggregate([
       {
         $match: {
@@ -494,16 +593,38 @@ const createTaxDeclaration = async (req, res) => {
 
     console.log(`💰 System revenue: ${systemRevenueDecimal.toString()}`);
 
-    const taxpayerInfo = await getTaxpayerInfo(storeId);
+    // Lấy thông tin người nộp thuế từ database
+    const dbTaxpayerInfo = await getTaxpayerInfo(storeId);
 
-    const gtgtRate =
-      req.body.taxRates?.gtgt !== undefined
-        ? Number(req.body.taxRates.gtgt)
-        : 1.0;
-    const tncnRate =
-      req.body.taxRates?.tncn !== undefined
-        ? Number(req.body.taxRates.tncn)
-        : 0.5;
+    // ✅ MERGE thông tin: database info + custom info từ client
+    const taxpayerInfo = {
+      ...dbTaxpayerInfo,
+      ...customTaxpayerInfo,
+      // Merge nested objects
+      businessAddress: {
+        ...(dbTaxpayerInfo.businessAddress || {}),
+        ...(customTaxpayerInfo.businessAddress || {}),
+      },
+      residenceAddress: {
+        ...(dbTaxpayerInfo.residenceAddress || {}),
+        ...(customTaxpayerInfo.residenceAddress || {}),
+      },
+      workingHours: {
+        ...(dbTaxpayerInfo.workingHours || {}),
+        ...(customTaxpayerInfo.workingHours || {}),
+      },
+      personalInfo: {
+        ...(dbTaxpayerInfo.personalInfo || {}),
+        ...(customTaxpayerInfo.personalInfo || {}),
+      },
+    };
+
+    console.log("👤 Final taxpayer info keys:", Object.keys(taxpayerInfo));
+    console.log("📧 Final email:", taxpayerInfo.email);
+
+    // Tính toán thuế
+    const gtgtRate = Number(taxRates.gtgt || 1.0);
+    const tncnRate = Number(taxRates.tncn || 0.5);
     const declaredNum = Number(declaredRevenue);
     const gtgtAmount = (declaredNum * gtgtRate) / 100;
     const tncnAmount = (declaredNum * tncnRate) / 100;
@@ -515,81 +636,91 @@ const createTaxDeclaration = async (req, res) => {
     console.log(`  - TNCN (${tncnRate}%): ${tncnAmount}`);
     console.log(`  - Total: ${totalTax}`);
 
-    const revenueByCategory = (req.body.revenueByCategory || []).map((cat) => ({
-      category: cat.category,
-      categoryCode: getCategoryCode(cat.category),
+    // Xử lý danh mục doanh thu
+    const processedRevenueByCategory = revenueByCategory.map((cat) => ({
+      category: cat.category || "",
+      categoryCode: getCategoryCode(cat.category || ""),
       revenue: parseDecimal(cat.revenue || 0),
       gtgtTax: parseDecimal(cat.gtgtTax || 0),
       tncnTax: parseDecimal(cat.tncnTax || 0),
     }));
 
-    const specialConsumptionTax = (req.body.specialConsumptionTax || []).map(
+    // Xử lý thuế tiêu thụ đặc biệt
+    const processedSpecialConsumptionTax = specialConsumptionTax.map(
       (item, idx) => ({
-        itemName: item.itemName,
+        itemName: item.itemName || "",
         itemCode: `[33${String.fromCharCode(97 + idx)}]`,
-        unit: item.unit,
+        unit: item.unit || "",
         revenue: parseDecimal(item.revenue || 0),
         taxRate: Number(item.taxRate || 0),
         taxAmount: parseDecimal(item.taxAmount || 0),
       })
     );
 
-    const environmentalTax = (req.body.environmentalTax || []).map(
-      (item, idx) => ({
-        type: item.type,
-        itemName: item.itemName,
-        itemCode:
-          item.type === "resource"
-            ? `[34${String.fromCharCode(97 + idx)}]`
-            : item.type === "environmental_tax"
-            ? `[35${String.fromCharCode(97 + idx)}]`
-            : `[36${String.fromCharCode(97 + idx)}]`,
-        unit: item.unit,
-        quantity: Number(item.quantity || 0),
-        unitPrice: parseDecimal(item.unitPrice || 0),
-        taxRate: Number(item.taxRate || 0),
-        taxAmount: parseDecimal(item.taxAmount || 0),
-      })
-    );
+    // Xử lý thuế môi trường
+    const processedEnvironmentalTax = environmentalTax.map((item, idx) => ({
+      type: item.type || "environmental_tax",
+      itemName: item.itemName || "",
+      itemCode:
+        item.type === "resource"
+          ? `[34${String.fromCharCode(97 + idx)}]`
+          : item.type === "environmental_tax"
+          ? `[35${String.fromCharCode(97 + idx)}]`
+          : `[36${String.fromCharCode(97 + idx)}]`,
+      unit: item.unit || "",
+      quantity: Number(item.quantity || 0),
+      unitPrice: parseDecimal(item.unitPrice || 0),
+      taxRate: Number(item.taxRate || 0),
+      taxAmount: parseDecimal(item.taxAmount || 0),
+    }));
 
     console.log("📦 Creating declaration document...");
 
-    const doc = await TaxDeclaration.create(
-      [
-        {
-          shopId: storeId,
-          periodType,
-          periodKey,
-          isFirstTime: req.body.isFirstTime !== false,
-          supplementNumber: req.body.supplementNumber || 0,
-          taxpayerInfo,
-          systemRevenue: systemRevenueDecimal,
-          declaredRevenue: parseDecimal(declaredNum),
-          taxRates: { gtgt: gtgtRate, tncn: tncnRate },
-          taxAmounts: {
-            gtgt: parseDecimal(gtgtAmount),
-            tncn: parseDecimal(tncnAmount),
-            total: parseDecimal(totalTax),
-          },
-          revenueByCategory,
-          specialConsumptionTax,
-          environmentalTax,
-          notes: req.body.notes || "",
-          internalNotes: req.body.internalNotes || "",
-          createdBy,
-          originalId: null,
-          isClone: false,
-          version: 1,
-          status: req.body.status || "draft",
-        },
-      ],
-      { session }
+    // ✅ Tạo document với tất cả các trường
+    const docData = {
+      shopId: storeId,
+      periodType,
+      periodKey: processedPeriodKey,
+      isFirstTime,
+      supplementNumber: Number(supplementNumber) || 0,
+      taxpayerInfo, // ✅ Đảm bảo taxpayerInfo có đầy đủ thông tin
+      systemRevenue: systemRevenueDecimal,
+      declaredRevenue: parseDecimal(declaredNum),
+      taxRates: {
+        gtgt: gtgtRate,
+        tncn: tncnRate,
+      },
+      taxAmounts: {
+        gtgt: parseDecimal(gtgtAmount),
+        tncn: parseDecimal(tncnAmount),
+        total: parseDecimal(totalTax),
+      },
+      revenueByCategory: processedRevenueByCategory,
+      specialConsumptionTax: processedSpecialConsumptionTax,
+      environmentalTax: processedEnvironmentalTax,
+      notes: notes || "",
+      internalNotes: internalNotes || "",
+      createdBy,
+      originalId: null,
+      isClone: false,
+      version: 1,
+      status,
+    };
+
+    console.log("📄 Document data keys:", Object.keys(docData));
+    console.log(
+      "📄 Document taxpayerInfo:",
+      JSON.stringify(docData.taxpayerInfo, null, 2)
     );
+
+    const doc = await TaxDeclaration.create([docData], { session });
 
     await session.commitTransaction();
     session.endSession();
 
     console.log(`✅ Declaration created: ${doc[0]._id}`);
+    console.log(`ℹ️  Period: ${periodType} ${processedPeriodKey}`);
+    console.log(`ℹ️  Status: ${status}`);
 
     await logActivity({
       user: req.user,
@@ -597,9 +728,9 @@ const createTaxDeclaration = async (req, res) => {
       action: "create",
       entity: "TaxDeclaration",
       entityId: doc[0]._id,
-      entityName: `${periodType}-${periodKey}`,
+      entityName: `${periodType}-${processedPeriodKey}`,
       req,
-      description: `Tạo tờ khai thuế kỳ ${periodType} ${periodKey} cho cửa hàng ${store.name}`,
+      description: `Tạo tờ khai thuế kỳ ${periodType} ${processedPeriodKey} cho cửa hàng ${store.name}`,
     });
 
     return successResponse(
@@ -607,7 +738,8 @@ const createTaxDeclaration = async (req, res) => {
       "Tạo tờ khai thành công",
       {
         declaration: doc[0],
-        periodFormatted: formatTaxPeriod(periodType, periodKey),
+        periodFormatted: formatTaxPeriod(periodType, processedPeriodKey),
+        note: "Đã tạo tờ khai mới (không kiểm tra trùng kỳ)",
       },
       201
     );
@@ -621,23 +753,28 @@ const createTaxDeclaration = async (req, res) => {
     });
   }
 };
-
 /**
- * 3. UPDATE TAX DECLARATION
+ * 3. UPDATE TAX DECLARATION - IMPROVED
  * PUT /api/taxs/:id
  */
 const updateTaxDeclaration = async (req, res) => {
   console.log("\n📋 === UPDATE TAX DECLARATION ===");
   console.log("ID:", req.params.id);
-  console.log("Request body keys:", Object.keys(req.body));
+  console.log("Request body:", JSON.stringify(req.body, null, 2));
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
   try {
     const { id } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
+      await session.abortTransaction();
+      session.endSession();
       return errorResponse(res, 400, "ID tờ khai không hợp lệ", { id });
     }
 
+    // Lấy tất cả các trường từ request body
     const {
       declaredRevenue,
       taxRates,
@@ -649,11 +786,17 @@ const updateTaxDeclaration = async (req, res) => {
       status,
       isFirstTime,
       supplementNumber,
-      taxpayerInfo,
+      taxpayerInfo: updatedTaxpayerInfo,
+      ...otherFields
     } = req.body;
 
-    const doc = await TaxDeclaration.findById(id);
+    console.log("📝 Fields to update:", Object.keys(req.body));
+
+    // Tìm document
+    const doc = await TaxDeclaration.findById(id).session(session);
     if (!doc) {
+      await session.abortTransaction();
+      session.endSession();
       return errorResponse(res, 404, "Không tìm thấy tờ khai", { id });
     }
 
@@ -661,7 +804,10 @@ const updateTaxDeclaration = async (req, res) => {
       `✅ Declaration found: ${doc.periodType}-${doc.periodKey} (status: ${doc.status})`
     );
 
+    // Kiểm tra quyền chỉnh sửa
     if (!["draft", "saved"].includes(doc.status)) {
+      await session.abortTransaction();
+      session.endSession();
       return errorResponse(
         res,
         400,
@@ -675,6 +821,8 @@ const updateTaxDeclaration = async (req, res) => {
 
     const userId = req.user?._id;
     if (!isManagerUser(req.user) && String(doc.createdBy) !== String(userId)) {
+      await session.abortTransaction();
+      session.endSession();
       return errorResponse(
         res,
         403,
@@ -688,8 +836,48 @@ const updateTaxDeclaration = async (req, res) => {
 
     console.log("🔧 Updating fields...");
 
+    // ✅ Cập nhật thông tin người nộp thuế nếu có
+    if (updatedTaxpayerInfo) {
+      console.log("👤 Updating taxpayer info...");
+
+      // Merge thông tin mới với thông tin cũ
+      doc.taxpayerInfo = {
+        ...doc.taxpayerInfo,
+        ...updatedTaxpayerInfo,
+        // Merge nested objects
+        businessAddress: {
+          ...(doc.taxpayerInfo?.businessAddress || {}),
+          ...(updatedTaxpayerInfo.businessAddress || {}),
+        },
+        residenceAddress: {
+          ...(doc.taxpayerInfo?.residenceAddress || {}),
+          ...(updatedTaxpayerInfo.residenceAddress || {}),
+        },
+        workingHours: {
+          ...(doc.taxpayerInfo?.workingHours || {}),
+          ...(updatedTaxpayerInfo.workingHours || {}),
+        },
+        personalInfo: {
+          ...(doc.taxpayerInfo?.personalInfo || {}),
+          ...(updatedTaxpayerInfo.personalInfo || {}),
+        },
+      };
+
+      console.log("📧 Updated email:", doc.taxpayerInfo.email);
+    }
+
+    // Cập nhật doanh thu và thuế nếu có
     if (declaredRevenue != null) {
       const declaredNum = Number(declaredRevenue);
+      if (isNaN(declaredNum) || declaredNum < 0) {
+        await session.abortTransaction();
+        session.endSession();
+        return errorResponse(res, 400, "Doanh thu kê khai không hợp lệ", {
+          declaredRevenue,
+          hint: "Doanh thu phải là số >= 0",
+        });
+      }
+
       const gtgtRate =
         taxRates?.gtgt !== undefined
           ? Number(taxRates.gtgt)
@@ -699,9 +887,35 @@ const updateTaxDeclaration = async (req, res) => {
           ? Number(taxRates.tncn)
           : doc.taxRates.tncn ?? 0.5;
 
+      // Validate tax rates
+      if (isNaN(gtgtRate) || gtgtRate < 0 || gtgtRate > 10) {
+        await session.abortTransaction();
+        session.endSession();
+        return errorResponse(res, 400, "Thuế suất GTGT không hợp lệ", {
+          gtgtRate,
+          hint: "Thuế suất GTGT phải từ 0-10%",
+        });
+      }
+
+      if (isNaN(tncnRate) || tncnRate < 0 || tncnRate > 5) {
+        await session.abortTransaction();
+        session.endSession();
+        return errorResponse(res, 400, "Thuế suất TNCN không hợp lệ", {
+          tncnRate,
+          hint: "Thuế suất TNCN phải từ 0-5%",
+        });
+      }
+
+      // Tính toán thuế mới
       const gtgtAmount = (declaredNum * gtgtRate) / 100;
       const tncnAmount = (declaredNum * tncnRate) / 100;
       const totalTax = gtgtAmount + tncnAmount;
+
+      console.log("💸 Tax calculation:");
+      console.log(`  - Declared: ${declaredNum}`);
+      console.log(`  - GTGT (${gtgtRate}%): ${gtgtAmount}`);
+      console.log(`  - TNCN (${tncnRate}%): ${tncnAmount}`);
+      console.log(`  - Total: ${totalTax}`);
 
       doc.declaredRevenue = parseDecimal(declaredNum);
       doc.taxRates.gtgt = gtgtRate;
@@ -709,85 +923,109 @@ const updateTaxDeclaration = async (req, res) => {
       doc.taxAmounts.gtgt = parseDecimal(gtgtAmount);
       doc.taxAmounts.tncn = parseDecimal(tncnAmount);
       doc.taxAmounts.total = parseDecimal(totalTax);
-
-      console.log(
-        `💸 Tax updated: GTGT=${gtgtAmount}, TNCN=${tncnAmount}, Total=${totalTax}`
-      );
     }
 
-    if (revenueByCategory) {
+    // Cập nhật các trường khác
+    if (revenueByCategory !== undefined) {
       doc.revenueByCategory = revenueByCategory.map((cat) => ({
-        category: cat.category,
-        categoryCode: getCategoryCode(cat.category),
+        category: cat.category || "",
+        categoryCode: getCategoryCode(cat.category || ""),
         revenue: parseDecimal(cat.revenue || 0),
         gtgtTax: parseDecimal(cat.gtgtTax || 0),
         tncnTax: parseDecimal(cat.tncnTax || 0),
       }));
-      console.log(
-        `📊 Revenue by category updated: ${revenueByCategory.length} items`
-      );
     }
 
-    if (specialConsumptionTax) {
+    if (specialConsumptionTax !== undefined) {
       doc.specialConsumptionTax = specialConsumptionTax.map((item, idx) => ({
-        itemName: item.itemName,
+        itemName: item.itemName || "",
         itemCode: `[33${String.fromCharCode(97 + idx)}]`,
-        unit: item.unit,
+        unit: item.unit || "",
         revenue: parseDecimal(item.revenue || 0),
         taxRate: Number(item.taxRate || 0),
         taxAmount: parseDecimal(item.taxAmount || 0),
       }));
-      console.log(
-        `🍾 Special consumption tax updated: ${specialConsumptionTax.length} items`
-      );
     }
 
-    if (environmentalTax) {
+    if (environmentalTax !== undefined) {
       doc.environmentalTax = environmentalTax.map((item, idx) => ({
-        type: item.type,
-        itemName: item.itemName,
+        type: item.type || "environmental_tax",
+        itemName: item.itemName || "",
         itemCode:
           item.type === "resource"
             ? `[34${String.fromCharCode(97 + idx)}]`
             : item.type === "environmental_tax"
             ? `[35${String.fromCharCode(97 + idx)}]`
             : `[36${String.fromCharCode(97 + idx)}]`,
-        unit: item.unit,
+        unit: item.unit || "",
         quantity: Number(item.quantity || 0),
         unitPrice: parseDecimal(item.unitPrice || 0),
         taxRate: Number(item.taxRate || 0),
         taxAmount: parseDecimal(item.taxAmount || 0),
       }));
-      console.log(
-        `🌿 Environmental tax updated: ${environmentalTax.length} items`
-      );
     }
 
-    if (taxpayerInfo) {
-      doc.taxpayerInfo = { ...doc.taxpayerInfo, ...taxpayerInfo };
-      console.log("👤 Taxpayer info updated");
-    }
-
+    // Cập nhật các trường cơ bản
     if (notes !== undefined) doc.notes = notes;
     if (internalNotes !== undefined && isManagerUser(req.user)) {
       doc.internalNotes = internalNotes;
     }
     if (isFirstTime !== undefined) doc.isFirstTime = isFirstTime;
-    if (supplementNumber !== undefined) doc.supplementNumber = supplementNumber;
-
-    if (status && ["draft", "saved", "submitted"].includes(status)) {
-      doc.status = status;
-      if (status === "submitted" && !doc.submittedAt) {
-        doc.submittedAt = new Date();
-        console.log("📤 Status changed to submitted");
-      }
+    if (supplementNumber !== undefined) {
+      doc.supplementNumber = Number(supplementNumber) || 0;
     }
 
+    // Cập nhật trạng thái
+    if (status && ["draft", "saved", "submitted"].includes(status)) {
+      if (status === "submitted") {
+        // Validate before submitting
+        const validationErrors = [];
+        if (!doc.taxpayerInfo?.name) {
+          validationErrors.push("Thiếu tên người nộp thuế");
+        }
+        if (!doc.taxpayerInfo?.taxCode) {
+          validationErrors.push("Thiếu mã số thuế");
+        }
+        if (parseFloat(doc.declaredRevenue.toString()) <= 0) {
+          validationErrors.push("Doanh thu kê khai phải lớn hơn 0");
+        }
+        // ✅ Kiểm tra email khi submit
+        if (!doc.taxpayerInfo?.email) {
+          validationErrors.push("Thiếu email người nộp thuế");
+        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(doc.taxpayerInfo.email)) {
+          validationErrors.push("Email không hợp lệ");
+        }
+
+        if (validationErrors.length > 0) {
+          await session.abortTransaction();
+          session.endSession();
+          return errorResponse(res, 400, "Không thể nộp tờ khai", {
+            validationErrors,
+            hint: "Vui lòng kiểm tra lại thông tin trước khi nộp",
+          });
+        }
+
+        if (!doc.submittedAt) {
+          doc.submittedAt = new Date();
+          console.log("📤 Status changed to submitted");
+        }
+      }
+      doc.status = status;
+    }
+
+    // Cập nhật thời gian và người cập nhật
     doc.updatedAt = new Date();
-    await doc.save();
+    doc.updatedBy = req.user?._id;
+
+    // Lưu trong transaction
+    await doc.save({ session });
+
+    await session.commitTransaction();
+    session.endSession();
 
     console.log(`✅ Declaration updated: ${doc._id}`);
 
+    // Log activity
     await logActivity({
       user: req.user,
       store: { _id: doc.shopId },
@@ -796,13 +1034,17 @@ const updateTaxDeclaration = async (req, res) => {
       entityId: doc._id,
       entityName: `${doc.periodType}-${doc.periodKey}`,
       req,
-      description: `Cập nhật tờ khai thuế kỳ ${doc.periodType} ${doc.periodKey}`,
+      description: `Cập nhật tờ khai thuế kỳ ${doc.periodType} ${doc.periodKey} - Trạng thái: ${doc.status}`,
+      changes: Object.keys(req.body),
     });
 
     return successResponse(res, "Cập nhật tờ khai thành công", {
       declaration: doc,
+      changes: Object.keys(req.body),
     });
   } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
     console.error("❌ updateTaxDeclaration error:", err);
     return errorResponse(res, 500, "Lỗi server khi cập nhật tờ khai", {
       error: err.message,
@@ -1415,6 +1657,7 @@ const exportDeclaration = async (req, res) => {
 
     const info = doc.taxpayerInfo || {};
     const personalInfo = info.personalInfo || {};
+    const categories = doc.revenueByCategory || [];
 
     // ===== HEADER =====
     pdf.fontSize(9).text("Mẫu số: 01/CNKD", 40, 40);
@@ -1441,145 +1684,406 @@ const exportDeclaration = async (req, res) => {
       });
     pdf.moveDown();
 
-    // Loại hình kê khai
-    pdf
-      .fontSize(10)
-      .font("Roboto")
-      .text("☑ HKD, CNKD nộp thuế theo phương pháp kê khai");
+    // ===== LOẠI HÌNH KÊ KHAI =====
+    const filingMethod = info.filingMethod || "declaration";
+    const methods = [
+      { code: "fixed", text: "□ HKD, CNKD nộp thuế theo phương pháp khoán" },
+      {
+        code: "per_occurrence",
+        text: "□ CNKD nộp thuế theo từng lần phát sinh",
+      },
+      {
+        code: "proxy",
+        text: "□ Tổ chức, cá nhân khai thuế thay, nộp thuế thay",
+      },
+      {
+        code: "declaration",
+        text: "□ HKD, CNKD nộp thuế theo phương pháp kê khai",
+      },
+      {
+        code: "confirmed_revenue",
+        text: "□ HKD, CNKD trong lĩnh vực ngành nghề có căn cứ xác định được doanh thu theo xác nhận của cơ quan chức năng",
+      },
+      {
+        code: "conversion",
+        text: "□ Hộ khoán chuyển đổi phương pháp tính thuế",
+      },
+    ];
+
+    methods.forEach((method) => {
+      const prefix = method.code === filingMethod ? "☑" : "□";
+      pdf.fontSize(10).text(`${prefix} ${method.text}`);
+    });
     pdf.moveDown();
 
-    // [01] Kỳ tính thuế
-    pdf.text(formatTaxPeriod(doc.periodType, doc.periodKey));
-    pdf.moveDown(0.5);
+    // ===== [01] KỲ TÍNH THUẾ =====
+    pdf.fontSize(10).font("RobotoBold").text("[01] Kỳ tính thuế:");
+    pdf.font("Roboto");
 
-    // [02] Lần đầu, [03] Bổ sung lần thứ
-    pdf.text(`[02] Lần đầu: ${doc.isFirstTime ? "☑" : "☐"}`);
-    pdf.text(`[03] Bổ sung lần thứ: ${doc.supplementNumber || "0"}`);
+    const periodInfo = formatTaxPeriod(doc.periodType, doc.periodKey);
+    switch (doc.periodType) {
+      case "year":
+        pdf.text(`[01a] Năm ${doc.periodKey} (${periodInfo})`);
+        break;
+      case "month":
+        pdf.text(`[01b] Tháng ${doc.periodKey}`);
+        break;
+      case "quarter":
+        pdf.text(
+          `[01c] Quý ${doc.periodKey.split("-")[1]} năm ${
+            doc.periodKey.split("-")[0]
+          } (${periodInfo})`
+        );
+        break;
+      case "occurrence":
+        pdf.text(`[01d] Lần phát sinh: Ngày ${formatDate(doc.periodKey)}`);
+        break;
+    }
+    pdf.moveDown();
+
+    // ===== [02] LẦN ĐẦU & [03] BỔ SUNG =====
+    pdf.text(`[02] Lần đầu: ${doc.isFirstTime ? "☑" : "□"}`, {
+      continued: true,
+    });
+    pdf.text(`       [03] Bổ sung lần thứ: ${doc.supplementNumber || "0"}`);
     pdf.moveDown();
 
     // ===== THÔNG TIN NGƯỜI NỘP THUẾ =====
-    pdf.fontSize(10).font("RobotoBold").text("THÔNG TIN NGƯỜI NỘP THUẾ");
-    pdf.font("Roboto");
+    const drawField = (label, value, x, y, width = 400) => {
+      pdf.text(`${label}`, x, y);
+      pdf.text(`${value}`, x + 120, y, { width: width - 120 });
+    };
 
-    pdf.text(`[04] Người nộp thuế: ${info.name || "..."}`);
-    pdf.text(`[05] Tên cửa hàng/thương hiệu: ${info.storeName || "..."}`);
-    pdf.text(`[06] Tài khoản ngân hàng: ${info.bankAccount || "..."}`);
-    pdf.text(`[07] Mã số thuế: ${info.taxCode || "..."}`);
+    let yPos = pdf.y;
 
-    pdf.text(
-      `[08] Ngành nghề kinh doanh: ${info.businessSector || "..."} ${
-        info.businessSectorChanged ? "[08a] Thay đổi thông tin ☑" : ""
-      }`
+    drawField(
+      "[04] Người nộp thuế:",
+      info.name || "...........................",
+      40,
+      yPos
     );
+    yPos += 20;
 
-    pdf.text(
-      `[09] Diện tích kinh doanh: ${info.businessArea || "0"} m² ${
-        info.isRented ? "[09a] Đi thuê ☑" : ""
-      }`
+    drawField(
+      "[05] Tên cửa hàng/thương hiệu:",
+      info.storeName || "...........................",
+      40,
+      yPos
     );
+    yPos += 20;
 
-    pdf.text(
-      `[10] Số lượng lao động sử dụng thường xuyên: ${
-        info.employeeCount || "0"
-      }`
+    drawField(
+      "[06] Tài khoản ngân hàng:",
+      info.bankAccount || "...........................",
+      40,
+      yPos
     );
+    yPos += 20;
 
-    pdf.text(
-      `[11] Thời gian hoạt động trong ngày từ ${
-        info.workingHours?.from || "..."
-      } giờ đến ${info.workingHours?.to || "..."} giờ`
+    drawField(
+      "[07] Mã số thuế:",
+      info.taxCode || "...........................",
+      40,
+      yPos
     );
+    yPos += 20;
 
-    // [12] Địa chỉ kinh doanh
+    // [08] Ngành nghề kinh doanh
+    pdf.text(
+      `[08] Ngành nghề kinh doanh: ${
+        info.businessSector || "..........................."
+      }`,
+      40,
+      yPos
+    );
+    pdf.text(
+      `[08a] Thay đổi thông tin ${info.businessSectorChanged ? "☑" : "□"}`,
+      450,
+      yPos
+    );
+    yPos += 20;
+
+    // [09] Diện tích kinh doanh
+    pdf.text(
+      `[09] Diện tích kinh doanh: ${info.businessArea || "0"} m²`,
+      40,
+      yPos
+    );
+    pdf.text(`[09a] Đi thuê ${info.isRented ? "☑" : "□"}`, 450, yPos);
+    yPos += 20;
+
+    drawField(
+      "[10] Số lượng lao động sử dụng thường xuyên:",
+      info.employeeCount || "0",
+      40,
+      yPos
+    );
+    yPos += 20;
+
+    drawField(
+      "[11] Thời gian hoạt động trong ngày từ",
+      `${info.workingHours?.from || "..."} giờ đến ${
+        info.workingHours?.to || "..."
+      } giờ`,
+      40,
+      yPos
+    );
+    yPos += 20;
+
+    // ===== [12] ĐỊA CHỈ KINH DOANH =====
     const businessAddr = info.businessAddress || {};
     pdf.text(
-      `[12] Địa chỉ kinh doanh: ${businessAddr.full || "..."} ${
-        businessAddr.changed ? "[12a] Thay đổi thông tin ☑" : ""
-      }`
+      `[12] Địa chỉ kinh doanh: ${
+        businessAddr.full || "..........................."
+      }`,
+      40,
+      yPos
     );
+    pdf.text(
+      `[12a] Thay đổi thông tin ${businessAddr.changed ? "☑" : "□"}`,
+      450,
+      yPos
+    );
+    yPos += 20;
 
     if (businessAddr.street) {
       pdf.text(
-        `     [12b] Số nhà, đường phố/xóm/ấp/thôn: ${businessAddr.street}`
+        `     [12b] Số nhà, đường phố/xóm/ấp/thôn: ${businessAddr.street}`,
+        40,
+        yPos
       );
-    }
-    if (businessAddr.ward) {
-      pdf.text(`     [12c] Phường/Xã/Thị trấn: ${businessAddr.ward}`);
-    }
-    if (businessAddr.district) {
-      pdf.text(
-        `     [12d] Quận/Huyện/Thị xã/Thành phố thuộc tỉnh: ${businessAddr.district}`
-      );
-    }
-    if (businessAddr.province) {
-      pdf.text(`     [12đ] Tỉnh/Thành phố: ${businessAddr.province}`);
-    }
-    if (businessAddr.borderMarket) {
-      pdf.text("     [12e] Kinh doanh tại chợ biên giới ☑");
+      yPos += 20;
     }
 
-    // [13] Địa chỉ cư trú
+    if (businessAddr.ward) {
+      pdf.text(`     [12c] Phường/Xã/Thị trấn: ${businessAddr.ward}`, 40, yPos);
+      yPos += 20;
+    }
+
+    if (businessAddr.district) {
+      pdf.text(
+        `     [12d] Quận/Huyện/Thị xã/Thành phố thuộc tỉnh: ${businessAddr.district}`,
+        40,
+        yPos
+      );
+      yPos += 20;
+    }
+
+    if (businessAddr.province) {
+      pdf.text(`     [12đ] Tỉnh/Thành phố: ${businessAddr.province}`, 40, yPos);
+      yPos += 20;
+    }
+
+    if (businessAddr.borderMarket) {
+      pdf.text(
+        `     [12e] Kinh doanh tại chợ biên giới: ${businessAddr.borderMarket} ☑`,
+        40,
+        yPos
+      );
+      yPos += 20;
+    }
+
+    // ===== [13] ĐỊA CHỈ CƯ TRÚ =====
     const residenceAddr = info.residenceAddress || {};
-    pdf.text(`[13] Địa chỉ cư trú: ${residenceAddr.full || "..."}`);
+    pdf.text(
+      `[13] Địa chỉ cư trú: ${
+        residenceAddr.full || "..........................."
+      }`,
+      40,
+      yPos
+    );
+    yPos += 20;
 
     if (residenceAddr.street) {
       pdf.text(
-        `     [13a] Số nhà, đường phố/xóm/ấp/thôn: ${residenceAddr.street}`
+        `     [13a] Số nhà, đường phố/xóm/ấp/thôn: ${residenceAddr.street}`,
+        40,
+        yPos
       );
-    }
-    if (residenceAddr.ward) {
-      pdf.text(`     [13b] Phường/Xã/Thị trấn: ${residenceAddr.ward}`);
-    }
-    if (residenceAddr.district) {
-      pdf.text(
-        `     [13c] Quận/Huyện/Thị xã/Thành phố thuộc tỉnh: ${residenceAddr.district}`
-      );
-    }
-    if (residenceAddr.province) {
-      pdf.text(`     [13d] Tỉnh/Thành phố: ${residenceAddr.province}`);
+      yPos += 20;
     }
 
-    pdf.text(`[14] Điện thoại: ${info.phone || "..."}`);
-    pdf.text(`[15] Fax: ${info.fax || "..."}`);
-    pdf.text(`[16] Email: ${info.email || "..."}`);
+    if (residenceAddr.ward) {
+      pdf.text(
+        `     [13b] Phường/Xã/Thị trấn: ${residenceAddr.ward}`,
+        40,
+        yPos
+      );
+      yPos += 20;
+    }
+
+    if (residenceAddr.district) {
+      pdf.text(
+        `     [13c] Quận/Huyện/Thị xã/Thành phố thuộc tỉnh: ${residenceAddr.district}`,
+        40,
+        yPos
+      );
+      yPos += 20;
+    }
+
+    if (residenceAddr.province) {
+      pdf.text(
+        `     [13d] Tỉnh/Thành phố: ${residenceAddr.province}`,
+        40,
+        yPos
+      );
+      yPos += 20;
+    }
+
+    // ===== THÔNG TIN LIÊN HỆ =====
+    drawField(
+      "[14] Điện thoại:",
+      info.phone || "...........................",
+      40,
+      yPos
+    );
+    yPos += 20;
+
+    drawField("[15] Fax:", info.fax || "...........................", 40, yPos);
+    yPos += 20;
+
+    drawField(
+      "[16] Email:",
+      info.email || "...........................",
+      40,
+      yPos
+    );
+    yPos += 20;
 
     // [17] Văn bản ủy quyền
     if (info.taxAuthorizationDoc) {
       pdf.text(
-        `[17] Văn bản ủy quyền khai thuế: ${
-          info.taxAuthorizationDoc.number || ""
-        } ngày ${formatDate(info.taxAuthorizationDoc.date)}`
+        `[17] Văn bản ủy quyền khai thuế (nếu có): ${
+          info.taxAuthorizationDoc.number || "..........."
+        } ngày ${formatDate(info.taxAuthorizationDoc.date)}`,
+        40,
+        yPos
       );
+      yPos += 20;
     }
 
-    // Thông tin cá nhân (nếu có)
-    if (personalInfo.dateOfBirth || personalInfo.idCard?.number) {
-      pdf.moveDown();
+    // ===== [18] THÔNG TIN CÁ NHÂN (NẾU CHƯA ĐĂNG KÝ THUẾ) =====
+    if (
+      personalInfo.dateOfBirth ||
+      personalInfo.nationality ||
+      personalInfo.idCard?.number
+    ) {
       pdf.text(
-        "[18] Trường hợp cá nhân kinh doanh chưa đăng ký thuế thì khai thêm các thông tin sau:"
+        "[18] Trường hợp cá nhân kinh doanh chưa đăng ký thuế thì khai thêm các thông tin sau:",
+        40,
+        yPos
       );
+      yPos += 20;
 
       if (personalInfo.dateOfBirth) {
         pdf.text(
-          `     [18a] Ngày sinh: ${formatDate(personalInfo.dateOfBirth)}`
+          `[18a] Ngày sinh: ${formatDate(personalInfo.dateOfBirth)}`,
+          40,
+          yPos
         );
+        yPos += 20;
       }
+
       if (personalInfo.nationality) {
-        pdf.text(`     [18b] Quốc tịch: ${personalInfo.nationality}`);
+        pdf.text(`[18b] Quốc tịch: ${personalInfo.nationality}`, 40, yPos);
+        yPos += 20;
       }
+
       if (personalInfo.idCard?.number) {
-        pdf.text(`     [18c] Số CMND/CCCD: ${personalInfo.idCard.number}`);
+        pdf.text(`[18c] Số CMND/CCCD: ${personalInfo.idCard.number}`, 40, yPos);
         pdf.text(
-          `     [18c.1] Ngày cấp: ${formatDate(personalInfo.idCard.issueDate)}`
+          `[18c.1] Ngày cấp: ${formatDate(personalInfo.idCard.issueDate)}`,
+          240,
+          yPos
         );
         pdf.text(
-          `     [18c.2] Nơi cấp: ${personalInfo.idCard.issuePlace || ""}`
+          `[18c.2] Nơi cấp: ${personalInfo.idCard.issuePlace || ""}`,
+          380,
+          yPos
         );
+        yPos += 20;
       }
-      // Các loại giấy tờ khác...
+
+      // Các loại giấy tờ khác (hộ chiếu, giấy thông hành, etc.)
+      if (personalInfo.passport?.number) {
+        pdf.text(
+          `[18d] Số hộ chiếu: ${personalInfo.passport.number}`,
+          40,
+          yPos
+        );
+        pdf.text(
+          `[18d.1] Ngày cấp: ${formatDate(personalInfo.passport.issueDate)}`,
+          240,
+          yPos
+        );
+        pdf.text(
+          `[18d.2] Nơi cấp: ${personalInfo.passport.issuePlace || ""}`,
+          380,
+          yPos
+        );
+        yPos += 20;
+      }
+
+      // Thông tin đăng ký hộ kinh doanh
+      if (personalInfo.businessRegistration) {
+        pdf.text(
+          `[18i] Giấy chứng nhận đăng ký hộ kinh doanh (nếu có): Số: ${personalInfo.businessRegistration.number}`,
+          40,
+          yPos
+        );
+        yPos += 20;
+        pdf.text(
+          `[18i.1] Ngày cấp: ${formatDate(
+            personalInfo.businessRegistration.issueDate
+          )}`,
+          40,
+          yPos
+        );
+        pdf.text(
+          `[18i.2] Cơ quan cấp: ${
+            personalInfo.businessRegistration.issuingAuthority || ""
+          }`,
+          240,
+          yPos
+        );
+        yPos += 20;
+      }
+
+      if (personalInfo.capital) {
+        pdf.text(
+          `[18k] Vốn kinh doanh (đồng): ${formatCurrency(
+            personalInfo.capital
+          )}`,
+          40,
+          yPos
+        );
+        yPos += 20;
+      }
     }
 
-    pdf.moveDown();
+    // ===== THÔNG TIN ĐẠI LÝ THUẾ =====
+    if (info.taxAgent) {
+      pdf.text(
+        `[19] Tên đại lý thuế (nếu có): ${info.taxAgent.name || "..."}`,
+        40,
+        yPos
+      );
+      yPos += 20;
+
+      pdf.text(`[20] Mã số thuế: ${info.taxAgent.taxCode || "..."}`, 40, yPos);
+      yPos += 20;
+
+      if (info.taxAgent.contract) {
+        pdf.text(
+          `[21] Hợp đồng đại lý thuế: Số: ${
+            info.taxAgent.contract.number || "..."
+          } Ngày: ${formatDate(info.taxAgent.contract.date)}`,
+          40,
+          yPos
+        );
+        yPos += 20;
+      }
+    }
 
     // ===== PHẦN A – GTGT & TNCN =====
     pdf.addPage();
@@ -1597,7 +2101,7 @@ const exportDeclaration = async (req, res) => {
     const tableWidthA = 515;
     const rowHeightA = 20;
 
-    // Header
+    // Header với 6 cột như mẫu
     pdf
       .rect(40, tableTopA, tableWidthA, rowHeightA)
       .fillAndStroke("#e0e0e0", "#000");
@@ -1606,65 +2110,105 @@ const exportDeclaration = async (req, res) => {
     const colWidthsA = [30, 180, 50, 85, 85, 85];
     let xPos = 40;
 
-    ["STT", "Nhóm ngành nghề", "Mã chỉ tiêu", "Thuế GTGT", "Thuế TNCN"].forEach(
-      (header, index) => {
-        const width = index === 1 ? 180 : index === 0 ? 30 : 85;
-        pdf.text(header, xPos + 2, tableTopA + 6, {
-          width: width - 4,
-          align: "center",
-        });
-        xPos += width;
-      }
-    );
+    // Header chính
+    const headers = [
+      "STT",
+      "Nhóm ngành nghề",
+      "Mã chỉ tiêu",
+      "Thuế GTGT",
+      "Thuế TNCN",
+    ];
+    headers.forEach((header, index) => {
+      const width = colWidthsA[index];
+      pdf.text(header, xPos + 2, tableTopA + 6, {
+        width: width - 4,
+        align: "center",
+      });
+      xPos += width;
+    });
 
     // Sub-header cho doanh thu và số thuế
-    pdf.text("Doanh thu", 40 + 30 + 180 + 50 + 2, tableTopA + 12, {
-      width: 85 - 4,
-      align: "center",
-    });
-    pdf.text("Số thuế", 40 + 30 + 180 + 50 + 85 + 2, tableTopA + 12, {
-      width: 85 - 4,
-      align: "center",
-    });
-    pdf.text("Doanh thu", 40 + 30 + 180 + 50 + 85 * 2 + 2, tableTopA + 12, {
-      width: 85 - 4,
-      align: "center",
-    });
-    pdf.text("Số thuế", 40 + 30 + 180 + 50 + 85 * 3 + 2, tableTopA + 12, {
-      width: 85 - 4,
-      align: "center",
+    xPos = 40 + 30 + 180 + 50; // Vị trí bắt đầu cột GTGT
+    const subHeaders = ["Doanh thu", "Số thuế", "Doanh thu", "Số thuế"];
+    subHeaders.forEach((subHeader, index) => {
+      pdf.text(subHeader, xPos + 2, tableTopA + 12, {
+        width: 85 - 4,
+        align: "center",
+      });
+      xPos += 85;
     });
 
     let yPosA = tableTopA + rowHeightA;
-    const categories = doc.revenueByCategory || [];
-
-    // Dữ liệu các dòng
     pdf.fontSize(8).font("Roboto");
-    categories.forEach((cat, idx) => {
+
+    // Dữ liệu các dòng - theo 4 nhóm ngành nghề như mẫu
+    const categoryGroups = [
+      {
+        name: "Phân phối, cung cấp hàng hóa",
+        code: "[28]",
+        category: "distribution",
+      },
+      {
+        name: "Dịch vụ, xây dựng không bao thầu nguyên vật liệu",
+        code: "[29]",
+        category: "services",
+      },
+      {
+        name: "Sản xuất, vận tải, dịch vụ có gắn với hàng hóa, xây dựng có bao thầu nguyên vật liệu",
+        code: "[30]",
+        category: "production",
+      },
+      {
+        name: "Hoạt động kinh doanh khác",
+        code: "[31]",
+        category: "other",
+      },
+    ];
+
+    categoryGroups.forEach((group, idx) => {
+      const cat = categories.find((c) => c.category === group.category) || {
+        revenue: 0,
+        gtgtTax: 0,
+        tncnTax: 0,
+      };
+
       pdf.rect(40, yPosA, tableWidthA, rowHeightA).stroke();
 
+      // STT
       pdf.text((idx + 1).toString(), 42, yPosA + 6, {
         width: 26,
         align: "center",
       });
-      pdf.text(getCategoryName(cat.category), 72, yPosA + 6, { width: 176 });
-      pdf.text(getCategoryCode(cat.category), 252, yPosA + 6, {
+
+      // Nhóm ngành nghề
+      pdf.text(group.name, 72, yPosA + 6, { width: 176 });
+
+      // Mã chỉ tiêu
+      pdf.text(group.code, 252, yPosA + 6, {
         width: 46,
         align: "center",
       });
+
+      // GTGT - Doanh thu
       pdf.text(formatCurrency(decimalToString(cat.revenue)), 300, yPosA + 6, {
         width: 81,
         align: "right",
       });
-      pdf.text(formatCurrency(decimalToString(cat.gtgtTax)), 383, yPosA + 6, {
+
+      // GTGT - Số thuế
+      pdf.text(formatCurrency(decimalToString(cat.gtgtTax)), 385, yPosA + 6, {
         width: 81,
         align: "right",
       });
-      pdf.text(formatCurrency(decimalToString(cat.revenue)), 466, yPosA + 6, {
+
+      // TNCN - Doanh thu
+      pdf.text(formatCurrency(decimalToString(cat.revenue)), 468, yPosA + 6, {
         width: 81,
         align: "right",
       });
-      pdf.text(formatCurrency(decimalToString(cat.tncnTax)), 549, yPosA + 6, {
+
+      // TNCN - Số thuế
+      pdf.text(formatCurrency(decimalToString(cat.tncnTax)), 553, yPosA + 6, {
         width: 81,
         align: "right",
       });
@@ -1677,34 +2221,39 @@ const exportDeclaration = async (req, res) => {
       .rect(40, yPosA, tableWidthA, rowHeightA)
       .fillAndStroke("#f0f0f0", "#000");
     pdf.fillColor("#000").fontSize(9).font("RobotoBold");
-    pdf.text("Tổng cộng:", 72, yPosA + 6, { width: 176 });
-    pdf.text("[32]", 252, yPosA + 6, { width: 46, align: "center" });
-    pdf.text(
-      formatCurrency(decimalToString(doc.declaredRevenue)),
-      300,
-      yPosA + 6,
-      { width: 81, align: "right" }
+
+    // Tính tổng
+    const totalRevenue = categories.reduce(
+      (sum, cat) => sum + parseFloat(decimalToString(cat.revenue)),
+      0
     );
-    pdf.text(
-      formatCurrency(decimalToString(doc.taxAmounts.gtgt)),
-      383,
-      yPosA + 6,
-      { width: 81, align: "right" }
+    const totalGTGT = categories.reduce(
+      (sum, cat) => sum + parseFloat(decimalToString(cat.gtgtTax)),
+      0
     );
-    pdf.text(
-      formatCurrency(decimalToString(doc.declaredRevenue)),
-      466,
-      yPosA + 6,
-      { width: 81, align: "right" }
-    );
-    pdf.text(
-      formatCurrency(decimalToString(doc.taxAmounts.tncn)),
-      549,
-      yPosA + 6,
-      { width: 81, align: "right" }
+    const totalTNCN = categories.reduce(
+      (sum, cat) => sum + parseFloat(decimalToString(cat.tncnTax)),
+      0
     );
 
-    pdf.moveDown(2);
+    pdf.text("Tổng cộng:", 72, yPosA + 6, { width: 176 });
+    pdf.text("[32]", 252, yPosA + 6, { width: 46, align: "center" });
+    pdf.text(formatCurrency(totalRevenue), 300, yPosA + 6, {
+      width: 81,
+      align: "right",
+    });
+    pdf.text(formatCurrency(totalGTGT), 385, yPosA + 6, {
+      width: 81,
+      align: "right",
+    });
+    pdf.text(formatCurrency(totalRevenue), 468, yPosA + 6, {
+      width: 81,
+      align: "right",
+    });
+    pdf.text(formatCurrency(totalTNCN), 553, yPosA + 6, {
+      width: 81,
+      align: "right",
+    });
 
     // ===== PHẦN B – THUẾ TTĐB =====
     if (doc.specialConsumptionTax && doc.specialConsumptionTax.length > 0) {
@@ -1729,7 +2278,7 @@ const exportDeclaration = async (req, res) => {
       const colWidthsB = [30, 150, 50, 60, 100, 60, 65];
       let xPosB = 40;
 
-      [
+      const headersB = [
         "STT",
         "Hàng hóa, dịch vụ chịu thuế TTĐB",
         "Mã chỉ tiêu",
@@ -1737,7 +2286,9 @@ const exportDeclaration = async (req, res) => {
         "Doanh thu tính thuế TTĐB",
         "Thuế suất",
         "Số thuế",
-      ].forEach((header, index) => {
+      ];
+
+      headersB.forEach((header, index) => {
         const width = colWidthsB[index];
         pdf.text(header, xPosB + 2, tableTopB + 6, {
           width: width - 4,
@@ -1756,29 +2307,41 @@ const exportDeclaration = async (req, res) => {
           width: 26,
           align: "center",
         });
+
         pdf.text(item.itemName, 72, yPosB + 6, { width: 146 });
-        pdf.text(
-          item.itemCode || `[33${String.fromCharCode(97 + idx)}]`,
-          222,
-          yPosB + 6,
-          { width: 46, align: "center" }
-        );
-        pdf.text(item.unit, 270, yPosB + 6, { width: 56, align: "center" });
+
+        // Mã chỉ tiêu theo mẫu: [33a], [33b], ...
+        const letter = String.fromCharCode(97 + idx);
+        pdf.text(`[33${letter}]`, 222, yPosB + 6, {
+          width: 46,
+          align: "center",
+        });
+
+        pdf.text(item.unit, 272, yPosB + 6, { width: 56, align: "center" });
+
         pdf.text(
           formatCurrency(decimalToString(item.revenue)),
-          332,
+          330,
           yPosB + 6,
-          { width: 96, align: "right" }
+          {
+            width: 96,
+            align: "right",
+          }
         );
+
         pdf.text(`${item.taxRate}%`, 430, yPosB + 6, {
           width: 56,
           align: "center",
         });
+
         pdf.text(
           formatCurrency(decimalToString(item.taxAmount)),
           490,
           yPosB + 6,
-          { width: 61, align: "right" }
+          {
+            width: 61,
+            align: "right",
+          }
         );
 
         yPosB += rowHeightB;
@@ -1789,6 +2352,7 @@ const exportDeclaration = async (req, res) => {
         .rect(40, yPosB, tableWidthB, rowHeightB)
         .fillAndStroke("#f0f0f0", "#000");
       pdf.fillColor("#000").fontSize(9).font("RobotoBold");
+
       pdf.text("Tổng cộng:", 72, yPosB + 6, { width: 146 });
       pdf.text("[33]", 222, yPosB + 6, { width: 46, align: "center" });
 
@@ -1801,7 +2365,7 @@ const exportDeclaration = async (req, res) => {
         0
       );
 
-      pdf.text(formatCurrency(totalRevenueB), 332, yPosB + 6, {
+      pdf.text(formatCurrency(totalRevenueB), 330, yPosB + 6, {
         width: 96,
         align: "right",
       });
@@ -1810,8 +2374,6 @@ const exportDeclaration = async (req, res) => {
         width: 61,
         align: "right",
       });
-
-      pdf.moveDown(2);
     }
 
     // ===== PHẦN C – THUẾ MÔI TRƯỜNG/TÀI NGUYÊN =====
@@ -1837,7 +2399,7 @@ const exportDeclaration = async (req, res) => {
       const colWidthsC = [30, 130, 40, 40, 50, 60, 50, 65];
       let xPosC = 40;
 
-      [
+      const headersC = [
         "STT",
         "Tài nguyên, hàng hóa, sản phẩm",
         "Mã CT",
@@ -1846,7 +2408,9 @@ const exportDeclaration = async (req, res) => {
         "Giá tính thuế",
         "Thuế suất",
         "Số thuế",
-      ].forEach((header, index) => {
+      ];
+
+      headersC.forEach((header, index) => {
         const width = colWidthsC[index];
         pdf.text(header, xPosC + 2, tableTopC + 6, {
           width: width - 4,
@@ -1871,8 +2435,9 @@ const exportDeclaration = async (req, res) => {
 
       let rowIndex = 0;
 
-      // 1. Thuế tài nguyên
+      // 1. Khai thuế tài nguyên
       if (resourceTax.length > 0) {
+        pdf.rect(40, yPosC, tableWidthC, rowHeightC).stroke();
         pdf.text("1. Khai thuế tài nguyên", 42, yPosC + 6, { width: 200 });
         yPosC += rowHeightC;
 
@@ -1884,12 +2449,13 @@ const exportDeclaration = async (req, res) => {
             align: "center",
           });
           pdf.text(item.itemName, 72, yPosC + 6, { width: 126 });
-          pdf.text(
-            item.itemCode || `[34${String.fromCharCode(97 + idx)}]`,
-            202,
-            yPosC + 6,
-            { width: 36, align: "center" }
-          );
+
+          const letter = String.fromCharCode(97 + idx);
+          pdf.text(`[34${letter}]`, 202, yPosC + 6, {
+            width: 36,
+            align: "center",
+          });
+
           pdf.text(item.unit, 242, yPosC + 6, { width: 36, align: "center" });
           pdf.text(formatCurrency(item.quantity), 282, yPosC + 6, {
             width: 46,
@@ -1905,20 +2471,33 @@ const exportDeclaration = async (req, res) => {
             width: 46,
             align: "center",
           });
-          pdf.text(
-            formatCurrency(decimalToString(item.taxAmount)),
-            442,
-            yPosC + 6,
-            { width: 61, align: "right" }
-          );
+
+          const taxAmount =
+            parseFloat(decimalToString(item.quantity)) *
+            parseFloat(decimalToString(item.unitPrice)) *
+            (parseFloat(item.taxRate) / 100);
+          pdf.text(formatCurrency(taxAmount), 442, yPosC + 6, {
+            width: 61,
+            align: "right",
+          });
 
           yPosC += rowHeightC;
           rowIndex++;
         });
+
+        // Tổng cộng thuế tài nguyên
+        pdf
+          .rect(40, yPosC, tableWidthC, rowHeightC)
+          .fillAndStroke("#f0f0f0", "#000");
+        pdf.fillColor("#000").fontSize(9).font("RobotoBold");
+        pdf.text("Tổng cộng", 72, yPosC + 6, { width: 126 });
+        pdf.text("[34]", 202, yPosC + 6, { width: 36, align: "center" });
+        yPosC += rowHeightC;
       }
 
-      // 2. Thuế bảo vệ môi trường
+      // 2. Khai thuế bảo vệ môi trường
       if (envTax.length > 0) {
+        pdf.rect(40, yPosC, tableWidthC, rowHeightC).stroke();
         pdf.text("2. Khai thuế bảo vệ môi trường", 42, yPosC + 6, {
           width: 200,
         });
@@ -1932,12 +2511,13 @@ const exportDeclaration = async (req, res) => {
             align: "center",
           });
           pdf.text(item.itemName, 72, yPosC + 6, { width: 126 });
-          pdf.text(
-            item.itemCode || `[35${String.fromCharCode(97 + idx)}]`,
-            202,
-            yPosC + 6,
-            { width: 36, align: "center" }
-          );
+
+          const letter = String.fromCharCode(97 + idx);
+          pdf.text(`[35${letter}]`, 202, yPosC + 6, {
+            width: 36,
+            align: "center",
+          });
+
           pdf.text(item.unit, 242, yPosC + 6, { width: 36, align: "center" });
           pdf.text(formatCurrency(item.quantity), 282, yPosC + 6, {
             width: 46,
@@ -1953,20 +2533,32 @@ const exportDeclaration = async (req, res) => {
             width: 46,
             align: "center",
           });
-          pdf.text(
-            formatCurrency(decimalToString(item.taxAmount)),
-            442,
-            yPosC + 6,
-            { width: 61, align: "right" }
-          );
+
+          const taxAmount =
+            parseFloat(decimalToString(item.quantity)) *
+            parseFloat(decimalToString(item.unitPrice));
+          pdf.text(formatCurrency(taxAmount), 442, yPosC + 6, {
+            width: 61,
+            align: "right",
+          });
 
           yPosC += rowHeightC;
           rowIndex++;
         });
+
+        // Tổng cộng thuế BVMT
+        pdf
+          .rect(40, yPosC, tableWidthC, rowHeightC)
+          .fillAndStroke("#f0f0f0", "#000");
+        pdf.fillColor("#000").fontSize(9).font("RobotoBold");
+        pdf.text("Tổng cộng", 72, yPosC + 6, { width: 126 });
+        pdf.text("[35]", 202, yPosC + 6, { width: 36, align: "center" });
+        yPosC += rowHeightC;
       }
 
-      // 3. Phí bảo vệ môi trường
+      // 3. Khai phí bảo vệ môi trường
       if (envFee.length > 0) {
+        pdf.rect(40, yPosC, tableWidthC, rowHeightC).stroke();
         pdf.text("3. Khai phí bảo vệ môi trường", 42, yPosC + 6, {
           width: 200,
         });
@@ -1980,12 +2572,13 @@ const exportDeclaration = async (req, res) => {
             align: "center",
           });
           pdf.text(item.itemName, 72, yPosC + 6, { width: 126 });
-          pdf.text(
-            item.itemCode || `[36${String.fromCharCode(97 + idx)}]`,
-            202,
-            yPosC + 6,
-            { width: 36, align: "center" }
-          );
+
+          const letter = String.fromCharCode(97 + idx);
+          pdf.text(`[36${letter}]`, 202, yPosC + 6, {
+            width: 36,
+            align: "center",
+          });
+
           pdf.text(item.unit, 242, yPosC + 6, { width: 36, align: "center" });
           pdf.text(formatCurrency(item.quantity), 282, yPosC + 6, {
             width: 46,
@@ -2001,19 +2594,27 @@ const exportDeclaration = async (req, res) => {
             width: 46,
             align: "center",
           });
-          pdf.text(
-            formatCurrency(decimalToString(item.taxAmount)),
-            442,
-            yPosC + 6,
-            { width: 61, align: "right" }
-          );
+
+          const taxAmount =
+            parseFloat(decimalToString(item.quantity)) *
+            parseFloat(decimalToString(item.unitPrice));
+          pdf.text(formatCurrency(taxAmount), 442, yPosC + 6, {
+            width: 61,
+            align: "right",
+          });
 
           yPosC += rowHeightC;
           rowIndex++;
         });
-      }
 
-      pdf.moveDown(2);
+        // Tổng cộng phí BVMT
+        pdf
+          .rect(40, yPosC, tableWidthC, rowHeightC)
+          .fillAndStroke("#f0f0f0", "#000");
+        pdf.fillColor("#000").fontSize(9).font("RobotoBold");
+        pdf.text("Tổng cộng", 72, yPosC + 6, { width: 126 });
+        pdf.text("[36]", 202, yPosC + 6, { width: 36, align: "center" });
+      }
     }
 
     // ===== CAM ĐOAN & CHỮ KÝ =====
@@ -2042,6 +2643,22 @@ const exportDeclaration = async (req, res) => {
       align: "right",
     });
 
+    // Chữ ký đại lý thuế (nếu có)
+    if (info.taxAgent) {
+      pdf.moveDown(5);
+      pdf.text("NHÂN VIÊN ĐẠI LÝ THUẾ", { align: "left" });
+      pdf.text(
+        `Họ và tên: ${info.taxAgent.representative || "..................."}`,
+        { align: "left" }
+      );
+      pdf.text(
+        `Chứng chỉ hành nghề số: ${
+          info.taxAgent.licenseNumber || "..................."
+        }`,
+        { align: "left" }
+      );
+    }
+
     console.log("✅ PDF export successful");
     pdf.end();
   } catch (err) {
@@ -2053,6 +2670,43 @@ const exportDeclaration = async (req, res) => {
   }
 };
 
+// Hàm helper định dạng ngày
+const formatDate = (dateString) => {
+  if (!dateString) return ".../.../......";
+  const date = new Date(dateString);
+  return `${date.getDate().toString().padStart(2, "0")}/${(date.getMonth() + 1)
+    .toString()
+    .padStart(2, "0")}/${date.getFullYear()}`;
+};
+
+// Hàm helper định dạng tiền tệ
+const formatCurrency = (amount) => {
+  if (!amount) return "0";
+  return parseFloat(amount).toLocaleString("vi-VN");
+};
+
+// Hàm helper chuyển đổi tên nhóm ngành
+const getCategoryName = (category) => {
+  const map = {
+    distribution: "Phân phối, cung cấp hàng hóa",
+    services: "Dịch vụ, xây dựng không bao thầu nguyên vật liệu",
+    production:
+      "Sản xuất, vận tải, dịch vụ có gắn với hàng hóa, xây dựng có bao thầu nguyên vật liệu",
+    other: "Hoạt động kinh doanh khác",
+  };
+  return map[category] || "Hoạt động kinh doanh khác";
+};
+
+// Hàm helper lấy mã chỉ tiêu
+const getCategoryCode = (category) => {
+  const map = {
+    distribution: "[28]",
+    services: "[29]",
+    production: "[30]",
+    other: "[31]",
+  };
+  return map[category] || "[31]";
+};
 module.exports = {
   previewSystemRevenue,
   createTaxDeclaration,
