@@ -311,25 +311,61 @@ export const AuthProvider = ({ children }) => {
 
             await new Promise(resolve => setTimeout(resolve, 100));
 
+            // ✅ SỬA NAVIGATION CHO STAFF
             if (userData?.role === "STAFF") {
                 try {
                     const response = await apiClient.get('/products', {
                         params: { limit: 1 }
                     });
 
-                    navigate("/dashboard");
+                    // ✅ FIX: STAFF cần navigate với storeId
+                    // Lấy storeId từ currentStore hoặc resolvedStore
+                    const staffStoreId = currentStore?._id || resolvedStore?._id;
+
+                    if (staffStoreId) {
+                        // Tuỳ thuộc vào route config của bạn, chọn 1 trong các cách:
+
+                        // Cách 1: Query parameter (recommended)
+                        navigate(`/dashboard?storeId=${staffStoreId}`);
+
+                        // Cách 2: Dynamic route
+                        // navigate(`/dashboard/${staffStoreId}`);
+
+                        // Cách 3: State
+                        // navigate("/dashboard", { state: { storeId: staffStoreId } });
+
+                        console.log(`✅ STAFF logged in, store: ${staffStoreId}`);
+                    } else {
+                        // Nếu không có storeId, chuyển đến select-store
+                        console.warn("No store found for STAFF, redirecting to select-store");
+                        navigate("/select-store");
+                    }
+
                 } catch (err) {
                     if (err.response?.status === 403) {
                         const errorData = err.response.data;
 
                         if (errorData.manager_expired || errorData.is_staff) {
-                            navigate("/dashboard");
+                            // Vẫn navigate với storeId nếu có
+                            const staffStoreId = currentStore?._id || resolvedStore?._id;
+                            if (staffStoreId) {
+                                navigate(`/dashboard/${staffStoreId}`);
+                            } else {
+                                navigate("/dashboard");
+                            }
                             return;
                         }
                     }
 
                     console.error('STAFF subscription check error:', err);
-                    navigate("/dashboard");
+
+                    // Fallback navigation với storeId
+                    const staffStoreId = currentStore?._id || resolvedStore?._id;
+                    if (staffStoreId) {
+                        navigate(`/dashboard/${staffStoreId}`);
+                    } else {
+                        navigate("/dashboard");
+                    }
                 }
                 return;
             }
