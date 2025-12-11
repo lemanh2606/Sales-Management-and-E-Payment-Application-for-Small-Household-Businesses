@@ -1,4 +1,4 @@
-// routes/taxRoutes.js - ✅ BẢN ĐẦY ĐỦ ĐÃ FIX
+// routes/taxRoutes.js - ✅ BẢN ĐÃ XÓA 404 HANDLER
 const express = require("express");
 const router = express.Router();
 const mongoose = require("mongoose");
@@ -123,9 +123,9 @@ const validateObjectId = (req, res, next) => {
 };
 
 // ==================== ROUTES ====================
-// ✅ QUAN TRỌNG: Đặt routes cụ thể TRƯỚC routes động (:id)
+// ✅ QUAN TRỌNG: Đặt routes theo thứ tự chính xác
 
-// 1. Preview (route cụ thể)
+// 1. Routes cụ thể không có :id
 router.get(
   "/preview",
   verifyToken,
@@ -134,7 +134,6 @@ router.get(
   previewSystemRevenue
 );
 
-// 2. List (route cụ thể)
 router.get(
   "/",
   verifyToken,
@@ -143,7 +142,6 @@ router.get(
   listDeclarations
 );
 
-// 3. Create (POST /)
 router.post(
   "/",
   verifyToken,
@@ -152,7 +150,7 @@ router.post(
   createTaxDeclaration
 );
 
-// 4. Clone (POST /:id/clone) - ĐẶT TRƯỚC /:id
+// 2. Routes cụ thể với :id và path phụ
 router.post(
   "/:id/clone",
   verifyToken,
@@ -162,7 +160,6 @@ router.post(
   cloneTaxDeclaration
 );
 
-// 5. Approve (POST /:id/approve) - ĐẶT TRƯỚC /:id
 router.post(
   "/:id/approve",
   verifyToken,
@@ -173,7 +170,6 @@ router.post(
   approveRejectDeclaration
 );
 
-// 6. Export (GET /:id/export) - ĐẶT TRƯỚC /:id
 router.get(
   "/:id/export",
   verifyToken,
@@ -183,7 +179,8 @@ router.get(
   exportDeclaration
 );
 
-// 7. Update (PUT /:id) - ĐẶT SAU CÁC ROUTES CỤ THỂ
+// 3. Routes chính với :id - THEO THỨ TỰ QUAN TRỌNG
+// PUT phải được định nghĩa và không bị conflict
 router.put(
   "/:id",
   verifyToken,
@@ -192,14 +189,13 @@ router.put(
   requirePermission("tax:update"),
   (req, res, next) => {
     console.log(
-      `   ✅ PUT /:id middleware passed, calling updateTaxDeclaration`
+      `   🟢 [ROUTE MATCHED] PUT /:id - Calling updateTaxDeclaration`
     );
     next();
   },
   updateTaxDeclaration
 );
 
-// 8. Delete (DELETE /:id)
 router.delete(
   "/:id",
   verifyToken,
@@ -210,13 +206,17 @@ router.delete(
   deleteTaxDeclaration
 );
 
-// 9. Get single (GET /:id) - ĐẶT CUỐI CÙNG
+// 4. GET /:id phải ĐẶT CUỐI CÙNG để không ghi đè các routes khác
 router.get(
   "/:id",
   verifyToken,
   validateObjectId,
   taxStoreAccess,
   requirePermission("tax:view"),
+  (req, res, next) => {
+    console.log(`   🟢 [ROUTE MATCHED] GET /:id - Calling getDeclaration`);
+    next();
+  },
   getDeclaration
 );
 
@@ -229,5 +229,8 @@ router.use((err, req, res, next) => {
     error: process.env.NODE_ENV === "development" ? err.stack : undefined,
   });
 });
+
+// ⚠️ XÓA HOÀN TOÀN PHẦN 404 HANDLER NÀY
+// KHÔNG đặt 404 handler trong router con
 
 module.exports = router;

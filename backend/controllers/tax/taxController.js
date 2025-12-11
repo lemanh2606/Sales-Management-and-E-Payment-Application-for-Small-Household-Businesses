@@ -1,4 +1,4 @@
-// controllers/tax/taxController.js - ✅ BẢN HOÀN CHỈNH ĐẦY ĐỦ THEO MẪU 01/CNKD
+// controllers/tax/taxController.js - ✅ BẢN ĐÃ SỬA LỖI LƯU DỮ LIỆU
 const mongoose = require("mongoose");
 const PDFDocument = require("pdfkit");
 const Order = require("../../models/Order");
@@ -26,7 +26,7 @@ function isManagerUser(user) {
   return false;
 }
 
-// ✅ VALIDATION HELPER
+// ✅ VALIDATION HELPER - IMPROVED
 function validateRequiredFields(data, requiredFields) {
   const missing = [];
   const invalid = [];
@@ -40,14 +40,23 @@ function validateRequiredFields(data, requiredFields) {
     }
 
     // Type validation
-    if (type === "number" && (isNaN(value) || Number(value) < 0)) {
-      invalid.push({ field, message: `${field} phải là số dương` });
+    if (type === "number") {
+      const numValue = Number(value);
+      if (isNaN(numValue) || numValue < 0) {
+        invalid.push({ field, message: `${field} phải là số dương` });
+      }
     }
     if (type === "string" && typeof value !== "string") {
       invalid.push({ field, message: `${field} phải là chuỗi` });
     }
     if (type === "objectId" && !mongoose.Types.ObjectId.isValid(value)) {
       invalid.push({ field, message: `${field} không phải ObjectId hợp lệ` });
+    }
+    if (type === "email" && typeof value === "string") {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(value)) {
+        invalid.push({ field, message: `${field} không phải email hợp lệ` });
+      }
     }
   });
 
@@ -80,13 +89,13 @@ function successResponse(res, message, data = {}, status = 200) {
   });
 }
 
-// ✅ Lấy thông tin người nộp thuế từ Store
+// ✅ Lấy thông tin người nộp thuế từ Store - IMPROVED
 async function getTaxpayerInfo(storeId) {
   try {
     const store = await Store.findOne({ _id: storeId, deleted: false })
       .populate(
         "owner_id",
-        "_id name fullName email dateOfBirth nationality idCard passport"
+        "_id name fullName email dateOfBirth nationality idCard passport phone"
       )
       .populate("staff_ids", "_id name email")
       .lean();
@@ -97,6 +106,15 @@ async function getTaxpayerInfo(storeId) {
     }
 
     const owner = store.owner_id || {};
+
+    // Đảm bảo email được lấy đầy đủ từ cả store và owner
+    const storeEmail = store.email || "";
+    const ownerEmail = owner.email || "";
+    const finalEmail = storeEmail || ownerEmail;
+
+    console.log(
+      `📧 Email info: store=${storeEmail}, owner=${ownerEmail}, final=${finalEmail}`
+    );
 
     return {
       name: owner.fullName || owner.name || store.owner_name || "",
@@ -128,9 +146,9 @@ async function getTaxpayerInfo(storeId) {
         district: store.ownerResidence?.district || "",
         province: store.ownerResidence?.province || "",
       },
-      phone: store.phone || "",
+      phone: store.phone || owner.phone || "",
       fax: store.fax || "",
-      email: store.email || "",
+      email: finalEmail, // ✅ Sử dụng email đã được xác định
       taxAuthorizationDoc: store.taxAuthorizationDoc || null,
       personalInfo: {
         dateOfBirth: owner.dateOfBirth || null,
@@ -246,7 +264,7 @@ function formatCurrency(amount) {
 // ==================== CONTROLLERS ====================
 
 /**
- * 1. PREVIEW SYSTEM REVENUE
+ * 1. PREVIEW SYSTEM REVENUE - FIXED
  * GET /api/taxs/preview?periodType=...&periodKey=...&storeId=...
  */
 const previewSystemRevenue = async (req, res) => {
@@ -254,7 +272,16 @@ const previewSystemRevenue = async (req, res) => {
   console.log("Query params:", req.query);
 
   try {
-    const { periodType, periodKey, storeId, monthFrom, monthTo } = req.query;
+    const { periodType, storeId, monthFrom, monthTo } = req.query;
+
+    // FIX: Xử lý periodKey khi nó là array
+    let periodKey = req.query.periodKey;
+
+    // Nếu periodKey là array, lấy phần tử đầu tiên
+    if (Array.isArray(periodKey)) {
+      console.log(`⚠️ periodKey is array: ${periodKey}, taking first element`);
+      periodKey = periodKey[0];
+    }
 
     // Validation
     const validation = validateRequiredFields({ periodType, storeId }, [
@@ -305,12 +332,61 @@ const previewSystemRevenue = async (req, res) => {
 
     console.log(`✅ Store found: ${store.name} (${storeId})`);
 
+    // FIX: Kiểm tra periodKey có hợp lệ không trước khi gọi periodToRange
+    if (periodType !== "custom" && periodKey) {
+      // Validate periodKey format
+      if (periodType === "month") {
+        if (!/^\d{4}-\d{2}$/.test(periodKey)) {
+          return errorResponse(
+            res,
+            400,
+            "Định dạng periodKey không hợp lệ cho tháng",
+            {
+              periodKey,
+              expectedFormat: "YYYY-MM",
+              example: "2025-11",
+            }
+          );
+        }
+      } else if (periodType === "quarter") {
+        if (!/^\d{4}-Q[1-4]$/.test(periodKey)) {
+          return errorResponse(
+            res,
+            400,
+            "Định dạng periodKey không hợp lệ cho quý",
+            {
+              periodKey,
+              expectedFormat: "YYYY-Q[1-4]",
+              example: "2025-Q4",
+            }
+          );
+        }
+      } else if (periodType === "year") {
+        if (!/^\d{4}$/.test(periodKey)) {
+          return errorResponse(
+            res,
+            400,
+            "Định dạng periodKey không hợp lệ cho năm",
+            {
+              periodKey,
+              expectedFormat: "YYYY",
+              example: "2025",
+            }
+          );
+        }
+      }
+    }
+
+    console.log(`📅 Period: ${periodType} - ${periodKey}`);
+    console.log(`📅 Custom range: ${monthFrom} -> ${monthTo}`);
+
     const { start, end } = periodToRange(
       periodType,
       periodKey,
       monthFrom,
       monthTo
     );
+
     console.log(`📅 Period range: ${start} -> ${end}`);
 
     const agg = await Order.aggregate([
@@ -358,26 +434,38 @@ const previewSystemRevenue = async (req, res) => {
 };
 
 /**
- * 2. CREATE TAX DECLARATION
+ * 2. CREATE TAX DECLARATION - FIXED (ĐÃ BỎ CHECK TỒN TẠI)
  * POST /api/taxs
  */
 const createTaxDeclaration = async (req, res) => {
-  console.log("\n📋 === CREATE TAX DECLARATION ===");
+  console.log("\n📋 === CREATE TAX DECLARATION (NO DUPLICATE CHECK) ===");
   console.log("Request body keys:", Object.keys(req.body));
-  console.log("StoreId:", req.body.storeId);
-  console.log("PeriodType:", req.body.periodType);
-  console.log("PeriodKey:", req.body.periodKey);
-  console.log("DeclaredRevenue:", req.body.declaredRevenue);
+  console.log("Request body:", JSON.stringify(req.body, null, 2));
 
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
-    const storeId = req.body.storeId || req.query.storeId;
-    const periodType = req.body.periodType || req.query.periodType;
-    let periodKey = req.body.periodKey || req.query.periodKey;
-    const declaredRevenue =
-      req.body.declaredRevenue || req.query.declaredRevenue;
+    // ✅ Lấy dữ liệu từ request body với fallback hợp lý
+    const {
+      storeId,
+      periodType,
+      periodKey,
+      declaredRevenue,
+      monthFrom,
+      monthTo,
+      taxRates = {},
+      revenueByCategory = [],
+      specialConsumptionTax = [],
+      environmentalTax = [],
+      notes = "",
+      internalNotes = "",
+      status = "draft",
+      isFirstTime = true,
+      supplementNumber = 0,
+      taxpayerInfo: customTaxpayerInfo = {}, // Cho phép ghi đè thông tin từ client
+    } = req.body;
+
     const createdBy = req.user?._id;
 
     console.log("📝 Extracted fields:");
@@ -386,8 +474,12 @@ const createTaxDeclaration = async (req, res) => {
     console.log("  - periodKey:", periodKey);
     console.log("  - declaredRevenue:", declaredRevenue);
     console.log("  - createdBy:", createdBy);
+    console.log(
+      "  - customTaxpayerInfo keys:",
+      Object.keys(customTaxpayerInfo)
+    );
 
-    // ✅ VALIDATE REQUIRED FIELDS
+    // ✅ VALIDATE REQUIRED FIELDS - IMPROVED
     const validation = validateRequiredFields(
       { storeId, periodType, periodKey, declaredRevenue },
       [
@@ -421,16 +513,19 @@ const createTaxDeclaration = async (req, res) => {
       });
     }
 
+    // Xử lý periodKey cho kỳ custom
+    let processedPeriodKey = periodKey;
     if (
       periodType === "custom" &&
       typeof periodKey === "string" &&
       periodKey.includes("đến")
     ) {
       const [from, to] = periodKey.split("đến").map((s) => s.trim());
-      periodKey = `${from}_${to}`;
-      console.log("  - periodKey (converted):", periodKey);
+      processedPeriodKey = `${from}_${to}`;
+      console.log("  - periodKey (converted):", processedPeriodKey);
     }
 
+    // Kiểm tra store
     const store = await Store.findOne({ _id: storeId, deleted: false }).session(
       session
     );
@@ -445,10 +540,13 @@ const createTaxDeclaration = async (req, res) => {
 
     console.log(`✅ Store found: ${store.name}`);
 
+    // ❌ BỎ CHECK TỒN TẠI - CHO PHÉP TẠO NHIỀU TỜ KHAI CÙNG KỲ
+    // Comment/Remove the existing duplicate check
+    /*
     const existingOriginal = await TaxDeclaration.findOne({
       shopId: storeId,
       periodType,
-      periodKey,
+      periodKey: processedPeriodKey,
       isClone: false,
     }).session(session);
 
@@ -458,20 +556,21 @@ const createTaxDeclaration = async (req, res) => {
       return errorResponse(res, 409, "Tờ khai cho kỳ này đã tồn tại", {
         existingId: existingOriginal._id,
         periodType,
-        periodKey,
+        periodKey: processedPeriodKey,
         hint: "Vui lòng cập nhật tờ khai hiện có hoặc tạo bản sao",
       });
     }
+    */
 
-    let monthFrom = req.body.monthFrom || req.query.monthFrom;
-    let monthTo = req.body.monthTo || req.query.monthTo;
+    // Tính toán period range
     const { start, end } =
       periodType === "custom"
-        ? periodToRange(periodType, periodKey, monthFrom, monthTo)
-        : periodToRange(periodType, periodKey);
+        ? periodToRange(periodType, processedPeriodKey, monthFrom, monthTo)
+        : periodToRange(periodType, processedPeriodKey);
 
     console.log(`📅 Period range: ${start} -> ${end}`);
 
+    // Tính doanh thu hệ thống
     const agg = await Order.aggregate([
       {
         $match: {
@@ -494,16 +593,38 @@ const createTaxDeclaration = async (req, res) => {
 
     console.log(`💰 System revenue: ${systemRevenueDecimal.toString()}`);
 
-    const taxpayerInfo = await getTaxpayerInfo(storeId);
+    // Lấy thông tin người nộp thuế từ database
+    const dbTaxpayerInfo = await getTaxpayerInfo(storeId);
 
-    const gtgtRate =
-      req.body.taxRates?.gtgt !== undefined
-        ? Number(req.body.taxRates.gtgt)
-        : 1.0;
-    const tncnRate =
-      req.body.taxRates?.tncn !== undefined
-        ? Number(req.body.taxRates.tncn)
-        : 0.5;
+    // ✅ MERGE thông tin: database info + custom info từ client
+    const taxpayerInfo = {
+      ...dbTaxpayerInfo,
+      ...customTaxpayerInfo,
+      // Merge nested objects
+      businessAddress: {
+        ...(dbTaxpayerInfo.businessAddress || {}),
+        ...(customTaxpayerInfo.businessAddress || {}),
+      },
+      residenceAddress: {
+        ...(dbTaxpayerInfo.residenceAddress || {}),
+        ...(customTaxpayerInfo.residenceAddress || {}),
+      },
+      workingHours: {
+        ...(dbTaxpayerInfo.workingHours || {}),
+        ...(customTaxpayerInfo.workingHours || {}),
+      },
+      personalInfo: {
+        ...(dbTaxpayerInfo.personalInfo || {}),
+        ...(customTaxpayerInfo.personalInfo || {}),
+      },
+    };
+
+    console.log("👤 Final taxpayer info keys:", Object.keys(taxpayerInfo));
+    console.log("📧 Final email:", taxpayerInfo.email);
+
+    // Tính toán thuế
+    const gtgtRate = Number(taxRates.gtgt || 1.0);
+    const tncnRate = Number(taxRates.tncn || 0.5);
     const declaredNum = Number(declaredRevenue);
     const gtgtAmount = (declaredNum * gtgtRate) / 100;
     const tncnAmount = (declaredNum * tncnRate) / 100;
@@ -515,81 +636,91 @@ const createTaxDeclaration = async (req, res) => {
     console.log(`  - TNCN (${tncnRate}%): ${tncnAmount}`);
     console.log(`  - Total: ${totalTax}`);
 
-    const revenueByCategory = (req.body.revenueByCategory || []).map((cat) => ({
-      category: cat.category,
-      categoryCode: getCategoryCode(cat.category),
+    // Xử lý danh mục doanh thu
+    const processedRevenueByCategory = revenueByCategory.map((cat) => ({
+      category: cat.category || "",
+      categoryCode: getCategoryCode(cat.category || ""),
       revenue: parseDecimal(cat.revenue || 0),
       gtgtTax: parseDecimal(cat.gtgtTax || 0),
       tncnTax: parseDecimal(cat.tncnTax || 0),
     }));
 
-    const specialConsumptionTax = (req.body.specialConsumptionTax || []).map(
+    // Xử lý thuế tiêu thụ đặc biệt
+    const processedSpecialConsumptionTax = specialConsumptionTax.map(
       (item, idx) => ({
-        itemName: item.itemName,
+        itemName: item.itemName || "",
         itemCode: `[33${String.fromCharCode(97 + idx)}]`,
-        unit: item.unit,
+        unit: item.unit || "",
         revenue: parseDecimal(item.revenue || 0),
         taxRate: Number(item.taxRate || 0),
         taxAmount: parseDecimal(item.taxAmount || 0),
       })
     );
 
-    const environmentalTax = (req.body.environmentalTax || []).map(
-      (item, idx) => ({
-        type: item.type,
-        itemName: item.itemName,
-        itemCode:
-          item.type === "resource"
-            ? `[34${String.fromCharCode(97 + idx)}]`
-            : item.type === "environmental_tax"
-            ? `[35${String.fromCharCode(97 + idx)}]`
-            : `[36${String.fromCharCode(97 + idx)}]`,
-        unit: item.unit,
-        quantity: Number(item.quantity || 0),
-        unitPrice: parseDecimal(item.unitPrice || 0),
-        taxRate: Number(item.taxRate || 0),
-        taxAmount: parseDecimal(item.taxAmount || 0),
-      })
-    );
+    // Xử lý thuế môi trường
+    const processedEnvironmentalTax = environmentalTax.map((item, idx) => ({
+      type: item.type || "environmental_tax",
+      itemName: item.itemName || "",
+      itemCode:
+        item.type === "resource"
+          ? `[34${String.fromCharCode(97 + idx)}]`
+          : item.type === "environmental_tax"
+          ? `[35${String.fromCharCode(97 + idx)}]`
+          : `[36${String.fromCharCode(97 + idx)}]`,
+      unit: item.unit || "",
+      quantity: Number(item.quantity || 0),
+      unitPrice: parseDecimal(item.unitPrice || 0),
+      taxRate: Number(item.taxRate || 0),
+      taxAmount: parseDecimal(item.taxAmount || 0),
+    }));
 
     console.log("📦 Creating declaration document...");
 
-    const doc = await TaxDeclaration.create(
-      [
-        {
-          shopId: storeId,
-          periodType,
-          periodKey,
-          isFirstTime: req.body.isFirstTime !== false,
-          supplementNumber: req.body.supplementNumber || 0,
-          taxpayerInfo,
-          systemRevenue: systemRevenueDecimal,
-          declaredRevenue: parseDecimal(declaredNum),
-          taxRates: { gtgt: gtgtRate, tncn: tncnRate },
-          taxAmounts: {
-            gtgt: parseDecimal(gtgtAmount),
-            tncn: parseDecimal(tncnAmount),
-            total: parseDecimal(totalTax),
-          },
-          revenueByCategory,
-          specialConsumptionTax,
-          environmentalTax,
-          notes: req.body.notes || "",
-          internalNotes: req.body.internalNotes || "",
-          createdBy,
-          originalId: null,
-          isClone: false,
-          version: 1,
-          status: req.body.status || "draft",
-        },
-      ],
-      { session }
+    // ✅ Tạo document với tất cả các trường
+    const docData = {
+      shopId: storeId,
+      periodType,
+      periodKey: processedPeriodKey,
+      isFirstTime,
+      supplementNumber: Number(supplementNumber) || 0,
+      taxpayerInfo, // ✅ Đảm bảo taxpayerInfo có đầy đủ thông tin
+      systemRevenue: systemRevenueDecimal,
+      declaredRevenue: parseDecimal(declaredNum),
+      taxRates: {
+        gtgt: gtgtRate,
+        tncn: tncnRate,
+      },
+      taxAmounts: {
+        gtgt: parseDecimal(gtgtAmount),
+        tncn: parseDecimal(tncnAmount),
+        total: parseDecimal(totalTax),
+      },
+      revenueByCategory: processedRevenueByCategory,
+      specialConsumptionTax: processedSpecialConsumptionTax,
+      environmentalTax: processedEnvironmentalTax,
+      notes: notes || "",
+      internalNotes: internalNotes || "",
+      createdBy,
+      originalId: null,
+      isClone: false,
+      version: 1,
+      status,
+    };
+
+    console.log("📄 Document data keys:", Object.keys(docData));
+    console.log(
+      "📄 Document taxpayerInfo:",
+      JSON.stringify(docData.taxpayerInfo, null, 2)
     );
+
+    const doc = await TaxDeclaration.create([docData], { session });
 
     await session.commitTransaction();
     session.endSession();
 
     console.log(`✅ Declaration created: ${doc[0]._id}`);
+    console.log(`ℹ️  Period: ${periodType} ${processedPeriodKey}`);
+    console.log(`ℹ️  Status: ${status}`);
 
     await logActivity({
       user: req.user,
@@ -597,9 +728,9 @@ const createTaxDeclaration = async (req, res) => {
       action: "create",
       entity: "TaxDeclaration",
       entityId: doc[0]._id,
-      entityName: `${periodType}-${periodKey}`,
+      entityName: `${periodType}-${processedPeriodKey}`,
       req,
-      description: `Tạo tờ khai thuế kỳ ${periodType} ${periodKey} cho cửa hàng ${store.name}`,
+      description: `Tạo tờ khai thuế kỳ ${periodType} ${processedPeriodKey} cho cửa hàng ${store.name}`,
     });
 
     return successResponse(
@@ -607,7 +738,8 @@ const createTaxDeclaration = async (req, res) => {
       "Tạo tờ khai thành công",
       {
         declaration: doc[0],
-        periodFormatted: formatTaxPeriod(periodType, periodKey),
+        periodFormatted: formatTaxPeriod(periodType, processedPeriodKey),
+        note: "Đã tạo tờ khai mới (không kiểm tra trùng kỳ)",
       },
       201
     );
@@ -621,23 +753,28 @@ const createTaxDeclaration = async (req, res) => {
     });
   }
 };
-
 /**
- * 3. UPDATE TAX DECLARATION
+ * 3. UPDATE TAX DECLARATION - IMPROVED
  * PUT /api/taxs/:id
  */
 const updateTaxDeclaration = async (req, res) => {
   console.log("\n📋 === UPDATE TAX DECLARATION ===");
   console.log("ID:", req.params.id);
-  console.log("Request body keys:", Object.keys(req.body));
+  console.log("Request body:", JSON.stringify(req.body, null, 2));
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
   try {
     const { id } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
+      await session.abortTransaction();
+      session.endSession();
       return errorResponse(res, 400, "ID tờ khai không hợp lệ", { id });
     }
 
+    // Lấy tất cả các trường từ request body
     const {
       declaredRevenue,
       taxRates,
@@ -649,11 +786,17 @@ const updateTaxDeclaration = async (req, res) => {
       status,
       isFirstTime,
       supplementNumber,
-      taxpayerInfo,
+      taxpayerInfo: updatedTaxpayerInfo,
+      ...otherFields
     } = req.body;
 
-    const doc = await TaxDeclaration.findById(id);
+    console.log("📝 Fields to update:", Object.keys(req.body));
+
+    // Tìm document
+    const doc = await TaxDeclaration.findById(id).session(session);
     if (!doc) {
+      await session.abortTransaction();
+      session.endSession();
       return errorResponse(res, 404, "Không tìm thấy tờ khai", { id });
     }
 
@@ -661,7 +804,10 @@ const updateTaxDeclaration = async (req, res) => {
       `✅ Declaration found: ${doc.periodType}-${doc.periodKey} (status: ${doc.status})`
     );
 
+    // Kiểm tra quyền chỉnh sửa
     if (!["draft", "saved"].includes(doc.status)) {
+      await session.abortTransaction();
+      session.endSession();
       return errorResponse(
         res,
         400,
@@ -675,6 +821,8 @@ const updateTaxDeclaration = async (req, res) => {
 
     const userId = req.user?._id;
     if (!isManagerUser(req.user) && String(doc.createdBy) !== String(userId)) {
+      await session.abortTransaction();
+      session.endSession();
       return errorResponse(
         res,
         403,
@@ -688,8 +836,48 @@ const updateTaxDeclaration = async (req, res) => {
 
     console.log("🔧 Updating fields...");
 
+    // ✅ Cập nhật thông tin người nộp thuế nếu có
+    if (updatedTaxpayerInfo) {
+      console.log("👤 Updating taxpayer info...");
+
+      // Merge thông tin mới với thông tin cũ
+      doc.taxpayerInfo = {
+        ...doc.taxpayerInfo,
+        ...updatedTaxpayerInfo,
+        // Merge nested objects
+        businessAddress: {
+          ...(doc.taxpayerInfo?.businessAddress || {}),
+          ...(updatedTaxpayerInfo.businessAddress || {}),
+        },
+        residenceAddress: {
+          ...(doc.taxpayerInfo?.residenceAddress || {}),
+          ...(updatedTaxpayerInfo.residenceAddress || {}),
+        },
+        workingHours: {
+          ...(doc.taxpayerInfo?.workingHours || {}),
+          ...(updatedTaxpayerInfo.workingHours || {}),
+        },
+        personalInfo: {
+          ...(doc.taxpayerInfo?.personalInfo || {}),
+          ...(updatedTaxpayerInfo.personalInfo || {}),
+        },
+      };
+
+      console.log("📧 Updated email:", doc.taxpayerInfo.email);
+    }
+
+    // Cập nhật doanh thu và thuế nếu có
     if (declaredRevenue != null) {
       const declaredNum = Number(declaredRevenue);
+      if (isNaN(declaredNum) || declaredNum < 0) {
+        await session.abortTransaction();
+        session.endSession();
+        return errorResponse(res, 400, "Doanh thu kê khai không hợp lệ", {
+          declaredRevenue,
+          hint: "Doanh thu phải là số >= 0",
+        });
+      }
+
       const gtgtRate =
         taxRates?.gtgt !== undefined
           ? Number(taxRates.gtgt)
@@ -699,9 +887,35 @@ const updateTaxDeclaration = async (req, res) => {
           ? Number(taxRates.tncn)
           : doc.taxRates.tncn ?? 0.5;
 
+      // Validate tax rates
+      if (isNaN(gtgtRate) || gtgtRate < 0 || gtgtRate > 10) {
+        await session.abortTransaction();
+        session.endSession();
+        return errorResponse(res, 400, "Thuế suất GTGT không hợp lệ", {
+          gtgtRate,
+          hint: "Thuế suất GTGT phải từ 0-10%",
+        });
+      }
+
+      if (isNaN(tncnRate) || tncnRate < 0 || tncnRate > 5) {
+        await session.abortTransaction();
+        session.endSession();
+        return errorResponse(res, 400, "Thuế suất TNCN không hợp lệ", {
+          tncnRate,
+          hint: "Thuế suất TNCN phải từ 0-5%",
+        });
+      }
+
+      // Tính toán thuế mới
       const gtgtAmount = (declaredNum * gtgtRate) / 100;
       const tncnAmount = (declaredNum * tncnRate) / 100;
       const totalTax = gtgtAmount + tncnAmount;
+
+      console.log("💸 Tax calculation:");
+      console.log(`  - Declared: ${declaredNum}`);
+      console.log(`  - GTGT (${gtgtRate}%): ${gtgtAmount}`);
+      console.log(`  - TNCN (${tncnRate}%): ${tncnAmount}`);
+      console.log(`  - Total: ${totalTax}`);
 
       doc.declaredRevenue = parseDecimal(declaredNum);
       doc.taxRates.gtgt = gtgtRate;
@@ -709,85 +923,109 @@ const updateTaxDeclaration = async (req, res) => {
       doc.taxAmounts.gtgt = parseDecimal(gtgtAmount);
       doc.taxAmounts.tncn = parseDecimal(tncnAmount);
       doc.taxAmounts.total = parseDecimal(totalTax);
-
-      console.log(
-        `💸 Tax updated: GTGT=${gtgtAmount}, TNCN=${tncnAmount}, Total=${totalTax}`
-      );
     }
 
-    if (revenueByCategory) {
+    // Cập nhật các trường khác
+    if (revenueByCategory !== undefined) {
       doc.revenueByCategory = revenueByCategory.map((cat) => ({
-        category: cat.category,
-        categoryCode: getCategoryCode(cat.category),
+        category: cat.category || "",
+        categoryCode: getCategoryCode(cat.category || ""),
         revenue: parseDecimal(cat.revenue || 0),
         gtgtTax: parseDecimal(cat.gtgtTax || 0),
         tncnTax: parseDecimal(cat.tncnTax || 0),
       }));
-      console.log(
-        `📊 Revenue by category updated: ${revenueByCategory.length} items`
-      );
     }
 
-    if (specialConsumptionTax) {
+    if (specialConsumptionTax !== undefined) {
       doc.specialConsumptionTax = specialConsumptionTax.map((item, idx) => ({
-        itemName: item.itemName,
+        itemName: item.itemName || "",
         itemCode: `[33${String.fromCharCode(97 + idx)}]`,
-        unit: item.unit,
+        unit: item.unit || "",
         revenue: parseDecimal(item.revenue || 0),
         taxRate: Number(item.taxRate || 0),
         taxAmount: parseDecimal(item.taxAmount || 0),
       }));
-      console.log(
-        `🍾 Special consumption tax updated: ${specialConsumptionTax.length} items`
-      );
     }
 
-    if (environmentalTax) {
+    if (environmentalTax !== undefined) {
       doc.environmentalTax = environmentalTax.map((item, idx) => ({
-        type: item.type,
-        itemName: item.itemName,
+        type: item.type || "environmental_tax",
+        itemName: item.itemName || "",
         itemCode:
           item.type === "resource"
             ? `[34${String.fromCharCode(97 + idx)}]`
             : item.type === "environmental_tax"
             ? `[35${String.fromCharCode(97 + idx)}]`
             : `[36${String.fromCharCode(97 + idx)}]`,
-        unit: item.unit,
+        unit: item.unit || "",
         quantity: Number(item.quantity || 0),
         unitPrice: parseDecimal(item.unitPrice || 0),
         taxRate: Number(item.taxRate || 0),
         taxAmount: parseDecimal(item.taxAmount || 0),
       }));
-      console.log(
-        `🌿 Environmental tax updated: ${environmentalTax.length} items`
-      );
     }
 
-    if (taxpayerInfo) {
-      doc.taxpayerInfo = { ...doc.taxpayerInfo, ...taxpayerInfo };
-      console.log("👤 Taxpayer info updated");
-    }
-
+    // Cập nhật các trường cơ bản
     if (notes !== undefined) doc.notes = notes;
     if (internalNotes !== undefined && isManagerUser(req.user)) {
       doc.internalNotes = internalNotes;
     }
     if (isFirstTime !== undefined) doc.isFirstTime = isFirstTime;
-    if (supplementNumber !== undefined) doc.supplementNumber = supplementNumber;
-
-    if (status && ["draft", "saved", "submitted"].includes(status)) {
-      doc.status = status;
-      if (status === "submitted" && !doc.submittedAt) {
-        doc.submittedAt = new Date();
-        console.log("📤 Status changed to submitted");
-      }
+    if (supplementNumber !== undefined) {
+      doc.supplementNumber = Number(supplementNumber) || 0;
     }
 
+    // Cập nhật trạng thái
+    if (status && ["draft", "saved", "submitted"].includes(status)) {
+      if (status === "submitted") {
+        // Validate before submitting
+        const validationErrors = [];
+        if (!doc.taxpayerInfo?.name) {
+          validationErrors.push("Thiếu tên người nộp thuế");
+        }
+        if (!doc.taxpayerInfo?.taxCode) {
+          validationErrors.push("Thiếu mã số thuế");
+        }
+        if (parseFloat(doc.declaredRevenue.toString()) <= 0) {
+          validationErrors.push("Doanh thu kê khai phải lớn hơn 0");
+        }
+        // ✅ Kiểm tra email khi submit
+        if (!doc.taxpayerInfo?.email) {
+          validationErrors.push("Thiếu email người nộp thuế");
+        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(doc.taxpayerInfo.email)) {
+          validationErrors.push("Email không hợp lệ");
+        }
+
+        if (validationErrors.length > 0) {
+          await session.abortTransaction();
+          session.endSession();
+          return errorResponse(res, 400, "Không thể nộp tờ khai", {
+            validationErrors,
+            hint: "Vui lòng kiểm tra lại thông tin trước khi nộp",
+          });
+        }
+
+        if (!doc.submittedAt) {
+          doc.submittedAt = new Date();
+          console.log("📤 Status changed to submitted");
+        }
+      }
+      doc.status = status;
+    }
+
+    // Cập nhật thời gian và người cập nhật
     doc.updatedAt = new Date();
-    await doc.save();
+    doc.updatedBy = req.user?._id;
+
+    // Lưu trong transaction
+    await doc.save({ session });
+
+    await session.commitTransaction();
+    session.endSession();
 
     console.log(`✅ Declaration updated: ${doc._id}`);
 
+    // Log activity
     await logActivity({
       user: req.user,
       store: { _id: doc.shopId },
@@ -796,13 +1034,17 @@ const updateTaxDeclaration = async (req, res) => {
       entityId: doc._id,
       entityName: `${doc.periodType}-${doc.periodKey}`,
       req,
-      description: `Cập nhật tờ khai thuế kỳ ${doc.periodType} ${doc.periodKey}`,
+      description: `Cập nhật tờ khai thuế kỳ ${doc.periodType} ${doc.periodKey} - Trạng thái: ${doc.status}`,
+      changes: Object.keys(req.body),
     });
 
     return successResponse(res, "Cập nhật tờ khai thành công", {
       declaration: doc,
+      changes: Object.keys(req.body),
     });
   } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
     console.error("❌ updateTaxDeclaration error:", err);
     return errorResponse(res, 500, "Lỗi server khi cập nhật tờ khai", {
       error: err.message,
@@ -2052,7 +2294,6 @@ const exportDeclaration = async (req, res) => {
     });
   }
 };
-
 module.exports = {
   previewSystemRevenue,
   createTaxDeclaration,

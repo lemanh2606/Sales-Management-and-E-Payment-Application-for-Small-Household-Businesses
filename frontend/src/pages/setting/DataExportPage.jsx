@@ -44,6 +44,8 @@ const filterBadges = {
   paymentMethod: { color: "purple", label: "Hình thức thanh toán" },
 };
 
+const HIDDEN_EXPORT_KEYS = new Set(["purchaseOrders", "purchaseReturns", "stockChecks", "stockDisposals"]);
+
 const extractServerMessage = async (error) => {
   const response = error?.response;
   if (!response || response?.data == null) return null;
@@ -107,8 +109,14 @@ const DataExportPage = () => {
       try {
         const { data } = await exportApi.getOptions({ storeId: currentStore._id });
         const fetchedOptions = data?.options || [];
-        setOptions(fetchedOptions);
-        setSelectedKey((prev) => prev ?? fetchedOptions[0]?.key ?? null);
+        const visibleOptions = fetchedOptions.filter((option) => !HIDDEN_EXPORT_KEYS.has(option.key));
+        setOptions(visibleOptions);
+        setSelectedKey((prev) => {
+          if (prev && visibleOptions.some((option) => option.key === prev)) {
+            return prev;
+          }
+          return visibleOptions[0]?.key ?? null;
+        });
       } catch (error) {
         console.error("Load export options error", error);
         messageApi.error(error.response?.data?.message || "Không tải được danh sách dữ liệu");

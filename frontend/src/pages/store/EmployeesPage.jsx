@@ -166,6 +166,7 @@ const PERMISSION_LABELS = {
   "tax:delete": "Xóa tờ khai thuế",
   "tax:list": "Danh sách tờ khai thuế",
   "tax:export": "Xuất tờ khai thuế",
+  "users:view": "Xem hồ sơ cá nhân",
   "users:manage": "Quản trị người dùng",
   "users:role:update": "Đổi vai trò người dùng",
   "users:menu:update": "Cập nhật quyền menu",
@@ -185,7 +186,7 @@ const PERMISSION_LABELS = {
 };
 
 const STAFF_ALLOWED_PREFIXES = ["customers", "orders", "notifications"];
-const STAFF_ALLOWED_EXACT = ["store:dashboard:view"];
+const STAFF_ALLOWED_EXACT = ["store:dashboard:view", "users:view"];
 
 const isAllowedForStaff = (permission = "") =>
   STAFF_ALLOWED_EXACT.includes(permission) || STAFF_ALLOWED_PREFIXES.some((prefix) => permission.startsWith(`${prefix}:`));

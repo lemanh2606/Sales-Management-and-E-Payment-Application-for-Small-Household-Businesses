@@ -17,9 +17,16 @@ const swaggerUi = require("swagger-ui-express");
 const YAML = require("yamljs");
 const swaggerDocument = YAML.load(path.join(__dirname, "swagger.yaml")); // 👈 nhớ tạo file swagger.yaml
 // --- LOAD MODELS ---
-["Product", "ProductGroup", "Supplier", "Employee", "StockDisposal", "StockCheck", "PurchaseOrder", "PurchaseReturn"].forEach((model) =>
-  require(`./models/${model}`)
-);
+[
+  "Product",
+  "ProductGroup",
+  "Supplier",
+  "Employee",
+  "StockDisposal",
+  "StockCheck",
+  "PurchaseOrder",
+  "PurchaseReturn",
+].forEach((model) => require(`./models/${model}`));
 
 const app = express();
 
@@ -35,8 +42,16 @@ const allowedOrigins = [
 // --- ĐẶT WEBOOK trước các body parser ---
 const orderWebhookHandler = require("./routers/orderWebhookHandler");
 const subscriptionWebhookHandler = require("./routers/subscriptionWebhookHandler");
-app.post("/api/orders/vietqr-webhook", express.raw({ type: "*/*" }), orderWebhookHandler);
-app.post("/api/subscriptions/webhook", express.raw({ type: "*/*" }), subscriptionWebhookHandler);
+app.post(
+  "/api/orders/vietqr-webhook",
+  express.raw({ type: "*/*" }),
+  orderWebhookHandler
+);
+app.post(
+  "/api/subscriptions/webhook",
+  express.raw({ type: "*/*" }),
+  subscriptionWebhookHandler
+);
 
 // PHẦN CODE CỦA Multer
 const uploadDir = path.join(__dirname, "uploads");
@@ -56,13 +71,23 @@ const io = new Server(server, {
     origin: allowedOrigins,
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "Cache-Control", "Pragma", "X-XSRF-TOKEN", "XSRF-TOKEN"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "Cache-Control",
+      "Pragma",
+      "X-XSRF-TOKEN",
+      "XSRF-TOKEN",
+      "x-store-id",
+    ],
   },
 });
 app.set("io", io);
 io.on("connection", (socket) => {
   console.log(`🟢 Client kết nối: ${socket.id}`);
-  socket.on("disconnect", () => console.log(`🔴 Client ngắt kết nối: ${socket.id}`));
+  socket.on("disconnect", () =>
+    console.log(`🔴 Client ngắt kết nối: ${socket.id}`)
+  );
 });
 
 //PHẦN KHAI BÁO THÔNG BÁO BẰNG EMAIL CRONJOB
@@ -74,7 +99,14 @@ app.use(
     origin: allowedOrigins,
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "Cache-Control", "Pragma", "X-XSRF-TOKEN", "XSRF-TOKEN"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "Cache-Control",
+      "Pragma",
+      "X-XSRF-TOKEN",
+      "XSRF-TOKEN",
+    ],
   })
 );
 
@@ -134,7 +166,9 @@ app.use("/api/export", exportRouters);
 
 // --- PHẦN ROOT MẶC ĐỊNH CỦA BACKEND ---
 app.get("/", (req, res) => {
-  res.send("👀 Ai vừa ping tui đó? Tui thấy rồi nha! From SmartRetail team with Love 🫶");
+  res.send(
+    "👀 Ai vừa ping tui đó? Tui thấy rồi nha! From SmartRetail team with Love 🫶"
+  );
 });
 
 // --- API TỔNG QUAN (JSON) ---

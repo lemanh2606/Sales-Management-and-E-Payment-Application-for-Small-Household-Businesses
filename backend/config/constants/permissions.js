@@ -85,6 +85,7 @@ const ALL_PERMISSIONS = [
   "tax:list",
   "tax:export",
   // user management
+  "users:view",
   "users:manage",
   "users:role:update",
   "users:menu:update",
@@ -124,6 +125,7 @@ const STAFF_DEFAULT_MENU = [
   "inventory:stock-check:detail",
   "inventory:stock-check:update",
   "supplier:view",
+  "users:view",
   "reports:revenue:view",
   "notifications:view",
   "file:view",
