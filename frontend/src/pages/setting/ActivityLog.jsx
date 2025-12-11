@@ -289,7 +289,7 @@ const ActivityLog = () => {
       title: "Hành động",
       dataIndex: "action",
       key: "action",
-      width: 85,
+      width: 95,
       render: (action) => <Tag color="volcano">{action.toUpperCase()}</Tag>,
       onCell: () => ({ style: { cursor: "pointer" } }),
     },
@@ -305,7 +305,7 @@ const ActivityLog = () => {
       title: "Tên đối tượng",
       dataIndex: "entityName",
       key: "entityName",
-      width: 180,
+      width: 170,
       ellipsis: { showTitle: false },
       onCell: () => ({ style: { cursor: "pointer" } }),
     },
@@ -313,19 +313,21 @@ const ActivityLog = () => {
       title: "Mô tả",
       dataIndex: "description",
       key: "description",
-      width: 280,
+      width: 270,
       ellipsis: { showTitle: false },
       onCell: () => ({ style: { cursor: "pointer" } }),
     },
     {
-      title: "Hành động",
+      title: "Thao tác",
       key: "actions",
-      width: 50,
+      width: 95,
       fixed: "right",
       render: (_, record) => (
-        <Tooltip title="Nhấp để xem chi tiết log này">
-          <Button type="link" icon={<InfoCircleOutlined />} onClick={() => fetchLogDetail(record._id)} />
-        </Tooltip>
+        <div style={{textAlign:"center"}}>
+          <Tooltip title="Nhấp để xem chi tiết log này">
+            <Button type="link" icon={<InfoCircleOutlined />} onClick={() => fetchLogDetail(record._id)} />
+          </Tooltip>
+        </div>
       ),
       onCell: () => ({ style: { cursor: "pointer" } }),
     },
@@ -338,12 +340,12 @@ const ActivityLog = () => {
       log.action === "create"
         ? "green"
         : log.action === "update"
-          ? "blue"
-          : log.action === "delete"
-            ? "red"
-            : log.action === "auth"
-              ? "purple"
-              : "gray",
+        ? "blue"
+        : log.action === "delete"
+        ? "red"
+        : log.action === "auth"
+        ? "purple"
+        : "gray",
     children: (
       <div>
         <Text strong>{log.userName}</Text>
@@ -515,19 +517,10 @@ const ActivityLog = () => {
                     </Select>
                   </Col>
                   <Col span={6}>
-                    <RangePicker
-                      style={{ width: "100%" }}
-                      onChange={handleDateRange}
-                      format="YYYY-MM-DD"
-                      placeholder={["Từ ngày", "Đến ngày"]}
-                    />
+                    <RangePicker style={{ width: "100%" }} onChange={handleDateRange} format="YYYY-MM-DD" placeholder={["Từ ngày", "Đến ngày"]} />
                   </Col>
                   <Col span={6}>
-                    <Input
-                      placeholder="Tìm kiếm keyword"
-                      onChange={(e) => handleFilterChange("keyword", e.target.value)}
-                      style={{ width: "100%" }}
-                    />
+                    <Input placeholder="Tìm kiếm keyword" onChange={(e) => handleFilterChange("keyword", e.target.value)} style={{ width: "100%" }} />
                   </Col>
                 </Row>
                 <Row style={{ marginTop: 16 }}>
@@ -544,10 +537,7 @@ const ActivityLog = () => {
                         Xem nhật ký
                       </Button>
                       <Tooltip title="Thu gọn/Mở rộng thống kê">
-                        <Button
-                          icon={<DownOutlined rotate={statsCollapsed ? 0 : 180} />}
-                          onClick={() => setStatsCollapsed(!statsCollapsed)}
-                        >
+                        <Button icon={<DownOutlined rotate={statsCollapsed ? 0 : 180} />} onClick={() => setStatsCollapsed(!statsCollapsed)}>
                           {statsCollapsed ? "Hiện" : "Ẩn"} thống kê
                         </Button>
                       </Tooltip>
@@ -624,9 +614,7 @@ const ActivityLog = () => {
                   scroll={{ x: 1200 }}
                   locale={{
                     emptyText: (
-                      <div style={{ color: "#f45a07f7" }}>
-                        {filterApplied ? "Phần này chưa có nhật ký" : "Chưa có nhật ký. Hãy lọc và xem!"}
-                      </div>
+                      <div style={{ color: "#f45a07f7" }}>{filterApplied ? "Phần này chưa có nhật ký" : "Chưa có nhật ký. Hãy lọc và xem!"}</div>
                     ),
                   }}
                   onRow={(record) => ({ onClick: () => fetchLogDetail(record._id) })}
@@ -651,9 +639,7 @@ const ActivityLog = () => {
                     <Spin tip="Đang tải danh sách vào ca..." />
                   </div>
                 ) : attendance.length === 0 ? (
-                  <div style={{ textAlign: "center", padding: "40px", color: "#999", fontSize: 16 }}>
-                    Chưa có nhân viên nào vào ca hôm nay
-                  </div>
+                  <div style={{ textAlign: "center", padding: "40px", color: "#999", fontSize: 16 }}>Chưa có nhân viên nào vào ca hôm nay</div>
                 ) : (
                   <Table
                     dataSource={attendance}
@@ -672,9 +658,7 @@ const ActivityLog = () => {
                             />
                             <div>
                               <div style={{ fontWeight: 600 }}>{log.userDetail?.fullname || log.userName}</div>
-                              <div style={{ fontSize: 12, color: "#888" }}>
-                                {log.userDetail?.role === "MANAGER" ? "Quản lý" : "Nhân viên"}
-                              </div>
+                              <div style={{ fontSize: 12, color: "#888" }}>{log.userDetail?.role === "MANAGER" ? "Quản lý" : "Nhân viên"}</div>
                             </div>
                           </Space>
                         ),
@@ -705,13 +689,9 @@ const ActivityLog = () => {
                       {
                         title: "Thiết bị",
                         render: (_, log) => {
-                          const isStoreIP =
-                            log.ip && ["192.168.", "10.0.", "172.16."].some((p) => log.ip.startsWith(p));
+                          const isStoreIP = log.ip && ["192.168.", "10.0.", "172.16."].some((p) => log.ip.startsWith(p));
                           return (
-                            <Tag
-                              color={isStoreIP ? "green" : "orange"}
-                              icon={isStoreIP ? <AppstoreOutlined /> : <QuestionCircleOutlined />}
-                            >
+                            <Tag color={isStoreIP ? "green" : "orange"} icon={isStoreIP ? <AppstoreOutlined /> : <QuestionCircleOutlined />}>
                               {isStoreIP ? "Máy tại quán" : "Thiết bị lạ"}
                             </Tag>
                           );
@@ -720,12 +700,7 @@ const ActivityLog = () => {
                       {
                         title: "Địa chỉ IP",
                         dataIndex: "ip",
-                        render: (ip) =>
-                          ip ? (
-                            <code style={{ background: "#f5f5f5", padding: "2px 6px", borderRadius: 4 }}>{ip}</code>
-                          ) : (
-                            "-"
-                          ),
+                        render: (ip) => (ip ? <code style={{ background: "#f5f5f5", padding: "2px 6px", borderRadius: 4 }}>{ip}</code> : "-"),
                       },
                     ]}
                   />

@@ -6,7 +6,7 @@ const { generateQRWithPayOS } = require("../services/payOSService");
 
 // Pricing config
 const PRICING = {
-  1: { price: 5000, discount: 0, label: "1 tháng" },
+  1: { price: 5000, discount: 0, label: "1 tháng", badge: "Rẻ nhất" },
   3: { price: 499000, discount: 98000, label: "3 tháng", badge: "Phổ biến" },
   6: { price: 899000, discount: 295000, label: "6 tháng", badge: "Tiết kiệm nhất" },
 };
@@ -245,7 +245,7 @@ const createCheckout = async (req, res) => {
     const shortId = String(userId).slice(-6);
 
     // Tạo order description. Mô tả thanh toán mới
-    const orderInfo = `Premium ${plan.label} UID${shortId} ${fullnameNoAccent}`;
+    const orderInfo = `Premium ${plan.label} UID ${shortId} ${fullnameNoAccent}`;
     const amount = plan.price;
 
     // Generate payment link với PayOS

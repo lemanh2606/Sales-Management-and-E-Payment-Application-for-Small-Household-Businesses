@@ -298,7 +298,7 @@ function requirePermission(permission, options = {}) {
 
       return res
         .status(403)
-        .json({ message: "Access denied (permission missing)" });
+        .json({ message: "Truy cập bị từ chối, chỉ Manager mới có quyền này" });
     } catch (err) {
       console.error("requirePermission error:", err);
       return res
