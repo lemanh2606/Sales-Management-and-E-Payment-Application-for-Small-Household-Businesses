@@ -185,13 +185,15 @@ const PERMISSION_LABELS = {
   "file:view": "Xem & tải tệp",
 };
 
-const STAFF_ALLOWED_PREFIXES = ["customers", "orders", "notifications"];
-const STAFF_ALLOWED_EXACT = ["store:dashboard:view", "users:view"];
-
-const isAllowedForStaff = (permission = "") =>
-  STAFF_ALLOWED_EXACT.includes(permission) || STAFF_ALLOWED_PREFIXES.some((prefix) => permission.startsWith(`${prefix}:`));
-
-const filterStaffPermissions = (list = []) => Array.from(new Set(list.filter((permission) => isAllowedForStaff(permission))));
+const normalizePermissions = (list = []) =>
+  Array.from(
+    new Set(
+      (Array.isArray(list) ? list : [])
+        .filter((permission) => typeof permission === "string")
+        .map((permission) => permission.trim())
+        .filter(Boolean)
+    )
+  );
 
 const groupPermissions = (permissionList = []) => {
   const groups = {};
@@ -286,8 +288,8 @@ export default function EmployeesPage() {
     }
     try {
       const res = await getPermissionCatalog();
-      const permissions = filterStaffPermissions(res.permissions || []);
-      const staffDefault = filterStaffPermissions(res.staffDefault?.length ? res.staffDefault : permissions);
+      const permissions = normalizePermissions(res.permissions || []);
+      const staffDefault = normalizePermissions(res.staffDefault?.length ? res.staffDefault : permissions);
       setPermissionOptions(permissions);
       setDefaultStaffPermissions(staffDefault);
       return { permissions, staffDefault };
@@ -462,7 +464,7 @@ export default function EmployeesPage() {
     if (!record?._id) return;
     if (selectedStaff && String(selectedStaff._id) === String(record._id) && permissionOptions.length) {
       const currentMenu = Array.isArray(record.user_id?.menu) ? record.user_id.menu : [];
-      setSelectedPermissions(filterStaffPermissions(currentMenu));
+      setSelectedPermissions(normalizePermissions(currentMenu));
       return;
     }
     setSelectedStaff(record);
@@ -471,9 +473,9 @@ export default function EmployeesPage() {
       const catalog = await ensurePermissionCatalog();
       const catalogKeys = catalog?.permissions || [];
       const currentMenu = Array.isArray(record.user_id?.menu) ? record.user_id.menu : [];
-      const mergedCatalog = filterStaffPermissions([...(catalogKeys || []), ...currentMenu]);
+      const mergedCatalog = normalizePermissions([...(catalogKeys || []), ...currentMenu]);
       setPermissionOptions(mergedCatalog);
-      setSelectedPermissions(filterStaffPermissions(currentMenu));
+      setSelectedPermissions(normalizePermissions(currentMenu));
     } catch (err) {
       console.error(err);
       Swal.fire({
@@ -524,7 +526,7 @@ export default function EmployeesPage() {
     }
 
     const userId = selectedStaff.user_id?._id || selectedStaff.user_id;
-    const sanitizedMenu = filterStaffPermissions(selectedPermissions);
+    const sanitizedMenu = normalizePermissions(selectedPermissions);
     setPermissionSaving(true);
     try {
       await updateUserById(userId, { menu: sanitizedMenu, storeId: currentStore._id });

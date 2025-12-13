@@ -872,7 +872,7 @@ const OrderPOSHome: React.FC = () => {
                               title: "Tên sản phẩm",
                               dataIndex: "name",
                               ellipsis: true,
-                              width: 300,
+                              width: 250,
                               render: (_text, record: CartItem) => (
                                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                                   <img
@@ -911,7 +911,7 @@ const OrderPOSHome: React.FC = () => {
                             },
                             {
                               title: "Đơn giá",
-                              width: 140,
+                              width: 120,
                               align: "right",
                               render: (_, record) => {
                                 const unitPrice = getItemUnitPrice(record);
@@ -945,12 +945,13 @@ const OrderPOSHome: React.FC = () => {
                               dataIndex: "unit",
                               width: 100,
                               align: "center",
+                              render: (value: string) => (value && String(value).trim() ? value : "---"),
                             },
                             {
                               title: "Thành tiền",
                               dataIndex: "subtotal",
                               align: "right",
-                              width: 160,
+                              width: 150,
                               render: (_sub, record: CartItem) => {
                                 const amount = getItemUnitPrice(record) * record.quantity;
                                 return (
