@@ -70,8 +70,40 @@ interface Customer {
 interface Employee {
   _id: string;
   fullName: string;
-  user_id: { username: string };
+  phone?: string;
+  salary?: number | string;
+  shift?: string;
+  commission_rate?: number | string;
+  hired_date?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  isDeleted?: boolean;
+  user_id: {
+    _id: string;
+    username: string;
+    role?: string;
+    email?: string;
+    phone?: string;
+    menu?: string[];
+    // Có thể thêm các field khác nếu cần sau này
+  } | null; // cho phép null nếu có nhân viên chưa link user (hiếm)
+  store_id?: {
+    _id: string;
+    name?: string;
+  };
 }
+
+type VirtualOwner = {
+  _id: "virtual-owner";
+  fullName: string;
+  isOwner: true;
+};
+
+type RealEmployee = Employee & {
+  isOwner?: false;
+};
+
+type Seller = RealEmployee | VirtualOwner;
 
 type SaleType = "NORMAL" | "AT_COST" | "VIP" | "CLEARANCE" | "FREE";
 interface CartItem {
@@ -166,6 +198,9 @@ const OrderPOSHome: React.FC = () => {
   const [orderPrintCount, setOrderPrintCount] = useState<number>(0); // số lần in
   const [orderEarnedPoints, setOrderEarnedPoints] = useState<number>(0); // điểm tích
 
+  // Thêm state để lưu employee hiện tại của user đang login
+  const [currentUserEmployee, setCurrentUserEmployee] = useState<Seller | null>(null);
+
   // Helper - Lấy giá trị số từ price
   const getPriceNumber = (price: any): number => {
     if (!price) return 0;
@@ -246,11 +281,52 @@ const OrderPOSHome: React.FC = () => {
     }
   }, [storeId]);
 
-  // Load danh sách nhân viên
+  // Khi load employees, tìm employee tương ứng với user đang login
   const loadEmployees = async () => {
     try {
       const res = await axios.get(`${API_BASE}/stores/${storeId}/employees?deleted=false`, { headers });
-      setEmployees(res.data.employees || []);
+
+      const employeesList: Employee[] = res.data.employees || [];
+      setEmployees(employeesList);
+
+      const loggedInUser = JSON.parse(localStorage.getItem("user") || "{}");
+
+      if (!loggedInUser?.id) return;
+
+      // Manager / Owner → luôn là virtual owner
+      if (loggedInUser.role === "MANAGER" || loggedInUser.role === "OWNER") {
+        const virtualOwner: VirtualOwner = {
+          _id: "virtual-owner",
+          fullName: loggedInUser.fullname || loggedInUser.username || "Chủ cửa hàng",
+          isOwner: true,
+        };
+
+        setCurrentUserEmployee(virtualOwner);
+
+        // set mặc định employeeId = null
+        setOrders((prev) =>
+          prev.map((tab) => ({
+            ...tab,
+            employeeId: null,
+          }))
+        );
+
+        return;
+      }
+
+      // STAFF → tìm employee thật
+      const myEmployee = employeesList.find((emp) => emp.user_id && emp.user_id._id === loggedInUser.id);
+
+      if (myEmployee) {
+        setCurrentUserEmployee(myEmployee);
+
+        setOrders((prev) =>
+          prev.map((tab) => ({
+            ...tab,
+            employeeId: myEmployee._id,
+          }))
+        );
+      }
     } catch (err) {
       Swal.fire({
         title: "❌ Lỗi!",
@@ -408,7 +484,7 @@ const OrderPOSHome: React.FC = () => {
         key: newKey,
         cart: [],
         customer: null,
-        employeeId: null,
+        employeeId: currentUserEmployee?.isOwner ? null : currentUserEmployee?._id || null, // ← mặc định là user hiện tại
         usedPoints: 0,
         usedPointsEnabled: false,
         isVAT: false,
@@ -429,6 +505,7 @@ const OrderPOSHome: React.FC = () => {
   };
 
   const currentTab = orders.find((tab) => tab.key === activeTab)!;
+  const selectValue = currentTab.employeeId === null ? "virtual-owner" : currentTab.employeeId;
 
   // Tính toán các giá trị thanh toán
   const subtotal = useMemo(() => currentTab.cart.reduce((sum, item) => sum + getItemUnitPrice(item) * item.quantity, 0), [currentTab.cart]);
@@ -450,12 +527,16 @@ const OrderPOSHome: React.FC = () => {
         confirmButtonText: "OK",
       });
 
-    if (!currentTab.employeeId)
-      return Swal.fire({
-        icon: "warning",
-        title: "Vui lòng chọn nhân viên",
-        confirmButtonText: "OK",
-      });
+    // if (!currentTab.employeeId)
+    //   return Swal.fire({
+    //     icon: "info",
+    //     title: "Thông báo",
+    //     text: "Đã tự động chọn bạn làm nhân viên bán hàng",
+    //     confirmButtonText: "OK",
+    //   });
+
+    // === CHUYỂN VIRTUAL-OWNER VỀ NULL TRƯỚC KHI GỬI ===
+    const sendEmployeeId = currentTab.employeeId === "virtual-owner" ? null : currentTab.employeeId;
 
     setLoading(true);
     try {
@@ -472,7 +553,7 @@ const OrderPOSHome: React.FC = () => {
       // Build payload conditionally
       const payload: any = {
         storeId,
-        employeeId: currentTab.employeeId,
+        employeeId: sendEmployeeId,
         items,
         paymentMethod: currentTab.paymentMethod,
         isVATInvoice: currentTab.isVAT,
@@ -924,19 +1005,31 @@ const OrderPOSHome: React.FC = () => {
                 <UserOutlined style={{ fontSize: 20, color: "#1890ff" }} />
                 <Text strong>Nhân viên bán hàng:</Text>
                 <Select
-                  placeholder="Chọn nhân viên"
-                  value={currentTab.employeeId}
-                  onChange={(v) =>
-                    updateOrderTab((t) => {
-                      t.employeeId = v;
-                    })
-                  }
-                  style={{ width: 300 }}
+                  placeholder="Nhân viên bán hàng"
+                  value={selectValue}
+                  onChange={(value) => {
+                    updateOrderTab((tab) => {
+                      tab.employeeId = value === "virtual-owner" ? null : value;
+                    });
+                  }}
+                  style={{ width: "350px" }}
                   size="large"
+                  allowClear={false} // không cho clear để luôn có người bán
                 >
+                  {/* Ưu tiên hiển thị chủ cửa hàng ở trên cùng nếu là chủ */}
+                  {currentUserEmployee?.isOwner && (
+                    <Option value="virtual-owner" key="virtual-owner">
+                      <Text strong style={{ color: "#1890ff" }}>
+                        {currentUserEmployee.fullName} (Bạn - Chủ cửa hàng)
+                      </Text>
+                    </Option>
+                  )}
+
+                  {/* Danh sách nhân viên thật */}
                   {employees.map((emp) => (
                     <Option key={emp._id} value={emp._id}>
-                      {emp.fullName} ({emp.user_id?.username})
+                      {emp.fullName}
+                      {currentUserEmployee?._id === emp._id && " (Bạn)"}
                     </Option>
                   ))}
                 </Select>

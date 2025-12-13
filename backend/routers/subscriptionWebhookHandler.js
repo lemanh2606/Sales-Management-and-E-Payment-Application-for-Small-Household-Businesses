@@ -8,6 +8,8 @@ const { computePayOSSignatureFromData } = require("../services/payOSService");
 
 module.exports = async (req, res) => {
   console.log("🛰️ Webhook nhận tín hiệu từ PayOS:", new Date().toISOString());
+  console.log("🌐 Headers:", req.headers);
+  console.log("🌐 Query params:", req.query);
 
   let parsed;
 
@@ -64,8 +66,34 @@ module.exports = async (req, res) => {
     return res.status(200).json({ message: "Invalid signature" });
   }
 
+  // ============================
+  // 3.5) Xử lý trạng thái PayOS (PAID / PENDING / CANCELLED)
+  // ============================
+  const payosStatus = tx.status?.toUpperCase();
+
+  if (payosStatus === "CANCELLED") {
+    console.log("🚫 Thanh toán bị hủy — clear pending payment");
+
+    const result = await Subscription.updateOne(
+      { pending_order_code: orderCode },
+      {
+        $unset: {
+          pending_order_code: "",
+          pending_amount: "",
+          pending_checkout_url: "",
+          pending_qr_url: "",
+          pending_created_at: "",
+          pending_plan_duration: "",
+        },
+      }
+    );
+    console.log("🚫 Clear 'pending' result:", result);
+
+    return res.status(200).json({ message: "Payment cancelled — pending cleared" });
+  }
+  // Nếu không phải CANCELLED nhưng code != 00 thì bỏ qua
   if (parsed.code !== "00") {
-    console.warn("⚠ PayOS báo trạng thái không thành công, bỏ qua");
+    console.warn("⚠ PayOS báo không thành công, nhưng không phải CANCELLED. Bỏ qua.");
     return res.status(200).json({ message: "Ignored non-success" });
   }
 
@@ -82,6 +110,7 @@ module.exports = async (req, res) => {
   }
 
   console.log("📌 Tìm thấy subscription:", subscription._id.toString());
+  console.log("📌 Subscription status trước khi update:", subscription.status);
 
   const planDuration = subscription.pending_plan_duration || subscription.duration_months || 1;
 
@@ -103,6 +132,7 @@ module.exports = async (req, res) => {
 
     subscription.clearPendingPayment();
     await subscription.save();
+    console.log("💾 Subscription đã lưu:", subscription._id, "new status:", subscription.status);
   } catch (e) {
     console.error("❌ Lỗi update subscription:", e);
     return res.status(200).json({ message: "Update error" });
@@ -132,6 +162,8 @@ module.exports = async (req, res) => {
     },
     { upsert: true }
   );
+  console.log("💰 PaymentHistory updated/created:", orderCode);
+
 
   // ============================
   // 8) Gửi thông báo (có try/catch riêng)
@@ -164,5 +196,5 @@ module.exports = async (req, res) => {
 
   console.log("✅ Hoàn tất xử lý webhook cho orderCode:", orderCode);
 
-  return res.status(200).json({ message: "Subscription activated" });
+  return res.status(200).json({ message: "Đã kích hoạt gói đăng ký" });
 };

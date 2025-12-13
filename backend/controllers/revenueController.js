@@ -59,7 +59,12 @@ async function calcRevenueByPeriod({ storeId, periodType, periodKey, type = "tot
   // =================== THEO NHÂN VIÊN ===================
   if (type === "employee") {
     const pipeline = [
-      { $match: baseMatch },
+      {
+        $match: {
+          ...baseMatch,
+          employeeId: { $ne: null }, // ⭐ DÒNG QUAN TRỌNG
+        },
+      },
       {
         $group: {
           _id: "$employeeId",

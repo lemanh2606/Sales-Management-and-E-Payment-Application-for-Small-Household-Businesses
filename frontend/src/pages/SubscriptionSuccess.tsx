@@ -1,3 +1,4 @@
+// frontend/src/pages/SubscriptionSuccess.tsx
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, Result, Button, Space, Typography, Spin, Progress } from "antd";
@@ -17,10 +18,10 @@ const SubscriptionSuccess = () => {
   const payosStatus = params.get("status");
 
   useEffect(() => {
-    if (!orderCode) {
-      navigate("/settings/subscription");
-      return;
-    }
+    // if (!orderCode) {
+    //   navigate("/settings/subscription");
+    //   return;
+    // }
 
     const verify = async () => {
       try {
@@ -35,17 +36,17 @@ const SubscriptionSuccess = () => {
         }
 
         // Webhook chưa chạy → retry
-        if (attempt < 6) {
+        if (attempt < 4) {
           setAttempt((prev) => prev + 1);
-          setMessage(`Đang xác nhận thanh toán... (${attempt + 1}/6)`);
+          setMessage(`Đang xác nhận thanh toán... (${attempt + 1}/5)`);
         } else {
           setMessage("Thanh toán thành công. Hệ thống đang cập nhật, vui lòng F5 sau 30 giây.");
           setStatus("pending");
         }
       } catch (err) {
-        if (attempt < 6) {
+        if (attempt < 5) {
           setAttempt((prev) => prev + 1);
-          setMessage(`Đang xác nhận thanh toán... (${attempt + 1}/6)`);
+          setMessage(`Đang xác nhận thanh toán... (${attempt + 1}/5)`);
         } else {
           setMessage("Không thể xác nhận giao dịch. Vui lòng thử lại sau.");
           setStatus("pending");
@@ -77,6 +78,40 @@ const SubscriptionSuccess = () => {
     if (status === "loading") return "Đang xác nhận thanh toán";
     if (status === "success") return "Thanh toán thành công!";
     return "Đang xử lý giao dịch";
+  };
+  // hàm format trạng thái sang tiếng việt
+  const formatPayOSStatus = (status: string | null) => {
+    if (!status) return "";
+
+    switch (status.toUpperCase()) {
+      case "PAID":
+        return "Đã thanh toán thành công";
+      case "PENDING":
+        return "Đang chờ thanh toán";
+      case "PROCESSING":
+        return "Đang xử lý thanh toán";
+      case "CANCELLED":
+        return "Giao dịch bị hủy";
+      default:
+        return status;
+    }
+  };
+  //hàm đổi màu trạng thái tương ứng cho đẹp
+  const getStatusColor = (status: string | null) => {
+    if (!status) return "#595959"; // mặc định màu xám
+
+    switch (status.toUpperCase()) {
+      case "PAID":
+        return "#52c41a"; // xanh lá
+      case "PENDING":
+        return "#faad14"; // vàng
+      case "PROCESSING":
+        return "#1890ff"; // xanh dương
+      case "CANCELLED":
+        return "#ff4d4f"; // đỏ
+      default:
+        return "#595959";
+    }
   };
 
   return (
@@ -114,7 +149,7 @@ const SubscriptionSuccess = () => {
               {/* Progress bar khi đang loading */}
               {status === "loading" && (
                 <Progress
-                  percent={(attempt / 6) * 100}
+                  percent={(attempt / 5) * 100}
                   strokeColor={{
                     "0%": "#108ee9",
                     "100%": "#87d068",
@@ -158,19 +193,19 @@ const SubscriptionSuccess = () => {
                       <Space style={{ marginTop: 16 }}>
                         <CheckCircleOutlined style={{ fontSize: 18, color: "#52c41a" }} />
                         <Text strong style={{ fontSize: 14 }}>
-                          Trạng thái PayOS:
+                          Trạng thái Thanh toán:
                         </Text>
                       </Space>
                       <Text
                         style={{
                           fontSize: 16,
                           fontWeight: 600,
-                          color: "#52c41a",
+                          color: getStatusColor(payosStatus),
                           display: "block",
                           marginTop: 8,
                         }}
                       >
-                        {payosStatus}
+                        {formatPayOSStatus(payosStatus)}
                       </Text>
                     </>
                   )}
@@ -246,8 +281,8 @@ const SubscriptionSuccess = () => {
         >
           <Text type="secondary" style={{ fontSize: 12 }}>
             Nếu có bất kỳ vấn đề gì, vui lòng liên hệ{" "}
-            <a href="mailto:support@smartretail.vn" style={{ color: "#1890ff" }}>
-              support@smartretail.vn
+            <a href="mailto:huyndhe176876@fpt.edu.vn" style={{ color: "#1890ff" }}>
+              huyndhe176876@fpt.edu.vn
             </a>
           </Text>
         </div>

@@ -4,7 +4,7 @@ const mongoose = require("mongoose");
 const orderSchema = new mongoose.Schema(
   {
     storeId: { type: mongoose.Schema.Types.ObjectId, ref: "Store", required: true }, // Cửa hàng
-    employeeId: { type: mongoose.Schema.Types.ObjectId, ref: "Employee", required: true }, // Nhân viên bán
+    employeeId: { type: mongoose.Schema.Types.ObjectId, ref: "Employee", default: null }, // Nhân viên bán
     customer: { type: mongoose.Schema.Types.ObjectId, ref: "Customer", required: false, default: null }, // Khách hàng
     totalAmount: { type: mongoose.Schema.Types.Decimal128, required: true, min: 0 }, // Tổng tiền
     paymentMethod: { type: String, enum: ["cash", "qr"], required: true }, // Hình thức TT

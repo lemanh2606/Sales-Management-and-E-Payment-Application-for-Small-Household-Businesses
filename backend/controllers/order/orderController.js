@@ -20,7 +20,17 @@ const dayjs = require("dayjs");
 
 const createOrder = async (req, res) => {
   try {
-    const { storeId: bodyStoreId, employeeId, customerInfo, items, paymentMethod, isVATInvoice, vatInfo, usedPoints } = req.body;
+    const {
+      employeeId: clientEmployeeId,
+      storeId: bodyStoreId,
+      employeeId,
+      customerInfo,
+      items,
+      paymentMethod,
+      isVATInvoice,
+      vatInfo,
+      usedPoints,
+    } = req.body;
 
     const storeId =
       bodyStoreId ||
@@ -142,11 +152,34 @@ const createOrder = async (req, res) => {
           console.log(`Giảm giá ${discount} từ ${maxUsed} điểm cho khách ${customer.phone}`);
         }
       }
+      // Update thêm chức năng chủ cửa hàng cũng chính là 1 người bán hàng
+      let finalEmployeeId = clientEmployeeId;
+      // === FALLBACK THÔNG MINH CHO TRƯỜNG HỢP CHỦ BÁN ===
+      if (!finalEmployeeId) {
+        const currentUserId = req.user._id; // từ verifyToken middleware
+
+        // Tìm xem user này có Employee record không (dành cho STAFF)
+        const employee = await Employee.findOne({
+          user_id: currentUserId,
+          store_id: storeId,
+          isDeleted: false,
+        }).lean();
+
+        if (employee) {
+          finalEmployeeId = employee._id;
+        } else {
+          // Nếu không có → nghĩa là CHỦ CỬA HÀNG đang bán
+          // Ta vẫn lưu null vào employeeId (giữ nguyên schema)
+          // Nhưng thêm một field mới để báo cáo dễ phân biệt (không bắt buộc, nhưng hay)
+          // Hoặc đơn giản: để null = chủ bán
+          finalEmployeeId = null;
+        }
+      }
 
       // Tạo Order pending (status default pending)
       const newOrder = new Order({
         storeId,
-        employeeId,
+        employeeId: finalEmployeeId,  // có thể là Employee._id hoặc null (chủ bán)
         customer: customer ? customer._id : null, // Ref customer thay customerInfo
         totalAmount: total.toFixed(2).toString(),
         paymentMethod,

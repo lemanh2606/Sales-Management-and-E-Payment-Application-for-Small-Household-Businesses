@@ -1,3 +1,4 @@
+// frontend/src/pages/SubscriptionCancel.tsx
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, Result, Button, Space, Typography, Progress } from "antd";
@@ -202,7 +203,7 @@ const SubscriptionCancel = () => {
           <Text type="secondary" style={{ fontSize: 12 }}>
             Gặp vấn đề khi thanh toán? Liên hệ hỗ trợ:{" "}
             <a href="mailto:support@smartretail.vn" style={{ color: "#1890ff" }}>
-              huyndhe176876@fpt.eduu.vn
+              huyndhe176876@fpt.edu.vn
             </a>
           </Text>
         </div>
