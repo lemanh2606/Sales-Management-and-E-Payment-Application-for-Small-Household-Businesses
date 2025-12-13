@@ -307,6 +307,9 @@ export default function Sidebar({ onCollapsedChange }) {
     (items) => {
       return items
         .map((item) => {
+          if (user?.role === "STAFF" && item.key === "/orders/reconciliation") {
+            return null;
+          }
           if (item.children) {
             const filteredChildren = filterMenuItems(item.children);
             if (filteredChildren.length === 0) return null;
@@ -316,7 +319,7 @@ export default function Sidebar({ onCollapsedChange }) {
         })
         .filter(Boolean);
     },
-    [hasPermission]
+    [hasPermission, user?.role]
   );
 
   const menuItems = useMemo(() => {
