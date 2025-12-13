@@ -383,7 +383,7 @@ export default function EmployeesPage() {
     } catch (err) {
       Swal.fire({
         title: "❌ Lỗi!",
-        text:  err.response?.data?.message,
+        text: err.response?.data?.message,
         icon: "error",
         confirmButtonText: "OK",
         confirmButtonColor: "#ff4d4f",
@@ -429,7 +429,7 @@ export default function EmployeesPage() {
       await axios.put(`${API_BASE}/stores/${currentStore._id}/employees/${id}/restore`, {}, { headers });
       Swal.fire({
         title: "🎉 Thành công!",
-        text: `Khôi phuch nhân viên thành công `,
+        text: `Khôi phục nhân viên thành công `,
         icon: "success",
         timer: 2000,
         confirmButtonText: "OK",
@@ -715,6 +715,11 @@ export default function EmployeesPage() {
     },
   ];
 
+  const [pagination, setPagination] = useState({
+    current: 1,
+    pageSize: 10,
+  });
+
   const permissionColumns = [
     {
       title: "Tên nhân viên",
@@ -857,11 +862,23 @@ export default function EmployeesPage() {
                             showSizeChanger: true,
                             responsive: true,
                             size: "small",
+                            current: pagination.current,
+                            pageSize: pagination.pageSize,
+                            total: filteredActive.length,
+                            showTotal: (total, range) => (
+                              <div>
+                                Đang xem{" "}
+                                <span style={{ color: "#1890ff", fontWeight: 600 }}>
+                                  {range[0]} – {range[1]}
+                                </span>{" "}
+                                trên tổng số <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> nhân viên
+                              </div>
+                            ),
                           }}
                           loading={loading && tabKey === "permissions"}
                           scroll={{ x: "max-content" }}
-                          locale={{ emptyText: "Chưa có nhân viên để phân quyền" }}
                           size="small"
+                          onChange={(pag) => setPagination({ current: pag.current, pageSize: pag.pageSize })}
                           onRow={(record) => ({
                             onClick: () => handleSelectStaff(record),
                             style: {

@@ -226,13 +226,14 @@ const PublicRoute = ({ children, allowWhenAuth = false }) => {
 function AppInit() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { logout } = useAuth();
 
   useEffect(() => {
     if (location.pathname === "/") {
-      localStorage.clear();
+      logout();
       navigate("/login", { replace: true });
     }
-  }, [location.pathname, navigate]);
+  }, [location.pathname]);
 
   return null;
 }
@@ -269,6 +270,9 @@ function App() {
       <SubscriptionExpiredOverlay />
 
       <Routes>
+        {/* ==================== Mặc định điều hướng nếu vào trang '/' ==================== */}
+        <Route path="/" element={<Navigate to="/login" replace />} />
+
         {/* ==================== Auth Routes ==================== */}
         <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
         <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />

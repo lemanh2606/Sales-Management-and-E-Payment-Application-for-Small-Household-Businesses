@@ -30,7 +30,7 @@ export default function ComponentTaxGuide() {
 
           <Paragraph>
             <Text strong>1. Ngưỡng doanh thu miễn thuế:</Text>
-            Nếu doanh thu trong năm dương lịch từ <Text strong>100 triệu đồng/năm</Text> trở xuống thì
+            Nếu doanh thu trong năm dương lịch từ <Text strong>500 triệu đồng/năm</Text> trở xuống thì
             <Text strong> không phải nộp</Text> thuế Giá trị gia tăng (GTGT) và thuế Thu nhập cá nhân (TNCN).
           </Paragraph>
 

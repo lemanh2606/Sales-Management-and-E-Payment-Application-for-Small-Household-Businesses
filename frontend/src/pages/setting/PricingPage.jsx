@@ -46,7 +46,7 @@ const PricingPage = () => {
           duration: 1,
           label: "1 tháng",
           price: 5000,
-          original_price: 5000,
+          original_price: 10000,
           discount: 0,
           discount_percent: 0,
           price_per_month: 5000,
