@@ -312,7 +312,7 @@ const ProductGroupListScreen: React.FC = () => {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.headerGradient}>
-        <Text style={styles.headerTitle}>📦 Nhóm sản phẩm</Text>
+        <Text style={styles.headerTitle}> Nhóm sản phẩm</Text>
         <Text style={styles.headerSubtitle}>
           Tổ chức và phân loại sản phẩm dễ dàng
         </Text>

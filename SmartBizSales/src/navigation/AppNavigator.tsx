@@ -56,7 +56,7 @@ import FileManagerScreen from "../screens/settings/FileManagerScreen";
 import PricingScreen from "../screens/settings/PricingScreen";
 import SubscriptionScreen from "../screens/settings/SubscriptionScreen";
 import OrderReconciliationScreen from "../screens/orders/OrderReconciliationScreen";
-
+import EmployeesScreen from "../screens/employee/EmployeesScreen";
 // ========== TYPES ==========
 export type RootDrawerParamList = {
   Dashboard: undefined;
@@ -154,7 +154,7 @@ const OrderListScreen: FC = () => (
 // const OrderReconciliationScreen: FC = () => (
 //   <PlaceholderScreen title="Đối soát hóa đơn" />
 // );
-const EmployeesScreen: FC = () => <PlaceholderScreen title="Nhân viên" />;
+
 const EmployeeScheduleScreen: FC = () => (
   <PlaceholderScreen title="Lịch làm việc" />
 );
@@ -251,12 +251,6 @@ const MENU_TREE: readonly MenuSection[] = [
         label: "Nhân viên",
         icon: "id-card-outline",
         permission: "employees:view",
-      },
-      {
-        key: "EmployeeSchedule",
-        label: "Lịch làm việc",
-        icon: "calendar-outline",
-        permission: "employees:assign",
       },
     ],
   },
@@ -810,11 +804,6 @@ const AppNavigator: FC = (): JSX.Element => {
         name="Employees"
         component={withPermission(EmployeesScreen, "employees:view")}
         options={{ title: "Nhân viên" }}
-      />
-      <Drawer.Screen
-        name="EmployeeSchedule"
-        component={withPermission(EmployeeScheduleScreen, "employees:assign")}
-        options={{ title: "Lịch LV" }}
       />
       <Drawer.Screen
         name="LoyaltyConfig"

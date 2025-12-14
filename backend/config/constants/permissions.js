@@ -104,6 +104,9 @@ const ALL_PERMISSIONS = [
   "subscription:activate",
   "subscription:cancel",
   "subscription:history",
+  "employees:view",
+  "employees:assign",
+
   // file management
   "file:view",
 ];

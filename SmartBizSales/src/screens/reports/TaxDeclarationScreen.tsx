@@ -1,6 +1,5 @@
 // src/screens/tax/TaxDeclarationScreen.tsx
 import React, {
-  FC,
   useCallback,
   useEffect,
   useMemo,
@@ -8,68 +7,95 @@ import React, {
   useState,
 } from "react";
 import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  TextInput,
   ActivityIndicator,
   Alert,
-  Dimensions,
-  KeyboardAvoidingView,
-  Linking,
   Modal,
-  Platform,
+  FlatList,
   RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+  Platform,
+  Linking,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons } from "@expo/vector-icons";
-import { Picker } from "@react-native-picker/picker";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import dayjs from "dayjs";
-import quarterOfYear from "dayjs/plugin/quarterOfYear";
-import "dayjs/locale/vi";
-
-import { useAuth } from "../../context/AuthContext";
 import apiClient from "../../api/apiClient";
-import { fileService } from "../../services/fileService";
+import { useAuth } from "../../context/AuthContext";
+import { Directory, File, Paths } from "expo-file-system/next";
+import { fetch } from "expo/fetch";
+import * as Sharing from "expo-sharing";
+import DateTimePicker from "@react-native-community/datetimepicker";
 
-dayjs.extend(quarterOfYear);
-dayjs.locale("vi");
+const Chip = ({ text, color }: { text: string; color: string }) => (
+  <View
+    style={[styles.chip, { borderColor: color, backgroundColor: `${color}18` }]}
+  >
+    <Text style={[styles.chipText, { color }]}>{text}</Text>
+  </View>
+);
 
-const { width } = Dimensions.get("window");
+const SectionTitle = ({ title }: { title: string }) => (
+  <Text style={styles.sectionTitle}>{title}</Text>
+);
 
-// ==================== TYPES ====================
+type FieldProps = {
+  label: string;
+  value: string;
+  onChangeText: (t: string) => void;
+  placeholder?: string;
+  keyboardType?: any;
+};
 
+const Field = React.memo(
+  ({ label, value, onChangeText, placeholder, keyboardType }: FieldProps) => (
+    <View style={{ marginBottom: 12 }}>
+      <Text style={styles.label}>{label}</Text>
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor="#9ca3af"
+        keyboardType={keyboardType}
+        style={styles.input}
+      />
+    </View>
+  )
+);
+// ===================== TYPES =====================
 type PeriodType = "month" | "quarter" | "year" | "custom";
+type DeclarationStatus =
+  | "draft"
+  | "saved"
+  | "submitted"
+  | "approved"
+  | "rejected";
 
-type TaxStatus = "draft" | "saved" | "submitted" | "approved" | "rejected";
+type DecimalLike =
+  | number
+  | { $numberDecimal?: string }
+  | { numberDecimal?: string };
 
-interface TaxpayerInfo {
-  name: string;
-  storeName: string;
-  taxCode: string;
-  phone: string;
-  email: string;
-  businessSector?: string;
-  businessArea?: number;
-  isRented?: boolean;
-  employeeCount?: number;
-  workingHours?: {
-    from: string;
-    to: string;
-  };
-  businessAddress: {
-    full: string;
-    street?: string;
-    ward?: string;
-    district?: string;
-    province?: string;
-  };
+interface Store {
+  _id?: string;
+  id?: string;
+  name?: string;
+  phone?: string;
+  taxCode?: string;
+  address?: string;
+  email?: string;
+  ownername?: string;
   bankAccount?: string;
+  businessSector?: string;
+  area?: number;
+  isRented?: boolean;
+  [key: string]: any;
 }
 
-interface CategoryRevenue {
+interface CategoryRevenueItem {
   category: keyof typeof CATEGORY_MAP;
   revenue: number;
   gtgtTax: number;
@@ -84,10 +110,8 @@ interface SpecialTaxItem {
   taxAmount: number;
 }
 
-type EnvTaxType = "resource" | "environmental_tax" | "environmental_fee";
-
 interface EnvTaxItem {
-  type: EnvTaxType;
+  type: "resource" | "environmentaltax" | "environmentalfee";
   itemName: string;
   unit: string;
   quantity: number;
@@ -96,71 +120,95 @@ interface EnvTaxItem {
   taxAmount: number;
 }
 
-interface TaxAmounts {
-  gtgt: number;
-  tncn: number;
-  total: number;
+interface TaxpayerInfo {
+  name?: string;
+  storeName?: string;
+  bankAccount?: string;
+  taxCode?: string;
+  businessSector?: string;
+  businessArea?: number;
+  isRented?: boolean;
+  employeeCount?: number;
+  workingHours?: { from?: string; to?: string };
+  businessAddress?: {
+    full?: string;
+    street?: string;
+    ward?: string;
+    district?: string;
+    province?: string;
+  };
+  phone?: string;
+  email?: string;
 }
 
-interface TaxDeclaration {
-  _id: string;
+interface TaxAmounts {
+  gtgt?: number;
+  tncn?: number;
+  total?: number;
+}
+
+interface TaxDeclarationRecord {
+  id: string;
   storeId: string;
   periodType: PeriodType;
   periodKey: string;
   declaredRevenue: number;
-  taxRates: {
-    gtgt: number;
-    tncn: number;
-  };
-  taxAmounts: TaxAmounts;
-  status: TaxStatus;
-  version: number;
-  isClone: boolean;
-  isFirstTime: boolean;
-  supplementNumber: number;
-  taxpayerInfo?: TaxpayerInfo;
-  revenueByCategory?: CategoryRevenue[];
-  specialConsumptionTax?: SpecialTaxItem[];
-  environmentalTax?: EnvTaxItem[];
+  systemRevenue?: number;
+  orderCount?: number;
+  taxRates?: { gtgt?: number; tncn?: number };
+  taxAmounts?: TaxAmounts;
+  revenueByCategory?: Array<{
+    category: string;
+    revenue: number;
+    gtgtTax: number;
+    tncnTax: number;
+  }>;
+  specialConsumptionTax?: Array<{
+    itemName: string;
+    unit: string;
+    revenue: number;
+    taxRate: number;
+    taxAmount: number;
+  }>;
+  environmentalTax?: Array<{
+    type: string;
+    itemName: string;
+    unit: string;
+    quantity: number;
+    unitPrice: number;
+    taxRate: number;
+    taxAmount: number;
+  }>;
   notes?: string;
-  createdAt: string;
-  createdBy?: {
-    fullName?: string;
-    email?: string;
-  };
+  taxpayerInfo?: TaxpayerInfo;
+
+  isClone?: boolean;
+  version?: string | number;
+  status: DeclarationStatus;
+
+  createdAt?: string;
   submittedAt?: string;
   approvedAt?: string;
-  approvedBy?: {
-    fullName?: string;
-  };
   rejectionReason?: string;
+  createdBy?: { fullName?: string; email?: string };
+  approvedBy?: { fullName?: string; email?: string };
 }
 
-interface Pagination {
-  current: number;
-  pageSize: number;
-  total: number;
-  totalPages: number;
-}
-
-interface DeclarationsApiResponse {
-  data: TaxDeclaration[];
-  pagination: Pagination;
-}
-
-interface PreviewApiResponse {
-  systemRevenue: number;
-  orderCount: number;
-}
-
-// ==================== CONSTANTS ====================
-
-const PERIOD_TYPES = [
-  { value: "month", label: "📅 Tháng" },
-  { value: "quarter", label: "📊 Quý" },
-  { value: "year", label: "📈 Năm" },
-  { value: "custom", label: "⚙️ Tùy chỉnh" },
-] as const;
+// ===================== CONSTANTS (từ bản web) =====================
+const PERIOD_TYPES: Array<{
+  value: PeriodType;
+  label: string;
+  description: string;
+}> = [
+  { value: "month", label: "Tháng", description: "Kê khai theo tháng" },
+  { value: "quarter", label: "Quý", description: "Kê khai theo quý" },
+  { value: "year", label: "Năm", description: "Kê khai theo năm" },
+  {
+    value: "custom",
+    label: "Tùy chỉnh",
+    description: "Kê khai theo khoảng thời gian tùy chọn",
+  },
+];
 
 const TAX_RATES = {
   DEFAULT_GTGT: 1.0,
@@ -170,159 +218,178 @@ const TAX_RATES = {
 };
 
 const STATUS_CONFIG: Record<
-  TaxStatus,
-  { text: string; color: string; bg: string }
+  DeclarationStatus,
+  { text: string; color: string }
 > = {
-  draft: { text: "Nháp", color: "#595959", bg: "#f5f5f5" },
-  saved: { text: "Đã lưu", color: "#1890ff", bg: "#e6f7ff" },
-  submitted: { text: "Đã nộp", color: "#faad14", bg: "#fff7e6" },
-  approved: { text: "Đã duyệt", color: "#52c41a", bg: "#f6ffed" },
-  rejected: { text: "Từ chối", color: "#ff4d4f", bg: "#fff1f0" },
+  draft: { text: "Nháp", color: "#6b7280" },
+  saved: { text: "Đã lưu", color: "#2563eb" },
+  submitted: { text: "Đã nộp", color: "#f59e0b" },
+  approved: { text: "Đã duyệt", color: "#10b981" },
+  rejected: { text: "Từ chối", color: "#ef4444" },
 };
 
 const CATEGORY_MAP = {
-  goods_distribution: { code: "[28]", name: "Phân phối, cung cấp hàng hóa" },
-  service_construction: {
-    code: "[29]",
+  goodsdistribution: { code: 28, name: "Phân phối, cung cấp hàng hóa" },
+  serviceconstruction: {
+    code: 29,
     name: "Dịch vụ, xây dựng không bao thầu nguyên vật liệu",
   },
-  manufacturing_transport: {
-    code: "[30]",
+  manufacturingtransport: {
+    code: 30,
     name: "Sản xuất, vận tải, dịch vụ có gắn với hàng hóa",
   },
-  other_business: { code: "[31]", name: "Hoạt động kinh doanh khác" },
+  otherbusiness: { code: 31, name: "Hoạt động kinh doanh khác" },
 } as const;
 
-const ENV_TAX_TYPES: { value: EnvTaxType; label: string }[] = [
-  { value: "resource", label: "[34] Thuế tài nguyên" },
-  { value: "environmental_tax", label: "[35] Thuế BVMT" },
-  { value: "environmental_fee", label: "[36] Phí BVMT" },
-];
+// ===================== HELPERS =====================
+const toNumber = (v: any): number => {
+  if (typeof v === "number") return v;
+  if (typeof v === "string") {
+    const n = parseFloat(v);
+    return Number.isFinite(n) ? n : 0;
+  }
+  if (!v || typeof v !== "object") return 0;
 
-// ==================== HELPERS ====================
+  const s = v.$numberDecimal ?? v.numberDecimal ?? v.toString?.();
 
-const formatVND = (value?: number | string | null): string => {
-  if (value === undefined || value === null) return "₫0";
-  const num = Number(value);
-  if (Number.isNaN(num)) return "₫0";
+  const n = parseFloat(String(s));
+  return Number.isFinite(n) ? n : 0;
+};
+
+const formatVND = (value: number): string => {
   try {
     return new Intl.NumberFormat("vi-VN", {
       style: "currency",
       currency: "VND",
       minimumFractionDigits: 0,
-    }).format(num);
+    }).format(Math.round(Number(value) || 0));
   } catch {
-    return `${num}`;
+    return `${Math.round(Number(value) || 0)}`;
   }
 };
 
-// ==================== MAIN SCREEN ====================
+const parseNumberInput = (s: string): number => {
+  const cleaned = (s || "").replace(/[^\d.]/g, "");
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : 0;
+};
 
-const TaxDeclarationScreen: FC = () => {
-  const { currentStore, token } = useAuth();
-  const storeId = currentStore?._id;
-  const storeName = currentStore?.name || "Chưa chọn cửa hàng";
+const getStoreId = (store: Store | null): string | null => {
+  if (!store) return null;
+  return (store.id || store._id) ?? null;
+};
 
-  const isMountedRef = useRef(true);
+const buildPeriodKey = (
+  periodType: PeriodType,
+  month: string,
+  quarter: string,
+  year: string,
+  from: string,
+  to: string
+) => {
+  if (periodType === "month") return month;
+  if (periodType === "quarter") return quarter;
+  if (periodType === "year") return year;
+  if (periodType === "custom") return from && to ? `${from}-${to}` : "";
+  return "";
+};
 
-  // Trong TaxDeclarationScreen component
+// ===================== MAIN SCREEN =====================
+export default function TaxDeclarationScreen() {
+  const { user } = useAuth();
+
+  // Auth + Store
+  const [token, setToken] = useState<string | null>(null);
+  const [currentStore, setCurrentStore] = useState<Store | null>(null);
+  const [storeId, setStoreId] = useState<string | null>(null);
+
+  // Loading
+  const [loading, setLoading] = useState(false);
+  const [submitLoading, setSubmitLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Step
+  const [currentStep, setCurrentStep] = useState<number>(0);
+
+  // Filter period
+  const [periodType, setPeriodType] = useState<PeriodType | null>(null);
+  const [monthKey, setMonthKey] = useState<string>(dayjs().format("YYYY-MM")); // YYYY-MM
+  const [quarterKey, setQuarterKey] = useState<string>(
+    `${dayjs().year()}-Q${Math.ceil((dayjs().month() + 1) / 3)}`
+  ); // YYYY-Qn
+  const [yearKey, setYearKey] = useState<string>(dayjs().format("YYYY")); // YYYY
+  const [monthFrom, setMonthFrom] = useState<string>(dayjs().format("YYYY-MM"));
+  const [monthTo, setMonthTo] = useState<string>(dayjs().format("YYYY-MM"));
+
+  // Preview system revenue
+  const [systemRevenue, setSystemRevenue] = useState<number | null>(null);
+  const [orderCount, setOrderCount] = useState<number>(0);
+
+  // Editing
+  const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  // Loading & list
-  const [loading, setLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [declarations, setDeclarations] = useState<TaxDeclaration[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
-
-  // Filter & preview
-  const [periodType, setPeriodType] = useState<PeriodType | "">("");
-  const [periodKey, setPeriodKey] = useState("");
-  const [monthFrom, setMonthFrom] = useState("");
-  const [monthTo, setMonthTo] = useState("");
-  const [systemRevenue, setSystemRevenue] = useState<number | null>(null);
-  const [orderCount, setOrderCount] = useState(0);
-
-  // Form: phần A
-  const [declaredRevenue, setDeclaredRevenue] = useState("");
-  const [gtgtRate, setGtgtRate] = useState(TAX_RATES.DEFAULT_GTGT.toString());
-  const [tncnRate, setTncnRate] = useState(TAX_RATES.DEFAULT_TNCN.toString());
-  const [calculatedTax, setCalculatedTax] = useState<TaxAmounts | null>(null);
-  const [isFirstTime, setIsFirstTime] = useState(true);
-  const [supplementNumber, setSupplementNumber] = useState("0");
-
-  // Phần B/C/A chi tiết
-  const [categoryRevenues, setCategoryRevenues] = useState<CategoryRevenue[]>(
-    []
+  // Form values
+  const [declaredRevenueText, setDeclaredRevenueText] = useState<string>("");
+  const [gtgtRateText, setGtgtRateText] = useState<string>(
+    String(TAX_RATES.DEFAULT_GTGT)
   );
+  const [tncnRateText, setTncnRateText] = useState<string>(
+    String(TAX_RATES.DEFAULT_TNCN)
+  );
+  const [isFirstTime, setIsFirstTime] = useState<boolean>(true);
+  const [supplementNumberText, setSupplementNumberText] = useState<string>("0");
+  const [exportTargetId, setExportTargetId] = useState<string | null>(null);
+  const [exportLoading, setExportLoading] = useState(false);
+  // Taxpayer info
+  const [taxpayerName, setTaxpayerName] = useState<string>("");
+  const [storeName, setStoreName] = useState<string>("");
+  const [taxCode, setTaxCode] = useState<string>("");
+  const [bankAccount, setBankAccount] = useState<string>("");
+  const [businessSector, setBusinessSector] = useState<string>("");
+  const [businessAreaText, setBusinessAreaText] = useState<string>("0");
+  const [isRented, setIsRented] = useState<boolean>(false);
+  const [employeeCountText, setEmployeeCountText] = useState<string>("0");
+  const [workingHoursFrom, setWorkingHoursFrom] = useState<string>("08:00");
+  const [workingHoursTo, setWorkingHoursTo] = useState<string>("22:00");
+  const [businessAddressFull, setBusinessAddressFull] = useState<string>("");
+  const [phone, setPhone] = useState<string>("");
+  const [email, setEmail] = useState<string>("");
+
+  // Extra
+  const [notes, setNotes] = useState<string>("");
+
+  // Arrays
+  const [categoryRevenues, setCategoryRevenues] = useState<
+    CategoryRevenueItem[]
+  >([]);
   const [specialTaxItems, setSpecialTaxItems] = useState<SpecialTaxItem[]>([]);
   const [envTaxItems, setEnvTaxItems] = useState<EnvTaxItem[]>([]);
+  const [showPeriodPicker, setShowPeriodPicker] = useState(false);
+  const [tempDate, setTempDate] = useState<Date>(new Date());
 
-  // Người nộp thuế & ghi chú
-  const [taxpayerName, setTaxpayerName] = useState(
-    currentStore?.owner_name || ""
-  );
-  const [storeDisplayName, setStoreDisplayName] = useState(
-    currentStore?.name || ""
-  );
-  const [bankAccount, setBankAccount] = useState(
-    typeof currentStore?.bankAccount === "string"
-      ? currentStore.bankAccount
-      : currentStore?.bankAccount?.accountNumber || ""
-  );
-  const [taxCode, setTaxCode] = useState(currentStore?.taxCode || "");
-  const [businessSector, setBusinessSector] = useState(
-    currentStore?.businessSector || ""
-  );
-  const [businessArea, setBusinessArea] = useState(
-    currentStore?.area?.toString() || ""
-  );
-  const [isRented, setIsRented] = useState(false);
-  const [employeeCount, setEmployeeCount] = useState("");
-  const [workingHoursFrom, setWorkingHoursFrom] = useState("08:00");
-  const [workingHoursTo, setWorkingHoursTo] = useState("22:00");
-  const [businessAddress, setBusinessAddress] = useState(
-    currentStore?.address || ""
-  );
-  const [phone, setPhone] = useState(currentStore?.phone || "");
-  const [email, setEmail] = useState(currentStore?.email || "");
-  const [notes, setNotes] = useState("");
+  // Result
+  const calculatedTax = useMemo(() => {
+    const declaredRevenue = parseNumberInput(declaredRevenueText);
+    const gtgtRate = parseNumberInput(gtgtRateText);
+    const tncnRate = parseNumberInput(tncnRateText);
+    const gtgt = (declaredRevenue * gtgtRate) / 100;
+    const tncn = (declaredRevenue * tncnRate) / 100;
+    const total = gtgt + tncn;
+    return { declaredRevenue, gtgtRate, tncnRate, gtgt, tncn, total };
+  }, [declaredRevenueText, gtgtRateText, tncnRateText]);
 
-  // Modal & pagination
-  const [formModalVisible, setFormModalVisible] = useState(false);
-  const [detailModalVisible, setDetailModalVisible] = useState(false);
-  const [selectedRecord, setSelectedRecord] = useState<TaxDeclaration | null>(
-    null
-  );
-  const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 10;
-
-  // Expandable sections
-  const [expandedSections, setExpandedSections] = useState({
-    basicInfo: true,
-    taxpayerInfo: true,
-    taxDetails: true,
-    categoryRevenue: false,
-    specialTax: false,
-    envTax: false,
-    notes: false,
-  });
-
-  // ==================== EFFECTS ====================
-
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (storeId && token) {
-      fetchDeclarations();
-    }
-  }, [storeId, token, currentPage]);
-
-  // ==================== MEMO ====================
+  const periodKey = useMemo(() => {
+    if (!periodType) return "";
+    return buildPeriodKey(
+      periodType,
+      monthKey,
+      quarterKey,
+      yearKey,
+      monthFrom,
+      monthTo
+    );
+  }, [periodType, monthKey, quarterKey, yearKey, monthFrom, monthTo]);
 
   const hasValidPeriod = useMemo(() => {
     if (!periodType) return false;
@@ -330,87 +397,302 @@ const TaxDeclarationScreen: FC = () => {
     return !!periodKey;
   }, [periodType, periodKey, monthFrom, monthTo]);
 
-  const periodDisplay = useMemo(() => {
-    if (periodType === "custom" && monthFrom && monthTo) {
-      return `${dayjs(monthFrom).format("MM/YYYY")} - ${dayjs(monthTo).format(
-        "MM/YYYY"
-      )}`;
+  // Declarations list
+  const [declarations, setDeclarations] = useState<TaxDeclarationRecord[]>([]);
+  const [totalCount, setTotalCount] = useState<number>(0);
+  const [page, setPage] = useState<number>(1);
+  const pageSize = 10;
+
+  // Modals
+  const [detailVisible, setDetailVisible] = useState(false);
+  const [selectedRecord, setSelectedRecord] =
+    useState<TaxDeclarationRecord | null>(null);
+
+  const [rejectVisible, setRejectVisible] = useState(false);
+  const [rejectReason, setRejectReason] = useState<string>("");
+  const [selectedActionId, setSelectedActionId] = useState<string | null>(null);
+  const [customPicking, setCustomPicking] = useState<"from" | "to" | null>(
+    null
+  );
+  type PickerTarget = null | "period" | "customFrom" | "customTo";
+
+  const [pickerTarget, setPickerTarget] = useState<PickerTarget>(null);
+  const [showPicker, setShowPicker] = useState(false);
+
+  // ===================== INIT: token + store =====================
+  useEffect(() => {
+    (async () => {
+      const t =
+        (await AsyncStorage.getItem("token")) ||
+        (await AsyncStorage.getItem("accessToken"));
+      setToken(t);
+
+      const storeRaw = await AsyncStorage.getItem("currentStore");
+      if (storeRaw) {
+        const s = JSON.parse(storeRaw) as Store;
+        setCurrentStore(s);
+        setStoreId(getStoreId(s));
+      }
+    })();
+  }, []);
+
+  // Prefill taxpayer info from store
+  useEffect(() => {
+    if (!currentStore) return;
+    setTaxpayerName(currentStore.ownername || user?.fullname || "");
+    setStoreName(currentStore.name || "");
+    setTaxCode(currentStore.taxCode || "");
+    setBankAccount(currentStore.bankAccount || "");
+    setBusinessSector(currentStore.businessSector || "");
+    setBusinessAreaText(String(currentStore.area ?? 0));
+    setIsRented(!!currentStore.isRented);
+    setBusinessAddressFull(currentStore.address || "");
+    setPhone(currentStore.phone || "");
+    setEmail(currentStore.email || "");
+  }, [currentStore, user?.fullname]);
+
+  // Load declarations whenever storeId/page ready
+  useEffect(() => {
+    if (!storeId || !token) return;
+    fetchDeclarations();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storeId, token, page]);
+
+  const axiosConfig = useMemo(() => {
+    return {
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        "Content-Type": "application/json",
+      },
+    };
+  }, [token]);
+  // ===================== PICKERS =====================
+  const onChangeCustom = (event: any, date?: Date) => {
+    if (event?.type === "dismissed" || !date) {
+      setShowPeriodPicker(false);
+      setCustomPicking(null);
+      return;
     }
-    return periodKey || "Chưa chọn";
-  }, [periodType, periodKey, monthFrom, monthTo]);
 
-  const totalDeclaredRevenue = useMemo(
-    () =>
-      categoryRevenues.reduce((sum, c) => sum + (Number(c.revenue) || 0), 0),
-    [categoryRevenues]
-  );
+    const picked = dayjs(date).format("YYYY-MM");
 
-  const totalSpecialTax = useMemo(
-    () =>
-      specialTaxItems.reduce((sum, i) => sum + (Number(i.taxAmount) || 0), 0),
-    [specialTaxItems]
-  );
+    if (customPicking === "from") {
+      // đảm bảo from <= to
+      const newFrom = picked;
+      const to = monthTo || picked;
+      if (dayjs(newFrom).isAfter(dayjs(to))) {
+        setMonthFrom(newFrom);
+        setMonthTo(newFrom);
+      } else {
+        setMonthFrom(newFrom);
+      }
+    }
 
-  const totalEnvTax = useMemo(
-    () => envTaxItems.reduce((sum, i) => sum + (Number(i.taxAmount) || 0), 0),
-    [envTaxItems]
-  );
+    if (customPicking === "to") {
+      // đảm bảo from <= to
+      const from = monthFrom || picked;
+      const newTo = picked;
+      if (dayjs(newTo).isBefore(dayjs(from))) {
+        setMonthFrom(newTo);
+        setMonthTo(newTo);
+      } else {
+        setMonthTo(newTo);
+      }
+    }
 
-  // ==================== API CALLS ====================
+    setShowPeriodPicker(false);
+    setCustomPicking(null);
+  };
 
+  const openPeriodPicker = () => {
+    if (!periodType) return;
+
+    // phân biệt đang chọn month/quarter/year theo periodType hiện tại
+    setPickerTarget("period");
+
+    if (periodType === "month") {
+      setTempDate(dayjs(monthKey, "YYYY-MM").toDate());
+    } else if (periodType === "year") {
+      setTempDate(dayjs(yearKey, "YYYY").toDate());
+    } else if (periodType === "quarter") {
+      const [y, q] = quarterKey.split("-Q");
+      const m = (Number(q || 1) - 1) * 3;
+      setTempDate(
+        dayjs(`${y || dayjs().year()}-01-01`)
+          .month(m)
+          .toDate()
+      );
+    } else {
+      setTempDate(new Date());
+    }
+
+    setShowPicker(true);
+  };
+  const closePicker = () => {
+    setShowPicker(false);
+    setPickerTarget(null);
+  };
+
+  const onChangePicker = (event: any, date?: Date) => {
+    // Dismiss/Cancel: kiểm tra event.type để không set giá trị sai [web:149]
+    if (event?.type === "dismissed" || !date) {
+      closePicker();
+      return;
+    }
+
+    // ===== PERIOD (month/quarter/year) =====
+    if (pickerTarget === "period") {
+      if (periodType === "month") setMonthKey(dayjs(date).format("YYYY-MM"));
+      else if (periodType === "year") setYearKey(dayjs(date).format("YYYY"));
+      else if (periodType === "quarter") {
+        const y = dayjs(date).year();
+        const q = Math.ceil((dayjs(date).month() + 1) / 3);
+        setQuarterKey(`${y}-Q${q}`);
+      }
+    }
+
+    // ===== CUSTOM RANGE =====
+    if (pickerTarget === "customFrom") {
+      const newFrom = dayjs(date).format("YYYY-MM");
+      setMonthFrom(newFrom);
+
+      // chỉ tự sửa "to" nếu from > to
+      if (dayjs(newFrom).isAfter(dayjs(monthTo, "YYYY-MM"))) {
+        setMonthTo(newFrom);
+      }
+    }
+
+    if (pickerTarget === "customTo") {
+      const newTo = dayjs(date).format("YYYY-MM");
+      setMonthTo(newTo);
+
+      // chỉ tự sửa "from" nếu to < from
+      if (dayjs(newTo).isBefore(dayjs(monthFrom, "YYYY-MM"))) {
+        setMonthFrom(newTo);
+      }
+    }
+
+    // Android: thường chọn xong là đóng; iOS spinner: nên có nút "Xong" để đóng [web:147]
+    if (Platform.OS === "android") {
+      closePicker();
+    }
+  };
+
+  const openCustomPicker = (which: "from" | "to") => {
+    setPickerTarget(which === "from" ? "customFrom" : "customTo");
+
+    const current =
+      which === "from"
+        ? dayjs(monthFrom, "YYYY-MM").toDate()
+        : dayjs(monthTo, "YYYY-MM").toDate();
+
+    setTempDate(current);
+    setShowPicker(true);
+  };
+
+  const onChangePeriod = (event: any, date?: Date) => {
+    // user bấm cancel -> date undefined (thư viện gọi onChange cả khi dismiss) [web:77]
+    if (event?.type === "dismissed" || !date) {
+      setShowPeriodPicker(false);
+      return;
+    }
+
+    setShowPeriodPicker(false);
+    if (!periodType) return;
+
+    if (periodType === "month") setMonthKey(dayjs(date).format("YYYY-MM"));
+    else if (periodType === "year") setYearKey(dayjs(date).format("YYYY"));
+    else if (periodType === "quarter") {
+      const y = dayjs(date).year();
+      const q = Math.ceil((dayjs(date).month() + 1) / 3);
+      setQuarterKey(`${y}-Q${q}`);
+    }
+  };
+
+  // ===================== API: fetch declarations =====================
   const fetchDeclarations = useCallback(async () => {
     if (!storeId) return;
-
     setLoading(true);
     try {
-      const res = await apiClient.get<DeclarationsApiResponse>("/taxs", {
-        params: {
-          storeId,
-          page: currentPage,
-          limit: pageSize,
-        },
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      const res: any = await apiClient.get("/taxs", {
+        ...axiosConfig,
+        params: { storeId, page, limit: pageSize },
       });
 
-      if (!isMountedRef.current) return;
-      setDeclarations(res.data.data || []);
-      setTotalCount(res.data.pagination?.total || 0);
-    } catch (error: any) {
-      if (!isMountedRef.current) return;
-      const msg =
-        error?.response?.data?.message || "Không thể tải danh sách tờ khai";
-      Alert.alert("Lỗi", msg);
-    } finally {
-      if (isMountedRef.current) setLoading(false);
-    }
-  }, [storeId, token, currentPage]);
+      // web: res.data.success + res.data.data + res.data.pagination.total
+      const ok = !!res.data?.success;
+      if (!ok)
+        throw new Error(res.data?.message || "Lỗi tải danh sách tờ khai");
 
-  const fetchPreview = useCallback(async () => {
+      const rows: any[] = res.data?.data || [];
+      const total = res.data?.pagination?.total || 0;
+
+      const normalized: TaxDeclarationRecord[] = rows.map((r: any) => ({
+        id: r.id || r._id,
+        storeId: r.storeId,
+        periodType: r.periodType,
+        periodKey: r.periodKey,
+        declaredRevenue: Number(r.declaredRevenue || 0),
+        systemRevenue: Number(r.systemRevenue || 0),
+        orderCount: Number(r.orderCount || 0),
+        taxRates: r.taxRates,
+        taxAmounts: r.taxAmounts,
+        revenueByCategory: r.revenueByCategory,
+        specialConsumptionTax: r.specialConsumptionTax,
+        environmentalTax: r.environmentalTax,
+        notes: r.notes,
+        taxpayerInfo: r.taxpayerInfo,
+        isClone: !!r.isClone,
+        version: r.version,
+        status: r.status,
+        createdAt: r.createdAt,
+        submittedAt: r.submittedAt,
+        approvedAt: r.approvedAt,
+        rejectionReason: r.rejectionReason,
+        createdBy: r.createdBy,
+        approvedBy: r.approvedBy,
+      }));
+
+      setDeclarations(normalized);
+      setTotalCount(total);
+    } catch (e: any) {
+      console.error(
+        "❌ fetchDeclarations error:",
+        e?.response?.data || e?.message || e
+      );
+      Alert.alert(
+        "Lỗi",
+        e?.response?.data?.message ||
+          e?.message ||
+          "Không thể tải danh sách tờ khai"
+      );
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [storeId, axiosConfig, page]);
+
+  // ===================== API: preview revenue =====================
+  const fetchPreview = async () => {
     if (!storeId) {
-      Alert.alert("Thiếu thông tin", "Vui lòng chọn cửa hàng trước");
-      return;
-    }
-    if (!periodType) {
-      Alert.alert("Thiếu thông tin", "Vui lòng chọn loại kỳ kê khai");
-      return;
-    }
-    if (!hasValidPeriod) {
       Alert.alert(
         "Thiếu thông tin",
-        "Vui lòng nhập đầy đủ kỳ kê khai (tháng/quý/năm hoặc khoảng thời gian)"
+        "Vui lòng chọn cửa hàng trước khi kê khai thuế"
       );
       return;
     }
+    if (!periodType) {
+      Alert.alert("Thiếu thông tin", "Vui lòng chọn kỳ kê khai");
+      return;
+    }
+    if (!hasValidPeriod) {
+      Alert.alert("Thiếu thông tin", "Vui lòng chọn thời gian kê khai hợp lệ");
+      return;
+    }
 
     setLoading(true);
     try {
-      const params: any = {
-        storeId,
-        periodType,
-      };
-
+      const params: any = { storeId, periodType };
       if (periodType === "custom") {
         params.monthFrom = monthFrom;
         params.monthTo = monthTo;
@@ -418,431 +700,660 @@ const TaxDeclarationScreen: FC = () => {
         params.periodKey = periodKey;
       }
 
-      const res = await apiClient.get<PreviewApiResponse>("/taxs/preview", {
+      const res: any = await apiClient.get("/taxs/preview", {
+        ...axiosConfig,
         params,
-        headers: { Authorization: `Bearer ${token}` },
       });
 
-      if (!isMountedRef.current) return;
+      if (!res.data?.success)
+        throw new Error(res.data?.message || "Lỗi tải doanh thu hệ thống");
+      console.log("✅ fetchPreview res.data:", res.data);
+      const revenue = toNumber(res.data?.systemRevenue ?? 0);
+      const count = Number(res.data?.orderCount ?? 0);
 
-      const revenue = res.data.systemRevenue || 0;
-      const count = res.data.orderCount || 0;
       setSystemRevenue(revenue);
       setOrderCount(count);
-      setDeclaredRevenue(revenue.toString());
 
-      Alert.alert(
-        "Đã tải doanh thu",
-        `Doanh thu hệ thống: ${formatVND(
-          revenue
-        )}\nTổng ${count} đơn hàng trong kỳ`
-      );
-    } catch (error: any) {
-      if (!isMountedRef.current) return;
-      const msg =
-        error?.response?.data?.message || "Không thể tải doanh thu hệ thống";
-      Alert.alert("Lỗi", msg);
-    } finally {
-      if (isMountedRef.current) setLoading(false);
-    }
-  }, [
-    storeId,
-    periodType,
-    periodKey,
-    monthFrom,
-    monthTo,
-    hasValidPeriod,
-    token,
-  ]);
-
-  const submitDeclaration = useCallback(async () => {
-    if (!storeId || !periodType || !hasValidPeriod) {
-      Alert.alert(
-        "Thiếu thông tin",
-        "Vui lòng chọn cửa hàng và kỳ kê khai hợp lệ"
-      );
-      return;
-    }
-
-    const declared = Number(declaredRevenue) || 0;
-    if (declared <= 0) {
-      Alert.alert("Thiếu thông tin", "Doanh thu kê khai phải lớn hơn 0");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const payload: any = {
-        storeId,
-        periodType,
-        declaredRevenue: declared,
-        taxRates: {
-          gtgt: Number(gtgtRate) || TAX_RATES.DEFAULT_GTGT,
-          tncn: Number(tncnRate) || TAX_RATES.DEFAULT_TNCN,
-        },
-        isFirstTime,
-        supplementNumber: Number(supplementNumber) || 0,
-        revenueByCategory: categoryRevenues.map((c) => ({
-          category: c.category,
-          revenue: c.revenue || 0,
-          gtgtTax: c.gtgtTax || 0,
-          tncnTax: c.tncnTax || 0,
-        })),
-        specialConsumptionTax: specialTaxItems.map((i) => ({
-          itemName: i.itemName || "",
-          unit: i.unit || "",
-          revenue: i.revenue || 0,
-          taxRate: i.taxRate || 0,
-          taxAmount: i.taxAmount || 0,
-        })),
-        environmentalTax: envTaxItems.map((i) => ({
-          type: i.type || "environmental_tax",
-          itemName: i.itemName || "",
-          unit: i.unit || "",
-          quantity: i.quantity || 0,
-          unitPrice: i.unitPrice || 0,
-          taxRate: i.taxRate || 0,
-          taxAmount: i.taxAmount || 0,
-        })),
-        notes,
-        taxpayerInfo: {
-          name: taxpayerName || currentStore?.owner_name || "",
-          storeName: storeDisplayName || currentStore?.name || "",
-          bankAccount: bankAccount || currentStore?.bankAccount || "",
-          taxCode: taxCode || currentStore?.taxCode || "",
-          businessSector: businessSector || currentStore?.businessSector || "",
-          businessArea: Number(businessArea) || currentStore?.area || 0,
-          isRented,
-          employeeCount: Number(employeeCount) || 0,
-          workingHours: {
-            from: workingHoursFrom || "08:00",
-            to: workingHoursTo || "22:00",
-          },
-          businessAddress: {
-            full: businessAddress || currentStore?.address || "",
-          },
-          phone: phone || currentStore?.phone || "",
-          email: email || currentStore?.email || "",
-        } as TaxpayerInfo,
-      };
-
-      if (periodType === "custom") {
-        payload.periodKey = `${monthFrom}_${monthTo}`;
-      } else {
-        payload.periodKey = periodKey;
-      }
-
-      const url = editingId ? `/taxs/${editingId}` : "/taxs";
-      const method: "post" | "put" = editingId ? "put" : "post";
-
-      await apiClient.request({
-        url,
-        method,
-        data: payload,
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (!isMountedRef.current) return;
+      setDeclaredRevenueText(String(Math.round(revenue)));
+      setCurrentStep(2);
 
       Alert.alert(
         "Thành công",
-        editingId ? "Đã cập nhật tờ khai" : "Đã tạo tờ khai mới",
-        [
-          {
-            text: "OK",
-            onPress: () => {
-              setFormModalVisible(false);
-              resetForm();
-              fetchDeclarations();
-            },
-          },
-        ]
+        `Đã tải doanh thu hệ thống: ${formatVND(revenue)} (${count} đơn)`
       );
-    } catch (error: any) {
-      if (!isMountedRef.current) return;
-      const msg = error?.response?.data?.message || "Không thể lưu tờ khai";
-      Alert.alert("Lỗi", msg);
+    } catch (e: any) {
+      console.error(
+        "❌ fetchPreview error:",
+        e?.response?.data || e?.message || e
+      );
+      Alert.alert(
+        "Lỗi",
+        e?.response?.data?.message ||
+          e?.message ||
+          "Không thể tải doanh thu hệ thống"
+      );
     } finally {
-      if (isMountedRef.current) setLoading(false);
+      setLoading(false);
     }
-  }, [
-    editingId,
-    storeId,
-    periodType,
-    hasValidPeriod,
-    declaredRevenue,
-    gtgtRate,
-    tncnRate,
-    isFirstTime,
-    supplementNumber,
-    categoryRevenues,
-    specialTaxItems,
-    envTaxItems,
-    notes,
-    taxpayerName,
-    storeDisplayName,
-    bankAccount,
-    taxCode,
-    businessSector,
-    businessArea,
-    isRented,
-    employeeCount,
-    workingHoursFrom,
-    workingHoursTo,
-    businessAddress,
-    phone,
-    email,
-    currentStore,
-    monthFrom,
-    monthTo,
-    periodKey,
-    token,
-    fetchDeclarations,
-  ]);
+  };
 
-  const deleteDeclaration = useCallback(
-    (id: string) => {
-      Alert.alert("Xác nhận", "Bạn có chắc muốn xóa tờ khai này?", [
-        { text: "Hủy", style: "cancel" },
-        {
-          text: "Xóa",
-          style: "destructive",
-          onPress: async () => {
-            setLoading(true);
-            try {
-              await apiClient.delete(`/taxs/${id}`, {
-                headers: { Authorization: `Bearer ${token}` },
-              });
-              if (!isMountedRef.current) return;
-              Alert.alert("Đã xóa", "Tờ khai đã được xóa");
-              fetchDeclarations();
-            } catch (error: any) {
-              if (!isMountedRef.current) return;
-              const msg =
-                error?.response?.data?.message || "Không thể xóa tờ khai";
-              Alert.alert("Lỗi", msg);
-            } finally {
-              if (isMountedRef.current) setLoading(false);
-            }
-          },
-        },
-      ]);
-    },
-    [token, fetchDeclarations]
-  );
-
-  const cloneDeclaration = useCallback(
-    async (id: string) => {
-      setLoading(true);
-      try {
-        await apiClient.post(
-          `/taxs/${id}/clone`,
-          {},
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        if (!isMountedRef.current) return;
-        Alert.alert("Thành công", "Đã tạo bản sao tờ khai (trạng thái nháp)");
-        fetchDeclarations();
-      } catch (error: any) {
-        if (!isMountedRef.current) return;
-        const msg =
-          error?.response?.data?.message || "Không thể nhân bản tờ khai";
-        Alert.alert("Lỗi", msg);
-      } finally {
-        if (isMountedRef.current) setLoading(false);
-      }
-    },
-    [token, fetchDeclarations]
-  );
-
-  const approveOrReject = useCallback(
-    async (id: string, action: "approve" | "reject") => {
-      setLoading(true);
-      try {
-        await apiClient.post(
-          `/taxs/${id}/approve`,
-          { action },
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        if (!isMountedRef.current) return;
-        Alert.alert(
-          "Thành công",
-          action === "approve"
-            ? "Đã duyệt tờ khai"
-            : "Đã chuyển tờ khai sang trạng thái từ chối"
-        );
-        fetchDeclarations();
-      } catch (error: any) {
-        if (!isMountedRef.current) return;
-        const msg =
-          error?.response?.data?.message ||
-          "Không thể cập nhật trạng thái tờ khai";
-        Alert.alert("Lỗi", msg);
-      } finally {
-        if (isMountedRef.current) setLoading(false);
-      }
-    },
-    [token, fetchDeclarations]
-  );
-
-  const exportDeclaration = useCallback(
-    async (id: string, format: "csv" | "pdf") => {
-      try {
-        if (!storeId || !token) {
-          Alert.alert("Lỗi", "Thiếu storeId hoặc token");
-          return;
-        }
-
-        setLoading(true);
-
-        // Gọi API với Bearer token, nhận về blob/binary
-        const response = await apiClient.get(`/taxs/${id}/export`, {
-          params: { format, storeId },
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          responseType: "blob", // để fileService xử lý blob
-        });
-
-        const blob = response.data;
-
-        const fileName = `to-khai-thue_${id}_${dayjs().format(
-          "YYYYMMDD_HHmmss"
-        )}.${format}`;
-
-        const mimeType = format === "pdf" ? "application/pdf" : "text/csv";
-
-        const result = await fileService.handleApiBlobResponse(
-          blob,
-          fileName,
-          mimeType
-        );
-
-        if (!result.success) {
-          Alert.alert("Lỗi", result.error || "Không thể lưu file");
-        }
-        // Nếu thành công, fileService đã tự share/mở file rồi
-      } catch (error: any) {
-        const msg =
-          error?.response?.data?.message ||
-          error?.message ||
-          "Không thể xuất file";
-        Alert.alert("Lỗi", msg);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [storeId, token]
-  );
-
-  // ==================== HANDLERS ====================
-
-  const resetForm = useCallback(() => {
+  // ===================== ACTIONS =====================
+  const resetForm = () => {
+    setIsEditing(false);
     setEditingId(null);
-    setPeriodType("");
-    setPeriodKey("");
-    setMonthFrom("");
-    setMonthTo("");
+    setCurrentStep(0);
     setSystemRevenue(null);
     setOrderCount(0);
-    setDeclaredRevenue("");
-    setGtgtRate(TAX_RATES.DEFAULT_GTGT.toString());
-    setTncnRate(TAX_RATES.DEFAULT_TNCN.toString());
-    setCalculatedTax(null);
+
+    setDeclaredRevenueText("");
+    setGtgtRateText(String(TAX_RATES.DEFAULT_GTGT));
+    setTncnRateText(String(TAX_RATES.DEFAULT_TNCN));
     setIsFirstTime(true);
-    setSupplementNumber("0");
+    setSupplementNumberText("0");
+
     setCategoryRevenues([]);
     setSpecialTaxItems([]);
     setEnvTaxItems([]);
     setNotes("");
-    setBankAccount(
-      typeof currentStore?.bankAccount === "string"
-        ? currentStore.bankAccount
-        : currentStore?.bankAccount?.accountNumber || ""
-    );
-    setStoreDisplayName(currentStore?.name || "");
-    setTaxCode(currentStore?.taxCode || "");
-    setBusinessSector(currentStore?.businessSector || "");
-    setBusinessArea(currentStore?.area?.toString() || "");
-    setIsRented(false);
-    setEmployeeCount("");
-    setWorkingHoursFrom("08:00");
-    setWorkingHoursTo("22:00");
-    setBusinessAddress(currentStore?.address || "");
-    setPhone(currentStore?.phone || "");
-    setEmail(currentStore?.email || "");
-  }, [currentStore]);
 
-  const handleRefresh = useCallback(() => {
-    setRefreshing(true);
-    setCurrentPage(1);
-    fetchDeclarations().finally(() => setRefreshing(false));
-  }, [fetchDeclarations]);
-
-  const toggleSection = (key: keyof typeof expandedSections) => {
-    setExpandedSections((prev) => ({ ...prev, [key]: !prev[key] }));
+    // re-prefill store info
+    if (currentStore) {
+      setTaxpayerName(currentStore.ownername || user?.fullname || "");
+      setStoreName(currentStore.name || "");
+      setTaxCode(currentStore.taxCode || "");
+      setBankAccount(currentStore.bankAccount || "");
+      setBusinessSector(currentStore.businessSector || "");
+      setBusinessAreaText(String(currentStore.area ?? 0));
+      setIsRented(!!currentStore.isRented);
+      setBusinessAddressFull(currentStore.address || "");
+      setPhone(currentStore.phone || "");
+      setEmail(currentStore.email || "");
+    }
   };
 
-  const calculateTax = useCallback(() => {
-    const revenue = Number(declaredRevenue) || 0;
-    if (revenue <= 0) {
-      Alert.alert("Thiếu thông tin", "Vui lòng nhập doanh thu kê khai");
+  const validateForm = (): {
+    isValid: boolean;
+    errors: string[];
+    warnings: string[];
+  } => {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+
+    if (!periodType) errors.push("Chưa chọn kỳ kê khai");
+    if (!hasValidPeriod) errors.push("Chưa chọn thời gian kê khai hợp lệ");
+
+    const declared = parseNumberInput(declaredRevenueText);
+    if (!declared || declared <= 0)
+      errors.push("Doanh thu kê khai phải lớn hơn 0");
+
+    if (systemRevenue !== null && systemRevenue > 0 && declared > 0) {
+      const diff = Math.abs(declared - systemRevenue);
+      const diffPercent = (diff / systemRevenue) * 100;
+      if (diffPercent >= 20)
+        warnings.push(
+          `Doanh thu kê khai lệch ${diffPercent.toFixed(1)}% so với hệ thống`
+        );
+    }
+
+    const categoryTotal = categoryRevenues.reduce(
+      (s, c) => s + Number(c.revenue || 0),
+      0
+    );
+    if (
+      categoryRevenues.length > 0 &&
+      Math.abs(categoryTotal - declared) > 1000
+    ) {
+      warnings.push(
+        "Tổng doanh thu theo ngành nghề chưa khớp doanh thu kê khai"
+      );
+    }
+
+    if (!taxpayerName) warnings.push("Chưa nhập tên người nộp thuế");
+    if (!taxCode) warnings.push("Chưa nhập mã số thuế");
+    if (!email) warnings.push("Chưa nhập email");
+
+    return { isValid: errors.length === 0, errors, warnings };
+  };
+
+  const useSystemRevenue = () => {
+    if (systemRevenue === null) {
+      Alert.alert(
+        "Chưa có doanh thu hệ thống",
+        "Vui lòng bấm 'Xem doanh thu hệ thống' trước"
+      );
       return;
     }
-    const gt = Number(gtgtRate) || TAX_RATES.DEFAULT_GTGT;
-    const tn = Number(tncnRate) || TAX_RATES.DEFAULT_TNCN;
-    const gtgtAmount = (revenue * gt) / 100;
-    const tncnAmount = (revenue * tn) / 100;
-    const total = gtgtAmount + tncnAmount + totalSpecialTax + totalEnvTax;
-    setCalculatedTax({ gtgt: gtgtAmount, tncn: tncnAmount, total });
-
+    setDeclaredRevenueText(String(Math.round(systemRevenue)));
     Alert.alert(
-      "Kết quả",
-      `Thuế GTGT: ${formatVND(
-        gtgtAmount
-      )}\nThuế TNCN: ${formatVND(tncnAmount)}\nThuế TTĐB: ${formatVND(
-        totalSpecialTax
-      )}\nThuế môi trường: ${formatVND(
-        totalEnvTax
-      )}\n\nTổng thuế: ${formatVND(total)}`
+      "Đã áp dụng",
+      `Đã set doanh thu kê khai = ${formatVND(systemRevenue)}`
     );
-  }, [declaredRevenue, gtgtRate, tncnRate, totalSpecialTax, totalEnvTax]);
+  };
 
-  // Category revenue
-  const addCategoryRevenue = () => {
-    setCategoryRevenues((prev) => [
-      ...prev,
+  // ===================== CRUD: submit create/update =====================
+  const submitDeclaration = async (status: DeclarationStatus) => {
+    const v = validateForm();
+    if (!v.isValid) {
+      Alert.alert("Thông tin chưa hợp lệ", v.errors.join("\n"));
+      return;
+    }
+
+    if (v.warnings.length > 0 && status === "submitted") {
+      Alert.alert(
+        "Cảnh báo",
+        `${v.warnings.join("\n")}\n\nBạn vẫn muốn nộp tờ khai?`,
+        [
+          { text: "Hủy", style: "cancel" },
+          {
+            text: "Nộp",
+            style: "destructive",
+            onPress: () => submitDeclarationInternal(status, true),
+          },
+        ]
+      );
+      return;
+    }
+
+    await submitDeclarationInternal(status, false);
+  };
+
+  const submitDeclarationInternal = async (
+    status: DeclarationStatus,
+    withWarnings: boolean
+  ) => {
+    if (!storeId || !periodType) return;
+
+    setSubmitLoading(true);
+    try {
+      const finalPeriodKey =
+        periodType === "custom"
+          ? monthFrom && monthTo
+            ? `${monthFrom}-${monthTo}`
+            : ""
+          : periodKey;
+
+      const payload: any = {
+        storeId,
+        periodType,
+        periodKey: finalPeriodKey,
+        declaredRevenue: parseNumberInput(declaredRevenueText),
+        taxRates: {
+          gtgt: parseNumberInput(gtgtRateText) || TAX_RATES.DEFAULT_GTGT,
+          tncn: parseNumberInput(tncnRateText) || TAX_RATES.DEFAULT_TNCN,
+        },
+        isFirstTime: !!isFirstTime,
+        supplementNumber: parseNumberInput(supplementNumberText) || 0,
+        revenueByCategory: categoryRevenues.map((c) => ({
+          category: c.category,
+          revenue: Number(c.revenue || 0),
+          gtgtTax: Number(c.gtgtTax || 0),
+          tncnTax: Number(c.tncnTax || 0),
+        })),
+        specialConsumptionTax: specialTaxItems.map((it) => ({
+          itemName: it.itemName,
+          unit: it.unit,
+          revenue: Number(it.revenue || 0),
+          taxRate: Number(it.taxRate || 0),
+          taxAmount: Number(it.taxAmount || 0),
+        })),
+        environmentalTax: envTaxItems.map((it) => ({
+          type: it.type,
+          itemName: it.itemName,
+          unit: it.unit,
+          quantity: Number(it.quantity || 0),
+          unitPrice: Number(it.unitPrice || 0),
+          taxRate: Number(it.taxRate || 0),
+          taxAmount: Number(it.taxAmount || 0),
+        })),
+        notes,
+        taxpayerInfo: {
+          name: taxpayerName,
+          storeName: storeName,
+          bankAccount: bankAccount,
+          taxCode: taxCode,
+          businessSector: businessSector,
+          businessArea: parseNumberInput(businessAreaText) || 0,
+          isRented: !!isRented,
+          employeeCount: parseNumberInput(employeeCountText) || 0,
+          workingHours: {
+            from: workingHoursFrom || "08:00",
+            to: workingHoursTo || "22:00",
+          },
+          businessAddress: { full: businessAddressFull },
+          phone,
+          email,
+        },
+        status,
+      };
+
+      if (periodType === "custom") {
+        payload.monthFrom = monthFrom;
+        payload.monthTo = monthTo;
+      }
+
+      const url = isEditing && editingId ? `/taxs/${editingId}` : "/taxs";
+      const method = isEditing && editingId ? "put" : "post";
+
+      const res: any =
+        method === "post"
+          ? await apiClient.post(url, payload, axiosConfig)
+          : await apiClient.put(url, payload, axiosConfig);
+
+      if (!res.data?.success)
+        throw new Error(res.data?.message || "Lỗi lưu tờ khai");
+
+      Alert.alert(
+        "Thành công",
+        res.data?.message ||
+          (isEditing ? "Cập nhật tờ khai thành công" : "Tạo tờ khai thành công")
+      );
+
+      resetForm();
+      fetchDeclarations();
+    } catch (e: any) {
+      console.error(
+        "❌ submitDeclaration error:",
+        e?.response?.data || e?.message || e
+      );
+      Alert.alert(
+        "Lỗi",
+        e?.response?.data?.message || e?.message || "Không thể lưu tờ khai"
+      );
+    } finally {
+      setSubmitLoading(false);
+    }
+  };
+
+  // ===================== CRUD: load detail for edit =====================
+  const fetchDeclarationById = async (
+    id: string
+  ): Promise<TaxDeclarationRecord | null> => {
+    const res: any = await apiClient.get(`/taxs/${id}`, axiosConfig);
+    if (!res.data?.success)
+      throw new Error(res.data?.message || "Lỗi tải chi tiết tờ khai");
+    const d = res.data?.declaration || res.data?.data;
+    if (!d) return null;
+
+    const normalized: TaxDeclarationRecord = {
+      id: d.id || d._id,
+      storeId: d.storeId,
+      periodType: d.periodType,
+      periodKey: d.periodKey,
+      declaredRevenue: Number(d.declaredRevenue || 0),
+      systemRevenue: Number(d.systemRevenue || 0),
+      orderCount: Number(d.orderCount || 0),
+      taxRates: d.taxRates,
+      taxAmounts: d.taxAmounts,
+      revenueByCategory: d.revenueByCategory,
+      specialConsumptionTax: d.specialConsumptionTax,
+      environmentalTax: d.environmentalTax,
+      notes: d.notes,
+      taxpayerInfo: d.taxpayerInfo,
+      isClone: !!d.isClone,
+      version: d.version,
+      status: d.status,
+      createdAt: d.createdAt,
+      submittedAt: d.submittedAt,
+      approvedAt: d.approvedAt,
+      rejectionReason: d.rejectionReason,
+      createdBy: d.createdBy,
+      approvedBy: d.approvedBy,
+    };
+
+    return normalized;
+  };
+
+  const loadForEdit = async (id: string) => {
+    setLoading(true);
+    try {
+      const d = await fetchDeclarationById(id);
+      if (!d) {
+        Alert.alert("Không tìm thấy", "Không tìm thấy tờ khai");
+        return;
+      }
+      if (!["draft", "saved"].includes(d.status)) {
+        Alert.alert(
+          "Không thể chỉnh sửa",
+          "Tờ khai đã nộp/đã duyệt/đã từ chối không thể chỉnh sửa"
+        );
+        return;
+      }
+
+      setIsEditing(true);
+      setEditingId(d.id);
+
+      setSystemRevenue(Number(d.systemRevenue || 0));
+      setOrderCount(Number(d.orderCount || 0));
+
+      // period
+      setPeriodType(d.periodType);
+      if (
+        d.periodType === "custom" &&
+        typeof d.periodKey === "string" &&
+        d.periodKey.includes("-")
+      ) {
+        const parts = d.periodKey.split("-");
+        setMonthFrom(parts[0]);
+        setMonthTo(parts[1]);
+      } else if (d.periodType === "month") {
+        setMonthKey(d.periodKey);
+      } else if (d.periodType === "quarter") {
+        setQuarterKey(d.periodKey);
+      } else if (d.periodType === "year") {
+        setYearKey(d.periodKey);
+      }
+
+      // main fields
+      setDeclaredRevenueText(
+        String(Math.round(Number(d.declaredRevenue || 0)))
+      );
+      setGtgtRateText(String(d.taxRates?.gtgt ?? TAX_RATES.DEFAULT_GTGT));
+      setTncnRateText(String(d.taxRates?.tncn ?? TAX_RATES.DEFAULT_TNCN));
+      setNotes(d.notes || "");
+
+      // taxpayer info
+      setTaxpayerName(d.taxpayerInfo?.name || taxpayerName);
+      setStoreName(d.taxpayerInfo?.storeName || storeName);
+      setTaxCode(d.taxpayerInfo?.taxCode || taxCode);
+      setBankAccount(d.taxpayerInfo?.bankAccount || bankAccount);
+      setBusinessSector(d.taxpayerInfo?.businessSector || businessSector);
+      setBusinessAreaText(String(d.taxpayerInfo?.businessArea ?? 0));
+      setIsRented(!!d.taxpayerInfo?.isRented);
+      setEmployeeCountText(String(d.taxpayerInfo?.employeeCount ?? 0));
+      setWorkingHoursFrom(d.taxpayerInfo?.workingHours?.from || "08:00");
+      setWorkingHoursTo(d.taxpayerInfo?.workingHours?.to || "22:00");
+      setBusinessAddressFull(
+        d.taxpayerInfo?.businessAddress?.full || businessAddressFull
+      );
+      setPhone(d.taxpayerInfo?.phone || phone);
+      setEmail(d.taxpayerInfo?.email || email);
+
+      // arrays
+      if (d.revenueByCategory?.length) {
+        setCategoryRevenues(
+          d.revenueByCategory.map((c) => ({
+            category: (c.category as any) || "goodsdistribution",
+            revenue: Number(c.revenue || 0),
+            gtgtTax: Number(c.gtgtTax || 0),
+            tncnTax: Number(c.tncnTax || 0),
+          }))
+        );
+      } else setCategoryRevenues([]);
+
+      if (d.specialConsumptionTax?.length) {
+        setSpecialTaxItems(
+          d.specialConsumptionTax.map((it) => ({
+            itemName: it.itemName || "",
+            unit: it.unit || "",
+            revenue: Number(it.revenue || 0),
+            taxRate: Number(it.taxRate || 0),
+            taxAmount: Number(it.taxAmount || 0),
+          }))
+        );
+      } else setSpecialTaxItems([]);
+
+      if (d.environmentalTax?.length) {
+        setEnvTaxItems(
+          d.environmentalTax.map((it) => ({
+            type: (it.type as any) || "environmentaltax",
+            itemName: it.itemName || "",
+            unit: it.unit || "",
+            quantity: Number(it.quantity || 0),
+            unitPrice: Number(it.unitPrice || 0),
+            taxRate: Number(it.taxRate || 0),
+            taxAmount: Number(it.taxAmount || 0),
+          }))
+        );
+      } else setEnvTaxItems([]);
+
+      setCurrentStep(3);
+      Alert.alert("Đang chỉnh sửa", `Đã tải tờ khai kỳ ${d.periodKey}`);
+    } catch (e: any) {
+      console.error(
+        "❌ loadForEdit error:",
+        e?.response?.data || e?.message || e
+      );
+      Alert.alert(
+        "Lỗi",
+        e?.response?.data?.message || e?.message || "Không thể tải tờ khai"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ===================== STATUS / CLONE / DELETE / APPROVE / REJECT =====================
+  const handleClone = async (id: string) => {
+    setLoading(true);
+    try {
+      const res: any = await apiClient.post(
+        `/taxs/${id}/clone`,
+        {},
+        axiosConfig
+      );
+      if (!res.data?.success)
+        throw new Error(res.data?.message || "Lỗi nhân bản tờ khai");
+      Alert.alert("Thành công", res.data?.message || "Đã tạo bản sao");
+      fetchDeclarations();
+    } catch (e: any) {
+      console.error("❌ clone error:", e?.response?.data || e?.message || e);
+      Alert.alert(
+        "Lỗi",
+        e?.response?.data?.message || e?.message || "Không thể nhân bản"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ======= TIẾP TỤC TỪ ĐOẠN handleDelete (dán đè từ đây tới hết file) =======
+
+  const handleDelete = async (id: string) => {
+    Alert.alert("Xóa tờ khai", "Bạn chắc chắn muốn xóa tờ khai này?", [
+      { text: "Hủy", style: "cancel" },
       {
-        category: "goods_distribution",
-        revenue: 0,
-        gtgtTax: 0,
-        tncnTax: 0,
-      } as CategoryRevenue,
+        text: "Xóa",
+        style: "destructive",
+        onPress: async () => {
+          setLoading(true);
+          try {
+            const res: any = await apiClient.delete(`/taxs/${id}`, axiosConfig);
+            if (!res.data?.success)
+              throw new Error(res.data?.message || "Lỗi xóa tờ khai");
+            Alert.alert("Thành công", res.data?.message || "Đã xóa tờ khai");
+            fetchDeclarations();
+          } catch (e: any) {
+            console.error(
+              "❌ delete error:",
+              e?.response?.data || e?.message || e
+            );
+            Alert.alert(
+              "Lỗi",
+              e?.response?.data?.message ||
+                e?.message ||
+                "Không thể xóa tờ khai"
+            );
+          } finally {
+            setLoading(false);
+          }
+        },
+      },
     ]);
   };
 
-  const updateCategoryRevenue = (
-    index: number,
-    field: keyof CategoryRevenue,
-    value: any
+  const handleUpdateStatus = async (id: string, status: DeclarationStatus) => {
+    setLoading(true);
+    try {
+      const res: any = await apiClient.put(
+        `/taxs/${id}`,
+        { status },
+        axiosConfig
+      );
+      if (!res.data?.success)
+        throw new Error(res.data?.message || "Lỗi cập nhật trạng thái");
+      Alert.alert("Thành công", res.data?.message || "Đã cập nhật trạng thái");
+      fetchDeclarations();
+    } catch (e: any) {
+      console.error(
+        "❌ update status error:",
+        e?.response?.data || e?.message || e
+      );
+      Alert.alert(
+        "Lỗi",
+        e?.response?.data?.message ||
+          e?.message ||
+          "Không thể cập nhật trạng thái"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleApproveReject = async (
+    id: string,
+    action: "approve" | "reject",
+    reason?: string
   ) => {
-    setCategoryRevenues((prev) => {
-      const clone = [...prev];
-      (clone[index] as any)[field] = value;
-      return clone;
-    });
+    setLoading(true);
+    try {
+      const payload: any = { action };
+      if (action === "reject") payload.rejectionReason = reason || "";
+      const res: any = await apiClient.post(
+        `/taxs/${id}/approve`,
+        payload,
+        axiosConfig
+      );
+      if (!res.data?.success)
+        throw new Error(res.data?.message || "Lỗi duyệt/từ chối");
+      Alert.alert(
+        "Thành công",
+        res.data?.message || (action === "approve" ? "Đã duyệt" : "Đã từ chối")
+      );
+      fetchDeclarations();
+    } catch (e: any) {
+      console.error(
+        "❌ approve/reject error:",
+        e?.response?.data || e?.message || e
+      );
+      Alert.alert(
+        "Lỗi",
+        e?.response?.data?.message || e?.message || "Không thể thực hiện"
+      );
+    } finally {
+      setLoading(false);
+      setRejectVisible(false);
+      setRejectReason("");
+      setSelectedActionId(null);
+    }
+  };
+
+  const showRejectModal = (id: string) => {
+    setSelectedActionId(id);
+    setRejectReason("");
+    setRejectVisible(true);
+  };
+
+  const showApproveConfirm = (id: string) => {
+    Alert.alert("Duyệt tờ khai", "Bạn chắc chắn muốn duyệt tờ khai này?", [
+      { text: "Hủy", style: "cancel" },
+      {
+        text: "Duyệt",
+        style: "default",
+        onPress: () => handleApproveReject(id, "approve"),
+      },
+    ]);
+  };
+
+  // (Tuỳ backend) Export: nếu API trả URL thì có thể mở bằng Linking.
+  // Hiện giữ tối giản để tránh phụ thuộc responseType blob trên RN.
+  const ensureDir = () => {
+    const dir = new Directory(Paths.cache, "tax-exports");
+    dir.create({ intermediates: true, idempotent: true }); // không lỗi nếu đã tồn tại
+    return dir;
+  };
+
+  const joinUrl = (baseURL: string, path: string) => {
+    if (!baseURL) return path;
+    return `${baseURL.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
+  };
+
+  const handleExport = async (id: string, format: "pdf" | "csv") => {
+    if (!id) return;
+
+    try {
+      setExportLoading(true);
+
+      const ext = format === "pdf" ? "pdf" : "csv";
+      const mime = format === "pdf" ? "application/pdf" : "text/csv";
+
+      // baseURL lấy từ apiClient (axios instance) của bạn
+      const baseURL = (apiClient.defaults as any)?.baseURL || "";
+      const url = joinUrl(baseURL, `/taxs/${id}/export?format=${format}`);
+
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`, // token đang có trong state
+          Accept: mime,
+        },
+      });
+
+      if (!res.ok) {
+        throw new Error(`Export failed (HTTP ${res.status})`);
+      }
+
+      const bytes = await res.bytes(); // Uint8Array theo expo/fetch
+      const dir = await ensureDir();
+      const outFile = new File(dir, `to-khai-${id}-${Date.now()}.${ext}`);
+
+      outFile.write(bytes); // File.write nhận Uint8Array [web:59]
+
+      // Mở/share file
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(outFile.uri, { mimeType: mime });
+      } else {
+        Alert.alert("Thành công", `Đã lưu file tại: ${outFile.uri}`);
+      }
+    } catch (e: any) {
+      Alert.alert("Lỗi", e?.message || "Không thể xuất file");
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+  // ===================== ARRAY HANDLERS =====================
+  const addCategoryRevenue = () => {
+    setCategoryRevenues((prev) => [
+      ...prev,
+      { category: "goodsdistribution", revenue: 0, gtgtTax: 0, tncnTax: 0 },
+    ]);
   };
 
   const removeCategoryRevenue = (index: number) => {
     setCategoryRevenues((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Special tax
+  const updateCategoryRevenue = (
+    index: number,
+    field: keyof CategoryRevenueItem,
+    value: any
+  ) => {
+    setCategoryRevenues((prev) => {
+      const next = [...prev];
+      (next[index] as any)[field] =
+        field === "category" ? value : Number(value || 0);
+      return next;
+    });
+  };
+
   const addSpecialTaxItem = () => {
     setSpecialTaxItems((prev) => [
       ...prev,
       { itemName: "", unit: "", revenue: 0, taxRate: 0, taxAmount: 0 },
     ]);
+  };
+
+  const removeSpecialTaxItem = (index: number) => {
+    setSpecialTaxItems((prev) => prev.filter((_, i) => i !== index));
   };
 
   const updateSpecialTaxItem = (
@@ -851,27 +1362,23 @@ const TaxDeclarationScreen: FC = () => {
     value: any
   ) => {
     setSpecialTaxItems((prev) => {
-      const items = [...prev];
-      (items[index] as any)[field] = value;
+      const next = [...prev];
+      (next[index] as any)[field] =
+        field === "itemName" || field === "unit" ? value : Number(value || 0);
       if (field === "revenue" || field === "taxRate") {
-        const r = Number(items[index].revenue) || 0;
-        const t = Number(items[index].taxRate) || 0;
-        items[index].taxAmount = (r * t) / 100;
+        const rev = Number(next[index].revenue || 0);
+        const rate = Number(next[index].taxRate || 0);
+        next[index].taxAmount = (rev * rate) / 100;
       }
-      return items;
+      return next;
     });
   };
 
-  const removeSpecialTaxItem = (index: number) => {
-    setSpecialTaxItems((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  // Env tax
   const addEnvTaxItem = () => {
     setEnvTaxItems((prev) => [
       ...prev,
       {
-        type: "environmental_tax",
+        type: "environmentaltax",
         itemName: "",
         unit: "",
         quantity: 0,
@@ -882,2261 +1389,1551 @@ const TaxDeclarationScreen: FC = () => {
     ]);
   };
 
+  const removeEnvTaxItem = (index: number) => {
+    setEnvTaxItems((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const updateEnvTaxItem = (
     index: number,
     field: keyof EnvTaxItem,
     value: any
   ) => {
     setEnvTaxItems((prev) => {
-      const items = [...prev];
-      (items[index] as any)[field] = value;
-      if (["quantity", "unitPrice", "taxRate"].includes(field)) {
-        const q = Number(items[index].quantity) || 0;
-        const u = Number(items[index].unitPrice) || 0;
-        const t = Number(items[index].taxRate) || 0;
-        items[index].taxAmount = (q * u * t) / 100;
+      const next = [...prev];
+      (next[index] as any)[field] =
+        field === "itemName" || field === "unit" || field === "type"
+          ? value
+          : Number(value || 0);
+
+      if (
+        field === "quantity" ||
+        field === "unitPrice" ||
+        field === "taxRate"
+      ) {
+        const q = Number(next[index].quantity || 0);
+        const p = Number(next[index].unitPrice || 0);
+        const r = Number(next[index].taxRate || 0);
+        next[index].taxAmount = (q * p * r) / 100;
       }
-      return items;
+      return next;
     });
   };
 
-  const removeEnvTaxItem = (index: number) => {
-    setEnvTaxItems((prev) => prev.filter((_, i) => i !== index));
-  };
+  // ===================== UI HELPERS =====================
+  const totalCategoryRevenue = useMemo(
+    () => categoryRevenues.reduce((s, c) => s + Number(c.revenue || 0), 0),
+    [categoryRevenues]
+  );
 
-  const openDetail = (record: TaxDeclaration) => {
-    setSelectedRecord(record);
-    setDetailModalVisible(true);
-  };
-  const startEdit = (record: TaxDeclaration) => {
-    setEditingId(record._id);
+  const canEditRecord = (r: TaxDeclarationRecord) =>
+    ["draft", "saved"].includes(r.status);
+  const canApprove = (r: TaxDeclarationRecord) =>
+    r.status === "submitted" && user?.role === "MANAGER";
+  const canDelete = (r: TaxDeclarationRecord) =>
+    ["draft", "saved"].includes(r.status);
 
-    // Kỳ kê khai
-    setPeriodType(record.periodType);
-    setPeriodKey(record.periodKey);
-    setMonthFrom("");
-    setMonthTo("");
-    setSystemRevenue(record.declaredRevenue);
-    setOrderCount(0); // nếu cần có thể fetch lại preview
-
-    // Phần A
-    setDeclaredRevenue(record.declaredRevenue.toString());
-    setGtgtRate(
-      record.taxRates?.gtgt?.toString() ?? TAX_RATES.DEFAULT_GTGT.toString()
-    );
-    setTncnRate(
-      record.taxRates?.tncn?.toString() ?? TAX_RATES.DEFAULT_TNCN.toString()
-    );
-    setIsFirstTime(record.isFirstTime);
-    setSupplementNumber(record.supplementNumber?.toString() ?? "0");
-
-    // Phần A chi tiết
-    setCategoryRevenues(record.revenueByCategory || []);
-    setSpecialTaxItems(record.specialConsumptionTax || []);
-    setEnvTaxItems(record.environmentalTax || []);
-
-    // Người nộp thuế
-    const info = record.taxpayerInfo;
-    if (info) {
-      setTaxpayerName(info.name || "");
-      setStoreDisplayName(info.storeName || "");
-      setBankAccount(info.bankAccount || "");
-      setTaxCode(info.taxCode || "");
-      setBusinessSector(info.businessSector || "");
-      setBusinessArea(info.businessArea?.toString() || "");
-      setIsRented(!!info.isRented);
-      setEmployeeCount(info.employeeCount?.toString() || "");
-      setWorkingHoursFrom(info.workingHours?.from || "08:00");
-      setWorkingHoursTo(info.workingHours?.to || "22:00");
-      setBusinessAddress(info.businessAddress?.full || "");
-      setPhone(info.phone || "");
-      setEmail(info.email || "");
-    } else {
-      // fallback từ currentStore nếu record không có taxpayerInfo
-      setTaxpayerName(currentStore?.owner_name || "");
-      setStoreDisplayName(currentStore?.name || "");
-      setBankAccount(
-        typeof currentStore?.bankAccount === "string"
-          ? currentStore.bankAccount
-          : currentStore?.bankAccount?.accountNumber || ""
+  const openDetail = async (id: string) => {
+    setLoading(true);
+    try {
+      const d = await fetchDeclarationById(id);
+      if (!d) {
+        Alert.alert("Không tìm thấy", "Không tìm thấy tờ khai");
+        return;
+      }
+      setSelectedRecord(d);
+      setDetailVisible(true);
+    } catch (e: any) {
+      console.error(
+        "❌ openDetail error:",
+        e?.response?.data || e?.message || e
       );
-      setTaxCode(currentStore?.taxCode || "");
-      setBusinessSector(currentStore?.businessSector || "");
-      setBusinessArea(currentStore?.area?.toString() || "");
-      setBusinessAddress(currentStore?.address || "");
-      setPhone(currentStore?.phone || "");
-      setEmail(currentStore?.email || "");
+      Alert.alert(
+        "Lỗi",
+        e?.response?.data?.message || e?.message || "Không thể tải chi tiết"
+      );
+    } finally {
+      setLoading(false);
     }
-
-    setNotes(record.notes || "");
-
-    setFormModalVisible(true);
   };
 
-  // ==================== RENDER ====================
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchDeclarations();
+  };
 
+  // ===================== RENDER SMALL COMPONENTS =====================
+
+  // ===================== RENDER: missing store/token =====================
   if (!storeId || !token) {
     return (
-      <View style={styles.errorContainer}>
-        <Ionicons name="warning" size={56} color="#faad14" />
-        <Text style={styles.errorTitle}>
+      <View style={styles.center}>
+        <Text style={styles.emptyTitle}>
           Vui lòng đăng nhập và chọn cửa hàng
         </Text>
-        <Text style={styles.errorText}>
-          Chức năng kê khai thuế chỉ hoạt động khi đã chọn cửa hàng đang làm
-          việc.
+        <Text style={styles.emptySub}>
+          Cần token + currentStore để kê khai thuế.
         </Text>
       </View>
     );
   }
 
+  // ===================== MAIN RENDER =====================
   return (
-    <View style={styles.container}>
-      {/* HEADER */}
-      <LinearGradient colors={["#1890ff", "#096dd9"]} style={styles.header}>
-        <View style={styles.headerContent}>
-          <View style={styles.headerLeft}>
-            <Ionicons name="document-text" size={28} color="#fff" />
-            <View style={styles.headerTextContainer}>
-              <Text style={styles.headerTitle}>Kê khai thuế 01/CNKD</Text>
-              <Text style={styles.headerSubtitle}>{storeName}</Text>
-            </View>
-          </View>
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => {
-              resetForm();
-              setFormModalVisible(true);
-            }}
-          >
-            <Ionicons name="add" size={24} color="#fff" />
-          </TouchableOpacity>
-        </View>
-      </LinearGradient>
-
-      {/* CONTENT */}
-      <ScrollView
-        style={styles.content}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-        }
-      >
-        {/* Tổng quan */}
-        <View style={styles.statsCard}>
-          <Text style={styles.statsTitle}>Tổng quan tờ khai</Text>
-          <View style={styles.statsGrid}>
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>{totalCount}</Text>
-              <Text style={styles.statLabel}>Tổng tờ khai</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: "#52c41a" }]}>
-                {declarations.filter((d) => d.status === "approved").length}
-              </Text>
-              <Text style={styles.statLabel}>Đã duyệt</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: "#faad14" }]}>
-                {declarations.filter((d) => d.status === "submitted").length}
-              </Text>
-              <Text style={styles.statLabel}>Đã nộp</Text>
-            </View>
-          </View>
+    <View style={styles.root}>
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.headerTitle}>
+            {currentStore?.name || "Cửa hàng"}
+          </Text>
+          <Text style={styles.headerSub}>
+            Kê khai thuế •{" "}
+            {currentStore?.taxCode
+              ? `MST: ${currentStore.taxCode}`
+              : "Chưa có MST"}
+          </Text>
         </View>
 
-        {/* DANH SÁCH TỜ KHAI */}
-        <View style={styles.listSection}>
-          <Text style={styles.sectionTitle}>Lịch sử tờ khai</Text>
-
-          {loading && declarations.length === 0 ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#1890ff" />
-              <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
-            </View>
-          ) : declarations.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Ionicons name="file-tray-outline" size={72} color="#d9d9d9" />
-              <Text style={styles.emptyText}>Chưa có tờ khai</Text>
-              <Text style={styles.emptySubtext}>
-                Nhấn nút "+" trên thanh tiêu đề để tạo tờ khai mới.
-              </Text>
-            </View>
+        <TouchableOpacity
+          onPress={fetchDeclarations}
+          disabled={loading}
+          style={[styles.headerBtn, loading && styles.btnDisabled]}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
           ) : (
-            declarations.map((item) => {
-              const statusCfg = STATUS_CONFIG[item.status];
+            <Text style={styles.headerBtnText}>Tải lại</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView
+        style={styles.container}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="none"
+        contentContainerStyle={{ paddingBottom: 24 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={["#2563eb"]}
+            tintColor="#2563eb"
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Step info */}
+        <View style={styles.card}>
+          <Text style={styles.stepText}>
+            Bước: <Text style={{ fontWeight: "800" }}>{currentStep + 1}/5</Text>
+          </Text>
+          <Text style={styles.stepHint}>
+            0-Chọn kỳ • 1-Xem doanh thu • 2-Thông tin người nộp • 3-Kê khai •
+            4-Xác nhận
+          </Text>
+        </View>
+
+        {/* Period selector */}
+        <View style={styles.card}>
+          <SectionTitle title="1) Chọn kỳ kê khai" />
+
+          <View style={styles.row}>
+            {PERIOD_TYPES.map((t) => {
+              const active = periodType === t.value;
               return (
                 <TouchableOpacity
-                  key={item._id}
-                  style={styles.declarationCard}
-                  activeOpacity={0.8}
-                  onPress={() => openDetail(item)}
+                  key={t.value}
+                  style={[styles.pill, active && styles.pillActive]}
+                  onPress={() => {
+                    setPeriodType(t.value);
+                    setSystemRevenue(null);
+                    setOrderCount(0);
+                    setCurrentStep(0);
+                    // khi đổi kỳ, giữ lại form nhưng reset preview
+                  }}
                 >
-                  <View style={styles.declarationHeader}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.declarationPeriod}>
-                        Kỳ {item.periodKey}
-                      </Text>
-                      <Text style={styles.declarationDate}>
-                        Tạo lúc{" "}
-                        {dayjs(item.createdAt).format("DD/MM/YYYY HH:mm")}
-                      </Text>
-                    </View>
-                    <View
-                      style={[
-                        styles.statusBadge,
-                        {
-                          backgroundColor: statusCfg.bg,
-                          borderColor: statusCfg.color,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[styles.statusText, { color: statusCfg.color }]}
-                      >
-                        {statusCfg.text}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.declarationRow}>
-                    <Text style={styles.declarationLabel}>Doanh thu:</Text>
-                    <Text style={styles.declarationValue}>
-                      {formatVND(item.declaredRevenue)}
-                    </Text>
-                  </View>
-                  <View style={styles.declarationRow}>
-                    <Text style={styles.declarationLabel}>Tổng thuế:</Text>
-                    <Text style={styles.declarationTotal}>
-                      {formatVND(item.taxAmounts?.total)}
-                    </Text>
-                  </View>
-
-                  <View style={styles.declarationFooter}>
-                    <View style={styles.tagRow}>
-                      {item.isClone && (
-                        <View
-                          style={[styles.tag, { backgroundColor: "#fff7e6" }]}
-                        >
-                          <Text style={[styles.tagText, { color: "#fa8c16" }]}>
-                            Bản sao
-                          </Text>
-                        </View>
-                      )}
-                      <View
-                        style={[styles.tag, { backgroundColor: "#f0f5ff" }]}
-                      >
-                        <Text style={[styles.tagText, { color: "#1890ff" }]}>
-                          v{item.version}
-                        </Text>
-                      </View>
-                    </View>
-                    <View style={styles.cardActions}>
-                      {["draft", "saved"].includes(item.status) && (
-                        <TouchableOpacity
-                          style={styles.iconButton}
-                          onPress={() => startEdit(item)}
-                        >
-                          <Ionicons
-                            name="create-outline"
-                            size={18}
-                            color="#1890ff"
-                          />
-                        </TouchableOpacity>
-                      )}
-                      <TouchableOpacity
-                        style={styles.iconButton}
-                        onPress={() => cloneDeclaration(item._id)}
-                      >
-                        <Ionicons
-                          name="duplicate-outline"
-                          size={18}
-                          color="#1890ff"
-                        />
-                      </TouchableOpacity>
-                      {item.status === "submitted" && (
-                        <>
-                          <TouchableOpacity
-                            style={styles.iconButton}
-                            onPress={() => approveOrReject(item._id, "approve")}
-                          >
-                            <Ionicons
-                              name="checkmark-circle-outline"
-                              size={18}
-                              color="#52c41a"
-                            />
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            style={styles.iconButton}
-                            onPress={() => approveOrReject(item._id, "reject")}
-                          >
-                            <Ionicons
-                              name="close-circle-outline"
-                              size={18}
-                              color="#ff4d4f"
-                            />
-                          </TouchableOpacity>
-                        </>
-                      )}
-                      <TouchableOpacity
-                        style={styles.iconButton}
-                        onPress={() => exportDeclaration(item._id, "pdf")}
-                      >
-                        <Ionicons
-                          name="download-outline"
-                          size={18}
-                          color="#722ed1"
-                        />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.iconButton}
-                        onPress={() => deleteDeclaration(item._id)}
-                      >
-                        <Ionicons
-                          name="trash-outline"
-                          size={18}
-                          color="#ff4d4f"
-                        />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
+                  <Text
+                    style={[styles.pillText, active && styles.pillTextActive]}
+                  >
+                    {t.label}
+                  </Text>
                 </TouchableOpacity>
               );
-            })
-          )}
-        </View>
-      </ScrollView>
-
-      {/* MODAL FORM KÊ KHAI */}
-      <Modal
-        visible={formModalVisible}
-        animationType="slide"
-        onRequestClose={() => setFormModalVisible(false)}
-      >
-        <KeyboardAvoidingView
-          style={styles.modalContainer}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-        >
-          <View style={styles.modalHeader}>
-            <TouchableOpacity
-              onPress={() => setFormModalVisible(false)}
-              style={styles.closeButton}
-            >
-              <Ionicons name="close" size={26} color="#000" />
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>Tờ khai mới</Text>
-            <View style={{ width: 26 }} />
+            })}
           </View>
 
-          <ScrollView style={styles.modalContent}>
-            {/* [01-03] Kỳ kê khai */}
-            <View style={styles.formSection}>
-              <TouchableOpacity
-                style={styles.sectionHeader}
-                onPress={() => toggleSection("basicInfo")}
-              >
-                <Text style={styles.sectionHeaderText}>
-                  📅 [01-03] Kỳ kê khai
+          {!periodType ? (
+            <Text style={styles.helperText}>
+              Chọn loại kỳ kê khai để nhập thời gian.
+            </Text>
+          ) : (
+            <>
+              {/* THÁNG */}
+              {periodType === "month" && (
+                <TouchableOpacity
+                  onPress={openPeriodPicker}
+                  style={styles.secondaryBtn}
+                >
+                  <Text style={styles.secondaryBtnText}>
+                    Tháng: {dayjs(monthKey, "YYYY-MM").format("MM/YYYY")}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {/* QUÝ */}
+              {periodType === "quarter" && (
+                <TouchableOpacity
+                  onPress={openPeriodPicker}
+                  style={styles.secondaryBtn}
+                >
+                  <Text style={styles.secondaryBtnText}>Quý: {quarterKey}</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* NĂM */}
+              {periodType === "year" && (
+                <TouchableOpacity
+                  onPress={openPeriodPicker}
+                  style={styles.secondaryBtn}
+                >
+                  <Text style={styles.secondaryBtnText}>Năm: {yearKey}</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* CUSTOM */}
+              {periodType === "custom" && (
+                <>
+                  <TouchableOpacity
+                    onPress={() => openCustomPicker("from")}
+                    style={styles.secondaryBtn}
+                  >
+                    <Text style={styles.secondaryBtnText}>
+                      Từ tháng: {dayjs(monthFrom, "YYYY-MM").format("MM/YYYY")}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => openCustomPicker("to")}
+                    style={styles.secondaryBtn}
+                  >
+                    <Text style={styles.secondaryBtnText}>
+                      Đến tháng: {dayjs(monthTo, "YYYY-MM").format("MM/YYYY")}
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              )}
+
+              {/* CHỈ 1 DateTimePicker DUY NHẤT */}
+              {showPicker && (
+                <View style={{ marginTop: 8 }}>
+                  <DateTimePicker
+                    value={tempDate}
+                    mode="date"
+                    display={Platform.OS === "ios" ? "spinner" : "default"}
+                    onChange={onChangePicker}
+                    locale="vi-VN"
+                  />
+
+                  {/* iOS spinner: thêm nút đóng để người dùng cuộn chọn xong rồi bấm Xong */}
+                  {Platform.OS === "ios" && (
+                    <TouchableOpacity
+                      onPress={closePicker}
+                      style={styles.smallBtn}
+                    >
+                      <Text style={styles.smallBtnText}>Xong</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+
+              <View style={styles.actionRow}>
+                <TouchableOpacity
+                  onPress={fetchPreview}
+                  disabled={loading || !hasValidPeriod}
+                  style={[
+                    styles.primaryBtn,
+                    (loading || !hasValidPeriod) && styles.btnDisabled,
+                  ]}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.primaryBtnText}>
+                      Xem doanh thu hệ thống
+                    </Text>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={resetForm}
+                  style={styles.secondaryBtn}
+                >
+                  <Text style={styles.secondaryBtnText}>
+                    {isEditing ? "Hủy chỉnh sửa" : "Làm mới"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {!!periodKey && (
+                <View
+                  style={{
+                    marginTop: 10,
+                    flexDirection: "row",
+                    gap: 8,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <Chip text={`Kỳ: ${periodKey}`} color="#2563eb" />
+                  {systemRevenue !== null && (
+                    <Chip
+                      text={`Doanh thu: ${formatVND(systemRevenue)}`}
+                      color="#10b981"
+                    />
+                  )}
+                  {systemRevenue !== null && (
+                    <Chip text={`Đơn: ${orderCount}`} color="#f59e0b" />
+                  )}
+                </View>
+              )}
+            </>
+          )}
+        </View>
+
+        {/* Form (only after preview) */}
+        {systemRevenue !== null && (
+          <>
+            {/* Taxpayer info */}
+            <View style={styles.card}>
+              <SectionTitle title="2) Thông tin người nộp thuế" />
+              <Field
+                label="Người nộp thuế"
+                value={taxpayerName}
+                onChangeText={setTaxpayerName}
+                placeholder="Họ tên"
+              />
+              <Field
+                label="Tên cửa hàng/Thương hiệu"
+                value={storeName}
+                onChangeText={setStoreName}
+                placeholder="Tên cửa hàng"
+              />
+              <Field
+                label="Mã số thuế"
+                value={taxCode}
+                onChangeText={setTaxCode}
+                placeholder="10-13 chữ số"
+                keyboardType="number-pad"
+              />
+              <Field
+                label="Tài khoản ngân hàng"
+                value={bankAccount}
+                onChangeText={setBankAccount}
+                placeholder="Số tài khoản"
+              />
+              <Field
+                label="Ngành nghề kinh doanh"
+                value={businessSector}
+                onChangeText={setBusinessSector}
+                placeholder="VD: Bán lẻ..."
+              />
+              <Field
+                label="Diện tích kinh doanh (m²)"
+                value={businessAreaText}
+                onChangeText={setBusinessAreaText}
+                placeholder="0"
+                keyboardType="number-pad"
+              />
+              <Field
+                label="Số lao động"
+                value={employeeCountText}
+                onChangeText={setEmployeeCountText}
+                placeholder="0"
+                keyboardType="number-pad"
+              />
+              <View style={styles.row2}>
+                <View style={{ flex: 1 }}>
+                  <Field
+                    label="Giờ mở (HH:mm)"
+                    value={workingHoursFrom}
+                    onChangeText={setWorkingHoursFrom}
+                    placeholder="08:00"
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Field
+                    label="Giờ đóng (HH:mm)"
+                    value={workingHoursTo}
+                    onChangeText={setWorkingHoursTo}
+                    placeholder="22:00"
+                  />
+                </View>
+              </View>
+              <Field
+                label="Địa chỉ kinh doanh"
+                value={businessAddressFull}
+                onChangeText={setBusinessAddressFull}
+                placeholder="Địa chỉ"
+              />
+              <View style={styles.row2}>
+                <View style={{ flex: 1 }}>
+                  <Field
+                    label="Điện thoại"
+                    value={phone}
+                    onChangeText={setPhone}
+                    placeholder="SĐT"
+                    keyboardType="phone-pad"
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Field
+                    label="Email"
+                    value={email}
+                    onChangeText={setEmail}
+                    placeholder="Email"
+                    keyboardType="email-address"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.toggleRow}>
+                <TouchableOpacity
+                  onPress={() => setIsRented((p) => !p)}
+                  style={styles.toggleBtn}
+                >
+                  <Text style={styles.toggleText}>
+                    {isRented ? "✓ Có thuê mặt bằng" : "Thuê mặt bằng"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Part A */}
+            <View style={styles.card}>
+              <SectionTitle title="3) Thu GTGT & TNCN" />
+              <Field
+                label="Doanh thu kê khai"
+                value={declaredRevenueText}
+                onChangeText={setDeclaredRevenueText}
+                placeholder="Nhập doanh thu"
+                keyboardType="number-pad"
+              />
+              <View style={styles.row2}>
+                <View style={{ flex: 1 }}>
+                  <Field
+                    label="Thu suất GTGT (%)"
+                    value={gtgtRateText}
+                    onChangeText={setGtgtRateText}
+                    placeholder="1.0"
+                    keyboardType="numeric"
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Field
+                    label="Thu suất TNCN (%)"
+                    value={tncnRateText}
+                    onChangeText={setTncnRateText}
+                    placeholder="0.5"
+                    keyboardType="numeric"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.actionRow}>
+                <TouchableOpacity
+                  onPress={useSystemRevenue}
+                  style={styles.secondaryBtn}
+                >
+                  <Text style={styles.secondaryBtnText}>
+                    Dùng doanh thu hệ thống
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.summaryBox}>
+                <Text style={styles.summaryTitle}>Kết quả tính</Text>
+                <Text style={styles.summaryLine}>
+                  GTGT: {formatVND(calculatedTax.gtgt)}
                 </Text>
-                <Ionicons
-                  name={
-                    expandedSections.basicInfo ? "chevron-up" : "chevron-down"
-                  }
-                  size={18}
-                  color="#595959"
-                />
+                <Text style={styles.summaryLine}>
+                  TNCN: {formatVND(calculatedTax.tncn)}
+                </Text>
+                <Text style={styles.summaryTotal}>
+                  Tổng: {formatVND(calculatedTax.total)}
+                </Text>
+              </View>
+
+              <View style={styles.hr} />
+              <Text style={styles.subTitle}>
+                Doanh thu theo nhóm ngành nghề (tùy chọn)
+              </Text>
+
+              <TouchableOpacity
+                onPress={addCategoryRevenue}
+                style={styles.secondaryBtn}
+              >
+                <Text style={styles.secondaryBtnText}>+ Thêm ngành nghề</Text>
               </TouchableOpacity>
 
-              {expandedSections.basicInfo && (
-                <View style={styles.sectionBody}>
-                  <Text style={styles.inputLabel}>Loại kỳ</Text>
-
-                  {Platform.OS === "ios" ? (
-                    // iOS: dùng hàng nút lớn, dễ bấm
-                    <View style={styles.segmentGroup}>
-                      {PERIOD_TYPES.map((p) => {
-                        const selected = periodType === p.value;
+              {categoryRevenues.length === 0 ? (
+                <Text style={styles.helperText}>
+                  Chưa có ngành nghề. Có thể bỏ qua nếu không cần phân loại.
+                </Text>
+              ) : (
+                categoryRevenues.map((c, idx) => (
+                  <View key={idx} style={styles.itemCard}>
+                    <Text style={styles.label}>Ngành nghề</Text>
+                    <View style={styles.rowWrap}>
+                      {Object.keys(CATEGORY_MAP).map((k) => {
+                        const key = k as keyof typeof CATEGORY_MAP;
+                        const active = c.category === key;
                         return (
                           <TouchableOpacity
-                            key={p.value}
+                            key={key}
+                            onPress={() =>
+                              updateCategoryRevenue(idx, "category", key)
+                            }
                             style={[
-                              styles.segmentItem,
-                              selected && styles.segmentItemActive,
+                              styles.miniPill,
+                              active && styles.miniPillActive,
                             ]}
-                            onPress={() => {
-                              const v = p.value as PeriodType;
-                              setPeriodType(v);
-                              setPeriodKey("");
-                              setMonthFrom("");
-                              setMonthTo("");
-                              setSystemRevenue(null);
-                              setOrderCount(0);
-                            }}
                           >
                             <Text
                               style={[
-                                styles.segmentItemText,
-                                selected && styles.segmentItemTextActive,
+                                styles.miniPillText,
+                                active && styles.miniPillTextActive,
                               ]}
                             >
-                              {p.label}
+                              {CATEGORY_MAP[key].code}
                             </Text>
                           </TouchableOpacity>
                         );
                       })}
                     </View>
-                  ) : (
-                    // Android: giữ Picker cũ
-                    <View style={styles.pickerWrapper}>
-                      <Picker
-                        selectedValue={periodType}
-                        onValueChange={(v) => {
-                          setPeriodType(v as PeriodType);
-                          setPeriodKey("");
-                          setMonthFrom("");
-                          setMonthTo("");
-                          setSystemRevenue(null);
-                          setOrderCount(0);
-                        }}
-                      >
-                        <Picker.Item label="-- Chọn --" value="" />
-                        {PERIOD_TYPES.map((p) => (
-                          <Picker.Item
-                            key={p.value}
-                            label={p.label}
-                            value={p.value}
-                          />
-                        ))}
-                      </Picker>
-                    </View>
-                  )}
 
-                  {periodType && periodType !== "custom" && (
-                    <>
-                      <Text style={styles.inputLabel}>
-                        {periodType === "month"
-                          ? "Chọn tháng (YYYY-MM)"
-                          : periodType === "quarter"
-                            ? "Chọn quý (VD: 2025-Q1)"
-                            : "Chọn năm (YYYY)"}
-                      </Text>
-                      <TextInput
-                        style={styles.input}
-                        value={periodKey}
-                        onChangeText={setPeriodKey}
-                        placeholder={
-                          periodType === "month"
-                            ? "2025-01"
-                            : periodType === "quarter"
-                              ? "2025-Q1"
-                              : "2025"
-                        }
-                        placeholderTextColor="#bfbfbf"
-                      />
-                    </>
-                  )}
-
-                  {periodType === "custom" && (
-                    <>
-                      <Text style={styles.inputLabel}>Từ tháng (YYYY-MM)</Text>
-                      <TextInput
-                        style={styles.input}
-                        value={monthFrom}
-                        onChangeText={setMonthFrom}
-                        placeholder="2025-01"
-                        placeholderTextColor="#bfbfbf"
-                      />
-                      <Text style={styles.inputLabel}>Đến tháng (YYYY-MM)</Text>
-                      <TextInput
-                        style={styles.input}
-                        value={monthTo}
-                        onChangeText={setMonthTo}
-                        placeholder="2025-12"
-                        placeholderTextColor="#bfbfbf"
-                      />
-                    </>
-                  )}
-
-                  <TouchableOpacity
-                    style={[
-                      styles.primaryButton,
-                      !hasValidPeriod && { opacity: 0.5 },
-                    ]}
-                    disabled={!hasValidPeriod || loading}
-                    onPress={fetchPreview}
-                  >
-                    {loading ? (
-                      <ActivityIndicator color="#fff" />
-                    ) : (
-                      <>
-                        <Ionicons
-                          name="refresh-circle-outline"
-                          size={20}
-                          color="#fff"
+                    <View style={styles.row2}>
+                      <View style={{ flex: 1 }}>
+                        <Field
+                          label="Doanh thu"
+                          value={String(c.revenue ?? 0)}
+                          onChangeText={(t) =>
+                            updateCategoryRevenue(
+                              idx,
+                              "revenue",
+                              parseNumberInput(t)
+                            )
+                          }
+                          keyboardType="number-pad"
                         />
-                        <Text style={styles.primaryButtonText}>
-                          Xem doanh thu hệ thống
-                        </Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
-
-                  {systemRevenue !== null && (
-                    <View style={styles.systemRevenueCard}>
-                      <Text style={styles.systemRevenueTitle}>
-                        Doanh thu hệ thống (tham khảo)
-                      </Text>
-                      <Text style={styles.systemRevenueValue}>
-                        {formatVND(systemRevenue)}
-                      </Text>
-                      <Text style={styles.systemRevenueSub}>
-                        {orderCount} đơn hàng • {periodDisplay}
-                      </Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Field
+                          label="Thu GTGT"
+                          value={String(c.gtgtTax ?? 0)}
+                          onChangeText={(t) =>
+                            updateCategoryRevenue(
+                              idx,
+                              "gtgtTax",
+                              parseNumberInput(t)
+                            )
+                          }
+                          keyboardType="number-pad"
+                        />
+                      </View>
                     </View>
-                  )}
 
-                  <View style={styles.row}>
-                    <TouchableOpacity
-                      style={styles.checkboxRow}
-                      onPress={() => setIsFirstTime(!isFirstTime)}
-                    >
-                      <Ionicons
-                        name={isFirstTime ? "checkbox" : "square-outline"}
-                        size={22}
-                        color={isFirstTime ? "#1890ff" : "#bfbfbf"}
-                      />
-                      <Text style={styles.checkboxLabel}>
-                        [02] Lần đầu kê khai
-                      </Text>
-                    </TouchableOpacity>
-
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.inputLabel}>
-                        [03] Bổ sung lần thứ
-                      </Text>
-                      <TextInput
-                        style={styles.input}
-                        value={supplementNumber}
-                        onChangeText={setSupplementNumber}
-                        keyboardType="numeric"
-                        placeholder="0"
-                        placeholderTextColor="#bfbfbf"
-                      />
+                    <View style={styles.row2}>
+                      <View style={{ flex: 1 }}>
+                        <Field
+                          label="Thu TNCN"
+                          value={String(c.tncnTax ?? 0)}
+                          onChangeText={(t) =>
+                            updateCategoryRevenue(
+                              idx,
+                              "tncnTax",
+                              parseNumberInput(t)
+                            )
+                          }
+                          keyboardType="number-pad"
+                        />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <TouchableOpacity
+                          onPress={() => removeCategoryRevenue(idx)}
+                          style={[styles.dangerBtn, { marginTop: 22 }]}
+                        >
+                          <Text style={styles.dangerBtnText}>Xóa</Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
                   </View>
-                </View>
+                ))
+              )}
+
+              {categoryRevenues.length > 0 && (
+                <Text style={styles.helperText}>
+                  Tổng doanh thu theo ngành nghề:{" "}
+                  {formatVND(totalCategoryRevenue)} (so với kê khai:{" "}
+                  {formatVND(parseNumberInput(declaredRevenueText))})
+                </Text>
               )}
             </View>
 
-            {/* PHẦN A: THUẾ GTGT & TNCN */}
-            {systemRevenue !== null && (
-              <View style={styles.formSection}>
-                <TouchableOpacity
-                  style={styles.sectionHeader}
-                  onPress={() => toggleSection("taxDetails")}
-                >
-                  <Text style={styles.sectionHeaderText}>
-                    💰 PHẦN A: Thuế GTGT & TNCN
-                  </Text>
-                  <Ionicons
-                    name={
-                      expandedSections.taxDetails
-                        ? "chevron-up"
-                        : "chevron-down"
-                    }
-                    size={18}
-                    color="#595959"
-                  />
-                </TouchableOpacity>
-
-                {expandedSections.taxDetails && (
-                  <View style={styles.sectionBody}>
-                    <Text style={styles.inputLabel}>
-                      💵 [32] Doanh thu kê khai
-                    </Text>
-                    <TextInput
-                      style={styles.input}
-                      value={declaredRevenue}
-                      onChangeText={setDeclaredRevenue}
-                      keyboardType="numeric"
-                      placeholder="Nhập doanh thu..."
-                      placeholderTextColor="#bfbfbf"
-                    />
-
-                    <View style={styles.row}>
-                      <View style={{ flex: 1, marginRight: 8 }}>
-                        <Text style={styles.inputLabel}>Thuế GTGT (%)</Text>
-                        <TextInput
-                          style={styles.input}
-                          value={gtgtRate}
-                          onChangeText={setGtgtRate}
-                          keyboardType="decimal-pad"
-                          placeholder="1.0"
-                          placeholderTextColor="#bfbfbf"
-                        />
-                      </View>
-                      <View style={{ flex: 1, marginLeft: 8 }}>
-                        <Text style={styles.inputLabel}>Thuế TNCN (%)</Text>
-                        <TextInput
-                          style={styles.input}
-                          value={tncnRate}
-                          onChangeText={setTncnRate}
-                          keyboardType="decimal-pad"
-                          placeholder="0.5"
-                          placeholderTextColor="#bfbfbf"
-                        />
-                      </View>
-                    </View>
-
-                    <TouchableOpacity
-                      style={styles.outlineButton}
-                      onPress={calculateTax}
-                    >
-                      <Ionicons
-                        name="calculator-outline"
-                        size={20}
-                        color="#1890ff"
-                      />
-                      <Text style={styles.outlineButtonText}>Tính thuế</Text>
-                    </TouchableOpacity>
-
-                    {calculatedTax && (
-                      <View style={styles.taxResultCard}>
-                        <Text style={styles.taxResultTitle}>
-                          Kết quả tính thuế
-                        </Text>
-                        <View style={styles.taxRow}>
-                          <Text style={styles.taxLabel}>Thuế GTGT:</Text>
-                          <Text style={styles.taxValue}>
-                            {formatVND(calculatedTax.gtgt)}
-                          </Text>
-                        </View>
-                        <View style={styles.taxRow}>
-                          <Text style={styles.taxLabel}>Thuế TNCN:</Text>
-                          <Text style={styles.taxValue}>
-                            {formatVND(calculatedTax.tncn)}
-                          </Text>
-                        </View>
-                        <View style={styles.taxRow}>
-                          <Text style={styles.taxLabel}>Thuế TTĐB:</Text>
-                          <Text style={styles.taxValue}>
-                            {formatVND(totalSpecialTax)}
-                          </Text>
-                        </View>
-                        <View style={styles.taxRow}>
-                          <Text style={styles.taxLabel}>Thuế môi trường:</Text>
-                          <Text style={styles.taxValue}>
-                            {formatVND(totalEnvTax)}
-                          </Text>
-                        </View>
-                        <View style={styles.taxDivider} />
-                        <View style={styles.taxRow}>
-                          <Text style={styles.taxTotalLabel}>Tổng thuế:</Text>
-                          <Text style={styles.taxTotalValue}>
-                            {formatVND(calculatedTax.total)}
-                          </Text>
-                        </View>
-                      </View>
-                    )}
-                  </View>
-                )}
-              </View>
-            )}
-
-            {/* [28-31] DOANH THU THEO NGHỀ */}
-            {systemRevenue !== null && (
-              <View style={styles.formSection}>
-                <TouchableOpacity
-                  style={styles.sectionHeader}
-                  onPress={() => toggleSection("categoryRevenue")}
-                >
-                  <Text style={styles.sectionHeaderText}>
-                    📊 [28-31] Doanh thu theo ngành nghề
-                  </Text>
-                  <Ionicons
-                    name={
-                      expandedSections.categoryRevenue
-                        ? "chevron-up"
-                        : "chevron-down"
-                    }
-                    size={18}
-                    color="#595959"
-                  />
-                </TouchableOpacity>
-
-                {expandedSections.categoryRevenue && (
-                  <View style={styles.sectionBody}>
-                    {/* Thanh trên: nút thêm + tổng doanh thu */}
-                    <View style={styles.sectionHeaderRow}>
-                      <TouchableOpacity
-                        style={styles.outlineButton}
-                        onPress={addCategoryRevenue}
-                      >
-                        <Ionicons
-                          name="add-circle-outline"
-                          size={20}
-                          color="#1890ff"
-                        />
-                        <Text style={styles.outlineButtonText}>
-                          Thêm ngành nghề
-                        </Text>
-                      </TouchableOpacity>
-
-                      {categoryRevenues.length > 0 && (
-                        <View style={styles.summaryChip}>
-                          <Text style={styles.summaryChipLabel}>
-                            Tổng doanh thu:
-                          </Text>
-                          <Text style={styles.summaryChipValue}>
-                            {formatVND(totalDeclaredRevenue)}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-
-                    {categoryRevenues.map((cat, index) => (
-                      <View key={index} style={styles.itemCard}>
-                        <View style={styles.itemHeader}>
-                          <View>
-                            <Text style={styles.itemTitle}>
-                              Ngành nghề #{index + 1}
-                            </Text>
-                            <Text style={styles.itemSubtitle}>
-                              Chọn nhóm ngành và nhập doanh thu, thuế GTGT, thuế
-                              TNCN
-                            </Text>
-                          </View>
-                          <TouchableOpacity
-                            style={styles.iconCircleDanger}
-                            onPress={() => removeCategoryRevenue(index)}
-                          >
-                            <Ionicons name="close" size={18} color="#ff4d4f" />
-                          </TouchableOpacity>
-                        </View>
-
-                        {/* Nhóm ngành: iOS dùng chip, Android giữ Picker */}
-                        <Text style={styles.inputLabelStrong}>Nhóm ngành</Text>
-
-                        {Platform.OS === "ios" ? (
-                          <View style={styles.chipGroup}>
-                            {Object.entries(CATEGORY_MAP).map(([key, val]) => {
-                              const selected = cat.category === key;
-                              return (
-                                <TouchableOpacity
-                                  key={key}
-                                  style={[
-                                    styles.chip,
-                                    selected && styles.chipActive,
-                                  ]}
-                                  onPress={() =>
-                                    updateCategoryRevenue(
-                                      index,
-                                      "category",
-                                      key as CategoryRevenue["category"]
-                                    )
-                                  }
-                                >
-                                  <Text
-                                    style={[
-                                      styles.chipText,
-                                      selected && styles.chipTextActive,
-                                    ]}
-                                  >
-                                    {val.code} {val.name}
-                                  </Text>
-                                </TouchableOpacity>
-                              );
-                            })}
-                          </View>
-                        ) : (
-                          <View style={styles.pickerWrapper}>
-                            <Picker
-                              selectedValue={cat.category}
-                              onValueChange={(v) =>
-                                updateCategoryRevenue(
-                                  index,
-                                  "category",
-                                  v as CategoryRevenue["category"]
-                                )
-                              }
-                            >
-                              {Object.entries(CATEGORY_MAP).map(
-                                ([key, val]) => (
-                                  <Picker.Item
-                                    key={key}
-                                    label={`${val.code} ${val.name}`}
-                                    value={key}
-                                  />
-                                )
-                              )}
-                            </Picker>
-                          </View>
-                        )}
-
-                        {/* Doanh thu + Thuế */}
-                        <Text style={styles.inputLabelStrong}>
-                          Doanh thu (VND)
-                        </Text>
-                        <TextInput
-                          style={styles.inputFilled}
-                          value={cat.revenue.toString()}
-                          onChangeText={(v) =>
-                            updateCategoryRevenue(
-                              index,
-                              "revenue",
-                              Number(v) || 0
-                            )
-                          }
-                          keyboardType="numeric"
-                          placeholder="0"
-                          placeholderTextColor="#8c8c8c"
-                        />
-
-                        <View style={styles.row}>
-                          <View style={{ flex: 1, marginRight: 8 }}>
-                            <Text style={styles.inputLabelStrong}>
-                              Thuế GTGT
-                            </Text>
-                            <TextInput
-                              style={styles.inputFilled}
-                              value={cat.gtgtTax.toString()}
-                              onChangeText={(v) =>
-                                updateCategoryRevenue(
-                                  index,
-                                  "gtgtTax",
-                                  Number(v) || 0
-                                )
-                              }
-                              keyboardType="numeric"
-                              placeholder="0"
-                              placeholderTextColor="#8c8c8c"
-                            />
-                          </View>
-                          <View style={{ flex: 1, marginLeft: 8 }}>
-                            <Text style={styles.inputLabelStrong}>
-                              Thuế TNCN
-                            </Text>
-                            <TextInput
-                              style={styles.inputFilled}
-                              value={cat.tncnTax.toString()}
-                              onChangeText={(v) =>
-                                updateCategoryRevenue(
-                                  index,
-                                  "tncnTax",
-                                  Number(v) || 0
-                                )
-                              }
-                              keyboardType="numeric"
-                              placeholder="0"
-                              placeholderTextColor="#8c8c8c"
-                            />
-                          </View>
-                        </View>
-                      </View>
-                    ))}
-
-                    {categoryRevenues.length === 0 && (
-                      <Text style={styles.emptyHint}>
-                        Chưa có ngành nghề nào. Nhấn "Thêm ngành nghề" để bắt
-                        đầu.
-                      </Text>
-                    )}
-                  </View>
-                )}
-              </View>
-            )}
-
-            {/* PHẦN B: THUẾ TTĐB */}
-            {systemRevenue !== null && (
-              <View style={styles.formSection}>
-                <TouchableOpacity
-                  style={styles.sectionHeader}
-                  onPress={() => toggleSection("specialTax")}
-                >
-                  <Text style={styles.sectionHeaderText}>
-                    🍷 PHẦN B: Thuế tiêu thụ đặc biệt
-                  </Text>
-                  <Ionicons
-                    name={
-                      expandedSections.specialTax
-                        ? "chevron-up"
-                        : "chevron-down"
-                    }
-                    size={18}
-                    color="#595959"
-                  />
-                </TouchableOpacity>
-
-                {expandedSections.specialTax && (
-                  <View style={styles.sectionBody}>
-                    <TouchableOpacity
-                      style={styles.outlineButton}
-                      onPress={addSpecialTaxItem}
-                    >
-                      <Ionicons
-                        name="add-circle-outline"
-                        size={20}
-                        color="#1890ff"
-                      />
-                      <Text style={styles.outlineButtonText}>
-                        Thêm hàng hóa TTĐB
-                      </Text>
-                    </TouchableOpacity>
-
-                    {specialTaxItems.map((item, index) => (
-                      <View key={index} style={styles.itemCard}>
-                        <View style={styles.itemHeader}>
-                          <Text style={styles.itemTitle}>
-                            Hàng hóa #{index + 1}
-                          </Text>
-                          <TouchableOpacity
-                            onPress={() => removeSpecialTaxItem(index)}
-                          >
-                            <Ionicons
-                              name="close-circle"
-                              size={20}
-                              color="#ff4d4f"
-                            />
-                          </TouchableOpacity>
-                        </View>
-
-                        <Text style={styles.inputLabel}>
-                          [33] Tên hàng hóa/dịch vụ
-                        </Text>
-                        <TextInput
-                          style={styles.input}
-                          value={item.itemName}
-                          onChangeText={(v) =>
-                            updateSpecialTaxItem(index, "itemName", v)
-                          }
-                          placeholder="Ví dụ: Rượu vang, bia..."
-                          placeholderTextColor="#bfbfbf"
-                        />
-
-                        <View style={styles.row}>
-                          <View style={{ flex: 1, marginRight: 8 }}>
-                            <Text style={styles.inputLabel}>Đơn vị tính</Text>
-                            <TextInput
-                              style={styles.input}
-                              value={item.unit}
-                              onChangeText={(v) =>
-                                updateSpecialTaxItem(index, "unit", v)
-                              }
-                              placeholder="Chai, thùng..."
-                              placeholderTextColor="#bfbfbf"
-                            />
-                          </View>
-                          <View style={{ flex: 1, marginLeft: 8 }}>
-                            <Text style={styles.inputLabel}>Thuế suất (%)</Text>
-                            <TextInput
-                              style={styles.input}
-                              value={item.taxRate.toString()}
-                              onChangeText={(v) =>
-                                updateSpecialTaxItem(
-                                  index,
-                                  "taxRate",
-                                  Number(v) || 0
-                                )
-                              }
-                              keyboardType="decimal-pad"
-                              placeholder="0"
-                              placeholderTextColor="#bfbfbf"
-                            />
-                          </View>
-                        </View>
-
-                        <Text style={styles.inputLabel}>Doanh thu</Text>
-                        <TextInput
-                          style={styles.input}
-                          value={item.revenue.toString()}
-                          onChangeText={(v) =>
-                            updateSpecialTaxItem(
-                              index,
-                              "revenue",
-                              Number(v) || 0
-                            )
-                          }
-                          keyboardType="numeric"
-                          placeholder="0"
-                          placeholderTextColor="#bfbfbf"
-                        />
-
-                        <View style={styles.calculatedBox}>
-                          <Text style={styles.calculatedLabel}>
-                            Số thuế TTĐB:
-                          </Text>
-                          <Text style={styles.calculatedValue}>
-                            {formatVND(item.taxAmount)}
-                          </Text>
-                        </View>
-                      </View>
-                    ))}
-
-                    {specialTaxItems.length > 0 && (
-                      <View style={styles.summaryBox}>
-                        <Text style={styles.summaryLabel}>Tổng thuế TTĐB:</Text>
-                        <Text
-                          style={[styles.summaryValue, { color: "#d4380d" }]}
-                        >
-                          {formatVND(totalSpecialTax)}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                )}
-              </View>
-            )}
-
-            {/* PHẦN C: THUẾ/PHÍ MÔI TRƯỜNG */}
-            {systemRevenue !== null && (
-              <View style={styles.formSection}>
-                <TouchableOpacity
-                  style={styles.sectionHeader}
-                  onPress={() => toggleSection("envTax")}
-                >
-                  <Text style={styles.sectionHeaderText}>
-                    🌍 PHẦN C: Thuế/Phí môi trường
-                  </Text>
-                  <Ionicons
-                    name={
-                      expandedSections.envTax ? "chevron-up" : "chevron-down"
-                    }
-                    size={18}
-                    color="#595959"
-                  />
-                </TouchableOpacity>
-
-                {expandedSections.envTax && (
-                  <View style={styles.sectionBody}>
-                    {/* Thanh trên: nút thêm + tổng thuế */}
-                    <View style={styles.sectionHeaderRow}>
-                      <TouchableOpacity
-                        style={styles.outlineButton}
-                        onPress={addEnvTaxItem}
-                      >
-                        <Ionicons
-                          name="add-circle-outline"
-                          size={20}
-                          color="#1890ff"
-                        />
-                        <Text style={styles.outlineButtonText}>
-                          Thêm mục môi trường
-                        </Text>
-                      </TouchableOpacity>
-
-                      {envTaxItems.length > 0 && (
-                        <View style={styles.summaryChip}>
-                          <Text style={styles.summaryChipLabel}>
-                            Tổng thuế môi trường:
-                          </Text>
-                          <Text style={styles.summaryChipValue}>
-                            {formatVND(totalEnvTax)}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-
-                    {envTaxItems.map((item, index) => (
-                      <View key={index} style={styles.itemCard}>
-                        <View style={styles.itemHeader}>
-                          <View>
-                            <Text style={styles.itemTitle}>
-                              Mục môi trường #{index + 1}
-                            </Text>
-                            <Text style={styles.itemSubtitle}>
-                              Chọn loại thuế/phí và nhập số lượng, đơn giá, thuế
-                              suất.
-                            </Text>
-                          </View>
-                          <TouchableOpacity
-                            style={styles.iconCircleDanger}
-                            onPress={() => removeEnvTaxItem(index)}
-                          >
-                            <Ionicons name="close" size={18} color="#ff4d4f" />
-                          </TouchableOpacity>
-                        </View>
-
-                        {/* Loại thuế/phí: iOS dùng chip, Android giữ Picker */}
-                        <Text style={styles.inputLabelStrong}>
-                          Loại thuế/phí
-                        </Text>
-
-                        {Platform.OS === "ios" ? (
-                          <View style={styles.chipGroup}>
-                            {ENV_TAX_TYPES.map((t) => {
-                              const selected = item.type === t.value;
-                              return (
-                                <TouchableOpacity
-                                  key={t.value}
-                                  style={[
-                                    styles.chip,
-                                    selected && styles.chipActive,
-                                  ]}
-                                  onPress={() =>
-                                    updateEnvTaxItem(
-                                      index,
-                                      "type",
-                                      t.value as EnvTaxType
-                                    )
-                                  }
-                                >
-                                  <Text
-                                    style={[
-                                      styles.chipText,
-                                      selected && styles.chipTextActive,
-                                    ]}
-                                  >
-                                    {t.label}
-                                  </Text>
-                                </TouchableOpacity>
-                              );
-                            })}
-                          </View>
-                        ) : (
-                          <View style={styles.pickerWrapper}>
-                            <Picker
-                              selectedValue={item.type}
-                              onValueChange={(v) =>
-                                updateEnvTaxItem(index, "type", v as EnvTaxType)
-                              }
-                            >
-                              {ENV_TAX_TYPES.map((t) => (
-                                <Picker.Item
-                                  key={t.value}
-                                  label={t.label}
-                                  value={t.value}
-                                />
-                              ))}
-                            </Picker>
-                          </View>
-                        )}
-
-                        {/* Tên tài nguyên / hàng hóa */}
-                        <Text style={styles.inputLabelStrong}>
-                          Tên tài nguyên / hàng hóa
-                        </Text>
-                        <TextInput
-                          style={styles.inputFilled}
-                          value={item.itemName}
-                          onChangeText={(v) =>
-                            updateEnvTaxItem(index, "itemName", v)
-                          }
-                          placeholder="Ví dụ: Xăng, dầu, túi nilon..."
-                          placeholderTextColor="#8c8c8c"
-                        />
-
-                        {/* Đơn vị + Số lượng */}
-                        <View style={styles.row}>
-                          <View style={{ flex: 1, marginRight: 8 }}>
-                            <Text style={styles.inputLabelStrong}>
-                              Đơn vị tính
-                            </Text>
-                            <TextInput
-                              style={styles.inputFilled}
-                              value={item.unit}
-                              onChangeText={(v) =>
-                                updateEnvTaxItem(index, "unit", v)
-                              }
-                              placeholder="Lít, kg, túi..."
-                              placeholderTextColor="#8c8c8c"
-                            />
-                          </View>
-                          <View style={{ flex: 1, marginLeft: 8 }}>
-                            <Text style={styles.inputLabelStrong}>
-                              Số lượng
-                            </Text>
-                            <TextInput
-                              style={styles.inputFilled}
-                              value={item.quantity.toString()}
-                              onChangeText={(v) =>
-                                updateEnvTaxItem(
-                                  index,
-                                  "quantity",
-                                  Number(v) || 0
-                                )
-                              }
-                              keyboardType="numeric"
-                              placeholder="0"
-                              placeholderTextColor="#8c8c8c"
-                            />
-                          </View>
-                        </View>
-
-                        {/* Đơn giá + Thuế suất */}
-                        <View style={styles.row}>
-                          <View style={{ flex: 1, marginRight: 8 }}>
-                            <Text style={styles.inputLabelStrong}>Đơn giá</Text>
-                            <TextInput
-                              style={styles.inputFilled}
-                              value={item.unitPrice.toString()}
-                              onChangeText={(v) =>
-                                updateEnvTaxItem(
-                                  index,
-                                  "unitPrice",
-                                  Number(v) || 0
-                                )
-                              }
-                              keyboardType="numeric"
-                              placeholder="0"
-                              placeholderTextColor="#8c8c8c"
-                            />
-                          </View>
-                          <View style={{ flex: 1, marginLeft: 8 }}>
-                            <Text style={styles.inputLabelStrong}>
-                              Thuế suất (%)
-                            </Text>
-                            <TextInput
-                              style={styles.inputFilled}
-                              value={item.taxRate.toString()}
-                              onChangeText={(v) =>
-                                updateEnvTaxItem(
-                                  index,
-                                  "taxRate",
-                                  Number(v) || 0
-                                )
-                              }
-                              keyboardType="decimal-pad"
-                              placeholder="0"
-                              placeholderTextColor="#8c8c8c"
-                            />
-                          </View>
-                        </View>
-
-                        {/* Số thuế BVMT */}
-                        <View style={styles.calculatedBox}>
-                          <Text style={styles.calculatedLabel}>
-                            Số thuế BVMT:
-                          </Text>
-                          <Text style={styles.calculatedValue}>
-                            {formatVND(item.taxAmount)}
-                          </Text>
-                        </View>
-                      </View>
-                    ))}
-
-                    {envTaxItems.length === 0 && (
-                      <Text style={styles.emptyHint}>
-                        Chưa có mục môi trường nào. Nhấn "Thêm mục môi trường"
-                        để bắt đầu.
-                      </Text>
-                    )}
-                  </View>
-                )}
-              </View>
-            )}
-
-            {/* THÔNG TIN NGƯỜI NỘP THUẾ */}
-            {systemRevenue !== null && (
-              <View style={styles.formSection}>
-                <TouchableOpacity
-                  style={styles.sectionHeader}
-                  onPress={() => toggleSection("taxpayerInfo")}
-                >
-                  <Text style={styles.sectionHeaderText}>
-                    👤 [04-16] Người nộp thuế
-                  </Text>
-                  <Ionicons
-                    name={
-                      expandedSections.taxpayerInfo
-                        ? "chevron-up"
-                        : "chevron-down"
-                    }
-                    size={18}
-                    color="#595959"
-                  />
-                </TouchableOpacity>
-
-                {expandedSections.taxpayerInfo && (
-                  <View style={styles.sectionBody}>
-                    <Text style={styles.inputLabel}>[04] Người nộp thuế</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={taxpayerName}
-                      onChangeText={setTaxpayerName}
-                      placeholder="Họ tên đầy đủ"
-                      placeholderTextColor="#bfbfbf"
-                    />
-
-                    <Text style={styles.inputLabel}>
-                      [05] Tên cửa hàng/thương hiệu
-                    </Text>
-                    <TextInput
-                      style={styles.input}
-                      value={storeDisplayName}
-                      onChangeText={setStoreDisplayName}
-                      placeholder="Tên cửa hàng"
-                      placeholderTextColor="#bfbfbf"
-                    />
-
-                    <Text style={styles.inputLabel}>
-                      [06] Tài khoản ngân hàng
-                    </Text>
-                    <TextInput
-                      style={styles.input}
-                      value={bankAccount}
-                      onChangeText={setBankAccount}
-                      keyboardType="numeric"
-                      placeholder="Số tài khoản"
-                      placeholderTextColor="#bfbfbf"
-                    />
-
-                    <Text style={styles.inputLabel}>[07] Mã số thuế</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={taxCode}
-                      onChangeText={setTaxCode}
-                      keyboardType="numeric"
-                      placeholder="10-13 chữ số"
-                      placeholderTextColor="#bfbfbf"
-                    />
-
-                    <Text style={styles.inputLabel}>
-                      [08] Ngành nghề kinh doanh
-                    </Text>
-                    <TextInput
-                      style={styles.input}
-                      value={businessSector}
-                      onChangeText={setBusinessSector}
-                      placeholder="VD: Bán lẻ thực phẩm"
-                      placeholderTextColor="#bfbfbf"
-                    />
-
-                    <View style={styles.row}>
-                      <View style={{ flex: 1, marginRight: 8 }}>
-                        <Text style={styles.inputLabel}>
-                          [09] Diện tích (m²)
-                        </Text>
-                        <TextInput
-                          style={styles.input}
-                          value={businessArea}
-                          onChangeText={setBusinessArea}
-                          keyboardType="numeric"
-                          placeholder="0"
-                          placeholderTextColor="#bfbfbf"
-                        />
-                      </View>
-                      <View style={{ flex: 1, marginLeft: 8 }}>
-                        <Text style={styles.inputLabel}>[10] Số lao động</Text>
-                        <TextInput
-                          style={styles.input}
-                          value={employeeCount}
-                          onChangeText={setEmployeeCount}
-                          keyboardType="numeric"
-                          placeholder="0"
-                          placeholderTextColor="#bfbfbf"
-                        />
-                      </View>
-                    </View>
-
-                    <TouchableOpacity
-                      style={styles.checkboxRow}
-                      onPress={() => setIsRented(!isRented)}
-                    >
-                      <Ionicons
-                        name={isRented ? "checkbox" : "square-outline"}
-                        size={22}
-                        color={isRented ? "#1890ff" : "#bfbfbf"}
-                      />
-                      <Text style={styles.checkboxLabel}>
-                        [09a] Địa điểm đi thuê
-                      </Text>
-                    </TouchableOpacity>
-
-                    <Text style={styles.inputLabel}>
-                      [11] Thời gian hoạt động
-                    </Text>
-                    <View style={styles.row}>
-                      <View style={{ flex: 1, marginRight: 8 }}>
-                        <Text style={styles.subLabel}>Từ</Text>
-                        <TextInput
-                          style={styles.input}
-                          value={workingHoursFrom}
-                          onChangeText={setWorkingHoursFrom}
-                          placeholder="08:00"
-                          placeholderTextColor="#bfbfbf"
-                        />
-                      </View>
-                      <View style={{ flex: 1, marginLeft: 8 }}>
-                        <Text style={styles.subLabel}>Đến</Text>
-                        <TextInput
-                          style={styles.input}
-                          value={workingHoursTo}
-                          onChangeText={setWorkingHoursTo}
-                          placeholder="22:00"
-                          placeholderTextColor="#bfbfbf"
-                        />
-                      </View>
-                    </View>
-
-                    <Text style={styles.inputLabel}>
-                      [12] Địa chỉ kinh doanh
-                    </Text>
-                    <TextInput
-                      style={[styles.input, { height: 70 }]}
-                      value={businessAddress}
-                      onChangeText={setBusinessAddress}
-                      placeholder="Địa chỉ đầy đủ"
-                      placeholderTextColor="#bfbfbf"
-                      multiline
-                    />
-
-                    <View style={styles.row}>
-                      <View style={{ flex: 1, marginRight: 8 }}>
-                        <Text style={styles.inputLabel}>[14] Điện thoại</Text>
-                        <TextInput
-                          style={styles.input}
-                          value={phone}
-                          onChangeText={setPhone}
-                          keyboardType="phone-pad"
-                          placeholder="Số điện thoại"
-                          placeholderTextColor="#bfbfbf"
-                        />
-                      </View>
-                      <View style={{ flex: 1, marginLeft: 8 }}>
-                        <Text style={styles.inputLabel}>[16] Email</Text>
-                        <TextInput
-                          style={styles.input}
-                          value={email}
-                          onChangeText={setEmail}
-                          keyboardType="email-address"
-                          placeholder="Email"
-                          autoCapitalize="none"
-                          placeholderTextColor="#bfbfbf"
-                        />
-                      </View>
-                    </View>
-                  </View>
-                )}
-              </View>
-            )}
-
-            {/* GHI CHÚ & CAM ĐOAN */}
-            {systemRevenue !== null && (
-              <View style={styles.formSection}>
-                <TouchableOpacity
-                  style={styles.sectionHeader}
-                  onPress={() => toggleSection("notes")}
-                >
-                  <Text style={styles.sectionHeaderText}>
-                    📝 Ghi chú & Cam đoan
-                  </Text>
-                  <Ionicons
-                    name={
-                      expandedSections.notes ? "chevron-up" : "chevron-down"
-                    }
-                    size={18}
-                    color="#595959"
-                  />
-                </TouchableOpacity>
-
-                {expandedSections.notes && (
-                  <View style={styles.sectionBody}>
-                    <Text style={styles.inputLabel}>Ghi chú bổ sung</Text>
-                    <TextInput
-                      style={[styles.input, { height: 100 }]}
-                      value={notes}
-                      onChangeText={setNotes}
-                      multiline
-                      maxLength={500}
-                      placeholder="Nhập ghi chú cho tờ khai (tùy chọn)..."
-                      placeholderTextColor="#bfbfbf"
-                    />
-                    <Text style={styles.charCount}>{notes.length}/500</Text>
-
-                    <View style={styles.infoBox}>
-                      <Ionicons
-                        name="checkmark-circle"
-                        size={20}
-                        color="#52c41a"
-                      />
-                      <Text style={styles.infoText}>
-                        Tôi cam đoan số liệu khai trên là đúng và chịu trách
-                        nhiệm trước pháp luật về những số liệu đã khai.
-                      </Text>
-                    </View>
-                  </View>
-                )}
-              </View>
-            )}
-
-            <View style={{ height: 100 }} />
-          </ScrollView>
-
-          {/* FOOTER SUBMIT */}
-          {systemRevenue !== null && (
-            <View style={styles.modalFooter}>
+            {/* Part B */}
+            <View style={styles.card}>
+              <SectionTitle title="4) Thu tiêu thụ đặc biệt (nếu có)" />
               <TouchableOpacity
-                style={styles.submitButton}
-                onPress={submitDeclaration}
-                disabled={loading}
+                onPress={addSpecialTaxItem}
+                style={styles.secondaryBtn}
               >
-                <LinearGradient
-                  colors={["#52c41a", "#389e0d"]}
-                  style={styles.submitButtonInner}
+                <Text style={styles.secondaryBtnText}>+ Thêm mặt hàng</Text>
+              </TouchableOpacity>
+
+              {specialTaxItems.length === 0 ? (
+                <Text style={styles.helperText}>
+                  Không có mặt hàng chịu thuế TTĐB có thể bỏ qua.
+                </Text>
+              ) : (
+                specialTaxItems.map((it, idx) => (
+                  <View key={idx} style={styles.itemCard}>
+                    <Field
+                      label="Tên hàng hóa/dịch vụ"
+                      value={it.itemName}
+                      onChangeText={(t) =>
+                        updateSpecialTaxItem(idx, "itemName", t)
+                      }
+                    />
+                    <View style={styles.row2}>
+                      <View style={{ flex: 1 }}>
+                        <Field
+                          label="Đơn vị"
+                          value={it.unit}
+                          onChangeText={(t) =>
+                            updateSpecialTaxItem(idx, "unit", t)
+                          }
+                        />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Field
+                          label="Doanh thu"
+                          value={String(it.revenue)}
+                          onChangeText={(t) =>
+                            updateSpecialTaxItem(
+                              idx,
+                              "revenue",
+                              parseNumberInput(t)
+                            )
+                          }
+                          keyboardType="number-pad"
+                        />
+                      </View>
+                    </View>
+                    <View style={styles.row2}>
+                      <View style={{ flex: 1 }}>
+                        <Field
+                          label="Thu suất (%)"
+                          value={String(it.taxRate)}
+                          onChangeText={(t) =>
+                            updateSpecialTaxItem(
+                              idx,
+                              "taxRate",
+                              parseNumberInput(t)
+                            )
+                          }
+                          keyboardType="numeric"
+                        />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.label}>Số thuế</Text>
+                        <View style={styles.readonlyBox}>
+                          <Text style={styles.readonlyText}>
+                            {formatVND(it.taxAmount)}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+
+                    <TouchableOpacity
+                      onPress={() => removeSpecialTaxItem(idx)}
+                      style={styles.dangerBtn}
+                    >
+                      <Text style={styles.dangerBtnText}>Xóa mặt hàng</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))
+              )}
+            </View>
+
+            {/* Part C */}
+            <View style={styles.card}>
+              <SectionTitle title="5) Thu/Phí môi trường (nếu có)" />
+              <TouchableOpacity
+                onPress={addEnvTaxItem}
+                style={styles.secondaryBtn}
+              >
+                <Text style={styles.secondaryBtnText}>+ Thêm mục</Text>
+              </TouchableOpacity>
+
+              {envTaxItems.length === 0 ? (
+                <Text style={styles.helperText}>
+                  Không có mục môi trường có thể bỏ qua.
+                </Text>
+              ) : (
+                envTaxItems.map((it, idx) => (
+                  <View key={idx} style={styles.itemCard}>
+                    <Text style={styles.label}>Loại</Text>
+                    <View style={styles.row}>
+                      {[
+                        { v: "resource", t: "Thu tài nguyên" },
+                        { v: "environmentaltax", t: "Thu BVMT" },
+                        { v: "environmentalfee", t: "Phí BVMT" },
+                      ].map((opt) => {
+                        const active = it.type === (opt.v as any);
+                        return (
+                          <TouchableOpacity
+                            key={opt.v}
+                            onPress={() => updateEnvTaxItem(idx, "type", opt.v)}
+                            style={[styles.pill, active && styles.pillActive]}
+                          >
+                            <Text
+                              style={[
+                                styles.pillText,
+                                active && styles.pillTextActive,
+                              ]}
+                            >
+                              {opt.t}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+
+                    <Field
+                      label="Tên"
+                      value={it.itemName}
+                      onChangeText={(t) => updateEnvTaxItem(idx, "itemName", t)}
+                    />
+                    <View style={styles.row2}>
+                      <View style={{ flex: 1 }}>
+                        <Field
+                          label="Đơn vị"
+                          value={it.unit}
+                          onChangeText={(t) => updateEnvTaxItem(idx, "unit", t)}
+                        />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Field
+                          label="Số lượng"
+                          value={String(it.quantity)}
+                          onChangeText={(t) =>
+                            updateEnvTaxItem(
+                              idx,
+                              "quantity",
+                              parseNumberInput(t)
+                            )
+                          }
+                          keyboardType="number-pad"
+                        />
+                      </View>
+                    </View>
+
+                    <View style={styles.row2}>
+                      <View style={{ flex: 1 }}>
+                        <Field
+                          label="Đơn giá"
+                          value={String(it.unitPrice)}
+                          onChangeText={(t) =>
+                            updateEnvTaxItem(
+                              idx,
+                              "unitPrice",
+                              parseNumberInput(t)
+                            )
+                          }
+                          keyboardType="number-pad"
+                        />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Field
+                          label="Thu suất (%)"
+                          value={String(it.taxRate)}
+                          onChangeText={(t) =>
+                            updateEnvTaxItem(
+                              idx,
+                              "taxRate",
+                              parseNumberInput(t)
+                            )
+                          }
+                          keyboardType="numeric"
+                        />
+                      </View>
+                    </View>
+
+                    <Text style={styles.helperText}>
+                      Số thuế: {formatVND(it.taxAmount)}
+                    </Text>
+
+                    <TouchableOpacity
+                      onPress={() => removeEnvTaxItem(idx)}
+                      style={styles.dangerBtn}
+                    >
+                      <Text style={styles.dangerBtnText}>Xóa mục</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))
+              )}
+            </View>
+
+            {/* Notes + submit */}
+            <View style={styles.card}>
+              <SectionTitle title="Ghi chú & lưu/nộp" />
+              <Field
+                label="Ghi chú"
+                value={notes}
+                onChangeText={setNotes}
+                placeholder="Ghi chú bổ sung..."
+              />
+
+              <View style={styles.row2}>
+                <View style={{ flex: 1 }}>
+                  <Field
+                    label="Bổ sung lần thứ"
+                    value={supplementNumberText}
+                    onChangeText={setSupplementNumberText}
+                    placeholder="0"
+                    keyboardType="number-pad"
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <TouchableOpacity
+                    onPress={() => setIsFirstTime((p) => !p)}
+                    style={[styles.toggleBtn, { marginTop: 22 }]}
+                  >
+                    <Text style={styles.toggleText}>
+                      {isFirstTime ? "✓ Lần đầu kê khai" : "Lần đầu kê khai"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={styles.actionRow}>
+                <TouchableOpacity
+                  onPress={() => submitDeclaration("saved")}
+                  disabled={submitLoading}
+                  style={[
+                    styles.primaryBtn,
+                    submitLoading && styles.btnDisabled,
+                  ]}
                 >
-                  {loading ? (
+                  {submitLoading ? (
                     <ActivityIndicator color="#fff" />
                   ) : (
-                    <>
-                      <Ionicons name="save-outline" size={22} color="#fff" />
-                      <Text style={styles.submitButtonText}>Lưu tờ khai</Text>
-                    </>
+                    <Text style={styles.primaryBtnText}>
+                      {isEditing ? "Cập nhật tờ khai" : "Lưu tờ khai"}
+                    </Text>
                   )}
-                </LinearGradient>
-              </TouchableOpacity>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => submitDeclaration("submitted")}
+                  disabled={submitLoading}
+                  style={[
+                    styles.dangerBtn,
+                    submitLoading && styles.btnDisabled,
+                  ]}
+                >
+                  {submitLoading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.dangerBtnText}>Nộp tờ khai</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
+          </>
+        )}
+
+        {/* History list */}
+        <View style={styles.card}>
+          <SectionTitle title="Lịch sử tờ khai" />
+          <Text style={styles.helperText}>
+            Đang hiển thị {declarations.length}/{totalCount} tờ khai (trang{" "}
+            {page})
+          </Text>
+
+          {declarations.length === 0 ? (
+            <View style={styles.emptyBox}>
+              <Text style={styles.emptyTitle}>Chưa có tờ khai</Text>
+              <Text style={styles.emptySub}>
+                Bấm “Xem doanh thu hệ thống” để bắt đầu kê khai.
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={declarations}
+              keyExtractor={(it) => it.id}
+              scrollEnabled={false}
+              ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+              renderItem={({ item }) => {
+                const cfg = STATUS_CONFIG[item.status] || STATUS_CONFIG.draft;
+                return (
+                  <View style={styles.listItem}>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                        gap: 12,
+                      }}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.listTitle}>
+                          Kỳ: {item.periodKey}
+                        </Text>
+                        <Text style={styles.listSub}>
+                          Doanh thu:{" "}
+                          {formatVND(Number(item.declaredRevenue || 0))}
+                        </Text>
+                        <Text style={styles.listSub}>
+                          Tổng thuế:{" "}
+                          {formatVND(Number(item.taxAmounts?.total || 0))}
+                        </Text>
+                      </View>
+                      <View style={{ alignItems: "flex-end" }}>
+                        <Chip text={cfg.text} color={cfg.color} />
+                        <Text style={styles.listTime}>
+                          {item.createdAt
+                            ? dayjs(item.createdAt).format("DD/MM/YYYY")
+                            : ""}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.actionRowWrap}>
+                      <TouchableOpacity
+                        onPress={() => {
+                          setExportTargetId(item.id);
+                          openDetail(item.id);
+                        }}
+                        style={styles.smallBtn}
+                      >
+                        <Text style={styles.smallBtnText}>Chi tiết</Text>
+                      </TouchableOpacity>
+
+                      {canEditRecord(item) && (
+                        <TouchableOpacity
+                          onPress={() => loadForEdit(item.id)}
+                          style={styles.smallBtn}
+                        >
+                          <Text style={styles.smallBtnText}>Sửa</Text>
+                        </TouchableOpacity>
+                      )}
+
+                      <TouchableOpacity
+                        onPress={() => handleClone(item.id)}
+                        style={styles.smallBtn}
+                      >
+                        <Text style={styles.smallBtnText}>Nhân bản</Text>
+                      </TouchableOpacity>
+
+                      {canApprove(item) && (
+                        <>
+                          <TouchableOpacity
+                            onPress={() => showApproveConfirm(item.id)}
+                            style={styles.smallBtnSuccess}
+                          >
+                            <Text style={styles.smallBtnTextWhite}>Duyệt</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            onPress={() => showRejectModal(item.id)}
+                            style={styles.smallBtnDanger}
+                          >
+                            <Text style={styles.smallBtnTextWhite}>
+                              Từ chối
+                            </Text>
+                          </TouchableOpacity>
+                        </>
+                      )}
+
+                      {canDelete(item) && (
+                        <TouchableOpacity
+                          onPress={() => handleDelete(item.id)}
+                          style={styles.smallBtnDanger}
+                        >
+                          <Text style={styles.smallBtnTextWhite}>Xóa</Text>
+                        </TouchableOpacity>
+                      )}
+
+                      {/* Export placeholder */}
+                      {/* Export */}
+                      <TouchableOpacity
+                        onPress={() => {
+                          Alert.alert("Xuất file", "Chọn định dạng", [
+                            { text: "Hủy", style: "cancel" },
+                            {
+                              text: "Xuất CSV",
+                              onPress: () => handleExport(item.id, "csv"),
+                            },
+                            {
+                              text: "Xuất PDF",
+                              onPress: () => handleExport(item.id, "pdf"),
+                            },
+                          ]);
+                        }}
+                        style={styles.smallBtn}
+                      >
+                        <Text style={styles.smallBtnText}>Xuất file</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              }}
+            />
           )}
-        </KeyboardAvoidingView>
-      </Modal>
 
-      {/* MODAL CHI TIẾT */}
-      <Modal
-        visible={detailModalVisible}
-        animationType="slide"
-        onRequestClose={() => setDetailModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
+          <View style={styles.paginationRow}>
             <TouchableOpacity
-              onPress={() => setDetailModalVisible(false)}
-              style={styles.closeButton}
+              onPress={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              style={[styles.secondaryBtn, page <= 1 && styles.btnDisabled]}
             >
-              <Ionicons name="close" size={26} color="#000" />
+              <Text style={styles.secondaryBtnText}>Trang trước</Text>
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>Chi tiết tờ khai</Text>
-            <View style={{ width: 26 }} />
+
+            <TouchableOpacity
+              onPress={() => setPage((p) => p + 1)}
+              disabled={declarations.length < pageSize}
+              style={[
+                styles.secondaryBtn,
+                declarations.length < pageSize && styles.btnDisabled,
+              ]}
+            >
+              <Text style={styles.secondaryBtnText}>Trang sau</Text>
+            </TouchableOpacity>
           </View>
-          <ScrollView style={styles.modalContent}>
-            {selectedRecord && (
-              <View>
-                <View style={styles.detailBlock}>
-                  <Text style={styles.detailLabel}>Kỳ kê khai</Text>
-                  <Text style={styles.detailValue}>
-                    {selectedRecord.periodKey}
+        </View>
+      </ScrollView>
+
+      {/* Detail Modal */}
+      <Modal
+        visible={detailVisible}
+        animationType="slide"
+        onRequestClose={() => setDetailVisible(false)}
+      >
+        <View style={styles.modalRoot}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Chi tiết tờ khai</Text>
+            <TouchableOpacity
+              onPress={() => setDetailVisible(false)}
+              style={styles.modalCloseBtn}
+            >
+              <Text style={styles.modalCloseText}>Đóng</Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="none"
+            style={{ flex: 1 }}
+            contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
+          >
+            {!selectedRecord ? (
+              <View style={styles.center}>
+                <ActivityIndicator />
+              </View>
+            ) : (
+              <>
+                <View style={styles.card}>
+                  <Text style={styles.listTitle}>
+                    Kỳ: {selectedRecord.periodKey}
+                  </Text>
+                  <Text style={styles.listSub}>
+                    Trạng thái:{" "}
+                    {STATUS_CONFIG[selectedRecord.status]?.text ||
+                      selectedRecord.status}
+                  </Text>
+                  <Text style={styles.listSub}>
+                    Doanh thu kê khai:{" "}
+                    {formatVND(Number(selectedRecord.declaredRevenue || 0))}
+                  </Text>
+                  <Text style={styles.listSub}>
+                    Thu GTGT:{" "}
+                    {formatVND(Number(selectedRecord.taxAmounts?.gtgt || 0))}
+                  </Text>
+                  <Text style={styles.listSub}>
+                    Thu TNCN:{" "}
+                    {formatVND(Number(selectedRecord.taxAmounts?.tncn || 0))}
+                  </Text>
+                  <Text style={[styles.listSub, { fontWeight: "800" }]}>
+                    Tổng thu:{" "}
+                    {formatVND(Number(selectedRecord.taxAmounts?.total || 0))}
                   </Text>
 
-                  <Text style={styles.detailLabel}>Doanh thu kê khai</Text>
-                  <Text style={[styles.detailValue, { color: "#1890ff" }]}>
-                    {formatVND(selectedRecord.declaredRevenue)}
-                  </Text>
-
-                  <Text style={styles.detailLabel}>Thuế GTGT</Text>
-                  <Text style={styles.detailValue}>
-                    {formatVND(selectedRecord.taxAmounts?.gtgt)}
-                  </Text>
-
-                  <Text style={styles.detailLabel}>Thuế TNCN</Text>
-                  <Text style={styles.detailValue}>
-                    {formatVND(selectedRecord.taxAmounts?.tncn)}
-                  </Text>
-
-                  <Text style={styles.detailLabel}>Tổng thuế</Text>
-                  <Text style={[styles.detailValue, { color: "#d4380d" }]}>
-                    {formatVND(selectedRecord.taxAmounts?.total)}
-                  </Text>
+                  {!!selectedRecord.rejectionReason && (
+                    <Text style={[styles.listSub, { color: "#ef4444" }]}>
+                      Lý do từ chối: {selectedRecord.rejectionReason}
+                    </Text>
+                  )}
                 </View>
 
                 {selectedRecord.taxpayerInfo && (
-                  <View style={styles.detailBlock}>
-                    <Text style={styles.detailBlockTitle}>
-                      Thông tin người nộp thuế
+                  <View style={styles.card}>
+                    <SectionTitle title="Thông tin người nộp thuế" />
+                    <Text style={styles.listSub}>
+                      Người nộp thuế: {selectedRecord.taxpayerInfo.name || ""}
                     </Text>
-                    {selectedRecord.taxpayerInfo.name && (
-                      <>
-                        <Text style={styles.detailLabel}>Người nộp thuế</Text>
-                        <Text style={styles.detailValue}>
-                          {selectedRecord.taxpayerInfo.name}
-                        </Text>
-                      </>
-                    )}
-                    {selectedRecord.taxpayerInfo.storeName && (
-                      <>
-                        <Text style={styles.detailLabel}>Cửa hàng</Text>
-                        <Text style={styles.detailValue}>
-                          {selectedRecord.taxpayerInfo.storeName}
-                        </Text>
-                      </>
-                    )}
-                    {selectedRecord.taxpayerInfo.taxCode && (
-                      <>
-                        <Text style={styles.detailLabel}>Mã số thuế</Text>
-                        <Text style={styles.detailValue}>
-                          {selectedRecord.taxpayerInfo.taxCode}
-                        </Text>
-                      </>
-                    )}
-                    {selectedRecord.taxpayerInfo.phone && (
-                      <>
-                        <Text style={styles.detailLabel}>Điện thoại</Text>
-                        <Text style={styles.detailValue}>
-                          {selectedRecord.taxpayerInfo.phone}
-                        </Text>
-                      </>
-                    )}
-                    {selectedRecord.taxpayerInfo.email && (
-                      <>
-                        <Text style={styles.detailLabel}>Email</Text>
-                        <Text style={styles.detailValue}>
-                          {selectedRecord.taxpayerInfo.email}
-                        </Text>
-                      </>
-                    )}
-                    {selectedRecord.taxpayerInfo.businessAddress?.full && (
-                      <>
-                        <Text style={styles.detailLabel}>
-                          Địa chỉ kinh doanh
-                        </Text>
-                        <Text style={styles.detailValue}>
-                          {selectedRecord.taxpayerInfo.businessAddress.full}
-                        </Text>
-                      </>
-                    )}
-                  </View>
-                )}
-
-                {selectedRecord.revenueByCategory &&
-                  selectedRecord.revenueByCategory.length > 0 && (
-                    <View style={styles.detailBlock}>
-                      <Text style={styles.detailBlockTitle}>
-                        Doanh thu theo ngành nghề
-                      </Text>
-                      {selectedRecord.revenueByCategory.map((cat, idx) => (
-                        <View key={idx} style={styles.detailRowInline}>
-                          <Text style={styles.detailInlineLabel}>
-                            {CATEGORY_MAP[cat.category]?.name ||
-                              (cat.category as string)}
-                          </Text>
-                          <Text style={styles.detailInlineValue}>
-                            {formatVND(cat.revenue)}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-
-                {selectedRecord.specialConsumptionTax &&
-                  selectedRecord.specialConsumptionTax.length > 0 && (
-                    <View style={styles.detailBlock}>
-                      <Text style={styles.detailBlockTitle}>
-                        Thuế tiêu thụ đặc biệt
-                      </Text>
-                      {selectedRecord.specialConsumptionTax.map((item, idx) => (
-                        <View key={idx} style={styles.detailRowInline}>
-                          <Text style={styles.detailInlineLabel}>
-                            {item.itemName}
-                          </Text>
-                          <Text style={styles.detailInlineValue}>
-                            {formatVND(item.taxAmount)}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-
-                {selectedRecord.environmentalTax &&
-                  selectedRecord.environmentalTax.length > 0 && (
-                    <View style={styles.detailBlock}>
-                      <Text style={styles.detailBlockTitle}>
-                        Thuế/Phí môi trường
-                      </Text>
-                      {selectedRecord.environmentalTax.map((item, idx) => (
-                        <View key={idx} style={styles.detailRowInline}>
-                          <Text style={styles.detailInlineLabel}>
-                            {item.itemName}
-                          </Text>
-                          <Text style={styles.detailInlineValue}>
-                            {formatVND(item.taxAmount)}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-
-                {selectedRecord.notes && (
-                  <View style={styles.detailBlock}>
-                    <Text style={styles.detailBlockTitle}>Ghi chú</Text>
-                    <Text style={styles.detailValue}>
-                      {selectedRecord.notes}
+                    <Text style={styles.listSub}>
+                      Cửa hàng: {selectedRecord.taxpayerInfo.storeName || ""}
+                    </Text>
+                    <Text style={styles.listSub}>
+                      MST: {selectedRecord.taxpayerInfo.taxCode || ""}
+                    </Text>
+                    <Text style={styles.listSub}>
+                      SĐT: {selectedRecord.taxpayerInfo.phone || ""}
+                    </Text>
+                    <Text style={styles.listSub}>
+                      Email: {selectedRecord.taxpayerInfo.email || ""}
+                    </Text>
+                    <Text style={styles.listSub}>
+                      Địa chỉ:{" "}
+                      {selectedRecord.taxpayerInfo.businessAddress?.full || ""}
                     </Text>
                   </View>
                 )}
-              </View>
+
+                {!!selectedRecord.revenueByCategory?.length && (
+                  <View style={styles.card}>
+                    <SectionTitle title="Doanh thu theo ngành nghề" />
+                    {selectedRecord.revenueByCategory.map((r, idx) => (
+                      <View key={idx} style={styles.simpleRow}>
+                        <Text style={{ flex: 1, color: "#111827" }}>
+                          {r.category}
+                        </Text>
+                        <Text
+                          style={{
+                            width: 130,
+                            textAlign: "right",
+                            color: "#111827",
+                          }}
+                        >
+                          {formatVND(Number(r.revenue || 0))}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {!!selectedRecord.specialConsumptionTax?.length && (
+                  <View style={styles.card}>
+                    <SectionTitle title="Thu TTĐB" />
+                    {selectedRecord.specialConsumptionTax.map((r, idx) => (
+                      <View key={idx} style={styles.simpleRow}>
+                        <Text style={{ flex: 1, color: "#111827" }}>
+                          {r.itemName}
+                        </Text>
+                        <Text
+                          style={{
+                            width: 130,
+                            textAlign: "right",
+                            color: "#111827",
+                          }}
+                        >
+                          {formatVND(Number(r.taxAmount || 0))}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {!!selectedRecord.environmentalTax?.length && (
+                  <View style={styles.card}>
+                    <SectionTitle title="Thu/Phí môi trường" />
+                    {selectedRecord.environmentalTax.map((r, idx) => (
+                      <View key={idx} style={styles.simpleRow}>
+                        <Text style={{ flex: 1, color: "#111827" }}>
+                          {r.itemName}
+                        </Text>
+                        <Text
+                          style={{
+                            width: 130,
+                            textAlign: "right",
+                            color: "#111827",
+                          }}
+                        >
+                          {formatVND(Number(r.taxAmount || 0))}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {!!selectedRecord.notes && (
+                  <View style={styles.card}>
+                    <SectionTitle title="Ghi chú" />
+                    <Text style={styles.listSub}>{selectedRecord.notes}</Text>
+                  </View>
+                )}
+              </>
             )}
           </ScrollView>
         </View>
       </Modal>
+
+      {/* Reject Modal */}
+      <Modal
+        visible={rejectVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setRejectVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle2}>Từ chối tờ khai</Text>
+            <Text style={styles.helperText}>Nhập lý do từ chối:</Text>
+            <TextInput
+              value={rejectReason}
+              onChangeText={setRejectReason}
+              placeholder="Lý do..."
+              placeholderTextColor="#9ca3af"
+              style={[styles.input, { height: 100, textAlignVertical: "top" }]}
+              multiline
+            />
+
+            <View style={styles.row2}>
+              <TouchableOpacity
+                onPress={() => {
+                  setRejectVisible(false);
+                  setRejectReason("");
+                  setSelectedActionId(null);
+                }}
+                style={styles.secondaryBtn}
+              >
+                <Text style={styles.secondaryBtnText}>Hủy</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => {
+                  if (!selectedActionId) return;
+                  if (!rejectReason.trim()) {
+                    Alert.alert(
+                      "Thiếu thông tin",
+                      "Vui lòng nhập lý do từ chối"
+                    );
+                    return;
+                  }
+                  handleApproveReject(
+                    selectedActionId,
+                    "reject",
+                    rejectReason.trim()
+                  );
+                }}
+                style={styles.dangerBtn}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.dangerBtnText}>Từ chối</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
-};
+}
 
-export default TaxDeclarationScreen;
-
-// ==================== STYLES ====================
-
+// ===================== STYLES =====================
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f5f5f5" },
+  root: { flex: 1, backgroundColor: "#f8fafc" },
+  container: { flex: 1 },
+
   header: {
-    paddingTop: Platform.OS === "ios" ? 50 : 24,
-    paddingBottom: 16,
+    backgroundColor: "#10b981",
+    paddingTop: Platform.OS === "ios" ? 1 : 5,
     paddingHorizontal: 16,
-  },
-  headerContent: {
+    paddingBottom: 14,
     flexDirection: "row",
+    gap: 12,
     alignItems: "center",
-    justifyContent: "space-between",
   },
-  headerLeft: { flexDirection: "row", alignItems: "center", flex: 1 },
-  headerTextContainer: { marginLeft: 12 },
-  headerTitle: { fontSize: 18, fontWeight: "700", color: "#fff" },
-  headerSubtitle: { fontSize: 13, color: "#e6f7ff", marginTop: 2 },
-  addButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  content: { flex: 1 },
-
-  // Error
-  errorContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
-    backgroundColor: "#fff",
-  },
-  errorTitle: {
-    marginTop: 16,
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#262626",
-    textAlign: "center",
-  },
-  errorText: {
-    marginTop: 8,
-    fontSize: 14,
-    color: "#8c8c8c",
-    textAlign: "center",
-  },
-
-  // Stats
-  statsCard: {
-    margin: 16,
-    padding: 16,
-    borderRadius: 12,
-    backgroundColor: "#fff",
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  statsTitle: {
-    fontSize: 16,
+  headerTitle: { color: "#fff", fontSize: 18, fontWeight: "800" },
+  headerSub: {
+    color: "rgba(255,255,255,0.85)",
+    marginTop: 2,
+    fontSize: 12,
     fontWeight: "600",
-    color: "#262626",
-    marginBottom: 12,
   },
-  statsGrid: {
-    flexDirection: "row",
-    justifyContent: "space-around",
+  headerBtn: {
+    backgroundColor: "#2563eb",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
   },
-  statItem: { alignItems: "center" },
-  statValue: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#1890ff",
-    marginBottom: 4,
-  },
-  statLabel: { fontSize: 12, color: "#8c8c8c" },
+  headerBtnText: { color: "#fff", fontWeight: "800" },
 
-  // List
-  listSection: { paddingHorizontal: 16, paddingBottom: 16 },
+  center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 16,
+  },
+  emptyBox: { paddingVertical: 30, alignItems: "center" },
+  emptyTitle: { fontSize: 16, fontWeight: "800", color: "#111827" },
+  emptySub: { marginTop: 6, color: "#6b7280", textAlign: "center" },
+
+  card: {
+    backgroundColor: "#fff",
+    marginHorizontal: 16,
+    marginTop: 14,
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+  },
   sectionTitle: {
     fontSize: 16,
-    fontWeight: "600",
-    color: "#262626",
-    marginBottom: 12,
-  },
-  loadingContainer: { padding: 32, alignItems: "center" },
-  loadingText: { marginTop: 8, fontSize: 14, color: "#8c8c8c" },
-  emptyContainer: { padding: 40, alignItems: "center" },
-  emptyText: {
-    marginTop: 12,
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#595959",
-  },
-  emptySubtext: {
-    marginTop: 4,
-    fontSize: 13,
-    color: "#8c8c8c",
-    textAlign: "center",
-  },
-
-  declarationCard: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 14,
+    fontWeight: "800",
+    color: "#111827",
     marginBottom: 10,
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 1,
   },
-  declarationHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+  subTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#374151",
+    marginTop: 8,
     marginBottom: 8,
   },
-  declarationPeriod: { fontSize: 15, fontWeight: "700", color: "#262626" },
-  declarationDate: { fontSize: 12, color: "#8c8c8c", marginTop: 2 },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 16,
-    borderWidth: 1,
-  },
-  statusText: { fontSize: 11, fontWeight: "600" },
-  declarationRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 4,
-  },
-  declarationLabel: { fontSize: 13, color: "#8c8c8c" },
-  declarationValue: { fontSize: 13, fontWeight: "600", color: "#262626" },
-  declarationTotal: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#d4380d",
-  },
-  declarationFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "#f0f0f0",
-    marginTop: 8,
-    paddingTop: 8,
-  },
-  tagRow: { flexDirection: "row" },
-  tag: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-    marginRight: 6,
-  },
-  tagText: { fontSize: 11, fontWeight: "600" },
-  cardActions: { flexDirection: "row", alignItems: "center" },
-  iconButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: "center",
-    justifyContent: "center",
-    marginLeft: 4,
-    backgroundColor: "#f5f5f5",
-  },
 
-  // Modal base
-  modalContainer: { flex: 1, backgroundColor: "#fff" },
-  modalHeader: {
-    paddingTop: Platform.OS === "ios" ? 48 : 16,
-    paddingHorizontal: 16,
-    paddingBottom: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#f0f0f0",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  closeButton: { padding: 4 },
-  modalTitle: { fontSize: 17, fontWeight: "700", color: "#262626" },
-  modalContent: { flex: 1, padding: 16 },
+  stepText: { fontSize: 14, color: "#111827", fontWeight: "700" },
+  stepHint: { marginTop: 6, color: "#6b7280", fontSize: 12 },
 
-  // Form sections
-  formSection: {
-    borderRadius: 12,
-    backgroundColor: "#fff",
-    marginBottom: 12,
-    shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 1,
-  },
-  sectionHeader: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#f0f0f0",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  sectionHeaderText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#262626",
-  },
-  sectionBody: { paddingHorizontal: 14, paddingVertical: 10 },
-  inputLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#595959",
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  subLabel: { fontSize: 12, color: "#8c8c8c", marginBottom: 4 },
-  input: {
-    height: 44,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#d9d9d9",
-    paddingHorizontal: 10,
-    fontSize: 14,
-    color: "#262626",
-    backgroundColor: "#fff",
-  },
-  pickerWrapper: {
-    borderWidth: 1,
-    borderColor: "#d9d9d9",
-    borderRadius: 8,
-    overflow: "hidden",
-  },
-  row: { flexDirection: "row", alignItems: "center", marginTop: 8 },
+  row: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  rowWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 10 },
+  row2: { flexDirection: "row", gap: 10 },
+  toggleRow: { flexDirection: "row", gap: 10, marginTop: 8 },
 
-  checkboxRow: {
-    flexDirection: "row",
-    alignItems: "center",
+  pill: {
+    paddingHorizontal: 12,
     paddingVertical: 8,
-    marginRight: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#fff",
   },
-  checkboxLabel: { marginLeft: 6, fontSize: 13, color: "#595959" },
+  pillActive: { borderColor: "#2563eb", backgroundColor: "#eff6ff" },
+  pillText: { color: "#374151", fontWeight: "800", fontSize: 12 },
+  pillTextActive: { color: "#2563eb" },
 
-  primaryButton: {
-    marginTop: 12,
-    height: 46,
-    borderRadius: 10,
-    backgroundColor: "#1890ff",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  primaryButtonText: {
-    marginLeft: 6,
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-
-  outlineButton: {
-    marginTop: 10,
-    height: 44,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: "#1890ff",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  outlineButtonText: {
-    marginLeft: 6,
-    color: "#1890ff",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-
-  systemRevenueCard: {
-    marginTop: 12,
-    padding: 12,
-    borderRadius: 10,
-    backgroundColor: "#e6f7ff",
-    alignItems: "center",
-  },
-  systemRevenueTitle: { fontSize: 13, color: "#0050b3" },
-  systemRevenueValue: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#0050b3",
-    marginTop: 4,
-  },
-  systemRevenueSub: { fontSize: 12, color: "#0050b3", marginTop: 2 },
-
-  // Item cards
-  itemCard: {
-    marginTop: 10,
-    padding: 10,
-    borderRadius: 10,
-    backgroundColor: "#fafafa",
-  },
-  itemHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 4,
-  },
-  itemTitle: { fontSize: 14, fontWeight: "600", color: "#262626" },
-
-  calculatedBox: {
-    marginTop: 8,
-    paddingVertical: 6,
+  miniPill: {
     paddingHorizontal: 10,
-    borderRadius: 8,
-    backgroundColor: "#fff1f0",
-    flexDirection: "row",
-    justifyContent: "space-between",
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#fff",
   },
-  calculatedLabel: { fontSize: 13, color: "#8c8c8c" },
-  calculatedValue: { fontSize: 13, fontWeight: "600", color: "#cf1322" },
+  miniPillActive: { borderColor: "#10b981", backgroundColor: "#ecfdf5" },
+  miniPillText: { fontSize: 12, fontWeight: "800", color: "#374151" },
+  miniPillTextActive: { color: "#10b981" },
+
+  label: { fontSize: 12, fontWeight: "800", color: "#374151", marginBottom: 6 },
+  input: {
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#f9fafb",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    color: "#111827",
+    fontSize: 14,
+  },
+  helperText: { marginTop: 8, color: "#6b7280", fontSize: 12, lineHeight: 16 },
+
+  actionRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 6,
+    alignItems: "center",
+  },
+  actionRowWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 12,
+  },
+
+  primaryBtn: {
+    flex: 1,
+    backgroundColor: "#2563eb",
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  primaryBtnText: { color: "#fff", fontWeight: "900" },
+
+  secondaryBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#fff",
+  },
+  secondaryBtnText: { color: "#111827", fontWeight: "900" },
+
+  dangerBtn: {
+    backgroundColor: "#ef4444",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  dangerBtnText: { color: "#fff", fontWeight: "900" },
+
+  btnDisabled: { opacity: 0.6 },
 
   summaryBox: {
     marginTop: 10,
-    padding: 10,
-    borderRadius: 8,
-    backgroundColor: "#f6ffed",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  summaryLabel: { fontSize: 13, color: "#389e0d" },
-  summaryValue: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#389e0d",
-  },
-
-  taxResultCard: {
-    marginTop: 10,
-    padding: 10,
-    borderRadius: 10,
-    backgroundColor: "#f5f5f5",
-  },
-  taxResultTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#262626",
-    marginBottom: 4,
-  },
-  taxRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 4,
-  },
-  taxLabel: { fontSize: 13, color: "#595959" },
-  taxValue: { fontSize: 13, fontWeight: "600", color: "#262626" },
-  taxDivider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: "#d9d9d9",
-    marginVertical: 6,
-  },
-  taxTotalLabel: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#262626",
-  },
-  taxTotalValue: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#cf1322",
-  },
-
-  infoBox: {
-    marginTop: 10,
-    padding: 10,
-    borderRadius: 8,
-    backgroundColor: "#f6ffed",
-    flexDirection: "row",
-    alignItems: "flex-start",
-  },
-  infoText: {
-    marginLeft: 8,
-    flex: 1,
-    fontSize: 13,
-    color: "#389e0d",
-  },
-  charCount: {
-    fontSize: 11,
-    color: "#8c8c8c",
-    textAlign: "right",
-    marginTop: 2,
-  },
-
-  // Footer
-  modalFooter: {
     padding: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "#f0f0f0",
+    borderRadius: 12,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+  },
+  summaryTitle: { fontWeight: "900", color: "#111827", marginBottom: 6 },
+  summaryLine: { color: "#374151", marginBottom: 2 },
+  summaryTotal: { marginTop: 6, color: "#111827", fontWeight: "900" },
+
+  hr: { height: 1, backgroundColor: "#e5e7eb", marginVertical: 12 },
+
+  itemCard: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
     backgroundColor: "#fff",
   },
-  submitButton: {
-    borderRadius: 999,
-    overflow: "hidden",
-  },
-  submitButtonInner: {
-    height: 50,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  submitButtonText: {
-    marginLeft: 8,
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: "700",
-  },
 
-  // Detail
-  detailBlock: {
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#f0f0f0",
-  },
-  detailBlockTitle: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#262626",
-    marginBottom: 6,
-  },
-  detailLabel: {
-    fontSize: 13,
-    color: "#8c8c8c",
-    marginTop: 4,
-  },
-  detailValue: {
-    fontSize: 14,
-    color: "#262626",
-    marginTop: 2,
-  },
-  detailRowInline: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 4,
-  },
-  detailInlineLabel: {
-    fontSize: 13,
-    color: "#595959",
-    flex: 1,
-    marginRight: 8,
-  },
-  detailInlineValue: {
-    fontSize: 13,
-    color: "#262626",
-    fontWeight: "600",
-  },
-  // Segmented control cho iOS
-  segmentGroup: {
-    flexDirection: "row",
-    borderRadius: 8,
-    backgroundColor: "#f5f5f5",
-    padding: 2,
-    marginTop: 4,
-  },
-  segmentItem: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 6,
-    borderRadius: 6,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  segmentItemActive: {
-    backgroundColor: "#1890ff",
-  },
-  segmentItemText: {
-    fontSize: 13,
-    color: "#595959",
-    fontWeight: "500",
-    textAlign: "center",
-  },
-  segmentItemTextActive: {
-    color: "#fff",
-    fontWeight: "700",
-  },
-  sectionHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 8,
-  },
-  summaryChip: {
-    backgroundColor: "#e6f7ff",
-    borderRadius: 16,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  summaryChipLabel: {
-    fontSize: 11,
-    color: "#595959",
-  },
-  summaryChipValue: {
-    fontSize: 12,
-    color: "#096dd9",
-    fontWeight: "700",
-  },
-  itemSubtitle: {
-    fontSize: 12,
-    color: "#8c8c8c",
-    marginTop: 2,
-  },
-  iconCircleDanger: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+  readonlyBox: {
     borderWidth: 1,
-    borderColor: "#ffccc7",
-    backgroundColor: "#fff1f0",
-    alignItems: "center",
-    justifyContent: "center",
+    borderColor: "#e5e7eb",
+    backgroundColor: "#f3f4f6",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
   },
+  readonlyText: { color: "#111827", fontWeight: "900" },
 
-  inputLabelStrong: {
-    fontSize: 12,
-    color: "#262626",
-    fontWeight: "600",
-    marginTop: 6,
-    marginBottom: 4,
-  },
-  inputFilled: {
-    borderWidth: 1,
-    borderColor: "#d9d9d9",
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    fontSize: 13,
-    color: "#262626",
-    backgroundColor: "#ffffff",
-  },
-  emptyHint: {
-    marginTop: 8,
-    fontSize: 12,
-    color: "#8c8c8c",
-  },
-
-  chipGroup: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginTop: 4,
-    marginBottom: 8,
-  },
   chip: {
     paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: "#f5f5f5",
-    marginRight: 6,
-    marginTop: 4,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
   },
-  chipActive: {
-    backgroundColor: "#1890ff",
+  chipText: { fontSize: 11, fontWeight: "800" },
+
+  toggleBtn: {
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#fff",
+    alignItems: "center",
   },
-  chipText: {
-    fontSize: 12,
-    color: "#595959",
+  toggleText: { color: "#111827", fontWeight: "800" },
+
+  listItem: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
   },
-  chipTextActive: {
-    color: "#ffffff",
-    fontWeight: "600",
+  listTitle: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#111827",
+    marginBottom: 4,
+  },
+  listSub: { fontSize: 13, color: "#6b7280", marginBottom: 2 },
+  listTime: { fontSize: 11, color: "#9ca3af", marginTop: 6 },
+
+  smallBtn: {
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#fff",
+  },
+  smallBtnText: { fontSize: 12, fontWeight: "800", color: "#111827" },
+
+  smallBtnSuccess: {
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: "#10b981",
+  },
+  smallBtnDanger: {
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: "#ef4444",
+  },
+  smallBtnTextWhite: { fontSize: 12, fontWeight: "800", color: "#fff" },
+
+  paginationRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 16,
+    justifyContent: "center",
+  },
+
+  modalRoot: { flex: 1, backgroundColor: "#f8fafc" },
+  modalHeader: {
+    backgroundColor: "#111827",
+    paddingTop: Platform.OS === "ios" ? 54 : 18,
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  modalTitle: { color: "#fff", fontSize: 18, fontWeight: "800" },
+  modalCloseBtn: {
+    backgroundColor: "#374151",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  modalCloseText: { color: "#fff", fontWeight: "800" },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 16,
+  },
+  modalBox: {
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    padding: 20,
+    width: "100%",
+    maxWidth: 400,
+  },
+  modalTitle2: {
+    fontSize: 17,
+    fontWeight: "900",
+    color: "#111827",
+    marginBottom: 12,
+  },
+
+  simpleRow: {
+    flexDirection: "row",
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderColor: "#f3f4f6",
   },
 });

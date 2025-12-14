@@ -17,28 +17,24 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
-import * as FileSystem from "expo-file-system";
+import { fetch } from "expo/fetch";
+import { File } from "expo-file-system";
 import { useAuth } from "../../context/AuthContext";
-import {
-  updateProfile,
-  sendPasswordOTP,
-  changePassword,
-} from "../../api/userApi";
+import { sendPasswordOTP, changePassword } from "../../api/userApi";
 import { UserPublic } from "@/type/user";
 
-// ========== TYPES ==========
-interface UserProfile {
-  _id: string;
-  username: string;
-  fullname?: string;
-  email?: string;
-  phone?: string;
-  role: string;
-  isVerified: boolean;
-  isDeleted: boolean;
-  image?: string;
-}
+// ================== CONFIG ==================
+// Bạn chỉnh lại URL cho đúng backend của bạn.
+const API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_URL || "https://api.example.com";
 
+// Endpoint update profile (PATCH/PUT tùy backend)
+const UPDATE_PROFILE_URL = `${API_BASE_URL}/users/profile`;
+
+// Field name backend mong đợi (ví dụ: "image" / "avatar" / "file")
+const IMAGE_FIELD_NAME = "image";
+
+// ================== TYPES ==================
 interface ProfileFormData {
   fullname: string;
   email: string;
@@ -51,7 +47,127 @@ interface PasswordFormData {
   confirmPassword: string;
 }
 
-// ========== MAIN COMPONENT ==========
+type UpdateProfileResponse = {
+  user: any;
+  message?: string;
+};
+
+// ================== HELPERS ==================
+const getAuthToken = async (): Promise<string | null> => {
+  // Tùy dự án bạn lưu token key nào
+  const t1 = await AsyncStorage.getItem("token");
+  if (t1) return t1;
+  const t2 = await AsyncStorage.getItem("accessToken");
+  if (t2) return t2;
+  return null;
+};
+
+const buildUserPublic = (raw: any): UserPublic => {
+  return {
+    id: raw._id || raw.id,
+    username: raw.username,
+    fullname: raw.fullname,
+    email: raw.email,
+    phone: raw.phone,
+    role: raw.role,
+    isVerified: raw.isVerified,
+    isDeleted: raw.isDeleted,
+    image: raw.image,
+    menu: raw.menu || [],
+  };
+};
+
+const safeReadJson = async (res: Response): Promise<any | null> => {
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+};
+
+// Upload/update profile theo “cách mới”: expo/fetch + FormData + File
+const updateProfileRequest = async (params: {
+  fullname: string;
+  email: string;
+  phone: string;
+  imageUri?: string | null;
+  removeImage?: boolean;
+}): Promise<UpdateProfileResponse> => {
+  const token = await getAuthToken();
+
+  // Trường hợp removeImage (không cần multipart)
+  if (params.removeImage) {
+    const res = await fetch(UPDATE_PROFILE_URL, {
+      method: "PATCH",
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        fullname: params.fullname,
+        email: params.email,
+        phone: params.phone,
+        removeImage: true,
+      }),
+    });
+
+    const data = await safeReadJson(res);
+    if (!res.ok) {
+      throw new Error(data?.message || `HTTP ${res.status}`);
+    }
+    return data as UpdateProfileResponse;
+  }
+
+  // Trường hợp có ảnh -> multipart
+  if (params.imageUri) {
+    const formData = new FormData();
+    formData.append("fullname", params.fullname);
+    formData.append("email", params.email);
+    formData.append("phone", params.phone);
+
+    // File mới của expo-file-system (implements Blob)
+    const file = new File(params.imageUri);
+    // Không set Content-Type multipart/form-data thủ công để tránh lỗi boundary.
+    formData.append(IMAGE_FIELD_NAME, file as any);
+
+    const res = await fetch(UPDATE_PROFILE_URL, {
+      method: "PATCH",
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        // không set content-type ở đây
+      },
+      body: formData as any,
+    });
+
+    const data = await safeReadJson(res);
+    if (!res.ok) {
+      throw new Error(data?.message || `HTTP ${res.status}`);
+    }
+    return data as UpdateProfileResponse;
+  }
+
+  // Trường hợp không ảnh -> JSON
+  const res = await fetch(UPDATE_PROFILE_URL, {
+    method: "PATCH",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      fullname: params.fullname,
+      email: params.email,
+      phone: params.phone,
+    }),
+  });
+
+  const data = await safeReadJson(res);
+  if (!res.ok) {
+    throw new Error(data?.message || `HTTP ${res.status}`);
+  }
+  return data as UpdateProfileResponse;
+};
+
+// ================== MAIN COMPONENT ==================
 const ProfileScreen: React.FC = () => {
   const { user, setUser } = useAuth();
   const [loading, setLoading] = useState<boolean>(true);
@@ -64,7 +180,7 @@ const ProfileScreen: React.FC = () => {
     phone: "",
   });
 
-  // Avatar (URI local, không còn base64)
+  // Avatar (URI local)
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null); // local file URI
   const [compressing, setCompressing] = useState<boolean>(false);
@@ -112,8 +228,20 @@ const ProfileScreen: React.FC = () => {
     ).padStart(2, "0")}`;
   };
 
+  // ========== IMAGE SIZE CHECK (NEW API) ==========
+  const getFileSizeMB = async (uri: string): Promise<number> => {
+    // Dùng File mới (expo-file-system)
+    const f = new File(uri);
+    const info = await f.info(); // { exists, size, ... }
+    const sizeBytes = typeof info?.size === "number" ? info.size : f.size;
+
+    if (!info?.exists || !sizeBytes || sizeBytes <= 0) {
+      throw new Error("Không thể xác định kích thước ảnh");
+    }
+    return sizeBytes / (1024 * 1024);
+  };
+
   // ========== IMAGE COMPRESSION ==========
-  // Trả về URI file sau khi nén, không base64
   const compressImage = async (uri: string): Promise<string> => {
     try {
       console.log("🔄 Compressing image...");
@@ -133,19 +261,11 @@ const ProfileScreen: React.FC = () => {
         throw new Error("Không thể xử lý ảnh");
       }
 
-      // Kiểm tra kích thước file (<= 5MB)
-      const info = await FileSystem.getInfoAsync(manipResult.uri);
-      let sizeInMB = 0;
-      if (info.exists && typeof info.size === "number") {
-        sizeInMB = info.size / (1024 * 1024);
-        console.log(`✅ Compressed image size: ${sizeInMB.toFixed(2)}MB`);
-        if (sizeInMB > 5) {
-          throw new Error(
-            "Ảnh vẫn quá lớn sau khi nén. Vui lòng chọn ảnh khác"
-          );
-        }
-      } else {
-        throw new Error("Không thể xác định kích thước ảnh");
+      // Kiểm tra kích thước file (<= 5MB) bằng API mới
+      const sizeInMB = await getFileSizeMB(manipResult.uri);
+      console.log(`✅ Compressed image size: ${sizeInMB.toFixed(2)}MB`);
+      if (sizeInMB > 5) {
+        throw new Error("Ảnh vẫn quá lớn sau khi nén. Vui lòng chọn ảnh khác");
       }
 
       return manipResult.uri;
@@ -174,11 +294,11 @@ const ProfileScreen: React.FC = () => {
       quality: 0.8,
     });
 
-    if (!result.canceled && result.assets[0].uri) {
+    if (!result.canceled && result.assets[0]?.uri) {
       try {
         const compressedUri = await compressImage(result.assets[0].uri);
 
-        setSelectedImage(compressedUri); // lưu URI local
+        setSelectedImage(compressedUri);
         setImagePreview(compressedUri);
 
         Alert.alert(
@@ -202,25 +322,14 @@ const ProfileScreen: React.FC = () => {
           try {
             console.log("🗑️ Removing image...");
 
-            const response = await updateProfile(profileData, {
+            const response = await updateProfileRequest({
+              fullname: profileData.fullname,
+              email: profileData.email,
+              phone: profileData.phone,
               removeImage: true,
             });
 
-            console.log("✅ Image removed:", response);
-
-            const updatedUserRaw = response.user as any;
-            const updatedUser: UserPublic = {
-              id: updatedUserRaw._id || updatedUserRaw.id,
-              username: updatedUserRaw.username,
-              fullname: updatedUserRaw.fullname,
-              email: updatedUserRaw.email,
-              phone: updatedUserRaw.phone,
-              role: updatedUserRaw.role,
-              isVerified: updatedUserRaw.isVerified,
-              isDeleted: updatedUserRaw.isDeleted,
-              image: updatedUserRaw.image,
-              menu: updatedUserRaw.menu || [],
-            };
+            const updatedUser = buildUserPublic(response.user);
             setUser(updatedUser);
             await AsyncStorage.setItem("user", JSON.stringify(updatedUser));
 
@@ -230,10 +339,7 @@ const ProfileScreen: React.FC = () => {
             Alert.alert("Thành công", "Đã xóa ảnh đại diện");
           } catch (error: any) {
             console.error("❌ Remove image error:", error);
-            Alert.alert(
-              "Lỗi",
-              error?.response?.data?.message || "Không thể xóa ảnh đại diện"
-            );
+            Alert.alert("Lỗi", error?.message || "Không thể xóa ảnh đại diện");
           }
         },
       },
@@ -256,59 +362,26 @@ const ProfileScreen: React.FC = () => {
         phone: profileData.phone,
       });
 
-      let options: any = {};
+      const response = await updateProfileRequest({
+        fullname: profileData.fullname,
+        email: profileData.email,
+        phone: profileData.phone,
+        imageUri: selectedImage || null,
+      });
 
-      if (selectedImage) {
-        // Tạo object file cho React Native FormData (uri, type, name)
-        options.imageFile = {
-          uri: selectedImage,
-          type: "image/jpeg",
-          name: `avatar-${Date.now()}.jpg`,
-        };
-      }
-
-      const response = await updateProfile(
-        {
-          fullname: profileData.fullname,
-          email: profileData.email,
-          phone: profileData.phone,
-        },
-        options
-      );
-
-      console.log("✅ Profile updated:", response);
-
-      const updatedUserRaw = response.user as any;
-      const updatedUser: UserPublic = {
-        id: updatedUserRaw._id || updatedUserRaw.id,
-        username: updatedUserRaw.username,
-        fullname: updatedUserRaw.fullname,
-        email: updatedUserRaw.email,
-        phone: updatedUserRaw.phone,
-        role: updatedUserRaw.role,
-        isVerified: updatedUserRaw.isVerified,
-        isDeleted: updatedUserRaw.isDeleted,
-        image: updatedUserRaw.image,
-        menu: updatedUserRaw.menu || [],
-      };
+      const updatedUser = buildUserPublic(response.user);
       setUser(updatedUser);
       await AsyncStorage.setItem("user", JSON.stringify(updatedUser));
 
+      // reset local selected image
       setSelectedImage(null);
+      // nếu backend trả image url mới thì preview nên chuyển sang url đó
+      setImagePreview(updatedUser.image || null);
+
       Alert.alert("Thành công", "Cập nhật thông tin thành công");
     } catch (error: any) {
       console.error("❌ Save profile error:", error);
-      console.error("Error details:", {
-        message: error?.message,
-        response: error?.response?.data,
-      });
-
-      Alert.alert(
-        "Lỗi",
-        error?.response?.data?.message ||
-          error?.message ||
-          "Không thể cập nhật thông tin"
-      );
+      Alert.alert("Lỗi", error?.message || "Không thể cập nhật thông tin");
     } finally {
       setSaving(false);
     }
@@ -332,7 +405,7 @@ const ProfileScreen: React.FC = () => {
       console.log("✅ OTP sent:", res);
 
       setOtpSent(true);
-      setTimer(300); // 5 minutes
+      setTimer(300);
       Alert.alert("Thành công", "Mã OTP đã được gửi đến email của bạn");
     } catch (error: any) {
       console.error("❌ Send OTP error:", error);

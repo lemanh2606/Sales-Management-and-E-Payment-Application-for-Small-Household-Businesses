@@ -300,6 +300,12 @@ export const setAuthToken = (token: string | null): void => {
   }
 };
 
+export const getPermissionCatalog = async () =>
+  (await apiClient.get("/users/permissions/catalog")).data;
+
+export const updateUserById = async (userId: string, data: any) =>
+  (await apiClient.put(`/users/${userId}`, data)).data;
+
 // ==================== EXPORT DEFAULT ====================
 export default {
   registerManager,

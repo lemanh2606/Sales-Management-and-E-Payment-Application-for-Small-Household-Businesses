@@ -1,709 +1,974 @@
-// src/screens/reports/TopProductsScreen.tsx
-import React, { useState, useEffect, JSX } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
   ActivityIndicator,
   Alert,
-  RefreshControl,
   FlatList,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
   TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
-import { Picker } from "@react-native-picker/picker";
-import { File, Paths } from "expo-file-system";
-import * as Sharing from "expo-sharing";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import dayjs from "dayjs";
-import "dayjs/locale/vi";
-import { useAuth } from "../../context/AuthContext";
-import apiClient from "../../api/apiClient";
+import DateTimePicker from "@react-native-community/datetimepicker";
 
-dayjs.locale("vi");
+import apiClient from "../../api/apiClient"; // chỉnh lại path nếu project bạn khác
+import { Directory, File, Paths } from "expo-file-system/next";
+import { fetch } from "expo/fetch";
+import * as Sharing from "expo-sharing";
 
-// ========== TYPES ==========
-interface TopProduct {
-  _id: string;
-  productName: string;
-  productSku: string;
-  totalQuantity: number;
-  totalSales: number | { $numberDecimal: string };
-  countOrders: number;
-}
+type PeriodType = "day" | "month" | "quarter" | "year" | "custom";
 
-interface ApiErrorResponse {
-  message?: string;
-  error?: string;
-}
+type DecimalLike = number | { $numberDecimal?: string };
 
-interface TopProductsResponse {
-  data: TopProduct[];
-}
+type TopProductRow = {
+  productName?: string;
+  productSku?: string;
+  totalQuantity?: number;
+  totalSales?: DecimalLike;
+  countOrders?: number;
+};
 
-type RangeType = "today" | "yesterday" | "thisWeek" | "thisMonth" | "thisYear";
-type LimitOption = "" | "3" | "5" | "20" | "custom";
+type Store = {
+  id?: string;
+  _id?: string;
+  name?: string;
+};
 
-// ========== MAIN COMPONENT ==========
-const TopProductsScreen: React.FC = () => {
-  const { currentStore } = useAuth();
-  const storeId = currentStore?._id;
-  const storeName = currentStore?.name || "Chưa chọn cửa hàng";
+const Chip = ({ text, color }: { text: string; color: string }) => (
+  <View
+    style={[styles.chip, { borderColor: color, backgroundColor: `${color}18` }]}
+  >
+    <Text style={[styles.chipText, { color }]}>{text}</Text>
+  </View>
+);
 
-  // States
-  const [loading, setLoading] = useState<boolean>(false);
-  const [refreshing, setRefreshing] = useState<boolean>(false);
-  const [products, setProducts] = useState<TopProduct[]>([]);
-  const [hasFetched, setHasFetched] = useState<boolean>(false);
+const SectionTitle = ({ title }: { title: string }) => (
+  <Text style={styles.sectionTitle}>{title}</Text>
+);
 
-  // ✅ Collapsible filter state
-  const [isFilterExpanded, setIsFilterExpanded] = useState<boolean>(true);
+const Field = React.memo(
+  ({
+    label,
+    value,
+    onChangeText,
+    placeholder,
+    keyboardType,
+  }: {
+    label: string;
+    value: string;
+    onChangeText: (t: string) => void;
+    placeholder?: string;
+    keyboardType?: any;
+  }) => (
+    <View style={{ marginBottom: 12 }}>
+      <Text style={styles.label}>{label}</Text>
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor="#9ca3af"
+        keyboardType={keyboardType}
+        style={styles.input}
+      />
+    </View>
+  )
+);
 
-  // Filters
-  const [range, setRange] = useState<RangeType>("thisMonth");
-  const [limitOption, setLimitOption] = useState<LimitOption>("");
-  const [customLimit, setCustomLimit] = useState<string>("");
+const toNumber = (v: any): number => {
+  if (typeof v === "number") return v;
+  if (typeof v === "string") {
+    const n = parseFloat(v);
+    return Number.isFinite(n) ? n : 0;
+  }
+  if (!v || typeof v !== "object") return 0;
+  const s = (v.$numberDecimal ?? v.numberDecimal ?? v.toString?.()) as
+    | string
+    | undefined;
+  const n = parseFloat(String(s ?? "0"));
+  return Number.isFinite(n) ? n : 0;
+};
 
-  // ========== FORMAT VND ==========
-  const formatVND = (
-    value: number | { $numberDecimal: string } | undefined | null
-  ): string => {
-    if (!value) return "₫0";
-    const num =
-      typeof value === "object" ? parseFloat(value.$numberDecimal) : value;
+const formatVND = (value: any) => {
+  const n = toNumber(value);
+  try {
     return new Intl.NumberFormat("vi-VN", {
       style: "currency",
       currency: "VND",
       minimumFractionDigits: 0,
-    }).format(num);
+    }).format(Math.round(n));
+  } catch {
+    return `${Math.round(n)} ₫`;
+  }
+};
+
+const parseNumberInput = (s: string): number => {
+  const cleaned = (s ?? "").replace(/,/g, "").trim();
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const getStoreId = (store: Store | null): string | null => {
+  if (!store) return null;
+  return store._id ?? store.id ?? null;
+};
+
+const buildPeriodKey = (
+  periodType: PeriodType,
+  dayKey: string,
+  monthKey: string,
+  quarterKey: string,
+  yearKey: string
+) => {
+  if (periodType === "day") return dayKey;
+  if (periodType === "month") return monthKey;
+  if (periodType === "quarter") return quarterKey;
+  if (periodType === "year") return yearKey;
+  return "";
+};
+
+const ensureDir = async () => {
+  const dir = new Directory(Paths.cache, "report-exports");
+  await dir.create({ intermediates: true, idempotent: true });
+  return dir;
+};
+
+const joinUrl = (baseURL: string | undefined, path: string) => {
+  if (!baseURL) return path;
+  return `${baseURL}`.replace(/\/+$/, "") + "/" + `${path}`.replace(/^\/+/, "");
+};
+
+export default function TopProductsScreen() {
+  const [token, setToken] = useState<string | null>(null);
+  const [currentStore, setCurrentStore] = useState<Store | null>(null);
+  const [storeId, setStoreId] = useState<string | null>(null);
+
+  const [products, setProducts] = useState<TopProductRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
+
+  // Period
+  const [periodType, setPeriodType] = useState<PeriodType>("month");
+  const [dayKey, setDayKey] = useState<string>(dayjs().format("YYYY-MM-DD"));
+  const [monthKey, setMonthKey] = useState<string>(dayjs().format("YYYY-MM"));
+  const [quarterKey, setQuarterKey] = useState<string>(() => {
+    const y = dayjs().year();
+    const q = Math.ceil((dayjs().month() + 1) / 3);
+    return `${y}-Q${q}`;
+  });
+  const [yearKey, setYearKey] = useState<string>(dayjs().format("YYYY"));
+
+  // Custom range (tháng)
+  const [monthFrom, setMonthFrom] = useState<string>(dayjs().format("YYYY-MM"));
+  const [monthTo, setMonthTo] = useState<string>(dayjs().format("YYYY-MM"));
+
+  // Picker flags (tách riêng để không xung đột)
+  const [showPeriodPicker, setShowPeriodPicker] = useState(false);
+  const [tempDate, setTempDate] = useState<Date>(new Date());
+
+  const [showCustomPicker, setShowCustomPicker] = useState(false);
+  const [customWhich, setCustomWhich] = useState<"from" | "to" | null>(null);
+
+  // Limit
+  const [limitOption, setLimitOption] = useState<
+    "" | "3" | "5" | "20" | "custom"
+  >("");
+  const [customLimitText, setCustomLimitText] = useState<string>("");
+
+  // Pagination (client-side)
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  const periodKey = useMemo(
+    () => buildPeriodKey(periodType, dayKey, monthKey, quarterKey, yearKey),
+    [periodType, dayKey, monthKey, quarterKey, yearKey]
+  );
+
+  const isReadyToLoad = useMemo(() => {
+    if (!storeId) return false;
+    if (periodType === "custom") return !!monthFrom && !!monthTo;
+    return !!periodKey;
+  }, [storeId, periodType, periodKey, monthFrom, monthTo]);
+
+  const axiosConfig = useMemo(
+    () => ({
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        "Content-Type": "application/json",
+      },
+    }),
+    [token]
+  );
+
+  // init token + store (giống TaxDeclarationScreen)
+  useEffect(() => {
+    (async () => {
+      const t =
+        (await AsyncStorage.getItem("token")) ||
+        (await AsyncStorage.getItem("accessToken"));
+      setToken(t);
+
+      const storeRaw = await AsyncStorage.getItem("currentStore");
+      if (storeRaw) {
+        const s = JSON.parse(storeRaw) as Store;
+        setCurrentStore(s);
+        setStoreId(getStoreId(s));
+      }
+    })();
+  }, []);
+
+  // reset khi đổi loại kỳ (giống web)
+  useEffect(() => {
+    setProducts([]);
+    setPage(1);
+
+    if (periodType === "day") setDayKey("");
+    if (periodType === "month") setMonthKey("");
+    if (periodType === "quarter") setQuarterKey("");
+    if (periodType === "year") setYearKey("");
+    if (periodType === "custom") {
+      setMonthFrom("");
+      setMonthTo("");
+    }
+  }, [periodType]);
+
+  const getLimit = () => {
+    let limit = 10;
+    if (limitOption === "3") limit = 3;
+    else if (limitOption === "5") limit = 5;
+    else if (limitOption === "20") limit = 20;
+    else if (limitOption === "custom") {
+      const n = parseNumberInput(customLimitText);
+      if (n > 0) limit = n;
+    }
+    return limit;
   };
 
-  // ========== RANGE TEXT MAP ==========
-  const rangeTextMap: Record<RangeType, string> = {
-    today: "Hôm nay",
-    yesterday: "Hôm qua",
-    thisWeek: "Tuần này",
-    thisMonth: "Tháng này",
-    thisYear: "Năm nay",
-  };
+  const loadTopProducts = useCallback(async () => {
+    if (!isReadyToLoad || !storeId) return;
 
-  // ========== FETCH TOP PRODUCTS ==========
-  const fetchTopProducts = async (
-    isRefresh: boolean = false
-  ): Promise<void> => {
-    if (!storeId) {
-      Alert.alert("Lỗi", "Vui lòng chọn cửa hàng");
-      return;
-    }
-
-    if (isRefresh) {
-      setRefreshing(true);
-    } else {
-      setLoading(true);
-    }
-    setHasFetched(true);
-
+    setLoading(true);
     try {
-      let limit = 10;
-      if (limitOption === "3") limit = 3;
-      else if (limitOption === "5") limit = 5;
-      else if (limitOption === "20") limit = 20;
-      else if (limitOption === "custom" && customLimit) {
-        limit = parseInt(customLimit);
+      const params: any = {
+        storeId,
+        periodType,
+        limit: getLimit(),
+      };
+
+      if (periodType === "custom") {
+        params.monthFrom = monthFrom;
+        params.monthTo = monthTo;
+      } else {
+        params.periodKey = periodKey;
       }
 
-      const params = new URLSearchParams();
-      params.append("storeId", storeId);
-      params.append("range", range);
-      if (limit) params.append("limit", limit.toString());
-
-      const response = await apiClient.get<TopProductsResponse>(
-        `/orders/top-products?${params.toString()}`
-      );
-
-      setProducts(response.data.data || []);
-
-      // ✅ Auto collapse filter sau khi load thành công
-      setIsFilterExpanded(false);
-
-      console.log("✅ Lấy top sản phẩm thành công");
-    } catch (err) {
-      const axiosError = err as any;
-      console.error("❌ Lỗi lấy top sản phẩm:", axiosError);
-      Alert.alert("Lỗi", "Không thể tải top sản phẩm");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  // ========== EXPORT CSV (NEW API) ==========
-  const exportToCSV = async (): Promise<void> => {
-    if (!products.length) {
-      Alert.alert("Thông báo", "Chưa có dữ liệu để xuất");
-      return;
-    }
-
-    try {
-      // Build CSV content
-      const BOM = "\uFEFF";
-      let csv = BOM + "STT,Tên sản phẩm,Mã SKU,Số lượng bán,Doanh thu,Số đơn\n";
-
-      products.forEach((item, index) => {
-        const sales =
-          typeof item.totalSales === "object"
-            ? parseFloat(item.totalSales.$numberDecimal)
-            : item.totalSales;
-
-        const row = [
-          index + 1,
-          `"${item.productName.replace(/"/g, '""')}"`, // Escape quotes
-          item.productSku,
-          item.totalQuantity,
-          sales,
-          item.countOrders,
-        ].join(",");
-
-        csv += row + "\n";
+      const res: any = await apiClient.get("/orders/top-products", {
+        ...axiosConfig,
+        params,
       });
 
-      // Create file using new API
-      const fileName = `top-san-pham-${range}-${dayjs().format("YYYYMMDD-HHmmss")}.csv`;
-      const file = new File(Paths.cache, fileName);
+      const rows = res?.data?.data ?? [];
+      setProducts(Array.isArray(rows) ? rows : []);
+    } catch (e: any) {
+      console.error(
+        "loadTopProducts error:",
+        e?.response?.data ?? e?.message ?? e
+      );
+      setProducts([]);
+      Alert.alert(
+        "Lỗi",
+        e?.response?.data?.message ?? e?.message ?? "Không thể tải top sản phẩm"
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [
+    axiosConfig,
+    isReadyToLoad,
+    storeId,
+    periodType,
+    periodKey,
+    monthFrom,
+    monthTo,
+    limitOption,
+    customLimitText,
+    pageSize,
+  ]);
 
-      // Create and write file
-      if (!file.exists) {
-        file.create();
-      }
-      file.write(csv);
+  // debounce 300ms
+  useEffect(() => {
+    if (!isReadyToLoad) {
+      setProducts([]);
+      return;
+    }
 
-      console.log("✅ File created at:", file.uri);
+    const t = setTimeout(() => {
+      loadTopProducts();
+    }, 300);
 
-      // Share
-      const isAvailable = await Sharing.isAvailableAsync();
+    return () => clearTimeout(t);
+  }, [isReadyToLoad, loadTopProducts]);
 
-      if (isAvailable) {
-        await Sharing.shareAsync(file.uri, {
-          mimeType: "text/csv",
-          dialogTitle: "Xuất file Top sản phẩm",
-          UTI: "public.comma-separated-values-text",
-        });
-        Alert.alert("Thành công", "Xuất file Excel thành công!");
-      } else {
-        Alert.alert("Lỗi", "Không thể chia sẻ file trên thiết bị này");
-      }
-    } catch (err) {
-      console.error("❌ Lỗi xuất CSV:", err);
-      Alert.alert("Lỗi", `Không thể xuất file CSV: ${err}`);
+  const openPeriodPicker = () => {
+    if (periodType === "custom") return;
+
+    if (periodType === "day" && dayKey)
+      setTempDate(dayjs(dayKey, "YYYY-MM-DD").toDate());
+    else if (periodType === "month" && monthKey)
+      setTempDate(dayjs(monthKey, "YYYY-MM").toDate());
+    else if (periodType === "year" && yearKey)
+      setTempDate(dayjs(yearKey, "YYYY").toDate());
+    else if (periodType === "quarter" && quarterKey) {
+      const [yStr, qStr] = quarterKey.split("-Q");
+      const y = Number(yStr);
+      const q = Number(qStr);
+      const m = (q - 1) * 3; // month index
+      setTempDate(dayjs(`${y}-01-01`).month(m).toDate());
+    } else {
+      setTempDate(new Date());
+    }
+
+    setShowPeriodPicker(true);
+  };
+
+  const onChangePeriod = (event: any, date?: Date) => {
+    if (event?.type === "dismissed" || !date) {
+      setShowPeriodPicker(false);
+      return;
+    }
+    setShowPeriodPicker(false);
+
+    if (periodType === "day") setDayKey(dayjs(date).format("YYYY-MM-DD"));
+    if (periodType === "month") setMonthKey(dayjs(date).format("YYYY-MM"));
+    if (periodType === "year") setYearKey(dayjs(date).format("YYYY"));
+    if (periodType === "quarter") {
+      const y = dayjs(date).year();
+      const q = Math.ceil((dayjs(date).month() + 1) / 3);
+      setQuarterKey(`${y}-Q${q}`);
     }
   };
 
-  // ========== GET FILTER DISPLAY TEXT ==========
-  const getFilterDisplayText = (): string => {
-    let text = rangeTextMap[range];
-
-    if (limitOption === "3") text += " • Top 3";
-    else if (limitOption === "5") text += " • Top 5";
-    else if (limitOption === "20") text += " • Top 20";
-    else if (limitOption === "custom" && customLimit)
-      text += ` • Top ${customLimit}`;
-    else text += " • Top 10";
-
-    return text;
+  const openCustomMonthPicker = (which: "from" | "to") => {
+    setCustomWhich(which);
+    const current = which === "from" ? monthFrom : monthTo;
+    setTempDate(current ? dayjs(current, "YYYY-MM").toDate() : new Date());
+    setShowCustomPicker(true);
   };
 
-  // ========== RENDER PRODUCT ITEM ==========
-  const renderProductItem = ({
-    item,
-    index,
-  }: {
-    item: TopProduct;
-    index: number;
-  }): JSX.Element => {
-    const sales =
-      typeof item.totalSales === "object"
-        ? parseFloat(item.totalSales.$numberDecimal)
-        : item.totalSales;
+  const onChangeCustomMonth = (event: any, date?: Date) => {
+    if (event?.type === "dismissed" || !date) {
+      setShowCustomPicker(false);
+      setCustomWhich(null);
+      return;
+    }
+    const picked = dayjs(date).format("YYYY-MM");
 
-    const rankColors = ["#fbbf24", "#d1d5db", "#f97316"];
-    const rankColor = index < 3 ? rankColors[index] : "#6b7280";
+    if (customWhich === "from") {
+      // đảm bảo from <= to
+      if (monthTo && dayjs(picked).isAfter(dayjs(monthTo))) {
+        setMonthFrom(picked);
+        setMonthTo(picked);
+      } else {
+        setMonthFrom(picked);
+      }
+    }
 
-    return (
-      <View style={styles.productCard}>
-        {/* Rank Badge */}
-        <View style={[styles.rankBadge, { backgroundColor: rankColor }]}>
-          <Text style={styles.rankText}>#{index + 1}</Text>
-        </View>
+    if (customWhich === "to") {
+      if (monthFrom && dayjs(picked).isBefore(dayjs(monthFrom))) {
+        setMonthFrom(picked);
+        setMonthTo(picked);
+      } else {
+        setMonthTo(picked);
+      }
+    }
 
-        {/* Product Info */}
-        <View style={styles.productInfo}>
-          <Text style={styles.productName} numberOfLines={2}>
-            {item.productName}
-          </Text>
-          <Text style={styles.productSku}>SKU: {item.productSku}</Text>
-
-          {/* Stats Grid */}
-          <View style={styles.statsGrid}>
-            <View style={styles.statItem}>
-              <Ionicons name="cube-outline" size={18} color="#1890ff" />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.statLabel}>Số lượng bán</Text>
-                <Text style={[styles.statValue, { color: "#ef4444" }]}>
-                  {item.totalQuantity}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.statItem}>
-              <Ionicons name="cash-outline" size={18} color="#52c41a" />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.statLabel}>Doanh thu</Text>
-                <Text style={[styles.statValue, { color: "#52c41a" }]}>
-                  {formatVND(sales)}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.statItem}>
-              <Ionicons name="receipt-outline" size={18} color="#722ed1" />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.statLabel}>Số đơn</Text>
-                <Text style={[styles.statValue, { color: "#722ed1" }]}>
-                  {item.countOrders}
-                </Text>
-              </View>
-            </View>
-          </View>
-        </View>
-      </View>
-    );
+    setShowCustomPicker(false);
+    setCustomWhich(null);
   };
 
-  // ========== RENDER ==========
-  if (!storeId) {
+  const getPeriodDisplay = () => {
+    if (!isReadyToLoad) return "Chọn kỳ báo cáo";
+    if (periodType === "day")
+      return `Ngày ${dayjs(periodKey).format("DD/MM/YYYY")}`;
+    if (periodType === "month")
+      return `Tháng ${dayjs(periodKey).format("MM/YYYY")}`;
+    if (periodType === "quarter")
+      return quarterKey ? quarterKey.replace("-Q", " Quý ") : "";
+    if (periodType === "year") return `Năm ${periodKey}`;
+    if (periodType === "custom")
+      return `Từ ${dayjs(monthFrom).format("MM/YYYY")} → ${dayjs(monthTo).format("MM/YYYY")}`;
+    return "";
+  };
+
+  const handleExport = async (format: "csv" | "pdf") => {
+    if (!isReadyToLoad || !storeId) return;
+
+    try {
+      setExportLoading(true);
+
+      const ext = format === "pdf" ? "pdf" : "csv";
+      const mime = format === "pdf" ? "application/pdf" : "text/csv";
+
+      const params: any = {
+        storeId,
+        periodType,
+        format,
+        limit: getLimit(),
+      };
+
+      if (periodType === "custom") {
+        params.monthFrom = monthFrom;
+        params.monthTo = monthTo;
+      } else {
+        params.periodKey = periodKey;
+      }
+
+      // build query
+      const query = new URLSearchParams();
+      Object.entries(params).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && `${v}` !== "")
+          query.append(k, `${v}`);
+      });
+
+      const baseURL = (apiClient.defaults as any)?.baseURL as
+        | string
+        | undefined;
+      const url = joinUrl(
+        baseURL,
+        `/orders/top-products/export?${query.toString()}`
+      );
+
+      const res = await fetch(url, {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          Accept: mime,
+        },
+      });
+
+      if (!res.ok) throw new Error(`Export failed (HTTP ${res.status})`);
+
+      const bytes = await res.bytes();
+      const dir = await ensureDir();
+
+      const filenameSafePeriod =
+        periodType === "custom" ? `${monthFrom}_den_${monthTo}` : periodKey;
+      const outFile = new File(
+        dir,
+        `top-san-pham-${periodType}-${filenameSafePeriod}-${Date.now()}.${ext}`
+      );
+      await outFile.write(bytes);
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(outFile.uri, { mimeType: mime });
+      } else {
+        Alert.alert("Thành công", `Đã lưu file tại: ${outFile.uri}`);
+      }
+    } catch (e: any) {
+      console.error("export error:", e?.message ?? e);
+      Alert.alert("Lỗi", e?.message ?? "Không thể xuất file");
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+  const askExport = () => {
+    if (!isReadyToLoad || products.length === 0) return;
+    Alert.alert("Xuất báo cáo", "Chọn định dạng", [
+      { text: "Hủy", style: "cancel" },
+      { text: "CSV", onPress: () => handleExport("csv") },
+      { text: "PDF", onPress: () => handleExport("pdf") },
+    ]);
+  };
+
+  const pagedProducts = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return products.slice(start, start + pageSize);
+  }, [products, page, pageSize]);
+
+  if (!storeId || !token) {
     return (
-      <View style={styles.errorContainer}>
-        <Ionicons name="alert-circle-outline" size={64} color="#ef4444" />
-        <Text style={styles.errorTitle}>Chưa chọn cửa hàng</Text>
-        <Text style={styles.errorText}>Vui lòng chọn cửa hàng trước</Text>
+      <View style={styles.center}>
+        <Text style={styles.emptyTitle}>
+          Vui lòng đăng nhập và chọn cửa hàng
+        </Text>
+        <Text style={styles.emptySub}>
+          Cần token + currentStore để xem báo cáo.
+        </Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View style={styles.root}>
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerIcon}>
-          <Ionicons name="trophy" size={32} color="#faad14" />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.headerTitle}>
+            {currentStore?.name ?? "Cửa hàng"}
+          </Text>
+          <Text style={styles.headerSub}>Top sản phẩm bán chạy</Text>
         </View>
-        <View style={styles.headerTextContainer}>
-          <Text style={styles.headerTitle}>Top sản phẩm</Text>
-          <Text style={styles.headerSubtitle}>{storeName}</Text>
-        </View>
+
         <TouchableOpacity
+          onPress={askExport}
+          disabled={
+            !isReadyToLoad || products.length === 0 || exportLoading || loading
+          }
           style={[
-            styles.exportBtn,
-            !products.length && styles.exportBtnDisabled,
+            styles.headerBtn,
+            (!isReadyToLoad ||
+              products.length === 0 ||
+              exportLoading ||
+              loading) &&
+              styles.btnDisabled,
           ]}
-          onPress={exportToCSV}
-          disabled={!products.length}
         >
-          <Ionicons name="download-outline" size={20} color="#fff" />
+          {exportLoading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.headerBtnText}>Xuất</Text>
+          )}
         </TouchableOpacity>
-      </View>
-
-      {/* ✅ Collapsible Filter Section */}
-      <View style={styles.filterSection}>
-        <TouchableOpacity
-          style={styles.filterToggle}
-          onPress={() => setIsFilterExpanded(!isFilterExpanded)}
-          activeOpacity={0.7}
-        >
-          <View style={styles.filterToggleLeft}>
-            <Ionicons name="funnel" size={20} color="#faad14" />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.filterToggleText}>
-                {isFilterExpanded ? "Thu gọn bộ lọc" : "Mở rộng bộ lọc"}
-              </Text>
-              {!isFilterExpanded && (
-                <Text style={styles.filterTogglePeriod}>
-                  {getFilterDisplayText()}
-                </Text>
-              )}
-            </View>
-          </View>
-          <Ionicons
-            name={isFilterExpanded ? "chevron-up" : "chevron-down"}
-            size={20}
-            color="#faad14"
-          />
-        </TouchableOpacity>
-
-        {isFilterExpanded && (
-          <View style={styles.filterContent}>
-            {/* Range */}
-            <Text style={styles.filterLabel}>Kỳ thống kê</Text>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={range}
-                onValueChange={(value: RangeType) => setRange(value)}
-                style={styles.picker}
-              >
-                <Picker.Item label="Hôm nay" value="today" />
-                <Picker.Item label="Hôm qua" value="yesterday" />
-                <Picker.Item label="Tuần này" value="thisWeek" />
-                <Picker.Item label="Tháng này" value="thisMonth" />
-                <Picker.Item label="Năm nay" value="thisYear" />
-              </Picker>
-            </View>
-
-            {/* Limit */}
-            <Text style={styles.filterLabel}>Số lượng</Text>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={limitOption}
-                onValueChange={(value: LimitOption) => {
-                  setLimitOption(value);
-                  if (value !== "custom") setCustomLimit("");
-                }}
-                style={styles.picker}
-              >
-                <Picker.Item label="Top 3" value="3" />
-                <Picker.Item label="Top 5" value="5" />
-                <Picker.Item label="Top 10 (mặc định)" value="" />
-                <Picker.Item label="Top 20" value="20" />
-                <Picker.Item label="Tùy chỉnh..." value="custom" />
-              </Picker>
-            </View>
-
-            {/* Custom Limit Input */}
-            {limitOption === "custom" && (
-              <>
-                <Text style={styles.filterLabel}>Nhập số lượng tùy chỉnh</Text>
-                <TextInput
-                  style={styles.customInput}
-                  value={customLimit}
-                  onChangeText={setCustomLimit}
-                  placeholder="VD: 30"
-                  keyboardType="numeric"
-                  placeholderTextColor="#9ca3af"
-                />
-              </>
-            )}
-
-            {/* Action Button */}
-            <TouchableOpacity
-              style={[styles.actionBtn, loading && styles.actionBtnDisabled]}
-              onPress={() => fetchTopProducts(false)}
-              disabled={loading}
-              activeOpacity={0.8}
-            >
-              <LinearGradient
-                colors={["#faad14", "#fa8c16"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.actionBtnGradient}
-              >
-                {loading ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <>
-                    <Ionicons name="search" size={18} color="#fff" />
-                    <Text style={styles.actionBtnText}>Xem kết quả</Text>
-                  </>
-                )}
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-        )}
       </View>
 
       <ScrollView
-        style={styles.scrollView}
+        contentContainerStyle={{ paddingBottom: 24 }}
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => fetchTopProducts(true)}
-            colors={["#faad14"]}
-          />
-        }
       >
-        {/* Summary Card */}
-        {products.length > 0 && (
-          <View style={styles.summaryCard}>
-            <View style={styles.summaryRow}>
-              <View style={styles.summaryItem}>
-                <Ionicons name="trophy" size={24} color="#faad14" />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.summaryLabel}>{rangeTextMap[range]}</Text>
-                  <Text style={styles.summaryValue}>
-                    {products.length} sản phẩm
+        {/* Filters */}
+        <View style={styles.card}>
+          <SectionTitle title="Chọn kỳ báo cáo" />
+
+          {/* Period type pills */}
+          <View style={styles.row}>
+            {[
+              { v: "day", t: "Ngày" },
+              { v: "month", t: "Tháng" },
+              { v: "quarter", t: "Quý" },
+              { v: "year", t: "Năm" },
+              { v: "custom", t: "Tùy chỉnh" },
+            ].map((it) => {
+              const active = periodType === (it.v as PeriodType);
+              return (
+                <TouchableOpacity
+                  key={it.v}
+                  style={[styles.pill, active && styles.pillActive]}
+                  onPress={() => setPeriodType(it.v as PeriodType)}
+                >
+                  <Text
+                    style={[styles.pillText, active && styles.pillTextActive]}
+                  >
+                    {it.t}
                   </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* period selector */}
+          {periodType !== "custom" ? (
+            <TouchableOpacity
+              onPress={openPeriodPicker}
+              style={styles.secondaryBtn}
+            >
+              <Text style={styles.secondaryBtnText}>
+                {periodType === "day" &&
+                  (dayKey
+                    ? `Ngày: ${dayjs(dayKey).format("DD/MM/YYYY")}`
+                    : "Chọn ngày")}
+                {periodType === "month" &&
+                  (monthKey
+                    ? `Tháng: ${dayjs(monthKey).format("MM/YYYY")}`
+                    : "Chọn tháng")}
+                {periodType === "quarter" &&
+                  (quarterKey ? `Quý: ${quarterKey}` : "Chọn quý")}
+                {periodType === "year" &&
+                  (yearKey ? `Năm: ${yearKey}` : "Chọn năm")}
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <>
+              <View style={styles.row2}>
+                <View style={{ flex: 1 }}>
+                  <TouchableOpacity
+                    onPress={() => openCustomMonthPicker("from")}
+                    style={styles.secondaryBtn}
+                  >
+                    <Text style={styles.secondaryBtnText}>
+                      {monthFrom
+                        ? `Từ tháng: ${dayjs(monthFrom).format("MM/YYYY")}`
+                        : "Từ tháng"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <TouchableOpacity
+                    onPress={() => openCustomMonthPicker("to")}
+                    style={styles.secondaryBtn}
+                  >
+                    <Text style={styles.secondaryBtnText}>
+                      {monthTo
+                        ? `Đến tháng: ${dayjs(monthTo).format("MM/YYYY")}`
+                        : "Đến tháng"}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               </View>
+
+              {/* Nếu bạn muốn cho phép nhập tay fallback */}
+              <View style={{ marginTop: 10 }}>
+                <Field
+                  label="Từ tháng (YYYY-MM)"
+                  value={monthFrom}
+                  onChangeText={setMonthFrom}
+                  placeholder="VD: 2025-01"
+                />
+                <Field
+                  label="Đến tháng (YYYY-MM)"
+                  value={monthTo}
+                  onChangeText={setMonthTo}
+                  placeholder="VD: 2025-12"
+                />
+              </View>
+            </>
+          )}
+
+          {/* DateTimePicker (non-custom) */}
+          {showPeriodPicker && periodType !== "custom" && (
+            <DateTimePicker
+              value={tempDate}
+              mode="date"
+              display={Platform.OS === "ios" ? "spinner" : "default"}
+              onChange={onChangePeriod}
+              locale="vi-VN"
+            />
+          )}
+
+          {/* DateTimePicker (custom from/to) */}
+          {showCustomPicker && periodType === "custom" && (
+            <DateTimePicker
+              value={tempDate}
+              mode="date"
+              display={Platform.OS === "ios" ? "spinner" : "default"}
+              onChange={onChangeCustomMonth}
+              locale="vi-VN"
+            />
+          )}
+
+          {/* Limit */}
+          <Text style={[styles.label, { marginTop: 12 }]}>Top</Text>
+          <View style={styles.row}>
+            {[
+              { v: "3", t: "Top 3" },
+              { v: "5", t: "Top 5" },
+              { v: "", t: "Top 10" },
+              { v: "20", t: "Top 20" },
+              { v: "custom", t: "Tùy chỉnh" },
+            ].map((it) => {
+              const active = limitOption === (it.v as any);
+              return (
+                <TouchableOpacity
+                  key={it.v || "10"}
+                  style={[styles.pill, active && styles.pillActive]}
+                  onPress={() => {
+                    setLimitOption(it.v as any);
+                    if (it.v !== "custom") setCustomLimitText("");
+                  }}
+                >
+                  <Text
+                    style={[styles.pillText, active && styles.pillTextActive]}
+                  >
+                    {it.t}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {limitOption === "custom" && (
+            <Field
+              label="Số lượng top"
+              value={customLimitText}
+              onChangeText={setCustomLimitText}
+              placeholder="VD: 50"
+              keyboardType="number-pad"
+            />
+          )}
+
+          {/* Chips */}
+          <View style={[styles.row, { marginTop: 8 }]}>
+            {isReadyToLoad && (
+              <Chip text={`Kỳ: ${getPeriodDisplay()}`} color="#2563eb" />
+            )}
+            {isReadyToLoad && (
+              <Chip text={`Limit: ${getLimit()}`} color="#f59e0b" />
+            )}
+            {products.length > 0 && (
+              <Chip text={`Sản phẩm: ${products.length}`} color="#10b981" />
+            )}
+          </View>
+        </View>
+
+        {/* Content */}
+        {!isReadyToLoad ? (
+          <View style={styles.card}>
+            <Text style={styles.helperText}>
+              Vui lòng chọn kỳ báo cáo để xem top sản phẩm.
+            </Text>
+          </View>
+        ) : loading ? (
+          <View style={styles.card}>
+            <View style={styles.centerPad}>
+              <ActivityIndicator />
+              <Text style={[styles.helperText, { marginTop: 8 }]}>
+                Đang tải top sản phẩm...
+              </Text>
+            </View>
+          </View>
+        ) : products.length === 0 ? (
+          <View style={styles.card}>
+            <Text style={styles.helperText}>
+              Không có dữ liệu trong kỳ này.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.card}>
+            <SectionTitle title={`Top sản phẩm – ${getPeriodDisplay()}`} />
+
+            {/* Table header */}
+            <View style={styles.tableHeader}>
+              <Text style={[styles.th, { width: 40 }]}>#</Text>
+              <Text style={[styles.th, { flex: 1 }]}>Sản phẩm</Text>
+              <Text style={[styles.th, { width: 80 }]}>SL</Text>
+              <Text style={[styles.th, { width: 110, textAlign: "right" }]}>
+                Doanh thu
+              </Text>
+            </View>
+
+            <FlatList
+              data={pagedProducts}
+              keyExtractor={(_, i) => `${i}`}
+              scrollEnabled={false}
+              ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+              renderItem={({ item, index }) => {
+                const stt = (page - 1) * pageSize + index + 1;
+                return (
+                  <View style={styles.tableRow}>
+                    <Text style={[styles.td, { width: 40 }]}>{stt}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.productName} numberOfLines={2}>
+                        {item.productName ?? "-"}
+                      </Text>
+                      <Text style={styles.skuText}>
+                        SKU: {item.productSku || "-"}
+                      </Text>
+                      <Text style={styles.metaText}>
+                        Số đơn: {item.countOrders ?? 0}
+                      </Text>
+                    </View>
+                    <Text
+                      style={[
+                        styles.qtyText,
+                        { width: 80, textAlign: "center" },
+                      ]}
+                    >
+                      {item.totalQuantity ?? 0}
+                    </Text>
+                    <Text
+                      style={[styles.td, { width: 110, textAlign: "right" }]}
+                    >
+                      {formatVND(item.totalSales)}
+                    </Text>
+                  </View>
+                );
+              }}
+            />
+
+            {/* Pagination controls */}
+            <View style={styles.paginationRow}>
+              <TouchableOpacity
+                style={[styles.secondaryBtn, page <= 1 && styles.btnDisabled]}
+                disabled={page <= 1}
+                onPress={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                <Text style={styles.secondaryBtnText}>Trang trước</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.secondaryBtn,
+                  page * pageSize >= products.length && styles.btnDisabled,
+                ]}
+                disabled={page * pageSize >= products.length}
+                onPress={() => setPage((p) => p + 1)}
+              >
+                <Text style={styles.secondaryBtnText}>Trang sau</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.row}>
+              {[10, 20, 50].map((s) => {
+                const active = pageSize === s;
+                return (
+                  <TouchableOpacity
+                    key={s}
+                    style={[styles.pill, active && styles.pillActive]}
+                    onPress={() => {
+                      setPageSize(s);
+                      setPage(1);
+                    }}
+                  >
+                    <Text
+                      style={[styles.pillText, active && styles.pillTextActive]}
+                    >
+                      {s}/trang
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           </View>
         )}
-
-        {/* Products List */}
-        <View style={styles.listSection}>
-          <View style={styles.listHeader}>
-            <Text style={styles.listHeaderTitle}>
-              {hasFetched ? "Kết quả" : "Chưa có dữ liệu"}
-            </Text>
-            {products.length > 0 && (
-              <Text style={styles.listHeaderCount}>
-                {products.length} sản phẩm
-              </Text>
-            )}
-          </View>
-
-          {loading && !refreshing ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#faad14" />
-              <Text style={styles.loadingText}>Đang tải top sản phẩm...</Text>
-            </View>
-          ) : products.length > 0 ? (
-            <FlatList
-              data={products}
-              renderItem={renderProductItem}
-              keyExtractor={(item) => item._id}
-              scrollEnabled={false}
-              contentContainerStyle={styles.productList}
-            />
-          ) : (
-            <View style={styles.emptyContainer}>
-              <Ionicons name="cube-outline" size={64} color="#d1d5db" />
-              <Text style={styles.emptyText}>
-                {hasFetched
-                  ? `${rangeTextMap[range]} chưa có dữ liệu nào!`
-                  : "Chưa có dữ liệu. Chọn kỳ thống kê và nhấn 'Xem kết quả'"}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        <View style={styles.bottomSpacer} />
       </ScrollView>
     </View>
   );
-};
+}
 
-export default TopProductsScreen;
-
-// ========== STYLES (giữ nguyên như bản trước) ==========
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f8fafc" },
-  scrollView: { flex: 1 },
-  errorContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#f8fafc",
-    padding: 32,
-  },
-  errorTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#111827",
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  errorText: { fontSize: 14, color: "#6b7280", textAlign: "center" },
+  root: { flex: 1, backgroundColor: "#f8fafc" },
+
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#fff",
-    padding: 20,
-    paddingTop: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
-    gap: 14,
-  },
-  headerIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: "#fffbeb",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerTextContainer: { flex: 1 },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#111827",
-    marginBottom: 4,
-  },
-  headerSubtitle: { fontSize: 13, color: "#6b7280" },
-  exportBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: "#faad14",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  exportBtnDisabled: { backgroundColor: "#d1d5db" },
-  filterSection: {
-    backgroundColor: "#fff",
-    marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    elevation: 3,
-  },
-  filterToggle: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 16,
-  },
-  filterToggleLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    flex: 1,
-  },
-  filterToggleText: { fontSize: 16, fontWeight: "700", color: "#faad14" },
-  filterTogglePeriod: { fontSize: 12, color: "#6b7280", marginTop: 4 },
-  filterContent: {
+    backgroundColor: "#10b981",
+    paddingTop: Platform.OS === "ios" ? 1 : 5,
     paddingHorizontal: 16,
-    paddingBottom: 16,
-    borderTopWidth: 1,
-    borderTopColor: "#f3f4f6",
-  },
-  filterLabel: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#374151",
-    marginBottom: 8,
-    marginTop: 12,
-  },
-  pickerContainer: {
-    backgroundColor: "#f9fafb",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    borderRadius: 12,
-    overflow: "hidden",
-  },
-  picker: { height: 50 },
-  customInput: {
-    backgroundColor: "#f9fafb",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: "#111827",
-  },
-  actionBtn: {
-    borderRadius: 12,
-    overflow: "hidden",
-    marginTop: 20,
-    shadowColor: "#faad14",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  actionBtnDisabled: { opacity: 0.6 },
-  actionBtnGradient: {
+    paddingBottom: 14,
     flexDirection: "row",
+    gap: 12,
     alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 14,
-    gap: 8,
   },
-  actionBtnText: { color: "#fff", fontSize: 15, fontWeight: "700" },
-  summaryCard: {
+  headerTitle: { color: "#fff", fontSize: 18, fontWeight: "800" },
+  headerSub: {
+    color: "rgba(255,255,255,0.85)",
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  headerBtn: {
+    backgroundColor: "#2563eb",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  headerBtnText: { color: "#fff", fontWeight: "800" },
+
+  card: {
     backgroundColor: "#fff",
     marginHorizontal: 16,
-    marginTop: 16,
+    marginTop: 14,
+    borderRadius: 14,
     padding: 16,
-    borderRadius: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
   },
-  summaryRow: { flexDirection: "row" },
-  summaryItem: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  summaryLabel: { fontSize: 13, color: "#6b7280", marginBottom: 4 },
-  summaryValue: { fontSize: 18, fontWeight: "700", color: "#111827" },
-  listSection: { marginHorizontal: 16, marginTop: 16 },
-  listHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  listHeaderTitle: { fontSize: 18, fontWeight: "700", color: "#111827" },
-  listHeaderCount: { fontSize: 13, color: "#6b7280", fontWeight: "600" },
-  loadingContainer: { alignItems: "center", paddingVertical: 40 },
-  loadingText: { marginTop: 12, fontSize: 14, color: "#6b7280" },
-  productList: { gap: 12 },
-  productCard: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    elevation: 3,
-    position: "relative",
-  },
-  rankBadge: {
-    position: "absolute",
-    top: 12,
-    right: 12,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  rankText: { fontSize: 14, fontWeight: "700", color: "#fff" },
-  productInfo: { paddingRight: 44 },
-  productName: {
+  sectionTitle: {
     fontSize: 16,
-    fontWeight: "700",
+    fontWeight: "800",
     color: "#111827",
-    marginBottom: 6,
+    marginBottom: 10,
   },
-  productSku: { fontSize: 13, color: "#6b7280", marginBottom: 12 },
-  statsGrid: { gap: 10 },
-  statItem: {
-    flexDirection: "row",
-    alignItems: "center",
+
+  label: { fontSize: 12, fontWeight: "800", color: "#374151", marginBottom: 6 },
+  input: {
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
     backgroundColor: "#f9fafb",
-    padding: 12,
-    borderRadius: 10,
-    gap: 10,
-  },
-  statLabel: { fontSize: 12, color: "#6b7280", marginBottom: 4 },
-  statValue: { fontSize: 16, fontWeight: "700", color: "#111827" },
-  emptyContainer: { alignItems: "center", paddingVertical: 60 },
-  emptyText: {
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    color: "#111827",
     fontSize: 14,
-    color: "#6b7280",
-    marginTop: 12,
+  },
+
+  helperText: { marginTop: 6, color: "#6b7280", fontSize: 12, lineHeight: 16 },
+  center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 16,
+  },
+  centerPad: { alignItems: "center", paddingVertical: 30 },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#111827",
     textAlign: "center",
   },
-  bottomSpacer: { height: 40 },
+  emptySub: { marginTop: 6, color: "#6b7280", textAlign: "center" },
+
+  row: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  row2: { flexDirection: "row", gap: 10 },
+
+  pill: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#fff",
+  },
+  pillActive: { borderColor: "#2563eb", backgroundColor: "#eff6ff" },
+  pillText: { color: "#374151", fontWeight: "800", fontSize: 12 },
+  pillTextActive: { color: "#2563eb" },
+
+  chip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  chipText: { fontSize: 11, fontWeight: "800" },
+
+  secondaryBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#fff",
+  },
+  secondaryBtnText: { color: "#111827", fontWeight: "900" },
+  btnDisabled: { opacity: 0.6 },
+
+  tableHeader: {
+    flexDirection: "row",
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderColor: "#f3f4f6",
+  },
+  tableRow: {
+    flexDirection: "row",
+    gap: 10,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 12,
+    paddingHorizontal: 10,
+  },
+  th: { fontSize: 12, fontWeight: "900", color: "#374151" },
+  td: { fontSize: 12, fontWeight: "800", color: "#111827" },
+  productName: { fontSize: 13, fontWeight: "900", color: "#111827" },
+  skuText: { fontSize: 11, color: "#6b7280", marginTop: 2 },
+  metaText: { fontSize: 11, color: "#6b7280", marginTop: 2 },
+  qtyText: { fontSize: 13, fontWeight: "900", color: "#ef4444" },
+
+  paginationRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 12,
+    justifyContent: "center",
+  },
 });

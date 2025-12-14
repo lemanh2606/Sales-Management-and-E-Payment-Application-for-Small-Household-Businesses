@@ -14,17 +14,18 @@ import {
   Animated,
 } from "react-native";
 import { useAuth } from "../../context/AuthContext";
-import apiClient from "../../api/apiClient"; // 🚀 IMPORT APICLIENT
+import apiClient from "../../api/apiClient";
 import dayjs from "dayjs";
 import { LineChart, BarChart, PieChart } from "react-native-chart-kit";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 
-const { width, height } = Dimensions.get("window");
+const { width } = Dimensions.get("window");
 
 // ==================== TYPES ====================
 interface Store {
-  _id: string;
+  _id?: string;
+  id?: string;
   name: string;
   [key: string]: any;
 }
@@ -35,12 +36,16 @@ interface OrderStats {
   refunded: number;
   paid: number;
   netSoldItems: number;
+  totalSoldItems?: number;
+  totalRefundedItems?: number;
 }
 
 interface FinancialData {
   totalRevenue: number;
   netProfit: number;
   expenses: number;
+  // backend của bạn có thể có nhiều field hơn, vẫn ok
+  [key: string]: any;
 }
 
 interface TopProduct {
@@ -51,10 +56,16 @@ interface TopProduct {
   category?: string;
 }
 
+type DecimalLike =
+  | number
+  | { $numberDecimal?: string }
+  | { numberDecimal?: string };
+
 interface RevenueResponse {
-  revenue: {
-    totalRevenue: number | { $numberDecimal?: string };
-    countOrders: number;
+  revenue?: {
+    totalRevenue?: DecimalLike;
+    countOrders?: number;
+    dailyRevenue?: Array<{ day: number | string; revenue: DecimalLike }>;
   };
 }
 
@@ -146,6 +157,24 @@ const MetricProgress: React.FC<{
   );
 };
 
+// ==================== HELPERS ====================
+const toNumber = (v: DecimalLike | undefined | null): number => {
+  if (typeof v === "number") return v;
+  if (!v || typeof v !== "object") return 0;
+  // support both: { $numberDecimal: "12.34" } & { numberDecimal: "12.34" }
+  const s =
+    (v as any).$numberDecimal ??
+    (v as any).numberDecimal ??
+    (v as any).toString?.();
+  const n = Number(s);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const getStoreId = (store: Store | null): string | null => {
+  if (!store) return null;
+  return (store._id || store.id) ?? null;
+};
+
 // ==================== MAIN COMPONENT ====================
 export default function DashboardScreen() {
   const { user } = useAuth();
@@ -191,7 +220,7 @@ export default function DashboardScreen() {
       if (storeData) {
         const store: Store = JSON.parse(storeData);
         setCurrentStore(store);
-        setStoreId(store._id);
+        setStoreId(getStoreId(store));
       }
     } catch (error) {
       console.error("❌ Load store error:", error);
@@ -200,9 +229,7 @@ export default function DashboardScreen() {
 
   // ==================== FETCH ALL DATA ====================
   useEffect(() => {
-    if (storeId) {
-      fetchAllData();
-    }
+    if (storeId) fetchAllData();
   }, [storeId]);
 
   const fetchAllData = async (): Promise<void> => {
@@ -216,7 +243,6 @@ export default function DashboardScreen() {
         fetchCategoryData(),
       ]);
 
-      // Start animations after data loads
       Animated.parallel([
         Animated.timing(fadeAnim, {
           toValue: 1,
@@ -242,18 +268,32 @@ export default function DashboardScreen() {
     if (!storeId) return;
 
     try {
-      const year = dayjs().format("YYYY");
+      // Theo web: periodType "month" + periodKey YYYY-MM
+      const periodKey = dayjs().format("YYYY-MM");
 
       const res = await apiClient.get("/orders/stats", {
-        params: { storeId, periodType: "year", periodKey: year },
+        params: { storeId, periodType: "month", periodKey },
       });
 
-      const { total, pending, refunded, paid, netSoldItems } =
-        res.data as OrderStats & {
-          totalSoldItems?: number;
-          totalRefundedItems?: number;
-        };
-      setOrderStats({ total, pending, refunded, paid, netSoldItems });
+      const {
+        total = 0,
+        pending = 0,
+        refunded = 0,
+        paid = 0,
+        netSoldItems = 0,
+        totalSoldItems,
+        totalRefundedItems,
+      } = (res.data || {}) as OrderStats;
+
+      setOrderStats({
+        total,
+        pending,
+        refunded,
+        paid,
+        netSoldItems,
+        totalSoldItems,
+        totalRefundedItems,
+      });
     } catch (error: any) {
       console.error("❌ Order stats error:", error?.message || error);
     }
@@ -264,32 +304,46 @@ export default function DashboardScreen() {
     if (!storeId) return;
 
     try {
-      const year = dayjs().format("YYYY");
+      const periodKey = dayjs().format("YYYY-MM");
 
       const res = await apiClient.get("/financials", {
-        params: { storeId, periodType: "year", periodKey: year },
+        params: { storeId, periodType: "month", periodKey },
       });
 
-      const data = (res.data as { data: FinancialData }).data;
-      setFinancials(data);
+      // web: res.data.data
+      const data = (res.data as { data: FinancialData })?.data;
+      setFinancials(data || null);
     } catch (error: any) {
       console.error("❌ Financials error:", error?.message || error);
     }
   };
 
   // ==================== FETCH TOP PRODUCTS ====================
+  // ==================== FETCH TOP PRODUCTS ====================
   const fetchTopProducts = async (): Promise<void> => {
     if (!storeId) return;
 
     try {
+      const periodKey = dayjs().format("YYYY-MM"); // giống web [file:35]
+
       const res = await apiClient.get("/orders/top-products", {
-        params: { storeId, range: "thisMonth", limit: 5 },
+        params: {
+          storeId,
+          periodType: "month",
+          periodKey,
+          limit: 5,
+        },
       });
 
-      const data = (res.data as { data: TopProduct[] }).data;
+      const data = (res.data as { data: TopProduct[] })?.data;
       setTopProducts(data || []);
     } catch (error: any) {
-      console.error("❌ Top products error:", error?.message || error);
+      console.error(
+        "❌ Top products error:",
+        error?.response?.status,
+        error?.response?.data,
+        error?.message
+      );
     }
   };
 
@@ -304,21 +358,30 @@ export default function DashboardScreen() {
         params: { storeId, periodType: "month", periodKey },
       });
 
-      const data = (res.data as RevenueResponse).revenue || {};
-      const totalRevenue =
-        typeof data.totalRevenue === "object"
-          ? Number(data.totalRevenue.$numberDecimal || 0)
-          : (data.totalRevenue as number);
+      const payload = res.data as RevenueResponse;
+      const revenue = payload?.revenue;
 
+      // Nếu backend trả dailyRevenue thật -> dùng luôn
+      if (revenue?.dailyRevenue?.length) {
+        const daily = revenue.dailyRevenue.map((x) => toNumber(x.revenue));
+        setRevenueData(daily);
+        return;
+      }
+
+      // Fallback: nếu chỉ có totalRevenue -> fake daily giống web
+      const totalRevenue = toNumber(revenue?.totalRevenue);
       const [year, month] = periodKey.split("-").map(Number);
       const daysInMonth = dayjs(`${year}-${month}`).daysInMonth();
+
       const fakeDaily = Array.from({ length: daysInMonth }, () => {
         const base = totalRevenue / daysInMonth;
         return Math.floor(base * (Math.random() * 0.4 + 0.8));
       });
+
       setRevenueData(fakeDaily);
     } catch (error: any) {
       console.error("❌ Revenue chart error:", error?.message || error);
+      setRevenueData([]);
     }
   };
 
@@ -437,7 +500,7 @@ export default function DashboardScreen() {
   // ==================== CALCULATIONS ====================
   const avgOrderValue =
     orderStats.paid > 0 && financials
-      ? financials.totalRevenue / orderStats.paid
+      ? (financials.totalRevenue || 0) / orderStats.paid
       : 0;
 
   const conversionRate =
@@ -834,20 +897,10 @@ export default function DashboardScreen() {
 
 // ==================== STYLES ====================
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: "#f8fafc",
-  },
-  container: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 24,
-  },
-  content: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-  },
+  root: { flex: 1, backgroundColor: "#f8fafc" },
+  container: { flex: 1 },
+  scrollContent: { paddingBottom: 24 },
+  content: { paddingHorizontal: 16, paddingTop: 16 },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
@@ -873,11 +926,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginBottom: 4,
   },
-  loadingSubtext: {
-    fontSize: 14,
-    color: "#6b7280",
-    fontWeight: "500",
-  },
+  loadingSubtext: { fontSize: 14, color: "#6b7280", fontWeight: "500" },
   header: {
     paddingTop: 60,
     paddingBottom: 20,
@@ -890,17 +939,9 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 8,
   },
-  headerContent: {
-    paddingBottom: 10,
-  },
-  headerTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  avatarContainer: {
-    marginRight: 12,
-  },
+  headerContent: { paddingBottom: 10 },
+  headerTop: { flexDirection: "row", alignItems: "center", marginBottom: 20 },
+  avatarContainer: { marginRight: 12 },
   avatar: {
     width: 50,
     height: 50,
@@ -913,14 +954,8 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  avatarText: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: "#667eea",
-  },
-  headerInfo: {
-    flex: 1,
-  },
+  avatarText: { fontSize: 20, fontWeight: "800", color: "#667eea" },
+  headerInfo: { flex: 1 },
   greeting: {
     fontSize: 18,
     fontWeight: "700",
@@ -938,11 +973,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 12,
   },
-  dateText: {
-    fontSize: 12,
-    color: "#ffffff",
-    fontWeight: "600",
-  },
+  dateText: { fontSize: 12, color: "#ffffff", fontWeight: "600" },
   tabContainer: {
     flexDirection: "row",
     backgroundColor: "rgba(255,255,255,0.15)",
@@ -958,21 +989,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 8,
   },
-  tabActive: {
-    backgroundColor: "rgba(255,255,255,0.25)",
-  },
-  tabIcon: {
-    fontSize: 16,
-    marginRight: 6,
-  },
-  tabText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "rgba(255,255,255,0.8)",
-  },
-  tabTextActive: {
-    color: "#ffffff",
-  },
+  tabActive: { backgroundColor: "rgba(255,255,255,0.25)" },
+  tabIcon: { fontSize: 16, marginRight: 6 },
+  tabText: { fontSize: 13, fontWeight: "600", color: "rgba(255,255,255,0.8)" },
+  tabTextActive: { color: "#ffffff" },
   statsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -1006,18 +1026,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  statIcon: {
-    fontSize: 20,
-  },
-  trendBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  trendText: {
-    fontSize: 10,
-    fontWeight: "700",
-  },
+  statIcon: { fontSize: 20 },
+  trendBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  trendText: { fontSize: 10, fontWeight: "700" },
   statValue: {
     fontSize: 20,
     fontWeight: "800",
@@ -1030,11 +1041,7 @@ const styles = StyleSheet.create({
     color: "#374151",
     marginBottom: 4,
   },
-  statSubtitle: {
-    fontSize: 11,
-    color: "#6b7280",
-    lineHeight: 14,
-  },
+  statSubtitle: { fontSize: 11, color: "#6b7280", lineHeight: 14 },
   metricsCard: {
     backgroundColor: "#ffffff",
     borderRadius: 16,
@@ -1053,53 +1060,26 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 16,
   },
-  sectionSubtitle: {
-    fontSize: 14,
-    color: "#6b7280",
-    fontWeight: "500",
-  },
-  metricContainer: {
-    marginBottom: 16,
-  },
+  sectionSubtitle: { fontSize: 14, color: "#6b7280", fontWeight: "500" },
+  metricContainer: { marginBottom: 16 },
   metricHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 8,
   },
-  metricTitle: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  metricIcon: {
-    fontSize: 16,
-    marginRight: 8,
-  },
-  metricLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#374151",
-  },
-  metricValue: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#1f2937",
-  },
+  metricTitle: { flexDirection: "row", alignItems: "center" },
+  metricIcon: { fontSize: 16, marginRight: 8 },
+  metricLabel: { fontSize: 14, fontWeight: "600", color: "#374151" },
+  metricValue: { fontSize: 14, fontWeight: "700", color: "#1f2937" },
   progressBar: {
     height: 8,
     backgroundColor: "#e5e7eb",
     borderRadius: 4,
     overflow: "hidden",
   },
-  progressFill: {
-    height: "100%",
-    borderRadius: 4,
-  },
-  progressText: {
-    fontSize: 11,
-    color: "#6b7280",
-    marginTop: 4,
-  },
+  progressFill: { height: "100%", borderRadius: 4 },
+  progressText: { fontSize: 11, color: "#6b7280", marginTop: 4 },
   chartCard: {
     backgroundColor: "#ffffff",
     borderRadius: 16,
@@ -1112,43 +1092,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 16,
   },
-  chartTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#1f2937",
-  },
-  chartLegend: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  legendDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 6,
-  },
-  legendText: {
-    fontSize: 12,
-    color: "#6b7280",
-    fontWeight: "500",
-  },
-  chart: {
-    borderRadius: 12,
-  },
-  analyticsRow: {
-    flexDirection: "row",
-  },
+  chartTitle: { fontSize: 16, fontWeight: "700", color: "#1f2937" },
+  chartLegend: { flexDirection: "row", alignItems: "center" },
+  legendDot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
+  legendText: { fontSize: 12, color: "#6b7280", fontWeight: "500" },
+  chart: { borderRadius: 12 },
+  analyticsRow: { flexDirection: "row" },
   pieChartCard: {
     flex: 1,
     backgroundColor: "#ffffff",
     borderRadius: 16,
     padding: 20,
   },
-  productsCard: {
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    padding: 20,
-  },
+  productsCard: { backgroundColor: "#ffffff", borderRadius: 16, padding: 20 },
   productItem: {
     flexDirection: "row",
     alignItems: "center",
@@ -1156,9 +1112,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#f3f4f6",
   },
-  productRank: {
-    marginRight: 12,
-  },
+  productRank: { marginRight: 12 },
   rankBadge: {
     width: 36,
     height: 36,
@@ -1171,58 +1125,32 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  rankText: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#ffffff",
-  },
-  productInfo: {
-    flex: 1,
-    marginRight: 12,
-  },
+  rankText: { fontSize: 13, fontWeight: "800", color: "#ffffff" },
+  productInfo: { flex: 1, marginRight: 12 },
   productName: {
     fontSize: 14,
     fontWeight: "600",
     color: "#1f2937",
     marginBottom: 2,
   },
-  productCategory: {
-    fontSize: 11,
-    color: "#6b7280",
-  },
-  productStats: {
-    alignItems: "flex-end",
-  },
+  productCategory: { fontSize: 11, color: "#6b7280" },
+  productStats: { alignItems: "flex-end" },
   productQuantity: {
     fontSize: 12,
     fontWeight: "600",
     color: "#374151",
     marginBottom: 2,
   },
-  productRevenue: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#059669",
-  },
-  emptyState: {
-    alignItems: "center",
-    paddingVertical: 40,
-  },
-  emptyIcon: {
-    fontSize: 48,
-    marginBottom: 12,
-  },
+  productRevenue: { fontSize: 14, fontWeight: "700", color: "#059669" },
+  emptyState: { alignItems: "center", paddingVertical: 40 },
+  emptyIcon: { fontSize: 48, marginBottom: 12 },
   emptyText: {
     fontSize: 16,
     fontWeight: "600",
     color: "#374151",
     marginBottom: 4,
   },
-  emptySubtext: {
-    fontSize: 13,
-    color: "#6b7280",
-    textAlign: "center",
-  },
+  emptySubtext: { fontSize: 13, color: "#6b7280", textAlign: "center" },
   scrollHintBtn: {
     position: "absolute",
     bottom: 24,
@@ -1241,9 +1169,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  scrollHintIcon: {
-    color: "#ffffff",
-    fontSize: 20,
-    fontWeight: "800",
-  },
+  scrollHintIcon: { color: "#ffffff", fontSize: 20, fontWeight: "800" },
 });
