@@ -343,7 +343,7 @@ export default function SupplierListPage() {
     {
       title: "STT",
       key: "index",
-      width: 70,
+      width: 50,
       align: "center",
       render: (_, __, index) => {
         const pagination = tabKey === "active" ? paginationActive : paginationDeleted;
@@ -376,7 +376,7 @@ export default function SupplierListPage() {
       ),
       dataIndex: "phone",
       key: "phone",
-      width: 150,
+      width: 110,
       render: (text) => <Tag color="green">{text || "-"}</Tag>,
     },
     {
@@ -388,9 +388,25 @@ export default function SupplierListPage() {
       ),
       dataIndex: "email",
       key: "email",
-      width: 240,
+      width: 230,
       ellipsis: true,
-      render: (text) => <Text type="secondary">{text || "-"}</Text>,
+      render: (text) =>
+        text ? (
+          <Tooltip title={text} placement="topLeft">
+            <Text
+              type="secondary"
+              ellipsis
+              style={{
+                maxWidth: 230,
+                cursor: "pointer",
+              }}
+            >
+              {text}
+            </Text>
+          </Tooltip>
+        ) : (
+          <Text type="secondary">trống</Text>
+        ),
     },
     {
       title: (
@@ -401,9 +417,18 @@ export default function SupplierListPage() {
       ),
       dataIndex: "address",
       key: "address",
-      width: 260,
+      width: 220, // thu gọn hơn
       ellipsis: true,
-      render: (text) => <Text>{text || "-"}</Text>,
+      render: (text) =>
+        text ? (
+          <Tooltip title={text} placement="topLeft">
+            <Text ellipsis style={{ maxWidth: 200, cursor: "pointer" }}>
+              {text}
+            </Text>
+          </Tooltip>
+        ) : (
+          <Text>trống</Text>
+        ),
     },
     {
       title: "Trạng thái",
@@ -429,25 +454,30 @@ export default function SupplierListPage() {
       ),
       dataIndex: "createdAt",
       key: "createdAt",
-      width: 170,
-      render: (v) => <Text type="secondary">{fmtDateTime(v)}</Text>,
-    },
-    {
-      title: (
-        <Space>
-          <CalendarOutlined />
-          <span>Cập nhật</span>
-        </Space>
+      align: "center",
+      width: 130,
+      render: (v) => (
+        <Text type="secondary" style={{ color: "black" }}>
+          {fmtDateTime(v)}
+        </Text>
       ),
-      dataIndex: "updatedAt",
-      key: "updatedAt",
-      width: 170,
-      render: (v) => <Text type="secondary">{fmtDateTime(v)}</Text>,
     },
+    // {
+    //   title: (
+    //     <Space>
+    //       <CalendarOutlined />
+    //       <span>Cập nhật</span>
+    //     </Space>
+    //   ),
+    //   dataIndex: "updatedAt",
+    //   key: "updatedAt",
+    //   width: 170,
+    //   render: (v) => <Text type="secondary">{fmtDateTime(v)}</Text>,
+    // },
     {
       title: "Hành động",
       key: "action",
-      width: showRestore ? 260 : 300,
+      width: showRestore ? 260 : 100,
       align: "center",
       fixed: "right",
       render: (_, record) => {
@@ -459,13 +489,7 @@ export default function SupplierListPage() {
         return (
           <Space size="small">
             <Tooltip title="Xem chi tiết">
-              <Button
-                type="primary"
-                icon={<EyeOutlined />}
-                size="small"
-                onClick={() => openDetail(supplierId)}
-                style={{ background: "#1890ff" }}
-              />
+              <Button type="primary" icon={<EyeOutlined />} size="small" onClick={() => openDetail(supplierId)} style={{ background: "#1890ff" }} />
             </Tooltip>
 
             {!showRestore && (
@@ -489,12 +513,7 @@ export default function SupplierListPage() {
                 cancelText="Hủy"
               >
                 <Tooltip title="Khôi phục nhà cung cấp">
-                  <Button
-                    type="default"
-                    icon={<UndoOutlined />}
-                    size="small"
-                    style={{ color: "#52c41a", borderColor: "#52c41a" }}
-                  >
+                  <Button type="default" icon={<UndoOutlined />} size="small" style={{ color: "#52c41a", borderColor: "#52c41a" }}>
                     Khôi phục
                   </Button>
                 </Tooltip>
@@ -540,8 +559,8 @@ export default function SupplierListPage() {
     <Layout>
       {contextHolder}
 
-      <div style={{ padding: isMobile ? 12 : 2, background: "#ffffff", minHeight: "100vh" }}>
-        <Card style={{ borderRadius: 16, boxShadow: "0 4px 20px rgba(0,0,0,0.08)", marginBottom: 24 }}>
+      <div style={{ padding: isMobile ? 12 : 0, background: "#ffffff", minHeight: "100vh" }}>
+        <Card style={{ borderRadius: 12, border: "1px solid #8c8c8c" }}>
           {/* Header */}
           <div style={{ marginBottom: 24 }}>
             <Title
@@ -593,7 +612,7 @@ export default function SupplierListPage() {
             <Col xs={24} sm={24} md={8}>
               <Card style={{ background: "#2C5364", border: "none", borderRadius: 12 }}>
                 <Statistic
-                  title={<span style={{ color: "#fff" }}>Trạng thái (active)</span>}
+                  title={<span style={{ color: "#fff" }}>Trạng thái (hoạt động)</span>}
                   value={`${activeStatusCount} / ${inactiveStatusCount}`}
                   prefix={<CheckCircleOutlined />}
                   valueStyle={{ color: "#fff", fontWeight: "bold" }}

@@ -149,12 +149,20 @@ export const getInventoryReport = async (req, res) => {
         costPrice: product.cost_price || 0,
         closingValue,
         lowStock: product.stock_quantity < (product.min_stock || 0),
+        minStock: product.min_stock || 0,
       });
     }
 
     // Tổng hợp
     const totalValue = report.reduce((sum, item) => sum + item.closingValue, 0);
     const totalQty = report.reduce((sum, item) => sum + item.closingStock, 0);
+
+    // Tính tổng giá vốn (chỉ cộng giá vốn của từng sản phẩm)
+    const totalCostPrice = report.reduce((sum, item) => {
+      const cost =
+        typeof item.costPrice === "object" && item.costPrice.$numberDecimal ? parseFloat(item.costPrice.$numberDecimal) : Number(item.costPrice || 0);
+      return sum + cost;
+    }, 0);
 
     return res.status(200).json({
       success: true,
@@ -165,6 +173,7 @@ export const getInventoryReport = async (req, res) => {
           totalProducts: report.length,
           totalStock: totalQty,
           totalValue,
+          totalCostPrice,
         },
         details: report,
       },
