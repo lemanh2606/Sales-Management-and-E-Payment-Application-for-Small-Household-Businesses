@@ -22,10 +22,14 @@ import {
   ListRenderItem,
   ScrollView,
   Dimensions,
+  Animated,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { Picker } from "@react-native-picker/picker";
+import DateTimePicker, {
+  DateTimePickerEvent,
+} from "@react-native-community/datetimepicker";
 import dayjs from "dayjs";
 import "dayjs/locale/vi";
 
@@ -89,11 +93,6 @@ interface LogDetailApiResponse {
   data: ActivityLog;
 }
 
-interface ApiError {
-  message?: string;
-  error?: string;
-}
-
 type ViewMode = "table" | "attendance" | "timeline";
 
 interface LogItemProps {
@@ -118,7 +117,20 @@ interface FetchOptions {
   signal?: AbortSignal;
 }
 
-// ==================== MEMOIZED COMPONENTS ====================
+// ==================== SMALL UI HELPERS ====================
+const formatDateLabel = (d?: Date | null) =>
+  d ? dayjs(d).format("DD/MM/YYYY") : "";
+
+const toISODate = (d?: Date | null) => (d ? dayjs(d).format("YYYY-MM-DD") : "");
+
+const clampDateRange = (from: Date | null, to: Date | null) => {
+  if (from && to && dayjs(from).isAfter(to, "day")) {
+    return { from, to: from };
+  }
+  return { from, to };
+};
+
+// ==================== MEMOIZED ITEM COMPONENTS ====================
 const LogItem = memo<LogItemProps>(({ item, onPress, getActionColor }) => (
   <TouchableOpacity
     style={styles.logCard}
@@ -180,7 +192,6 @@ const LogItem = memo<LogItemProps>(({ item, onPress, getActionColor }) => (
     )}
   </TouchableOpacity>
 ));
-
 LogItem.displayName = "LogItem";
 
 const AttendanceItem = memo<AttendanceItemProps>(({ item }) => {
@@ -248,7 +259,6 @@ const AttendanceItem = memo<AttendanceItemProps>(({ item }) => {
     </View>
   );
 });
-
 AttendanceItem.displayName = "AttendanceItem";
 
 const TimelineItem = memo<TimelineItemProps>(
@@ -291,6 +301,7 @@ const TimelineItem = memo<TimelineItemProps>(
               </Text>
             </View>
           </View>
+
           <View style={styles.timelineTags}>
             <View
               style={[
@@ -311,6 +322,7 @@ const TimelineItem = memo<TimelineItemProps>(
               <Text style={styles.timelineEntityText}>{item.entity}</Text>
             </View>
           </View>
+
           <Text style={styles.timelineEntityName}>{item.entityName}</Text>
           {item.description && (
             <Text style={styles.timelineDescription}>{item.description}</Text>
@@ -320,10 +332,194 @@ const TimelineItem = memo<TimelineItemProps>(
     </View>
   )
 );
-
 TimelineItem.displayName = "TimelineItem";
 
-// ==================== MAIN COMPONENT ====================
+// ==================== FILTER CHIP ====================
+const FilterChip: FC<{ label: string; onRemove: () => void }> = memo(
+  ({ label, onRemove }) => (
+    <View style={styles.filterChip}>
+      <Text style={styles.filterChipText} numberOfLines={1}>
+        {label}
+      </Text>
+      <TouchableOpacity
+        onPress={onRemove}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        <Ionicons name="close-circle" size={16} color="#1890ff" />
+      </TouchableOpacity>
+    </View>
+  )
+);
+FilterChip.displayName = "FilterChip";
+
+// ==================== SELECT MODAL (SEARCHABLE) ====================
+type SelectOption = { label: string; value: string };
+
+const SelectField: FC<{
+  label: string;
+  value: string;
+  placeholder?: string;
+  options: SelectOption[];
+  onChange: (v: string) => void;
+  icon?: keyof typeof Ionicons.glyphMap;
+}> = ({
+  label,
+  value,
+  placeholder,
+  options,
+  onChange,
+  icon = "chevron-down",
+}) => {
+  const [visible, setVisible] = useState(false);
+  const [q, setQ] = useState("");
+
+  const selectedLabel = useCallback(() => {
+    const found = options.find((o) => o.value === value);
+    return found?.label || "";
+  }, [options, value]);
+
+  const data = useCallback(() => {
+    const query = q.trim().toLowerCase();
+    if (!query) return options;
+    return options.filter((o) => o.label.toLowerCase().includes(query));
+  }, [q, options]);
+
+  return (
+    <>
+      <Text style={styles.filterLabel}>{label}</Text>
+      <TouchableOpacity
+        style={styles.selectField}
+        onPress={() => setVisible(true)}
+        activeOpacity={0.75}
+      >
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 10,
+            flex: 1,
+          }}
+        >
+          <Ionicons name="list-outline" size={18} color="#8c8c8c" />
+          <Text
+            style={[
+              styles.selectValue,
+              !selectedLabel() && styles.selectPlaceholder,
+            ]}
+          >
+            {selectedLabel() || placeholder || "Chọn..."}
+          </Text>
+        </View>
+
+        {!!value && (
+          <TouchableOpacity
+            onPress={() => onChange("")}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={{ marginRight: 10 }}
+          >
+            <Ionicons name="close-circle" size={18} color="#8c8c8c" />
+          </TouchableOpacity>
+        )}
+        <Ionicons name={icon} size={18} color="#8c8c8c" />
+      </TouchableOpacity>
+
+      <Modal
+        visible={visible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setVisible(false)}
+      >
+        <View style={styles.selectOverlay}>
+          <View style={styles.selectModal}>
+            <View style={styles.selectHeader}>
+              <Text style={styles.selectTitle}>{label}</Text>
+              <TouchableOpacity onPress={() => setVisible(false)}>
+                <Ionicons name="close-circle" size={26} color="#8c8c8c" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.selectSearchRow}>
+              <Ionicons name="search-outline" size={18} color="#8c8c8c" />
+              <TextInput
+                value={q}
+                onChangeText={setQ}
+                placeholder="Tìm nhanh..."
+                placeholderTextColor="#bfbfbf"
+                style={styles.selectSearchInput}
+              />
+              {q ? (
+                <TouchableOpacity onPress={() => setQ("")}>
+                  <Ionicons name="close-circle" size={18} color="#8c8c8c" />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+
+            <FlatList
+              data={data()}
+              keyExtractor={(it) => it.value || it.label}
+              keyboardShouldPersistTaps="handled"
+              renderItem={({ item }) => {
+                const active = item.value === value;
+                return (
+                  <TouchableOpacity
+                    style={[
+                      styles.selectItem,
+                      active && styles.selectItemActive,
+                    ]}
+                    onPress={() => {
+                      onChange(item.value);
+                      setVisible(false);
+                      setQ("");
+                    }}
+                    activeOpacity={0.75}
+                  >
+                    <Text
+                      style={[
+                        styles.selectItemText,
+                        active && styles.selectItemTextActive,
+                      ]}
+                    >
+                      {item.label}
+                    </Text>
+                    {active ? (
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={20}
+                        color="#1890ff"
+                      />
+                    ) : (
+                      <Ionicons
+                        name="ellipse-outline"
+                        size={20}
+                        color="#d9d9d9"
+                      />
+                    )}
+                  </TouchableOpacity>
+                );
+              }}
+              ListEmptyComponent={
+                <View style={{ paddingVertical: 24, alignItems: "center" }}>
+                  <Ionicons name="search-outline" size={28} color="#d9d9d9" />
+                  <Text
+                    style={{
+                      marginTop: 8,
+                      color: "#8c8c8c",
+                      fontWeight: "600",
+                    }}
+                  >
+                    Không tìm thấy dữ liệu
+                  </Text>
+                </View>
+              }
+            />
+          </View>
+        </View>
+      </Modal>
+    </>
+  );
+};
+
+// ==================== MAIN ====================
 const ActivityLogScreen: FC = () => {
   const { createAbortController } = useCleanup("ActivityLogScreen");
   const { currentStore } = useAuth();
@@ -334,6 +530,7 @@ const ActivityLogScreen: FC = () => {
   const isMountedRef = useRef<boolean>(true);
   const isLoadingMoreRef = useRef<boolean>(false);
   const hasInitializedRef = useRef<boolean>(false);
+  const filterAnimValue = useRef(new Animated.Value(0)).current;
 
   // States
   const [loading, setLoading] = useState<boolean>(false);
@@ -355,6 +552,13 @@ const ActivityLogScreen: FC = () => {
   const [action, setAction] = useState<string>("");
   const [entity, setEntity] = useState<string>("");
   const [keyword, setKeyword] = useState<string>("");
+
+  // Date filters with DateTimePicker
+  const [fromDate, setFromDate] = useState<Date | null>(null);
+  const [toDate, setToDate] = useState<Date | null>(null);
+  const [datePickerTarget, setDatePickerTarget] = useState<
+    "from" | "to" | null
+  >(null);
 
   // Filter options
   const [users, setUsers] = useState<string[]>([]);
@@ -383,6 +587,15 @@ const ActivityLogScreen: FC = () => {
     };
   }, []);
 
+  // Animate filter expand/collapse
+  useEffect(() => {
+    Animated.timing(filterAnimValue, {
+      toValue: isFilterExpanded ? 1 : 0,
+      duration: 250,
+      useNativeDriver: false,
+    }).start();
+  }, [isFilterExpanded]);
+
   // ==================== FETCH STATS ====================
   const fetchStats = useCallback(async (): Promise<void> => {
     if (!storeId) return;
@@ -399,9 +612,7 @@ const ActivityLogScreen: FC = () => {
         } as any
       );
 
-      if (isMountedRef.current) {
-        setStats(response.data.data.stats);
-      }
+      if (isMountedRef.current) setStats(response.data.data.stats);
     } catch (err) {
       const error = err as any;
       if (
@@ -430,25 +641,22 @@ const ActivityLogScreen: FC = () => {
         signal,
       } as any);
 
-      if (isMountedRef.current) {
-        const logsData: ActivityLog[] = Array.isArray(response.data.data)
-          ? response.data.data
-          : [];
+      if (!isMountedRef.current) return;
 
-        if (logsData.length === 0) {
-          return;
-        }
+      const logsData: ActivityLog[] = Array.isArray(response.data.data)
+        ? response.data.data
+        : [];
+      if (logsData.length === 0) return;
 
-        const uniqueEntities: string[] = [
-          ...new Set(logsData.map((l) => l.entity).filter(Boolean)),
-        ];
-        const uniqueUsers: string[] = [
-          ...new Set(logsData.map((l) => l.userName).filter(Boolean)),
-        ];
+      const uniqueEntities: string[] = [
+        ...new Set(logsData.map((l) => l.entity).filter(Boolean)),
+      ];
+      const uniqueUsers: string[] = [
+        ...new Set(logsData.map((l) => l.userName).filter(Boolean)),
+      ];
 
-        setEntities(uniqueEntities);
-        setUsers(uniqueUsers);
-      }
+      setEntities(uniqueEntities);
+      setUsers(uniqueUsers);
     } catch (err) {
       const error = err as any;
       if (
@@ -474,9 +682,7 @@ const ActivityLogScreen: FC = () => {
 
       const { page = 1, append = false, signal } = options;
 
-      if (append && isLoadingMoreRef.current) {
-        return;
-      }
+      if (append && isLoadingMoreRef.current) return;
 
       if (append) {
         isLoadingMoreRef.current = true;
@@ -500,6 +706,9 @@ const ActivityLogScreen: FC = () => {
         if (action) params.action = action;
         if (entity) params.entity = entity;
         if (keyword) params.keyword = keyword;
+
+        if (fromDate) params.fromDate = toISODate(fromDate);
+        if (toDate) params.toDate = toISODate(toDate);
 
         const response = await apiClient.get<LogsApiResponse>(
           `/activity-logs`,
@@ -556,9 +765,7 @@ const ActivityLogScreen: FC = () => {
             "❌ Lỗi lấy logs:",
             error.response?.data?.message || error.message
           );
-          if (!append) {
-            Alert.alert("Lỗi", "Không thể tải nhật ký hoạt động");
-          }
+          if (!append) Alert.alert("Lỗi", "Không thể tải nhật ký hoạt động");
         }
       } finally {
         if (isMountedRef.current) {
@@ -575,6 +782,8 @@ const ActivityLogScreen: FC = () => {
       action,
       entity,
       keyword,
+      fromDate,
+      toDate,
       pageSize,
       createAbortController,
     ]
@@ -623,9 +832,7 @@ const ActivityLogScreen: FC = () => {
         Alert.alert("Lỗi", "Không thể tải dữ liệu điểm danh");
       }
     } finally {
-      if (isMountedRef.current) {
-        setLoading(false);
-      }
+      if (isMountedRef.current) setLoading(false);
     }
   }, [storeId, createAbortController]);
 
@@ -663,9 +870,7 @@ const ActivityLogScreen: FC = () => {
           Alert.alert("Lỗi", "Không thể tải chi tiết log");
         }
       } finally {
-        if (isMountedRef.current) {
-          setLoading(false);
-        }
+        if (isMountedRef.current) setLoading(false);
       }
     },
     [storeId, createAbortController]
@@ -686,28 +891,13 @@ const ActivityLogScreen: FC = () => {
       setLogs([]);
       setAttendance([]);
 
-      if (viewMode === "table" || viewMode === "timeline") {
+      if (viewMode === "table" || viewMode === "timeline")
         fetchLogs({ page: 1, append: false });
-      } else if (viewMode === "attendance") {
-        fetchAttendance();
-      }
+      else if (viewMode === "attendance") fetchAttendance();
     }
   }, [storeId, viewMode]);
 
-  useEffect(() => {
-    hasInitializedRef.current = false;
-  }, [storeId]);
-
-  // ==================== HELPER FUNCTIONS ====================
-  const getFilterDisplayText = useCallback((): string => {
-    const parts: string[] = [];
-    if (userName) parts.push(`User: ${userName}`);
-    if (action) parts.push(`Action: ${action}`);
-    if (entity) parts.push(`Entity: ${entity}`);
-    if (keyword) parts.push(`Keyword: ${keyword}`);
-    return parts.length > 0 ? parts.join(" • ") : "Chưa áp dụng bộ lọc";
-  }, [userName, action, entity, keyword]);
-
+  // ==================== FILTER HELPERS ====================
   const getActionColor = useCallback((actionType: string): string => {
     const colorMap: Record<string, string> = {
       create: "#52c41a",
@@ -720,6 +910,47 @@ const ActivityLogScreen: FC = () => {
     return colorMap[actionType] || "#8c8c8c";
   }, []);
 
+  const getActiveFilters = useCallback(() => {
+    const filters: Array<{ key: string; label: string }> = [];
+    if (userName) filters.push({ key: "userName", label: `User: ${userName}` });
+    if (action)
+      filters.push({ key: "action", label: `Action: ${action.toUpperCase()}` });
+    if (entity) filters.push({ key: "entity", label: `Entity: ${entity}` });
+    if (keyword)
+      filters.push({ key: "keyword", label: `Keyword: "${keyword}"` });
+    if (fromDate)
+      filters.push({
+        key: "fromDate",
+        label: `Từ: ${formatDateLabel(fromDate)}`,
+      });
+    if (toDate)
+      filters.push({ key: "toDate", label: `Đến: ${formatDateLabel(toDate)}` });
+    return filters;
+  }, [userName, action, entity, keyword, fromDate, toDate]);
+
+  const removeFilter = useCallback((key: string) => {
+    switch (key) {
+      case "userName":
+        setUserName("");
+        break;
+      case "action":
+        setAction("");
+        break;
+      case "entity":
+        setEntity("");
+        break;
+      case "keyword":
+        setKeyword("");
+        break;
+      case "fromDate":
+        setFromDate(null);
+        break;
+      case "toDate":
+        setToDate(null);
+        break;
+    }
+  }, []);
+
   // ==================== HANDLERS ====================
   const handleRefresh = useCallback((): void => {
     setRefreshing(true);
@@ -727,11 +958,9 @@ const ActivityLogScreen: FC = () => {
     setLogs([]);
     setAttendance([]);
 
-    if (viewMode === "table" || viewMode === "timeline") {
+    if (viewMode === "table" || viewMode === "timeline")
       fetchLogs({ page: 1, append: false });
-    } else {
-      fetchAttendance();
-    }
+    else fetchAttendance();
   }, [viewMode, fetchLogs, fetchAttendance]);
 
   const handleLoadMore = useCallback((): void => {
@@ -768,17 +997,49 @@ const ActivityLogScreen: FC = () => {
     setAction("");
     setEntity("");
     setKeyword("");
+    setFromDate(null);
+    setToDate(null);
     setCurrentPage(1);
     setLogs([]);
+  }, []);
+
+  const handleQuickDateFilter = useCallback((days: number) => {
+    const from = dayjs().subtract(days, "day").startOf("day").toDate();
+    const to = dayjs().endOf("day").toDate();
+    const fixed = clampDateRange(from, to);
+    setFromDate(fixed.from);
+    setToDate(fixed.to);
   }, []);
 
   const handleViewModeChange = useCallback((mode: ViewMode): void => {
     setViewMode(mode);
   }, []);
 
-  const handleCloseModal = useCallback((): void => {
-    setDetailModalVisible(false);
-  }, []);
+  const handleCloseModal = useCallback(
+    (): void => setDetailModalVisible(false),
+    []
+  );
+
+  const onChangeDate = useCallback(
+    (event: DateTimePickerEvent, selected?: Date) => {
+      if (Platform.OS !== "ios") setDatePickerTarget(null);
+      if (event.type === "dismissed") return;
+      if (!selected) return;
+
+      if (datePickerTarget === "from") {
+        const fixed = clampDateRange(selected, toDate);
+        setFromDate(fixed.from);
+        setToDate(fixed.to);
+      } else if (datePickerTarget === "to") {
+        const fixed = clampDateRange(fromDate, selected);
+        setFromDate(fixed.from);
+        setToDate(fixed.to);
+      }
+
+      if (Platform.OS === "ios") setDatePickerTarget(null);
+    },
+    [datePickerTarget, fromDate, toDate]
+  );
 
   // ==================== RENDER FUNCTIONS ====================
   const renderLogItem: ListRenderItem<ActivityLog> = useCallback(
@@ -812,7 +1073,6 @@ const ActivityLogScreen: FC = () => {
 
   const renderListFooter = useCallback((): JSX.Element | null => {
     if (!loadingMore) return null;
-
     return (
       <View style={styles.loadMoreContainer}>
         <ActivityIndicator size="small" color="#1890ff" />
@@ -864,6 +1124,21 @@ const ActivityLogScreen: FC = () => {
     );
   }
 
+  const activeFilters = getActiveFilters();
+
+  const userOptions: SelectOption[] = [
+    { label: "Tất cả người dùng", value: "" },
+    ...users.map((u) => ({ label: u, value: u })),
+  ];
+  const actionOptions: SelectOption[] = [
+    { label: "Tất cả hành động", value: "" },
+    ...actions.map((a) => ({ label: a.toUpperCase(), value: a })),
+  ];
+  const entityOptions: SelectOption[] = [
+    { label: "Tất cả đối tượng", value: "" },
+    ...entities.map((e) => ({ label: e, value: e })),
+  ];
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -873,7 +1148,7 @@ const ActivityLogScreen: FC = () => {
             <Ionicons name="document-text" size={28} color="#ffffff" />
           </View>
           <View style={styles.headerTextContainer}>
-            <Text style={styles.headerTitle}>📋 Nhật ký hoạt động</Text>
+            <Text style={styles.headerTitle}>Nhật ký hoạt động</Text>
             <Text style={styles.headerSubtitle}>{storeName}</Text>
           </View>
         </View>
@@ -965,16 +1240,18 @@ const ActivityLogScreen: FC = () => {
                   activeOpacity={0.7}
                 >
                   <View style={styles.filterToggleLeft}>
-                    <Ionicons name="funnel-outline" size={20} color="#1890ff" />
+                    <View style={styles.filterIconCircle}>
+                      <Ionicons name="funnel" size={18} color="#1890ff" />
+                    </View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.filterToggleText}>
-                        {isFilterExpanded ? "Thu gọn bộ lọc" : "Mở rộng bộ lọc"}
+                        Bộ lọc tìm kiếm
                       </Text>
-                      {!isFilterExpanded && (
-                        <Text style={styles.filterTogglePeriod}>
-                          {getFilterDisplayText()}
-                        </Text>
-                      )}
+                      <Text style={styles.filterTogglePeriod}>
+                        {activeFilters.length > 0
+                          ? `${activeFilters.length} bộ lọc đang áp dụng`
+                          : "Chưa áp dụng bộ lọc"}
+                      </Text>
                     </View>
                   </View>
                   <Ionicons
@@ -984,71 +1261,287 @@ const ActivityLogScreen: FC = () => {
                   />
                 </TouchableOpacity>
 
+                {/* Active Filters Chips */}
+                {activeFilters.length > 0 && !isFilterExpanded && (
+                  <View style={styles.filterChipsContainer}>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                    >
+                      {activeFilters.map((f) => (
+                        <FilterChip
+                          key={f.key}
+                          label={f.label}
+                          onRemove={() => removeFilter(f.key)}
+                        />
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+
                 {isFilterExpanded && (
                   <View style={styles.filterContent}>
-                    <Text style={styles.filterLabel}>Người dùng</Text>
-                    <View style={styles.pickerContainer}>
-                      <Picker
-                        selectedValue={userName}
-                        onValueChange={(value: string) => setUserName(value)}
-                        style={styles.picker}
-                      >
-                        <Picker.Item label="Tất cả người dùng" value="" />
-                        {users.map((u) => (
-                          <Picker.Item key={u} label={u} value={u} />
-                        ))}
-                      </Picker>
+                    {/* Quick Date Presets */}
+                    <View style={styles.quickDateSection}>
+                      <Text style={styles.filterLabel}>
+                        Lọc nhanh theo thời gian
+                      </Text>
+                      <View style={styles.quickDateButtons}>
+                        <TouchableOpacity
+                          style={styles.quickDateBtn}
+                          onPress={() => handleQuickDateFilter(7)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.quickDateText}>7 ngày</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.quickDateBtn}
+                          onPress={() => handleQuickDateFilter(30)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.quickDateText}>30 ngày</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.quickDateBtn}
+                          onPress={() => handleQuickDateFilter(90)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.quickDateText}>90 ngày</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[
+                            styles.quickDateBtn,
+                            { backgroundColor: "#fff", borderColor: "#91caff" },
+                          ]}
+                          onPress={() => {
+                            const today = dayjs().startOf("day").toDate();
+                            setFromDate(today);
+                            setToDate(dayjs().endOf("day").toDate());
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <Text
+                            style={[styles.quickDateText, { color: "#1890ff" }]}
+                          >
+                            Hôm nay
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
 
-                    <Text style={styles.filterLabel}>Hành động</Text>
-                    <View style={styles.pickerContainer}>
-                      <Picker
-                        selectedValue={action}
-                        onValueChange={(value: string) => setAction(value)}
-                        style={styles.picker}
+                    {/* Date Range using DateTimePicker */}
+                    <Text style={styles.filterLabel}>Khoảng thời gian</Text>
+                    <View style={styles.dateRow}>
+                      <TouchableOpacity
+                        style={styles.dateField}
+                        onPress={() => setDatePickerTarget("from")}
+                        activeOpacity={0.75}
                       >
-                        <Picker.Item label="Tất cả hành động" value="" />
-                        {actions.map((a) => (
-                          <Picker.Item
-                            key={a}
-                            label={a.toUpperCase()}
-                            value={a}
-                          />
-                        ))}
-                      </Picker>
+                        <Ionicons
+                          name="calendar-outline"
+                          size={18}
+                          color="#8c8c8c"
+                        />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.dateFieldLabel}>Từ ngày</Text>
+                          <Text
+                            style={[
+                              styles.dateFieldValue,
+                              !fromDate && styles.dateFieldPlaceholder,
+                            ]}
+                          >
+                            {fromDate
+                              ? formatDateLabel(fromDate)
+                              : "Chọn ngày bắt đầu"}
+                          </Text>
+                        </View>
+                        {fromDate ? (
+                          <TouchableOpacity
+                            onPress={() => setFromDate(null)}
+                            hitSlop={{
+                              top: 10,
+                              bottom: 10,
+                              left: 10,
+                              right: 10,
+                            }}
+                          >
+                            <Ionicons
+                              name="close-circle"
+                              size={18}
+                              color="#8c8c8c"
+                            />
+                          </TouchableOpacity>
+                        ) : null}
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.dateField}
+                        onPress={() => setDatePickerTarget("to")}
+                        activeOpacity={0.75}
+                      >
+                        <Ionicons
+                          name="calendar-outline"
+                          size={18}
+                          color="#8c8c8c"
+                        />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.dateFieldLabel}>Đến ngày</Text>
+                          <Text
+                            style={[
+                              styles.dateFieldValue,
+                              !toDate && styles.dateFieldPlaceholder,
+                            ]}
+                          >
+                            {toDate
+                              ? formatDateLabel(toDate)
+                              : "Chọn ngày kết thúc"}
+                          </Text>
+                        </View>
+                        {toDate ? (
+                          <TouchableOpacity
+                            onPress={() => setToDate(null)}
+                            hitSlop={{
+                              top: 10,
+                              bottom: 10,
+                              left: 10,
+                              right: 10,
+                            }}
+                          >
+                            <Ionicons
+                              name="close-circle"
+                              size={18}
+                              color="#8c8c8c"
+                            />
+                          </TouchableOpacity>
+                        ) : null}
+                      </TouchableOpacity>
                     </View>
 
-                    <Text style={styles.filterLabel}>Đối tượng</Text>
-                    <View style={styles.pickerContainer}>
-                      <Picker
-                        selectedValue={entity}
-                        onValueChange={(value: string) => setEntity(value)}
-                        style={styles.picker}
-                      >
-                        <Picker.Item label="Tất cả đối tượng" value="" />
-                        {entities.map((e) => (
-                          <Picker.Item key={e} label={e} value={e} />
-                        ))}
-                      </Picker>
-                    </View>
+                    {/* DateTimePicker Modal */}
+                    {datePickerTarget && (
+                      <Modal transparent animationType="fade" visible>
+                        <View style={styles.pickerOverlay}>
+                          <View style={styles.pickerModal}>
+                            <View style={styles.pickerHeader}>
+                              <Text style={styles.pickerTitle}>
+                                {datePickerTarget === "from"
+                                  ? "Chọn từ ngày"
+                                  : "Chọn đến ngày"}
+                              </Text>
+                              <TouchableOpacity
+                                onPress={() => setDatePickerTarget(null)}
+                              >
+                                <Ionicons
+                                  name="close-circle"
+                                  size={26}
+                                  color="#8c8c8c"
+                                />
+                              </TouchableOpacity>
+                            </View>
 
+                            <DateTimePicker
+                              locale="vi-VN"
+                              value={
+                                datePickerTarget === "from"
+                                  ? fromDate || new Date()
+                                  : toDate || new Date()
+                              }
+                              mode="date"
+                              display={
+                                Platform.OS === "ios" ? "spinner" : "default"
+                              }
+                              onChange={onChangeDate}
+                              maximumDate={dayjs().endOf("day").toDate()}
+                              textColor="#000000"
+                              themeVariant="light"
+                            />
+
+                            {Platform.OS === "ios" && (
+                              <View style={styles.pickerFooter}>
+                                <TouchableOpacity
+                                  style={styles.pickerDoneBtn}
+                                  onPress={() => setDatePickerTarget(null)}
+                                  activeOpacity={0.8}
+                                >
+                                  <Text style={styles.pickerDoneText}>
+                                    Xong
+                                  </Text>
+                                </TouchableOpacity>
+                              </View>
+                            )}
+                          </View>
+                        </View>
+                      </Modal>
+                    )}
+
+                    {/* Keyword */}
                     <Text style={styles.filterLabel}>Tìm kiếm</Text>
-                    <TextInput
-                      style={styles.keywordInput}
-                      value={keyword}
-                      onChangeText={setKeyword}
-                      placeholder="Nhập từ khóa..."
-                      placeholderTextColor="#bfbfbf"
+                    <View style={styles.searchInputContainer}>
+                      <Ionicons
+                        name="search-outline"
+                        size={18}
+                        color="#8c8c8c"
+                      />
+                      <TextInput
+                        style={styles.keywordInput}
+                        value={keyword}
+                        onChangeText={setKeyword}
+                        placeholder="Nhập từ khóa (tên, mô tả...)"
+                        placeholderTextColor="#bfbfbf"
+                        returnKeyType="search"
+                        onSubmitEditing={handleApplyFilters}
+                      />
+                      {keyword ? (
+                        <TouchableOpacity onPress={() => setKeyword("")}>
+                          <Ionicons
+                            name="close-circle"
+                            size={18}
+                            color="#8c8c8c"
+                          />
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+
+                    {/* Selects */}
+                    <SelectField
+                      label="Người dùng"
+                      value={userName}
+                      placeholder="Chọn người dùng"
+                      options={userOptions}
+                      onChange={setUserName}
                     />
 
+                    <SelectField
+                      label="Hành động"
+                      value={action}
+                      placeholder="Chọn hành động"
+                      options={actionOptions}
+                      onChange={setAction}
+                    />
+
+                    <SelectField
+                      label="Đối tượng"
+                      value={entity}
+                      placeholder="Chọn đối tượng"
+                      options={entityOptions}
+                      onChange={setEntity}
+                    />
+
+                    {/* Actions */}
                     <View style={styles.filterActions}>
                       <TouchableOpacity
                         style={styles.filterResetBtn}
                         onPress={handleResetFilters}
                         activeOpacity={0.7}
                       >
+                        <Ionicons
+                          name="refresh-outline"
+                          size={18}
+                          color="#595959"
+                        />
                         <Text style={styles.filterResetText}>Đặt lại</Text>
                       </TouchableOpacity>
+
                       <TouchableOpacity
                         style={styles.filterApplyBtn}
                         onPress={handleApplyFilters}
@@ -1064,9 +1557,16 @@ const ActivityLogScreen: FC = () => {
                           {loading ? (
                             <ActivityIndicator color="#fff" size="small" />
                           ) : (
-                            <Text style={styles.filterApplyText}>
-                              Xem nhật ký
-                            </Text>
+                            <>
+                              <Ionicons
+                                name="checkmark-circle"
+                                size={18}
+                                color="#fff"
+                              />
+                              <Text style={styles.filterApplyText}>
+                                Áp dụng
+                              </Text>
+                            </>
                           )}
                         </LinearGradient>
                       </TouchableOpacity>
@@ -1084,9 +1584,12 @@ const ActivityLogScreen: FC = () => {
                   onPress={() => setIsStatsExpanded(!isStatsExpanded)}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.statsToggleText}>
-                    {isStatsExpanded ? "Thu gọn thống kê" : "Mở rộng thống kê"}
-                  </Text>
+                  <View style={styles.statsToggleLeft}>
+                    <Ionicons name="analytics" size={20} color="#1890ff" />
+                    <Text style={styles.statsToggleText}>
+                      Thống kê tổng quan
+                    </Text>
+                  </View>
                   <Ionicons
                     name={isStatsExpanded ? "chevron-up" : "chevron-down"}
                     size={20}
@@ -1177,14 +1680,17 @@ const ActivityLogScreen: FC = () => {
             {(viewMode === "table" || viewMode === "timeline") &&
               logs.length > 0 && (
                 <View style={styles.paginationInfo}>
-                  <Text style={styles.paginationText}>
-                    Đang xem{" "}
-                    <Text style={styles.paginationHighlight}>
-                      {logs.length}
-                    </Text>{" "}
-                    / <Text style={styles.paginationTotal}>{totalLogs}</Text>{" "}
-                    nhật ký
-                  </Text>
+                  <View style={styles.paginationRow}>
+                    <Ionicons name="layers-outline" size={16} color="#1890ff" />
+                    <Text style={styles.paginationText}>
+                      Đang xem{" "}
+                      <Text style={styles.paginationHighlight}>
+                        {logs.length}
+                      </Text>{" "}
+                      / <Text style={styles.paginationTotal}>{totalLogs}</Text>{" "}
+                      nhật ký
+                    </Text>
+                  </View>
                   {hasMore && (
                     <View style={styles.paginationSubtextContainer}>
                       <Ionicons
@@ -1202,14 +1708,22 @@ const ActivityLogScreen: FC = () => {
 
             {/* Attendance Header */}
             {viewMode === "attendance" && (
-              <View style={styles.attendanceHeader}>
+              <View style={styles.attendanceHeaderContainer}>
                 <View style={styles.attendanceTitleContainer}>
-                  <Ionicons name="people" size={24} color="#1890ff" />
-                  <Text style={styles.attendanceTitle}>
-                    Nhân viên vào ca hôm nay
-                  </Text>
+                  <View style={styles.attendanceIconCircle}>
+                    <Ionicons name="people" size={22} color="#1890ff" />
+                  </View>
+                  <View>
+                    <Text style={styles.attendanceTitle}>
+                      Nhân viên vào ca hôm nay
+                    </Text>
+                    <Text style={styles.attendanceSubtitle}>
+                      {attendance.length} người đã check-in
+                    </Text>
+                  </View>
                 </View>
                 <View style={styles.attendanceDateTag}>
+                  <Ionicons name="calendar" size={12} color="#1890ff" />
                   <Text style={styles.attendanceDateText}>
                     {dayjs().format("DD/MM/YYYY")}
                   </Text>
@@ -1235,8 +1749,8 @@ const ActivityLogScreen: FC = () => {
         initialNumToRender={10}
         maxToRenderPerBatch={10}
         windowSize={5}
-        removeClippedSubviews={true}
-        showsVerticalScrollIndicator={true}
+        removeClippedSubviews
+        showsVerticalScrollIndicator
       />
 
       {/* Detail Modal */}
@@ -1249,7 +1763,10 @@ const ActivityLogScreen: FC = () => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Chi tiết nhật ký</Text>
+              <View style={styles.modalHeaderLeft}>
+                <Ionicons name="information-circle" size={24} color="#1890ff" />
+                <Text style={styles.modalTitle}>Chi tiết nhật ký</Text>
+              </View>
               <TouchableOpacity onPress={handleCloseModal} activeOpacity={0.7}>
                 <Ionicons name="close-circle" size={28} color="#8c8c8c" />
               </TouchableOpacity>
@@ -1392,13 +1909,11 @@ export default ActivityLogScreen;
 
 // ==================== STYLES ====================
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f0f2f5",
-  },
+  container: { flex: 1, backgroundColor: "#f0f2f5" },
   header: {
-    paddingTop: 20,
-    paddingBottom: 16,
+    backgroundColor: "#10b981",
+    paddingTop: 10,
+    paddingBottom: 10,
     paddingHorizontal: 16,
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
@@ -1417,9 +1932,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  headerTextContainer: {
-    flex: 1,
-  },
+  headerTextContainer: { flex: 1 },
   headerTitle: {
     fontSize: 20,
     fontWeight: "800",
@@ -1431,6 +1944,7 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.9)",
     fontWeight: "600",
   },
+
   tabContainer: {
     flexDirection: "row",
     backgroundColor: "rgba(255,255,255,0.15)",
@@ -1447,30 +1961,22 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     gap: 6,
   },
-  tabActive: {
-    backgroundColor: "#ffffff",
-  },
-  tabText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#ffffff",
-  },
-  tabTextActive: {
-    color: "#1890ff",
-  },
-  listContent: {
-    padding: 16,
-    paddingBottom: 32,
-  },
+  tabActive: { backgroundColor: "#ffffff" },
+  tabText: { fontSize: 12, fontWeight: "700", color: "#ffffff" },
+  tabTextActive: { color: "#1890ff" },
+
+  listContent: { padding: 16, paddingBottom: 32 },
+
   filterSection: {
     backgroundColor: "#ffffff",
-    borderRadius: 12,
+    borderRadius: 16,
     marginBottom: 12,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowRadius: 12,
+    elevation: 4,
+    overflow: "hidden",
   },
   filterToggle: {
     flexDirection: "row",
@@ -1481,96 +1987,245 @@ const styles = StyleSheet.create({
   filterToggleLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 12,
     flex: 1,
   },
-  filterToggleText: {
-    fontSize: 15,
-    fontWeight: "700",
+  filterIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "#e6f7ff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  filterToggleText: { fontSize: 16, fontWeight: "700", color: "#262626" },
+  filterTogglePeriod: { fontSize: 12, color: "#8c8c8c", marginTop: 2 },
+
+  filterChipsContainer: { paddingHorizontal: 16, paddingBottom: 12 },
+  filterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#e6f7ff",
+    paddingVertical: 6,
+    paddingLeft: 12,
+    paddingRight: 8,
+    borderRadius: 20,
+    marginRight: 8,
+    gap: 6,
+  },
+  filterChipText: {
+    fontSize: 12,
+    fontWeight: "600",
     color: "#1890ff",
+    maxWidth: 180,
   },
-  filterTogglePeriod: {
-    fontSize: 11,
-    color: "#8c8c8c",
-    marginTop: 2,
-  },
+
   filterContent: {
     paddingHorizontal: 16,
     paddingBottom: 16,
     borderTopWidth: 1,
     borderTopColor: "#f0f0f0",
   },
+
   filterLabel: {
     fontSize: 13,
     fontWeight: "700",
     color: "#262626",
     marginBottom: 8,
-    marginTop: 12,
+    marginTop: 16,
   },
-  pickerContainer: {
+
+  quickDateSection: { marginTop: 16 },
+  quickDateButtons: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 8,
+  },
+  quickDateBtn: {
+    backgroundColor: "#f0f2f5",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#d9d9d9",
+  },
+  quickDateText: { fontSize: 13, fontWeight: "700", color: "#595959" },
+
+  dateRow: { gap: 10 },
+  dateField: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "#fafafa",
     borderWidth: 1,
     borderColor: "#d9d9d9",
-    borderRadius: 8,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 10,
+  },
+  dateFieldLabel: { fontSize: 11, color: "#8c8c8c", fontWeight: "700" },
+  dateFieldValue: {
+    marginTop: 2,
+    fontSize: 14,
+    color: "#262626",
+    fontWeight: "700",
+  },
+  dateFieldPlaceholder: { color: "#bfbfbf" },
+
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
+  },
+  pickerModal: {
+    width: "100%",
+    backgroundColor: "#fff",
+    borderRadius: 16,
     overflow: "hidden",
   },
-  picker: {
-    height: 48,
+  pickerHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
   },
-  keywordInput: {
+  pickerTitle: { fontSize: 15, fontWeight: "800", color: "#262626" },
+  pickerFooter: { padding: 12, borderTopWidth: 1, borderTopColor: "#f0f0f0" },
+  pickerDoneBtn: {
+    backgroundColor: "#1890ff",
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  pickerDoneText: { color: "#fff", fontWeight: "800" },
+
+  searchInputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "#fafafa",
     borderWidth: 1,
     borderColor: "#d9d9d9",
-    borderRadius: 8,
+    borderRadius: 12,
     paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 8,
+    marginTop: 8,
+  },
+  keywordInput: {
+    flex: 1,
+    paddingVertical: 8,
+    fontSize: 14,
+    color: "#262626",
+    fontWeight: "600",
+  },
+
+  selectField: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fafafa",
+    borderWidth: 1,
+    borderColor: "#d9d9d9",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  selectValue: { fontSize: 14, fontWeight: "700", color: "#262626" },
+  selectPlaceholder: { color: "#bfbfbf" },
+
+  selectOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    padding: 16,
+    justifyContent: "center",
+  },
+  selectModal: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    overflow: "hidden",
+    maxHeight: "80%",
+  },
+  selectHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  selectTitle: { fontSize: 16, fontWeight: "800", color: "#262626" },
+  selectSearchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fafafa",
+    margin: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  selectSearchInput: {
+    flex: 1,
     paddingVertical: 10,
     fontSize: 14,
     color: "#262626",
+    fontWeight: "600",
   },
-  filterActions: {
+  selectItem: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: "#f5f5f5",
     flexDirection: "row",
-    gap: 10,
-    marginTop: 16,
+    alignItems: "center",
+    justifyContent: "space-between",
   },
+  selectItemActive: { backgroundColor: "#e6f7ff" },
+  selectItemText: { fontSize: 14, fontWeight: "700", color: "#262626" },
+  selectItemTextActive: { color: "#1890ff" },
+
+  filterActions: { flexDirection: "row", gap: 12, marginTop: 24 },
   filterResetBtn: {
     flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: "#d9d9d9",
-    alignItems: "center",
     backgroundColor: "#ffffff",
+    gap: 6,
   },
-  filterResetText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#595959",
-  },
-  filterApplyBtn: {
-    flex: 1,
-    borderRadius: 8,
-    overflow: "hidden",
-  },
+  filterResetText: { fontSize: 14, fontWeight: "700", color: "#595959" },
+  filterApplyBtn: { flex: 1, borderRadius: 12, overflow: "hidden" },
   filterApplyGradient: {
+    flexDirection: "row",
     paddingVertical: 12,
     alignItems: "center",
     justifyContent: "center",
+    gap: 6,
   },
-  filterApplyText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#ffffff",
-  },
+  filterApplyText: { fontSize: 14, fontWeight: "800", color: "#ffffff" },
+
   statsSection: {
     backgroundColor: "#ffffff",
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
     marginBottom: 12,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowRadius: 12,
+    elevation: 4,
   },
   statsToggle: {
     flexDirection: "row",
@@ -1578,34 +2233,29 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 16,
   },
-  statsToggleText: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#262626",
-  },
-  statsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
+  statsToggleLeft: { flexDirection: "row", alignItems: "center", gap: 8 },
+  statsToggleText: { fontSize: 16, fontWeight: "700", color: "#262626" },
+  statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   statCard: {
     flex: 1,
     minWidth: "45%",
     backgroundColor: "#fafafa",
-    padding: 14,
-    borderRadius: 10,
+    padding: 16,
+    borderRadius: 12,
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#f0f0f0",
   },
   statIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
+    width: 48,
+    height: 48,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 8,
+    marginBottom: 10,
   },
   statValue: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: "800",
     color: "#262626",
     marginVertical: 4,
@@ -1616,81 +2266,79 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontWeight: "600",
   },
+
   paginationInfo: {
     backgroundColor: "#e6f7ff",
-    padding: 12,
-    borderRadius: 8,
+    padding: 14,
+    borderRadius: 12,
     marginVertical: 12,
     alignItems: "center",
   },
-  paginationText: {
-    fontSize: 13,
-    color: "#595959",
-    textAlign: "center",
-  },
-  paginationHighlight: {
-    fontWeight: "800",
-    color: "#1890ff",
-  },
-  paginationTotal: {
-    fontWeight: "800",
-    color: "#ff4d4f",
-  },
+  paginationRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  paginationText: { fontSize: 13, color: "#595959", textAlign: "center" },
+  paginationHighlight: { fontWeight: "800", color: "#1890ff" },
+  paginationTotal: { fontWeight: "800", color: "#ff4d4f" },
   paginationSubtextContainer: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    marginTop: 4,
+    marginTop: 6,
   },
-  paginationSubtext: {
-    fontSize: 11,
-    color: "#8c8c8c",
-  },
-  attendanceHeader: {
+  paginationSubtext: { fontSize: 11, color: "#8c8c8c" },
+
+  attendanceHeaderContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     backgroundColor: "#ffffff",
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 16,
     marginBottom: 12,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowRadius: 12,
+    elevation: 4,
   },
   attendanceTitleContainer: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 12,
+    flex: 1,
   },
-  attendanceTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#262626",
+  attendanceIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "#e6f7ff",
+    alignItems: "center",
+    justifyContent: "center",
   },
+  attendanceTitle: { fontSize: 16, fontWeight: "700", color: "#262626" },
+  attendanceSubtitle: { fontSize: 12, color: "#8c8c8c", marginTop: 2 },
   attendanceDateTag: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "#e6f7ff",
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 4,
   },
-  attendanceDateText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#1890ff",
-  },
+  attendanceDateText: { fontSize: 13, fontWeight: "700", color: "#1890ff" },
+
   logCard: {
     backgroundColor: "#ffffff",
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
     marginBottom: 12,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
     elevation: 3,
+    borderWidth: 1,
+    borderColor: "#f0f0f0",
   },
   logHeader: {
     flexDirection: "row",
@@ -1704,55 +2352,37 @@ const styles = StyleSheet.create({
     color: "#262626",
     marginBottom: 2,
   },
-  logTime: {
-    fontSize: 11,
-    color: "#8c8c8c",
-    fontWeight: "500",
-  },
-  roleBadge: {
-    paddingVertical: 3,
-    paddingHorizontal: 10,
-    borderRadius: 6,
-  },
-  roleBadgeText: {
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  logTags: {
-    flexDirection: "row",
-    gap: 8,
-    marginBottom: 10,
-  },
-  tag: {
-    paddingVertical: 3,
-    paddingHorizontal: 10,
-    borderRadius: 6,
-  },
-  tagText: {
-    fontSize: 11,
-    fontWeight: "700",
-  },
+  logTime: { fontSize: 11, color: "#8c8c8c", fontWeight: "500" },
+  roleBadge: { paddingVertical: 4, paddingHorizontal: 10, borderRadius: 6 },
+  roleBadgeText: { fontSize: 11, fontWeight: "700" },
+  logTags: { flexDirection: "row", gap: 8, marginBottom: 10 },
+  tag: { paddingVertical: 4, paddingHorizontal: 10, borderRadius: 6 },
+  tagText: { fontSize: 11, fontWeight: "700" },
   logEntityName: {
     fontSize: 13,
     fontWeight: "600",
     color: "#262626",
     marginBottom: 4,
   },
-  logDescription: {
-    fontSize: 12,
-    color: "#595959",
-    lineHeight: 18,
-  },
+  logDescription: { fontSize: 12, color: "#595959", lineHeight: 18 },
+
   attendanceCard: {
     backgroundColor: "#ffffff",
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
     marginBottom: 12,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
     elevation: 3,
+    borderWidth: 1,
+    borderColor: "#f0f0f0",
+  },
+  attendanceHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 12,
   },
   attendanceName: {
     fontSize: 15,
@@ -1766,44 +2396,27 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginBottom: 2,
   },
-  attendanceEmail: {
-    fontSize: 11,
-    color: "#8c8c8c",
-  },
-  attendanceRight: {
-    alignItems: "flex-end",
-  },
+  attendanceEmail: { fontSize: 11, color: "#8c8c8c" },
+  attendanceRight: { alignItems: "flex-end" },
   attendanceTimeContainer: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
     backgroundColor: "#e6f7ff",
-    paddingVertical: 4,
+    paddingVertical: 5,
     paddingHorizontal: 10,
     borderRadius: 6,
     marginBottom: 6,
   },
-  attendanceTime: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#1890ff",
-  },
+  attendanceTime: { fontSize: 13, fontWeight: "700", color: "#1890ff" },
   storeTag: {
     backgroundColor: "#f9f0ff",
-    paddingVertical: 3,
+    paddingVertical: 4,
     paddingHorizontal: 8,
     borderRadius: 6,
   },
-  storeTagText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#722ed1",
-  },
-  attendanceInfo: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
+  storeTagText: { fontSize: 10, fontWeight: "700", color: "#722ed1" },
+  attendanceInfo: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   deviceBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -1812,45 +2425,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     borderRadius: 6,
   },
-  deviceText: {
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  ipContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  ipText: {
-    fontSize: 10,
-    color: "#8c8c8c",
-    fontFamily: "monospace",
-  },
-  timelineItem: {
-    flexDirection: "row",
-    marginBottom: 16,
-  },
-  timelineLeft: {
-    width: 32,
-    alignItems: "center",
-  },
+  deviceText: { fontSize: 11, fontWeight: "700" },
+  ipContainer: { flexDirection: "row", alignItems: "center", gap: 4 },
+  ipText: { fontSize: 10, color: "#8c8c8c", fontFamily: "monospace" },
+
+  timelineItem: { flexDirection: "row", marginBottom: 16 },
+  timelineLeft: { width: 32, alignItems: "center" },
   timelineDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
     borderWidth: 3,
     borderColor: "#ffffff",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  timelineLine: {
-    flex: 1,
-    width: 2,
-    backgroundColor: "#d9d9d9",
-    marginTop: 4,
-  },
-  timelineContent: {
-    flex: 1,
-    marginLeft: 12,
-  },
+  timelineLine: { flex: 1, width: 2, backgroundColor: "#d9d9d9", marginTop: 4 },
+  timelineContent: { flex: 1, marginLeft: 12 },
   timelineTime: {
     fontSize: 11,
     color: "#8c8c8c",
@@ -1859,13 +2453,15 @@ const styles = StyleSheet.create({
   },
   timelineCard: {
     backgroundColor: "#ffffff",
-    borderRadius: 10,
+    borderRadius: 12,
     padding: 14,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
     elevation: 2,
+    borderWidth: 1,
+    borderColor: "#f0f0f0",
   },
   timelineHeader: {
     flexDirection: "row",
@@ -1873,57 +2469,35 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 8,
   },
-  timelineUser: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#262626",
-    flex: 1,
-  },
+  timelineUser: { fontSize: 14, fontWeight: "700", color: "#262626", flex: 1 },
   timelineRoleBadge: {
-    paddingVertical: 2,
+    paddingVertical: 3,
     paddingHorizontal: 8,
     borderRadius: 5,
   },
-  timelineRoleText: {
-    fontSize: 10,
-    fontWeight: "700",
-  },
-  timelineTags: {
-    flexDirection: "row",
-    gap: 6,
-    marginBottom: 8,
-  },
+  timelineRoleText: { fontSize: 10, fontWeight: "700" },
+  timelineTags: { flexDirection: "row", gap: 6, marginBottom: 8 },
   timelineActionTag: {
-    paddingVertical: 2,
+    paddingVertical: 3,
     paddingHorizontal: 8,
     borderRadius: 5,
   },
-  timelineActionText: {
-    fontSize: 10,
-    fontWeight: "700",
-  },
+  timelineActionText: { fontSize: 10, fontWeight: "700" },
   timelineEntityTag: {
     backgroundColor: "#e6f7ff",
-    paddingVertical: 2,
+    paddingVertical: 3,
     paddingHorizontal: 8,
     borderRadius: 5,
   },
-  timelineEntityText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#1890ff",
-  },
+  timelineEntityText: { fontSize: 10, fontWeight: "700", color: "#1890ff" },
   timelineEntityName: {
     fontSize: 12,
     fontWeight: "600",
     color: "#262626",
     marginBottom: 4,
   },
-  timelineDescription: {
-    fontSize: 11,
-    color: "#595959",
-    lineHeight: 16,
-  },
+  timelineDescription: { fontSize: 11, color: "#595959", lineHeight: 16 },
+
   loadMoreContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -1931,11 +2505,8 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
     gap: 8,
   },
-  loadMoreText: {
-    fontSize: 13,
-    color: "#8c8c8c",
-    fontWeight: "600",
-  },
+  loadMoreText: { fontSize: 13, color: "#8c8c8c", fontWeight: "600" },
+
   emptyContainer: {
     alignItems: "center",
     paddingVertical: 60,
@@ -1949,11 +2520,8 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontWeight: "600",
   },
-  emptySubtext: {
-    fontSize: 12,
-    color: "#8c8c8c",
-    textAlign: "center",
-  },
+  emptySubtext: { fontSize: 12, color: "#8c8c8c", textAlign: "center" },
+
   errorContainer: {
     flex: 1,
     alignItems: "center",
@@ -1982,6 +2550,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 20,
   },
+
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
@@ -2006,17 +2575,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#f0f0f0",
   },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: "#262626",
-  },
-  modalBody: {
-    padding: 20,
-  },
-  detailRow: {
-    marginBottom: 20,
-  },
+  modalHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
+  modalTitle: { fontSize: 20, fontWeight: "800", color: "#262626" },
+  modalBody: { padding: 20 },
+  detailRow: { marginBottom: 20 },
   detailLabel: {
     fontSize: 12,
     fontWeight: "700",
@@ -2034,17 +2596,16 @@ const styles = StyleSheet.create({
   detailValueCode: {
     fontFamily: "monospace",
     backgroundColor: "#fafafa",
-    padding: 8,
-    borderRadius: 6,
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#f0f0f0",
   },
   detailBadge: {
     alignSelf: "flex-start",
-    paddingVertical: 4,
+    paddingVertical: 6,
     paddingHorizontal: 12,
-    borderRadius: 6,
+    borderRadius: 8,
   },
-  detailBadgeText: {
-    fontSize: 12,
-    fontWeight: "700",
-  },
+  detailBadgeText: { fontSize: 12, fontWeight: "700" },
 });

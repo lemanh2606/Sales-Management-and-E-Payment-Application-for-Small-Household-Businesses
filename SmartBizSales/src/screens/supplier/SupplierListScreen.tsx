@@ -1,5 +1,5 @@
 // src/screens/supplier/SupplierListScreen.tsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -15,21 +15,36 @@ import {
   Animated,
   Dimensions,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// Import API và Types
 import * as supplierApi from "../../api/supplierApi";
 import type {
   Supplier,
   CreateSupplierData,
   UpdateSupplierData,
+  SupplierStatus,
 } from "../../type/supplier";
 
-const { width, height } = Dimensions.get("window");
+const { width } = Dimensions.get("window");
 
-// ========== SUB-COMPONENTS ==========
+// ---------- helpers ----------
+const normalizeId = (s: any): string => {
+  if (!s) return "";
+  if (typeof s === "string") return s;
+  if (typeof s === "object" && s.$oid) return String(s.$oid);
+  if (typeof s === "object" && typeof s.toString === "function")
+    return String(s.toString());
+  return String(s);
+};
+
+const normalizeSupplier = (s: any): Supplier => ({
+  ...s,
+  _id: normalizeId(s?._id || s?.id),
+});
+
+// ---------- sub-components ----------
 interface StatCardProps {
   title: string;
   value: number;
@@ -51,6 +66,7 @@ const StatCard: React.FC<StatCardProps> = ({
         <View style={styles.statIconCircle}>
           <Ionicons name={icon} size={20} color="#fff" />
         </View>
+
         {trend !== undefined && (
           <View
             style={[
@@ -69,11 +85,12 @@ const StatCard: React.FC<StatCardProps> = ({
                 { color: trend >= 0 ? "#10b981" : "#ef4444" },
               ]}
             >
-              {Math.abs(trend)}%
+              {Math.abs(trend).toFixed(1)}%
             </Text>
           </View>
         )}
       </View>
+
       <Text style={styles.statValue}>{value.toLocaleString("vi-VN")}</Text>
       <Text style={styles.statTitle}>{title}</Text>
     </LinearGradient>
@@ -82,12 +99,14 @@ const StatCard: React.FC<StatCardProps> = ({
 
 const SupplierCard: React.FC<{
   supplier: Supplier;
+  mode: "active" | "deleted";
   onEdit: () => void;
   onDelete: () => void;
+  onRestore: () => void;
   onView: () => void;
-}> = ({ supplier, onEdit, onDelete, onView }) => {
+}> = ({ supplier, mode, onEdit, onDelete, onRestore, onView }) => {
   const isActive = supplier.status === "đang hoạt động";
-  const scaleAnim = new Animated.Value(1);
+  const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
     Animated.spring(scaleAnim, {
@@ -95,18 +114,15 @@ const SupplierCard: React.FC<{
       useNativeDriver: true,
     }).start();
   };
-
   const handlePressOut = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 1,
-      useNativeDriver: true,
-    }).start();
+    Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true }).start();
   };
 
   return (
-    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+    <Animated.View
+      style={[styles.supplierCard, { transform: [{ scale: scaleAnim }] }]}
+    >
       <TouchableOpacity
-        style={styles.supplierCard}
         onPress={onView}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
@@ -122,14 +138,16 @@ const SupplierCard: React.FC<{
                 style={styles.avatarGradient}
               >
                 <Text style={styles.avatarText}>
-                  {supplier.name.charAt(0).toUpperCase()}
+                  {supplier.name?.charAt(0)?.toUpperCase() || "N"}
                 </Text>
               </LinearGradient>
             </View>
+
             <View style={styles.supplierDetails}>
               <Text style={styles.supplierName} numberOfLines={1}>
                 {supplier.name}
               </Text>
+
               <View style={styles.supplierMeta}>
                 <View
                   style={[
@@ -146,8 +164,9 @@ const SupplierCard: React.FC<{
                     {isActive ? "Hoạt động" : "Ngừng"}
                   </Text>
                 </View>
-                {supplier.phone && (
-                  <Text style={styles.phoneText}>• {supplier.phone}</Text>
+
+                {!!supplier.phone && (
+                  <Text style={styles.phoneText}>{supplier.phone}</Text>
                 )}
               </View>
             </View>
@@ -158,26 +177,25 @@ const SupplierCard: React.FC<{
           </TouchableOpacity>
         </View>
 
-        {(supplier.email || supplier.address) && (
-          <View style={styles.supplierExtraInfo}>
-            {supplier.email && (
-              <View style={styles.infoRow}>
-                <Ionicons name="mail-outline" size={14} color="#6b7280" />
-                <Text style={styles.infoText} numberOfLines={1}>
-                  {supplier.email}
-                </Text>
-              </View>
-            )}
-            {supplier.address && (
-              <View style={styles.infoRow}>
-                <Ionicons name="location-outline" size={14} color="#6b7280" />
-                <Text style={styles.infoText} numberOfLines={2}>
-                  {supplier.address}
-                </Text>
-              </View>
-            )}
-          </View>
-        )}
+        <View style={styles.supplierExtraInfo}>
+          {!!supplier.email && (
+            <View style={styles.infoRow}>
+              <Ionicons name="mail-outline" size={14} color="#6b7280" />
+              <Text style={styles.infoText} numberOfLines={1}>
+                {supplier.email}
+              </Text>
+            </View>
+          )}
+
+          {!!supplier.address && (
+            <View style={styles.infoRow}>
+              <Ionicons name="location-outline" size={14} color="#6b7280" />
+              <Text style={styles.infoText} numberOfLines={2}>
+                {supplier.address}
+              </Text>
+            </View>
+          )}
+        </View>
 
         <View style={styles.supplierActions}>
           <TouchableOpacity
@@ -188,21 +206,39 @@ const SupplierCard: React.FC<{
             <Text style={[styles.actionText, { color: "#3b82f6" }]}>Xem</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.actionBtn, styles.editBtn]}
-            onPress={onEdit}
-          >
-            <Ionicons name="create-outline" size={16} color="#f59e0b" />
-            <Text style={[styles.actionText, { color: "#f59e0b" }]}>Sửa</Text>
-          </TouchableOpacity>
+          {mode === "active" ? (
+            <>
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.editBtn]}
+                onPress={onEdit}
+              >
+                <Ionicons name="create-outline" size={16} color="#f59e0b" />
+                <Text style={[styles.actionText, { color: "#f59e0b" }]}>
+                  Sửa
+                </Text>
+              </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.actionBtn, styles.deleteBtn]}
-            onPress={onDelete}
-          >
-            <Ionicons name="trash-outline" size={16} color="#ef4444" />
-            <Text style={[styles.actionText, { color: "#ef4444" }]}>Xóa</Text>
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.deleteBtn]}
+                onPress={onDelete}
+              >
+                <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                <Text style={[styles.actionText, { color: "#ef4444" }]}>
+                  Xóa
+                </Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.restoreBtn]}
+              onPress={onRestore}
+            >
+              <Ionicons name="refresh-outline" size={16} color="#10b981" />
+              <Text style={[styles.actionText, { color: "#10b981" }]}>
+                Khôi phục
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       </TouchableOpacity>
     </Animated.View>
@@ -212,10 +248,12 @@ const SupplierCard: React.FC<{
 const DetailModal: React.FC<{
   visible: boolean;
   supplier: Supplier | null;
+  mode: "active" | "deleted";
   onClose: () => void;
   onEdit: () => void;
   onDelete: () => void;
-}> = ({ visible, supplier, onClose, onEdit, onDelete }) => {
+  onRestore: () => void;
+}> = ({ visible, supplier, mode, onClose, onEdit, onDelete, onRestore }) => {
   if (!supplier) return null;
 
   const isActive = supplier.status === "đang hoạt động";
@@ -224,7 +262,6 @@ const DetailModal: React.FC<{
     <Modal visible={visible} animationType="fade" transparent>
       <View style={styles.detailModalOverlay}>
         <View style={styles.detailModalContent}>
-          {/* Header */}
           <LinearGradient
             colors={isActive ? ["#10b981", "#059669"] : ["#6b7280", "#4b5563"]}
             style={styles.detailHeader}
@@ -233,30 +270,44 @@ const DetailModal: React.FC<{
               <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
                 <Ionicons name="close" size={24} color="#fff" />
               </TouchableOpacity>
+
               <Text style={styles.detailTitle}>Chi tiết NCC</Text>
+
               <View style={styles.detailActions}>
-                <TouchableOpacity
-                  onPress={onEdit}
-                  style={styles.detailActionBtn}
-                >
-                  <Ionicons name="create-outline" size={20} color="#fff" />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={onDelete}
-                  style={styles.detailActionBtn}
-                >
-                  <Ionicons name="trash-outline" size={20} color="#fff" />
-                </TouchableOpacity>
+                {mode === "active" ? (
+                  <>
+                    <TouchableOpacity
+                      onPress={onEdit}
+                      style={styles.detailActionBtn}
+                    >
+                      <Ionicons name="create-outline" size={20} color="#fff" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={onDelete}
+                      style={styles.detailActionBtn}
+                    >
+                      <Ionicons name="trash-outline" size={20} color="#fff" />
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <TouchableOpacity
+                    onPress={onRestore}
+                    style={styles.detailActionBtn}
+                  >
+                    <Ionicons name="refresh-outline" size={20} color="#fff" />
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
 
             <View style={styles.supplierHero}>
               <View style={styles.detailAvatar}>
                 <Text style={styles.detailAvatarText}>
-                  {supplier.name.charAt(0).toUpperCase()}
+                  {supplier.name?.charAt(0)?.toUpperCase() || "N"}
                 </Text>
               </View>
               <Text style={styles.detailName}>{supplier.name}</Text>
+
               <View
                 style={[
                   styles.detailStatus,
@@ -270,17 +321,21 @@ const DetailModal: React.FC<{
                   size={16}
                   color="#fff"
                 />
-                <Text style={styles.detailStatusText}>{supplier.status}</Text>
+                <Text style={styles.detailStatusText}>
+                  {supplier.status || "-"}
+                </Text>
               </View>
             </View>
           </LinearGradient>
 
-          {/* Content */}
-          <ScrollView style={styles.detailContent}>
+          <ScrollView
+            style={styles.detailContent}
+            showsVerticalScrollIndicator={false}
+          >
             <View style={styles.detailSection}>
               <Text style={styles.detailSectionTitle}>Thông tin liên hệ</Text>
 
-              {supplier.phone && (
+              {!!supplier.phone && (
                 <View style={styles.detailItem}>
                   <View style={styles.detailItemIcon}>
                     <Ionicons name="call-outline" size={20} color="#3b82f6" />
@@ -292,7 +347,7 @@ const DetailModal: React.FC<{
                 </View>
               )}
 
-              {supplier.email && (
+              {!!supplier.email && (
                 <View style={styles.detailItem}>
                   <View style={styles.detailItemIcon}>
                     <Ionicons name="mail-outline" size={20} color="#ef4444" />
@@ -305,7 +360,7 @@ const DetailModal: React.FC<{
               )}
             </View>
 
-            {supplier.address && (
+            {!!supplier.address && (
               <View style={styles.detailSection}>
                 <Text style={styles.detailSectionTitle}>Địa chỉ</Text>
                 <View style={styles.detailItem}>
@@ -325,23 +380,47 @@ const DetailModal: React.FC<{
               </View>
             )}
 
-            <View style={styles.detailSection}>
-              <Text style={styles.detailSectionTitle}>Thông tin khác</Text>
-              <View style={styles.statsGrid}>
-                <View style={styles.miniStat}>
-                  <Text style={styles.miniStatValue}>12</Text>
-                  <Text style={styles.miniStatLabel}>Đơn hàng</Text>
-                </View>
-                <View style={styles.miniStat}>
-                  <Text style={styles.miniStatValue}>₫125M</Text>
-                  <Text style={styles.miniStatLabel}>Tổng giá trị</Text>
-                </View>
-                <View style={styles.miniStat}>
-                  <Text style={styles.miniStatValue}>98%</Text>
-                  <Text style={styles.miniStatLabel}>Tỷ lệ thành công</Text>
-                </View>
+            {(supplier.taxcode || supplier.notes) && (
+              <View style={styles.detailSection}>
+                <Text style={styles.detailSectionTitle}>Thông tin khác</Text>
+
+                {!!supplier.taxcode && (
+                  <View style={styles.detailItem}>
+                    <View style={styles.detailItemIcon}>
+                      <Ionicons
+                        name="document-text-outline"
+                        size={20}
+                        color="#f59e0b"
+                      />
+                    </View>
+                    <View style={styles.detailItemContent}>
+                      <Text style={styles.detailItemLabel}>Mã số thuế</Text>
+                      <Text style={styles.detailItemValue}>
+                        {supplier.taxcode}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+
+                {!!supplier.notes && (
+                  <View style={styles.detailItem}>
+                    <View style={styles.detailItemIcon}>
+                      <Ionicons
+                        name="chatbox-ellipses-outline"
+                        size={20}
+                        color="#6b7280"
+                      />
+                    </View>
+                    <View style={styles.detailItemContent}>
+                      <Text style={styles.detailItemLabel}>Ghi chú</Text>
+                      <Text style={styles.detailItemValue}>
+                        {supplier.notes}
+                      </Text>
+                    </View>
+                  </View>
+                )}
               </View>
-            </View>
+            )}
           </ScrollView>
         </View>
       </View>
@@ -349,15 +428,17 @@ const DetailModal: React.FC<{
   );
 };
 
-// ========== MAIN COMPONENT ==========
+// ---------- main ----------
 const SupplierListScreen: React.FC = () => {
+  const [mode, setMode] = useState<"active" | "deleted">("active");
+
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [filteredSuppliers, setFilteredSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [search, setSearch] = useState<string>("");
 
-  // Modal states
+  // modal states
   const [formModalVisible, setFormModalVisible] = useState<boolean>(false);
   const [detailModalVisible, setDetailModalVisible] = useState<boolean>(false);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(
@@ -373,54 +454,64 @@ const SupplierListScreen: React.FC = () => {
   });
   const [saving, setSaving] = useState<boolean>(false);
 
-  // Animation
-  const fadeAnim = useState(new Animated.Value(0))[0];
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    fetchSuppliers();
-  }, []);
-
-  useEffect(() => {
+    fetchSuppliers(true);
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 600,
       useNativeDriver: true,
     }).start();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
 
   useEffect(() => {
     if (!search.trim()) {
       setFilteredSuppliers(suppliers);
       return;
     }
-    const query = search.toLowerCase().trim();
-    const filtered = suppliers.filter(
-      (s) =>
-        s.name.toLowerCase().includes(query) ||
-        s.phone?.toLowerCase().includes(query) ||
-        s.email?.toLowerCase().includes(query) ||
-        s.address?.toLowerCase().includes(query)
+    const q = search.toLowerCase().trim();
+    setFilteredSuppliers(
+      suppliers.filter((s) => {
+        const name = (s.name || "").toLowerCase();
+        const phone = (s.phone || "").toLowerCase();
+        const email = (s.email || "").toLowerCase();
+        const address = (s.address || "").toLowerCase();
+        return (
+          name.includes(q) ||
+          phone.includes(q) ||
+          email.includes(q) ||
+          address.includes(q)
+        );
+      })
     );
-    setFilteredSuppliers(filtered);
   }, [search, suppliers]);
 
-  const fetchSuppliers = async (): Promise<void> => {
+  const fetchSuppliers = async (silent = false): Promise<void> => {
     try {
+      if (!silent) setLoading(true);
+
       const storeStr = await AsyncStorage.getItem("currentStore");
       const store = storeStr ? JSON.parse(storeStr) : null;
-      const storeId = store?._id;
+      const storeId: string | undefined = store?._id || store?.id;
 
       if (!storeId) {
-        Alert.alert("Lỗi", "Không tìm thấy cửa hàng");
+        Alert.alert("Lỗi", "Không tìm thấy ID cửa hàng");
         setLoading(false);
+        setRefreshing(false);
         return;
       }
 
-      const response = await supplierApi.getSuppliers(storeId);
-      const data = response.suppliers || [];
-      console.log("✅ Loaded", data.length, "suppliers");
-      setSuppliers(data);
-      setFilteredSuppliers(data);
+      const res = await supplierApi.getSuppliers(storeId, {
+        deleted: mode === "deleted",
+      });
+      const list = Array.isArray(res?.suppliers)
+        ? res.suppliers.map(normalizeSupplier)
+        : [];
+
+      setSuppliers(list);
+      setFilteredSuppliers(list);
     } catch (error: any) {
       console.error("Fetch suppliers error:", error?.message || error);
       Alert.alert(
@@ -435,7 +526,7 @@ const SupplierListScreen: React.FC = () => {
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchSuppliers();
+    fetchSuppliers(true);
   };
 
   const handleAdd = () => {
@@ -453,19 +544,22 @@ const SupplierListScreen: React.FC = () => {
   const handleEdit = (supplier: Supplier) => {
     setEditingSupplier(supplier);
     setFormData({
-      name: supplier.name,
+      name: supplier.name || "",
       phone: supplier.phone || "",
       email: supplier.email || "",
       address: supplier.address || "",
-      status: supplier.status,
+      status: (supplier.status as SupplierStatus) || "đang hoạt động",
     });
     setFormModalVisible(true);
   };
 
   const handleDelete = (supplier: Supplier) => {
+    const id = supplier._id;
+    if (!id) return;
+
     Alert.alert(
       "Xóa nhà cung cấp",
-      `Bạn có chắc muốn xóa "${supplier.name}"? Hành động này không thể hoàn tác.`,
+      `Bạn có chắc muốn xóa "${supplier.name}"?\nHành động này là xóa mềm và có thể khôi phục.`,
       [
         { text: "Hủy", style: "cancel" },
         {
@@ -473,14 +567,16 @@ const SupplierListScreen: React.FC = () => {
           style: "destructive",
           onPress: async () => {
             try {
-              await supplierApi.deleteSupplier(supplier._id);
+              await supplierApi.deleteSupplier(id);
               Alert.alert("Thành công", "Đã xóa nhà cung cấp");
-              fetchSuppliers();
+              fetchSuppliers(true);
             } catch (error: any) {
               console.error("Delete error:", error?.message || error);
               Alert.alert(
                 "Lỗi",
-                error?.message || "Không thể xóa nhà cung cấp"
+                error?.response?.data?.message ||
+                  error?.message ||
+                  "Không thể xóa nhà cung cấp"
               );
             }
           },
@@ -489,14 +585,55 @@ const SupplierListScreen: React.FC = () => {
     );
   };
 
-  const handleView = (supplier: Supplier) => {
-    setSelectedSupplier(supplier);
-    setDetailModalVisible(true);
+  const handleRestore = (supplier: Supplier) => {
+    const id = supplier._id;
+    if (!id) return;
+
+    Alert.alert("Khôi phục nhà cung cấp", `Khôi phục "${supplier.name}"?`, [
+      { text: "Hủy", style: "cancel" },
+      {
+        text: "Khôi phục",
+        onPress: async () => {
+          try {
+            await supplierApi.restoreSupplier(id);
+            Alert.alert("Thành công", "Đã khôi phục nhà cung cấp");
+            fetchSuppliers(true);
+          } catch (error: any) {
+            console.error("Restore error:", error?.message || error);
+            Alert.alert(
+              "Lỗi",
+              error?.response?.data?.message ||
+                error?.message ||
+                "Không thể khôi phục nhà cung cấp"
+            );
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleView = async (supplier: Supplier) => {
+    try {
+      const id = supplier._id;
+      if (!id) return;
+
+      // luôn fetch chi tiết để xem được cả NCC đã bị khóa/xóa
+      const res = await supplierApi.getSupplierById(id);
+      const detail = normalizeSupplier(res?.supplier || supplier);
+
+      setSelectedSupplier(detail);
+      setDetailModalVisible(true);
+    } catch (error: any) {
+      console.error("View detail error:", error?.message || error);
+      // fallback: vẫn mở modal với dữ liệu hiện có
+      setSelectedSupplier(supplier);
+      setDetailModalVisible(true);
+    }
   };
 
   const handleSave = async () => {
     if (!formData.name.trim()) {
-      Alert.alert("Lỗi", "Tên nhà cung cấp không được để trống");
+      Alert.alert("Lỗi", "Tên nhà cung cấp không được trống");
       return;
     }
 
@@ -504,7 +641,7 @@ const SupplierListScreen: React.FC = () => {
     try {
       const storeStr = await AsyncStorage.getItem("currentStore");
       const store = storeStr ? JSON.parse(storeStr) : null;
-      const storeId = store?._id;
+      const storeId: string | undefined = store?._id || store?.id;
 
       if (!storeId) {
         Alert.alert("Lỗi", "Không tìm thấy ID cửa hàng");
@@ -512,6 +649,7 @@ const SupplierListScreen: React.FC = () => {
       }
 
       if (editingSupplier) {
+        const id = editingSupplier._id;
         const updateData: UpdateSupplierData = {
           name: formData.name,
           phone: formData.phone,
@@ -519,7 +657,7 @@ const SupplierListScreen: React.FC = () => {
           address: formData.address,
           status: formData.status,
         };
-        await supplierApi.updateSupplier(editingSupplier._id, updateData);
+        await supplierApi.updateSupplier(id, updateData);
         Alert.alert("Thành công", "Cập nhật nhà cung cấp thành công");
       } else {
         await supplierApi.createSupplier(storeId, formData);
@@ -527,26 +665,37 @@ const SupplierListScreen: React.FC = () => {
       }
 
       setFormModalVisible(false);
-      fetchSuppliers();
+      fetchSuppliers(true);
     } catch (error: any) {
       console.error("Save error:", error?.message || error);
-      Alert.alert("Lỗi", error?.message || "Không thể lưu nhà cung cấp");
+      Alert.alert(
+        "Lỗi",
+        error?.response?.data?.message ||
+          error?.message ||
+          "Không thể lưu nhà cung cấp"
+      );
     } finally {
       setSaving(false);
     }
   };
 
-  const activeCount = filteredSuppliers.filter(
-    (s) => s.status === "đang hoạt động"
-  ).length;
-  const inactiveCount = filteredSuppliers.length - activeCount;
+  const activeCount = useMemo(
+    () => filteredSuppliers.filter((s) => s.status === "đang hoạt động").length,
+    [filteredSuppliers]
+  );
+  const inactiveCount = useMemo(
+    () => filteredSuppliers.length - activeCount,
+    [filteredSuppliers]
+  );
 
   const renderItem = ({ item }: { item: Supplier }) => (
     <SupplierCard
       supplier={item}
+      mode={mode}
+      onView={() => handleView(item)}
       onEdit={() => handleEdit(item)}
       onDelete={() => handleDelete(item)}
-      onView={() => handleView(item)}
+      onRestore={() => handleRestore(item)}
     />
   );
 
@@ -566,9 +715,70 @@ const SupplierListScreen: React.FC = () => {
 
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
-      {/* Header với gradient */}
+      {/* Header */}
       <LinearGradient colors={["#667eea", "#764ba2"]} style={styles.header}>
         <View style={styles.headerContent}>
+          <View style={styles.headerTop}>
+            <View>
+              <Text style={styles.headerTitle}>Nhà cung cấp</Text>
+              <Text style={styles.headerSubtitle}>Quản lý theo cửa hàng</Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.notificationBtn}
+              onPress={() => fetchSuppliers(false)}
+            >
+              <Ionicons name="refresh" size={22} color="#fff" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Tabs Active/Deleted */}
+          <View style={styles.segmentWrap}>
+            <TouchableOpacity
+              onPress={() => setMode("active")}
+              style={[
+                styles.segmentBtn,
+                mode === "active" && styles.segmentBtnActive,
+              ]}
+            >
+              <Ionicons
+                name="checkmark-circle"
+                size={16}
+                color={mode === "active" ? "#fff" : "#e5e7eb"}
+              />
+              <Text
+                style={[
+                  styles.segmentText,
+                  mode === "active" && styles.segmentTextActive,
+                ]}
+              >
+                Đang hoạt động
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setMode("deleted")}
+              style={[
+                styles.segmentBtn,
+                mode === "deleted" && styles.segmentBtnActive,
+              ]}
+            >
+              <Ionicons
+                name="trash"
+                size={16}
+                color={mode === "deleted" ? "#fff" : "#e5e7eb"}
+              />
+              <Text
+                style={[
+                  styles.segmentText,
+                  mode === "deleted" && styles.segmentTextActive,
+                ]}
+              >
+                Đã xóa
+              </Text>
+            </TouchableOpacity>
+          </View>
+
           {/* Stats */}
           <View style={styles.statsContainer}>
             <StatCard
@@ -596,7 +806,7 @@ const SupplierListScreen: React.FC = () => {
         </View>
       </LinearGradient>
 
-      {/* Search & Add */}
+      {/* Search + Add */}
       <View style={styles.actionBar}>
         <View style={styles.searchContainer}>
           <Ionicons name="search" size={20} color="#6b7280" />
@@ -613,14 +823,18 @@ const SupplierListScreen: React.FC = () => {
             </TouchableOpacity>
           )}
         </View>
-        <TouchableOpacity style={styles.addBtn} onPress={handleAdd}>
-          <LinearGradient
-            colors={["#10b981", "#059669"]}
-            style={styles.addBtnGradient}
-          >
-            <Ionicons name="add" size={24} color="#fff" />
-          </LinearGradient>
-        </TouchableOpacity>
+
+        {/* Chỉ cho thêm ở tab active */}
+        {mode === "active" && (
+          <TouchableOpacity style={styles.addBtn} onPress={handleAdd}>
+            <LinearGradient
+              colors={["#10b981", "#059669"]}
+              style={styles.addBtnGradient}
+            >
+              <Ionicons name="add" size={24} color="#fff" />
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* List */}
@@ -647,14 +861,21 @@ const SupplierListScreen: React.FC = () => {
               <Ionicons name="business-outline" size={48} color="#9ca3af" />
             </LinearGradient>
             <Text style={styles.emptyTitle}>
-              {search ? "Không tìm thấy nhà cung cấp" : "Chưa có nhà cung cấp"}
+              {search
+                ? "Không tìm thấy nhà cung cấp"
+                : mode === "active"
+                  ? "Chưa có nhà cung cấp"
+                  : "Chưa có nhà cung cấp đã xóa"}
             </Text>
             <Text style={styles.emptySubtitle}>
               {search
                 ? "Thử tìm kiếm với từ khóa khác"
-                : "Thêm nhà cung cấp đầu tiên của bạn"}
+                : mode === "active"
+                  ? "Thêm nhà cung cấp đầu tiên của bạn"
+                  : "Xóa mềm để có thể khôi phục tại đây"}
             </Text>
-            {!search && (
+
+            {!search && mode === "active" && (
               <TouchableOpacity style={styles.emptyBtn} onPress={handleAdd}>
                 <Text style={styles.emptyBtnText}>Thêm nhà cung cấp</Text>
               </TouchableOpacity>
@@ -667,6 +888,7 @@ const SupplierListScreen: React.FC = () => {
       <DetailModal
         visible={detailModalVisible}
         supplier={selectedSupplier}
+        mode={mode}
         onClose={() => setDetailModalVisible(false)}
         onEdit={() => {
           setDetailModalVisible(false);
@@ -675,6 +897,10 @@ const SupplierListScreen: React.FC = () => {
         onDelete={() => {
           setDetailModalVisible(false);
           if (selectedSupplier) handleDelete(selectedSupplier);
+        }}
+        onRestore={() => {
+          setDetailModalVisible(false);
+          if (selectedSupplier) handleRestore(selectedSupplier);
         }}
       />
 
@@ -852,6 +1078,7 @@ const SupplierListScreen: React.FC = () => {
               <TouchableOpacity
                 style={styles.cancelBtn}
                 onPress={() => setFormModalVisible(false)}
+                disabled={saving}
               >
                 <Text style={styles.cancelBtnText}>Hủy</Text>
               </TouchableOpacity>
@@ -868,17 +1095,11 @@ const SupplierListScreen: React.FC = () => {
                   {saving ? (
                     <ActivityIndicator color="#fff" size="small" />
                   ) : (
-                    <>
-                      <Ionicons
-                        name="checkmark-circle"
-                        size={20}
-                        color="#fff"
-                      />
-                      <Text style={styles.saveBtnText}>
-                        {editingSupplier ? "Cập nhật" : "Thêm mới"}
-                      </Text>
-                    </>
+                    <Ionicons name="checkmark-circle" size={20} color="#fff" />
                   )}
+                  <Text style={styles.saveBtnText}>
+                    {editingSupplier ? "Cập nhật" : "Thêm mới"}
+                  </Text>
                 </LinearGradient>
               </TouchableOpacity>
             </View>
@@ -889,12 +1110,12 @@ const SupplierListScreen: React.FC = () => {
   );
 };
 
-// ========== STYLES ==========
+export default SupplierListScreen;
+
+// ---------- styles ----------
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f8fafc",
-  },
+  container: { flex: 1, backgroundColor: "#f8fafc" },
+
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
@@ -914,14 +1135,12 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 8,
   },
-  loadingText: {
-    fontSize: 16,
-    color: "#6b7280",
-    fontWeight: "600",
-  },
+  loadingText: { fontSize: 16, color: "#6b7280", fontWeight: "600" },
+
   header: {
-    paddingTop: 60,
-    paddingBottom: 20,
+    backgroundColor: "#10b981",
+    paddingTop: 5,
+    paddingBottom: 10,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
     shadowColor: "#000",
@@ -930,14 +1149,12 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 8,
   },
-  headerContent: {
-    paddingHorizontal: 20,
-  },
+  headerContent: { paddingHorizontal: 20 },
   headerTop: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 20,
+    marginBottom: 1,
   },
   headerTitle: {
     fontSize: 28,
@@ -945,17 +1162,30 @@ const styles = StyleSheet.create({
     color: "#fff",
     marginBottom: 4,
   },
-  headerSubtitle: {
-    fontSize: 16,
-    color: "rgba(255,255,255,0.9)",
-  },
-  notificationBtn: {
-    padding: 8,
-  },
-  statsContainer: {
+  headerSubtitle: { fontSize: 16, color: "rgba(255,255,255,0.9)" },
+  notificationBtn: { padding: 8 },
+
+  segmentWrap: { flexDirection: "row", gap: 10, marginBottom: 14 },
+  segmentBtn: {
+    flex: 1,
     flexDirection: "row",
-    gap: 12,
+    gap: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.35)",
+    backgroundColor: "rgba(255,255,255,0.12)",
   },
+  segmentBtnActive: {
+    backgroundColor: "rgba(0,0,0,0.18)",
+    borderColor: "rgba(255,255,255,0.55)",
+  },
+  segmentText: { color: "#e5e7eb", fontWeight: "700", fontSize: 13 },
+  segmentTextActive: { color: "#fff" },
+
+  statsContainer: { flexDirection: "row", gap: 12 },
   statCard: {
     flex: 1,
     padding: 16,
@@ -988,22 +1218,15 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     gap: 2,
   },
-  trendText: {
-    fontSize: 10,
-    fontWeight: "700",
-  },
+  trendText: { fontSize: 10, fontWeight: "700" },
   statValue: {
     fontSize: 24,
     fontWeight: "800",
     color: "#fff",
     marginBottom: 4,
   },
-  statTitle: {
-    fontSize: 12,
-    color: "#fff",
-    fontWeight: "600",
-    opacity: 0.9,
-  },
+  statTitle: { fontSize: 12, color: "#fff", fontWeight: "600", opacity: 0.9 },
+
   actionBar: {
     flexDirection: "row",
     paddingHorizontal: 20,
@@ -1024,12 +1247,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e2e8f0",
   },
-  searchInput: {
-    flex: 1,
-    marginLeft: 10,
-    fontSize: 16,
-    color: "#1e293b",
-  },
+  searchInput: { flex: 1, marginLeft: 10, fontSize: 16, color: "#1e293b" },
+
   addBtn: {
     width: 52,
     height: 52,
@@ -1039,6 +1258,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 10,
     elevation: 6,
+    overflow: "hidden",
   },
   addBtnGradient: {
     width: "100%",
@@ -1047,10 +1267,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  listContent: {
-    padding: 20,
-    paddingTop: 16,
-  },
+
+  listContent: { padding: 20, paddingTop: 16 },
+
   supplierCard: {
     backgroundColor: "#fff",
     borderRadius: 16,
@@ -1080,11 +1299,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    overflow: "hidden",
   },
   avatarGradient: {
     width: "100%",
@@ -1093,25 +1308,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  avatarText: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#fff",
-  },
-  supplierDetails: {
-    flex: 1,
-  },
+  avatarText: { fontSize: 18, fontWeight: "800", color: "#fff" },
+  supplierDetails: { flex: 1 },
   supplierName: {
     fontSize: 17,
     fontWeight: "700",
     color: "#1e293b",
     marginBottom: 6,
   },
-  supplierMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
+  supplierMeta: { flexDirection: "row", alignItems: "center", gap: 8 },
   statusBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -1122,34 +1327,14 @@ const styles = StyleSheet.create({
   },
   statusActive: { backgroundColor: "#10b981" },
   statusInactive: { backgroundColor: "#ef4444" },
-  statusText: {
-    fontSize: 11,
-    color: "#fff",
-    fontWeight: "700",
-  },
-  phoneText: {
-    fontSize: 12,
-    color: "#6b7280",
-    fontWeight: "500",
-  },
-  menuBtn: {
-    padding: 4,
-  },
-  supplierExtraInfo: {
-    gap: 6,
-    marginBottom: 12,
-    paddingLeft: 56, // Align with avatar
-  },
-  infoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  infoText: {
-    fontSize: 13,
-    color: "#6b7280",
-    flex: 1,
-  },
+  statusText: { fontSize: 11, color: "#fff", fontWeight: "700" },
+  phoneText: { fontSize: 12, color: "#6b7280", fontWeight: "500" },
+  menuBtn: { padding: 4 },
+
+  supplierExtraInfo: { gap: 6, marginBottom: 12, paddingLeft: 56 },
+  infoRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  infoText: { fontSize: 13, color: "#6b7280", flex: 1 },
+
   supplierActions: {
     flexDirection: "row",
     gap: 8,
@@ -1167,20 +1352,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: "#f8fafc",
   },
-  actionText: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  // Specific variants for action buttons (used in SupplierCard)
-  viewBtn: {
-    backgroundColor: "#eff6ff", // light blue background for view action
-  },
-  editBtn: {
-    backgroundColor: "#fffbeb", // light amber background for edit action
-  },
-  deleteBtn: {
-    backgroundColor: "#fff1f2", // light red/pink background for delete action
-  },
+  actionText: { fontSize: 12, fontWeight: "600" },
+  viewBtn: { backgroundColor: "#eff6ff" },
+  editBtn: { backgroundColor: "#fff7ed" },
+  deleteBtn: { backgroundColor: "#fff1f2" },
+  restoreBtn: { backgroundColor: "#ecfdf5" },
+
   empty: {
     alignItems: "center",
     justifyContent: "center",
@@ -1205,6 +1382,7 @@ const styles = StyleSheet.create({
     color: "#6b7280",
     textAlign: "center",
     marginBottom: 20,
+    paddingHorizontal: 16,
   },
   emptyBtn: {
     backgroundColor: "#10b981",
@@ -1212,13 +1390,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
   },
-  emptyBtnText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
-  },
+  emptyBtnText: { color: "#fff", fontSize: 14, fontWeight: "600" },
 
-  // Detail Modal Styles
+  // Detail modal
   detailModalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.7)",
@@ -1243,24 +1417,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 20,
   },
-  closeBtn: {
-    padding: 4,
-  },
-  detailTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#fff",
-  },
-  detailActions: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  detailActionBtn: {
-    padding: 8,
-  },
-  supplierHero: {
-    alignItems: "center",
-  },
+  closeBtn: { padding: 4 },
+  detailTitle: { fontSize: 18, fontWeight: "700", color: "#fff" },
+  detailActions: { flexDirection: "row", gap: 8 },
+  detailActionBtn: { padding: 8 },
+  supplierHero: { alignItems: "center" },
   detailAvatar: {
     width: 80,
     height: 80,
@@ -1272,11 +1433,7 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: "rgba(255,255,255,0.3)",
   },
-  detailAvatarText: {
-    fontSize: 32,
-    fontWeight: "800",
-    color: "#fff",
-  },
+  detailAvatarText: { fontSize: 32, fontWeight: "800", color: "#fff" },
   detailName: {
     fontSize: 24,
     fontWeight: "800",
@@ -1292,19 +1449,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     gap: 6,
   },
-  detailStatusActive: { backgroundColor: "rgba(16, 185, 129, 0.9)" },
-  detailStatusInactive: { backgroundColor: "rgba(239, 68, 68, 0.9)" },
-  detailStatusText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#fff",
-  },
-  detailContent: {
-    padding: 20,
-  },
-  detailSection: {
-    marginBottom: 24,
-  },
+  detailStatusActive: { backgroundColor: "rgba(16,185,129,0.9)" },
+  detailStatusInactive: { backgroundColor: "rgba(239,68,68,0.9)" },
+  detailStatusText: { fontSize: 12, fontWeight: "700", color: "#fff" },
+  detailContent: { padding: 20 },
+  detailSection: { marginBottom: 24 },
   detailSectionTitle: {
     fontSize: 16,
     fontWeight: "700",
@@ -1325,45 +1474,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  detailItemContent: {
-    flex: 1,
-  },
+  detailItemContent: { flex: 1 },
   detailItemLabel: {
     fontSize: 12,
     color: "#6b7280",
     marginBottom: 4,
     fontWeight: "600",
   },
-  detailItemValue: {
-    fontSize: 15,
-    color: "#1e293b",
-    fontWeight: "500",
-  },
-  statsGrid: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  miniStat: {
-    flex: 1,
-    backgroundColor: "#f8fafc",
-    padding: 16,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-  miniStatValue: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#1e293b",
-    marginBottom: 4,
-  },
-  miniStatLabel: {
-    fontSize: 11,
-    color: "#6b7280",
-    fontWeight: "600",
-    textAlign: "center",
-  },
+  detailItemValue: { fontSize: 15, color: "#1e293b", fontWeight: "500" },
 
-  // Form Modal Styles
+  // Form modal
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -1383,29 +1503,17 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
   },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#fff",
-  },
-  modalCloseBtn: {
-    padding: 4,
-  },
-  formContainer: {
-    padding: 20,
-  },
-  formSection: {
-    marginBottom: 24,
-  },
+  modalTitle: { fontSize: 20, fontWeight: "700", color: "#fff" },
+  modalCloseBtn: { padding: 4 },
+  formContainer: { padding: 20 },
+  formSection: { marginBottom: 24 },
   formSectionTitle: {
     fontSize: 16,
     fontWeight: "700",
     color: "#1e293b",
     marginBottom: 16,
   },
-  formGroup: {
-    marginBottom: 16,
-  },
+  formGroup: { marginBottom: 16 },
   formLabel: {
     fontSize: 14,
     fontWeight: "600",
@@ -1423,21 +1531,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
-  formInputText: {
-    flex: 1,
-    marginLeft: 10,
-    fontSize: 16,
-    color: "#1e293b",
-  },
-  formTextArea: {
-    paddingTop: 12,
-    minHeight: 100,
-    alignItems: "flex-start",
-  },
-  statusButtons: {
-    flexDirection: "row",
-    gap: 12,
-  },
+  formInputText: { flex: 1, marginLeft: 10, fontSize: 16, color: "#1e293b" },
+  formTextArea: { paddingTop: 12, minHeight: 100, alignItems: "flex-start" },
+
+  statusButtons: { flexDirection: "row", gap: 12 },
   statusButton: {
     flex: 1,
     flexDirection: "row",
@@ -1450,22 +1547,11 @@ const styles = StyleSheet.create({
     borderColor: "#e2e8f0",
     backgroundColor: "#fff",
   },
-  statusButtonActive: {
-    backgroundColor: "#10b981",
-    borderColor: "#10b981",
-  },
-  statusButtonInactive: {
-    backgroundColor: "#ef4444",
-    borderColor: "#ef4444",
-  },
-  statusButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#6b7280",
-  },
-  statusButtonTextActive: {
-    color: "#fff",
-  },
+  statusButtonActive: { backgroundColor: "#10b981", borderColor: "#10b981" },
+  statusButtonInactive: { backgroundColor: "#ef4444", borderColor: "#ef4444" },
+  statusButtonText: { fontSize: 14, fontWeight: "600", color: "#6b7280" },
+  statusButtonTextActive: { color: "#fff" },
+
   formActions: {
     flexDirection: "row",
     padding: 20,
@@ -1481,11 +1567,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  cancelBtnText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#6b7280",
-  },
+  cancelBtnText: { fontSize: 16, fontWeight: "600", color: "#6b7280" },
   saveBtn: {
     flex: 2,
     borderRadius: 12,
@@ -1503,14 +1585,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
   },
-  saveBtnDisabled: {
-    opacity: 0.6,
-  },
-  saveBtnText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "700",
-  },
+  saveBtnDisabled: { opacity: 0.6 },
+  saveBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
 });
-
-export default SupplierListScreen;

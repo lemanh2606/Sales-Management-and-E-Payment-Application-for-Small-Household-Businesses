@@ -48,7 +48,9 @@ const createOrder = async (req, res) => {
 
     if (!items || items.length === 0) {
       console.log("Lỗi: Không có sản phẩm trong hóa đơn");
-      return res.status(400).json({ message: "Hóa đơn phải có ít nhất 1 sản phẩm" });
+      return res
+        .status(400)
+        .json({ message: "Hóa đơn phải có ít nhất 1 sản phẩm" });
     }
 
     // Validate sản phẩm + tính total (ko trừ stock ở đây, chờ in bill)
@@ -60,9 +62,18 @@ const createOrder = async (req, res) => {
     try {
       for (let item of items) {
         const prod = await Product.findById(item.productId).session(session);
-        if (!prod || prod.store_id.toString() !== storeId.toString() || prod.stock_quantity < item.quantity || prod.status !== "Đang kinh doanh") {
+        if (
+          !prod ||
+          prod.store_id.toString() !== storeId.toString() ||
+          prod.stock_quantity < item.quantity ||
+          prod.status !== "Đang kinh doanh"
+        ) {
           // Kiểm tra stock đủ trước, nhưng ko trừ - chỉ warn nếu thiếu
-          throw new Error(`Sản phẩm ${prod?.name || "không tồn tại"} hết hàng hoặc không tồn tại trong cửa hàng`);
+          throw new Error(
+            `Sản phẩm ${
+              prod?.name || "không tồn tại"
+            } hết hàng hoặc không tồn tại trong cửa hàng`
+          );
         }
 
         // --- TÍNH GIÁ DỰA THEO saleType, bổ sung để làm báo cáo chuẩn ---
@@ -121,7 +132,9 @@ const createOrder = async (req, res) => {
         if (!customer) {
           // Tạo mới nếu ko tồn tại
           customer = new Customer({
-            name: customerInfo.name ? customerInfo.name.trim() : normalizedPhone,
+            name: customerInfo.name
+              ? customerInfo.name.trim()
+              : normalizedPhone,
             phone: normalizedPhone,
             storeId: storeId, // 👈 Fix: Truyền storeId vào Customer để ref store (required validation pass)
           });
@@ -129,7 +142,9 @@ const createOrder = async (req, res) => {
           console.log("Tạo khách hàng mới:", customer.phone);
         } else {
           // Update name nếu khác
-          const incomingName = customerInfo.name ? customerInfo.name.trim() : null;
+          const incomingName = customerInfo.name
+            ? customerInfo.name.trim()
+            : null;
           if (incomingName && customer.name !== incomingName) {
             customer.name = incomingName;
             await customer.save({ session });
@@ -141,7 +156,9 @@ const createOrder = async (req, res) => {
       }
 
       // Lấy loyalty config store (cho discount usedPoints)
-      const loyalty = await LoyaltySetting.findOne({ storeId }).session(session);
+      const loyalty = await LoyaltySetting.findOne({ storeId }).session(
+        session
+      );
       let discount = 0;
       if (usedPoints && loyalty && loyalty.isActive) {
         // Áp dụng giảm giá nếu active, usedPoints <= loyaltyPoints customer
@@ -151,7 +168,9 @@ const createOrder = async (req, res) => {
           customer.loyaltyPoints -= maxUsed; // Trừ điểm dùng
           await customer.save({ session });
           total -= discount; // Subtract discount từ total
-          console.log(`Giảm giá ${discount} từ ${maxUsed} điểm cho khách ${customer.phone}`);
+          console.log(
+            `Giảm giá ${discount} từ ${maxUsed} điểm cho khách ${customer.phone}`
+          );
         }
       }
       // Update thêm chức năng chủ cửa hàng cũng chính là 1 người bán hàng
@@ -218,7 +237,9 @@ const createOrder = async (req, res) => {
 
         defaultBank = paymentConfig.banks.find((b) => b.isDefault); // <- thêm || paymentConfig.banks[0] để lấy bank đầu danh sách nhưng chắc thôi
         if (!defaultBank) {
-          throw new Error("Không tìm thấy ngân hàng mặc định. Bạn vui lòng chọn ít nhất 1 ngân hàng ĐÃ KẾT NỐI làm mặc định.");
+          throw new Error(
+            "Không tìm thấy ngân hàng mặc định. Bạn vui lòng chọn ít nhất 1 ngân hàng ĐÃ KẾT NỐI làm mặc định."
+          );
         }
 
         // === BƯỚC 2: TẠO QR BẰNG VIETQR.IO (TIỀN VỀ ĐÚNG VÍ ÔNG CHỦ) ===
@@ -226,9 +247,13 @@ const createOrder = async (req, res) => {
         const description = `Thanh toan hoa don ${newOrder._id}`;
 
         const template = defaultBank.qrTemplate || "compact2";
-        const vietQrUrl = `https://img.vietqr.io/image/${defaultBank.bankCode}-${
+        const vietQrUrl = `https://img.vietqr.io/image/${
+          defaultBank.bankCode
+        }-${
           defaultBank.accountNumber
-        }-${template}.png?amount=${amount}&addInfo=${encodeURIComponent(description)}&accountName=${encodeURIComponent(defaultBank.accountName)}`;
+        }-${template}.png?amount=${amount}&addInfo=${encodeURIComponent(
+          description
+        )}&accountName=${encodeURIComponent(defaultBank.accountName)}`;
 
         // === BƯỚC 3: LƯU QR VÀO ORDER ===
         newOrder.paymentMethod = "qr";
@@ -237,7 +262,9 @@ const createOrder = async (req, res) => {
         newOrder.status = "pending"; // chờ khách quét
         await newOrder.save({ session });
 
-        console.log(`Tạo QR VietQR thành công cho cửa hàng ${storeId}, ngân hàng: ${defaultBank.bankName} - ${defaultBank.accountNumber}`);
+        console.log(
+          `Tạo QR VietQR thành công cho cửa hàng ${storeId}, ngân hàng: ${defaultBank.bankName} - ${defaultBank.accountNumber}`
+        );
 
         // === TRẢ VỀ CHO FE ===
         qrData = {
@@ -247,7 +274,9 @@ const createOrder = async (req, res) => {
         };
       } else {
         // Cash: Pending, chờ in bill để paid + trừ stock
-        console.log(`Tạo hóa đơn cash pending thành công cho ${newOrder._id}, chờ in bill`);
+        console.log(
+          `Tạo hóa đơn cash pending thành công cho ${newOrder._id}, chờ in bill`
+        );
       }
 
       await session.commitTransaction(); // Commit tất cả
@@ -271,7 +300,9 @@ const createOrder = async (req, res) => {
           entityId: newOrder._id,
           entityName: `Đơn hàng #${newOrder._id}`,
           req,
-          description: `Tạo đơn hàng mới (phương thức ${paymentMethod === "qr" ? "QRCode" : "tiền mặt"}) cho khách ${
+          description: `Tạo đơn hàng mới (phương thức ${
+            paymentMethod === "qr" ? "QRCode" : "tiền mặt"
+          }) cho khách ${
             customerInfo?.name || customerInfo?.phone || "khách vãng lai"
           }`,
         });
@@ -290,7 +321,9 @@ const createOrder = async (req, res) => {
         });
       } catch (format_err) {
         console.log("Lỗi format response order:", format_err.message); // Log tiếng Việt format error
-        res.status(500).json({ message: "Lỗi format response: " + format_err.message }); // Return local ko abort
+        res
+          .status(500)
+          .json({ message: "Lỗi format response: " + format_err.message }); // Return local ko abort
       }
     } catch (inner_err) {
       await session.abortTransaction(); // Abort chỉ inner error (validate/save)
@@ -300,7 +333,9 @@ const createOrder = async (req, res) => {
     }
   } catch (err) {
     console.error("Lỗi tạo hóa đơn:", err.message); // Log tiếng Việt outer error
-    res.status(500).json({ message: "Lỗi server khi tạo hóa đơn: " + err.message });
+    res
+      .status(500)
+      .json({ message: "Lỗi server khi tạo hóa đơn: " + err.message });
   }
 };
 
@@ -309,8 +344,14 @@ const setPaidCash = async (req, res) => {
   try {
     const { orderId: mongoId } = req.params;
     const order = await Order.findById(mongoId);
-    if (!order || order.paymentMethod !== "cash" || order.status !== "pending") {
-      return res.status(400).json({ message: "Hóa đơn cash không hợp lệ cho set paid" });
+    if (
+      !order ||
+      order.paymentMethod !== "cash" ||
+      order.status !== "pending"
+    ) {
+      return res
+        .status(400)
+        .json({ message: "Hóa đơn cash không hợp lệ cho set paid" });
     }
     order.status = "paid";
     await order.save();
@@ -333,7 +374,9 @@ const setPaidCash = async (req, res) => {
         title: "Thanh toán tiền mặt thành công",
         message: `Đơn hàng #${order._id} đã được thanh toán thành công, số tiền: ${order.totalAmount}đ, phương thức: TIỀN MẶT!`,
       });
-      console.log(`🔔 [SOCKET + DB] Thanh toán tiền mặt: ${order.totalAmount}đ - ĐH: ${order._id}`);
+      console.log(
+        `🔔 [SOCKET + DB] Thanh toán tiền mặt: ${order.totalAmount}đ - ĐH: ${order._id}`
+      );
     }
 
     // log nhật ký hoạt động
@@ -348,7 +391,9 @@ const setPaidCash = async (req, res) => {
       description: `Xác nhận thanh toán tiền mặt cho đơn hàng #${order._id}, tổng tiền ${order.totalAmount}đ`,
     });
 
-    console.log(`Set paid cash thành công cho hóa đơn ${mongoId}, sẵn sàng in bill`);
+    console.log(
+      `Set paid cash thành công cho hóa đơn ${mongoId}, sẵn sàng in bill`
+    );
     res.json({
       message: "Xác nhận thanh toán cash thành công, sẵn sàng in hóa đơn",
     });
@@ -371,7 +416,9 @@ const printBill = async (req, res) => {
 
     if (!order || (order.status !== "paid" && order.status !== "pending")) {
       console.log("Hóa đơn không hợp lệ, không thể in bill:", mongoId);
-      return res.status(400).json({ message: "Hóa đơn không hợp lệ, không thể in" });
+      return res
+        .status(400)
+        .json({ message: "Hóa đơn không hợp lệ, không thể in" });
     }
 
     // 🔴 NẾU LÀ PENDING (ESPECIALLY FOR QR) → TỰ ĐỘNG SET PAID TRƯỚC KHI IN, CHỈ ÁP DỤNG VỚI QR CODE
@@ -384,7 +431,9 @@ const printBill = async (req, res) => {
       // QR → auto paid
       order.status = "paid";
       await order.save();
-      console.log(`🟢 Auto set paid cho hóa đơn QR pending: ${mongoId} trước khi in bill`);
+      console.log(
+        `🟢 Auto set paid cho hóa đơn QR pending: ${mongoId} trước khi in bill`
+      );
 
       // Gửi socket thông báo hóa đơn đã paid (cho các tab khác refresh)
       const io = req.app.get("io");
@@ -405,7 +454,9 @@ const printBill = async (req, res) => {
           title: "Thanh toán QR thành công",
           message: `Đơn hàng #${order._id} đã được thanh toán thành công, số tiền: ${order.totalAmount}đ, phương thức: QR CODE!`,
         });
-        console.log(`🔔 [SOCKET + DB] Thanh toán QR: ${order.totalAmount}đ - ĐH: ${order._id}`);
+        console.log(
+          `🔔 [SOCKET + DB] Thanh toán QR: ${order.totalAmount}đ - ĐH: ${order._id}`
+        );
       }
     }
 
@@ -421,7 +472,13 @@ const printBill = async (req, res) => {
     const loyalty = await LoyaltySetting.findOne({ storeId: order.storeId });
     let earnedPoints = 0;
     let roundedEarnedPoints = 0;
-    if (isFirstPrint && loyalty && loyalty.isActive && order.totalAmount >= loyalty.minOrderValue && order.customer) {
+    if (
+      isFirstPrint &&
+      loyalty &&
+      loyalty.isActive &&
+      order.totalAmount >= loyalty.minOrderValue &&
+      order.customer
+    ) {
       earnedPoints = parseFloat(order.totalAmount) * loyalty.pointsPerVND; // Tích điểm = total * tỉ lệ
       // 🎯 Làm tròn điểm thưởng (chỉ lấy số nguyên, bỏ lẻ)
       roundedEarnedPoints = Math.round(earnedPoints);
@@ -429,7 +486,9 @@ const printBill = async (req, res) => {
       const session = await mongoose.startSession();
       session.startTransaction();
       try {
-        const customer = await Customer.findById(order.customer).session(session);
+        const customer = await Customer.findById(order.customer).session(
+          session
+        );
         if (customer) {
           // 🔢 Chuyển đổi và cộng dồn tổng chi tiêu (Decimal128 → float)
           const prevSpent = parseFloat(customer.totalSpent?.toString() || 0);
@@ -437,14 +496,19 @@ const printBill = async (req, res) => {
           const newSpent = prevSpent + currentSpent;
 
           // 💾 Cập nhật dữ liệu khách hàng
-          customer.loyaltyPoints = (customer.loyaltyPoints || 0) + roundedEarnedPoints; // 🎁 Cộng điểm mới (làm tròn)
-          customer.totalSpent = mongoose.Types.Decimal128.fromString(newSpent.toFixed(2)); // 💰 Cập nhật tổng chi tiêu chính xác 2 số lẻ
+          customer.loyaltyPoints =
+            (customer.loyaltyPoints || 0) + roundedEarnedPoints; // 🎁 Cộng điểm mới (làm tròn)
+          customer.totalSpent = mongoose.Types.Decimal128.fromString(
+            newSpent.toFixed(2)
+          ); // 💰 Cập nhật tổng chi tiêu chính xác 2 số lẻ
           customer.totalOrders = (customer.totalOrders || 0) + 1; // 🛒 +1 đơn hàng
 
           await customer.save({ session });
 
           console.log(
-            `[LOYALTY] +${roundedEarnedPoints} điểm cho khách ${customer.phone} | Tổng điểm: ${
+            `[LOYALTY] +${roundedEarnedPoints} điểm cho khách ${
+              customer.phone
+            } | Tổng điểm: ${
               customer.loyaltyPoints
             } | Tổng chi tiêu: ${newSpent.toLocaleString()}đ`
           );
@@ -472,7 +536,11 @@ const printBill = async (req, res) => {
         throw new Error("Lỗi cộng điểm khi in bill: " + err.message);
       }
     } else if (isDuplicate) {
-      console.log(`In hóa đơn duplicate lần ${order.printCount + 1}, không trừ stock/cộng điểm cho ${mongoId}`);
+      console.log(
+        `In hóa đơn duplicate lần ${
+          order.printCount + 1
+        }, không trừ stock/cộng điểm cho ${mongoId}`
+      );
     }
 
     // Trừ stock chỉ lần đầu (atomic session)
@@ -481,14 +549,21 @@ const printBill = async (req, res) => {
       session.startTransaction();
       try {
         for (let item of items) {
-          const prod = await Product.findById(item.productId._id).session(session); // Ref _id sau populate
+          const prod = await Product.findById(item.productId._id).session(
+            session
+          ); // Ref _id sau populate
           if (prod) {
             prod.stock_quantity -= item.quantity; // Trừ stock thật
             await prod.save({ session });
-            console.log(`Trừ stock khi in bill thành công cho ${prod.name}: -${item.quantity}`);
+            console.log(
+              `Trừ stock khi in bill thành công cho ${prod.name}: -${item.quantity}`
+            );
 
             // ==== CHECK LOW STOCK VÀ EMIT SOCKET + SAVE NOTIFICATION ====
-            if (prod.stock_quantity <= prod.min_stock && !prod.lowStockAlerted) {
+            if (
+              prod.stock_quantity <= prod.min_stock &&
+              !prod.lowStockAlerted
+            ) {
               // Lấy io từ app
               const io = req.app.get("io");
               if (io) {
@@ -533,24 +608,32 @@ const printBill = async (req, res) => {
     bill += `ID Hóa đơn: ${order._id}\n`;
     bill += `Cửa hàng: ${order.storeId?.name || "Cửa hàng mặc định"}\n`;
     bill += `Nhân viên: ${order.employeeId?.fullName || "N/A"}\n`;
-    bill += `Khách hàng: ${order.customer?.name || "Khách vãng lai"} ${order.customer?.phone ? "- " + order.customer.phone : ""}\n`; // Populate từ customer ref
+    bill += `Khách hàng: ${order.customer?.name || "Khách vãng lai"} ${
+      order.customer?.phone ? "- " + order.customer.phone : ""
+    }\n`; // Populate từ customer ref
     bill += `Ngày: ${new Date(order.createdAt).toLocaleString("vi-VN")}\n`;
     bill += `Ngày in: ${new Date().toLocaleString("vi-VN")}\n`;
-    if (isDuplicate) bill += `(Bản sao hóa đơn - lần in ${order.printCount + 1})\n`; // Note duplicate
+    if (isDuplicate)
+      bill += `(Bản sao hóa đơn - lần in ${order.printCount + 1})\n`; // Note duplicate
     bill += `\nCHI TIẾT SẢN PHẨM:\n`;
     items.forEach((item) => {
-      bill += `- ${item.productId?.name || "Sản phẩm"} (${item.productId?.sku || "N/A"}): ${item.quantity} x ${item.priceAtTime} = ${
-        item.subtotal
-      } VND\n`;
+      bill += `- ${item.productId?.name || "Sản phẩm"} (${
+        item.productId?.sku || "N/A"
+      }): ${item.quantity} x ${item.priceAtTime} = ${item.subtotal} VND\n`;
     });
-    bill += `\nTỔNG TIỀN: ${(parseFloat(order.beforeTaxAmount.toString()) || 0).toFixed(2)} VND\n`; // Tổng trước giảm
+    bill += `\nTỔNG TIỀN: ${(
+      parseFloat(order.beforeTaxAmount.toString()) || 0
+    ).toFixed(2)} VND\n`; // Tổng trước giảm
     if (order.usedPoints && order.usedPoints > 0) {
       const discountAmount = (order.usedPoints / 10).toFixed(2); // ví dụ 10 points = 1k VND
       bill += `Giảm từ điểm: ${discountAmount} VND\n`;
     }
     bill += `Thanh toán: ${order.totalAmount.toString()} VND\n`; // Số tiền khách trả thật
-    bill += `Phương thức: ${order.paymentMethod === "cash" ? "TIỀN MẶT" : "QR CODE"}\n`; // Rõ ràng hơn cho bill
-    if (earnedPoints > 0) bill += `Điểm tích lũy lần này: ${earnedPoints.toFixed(0)} điểm\n`; // Thêm điểm tích nếu có
+    bill += `Phương thức: ${
+      order.paymentMethod === "cash" ? "TIỀN MẶT" : "QR CODE"
+    }\n`; // Rõ ràng hơn cho bill
+    if (earnedPoints > 0)
+      bill += `Điểm tích lũy lần này: ${earnedPoints.toFixed(0)} điểm\n`; // Thêm điểm tích nếu có
     bill += `Trạng thái: Đã thanh toán\n`;
     bill += `=== CẢM ƠN QUÝ KHÁCH! ===\n`;
 
@@ -564,8 +647,12 @@ const printBill = async (req, res) => {
       { new: true } // Lấy bản mới nhất
     );
 
-    const logMsg = isDuplicate ? "In hóa đơn BẢN SAO thành công" : "In hóa đơn thành công, đã trừ stock";
-    console.log(`${logMsg} cho ${order._id}, Số lần in hiện tại: ${updatedOrder.printCount}`);
+    const logMsg = isDuplicate
+      ? "In hóa đơn BẢN SAO thành công"
+      : "In hóa đơn thành công, đã trừ stock";
+    console.log(
+      `${logMsg} cho ${order._id}, Số lần in hiện tại: ${updatedOrder.printCount}`
+    );
     res.json({
       message: `${logMsg}, printCount: ${updatedOrder.printCount}`,
       bill: bill,
@@ -573,7 +660,9 @@ const printBill = async (req, res) => {
     });
   } catch (err) {
     console.error("Lỗi in hóa đơn:", err.message);
-    res.status(500).json({ message: "Lỗi server khi in hóa đơn: " + err.message });
+    res
+      .status(500)
+      .json({ message: "Lỗi server khi in hóa đơn: " + err.message });
   }
 };
 
@@ -587,7 +676,9 @@ const vietqrReturn = async (req, res) => {
     entityId: req.query?.orderCode || null,
     entityName: `Đơn hàng #${req.query?.orderCode || "unknown"}`,
     req,
-    description: `Thanh toán VietQR thành công, số tiền ${req.query?.amount || "?"}đ`,
+    description: `Thanh toán VietQR thành công, số tiền ${
+      req.query?.amount || "?"
+    }đ`,
   });
 
   console.log("✅ Người dùng quay lại sau khi thanh toán thành công");
@@ -607,7 +698,9 @@ const vietqrCancel = async (req, res) => {
     entityId: req.query?.orderCode || null,
     entityName: `Đơn hàng #${req.query?.orderCode || "unknown"}`,
     req,
-    description: `Hủy thanh toán VietQR cho đơn hàng #${req.query?.orderCode || "unknown"}`,
+    description: `Hủy thanh toán VietQR cho đơn hàng #${
+      req.query?.orderCode || "unknown"
+    }`,
   });
 
   console.log("❌ Người dùng hủy thanh toán hoặc lỗi");
@@ -688,18 +781,26 @@ const refundOrder = async (req, res) => {
 
     // 1️⃣ Kiểm tra nhân viên
     const employee = await Employee.findById(employeeId);
-    if (!employee) return res.status(400).json({ message: "Nhân viên không tồn tại" });
+    if (!employee)
+      return res.status(400).json({ message: "Nhân viên không tồn tại" });
 
     // 2️⃣ Kiểm tra đơn hàng
-    const order = await Order.findById(mongoId).populate("employeeId", "fullName");
-    if (!order) return res.status(404).json({ message: "Không tìm thấy đơn hàng" });
-    if (order.status !== "paid" && order.status !== "partially_refunded") return res.status(400).json({ message: "Chỉ hoàn đơn đã thanh toán" });
+    const order = await Order.findById(mongoId).populate(
+      "employeeId",
+      "fullName"
+    );
+    if (!order)
+      return res.status(404).json({ message: "Không tìm thấy đơn hàng" });
+    if (order.status !== "paid" && order.status !== "partially_refunded")
+      return res.status(400).json({ message: "Chỉ hoàn đơn đã thanh toán" });
 
     // 3️⃣ Upload chứng từ (image/video)
     const files = req.files || [];
     const evidenceMedia = [];
     for (const file of files) {
-      const resourceType = file.mimetype.startsWith("video") ? "video" : "image";
+      const resourceType = file.mimetype.startsWith("video")
+        ? "video"
+        : "image";
       const result = await new Promise((resolve, reject) => {
         const uploadStream = cloudinary.uploader.upload_stream(
           {
@@ -751,27 +852,39 @@ const refundOrder = async (req, res) => {
 
         if (i.quantity + refundedQty > orderItem.quantity) {
           throw new Error(
-            `Tổng số lượng hoàn (${i.quantity + refundedQty}) vượt quá số lượng đã mua (${orderItem.quantity}) cho sản phẩm "${
+            `Tổng số lượng hoàn (${
+              i.quantity + refundedQty
+            }) vượt quá số lượng đã mua (${orderItem.quantity}) cho sản phẩm "${
               orderItem.productId.name
             }"`
           );
         }
 
         const refundQty = Math.min(i.quantity, orderItem.quantity);
-        const subtotal = Number(orderItem.priceAtTime || orderItem.subtotal / orderItem.quantity) * refundQty;
+        const subtotal =
+          Number(
+            orderItem.priceAtTime || orderItem.subtotal / orderItem.quantity
+          ) * refundQty;
         refundTotal += subtotal;
 
         refundItems.push({
           productId: i.productId,
           quantity: refundQty,
-          priceAtTime: orderItem.priceAtTime || orderItem.subtotal / orderItem.quantity,
+          priceAtTime:
+            orderItem.priceAtTime || orderItem.subtotal / orderItem.quantity,
           subtotal,
         });
 
         // Cộng lại stock
-        await Product.findByIdAndUpdate(i.productId, { $inc: { stock_quantity: refundQty } }, { session });
+        await Product.findByIdAndUpdate(
+          i.productId,
+          { $inc: { stock_quantity: refundQty } },
+          { session }
+        );
 
-        console.log(`➕ Cộng lại tồn kho cho ${orderItem.productId.name}: +${refundQty}`);
+        console.log(
+          `➕ Cộng lại tồn kho cho ${orderItem.productId.name}: +${refundQty}`
+        );
       }
 
       // 5️⃣ Tạo bản ghi refund
@@ -792,7 +905,10 @@ const refundOrder = async (req, res) => {
 
       // 6️⃣ Cập nhật trạng thái đơn
       const totalItems = await OrderItem.countDocuments({ orderId: mongoId });
-      const totalRefundedQty = refundItems.reduce((sum, i) => sum + i.quantity, 0);
+      const totalRefundedQty = refundItems.reduce(
+        (sum, i) => sum + i.quantity,
+        0
+      );
       const totalOrderQty =
         (
           await OrderItem.aggregate([
@@ -809,9 +925,13 @@ const refundOrder = async (req, res) => {
       // 🔥 THÊM ĐOẠN NÀY ĐỂ TRỪ ĐI TIỀN DOANH THU:
       const oldTotal = Number(order.totalAmount || 0);
       const newTotal = oldTotal - refundTotal;
-      order.totalAmount = mongoose.Types.Decimal128.fromString((oldTotal - refundTotal).toFixed(2));
+      order.totalAmount = mongoose.Types.Decimal128.fromString(
+        (oldTotal - refundTotal).toFixed(2)
+      );
       // Đơn trả bằng tiền mặt thì làm log (offline) - Nếu là QR / online thì ở đây mới gọi API hoàn tiền (nhưng mình k có cách này nên bỏ qua)
-      console.log(`🔄 Cập nhật tổng tiền đơn #${order._id}: ${oldTotal} → ${newTotal}`);
+      console.log(
+        `🔄 Cập nhật tổng tiền đơn #${order._id}: ${oldTotal} → ${newTotal}`
+      );
       // 🔥 HẾT ĐOẠN THÊM
 
       order.refundId = refund[0]._id;
@@ -843,7 +963,9 @@ const refundOrder = async (req, res) => {
       await session.abortTransaction();
       session.endSession();
       console.error("❌ Lỗi khi hoàn hàng:", err.message);
-      res.status(500).json({ message: "Lỗi khi hoàn hàng", error: err.message });
+      res
+        .status(500)
+        .json({ message: "Lỗi khi hoàn hàng", error: err.message });
     }
   } catch (err) {
     console.error("🔥 Lỗi refund:", err.message);
@@ -854,7 +976,14 @@ const refundOrder = async (req, res) => {
 //  Top sản phẩm bán chạy (sum quantity/sales từ OrderItem, filter paid + range/date/store)
 const getTopSellingProducts = async (req, res) => {
   try {
-    const { limit = 10, storeId, periodType, periodKey, monthFrom, monthTo } = req.query;
+    const {
+      limit = 10,
+      storeId,
+      periodType,
+      periodKey,
+      monthFrom,
+      monthTo,
+    } = req.query;
 
     // Validate period
     if (!periodType) {
@@ -871,7 +1000,10 @@ const getTopSellingProducts = async (req, res) => {
       });
     }
 
-    if (periodType === "custom" && (!req.query.monthFrom || !req.query.monthTo)) {
+    if (
+      periodType === "custom" &&
+      (!req.query.monthFrom || !req.query.monthTo)
+    ) {
       return res.status(400).json({
         success: false,
         message: "Thiếu monthFrom hoặc monthTo cho kỳ tùy chỉnh",
@@ -891,7 +1023,12 @@ const getTopSellingProducts = async (req, res) => {
     }
 
     // --- Dùng periodToRange (đang xài trong hơn 10 hàm order) ---
-    const { start, end } = periodToRange(periodType, periodKey, monthFrom, monthTo);
+    const { start, end } = periodToRange(
+      periodType,
+      periodKey,
+      monthFrom,
+      monthTo
+    );
 
     const match = {
       "order.status": "paid",
@@ -960,14 +1097,24 @@ const getTopSellingProducts = async (req, res) => {
     });
   } catch (err) {
     console.error("Lỗi top selling products:", err.message);
-    return res.status(500).json({ message: "Lỗi server khi lấy top sản phẩm bán chạy" });
+    return res
+      .status(500)
+      .json({ message: "Lỗi server khi lấy top sản phẩm bán chạy" });
   }
 };
 
 //http://localhost:9999/api/orders/top-customers?limit=5&range=thisYear&storeId=68f8f19a4d723cad0bda9fa5
 const getTopFrequentCustomers = async (req, res) => {
   try {
-    const { storeId, periodType = "month", periodKey, monthFrom, monthTo, limit = 10, range } = req.query;
+    const {
+      storeId,
+      periodType = "month",
+      periodKey,
+      monthFrom,
+      monthTo,
+      limit = 10,
+      range,
+    } = req.query;
 
     if (!storeId) {
       return res.status(400).json({ message: "Thiếu storeId" });
@@ -977,7 +1124,12 @@ const getTopFrequentCustomers = async (req, res) => {
 
     // ƯU TIÊN DÙNG periodType + periodKey (UI mới)
     if (periodType && periodKey) {
-      ({ start, end } = periodToRange(periodType, periodKey, monthFrom, monthTo));
+      ({ start, end } = periodToRange(
+        periodType,
+        periodKey,
+        monthFrom,
+        monthTo
+      ));
     }
     // FALLBACK: nếu vẫn dùng UI cũ (range=thisMonth...)
     else if (range) {
@@ -1074,13 +1226,24 @@ const getTopFrequentCustomers = async (req, res) => {
 // =============== EXPORT TOP CUSTOMERS (sửa xong) ===============
 const exportTopFrequentCustomers = async (req, res) => {
   try {
-    const { storeId, periodType = "month", periodKey, monthFrom, monthTo, limit = 500, format = "xlsx" } = req.query;
+    const {
+      storeId,
+      periodType = "month",
+      periodKey,
+      monthFrom,
+      monthTo,
+      limit = 500,
+      format = "xlsx",
+    } = req.query;
 
     if (!storeId) return res.status(400).json({ message: "Thiếu storeId" });
 
     const { start, end } = periodToRange(
       periodType,
-      periodKey || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`,
+      periodKey ||
+        `${new Date().getFullYear()}-${String(
+          new Date().getMonth() + 1
+        ).padStart(2, "0")}`,
       monthFrom,
       monthTo
     );
@@ -1136,8 +1299,13 @@ const exportTopFrequentCustomers = async (req, res) => {
       XLSX.utils.book_append_sheet(wb, ws, "Top Khach Hang");
       const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
 
-      res.setHeader("Content-Disposition", `attachment; filename=Top_Khach_Hang_${periodKey || "hien_tai"}.xlsx`);
-      res.type("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename=Top_Khach_Hang_${periodKey || "hien_tai"}.xlsx`
+      );
+      res.type(
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
       res.send(buffer);
     }
   } catch (err) {
@@ -1150,7 +1318,14 @@ const exportTopFrequentCustomers = async (req, res) => {
 // GET /api/orders/top-products/export?format=pdf|csv|xlsx&storeId=...&range=...
 const exportTopSellingProducts = async (req, res) => {
   try {
-    const { limit = 10, storeId, range, dateFrom, dateTo, format: rawFormat = "csv" } = req.query;
+    const {
+      limit = 10,
+      storeId,
+      range,
+      dateFrom,
+      dateTo,
+      format: rawFormat = "csv",
+    } = req.query;
 
     const format = String(rawFormat || "csv").toLowerCase();
 
@@ -1186,7 +1361,9 @@ const exportTopSellingProducts = async (req, res) => {
     const pad2 = (x) => String(x).padStart(2, "0");
     const formatDateTimeVN = (d) => {
       const dt = new Date(d);
-      return `${pad2(dt.getDate())}/${pad2(dt.getMonth() + 1)}/${dt.getFullYear()} ${pad2(dt.getHours())}:${pad2(dt.getMinutes())}`;
+      return `${pad2(dt.getDate())}/${pad2(
+        dt.getMonth() + 1
+      )}/${dt.getFullYear()} ${pad2(dt.getHours())}:${pad2(dt.getMinutes())}`;
     };
 
     const describeRange = () => {
@@ -1200,7 +1377,8 @@ const exportTopSellingProducts = async (req, res) => {
         };
         return map[range] || `range=${range}`;
       }
-      if (dateFrom || dateTo) return `Từ ${dateFrom || "..."} đến ${dateTo || "..."}`;
+      if (dateFrom || dateTo)
+        return `Từ ${dateFrom || "..."} đến ${dateTo || "..."}`;
       return "Tháng này (mặc định)";
     };
 
@@ -1211,16 +1389,48 @@ const exportTopSellingProducts = async (req, res) => {
     if (range) {
       switch (range) {
         case "today": {
-          const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-          const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+          const start = new Date(
+            now.getFullYear(),
+            now.getMonth(),
+            now.getDate(),
+            0,
+            0,
+            0,
+            0
+          );
+          const end = new Date(
+            now.getFullYear(),
+            now.getMonth(),
+            now.getDate(),
+            23,
+            59,
+            59,
+            999
+          );
           matchDate = { $gte: start, $lte: end };
           break;
         }
         case "yesterday": {
           const y = new Date(now);
           y.setDate(y.getDate() - 1);
-          const start = new Date(y.getFullYear(), y.getMonth(), y.getDate(), 0, 0, 0, 0);
-          const end = new Date(y.getFullYear(), y.getMonth(), y.getDate(), 23, 59, 59, 999);
+          const start = new Date(
+            y.getFullYear(),
+            y.getMonth(),
+            y.getDate(),
+            0,
+            0,
+            0,
+            0
+          );
+          const end = new Date(
+            y.getFullYear(),
+            y.getMonth(),
+            y.getDate(),
+            23,
+            59,
+            59,
+            999
+          );
           matchDate = { $gte: start, $lte: end };
           break;
         }
@@ -1229,12 +1439,28 @@ const exportTopSellingProducts = async (req, res) => {
           const diffToMonday = currentDay === 0 ? 6 : currentDay - 1;
           const monday = new Date(now);
           monday.setDate(monday.getDate() - diffToMonday);
-          const start = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate(), 0, 0, 0, 0);
+          const start = new Date(
+            monday.getFullYear(),
+            monday.getMonth(),
+            monday.getDate(),
+            0,
+            0,
+            0,
+            0
+          );
           matchDate = { $gte: start };
           break;
         }
         case "thisMonth": {
-          const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+          const start = new Date(
+            now.getFullYear(),
+            now.getMonth(),
+            1,
+            0,
+            0,
+            0,
+            0
+          );
           matchDate = { $gte: start };
           break;
         }
@@ -1245,7 +1471,15 @@ const exportTopSellingProducts = async (req, res) => {
         }
         default: {
           // fallback: thisMonth
-          const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+          const start = new Date(
+            now.getFullYear(),
+            now.getMonth(),
+            1,
+            0,
+            0,
+            0,
+            0
+          );
           matchDate = { $gte: start };
         }
       }
@@ -1308,7 +1542,9 @@ const exportTopSellingProducts = async (req, res) => {
     ]);
 
     if (!topProducts || topProducts.length === 0) {
-      return res.status(404).json({ message: "Không có dữ liệu top sản phẩm trong kỳ này" });
+      return res
+        .status(404)
+        .json({ message: "Không có dữ liệu top sản phẩm trong kỳ này" });
     }
 
     // normalize lần nữa cho chắc (nếu data bẩn)
@@ -1329,11 +1565,20 @@ const exportTopSellingProducts = async (req, res) => {
 
     // ===== CSV (thêm BOM cho Excel UTF-8) =====
     if (format === "csv") {
-      const fields = ["productName", "productSku", "totalQuantity", "totalSales", "countOrders"];
+      const fields = [
+        "productName",
+        "productSku",
+        "totalQuantity",
+        "totalSales",
+        "countOrders",
+      ];
       const csv = new Parser({ fields }).parse(normalized);
 
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
-      res.setHeader("Content-Disposition", `attachment; filename=${filenameBase}.csv`);
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename=${filenameBase}.csv`
+      );
       return res.send("\uFEFF" + csv);
     }
 
@@ -1361,21 +1606,40 @@ const exportTopSellingProducts = async (req, res) => {
       const workbook = XLSX.utils.book_new();
       const worksheet = XLSX.utils.json_to_sheet(excelData);
 
-      worksheet["!cols"] = [{ wch: 6 }, { wch: 40 }, { wch: 18 }, { wch: 10 }, { wch: 18 }, { wch: 12 }];
+      worksheet["!cols"] = [
+        { wch: 6 },
+        { wch: 40 },
+        { wch: 18 },
+        { wch: 10 },
+        { wch: 18 },
+        { wch: 12 },
+      ];
 
       XLSX.utils.book_append_sheet(workbook, worksheet, "Top bán chạy");
       const buf = XLSX.write(workbook, { bookType: "xlsx", type: "buffer" });
 
-      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-      res.setHeader("Content-Disposition", `attachment; filename=${filenameBase}.xlsx`);
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename=${filenameBase}.xlsx`
+      );
       res.setHeader("Content-Length", buf.length);
       return res.send(buf);
     }
 
     // ===== PDF (bảng chuyên nghiệp + tự xuống trang) =====
     const fontPath = {
-      normal: path.resolve(__dirname, "../../fonts/Roboto/static/Roboto-Regular.ttf"),
-      bold: path.resolve(__dirname, "../../fonts/Roboto/static/Roboto-Bold.ttf"),
+      normal: path.resolve(
+        __dirname,
+        "../../fonts/Roboto/static/Roboto-Regular.ttf"
+      ),
+      bold: path.resolve(
+        __dirname,
+        "../../fonts/Roboto/static/Roboto-Bold.ttf"
+      ),
     };
 
     const pdf = new PDFDocument({
@@ -1390,15 +1654,22 @@ const exportTopSellingProducts = async (req, res) => {
     if (hasRoboto) {
       try {
         pdf.registerFont("Roboto", fontPath.normal);
-        if (fs.existsSync(fontPath.bold)) pdf.registerFont("RobotoBold", fontPath.bold);
+        if (fs.existsSync(fontPath.bold))
+          pdf.registerFont("RobotoBold", fontPath.bold);
       } catch {}
     }
 
     const FONT_NORMAL = hasRoboto ? "Roboto" : "Helvetica";
-    const FONT_BOLD = hasRoboto && fs.existsSync(fontPath.bold) ? "RobotoBold" : "Helvetica-Bold";
+    const FONT_BOLD =
+      hasRoboto && fs.existsSync(fontPath.bold)
+        ? "RobotoBold"
+        : "Helvetica-Bold";
 
     res.setHeader("Content-Type", "application/pdf; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename=${filenameBase}.pdf`);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=${filenameBase}.pdf`
+    );
     pdf.pipe(res);
 
     // Layout constants
@@ -1461,7 +1732,9 @@ const exportTopSellingProducts = async (req, res) => {
       });
 
       const line2Left = storeId ? `StoreId: ${storeId}` : "StoreId: (tất cả)";
-      const line2Right = `Top: ${normalized.length} (limit=${parseInt(limit, 10) || 10})`;
+      const line2Right = `Top: ${normalized.length} (limit=${
+        parseInt(limit, 10) || 10
+      })`;
       pdf.text(line2Left, pageLeft, pdf.y, {
         width: contentWidth / 2,
         align: "left",
@@ -1475,7 +1748,12 @@ const exportTopSellingProducts = async (req, res) => {
 
       // divider
       const yDiv = pdf.y;
-      pdf.moveTo(pageLeft, yDiv).lineTo(pageRight, yDiv).lineWidth(1).strokeColor("#E5E7EB").stroke();
+      pdf
+        .moveTo(pageLeft, yDiv)
+        .lineTo(pageRight, yDiv)
+        .lineWidth(1)
+        .strokeColor("#E5E7EB")
+        .stroke();
       pdf.moveDown(0.8);
     };
 
@@ -1599,7 +1877,11 @@ const exportTopSellingProducts = async (req, res) => {
 
       // box
       pdf.save();
-      pdf.rect(pageLeft, y, contentWidth, 52).fill("#F9FAFB").strokeColor("#E5E7EB").stroke();
+      pdf
+        .rect(pageLeft, y, contentWidth, 52)
+        .fill("#F9FAFB")
+        .strokeColor("#E5E7EB")
+        .stroke();
       pdf.restore();
 
       pdf.font(FONT_BOLD).fontSize(11).fillColor(colors.text);
@@ -1609,13 +1891,23 @@ const exportTopSellingProducts = async (req, res) => {
       pdf.text(`Tổng SL bán: ${totalQtyAll}`, pageLeft + 10, y + 28, {
         width: contentWidth / 3,
       });
-      pdf.text(`Tổng doanh thu: ${formatVND(totalSalesAll)}`, pageLeft + 10 + contentWidth / 3, y + 28, {
-        width: contentWidth / 3,
-      });
-      pdf.text(`Tổng số đơn: ${totalOrdersAll}`, pageLeft + 10 + (contentWidth * 2) / 3, y + 28, {
-        width: contentWidth / 3 - 10,
-        align: "right",
-      });
+      pdf.text(
+        `Tổng doanh thu: ${formatVND(totalSalesAll)}`,
+        pageLeft + 10 + contentWidth / 3,
+        y + 28,
+        {
+          width: contentWidth / 3,
+        }
+      );
+      pdf.text(
+        `Tổng số đơn: ${totalOrdersAll}`,
+        pageLeft + 10 + (contentWidth * 2) / 3,
+        y + 28,
+        {
+          width: contentWidth / 3 - 10,
+          align: "right",
+        }
+      );
 
       pdf.y = y + 52;
     };
@@ -1648,7 +1940,9 @@ const getListPaidOrders = async (req, res) => {
       .populate("storeId", "name")
       .populate("employeeId", "fullName")
       .populate("customer", "name phone")
-      .select("storeId employeeId customer totalAmount paymentMethod createdAt updatedAt")
+      .select(
+        "storeId employeeId customer totalAmount paymentMethod createdAt updatedAt"
+      )
       .sort({ createdAt: -1 })
       .lean();
 
@@ -1658,7 +1952,9 @@ const getListPaidOrders = async (req, res) => {
     });
   } catch (err) {
     console.error("Lỗi khi lấy danh sách hóa đơn đã thanh toán:", err.message);
-    res.status(500).json({ message: "Lỗi server khi lấy danh sách hóa đơn đã thanh toán" });
+    res
+      .status(500)
+      .json({ message: "Lỗi server khi lấy danh sách hóa đơn đã thanh toán" });
   }
 };
 
@@ -1672,7 +1968,9 @@ const getListRefundOrders = async (req, res) => {
       .populate("storeId", "name")
       .populate("employeeId", "fullName")
       .populate("customer", "name phone")
-      .select("storeId employeeId customer totalAmount status createdAt updatedAt refundId")
+      .select(
+        "storeId employeeId customer totalAmount status createdAt updatedAt refundId"
+      )
       .sort({ updatedAt: -1 })
       .lean();
 
@@ -1682,7 +1980,9 @@ const getListRefundOrders = async (req, res) => {
     });
   } catch (err) {
     console.error("Lỗi khi lấy danh sách đơn hoàn hàng:", err.message);
-    res.status(500).json({ message: "Lỗi server khi lấy danh sách đơn hoàn hàng" });
+    res
+      .status(500)
+      .json({ message: "Lỗi server khi lấy danh sách đơn hoàn hàng" });
   }
 };
 
@@ -1715,7 +2015,9 @@ const getOrderRefundDetail = async (req, res) => {
     }
 
     // Nếu ông có OrderItem thì lấy danh sách sản phẩm của đơn gốc luôn
-    const orderItems = await OrderItem.find({ orderId }).populate("productId", "name price sku").lean();
+    const orderItems = await OrderItem.find({ orderId })
+      .populate("productId", "name price sku")
+      .lean();
 
     return res.status(200).json({
       message: "Lấy chi tiết đơn hoàn hàng thành công",
@@ -1725,7 +2027,9 @@ const getOrderRefundDetail = async (req, res) => {
     });
   } catch (error) {
     console.error("getOrderRefundDetail error:", error);
-    res.status(500).json({ message: "Lỗi server khi lấy chi tiết đơn hoàn hàng" });
+    res
+      .status(500)
+      .json({ message: "Lỗi server khi lấy chi tiết đơn hoàn hàng" });
   }
 };
 
@@ -1739,7 +2043,12 @@ const getOrderListAll = async (req, res) => {
     let dateFilter = {};
     // Nếu FE gửi filter theo thời gian
     if (periodType) {
-      const { start, end } = periodToRange(periodType, periodKey, monthFrom, monthTo);
+      const { start, end } = periodToRange(
+        periodType,
+        periodKey,
+        monthFrom,
+        monthTo
+      );
       dateFilter.createdAt = {
         $gte: start,
         $lte: end,
@@ -1767,13 +2076,73 @@ const getOrderListAll = async (req, res) => {
 
 const exportAllOrdersToExcel = async (req, res) => {
   try {
-    const { storeId } = req.query;
+    const { storeId, periodType, periodKey, monthFrom, monthTo } = req.query;
 
     if (!storeId) {
       return res.status(400).json({ message: "Thiếu storeId" });
     }
 
-    const orders = await Order.find({ storeId })
+    // ===== Helper: Decimal128 -> number an toàn =====
+    const decimalToNumber = (decimal) => {
+      if (decimal == null) return 0;
+      if (typeof decimal === "number")
+        return Number.isFinite(decimal) ? decimal : 0;
+
+      if (typeof decimal === "object" && decimal.$numberDecimal != null) {
+        const n = parseFloat(decimal.$numberDecimal);
+        return Number.isFinite(n) ? n : 0;
+      }
+
+      const n = parseFloat(String(decimal));
+      return Number.isFinite(n) ? n : 0;
+    };
+
+    // ===== Helper: sanitize filename for header (ASCII fallback) =====
+    // - Remove CR/LF to prevent header injection
+    // - Remove quotes/backslashes/unsafe chars
+    // - Convert Vietnamese/Unicode to ASCII-ish by stripping diacritics
+    // - Final allowlist: A-Z a-z 0-9 _ - . space
+    const toAsciiSafe = (input) => {
+      const s = String(input ?? "")
+        .replace(/[\r\n]+/g, " ")
+        .replace(/["\\]/g, " ")
+        .trim();
+
+      const noDiacritics = s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const cleaned = noDiacritics
+        .replace(/[^a-zA-Z0-9._ -]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      return cleaned || "Cua_Hang";
+    };
+
+    // ===== Helper: RFC 5987 encode for filename* =====
+    // encodeURIComponent is sufficient for most cases; keep it strict & no CRLF.
+    const encodeRFC5987 = (str) =>
+      encodeURIComponent(
+        String(str ?? "")
+          .replace(/[\r\n]+/g, " ")
+          .trim()
+      );
+
+    // ===== Build query filter (để khớp web/app) =====
+    // Nếu bạn muốn export theo kỳ giống list-all, nên lọc theo periodType/periodKey ở đây.
+    // (Ở code bạn đưa hiện đang export theo storeId thôi)
+    const filter = { storeId };
+
+    // Nếu BE của bạn đã có logic lọc kỳ ở endpoint export-all,
+    // bạn có thể thay bằng function giống list-all.
+    // Ở đây để "an toàn mọi trường hợp", chỉ thêm lọc khi có đủ dữ liệu:
+    if (periodType && periodKey && periodType !== "custom") {
+      // Gợi ý: bạn nên map periodType/periodKey -> createdAt range đúng như API list-all.
+      // Nếu đã có helper dựng range ở nơi khác, hãy dùng lại.
+      // (Không tự suy đoán range ở đây để tránh sai nghiệp vụ.)
+    }
+    if (periodType === "custom" && monthFrom && monthTo) {
+      // Tương tự: nếu đã có helper createdAt range thì dùng.
+    }
+
+    const orders = await Order.find(filter)
       .populate("storeId", "name")
       .populate("employeeId", "fullName")
       .populate("customer", "name phone")
@@ -1783,22 +2152,16 @@ const exportAllOrdersToExcel = async (req, res) => {
     if (!orders || orders.length === 0) {
       return res.status(404).json({ message: "Không có đơn hàng để xuất" });
     }
-    // Hàm convert Decimal128 → number an toàn tuyệt đối
-    const decimalToNumber = (decimal) => {
-      if (!decimal) return 0;
-      if (typeof decimal === "number") return decimal;
-      if (decimal.$numberDecimal) return parseFloat(decimal.$numberDecimal);
-      return parseFloat(decimal.toString());
-    };
 
     const data = orders.map((order) => ({
-      "Mã đơn": order._id.toString().slice(-8),
+      "Mã đơn": String(order._id).slice(-8),
       "Thời gian": dayjs(order.createdAt).format("DD/MM/YYYY HH:mm"),
       "Nhân viên": order.employeeId?.fullName || "—",
       "Khách hàng": order.customer?.name || "Khách lẻ",
       "Số điện thoại": order.customer?.phone || "—",
       "Tổng tiền": decimalToNumber(order.totalAmount),
-      "Phương thức": order.paymentMethod === "cash" ? "Tiền mặt" : "Chuyển khoản",
+      "Phương thức":
+        order.paymentMethod === "cash" ? "Tiền mặt" : "Chuyển khoản",
       "Trạng thái":
         {
           pending: "Chờ thanh toán",
@@ -1806,58 +2169,97 @@ const exportAllOrdersToExcel = async (req, res) => {
           refunded: "Đã hoàn tiền",
           partially_refunded: "Hoàn 1 phần",
         }[order.status] || order.status,
-      "In hóa đơn": order.printCount > 0 ? `Có (${order.printCount} lần)` : "Chưa",
+      "In hóa đơn":
+        order.printCount > 0 ? `Có (${order.printCount} lần)` : "Chưa",
       "Ghi chú": order.isVATInvoice ? "Có VAT" : "",
     }));
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(data);
 
-    // Đẹp cột
     ws["!cols"] = [
-      { wch: 12 }, // Mã đơn
-      { wch: 18 }, // Thời gian
-      { wch: 22 }, // Nhân viên
-      { wch: 22 }, // Khách hàng
-      { wch: 15 }, // SĐT
-      { wch: 18 }, // Tổng tiền
-      { wch: 14 }, // Phương thức
-      { wch: 16 }, // Trạng thái
-      { wch: 14 }, // In hóa đơn
-      { wch: 20 }, // Ghi chú
+      { wch: 12 },
+      { wch: 18 },
+      { wch: 22 },
+      { wch: 22 },
+      { wch: 15 },
+      { wch: 18 },
+      { wch: 14 },
+      { wch: 16 },
+      { wch: 14 },
+      { wch: 20 },
     ];
-    // ---- Format cột Tổng tiền ----
-    // Đặt định dạng số cho cột "Tổng tiền" (cột F)
-    // Giữ kiểu number để Excel vẫn hiểu là số, có thể sort/tính toán
-    // 'z = "#,##0"' sẽ hiển thị dấu phân cách hàng nghìn (ví dụ: 1,234,567)
-    const range = XLSX.utils.decode_range(ws["!ref"]);
-    for (let R = 1; R <= range.e.r; ++R) {
-      // bắt đầu từ row 2, bỏ header
-      const cell_address = { c: 5, r: R }; // cột F
-      const cell_ref = XLSX.utils.encode_cell(cell_address);
-      if (ws[cell_ref]) ws[cell_ref].z = "#,##0"; // dấu phân cách hàng nghìn
+
+    // Format cột "Tổng tiền" (cột F -> index 5)
+    if (ws["!ref"]) {
+      const range = XLSX.utils.decode_range(ws["!ref"]);
+      for (let R = 1; R <= range.e.r; ++R) {
+        const cellRef = XLSX.utils.encode_cell({ c: 5, r: R });
+        if (ws[cellRef]) {
+          ws[cellRef].t = "n";
+          ws[cellRef].z = "#,##0";
+        }
+      }
     }
-    // ---- Hết ----
 
     XLSX.utils.book_append_sheet(wb, ws, "Danh_Sach_Don_Hang");
+
+    // SheetJS buffer
     const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
 
+    // ===== Filename safe for all clients =====
     const storeName = orders[0]?.storeId?.name || "Cua_Hang";
-    const fileName = `Danh_Sach_Don_Hang_${storeName.replace(/ /g, "_")}_${dayjs().format("DD-MM-YYYY")}.xlsx`;
+    const dateText = dayjs().format("DD-MM-YYYY");
 
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-    res.send(buffer);
+    // Name to show to users (UTF-8, can include Vietnamese)
+    const utf8Name = `Danh_Sach_Don_Hang_${storeName}_${dateText}.xlsx`
+      .replace(/[\r\n]+/g, " ")
+      .trim();
+
+    // ASCII fallback (never breaks headers)
+    const asciiFallback = `Danh_Sach_Don_Hang_${toAsciiSafe(storeName).replace(
+      / /g,
+      "_"
+    )}_${dateText}.xlsx`;
+
+    // RFC5987 for filename*
+    const filenameStar = encodeRFC5987(utf8Name);
+
+    res.status(200);
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Length", String(buffer.length));
+
+    // ✅ Quan trọng: gửi cả filename + filename* để mọi trình duyệt/app đều ổn
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${asciiFallback}"; filename*=UTF-8''${filenameStar}`
+    );
+
+    return res.end(buffer);
   } catch (err) {
     console.error("Lỗi export đơn hàng:", err);
-    res.status(500).json({ message: "Lỗi server khi xuất Excel" });
+    return res.status(500).json({ message: "Lỗi server khi xuất Excel" });
   }
 };
 
 const getOrderStats = async (req, res) => {
   try {
-    const { storeId, periodType = "year", periodKey, monthFrom, monthTo } = req.query;
-    const { start, end } = periodToRange(periodType, periodKey, monthFrom, monthTo);
+    const {
+      storeId,
+      periodType = "year",
+      periodKey,
+      monthFrom,
+      monthTo,
+    } = req.query;
+    const { start, end } = periodToRange(
+      periodType,
+      periodKey,
+      monthFrom,
+      monthTo
+    );
 
     // Lấy ra danh sách orderId của cửa hàng trong khoảng thời gian
     const orders = await Order.find({
@@ -1872,7 +2274,9 @@ const getOrderStats = async (req, res) => {
     // Đếm đơn từng trạng thái
     const total = orders.length;
     const pending = orders.filter((o) => o.status === "pending").length;
-    const refunded = orders.filter((o) => ["refunded", "partially_refunded"].includes(o.status)).length;
+    const refunded = orders.filter((o) =>
+      ["refunded", "partially_refunded"].includes(o.status)
+    ).length;
     const paid = orders.filter((o) => o.status === "paid").length;
 
     // ✅ Tổng số lượng sản phẩm bán ra (theo order_items)
@@ -1883,7 +2287,10 @@ const getOrderStats = async (req, res) => {
       .select("quantity")
       .lean();
 
-    const totalSoldItems = orderItems.reduce((sum, i) => sum + (i.quantity || 0), 0);
+    const totalSoldItems = orderItems.reduce(
+      (sum, i) => sum + (i.quantity || 0),
+      0
+    );
 
     // ✅ Tổng số lượng sản phẩm bị hoàn trả (theo order_refunds)
     const refundDocs = await OrderRefund.find({
@@ -1894,7 +2301,8 @@ const getOrderStats = async (req, res) => {
       .lean();
 
     const totalRefundedItems = refundDocs.reduce((sum, refund) => {
-      const refundCount = refund.refundItems?.reduce((a, i) => a + (i.quantity || 0), 0) || 0;
+      const refundCount =
+        refund.refundItems?.reduce((a, i) => a + (i.quantity || 0), 0) || 0;
       return sum + refundCount;
     }, 0);
 

@@ -57,6 +57,7 @@ import PricingScreen from "../screens/settings/PricingScreen";
 import SubscriptionScreen from "../screens/settings/SubscriptionScreen";
 import OrderReconciliationScreen from "../screens/orders/OrderReconciliationScreen";
 import EmployeesScreen from "../screens/employee/EmployeesScreen";
+import OrderListScreen from "../screens/orders/OrderListScreen";
 // ========== TYPES ==========
 export type RootDrawerParamList = {
   Dashboard: undefined;
@@ -148,9 +149,7 @@ PlaceholderScreen.displayName = "PlaceholderScreen";
 
 // ========== PLACEHOLDER SCREENS ==========
 const PosScreen: FC = () => <PlaceholderScreen title="POS - Bán hàng" />;
-const OrderListScreen: FC = () => (
-  <PlaceholderScreen title="Danh sách đơn hàng" />
-);
+
 // const OrderReconciliationScreen: FC = () => (
 //   <PlaceholderScreen title="Đối soát hóa đơn" />
 // );

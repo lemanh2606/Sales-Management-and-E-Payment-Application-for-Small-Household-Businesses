@@ -1,5 +1,5 @@
 // src/screens/settings/FileManagerScreen.tsx
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, memo } from "react";
 import {
   View,
   Text,
@@ -14,10 +14,13 @@ import {
   Modal,
   Image,
   Linking,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { Picker } from "@react-native-picker/picker";
+import DateTimePicker, {
+  DateTimePickerEvent,
+} from "@react-native-community/datetimepicker";
 import { File, Directory, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import * as DocumentPicker from "expo-document-picker";
@@ -65,7 +68,7 @@ interface UploadResponse {
 }
 
 type FilterCategory = "all" | "image" | "video" | "document" | "other";
-type FilterExtension = "all" | "jpg" | "png" | "pdf" | "docx" | "mp4";
+type FilterExtension = "all" | string;
 
 // ========== CONSTANTS ==========
 const FILE_CATEGORIES: Record<string, { label: string; color: string }> = {
@@ -91,6 +94,184 @@ const FILE_EXTENSIONS: Record<string, { icon: string; color: string }> = {
   txt: { icon: "document-text", color: "#6b7280" },
 };
 
+// ========== SMALL HELPERS ==========
+type SelectOption<T extends string> = { label: string; value: T };
+
+const formatDateLabel = (d?: Date | null) =>
+  d ? dayjs(d).format("DD/MM/YYYY") : "";
+
+const clampDateRange = (from: Date | null, to: Date | null) => {
+  if (from && to && dayjs(from).isAfter(to, "day")) return { from, to: from };
+  return { from, to };
+};
+
+const isSameOrAfterDay = (iso: string, d: Date) =>
+  dayjs(iso).startOf("day").valueOf() >= dayjs(d).startOf("day").valueOf();
+
+const isSameOrBeforeDay = (iso: string, d: Date) =>
+  dayjs(iso).startOf("day").valueOf() <= dayjs(d).startOf("day").valueOf();
+
+// ========== UI: FILTER CHIP ==========
+const FilterChip = memo(
+  ({ label, onRemove }: { label: string; onRemove: () => void }) => (
+    <View style={styles.filterChip}>
+      <Text style={styles.filterChipText} numberOfLines={1}>
+        {label}
+      </Text>
+      <TouchableOpacity
+        onPress={onRemove}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        <Ionicons name="close-circle" size={16} color="#1890ff" />
+      </TouchableOpacity>
+    </View>
+  )
+);
+FilterChip.displayName = "FilterChip";
+
+// ========== UI: SEARCHABLE SELECT ==========
+const SelectField = <T extends string>({
+  label,
+  value,
+  placeholder,
+  options,
+  onChange,
+  leftIcon = "options-outline",
+}: {
+  label: string;
+  value: T;
+  placeholder?: string;
+  options: SelectOption<T>[];
+  onChange: (v: T) => void;
+  leftIcon?: keyof typeof Ionicons.glyphMap;
+}) => {
+  const [visible, setVisible] = useState(false);
+  const [q, setQ] = useState("");
+
+  const currentLabel = options.find((o) => o.value === value)?.label || "";
+  const filtered = (() => {
+    const query = q.trim().toLowerCase();
+    if (!query) return options;
+    return options.filter((o) => o.label.toLowerCase().includes(query));
+  })();
+
+  return (
+    <>
+      <Text style={styles.filterLabel}>{label}</Text>
+      <TouchableOpacity
+        style={styles.selectField}
+        onPress={() => setVisible(true)}
+        activeOpacity={0.85}
+      >
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 10,
+            flex: 1,
+          }}
+        >
+          <Ionicons name={leftIcon} size={18} color="#9ca3af" />
+          <Text
+            style={[
+              styles.selectValue,
+              !currentLabel && styles.selectPlaceholder,
+            ]}
+          >
+            {currentLabel || placeholder || "Chọn..."}
+          </Text>
+        </View>
+        <Ionicons name="chevron-down" size={18} color="#9ca3af" />
+      </TouchableOpacity>
+
+      <Modal
+        visible={visible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setVisible(false)}
+      >
+        <View style={styles.selectOverlay}>
+          <View style={styles.selectModal}>
+            <View style={styles.selectHeader}>
+              <Text style={styles.selectTitle}>{label}</Text>
+              <TouchableOpacity onPress={() => setVisible(false)}>
+                <Ionicons name="close-circle" size={26} color="#9ca3af" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.selectSearchRow}>
+              <Ionicons name="search-outline" size={18} color="#9ca3af" />
+              <TextInput
+                value={q}
+                onChangeText={setQ}
+                placeholder="Tìm nhanh..."
+                placeholderTextColor="#9ca3af"
+                style={styles.selectSearchInput}
+              />
+              {!!q && (
+                <TouchableOpacity onPress={() => setQ("")}>
+                  <Ionicons name="close-circle" size={18} color="#9ca3af" />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <FlatList
+              data={filtered}
+              keyExtractor={(it) => it.value}
+              keyboardShouldPersistTaps="handled"
+              renderItem={({ item }) => {
+                const active = item.value === value;
+                return (
+                  <TouchableOpacity
+                    style={[
+                      styles.selectItem,
+                      active && styles.selectItemActive,
+                    ]}
+                    onPress={() => {
+                      onChange(item.value);
+                      setVisible(false);
+                      setQ("");
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <Text
+                      style={[
+                        styles.selectItemText,
+                        active && styles.selectItemTextActive,
+                      ]}
+                    >
+                      {item.label}
+                    </Text>
+                    <Ionicons
+                      name={active ? "checkmark-circle" : "ellipse-outline"}
+                      size={20}
+                      color={active ? "#1890ff" : "#d1d5db"}
+                    />
+                  </TouchableOpacity>
+                );
+              }}
+              ListEmptyComponent={
+                <View style={{ paddingVertical: 22, alignItems: "center" }}>
+                  <Ionicons name="search-outline" size={28} color="#d1d5db" />
+                  <Text
+                    style={{
+                      marginTop: 8,
+                      color: "#6b7280",
+                      fontWeight: "800",
+                    }}
+                  >
+                    Không tìm thấy dữ liệu
+                  </Text>
+                </View>
+              }
+            />
+          </View>
+        </View>
+      </Modal>
+    </>
+  );
+};
+
 // ========== MAIN COMPONENT ==========
 const FileManagerScreen: React.FC = () => {
   const { currentStore } = useAuth();
@@ -103,12 +284,28 @@ const FileManagerScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [files, setFiles] = useState<FileItem[]>([]);
 
-  // Filters
+  // Filters (applied)
   const [searchText, setSearchText] = useState<string>("");
   const [categoryFilter, setCategoryFilter] = useState<FilterCategory>("all");
   const [extensionFilter, setExtensionFilter] =
     useState<FilterExtension>("all");
-  const [isFilterExpanded, setIsFilterExpanded] = useState<boolean>(true);
+  const [fromDate, setFromDate] = useState<Date | null>(null);
+  const [toDate, setToDate] = useState<Date | null>(null);
+
+  // Filter sheet (draft)
+  const [filterModalVisible, setFilterModalVisible] = useState<boolean>(false);
+  const [draftSearchText, setDraftSearchText] = useState<string>("");
+  const [draftCategoryFilter, setDraftCategoryFilter] =
+    useState<FilterCategory>("all");
+  const [draftExtensionFilter, setDraftExtensionFilter] =
+    useState<FilterExtension>("all");
+  const [draftFromDate, setDraftFromDate] = useState<Date | null>(null);
+  const [draftToDate, setDraftToDate] = useState<Date | null>(null);
+
+  // Date picker
+  const [datePickerTarget, setDatePickerTarget] = useState<
+    "from" | "to" | null
+  >(null);
 
   // Selection
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -125,31 +322,18 @@ const FileManagerScreen: React.FC = () => {
     async (isRefresh: boolean = false): Promise<void> => {
       if (!storeId) return;
 
-      if (isRefresh) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
+      if (isRefresh) setRefreshing(true);
+      else setLoading(true);
 
       try {
-        console.log(`📡 Fetching files for store: ${storeId}`);
-
         const response = await apiClient.get<FilesResponse>(
           `/files/store/${storeId}`
         );
 
-        console.log("📊 Response:", response.data);
-
-        // ✅ Handle different response formats
         let filesList: FileItem[] = [];
+        if (response.data?.data) filesList = response.data.data;
+        else if (Array.isArray(response.data)) filesList = response.data as any;
 
-        if (response.data?.data) {
-          filesList = response.data.data;
-        } else if (Array.isArray(response.data)) {
-          filesList = response.data as any;
-        }
-
-        console.log(`✅ Loaded ${filesList.length} files`);
         setFiles(filesList);
       } catch (err: any) {
         console.error("❌ Lỗi tải files:", err);
@@ -166,10 +350,35 @@ const FileManagerScreen: React.FC = () => {
   );
 
   useEffect(() => {
-    if (storeId) {
-      fetchFiles(false);
-    }
+    if (storeId) fetchFiles(false);
   }, [storeId, fetchFiles]);
+
+  // ========== OPTIONS (dynamic) ==========
+  const extensionOptions = useMemo((): SelectOption<string>[] => {
+    const exts = Array.from(
+      new Set(
+        files
+          .map((f) => (f.extension || "").toLowerCase().trim())
+          .filter(Boolean)
+      )
+    ).sort((a, b) => a.localeCompare(b));
+
+    return [
+      { label: "Tất cả đuôi file", value: "all" },
+      ...exts.map((e) => ({ label: e.toUpperCase(), value: e })),
+    ];
+  }, [files]);
+
+  const categoryOptions: SelectOption<FilterCategory>[] = useMemo(
+    () => [
+      { label: "Tất cả loại", value: "all" },
+      { label: "Hình ảnh", value: "image" },
+      { label: "Tài liệu", value: "document" },
+      { label: "Video", value: "video" },
+      { label: "Khác", value: "other" },
+    ],
+    []
+  );
 
   // ========== FILTERED FILES ==========
   const filteredFiles = useMemo(() => {
@@ -189,11 +398,20 @@ const FileManagerScreen: React.FC = () => {
     }
 
     if (extensionFilter !== "all") {
-      result = result.filter((f) => f.extension === extensionFilter);
+      result = result.filter(
+        (f) =>
+          (f.extension || "").toLowerCase() ===
+          String(extensionFilter).toLowerCase()
+      );
     }
 
+    if (fromDate)
+      result = result.filter((f) => isSameOrAfterDay(f.createdAt, fromDate));
+    if (toDate)
+      result = result.filter((f) => isSameOrBeforeDay(f.createdAt, toDate));
+
     return result;
-  }, [files, searchText, categoryFilter, extensionFilter]);
+  }, [files, searchText, categoryFilter, extensionFilter, fromDate, toDate]);
 
   // ========== FORMAT BYTES ==========
   const formatBytes = (bytes: number): string => {
@@ -226,7 +444,6 @@ const FileManagerScreen: React.FC = () => {
   const pickImage = async (): Promise<void> => {
     const permissionResult =
       await ImagePicker.requestMediaLibraryPermissionsAsync();
-
     if (!permissionResult.granted) {
       Alert.alert("Lỗi", "Cần quyền truy cập thư viện ảnh");
       return;
@@ -255,9 +472,7 @@ const FileManagerScreen: React.FC = () => {
       if (result.canceled) return;
 
       const uris = result.assets?.map((asset) => asset.uri) || [];
-      if (uris.length > 0) {
-        await uploadFiles(uris);
-      }
+      if (uris.length > 0) await uploadFiles(uris);
     } catch (err: any) {
       console.error("❌ Lỗi pick document:", err);
       Alert.alert("Lỗi", "Không thể chọn file");
@@ -279,7 +494,6 @@ const FileManagerScreen: React.FC = () => {
 
     try {
       const token = await AsyncStorage.getItem("token");
-
       if (!token) {
         Alert.alert("Lỗi", "Vui lòng đăng nhập lại");
         setUploading(false);
@@ -299,9 +513,7 @@ const FileManagerScreen: React.FC = () => {
           }
 
           const fileName = Paths.basename(uri);
-          const sluggedName = slugifyFileName(fileName);
-
-          console.log(`📤 Uploading: ${fileName}`);
+          slugifyFileName(fileName); // keep for future server naming if needed
 
           const formData = new FormData();
           formData.append("file", sourceFile as any);
@@ -311,40 +523,27 @@ const FileManagerScreen: React.FC = () => {
             `${baseURL}/files/upload?storeId=${storeId}`,
             {
               method: "POST",
-              headers: {
-                Authorization: `Bearer ${token}`,
-              },
+              headers: { Authorization: `Bearer ${token}` },
               body: formData,
             }
           );
 
-          console.log("📊 Response status:", response.status);
-
           const responseText = await response.text();
-          console.log("📄 Response body:", responseText);
-
           let result: UploadResponse;
           try {
             result = JSON.parse(responseText);
-          } catch (parseError) {
-            console.error("❌ Parse error:", parseError);
+          } catch {
             errorCount++;
             continue;
           }
 
-          console.log("✅ Parsed result:", result);
-
-          // ✅ Handle different response formats
           if (result.success && result.file) {
-            console.log("✅ Upload thành công - Format 1");
             setFiles((prev) => [result.file!, ...prev]);
             successCount++;
           } else if (result.file) {
-            console.log("✅ Upload thành công - Format 2");
             setFiles((prev) => [result.file!, ...prev]);
             successCount++;
           } else {
-            console.warn("⚠️ Response format không xác định:", result);
             errorCount++;
           }
         } catch (fileError: any) {
@@ -356,7 +555,6 @@ const FileManagerScreen: React.FC = () => {
         }
       }
 
-      // ✅ Show result
       if (successCount > 0) {
         Alert.alert(
           "Thành công",
@@ -432,15 +630,30 @@ const FileManagerScreen: React.FC = () => {
     ]);
   };
 
-  // ========== DOWNLOAD FILE ==========
+  // ========== DOWNLOAD FILE (FIX) ==========
   const downloadFile = async (fileItem: FileItem): Promise<void> => {
     try {
-      const destination = new Directory(Paths.cache, "downloads");
-      destination.create();
+      // Tạo folder gốc downloads (nếu đã có thì bỏ qua lỗi)
+      const root = new Directory(Paths.cache, "downloads");
+      try {
+        root.create();
+      } catch (e) {
+        // ignore "already exists"
+      }
 
+      // Tạo subfolder unique để tránh trùng file name từ server headers
+      const safeStamp = dayjs().format("YYYYMMDD_HHmmss");
+      const uniqueDir = new Directory(root, safeStamp);
+      try {
+        uniqueDir.create();
+      } catch (e) {
+        // ignore
+      }
+
+      // Download vào folder unique
       const downloadedFile = await File.downloadFileAsync(
         fileItem.url,
-        destination
+        uniqueDir
       );
 
       if (await Sharing.isAvailableAsync()) {
@@ -470,17 +683,126 @@ const FileManagerScreen: React.FC = () => {
   // ========== SELECTION ==========
   const toggleSelection = (id: string): void => {
     setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
   };
+  const selectAll = (): void => setSelectedIds(filteredFiles.map((f) => f._id));
+  const deselectAll = (): void => setSelectedIds([]);
 
-  const selectAll = (): void => {
-    setSelectedIds(filteredFiles.map((f) => f._id));
+  // ========== FILTER UX HELPERS ==========
+  const hasActiveFilters = (): boolean =>
+    searchText.trim() !== "" ||
+    categoryFilter !== "all" ||
+    extensionFilter !== "all" ||
+    !!fromDate ||
+    !!toDate;
+
+  const activeFilterCount = (): number => {
+    let c = 0;
+    if (searchText.trim()) c += 1;
+    if (categoryFilter !== "all") c += 1;
+    if (extensionFilter !== "all") c += 1;
+    if (fromDate || toDate) c += 1;
+    return c;
   };
 
-  const deselectAll = (): void => {
-    setSelectedIds([]);
+  const buildChips = (): Array<{ key: string; label: string }> => {
+    const chips: Array<{ key: string; label: string }> = [];
+    if (searchText.trim())
+      chips.push({ key: "search", label: `Từ khóa: "${searchText.trim()}"` });
+
+    if (categoryFilter !== "all") {
+      chips.push({
+        key: "category",
+        label: `Loại: ${FILE_CATEGORIES[categoryFilter]?.label || categoryFilter}`,
+      });
+    }
+
+    if (extensionFilter !== "all") {
+      chips.push({
+        key: "ext",
+        label: `Đuôi: ${String(extensionFilter).toUpperCase()}`,
+      });
+    }
+
+    if (fromDate || toDate) {
+      const f = fromDate ? formatDateLabel(fromDate) : "—";
+      const t = toDate ? formatDateLabel(toDate) : "—";
+      chips.push({ key: "date", label: `Ngày: ${f} → ${t}` });
+    }
+
+    return chips;
   };
+
+  const removeChip = (key: string) => {
+    if (key === "search") setSearchText("");
+    if (key === "category") setCategoryFilter("all");
+    if (key === "ext") setExtensionFilter("all");
+    if (key === "date") {
+      setFromDate(null);
+      setToDate(null);
+    }
+  };
+
+  const clearFilters = (): void => {
+    setSearchText("");
+    setCategoryFilter("all");
+    setExtensionFilter("all");
+    setFromDate(null);
+    setToDate(null);
+  };
+
+  const openFilterSheet = () => {
+    setDraftSearchText(searchText);
+    setDraftCategoryFilter(categoryFilter);
+    setDraftExtensionFilter(extensionFilter);
+    setDraftFromDate(fromDate);
+    setDraftToDate(toDate);
+    setFilterModalVisible(true);
+  };
+
+  const resetDraft = () => {
+    setDraftSearchText("");
+    setDraftCategoryFilter("all");
+    setDraftExtensionFilter("all");
+    setDraftFromDate(null);
+    setDraftToDate(null);
+  };
+
+  const applyDraft = () => {
+    const fixed = clampDateRange(draftFromDate, draftToDate);
+
+    setSearchText(draftSearchText);
+    setCategoryFilter(draftCategoryFilter);
+    setExtensionFilter(draftExtensionFilter);
+    setFromDate(fixed.from);
+    setToDate(fixed.to);
+    setFilterModalVisible(false);
+  };
+
+  const onChangeDate = useCallback(
+    (event: DateTimePickerEvent, selected?: Date) => {
+      // Android: dismiss => đóng, không set
+      if (Platform.OS !== "ios" && event.type === "dismissed") {
+        setDatePickerTarget(null);
+        return;
+      }
+      if (!selected) return;
+
+      if (datePickerTarget === "from") {
+        const fixed = clampDateRange(selected, draftToDate);
+        setDraftFromDate(fixed.from);
+        setDraftToDate(fixed.to);
+      } else if (datePickerTarget === "to") {
+        const fixed = clampDateRange(draftFromDate, selected);
+        setDraftFromDate(fixed.from);
+        setDraftToDate(fixed.to);
+      }
+
+      setDatePickerTarget(null);
+    },
+    [datePickerTarget, draftFromDate, draftToDate]
+  );
 
   // ========== GET FILE ICON ==========
   const getFileIcon = (extension: string): { icon: string; color: string } => {
@@ -503,11 +825,8 @@ const FileManagerScreen: React.FC = () => {
           selectedIds.includes(item._id) && styles.fileCardSelected,
         ]}
         onPress={() => {
-          if (isSelectionMode) {
-            toggleSelection(item._id);
-          } else {
-            openFile(item);
-          }
+          if (isSelectionMode) toggleSelection(item._id);
+          else openFile(item);
         }}
         onLongPress={() => {
           setIsSelectionMode(true);
@@ -542,6 +861,7 @@ const FileManagerScreen: React.FC = () => {
               />
             </View>
           )}
+
           <View style={styles.extensionBadge}>
             <Text style={styles.extensionBadgeText}>
               {item.extension.toUpperCase()}
@@ -578,7 +898,6 @@ const FileManagerScreen: React.FC = () => {
           <Text style={styles.fileDate}>
             {dayjs(item.createdAt).format("DD/MM/YYYY HH:mm")}
           </Text>
-
           <Text style={styles.fileUploader} numberOfLines={1}>
             {item.uploadedBy?.username || "Unknown"}
           </Text>
@@ -615,6 +934,8 @@ const FileManagerScreen: React.FC = () => {
     );
   }
 
+  const chips = buildChips();
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -629,12 +950,23 @@ const FileManagerScreen: React.FC = () => {
           </View>
         </View>
 
-        <TouchableOpacity
-          style={styles.refreshBtn}
-          onPress={() => fetchFiles(true)}
-        >
-          <Ionicons name="refresh" size={20} color="#1890ff" />
-        </TouchableOpacity>
+        <View style={{ flexDirection: "row", gap: 10 }}>
+          <TouchableOpacity
+            style={styles.headerActionBtn}
+            onPress={openFilterSheet}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="funnel-outline" size={20} color="#1890ff" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.refreshBtn}
+            onPress={() => fetchFiles(true)}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="refresh" size={20} color="#1890ff" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Selection Mode Bar */}
@@ -697,6 +1029,7 @@ const FileManagerScreen: React.FC = () => {
             style={styles.uploadBtn}
             onPress={() => setUploadModalVisible(true)}
             disabled={uploading}
+            activeOpacity={0.85}
           >
             <LinearGradient
               colors={["#1890ff", "#096dd9"]}
@@ -727,79 +1060,63 @@ const FileManagerScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Filter Section */}
-        <View style={styles.filterSection}>
-          <TouchableOpacity
-            style={styles.filterToggle}
-            onPress={() => setIsFilterExpanded(!isFilterExpanded)}
-          >
-            <View style={styles.filterToggleLeft}>
-              <Ionicons name="funnel" size={20} color="#1890ff" />
-              <Text style={styles.filterToggleText}>
-                {isFilterExpanded ? "Thu gọn" : "Mở rộng"} bộ lọc
-              </Text>
-            </View>
-            <Ionicons
-              name={isFilterExpanded ? "chevron-up" : "chevron-down"}
-              size={20}
-              color="#1890ff"
-            />
-          </TouchableOpacity>
-
-          {isFilterExpanded && (
-            <View style={styles.filterContent}>
-              <Text style={styles.filterLabel}>Tìm kiếm</Text>
-              <View style={styles.searchContainer}>
-                <Ionicons name="search" size={18} color="#9ca3af" />
-                <TextInput
-                  style={styles.searchInput}
-                  value={searchText}
-                  onChangeText={setSearchText}
-                  placeholder="Tìm kiếm tên file..."
-                  placeholderTextColor="#9ca3af"
-                />
-                {searchText.length > 0 && (
-                  <TouchableOpacity onPress={() => setSearchText("")}>
-                    <Ionicons name="close-circle" size={18} color="#9ca3af" />
-                  </TouchableOpacity>
-                )}
+        {/* Filter summary card */}
+        <View style={styles.filterSummaryCard}>
+          <View style={styles.filterSummaryTop}>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 10,
+                flex: 1,
+              }}
+            >
+              <View style={styles.filterSummaryIcon}>
+                <Ionicons name="funnel" size={18} color="#1890ff" />
               </View>
-
-              <Text style={styles.filterLabel}>Loại file</Text>
-              <View style={styles.pickerContainer}>
-                <Picker
-                  selectedValue={categoryFilter}
-                  onValueChange={(value: FilterCategory) =>
-                    setCategoryFilter(value)
-                  }
-                  style={styles.picker}
-                >
-                  <Picker.Item label="Tất cả" value="all" />
-                  <Picker.Item label="📷 Hình ảnh" value="image" />
-                  <Picker.Item label="📄 Tài liệu" value="document" />
-                  <Picker.Item label="🎥 Video" value="video" />
-                  <Picker.Item label="📦 Khác" value="other" />
-                </Picker>
-              </View>
-
-              <Text style={styles.filterLabel}>Đuôi file</Text>
-              <View style={styles.pickerContainer}>
-                <Picker
-                  selectedValue={extensionFilter}
-                  onValueChange={(value: FilterExtension) =>
-                    setExtensionFilter(value)
-                  }
-                  style={styles.picker}
-                >
-                  <Picker.Item label="Tất cả" value="all" />
-                  <Picker.Item label="JPG" value="jpg" />
-                  <Picker.Item label="PNG" value="png" />
-                  <Picker.Item label="PDF" value="pdf" />
-                  <Picker.Item label="DOCX" value="docx" />
-                  <Picker.Item label="MP4" value="mp4" />
-                </Picker>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.filterSummaryTitle}>Bộ lọc</Text>
+                <Text style={styles.filterSummarySub}>
+                  {hasActiveFilters()
+                    ? `Đang áp dụng ${activeFilterCount()} bộ lọc`
+                    : "Chưa áp dụng bộ lọc"}
+                </Text>
               </View>
             </View>
+
+            <TouchableOpacity
+              style={styles.filterOpenBtn}
+              onPress={openFilterSheet}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.filterOpenBtnText}>Mở</Text>
+              <Ionicons name="chevron-forward" size={16} color="#1890ff" />
+            </TouchableOpacity>
+          </View>
+
+          {chips.length > 0 && (
+            <View style={styles.filterChipsRow}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {chips.map((c) => (
+                  <FilterChip
+                    key={c.key}
+                    label={c.label}
+                    onRemove={() => removeChip(c.key)}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
+          {hasActiveFilters() && (
+            <TouchableOpacity
+              style={styles.clearInlineBtn}
+              onPress={clearFilters}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="close-circle" size={16} color="#ef4444" />
+              <Text style={styles.clearInlineText}>Xóa tất cả bộ lọc</Text>
+            </TouchableOpacity>
           )}
         </View>
 
@@ -824,9 +1141,7 @@ const FileManagerScreen: React.FC = () => {
             <View style={styles.emptyContainer}>
               <Ionicons name="folder-open-outline" size={64} color="#d1d5db" />
               <Text style={styles.emptyText}>
-                {searchText ||
-                categoryFilter !== "all" ||
-                extensionFilter !== "all"
+                {hasActiveFilters()
                   ? "Không tìm thấy file nào"
                   : "Chưa có file nào"}
               </Text>
@@ -836,6 +1151,281 @@ const FileManagerScreen: React.FC = () => {
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      {/* FILTER SHEET */}
+      <Modal
+        visible={filterModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setFilterModalVisible(false)}
+      >
+        <View style={styles.sheetOverlay}>
+          <TouchableOpacity
+            style={{ flex: 1 }}
+            activeOpacity={1}
+            onPress={() => setFilterModalVisible(false)}
+          />
+          <View style={styles.sheet}>
+            <View style={styles.sheetHeader}>
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
+              >
+                <View style={styles.sheetHeaderIcon}>
+                  <Ionicons name="funnel" size={18} color="#1890ff" />
+                </View>
+                <View>
+                  <Text style={styles.sheetTitle}>Bộ lọc file</Text>
+                  <Text style={styles.sheetSubTitle}>
+                    Tìm file nhanh theo loại, đuôi, ngày
+                  </Text>
+                </View>
+              </View>
+
+              <TouchableOpacity onPress={() => setFilterModalVisible(false)}>
+                <Ionicons name="close-circle" size={28} color="#9ca3af" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              style={styles.sheetBody}
+              showsVerticalScrollIndicator={false}
+            >
+              {/* Search */}
+              <Text style={styles.filterLabel}>Tìm kiếm</Text>
+              <View style={styles.searchContainer}>
+                <Ionicons name="search" size={18} color="#9ca3af" />
+                <TextInput
+                  style={styles.searchInput}
+                  value={draftSearchText}
+                  onChangeText={setDraftSearchText}
+                  placeholder="Tìm theo tên file..."
+                  placeholderTextColor="#9ca3af"
+                  returnKeyType="search"
+                />
+                {!!draftSearchText && (
+                  <TouchableOpacity onPress={() => setDraftSearchText("")}>
+                    <Ionicons name="close-circle" size={18} color="#9ca3af" />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* Category */}
+              <SelectField<FilterCategory>
+                label="Loại file"
+                value={draftCategoryFilter}
+                placeholder="Chọn loại file"
+                options={categoryOptions}
+                onChange={setDraftCategoryFilter}
+                leftIcon="grid-outline"
+              />
+
+              {/* Extension */}
+              <SelectField<string>
+                label="Đuôi file"
+                value={String(draftExtensionFilter)}
+                placeholder="Chọn đuôi file"
+                options={extensionOptions}
+                onChange={(v) => setDraftExtensionFilter(v)}
+                leftIcon="pricetag-outline"
+              />
+
+              {/* Date presets */}
+              <Text style={styles.filterLabel}>Lọc theo thời gian</Text>
+              <View style={styles.quickDateRow}>
+                <TouchableOpacity
+                  style={styles.quickDateBtn}
+                  onPress={() => {
+                    const today = dayjs().startOf("day").toDate();
+                    const end = dayjs().endOf("day").toDate();
+                    setDraftFromDate(today);
+                    setDraftToDate(end);
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.quickDateText}>Hôm nay</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.quickDateBtn}
+                  onPress={() => {
+                    const from = dayjs()
+                      .subtract(7, "day")
+                      .startOf("day")
+                      .toDate();
+                    const to = dayjs().endOf("day").toDate();
+                    const fixed = clampDateRange(from, to);
+                    setDraftFromDate(fixed.from);
+                    setDraftToDate(fixed.to);
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.quickDateText}>7 ngày</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.quickDateBtn}
+                  onPress={() => {
+                    const from = dayjs()
+                      .subtract(30, "day")
+                      .startOf("day")
+                      .toDate();
+                    const to = dayjs().endOf("day").toDate();
+                    const fixed = clampDateRange(from, to);
+                    setDraftFromDate(fixed.from);
+                    setDraftToDate(fixed.to);
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.quickDateText}>30 ngày</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Date range */}
+              <View style={styles.dateRow}>
+                <TouchableOpacity
+                  style={styles.dateField}
+                  onPress={() => setDatePickerTarget("from")}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="calendar-outline" size={18} color="#9ca3af" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.dateFieldLabel}>Từ ngày</Text>
+                    <Text
+                      style={[
+                        styles.dateFieldValue,
+                        !draftFromDate && styles.dateFieldPlaceholder,
+                      ]}
+                    >
+                      {draftFromDate
+                        ? formatDateLabel(draftFromDate)
+                        : "Chọn ngày bắt đầu"}
+                    </Text>
+                  </View>
+                  {!!draftFromDate && (
+                    <TouchableOpacity
+                      onPress={() => setDraftFromDate(null)}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <Ionicons name="close-circle" size={18} color="#9ca3af" />
+                    </TouchableOpacity>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.dateField}
+                  onPress={() => setDatePickerTarget("to")}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="calendar-outline" size={18} color="#9ca3af" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.dateFieldLabel}>Đến ngày</Text>
+                    <Text
+                      style={[
+                        styles.dateFieldValue,
+                        !draftToDate && styles.dateFieldPlaceholder,
+                      ]}
+                    >
+                      {draftToDate
+                        ? formatDateLabel(draftToDate)
+                        : "Chọn ngày kết thúc"}
+                    </Text>
+                  </View>
+                  {!!draftToDate && (
+                    <TouchableOpacity
+                      onPress={() => setDraftToDate(null)}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <Ionicons name="close-circle" size={18} color="#9ca3af" />
+                    </TouchableOpacity>
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              {/* DateTimePicker modal */}
+              {datePickerTarget && (
+                <Modal
+                  transparent
+                  animationType="fade"
+                  visible
+                  onRequestClose={() => setDatePickerTarget(null)}
+                >
+                  <View style={styles.pickerOverlay}>
+                    <View style={styles.pickerModal}>
+                      <View style={styles.pickerHeader}>
+                        <Text style={styles.pickerTitle}>
+                          {datePickerTarget === "from"
+                            ? "Chọn từ ngày"
+                            : "Chọn đến ngày"}
+                        </Text>
+                        <TouchableOpacity
+                          onPress={() => setDatePickerTarget(null)}
+                        >
+                          <Ionicons
+                            name="close-circle"
+                            size={26}
+                            color="#9ca3af"
+                          />
+                        </TouchableOpacity>
+                      </View>
+
+                      <DateTimePicker
+                        value={
+                          datePickerTarget === "from"
+                            ? draftFromDate || new Date()
+                            : draftToDate || new Date()
+                        }
+                        mode="date"
+                        display={Platform.OS === "ios" ? "spinner" : "default"}
+                        onChange={onChangeDate}
+                        maximumDate={dayjs().endOf("day").toDate()}
+                      />
+
+                      {Platform.OS === "ios" && (
+                        <View style={styles.pickerFooter}>
+                          <TouchableOpacity
+                            style={styles.pickerDoneBtn}
+                            onPress={() => setDatePickerTarget(null)}
+                            activeOpacity={0.9}
+                          >
+                            <Text style={styles.pickerDoneText}>Xong</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                </Modal>
+              )}
+            </ScrollView>
+
+            <View style={styles.sheetFooter}>
+              <TouchableOpacity
+                style={styles.sheetResetBtn}
+                onPress={resetDraft}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="refresh-outline" size={18} color="#374151" />
+                <Text style={styles.sheetResetText}>Đặt lại</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.sheetApplyBtn}
+                onPress={applyDraft}
+                activeOpacity={0.9}
+              >
+                <LinearGradient
+                  colors={["#1890ff", "#096dd9"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.sheetApplyGradient}
+                >
+                  <Ionicons name="checkmark-circle" size={18} color="#fff" />
+                  <Text style={styles.sheetApplyText}>Áp dụng</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Upload Modal */}
       <Modal
@@ -854,7 +1444,11 @@ const FileManagerScreen: React.FC = () => {
             </View>
 
             <View style={styles.uploadOptions}>
-              <TouchableOpacity style={styles.uploadOption} onPress={pickImage}>
+              <TouchableOpacity
+                style={styles.uploadOption}
+                onPress={pickImage}
+                activeOpacity={0.85}
+              >
                 <View
                   style={[
                     styles.uploadOptionIcon,
@@ -869,6 +1463,7 @@ const FileManagerScreen: React.FC = () => {
               <TouchableOpacity
                 style={styles.uploadOption}
                 onPress={pickDocument}
+                activeOpacity={0.85}
               >
                 <View
                   style={[
@@ -896,6 +1491,7 @@ const FileManagerScreen: React.FC = () => {
           <TouchableOpacity
             style={styles.previewCloseBtn}
             onPress={() => setPreviewModalVisible(false)}
+            activeOpacity={0.85}
           >
             <Ionicons name="close" size={32} color="#fff" />
           </TouchableOpacity>
@@ -919,6 +1515,7 @@ export default FileManagerScreen;
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f8fafc" },
   scrollView: { flex: 1 },
+
   errorContainer: {
     flex: 1,
     justifyContent: "center",
@@ -934,6 +1531,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   errorText: { fontSize: 14, color: "#6b7280", textAlign: "center" },
+
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -961,6 +1559,15 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   headerSubtitle: { fontSize: 13, color: "#6b7280" },
+
+  headerActionBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "#e6f4ff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   refreshBtn: {
     width: 44,
     height: 44,
@@ -969,6 +1576,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+
   selectionBar: {
     flexDirection: "row",
     alignItems: "center",
@@ -998,9 +1606,10 @@ const styles = StyleSheet.create({
   selectionBtnText: { fontSize: 14, fontWeight: "600", color: "#1890ff" },
   deleteBtn: { backgroundColor: "#ef4444", paddingHorizontal: 16 },
   deleteBtnText: { fontSize: 14, fontWeight: "700", color: "#fff" },
+
   uploadSection: { marginHorizontal: 16, marginTop: 16 },
   uploadBtn: {
-    borderRadius: 12,
+    borderRadius: 14,
     overflow: "hidden",
     shadowColor: "#1890ff",
     shadowOffset: { width: 0, height: 4 },
@@ -1016,88 +1625,126 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     gap: 12,
   },
-  uploadBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  uploadBtnText: { color: "#fff", fontSize: 16, fontWeight: "800" },
   uploadStats: { flexDirection: "row", gap: 12 },
   statItem: {
     flex: 1,
     backgroundColor: "#fff",
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 14,
     alignItems: "center",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 10,
     elevation: 3,
+    borderWidth: 1,
+    borderColor: "#f3f4f6",
   },
   statValue: {
     fontSize: 24,
-    fontWeight: "700",
+    fontWeight: "900",
     color: "#1890ff",
     marginBottom: 4,
   },
-  statLabel: { fontSize: 13, color: "#6b7280" },
-  filterSection: {
+  statLabel: { fontSize: 13, color: "#6b7280", fontWeight: "700" },
+
+  // Filter summary card
+  filterSummaryCard: {
     backgroundColor: "#fff",
     marginHorizontal: 16,
     marginTop: 16,
-    borderRadius: 16,
+    borderRadius: 18,
+    padding: 16,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 10,
     elevation: 3,
-  },
-  filterToggle: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 16,
-  },
-  filterToggleLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
-  filterToggleText: { fontSize: 16, fontWeight: "700", color: "#1890ff" },
-  filterContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-    borderTopWidth: 1,
-    borderTopColor: "#f3f4f6",
-  },
-  filterLabel: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#374151",
-    marginBottom: 8,
-    marginTop: 12,
-  },
-  searchContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f9fafb",
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    borderColor: "#f3f4f6",
+  },
+  filterSummaryTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     gap: 10,
   },
-  searchInput: { flex: 1, fontSize: 15, color: "#111827" },
-  pickerContainer: {
-    backgroundColor: "#f9fafb",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
+  filterSummaryIcon: {
+    width: 40,
+    height: 40,
     borderRadius: 12,
-    overflow: "hidden",
+    backgroundColor: "#e6f4ff",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  picker: { height: 50 },
+  filterSummaryTitle: { fontSize: 16, fontWeight: "900", color: "#111827" },
+  filterSummarySub: {
+    marginTop: 2,
+    fontSize: 12,
+    color: "#6b7280",
+    fontWeight: "700",
+  },
+  filterOpenBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: "#e6f4ff",
+  },
+  filterOpenBtnText: { fontSize: 13, fontWeight: "900", color: "#1890ff" },
+
+  filterChipsRow: { marginTop: 12 },
+  filterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#e6f4ff",
+    paddingVertical: 7,
+    paddingLeft: 12,
+    paddingRight: 8,
+    borderRadius: 999,
+    marginRight: 8,
+    gap: 6,
+  },
+  filterChipText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#1890ff",
+    maxWidth: 230,
+  },
+
+  clearInlineBtn: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: "#fff1f2",
+    borderWidth: 1,
+    borderColor: "#fecdd3",
+  },
+  clearInlineText: { fontSize: 13, fontWeight: "900", color: "#ef4444" },
+
   filesSection: { marginHorizontal: 16, marginTop: 16 },
   loadingContainer: { paddingVertical: 40, alignItems: "center" },
-  loadingText: { marginTop: 12, fontSize: 14, color: "#6b7280" },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: "#6b7280",
+    fontWeight: "600",
+  },
+
   fileList: { paddingBottom: 16 },
   fileGrid: { justifyContent: "space-between", marginBottom: 16 },
+
   fileCard: {
     width: "48%",
     backgroundColor: "#fff",
-    borderRadius: 12,
+    borderRadius: 14,
     overflow: "hidden",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
@@ -1105,9 +1752,12 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 3,
     position: "relative",
+    borderWidth: 1,
+    borderColor: "#f3f4f6",
   },
   fileCardSelected: { borderWidth: 2, borderColor: "#1890ff" },
   checkbox: { position: "absolute", top: 8, left: 8, zIndex: 1 },
+
   filePreview: {
     width: "100%",
     height: 120,
@@ -1120,20 +1770,22 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+
   extensionBadge: {
     position: "absolute",
-    bottom: 4,
-    right: 4,
-    backgroundColor: "#1890ff",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    bottom: 6,
+    right: 6,
+    backgroundColor: "#111827",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
   },
-  extensionBadgeText: { fontSize: 10, fontWeight: "700", color: "#fff" },
+  extensionBadgeText: { fontSize: 10, fontWeight: "900", color: "#fff" },
+
   fileInfo: { padding: 12 },
   fileName: {
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "700",
     color: "#111827",
     marginBottom: 8,
     lineHeight: 18,
@@ -1145,25 +1797,258 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 6,
   },
-  categoryBadge: { paddingVertical: 2, paddingHorizontal: 8, borderRadius: 6 },
-  categoryBadgeText: { fontSize: 11, fontWeight: "700" },
-  fileSize: { fontSize: 12, color: "#6b7280" },
-  fileDate: { fontSize: 11, color: "#9ca3af", marginBottom: 4 },
-  fileUploader: { fontSize: 11, color: "#6b7280" },
+  categoryBadge: {
+    paddingVertical: 3,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+  },
+  categoryBadgeText: { fontSize: 11, fontWeight: "900" },
+  fileSize: { fontSize: 12, color: "#6b7280", fontWeight: "700" },
+  fileDate: {
+    fontSize: 11,
+    color: "#9ca3af",
+    marginBottom: 4,
+    fontWeight: "600",
+  },
+  fileUploader: { fontSize: 11, color: "#6b7280", fontWeight: "700" },
+
   fileActions: {
     flexDirection: "row",
     borderTopWidth: 1,
     borderTopColor: "#f3f4f6",
   },
   actionBtn: { flex: 1, alignItems: "center", paddingVertical: 10 },
+
   emptyContainer: { alignItems: "center", paddingVertical: 60 },
   emptyText: {
     fontSize: 14,
     color: "#6b7280",
     marginTop: 12,
     textAlign: "center",
+    fontWeight: "700",
   },
+
   bottomSpacer: { height: 40 },
+
+  // Sheet
+  sheetOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)" },
+  sheet: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    maxHeight: "88%",
+    overflow: "hidden",
+  },
+  sheetHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f3f4f6",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  sheetHeaderIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: "#e6f4ff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sheetTitle: { fontSize: 18, fontWeight: "900", color: "#111827" },
+  sheetSubTitle: {
+    marginTop: 2,
+    fontSize: 12,
+    color: "#6b7280",
+    fontWeight: "700",
+  },
+  sheetBody: { paddingHorizontal: 16, paddingBottom: 12 },
+
+  filterLabel: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#374151",
+    marginBottom: 8,
+    marginTop: 14,
+  },
+
+  searchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f9fafb",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 10,
+  },
+  searchInput: { flex: 1, fontSize: 15, color: "#111827", fontWeight: "700" },
+
+  selectField: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f9fafb",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 10,
+  },
+  selectValue: { fontSize: 14, fontWeight: "900", color: "#111827" },
+  selectPlaceholder: { color: "#9ca3af" },
+
+  selectOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    padding: 16,
+    justifyContent: "center",
+  },
+  selectModal: {
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    overflow: "hidden",
+    maxHeight: "80%",
+  },
+  selectHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f3f4f6",
+  },
+  selectTitle: { fontSize: 16, fontWeight: "900", color: "#111827" },
+  selectSearchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f9fafb",
+    margin: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  selectSearchInput: {
+    flex: 1,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: "#111827",
+    fontWeight: "700",
+  },
+  selectItem: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: "#f3f4f6",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  selectItemActive: { backgroundColor: "#e6f4ff" },
+  selectItemText: { fontSize: 14, fontWeight: "900", color: "#111827" },
+  selectItemTextActive: { color: "#1890ff" },
+
+  quickDateRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  quickDateBtn: {
+    backgroundColor: "#f3f4f6",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+  },
+  quickDateText: { fontSize: 13, fontWeight: "900", color: "#374151" },
+
+  dateRow: { gap: 10, marginTop: 6 },
+  dateField: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f9fafb",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 10,
+  },
+  dateFieldLabel: { fontSize: 11, color: "#6b7280", fontWeight: "900" },
+  dateFieldValue: {
+    marginTop: 2,
+    fontSize: 14,
+    color: "#111827",
+    fontWeight: "900",
+  },
+  dateFieldPlaceholder: { color: "#9ca3af" },
+
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
+  },
+  pickerModal: {
+    width: "100%",
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    overflow: "hidden",
+  },
+  pickerHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f3f4f6",
+  },
+  pickerTitle: { fontSize: 15, fontWeight: "900", color: "#111827" },
+  pickerFooter: { padding: 12, borderTopWidth: 1, borderTopColor: "#f3f4f6" },
+  pickerDoneBtn: {
+    backgroundColor: "#1890ff",
+    paddingVertical: 12,
+    borderRadius: 14,
+    alignItems: "center",
+  },
+  pickerDoneText: { color: "#fff", fontWeight: "900" },
+
+  sheetFooter: {
+    padding: 14,
+    borderTopWidth: 1,
+    borderTopColor: "#f3f4f6",
+    flexDirection: "row",
+    gap: 12,
+    backgroundColor: "#fff",
+  },
+  sheetResetBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#f9fafb",
+  },
+  sheetResetText: { fontSize: 14, fontWeight: "900", color: "#374151" },
+  sheetApplyBtn: { flex: 1, borderRadius: 14, overflow: "hidden" },
+  sheetApplyGradient: {
+    flexDirection: "row",
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  sheetApplyText: { fontSize: 14, fontWeight: "900", color: "#fff" },
+
+  // Upload modal / preview modal
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
@@ -1193,7 +2078,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  uploadOptionText: { fontSize: 14, fontWeight: "600", color: "#374151" },
+  uploadOptionText: { fontSize: 14, fontWeight: "700", color: "#374151" },
+
   previewModalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.9)",

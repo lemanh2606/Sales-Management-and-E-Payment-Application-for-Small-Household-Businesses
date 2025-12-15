@@ -12,8 +12,10 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
+  SafeAreaView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
@@ -24,14 +26,9 @@ import { sendPasswordOTP, changePassword } from "../../api/userApi";
 import { UserPublic } from "@/type/user";
 
 // ================== CONFIG ==================
-// Bạn chỉnh lại URL cho đúng backend của bạn.
 const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_URL || "https://api.example.com";
-
-// Endpoint update profile (PATCH/PUT tùy backend)
 const UPDATE_PROFILE_URL = `${API_BASE_URL}/users/profile`;
-
-// Field name backend mong đợi (ví dụ: "image" / "avatar" / "file")
 const IMAGE_FIELD_NAME = "image";
 
 // ================== TYPES ==================
@@ -54,7 +51,6 @@ type UpdateProfileResponse = {
 
 // ================== HELPERS ==================
 const getAuthToken = async (): Promise<string | null> => {
-  // Tùy dự án bạn lưu token key nào
   const t1 = await AsyncStorage.getItem("token");
   if (t1) return t1;
   const t2 = await AsyncStorage.getItem("accessToken");
@@ -85,7 +81,6 @@ const safeReadJson = async (res: Response): Promise<any | null> => {
   }
 };
 
-// Upload/update profile theo “cách mới”: expo/fetch + FormData + File
 const updateProfileRequest = async (params: {
   fullname: string;
   email: string;
@@ -95,7 +90,6 @@ const updateProfileRequest = async (params: {
 }): Promise<UpdateProfileResponse> => {
   const token = await getAuthToken();
 
-  // Trường hợp removeImage (không cần multipart)
   if (params.removeImage) {
     const res = await fetch(UPDATE_PROFILE_URL, {
       method: "PATCH",
@@ -112,41 +106,32 @@ const updateProfileRequest = async (params: {
     });
 
     const data = await safeReadJson(res);
-    if (!res.ok) {
-      throw new Error(data?.message || `HTTP ${res.status}`);
-    }
+    if (!res.ok) throw new Error(data?.message || `HTTP ${res.status}`);
     return data as UpdateProfileResponse;
   }
 
-  // Trường hợp có ảnh -> multipart
   if (params.imageUri) {
     const formData = new FormData();
     formData.append("fullname", params.fullname);
     formData.append("email", params.email);
     formData.append("phone", params.phone);
 
-    // File mới của expo-file-system (implements Blob)
     const file = new File(params.imageUri);
-    // Không set Content-Type multipart/form-data thủ công để tránh lỗi boundary.
     formData.append(IMAGE_FIELD_NAME, file as any);
 
     const res = await fetch(UPDATE_PROFILE_URL, {
       method: "PATCH",
       headers: {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        // không set content-type ở đây
       },
       body: formData as any,
     });
 
     const data = await safeReadJson(res);
-    if (!res.ok) {
-      throw new Error(data?.message || `HTTP ${res.status}`);
-    }
+    if (!res.ok) throw new Error(data?.message || `HTTP ${res.status}`);
     return data as UpdateProfileResponse;
   }
 
-  // Trường hợp không ảnh -> JSON
   const res = await fetch(UPDATE_PROFILE_URL, {
     method: "PATCH",
     headers: {
@@ -161,9 +146,7 @@ const updateProfileRequest = async (params: {
   });
 
   const data = await safeReadJson(res);
-  if (!res.ok) {
-    throw new Error(data?.message || `HTTP ${res.status}`);
-  }
+  if (!res.ok) throw new Error(data?.message || `HTTP ${res.status}`);
   return data as UpdateProfileResponse;
 };
 
@@ -173,19 +156,16 @@ const ProfileScreen: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
 
-  // Profile form
   const [profileData, setProfileData] = useState<ProfileFormData>({
     fullname: "",
     email: "",
     phone: "",
   });
 
-  // Avatar (URI local)
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [selectedImage, setSelectedImage] = useState<string | null>(null); // local file URI
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [compressing, setCompressing] = useState<boolean>(false);
 
-  // Password change
   const [showPasswordForm, setShowPasswordForm] = useState<boolean>(false);
   const [passwordData, setPasswordData] = useState<PasswordFormData>({
     otp: "",
@@ -223,16 +203,12 @@ const ProfileScreen: React.FC = () => {
 
   const formatTime = (sec: number): string => {
     if (!sec || sec <= 0) return "00:00";
-    return `${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(
-      sec % 60
-    ).padStart(2, "0")}`;
+    return `${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(sec % 60).padStart(2, "0")}`;
   };
 
-  // ========== IMAGE SIZE CHECK (NEW API) ==========
   const getFileSizeMB = async (uri: string): Promise<number> => {
-    // Dùng File mới (expo-file-system)
     const f = new File(uri);
-    const info = await f.info(); // { exists, size, ... }
+    const info = await f.info();
     const sizeBytes = typeof info?.size === "number" ? info.size : f.size;
 
     if (!info?.exists || !sizeBytes || sizeBytes <= 0) {
@@ -241,7 +217,6 @@ const ProfileScreen: React.FC = () => {
     return sizeBytes / (1024 * 1024);
   };
 
-  // ========== IMAGE COMPRESSION ==========
   const compressImage = async (uri: string): Promise<string> => {
     try {
       console.log("🔄 Compressing image...");
@@ -257,11 +232,8 @@ const ProfileScreen: React.FC = () => {
         }
       );
 
-      if (!manipResult.uri) {
-        throw new Error("Không thể xử lý ảnh");
-      }
+      if (!manipResult.uri) throw new Error("Không thể xử lý ảnh");
 
-      // Kiểm tra kích thước file (<= 5MB) bằng API mới
       const sizeInMB = await getFileSizeMB(manipResult.uri);
       console.log(`✅ Compressed image size: ${sizeInMB.toFixed(2)}MB`);
       if (sizeInMB > 5) {
@@ -277,21 +249,27 @@ const ProfileScreen: React.FC = () => {
     }
   };
 
-  // ========== IMAGE HANDLING ==========
+  // ========== IMAGE PICKER (NEW API) ==========
   const handlePickImage = async () => {
+    // Request permission first (recommended by new docs)
     const permissionResult =
       await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permissionResult.granted) {
-      Alert.alert("Quyền truy cập", "Cần quyền truy cập thư viện ảnh");
+      Alert.alert(
+        "Quyền truy cập",
+        "Cần quyền truy cập thư viện ảnh để chọn ảnh đại diện"
+      );
       return;
     }
 
+    // Launch picker with NEW API syntax
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ["images"], // ✅ NEW: array syntax instead of MediaTypeOptions.Images
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
+      allowsMultipleSelection: false, // explicitly set to false
     });
 
     if (!result.canceled && result.assets[0]?.uri) {
@@ -303,7 +281,7 @@ const ProfileScreen: React.FC = () => {
 
         Alert.alert(
           "Thành công",
-          "Ảnh đã được chọn và nén. Nhấn Lưu để cập nhật."
+          "Ảnh đã được chọn và nén. Nhấn 'Lưu thông tin' để cập nhật."
         );
       } catch (error: any) {
         console.error("❌ Image processing error:", error);
@@ -346,7 +324,6 @@ const ProfileScreen: React.FC = () => {
     ]);
   };
 
-  // ========== SAVE PROFILE ==========
   const handleSaveProfile = async () => {
     if (!profileData.fullname.trim()) {
       Alert.alert("Lỗi", "Họ và tên không được để trống");
@@ -355,12 +332,7 @@ const ProfileScreen: React.FC = () => {
 
     setSaving(true);
     try {
-      console.log("📝 Updating profile...", {
-        hasSelectedImage: !!selectedImage,
-        fullname: profileData.fullname,
-        email: profileData.email,
-        phone: profileData.phone,
-      });
+      console.log("📝 Updating profile...");
 
       const response = await updateProfileRequest({
         fullname: profileData.fullname,
@@ -373,9 +345,7 @@ const ProfileScreen: React.FC = () => {
       setUser(updatedUser);
       await AsyncStorage.setItem("user", JSON.stringify(updatedUser));
 
-      // reset local selected image
       setSelectedImage(null);
-      // nếu backend trả image url mới thì preview nên chuyển sang url đó
       setImagePreview(updatedUser.image || null);
 
       Alert.alert("Thành công", "Cập nhật thông tin thành công");
@@ -387,7 +357,6 @@ const ProfileScreen: React.FC = () => {
     }
   };
 
-  // ========== PASSWORD CHANGE ==========
   const handleSendOTP = async () => {
     if (timer > 0) return;
 
@@ -399,10 +368,7 @@ const ProfileScreen: React.FC = () => {
     setSendingOTP(true);
     try {
       console.log("📧 Sending OTP to:", profileData.email);
-
-      const res = await sendPasswordOTP({ email: profileData.email });
-
-      console.log("✅ OTP sent:", res);
+      await sendPasswordOTP({ email: profileData.email });
 
       setOtpSent(true);
       setTimer(300);
@@ -444,8 +410,6 @@ const ProfileScreen: React.FC = () => {
         otp: passwordData.otp,
       });
 
-      console.log("✅ Password changed successfully");
-
       setPasswordData({ otp: "", newPassword: "", confirmPassword: "" });
       setOtpSent(false);
       setShowPasswordForm(false);
@@ -468,127 +432,152 @@ const ProfileScreen: React.FC = () => {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#10b981" />
+        <ActivityIndicator size="large" color="#6366f1" />
         <Text style={styles.loadingText}>Đang tải hồ sơ...</Text>
       </View>
     );
   }
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Hồ sơ cá nhân</Text>
-          <Text style={styles.headerSubtitle}>Quản lý thông tin của bạn</Text>
-        </View>
-
-        {/* Avatar Section */}
-        <View style={styles.avatarSection}>
-          <View style={styles.avatarWrapper}>
-            {imagePreview ? (
-              <Image source={{ uri: imagePreview }} style={styles.avatar} />
-            ) : (
-              <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                <Ionicons name="person" size={56} color="#d1d5db" />
+    <SafeAreaView style={styles.safe}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <ScrollView
+          style={styles.container}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Gradient Header */}
+          <LinearGradient
+            colors={["#6366f1", "#8b5cf6", "#d946ef"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.header}
+          >
+            <View style={styles.headerTop}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.headerTitle}>Hồ sơ cá nhân</Text>
+                <View style={styles.headerSubRow}>
+                  <Ionicons
+                    name="person-circle-outline"
+                    size={14}
+                    color="rgba(255,255,255,0.92)"
+                  />
+                  <Text style={styles.headerSubtitle}>
+                    Quản lý thông tin của bạn
+                  </Text>
+                </View>
               </View>
-            )}
-            <TouchableOpacity
-              style={styles.cameraBtn}
-              onPress={handlePickImage}
-              disabled={compressing}
-            >
-              {compressing ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Ionicons name="camera" size={20} color="#fff" />
+            </View>
+
+            {/* Avatar in header */}
+            <View style={styles.avatarSection}>
+              <View style={styles.avatarWrapper}>
+                {imagePreview ? (
+                  <Image source={{ uri: imagePreview }} style={styles.avatar} />
+                ) : (
+                  <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                    <Ionicons name="person" size={56} color="#e0e7ff" />
+                  </View>
+                )}
+
+                <TouchableOpacity
+                  style={styles.cameraBtn}
+                  onPress={handlePickImage}
+                  disabled={compressing}
+                >
+                  {compressing ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Ionicons name="camera" size={20} color="#fff" />
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.avatarHint}>
+                {compressing
+                  ? "Đang nén ảnh..."
+                  : "Nhấn để thay đổi ảnh (tối đa 5MB)"}
+              </Text>
+
+              {imagePreview && !compressing && (
+                <TouchableOpacity
+                  onPress={handleRemoveImage}
+                  style={styles.removeBtn}
+                >
+                  <Ionicons name="trash-outline" size={14} color="#ef4444" />
+                  <Text style={styles.removeBtnText}>Xóa ảnh</Text>
+                </TouchableOpacity>
               )}
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.avatarHint}>
-            {compressing
-              ? "Đang nén ảnh..."
-              : "Nhấn để thay đổi ảnh (tối đa ~5MB)"}
-          </Text>
-          {imagePreview && !compressing && (
-            <TouchableOpacity
-              onPress={handleRemoveImage}
-              style={styles.removeBtn}
-            >
-              <Ionicons name="trash-outline" size={16} color="#ef4444" />
-              <Text style={styles.removeBtnText}>Xóa ảnh</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+            </View>
+          </LinearGradient>
 
-        {/* Profile Form */}
-        <View style={styles.formCard}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="person-outline" size={22} color="#10b981" />
-            <Text style={styles.sectionTitle}>Thông tin cá nhân</Text>
-          </View>
+          {/* Profile Form Card */}
+          <View style={styles.formCard}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionIcon}>
+                <Ionicons name="person-outline" size={20} color="#6366f1" />
+              </View>
+              <Text style={styles.sectionTitle}>Thông tin cá nhân</Text>
+            </View>
 
-          <Text style={styles.label}>Tên đăng nhập</Text>
-          <View style={[styles.input, styles.inputDisabled]}>
-            <Ionicons name="at-outline" size={20} color="#9ca3af" />
-            <Text style={styles.inputTextDisabled}>{user?.username}</Text>
-          </View>
+            <Text style={styles.label}>Tên đăng nhập</Text>
+            <View style={[styles.input, styles.inputDisabled]}>
+              <Ionicons name="at-outline" size={18} color="#94a3b8" />
+              <Text style={styles.inputTextDisabled}>{user?.username}</Text>
+            </View>
 
-          <Text style={styles.label}>
-            Họ và tên <Text style={styles.required}>*</Text>
-          </Text>
-          <View style={styles.input}>
-            <Ionicons name="person-outline" size={20} color="#6b7280" />
-            <TextInput
-              style={styles.inputText}
-              value={profileData.fullname}
-              onChangeText={(text) =>
-                setProfileData({ ...profileData, fullname: text })
-              }
-              placeholder="Nhập họ và tên"
-              placeholderTextColor="#9ca3af"
-            />
-          </View>
+            <Text style={styles.label}>
+              Họ và tên <Text style={styles.required}>*</Text>
+            </Text>
+            <View style={styles.input}>
+              <Ionicons name="person-outline" size={18} color="#64748b" />
+              <TextInput
+                style={styles.inputText}
+                value={profileData.fullname}
+                onChangeText={(text) =>
+                  setProfileData({ ...profileData, fullname: text })
+                }
+                placeholder="Nhập họ và tên"
+                placeholderTextColor="#94a3b8"
+              />
+            </View>
 
-          <Text style={styles.label}>Email</Text>
-          <View style={styles.input}>
-            <Ionicons name="mail-outline" size={20} color="#6b7280" />
-            <TextInput
-              style={styles.inputText}
-              value={profileData.email}
-              onChangeText={(text) =>
-                setProfileData({ ...profileData, email: text })
-              }
-              placeholder="Nhập email"
-              placeholderTextColor="#9ca3af"
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-          </View>
+            <Text style={styles.label}>Email</Text>
+            <View style={styles.input}>
+              <Ionicons name="mail-outline" size={18} color="#64748b" />
+              <TextInput
+                style={styles.inputText}
+                value={profileData.email}
+                onChangeText={(text) =>
+                  setProfileData({ ...profileData, email: text })
+                }
+                placeholder="Nhập email"
+                placeholderTextColor="#94a3b8"
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
 
-          <Text style={styles.label}>Số điện thoại</Text>
-          <View style={styles.input}>
-            <Ionicons name="call-outline" size={20} color="#6b7280" />
-            <TextInput
-              style={styles.inputText}
-              value={profileData.phone}
-              onChangeText={(text) =>
-                setProfileData({ ...profileData, phone: text })
-              }
-              placeholder="Nhập số điện thoại"
-              placeholderTextColor="#9ca3af"
-              keyboardType="phone-pad"
-            />
-          </View>
+            <Text style={styles.label}>Số điện thoại</Text>
+            <View style={styles.input}>
+              <Ionicons name="call-outline" size={18} color="#64748b" />
+              <TextInput
+                style={styles.inputText}
+                value={profileData.phone}
+                onChangeText={(text) =>
+                  setProfileData({ ...profileData, phone: text })
+                }
+                placeholder="Nhập số điện thoại"
+                placeholderTextColor="#94a3b8"
+                keyboardType="phone-pad"
+              />
+            </View>
 
-          {/* Status Badges */}
-          <View style={styles.statusGrid}>
-            <View style={styles.statusCard}>
-              <Text style={styles.statusLabel}>Vai trò</Text>
-              <View style={styles.statusBadge}>
+            {/* Status Pills */}
+            <View style={styles.statusGrid}>
+              <View style={styles.statusPill}>
                 <View
                   style={[styles.statusDot, { backgroundColor: "#3b82f6" }]}
                 />
@@ -596,18 +585,8 @@ const ProfileScreen: React.FC = () => {
                   {user?.role === "MANAGER" ? "Quản lý" : "Nhân viên"}
                 </Text>
               </View>
-            </View>
 
-            <View style={styles.statusCard}>
-              <Text style={styles.statusLabel}>Email</Text>
-              <View
-                style={[
-                  styles.statusBadge,
-                  user?.isVerified
-                    ? styles.statusSuccess
-                    : styles.statusWarning,
-                ]}
-              >
+              <View style={styles.statusPill}>
                 <View
                   style={[
                     styles.statusDot,
@@ -620,16 +599,8 @@ const ProfileScreen: React.FC = () => {
                   {user?.isVerified ? "Đã xác thực" : "Chưa xác thực"}
                 </Text>
               </View>
-            </View>
 
-            <View style={styles.statusCard}>
-              <Text style={styles.statusLabel}>Tài khoản</Text>
-              <View
-                style={[
-                  styles.statusBadge,
-                  user?.isDeleted ? styles.statusDanger : styles.statusSuccess,
-                ]}
-              >
+              <View style={styles.statusPill}>
                 <View
                   style={[
                     styles.statusDot,
@@ -643,192 +614,208 @@ const ProfileScreen: React.FC = () => {
                 </Text>
               </View>
             </View>
-          </View>
 
-          <TouchableOpacity
-            style={[
-              styles.saveBtn,
-              (saving || compressing) && styles.saveBtnDisabled,
-            ]}
-            onPress={handleSaveProfile}
-            disabled={saving || compressing}
-          >
-            {saving ? (
-              <>
-                <ActivityIndicator color="#fff" />
-                <Text style={styles.saveBtnText}>Đang lưu...</Text>
-              </>
-            ) : (
-              <>
-                <Ionicons name="checkmark-circle" size={22} color="#fff" />
-                <Text style={styles.saveBtnText}>Lưu thông tin</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {/* Password Section */}
-        <View style={styles.formCard}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="lock-closed-outline" size={22} color="#ef4444" />
-            <Text style={styles.sectionTitle}>Đổi mật khẩu</Text>
-          </View>
-
-          {!showPasswordForm ? (
             <TouchableOpacity
-              style={styles.showPasswordBtn}
-              onPress={() => setShowPasswordForm(true)}
+              style={[
+                styles.saveBtn,
+                (saving || compressing) && { opacity: 0.55 },
+              ]}
+              onPress={handleSaveProfile}
+              disabled={saving || compressing}
             >
-              <Ionicons name="key-outline" size={20} color="#10b981" />
-              <Text style={styles.showPasswordBtnText}>Đổi mật khẩu</Text>
-            </TouchableOpacity>
-          ) : (
-            <>
-              <TouchableOpacity
-                style={[
-                  styles.otpBtn,
-                  (timer > 0 || sendingOTP) && styles.otpBtnDisabled,
-                ]}
-                onPress={handleSendOTP}
-                disabled={timer > 0 || sendingOTP}
+              <LinearGradient
+                colors={["#10b981", "#059669"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.saveBtnGradient}
               >
-                {sendingOTP ? (
-                  <ActivityIndicator color="#fff" size="small" />
+                {saving ? (
+                  <>
+                    <ActivityIndicator color="#fff" />
+                    <Text style={styles.saveBtnText}>Đang lưu...</Text>
+                  </>
                 ) : (
                   <>
-                    <Ionicons name="mail-outline" size={20} color="#fff" />
-                    <Text style={styles.otpBtnText}>
-                      {timer > 0
-                        ? `Chờ gửi lại (${formatTime(timer)})`
-                        : "Gửi OTP đến Email"}
-                    </Text>
+                    <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                    <Text style={styles.saveBtnText}>Lưu thông tin</Text>
                   </>
                 )}
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+
+          {/* Password Card */}
+          <View style={styles.formCard}>
+            <View style={styles.sectionHeader}>
+              <View
+                style={[styles.sectionIcon, { backgroundColor: "#fef2f2" }]}
+              >
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={20}
+                  color="#ef4444"
+                />
+              </View>
+              <Text style={styles.sectionTitle}>Đổi mật khẩu</Text>
+            </View>
+
+            {!showPasswordForm ? (
+              <TouchableOpacity
+                style={styles.showPasswordBtn}
+                onPress={() => setShowPasswordForm(true)}
+              >
+                <Ionicons name="key-outline" size={18} color="#6366f1" />
+                <Text style={styles.showPasswordBtnText}>Đổi mật khẩu</Text>
               </TouchableOpacity>
+            ) : (
+              <>
+                <TouchableOpacity
+                  style={[
+                    styles.otpBtn,
+                    (timer > 0 || sendingOTP) && { opacity: 0.55 },
+                  ]}
+                  onPress={handleSendOTP}
+                  disabled={timer > 0 || sendingOTP}
+                >
+                  {sendingOTP ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <>
+                      <Ionicons name="mail-outline" size={18} color="#fff" />
+                      <Text style={styles.otpBtnText}>
+                        {timer > 0
+                          ? `Gửi lại sau (${formatTime(timer)})`
+                          : "Gửi OTP đến Email"}
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
 
-              {otpSent && (
-                <>
-                  <Text style={styles.label}>Mã OTP</Text>
-                  <View style={styles.input}>
-                    <Ionicons
-                      name="shield-checkmark-outline"
-                      size={20}
-                      color="#6b7280"
-                    />
-                    <TextInput
-                      style={styles.inputText}
-                      value={passwordData.otp}
-                      onChangeText={(text) =>
-                        setPasswordData({ ...passwordData, otp: text })
-                      }
-                      placeholder="Nhập mã OTP"
-                      placeholderTextColor="#9ca3af"
-                      maxLength={6}
-                      keyboardType="number-pad"
-                    />
-                  </View>
+                {otpSent && (
+                  <>
+                    <Text style={styles.label}>Mã OTP</Text>
+                    <View style={styles.input}>
+                      <Ionicons
+                        name="shield-checkmark-outline"
+                        size={18}
+                        color="#64748b"
+                      />
+                      <TextInput
+                        style={styles.inputText}
+                        value={passwordData.otp}
+                        onChangeText={(text) =>
+                          setPasswordData({ ...passwordData, otp: text })
+                        }
+                        placeholder="Nhập mã OTP"
+                        placeholderTextColor="#94a3b8"
+                        maxLength={6}
+                        keyboardType="number-pad"
+                      />
+                    </View>
 
-                  <Text style={styles.label}>Mật khẩu mới</Text>
-                  <View style={styles.input}>
-                    <Ionicons
-                      name="lock-closed-outline"
-                      size={20}
-                      color="#6b7280"
-                    />
-                    <TextInput
-                      style={styles.inputText}
-                      value={passwordData.newPassword}
-                      onChangeText={(text) =>
-                        setPasswordData({
-                          ...passwordData,
-                          newPassword: text,
-                        })
-                      }
-                      placeholder="Nhập mật khẩu mới (ít nhất 6 ký tự)"
-                      placeholderTextColor="#9ca3af"
-                      secureTextEntry
-                    />
-                  </View>
+                    <Text style={styles.label}>Mật khẩu mới</Text>
+                    <View style={styles.input}>
+                      <Ionicons
+                        name="lock-closed-outline"
+                        size={18}
+                        color="#64748b"
+                      />
+                      <TextInput
+                        style={styles.inputText}
+                        value={passwordData.newPassword}
+                        onChangeText={(text) =>
+                          setPasswordData({
+                            ...passwordData,
+                            newPassword: text,
+                          })
+                        }
+                        placeholder="Nhập mật khẩu mới (ít nhất 6 ký tự)"
+                        placeholderTextColor="#94a3b8"
+                        secureTextEntry
+                      />
+                    </View>
 
-                  <Text style={styles.label}>Xác nhận mật khẩu</Text>
-                  <View style={styles.input}>
-                    <Ionicons
-                      name="lock-closed-outline"
-                      size={20}
-                      color="#6b7280"
-                    />
-                    <TextInput
-                      style={styles.inputText}
-                      value={passwordData.confirmPassword}
-                      onChangeText={(text) =>
-                        setPasswordData({
-                          ...passwordData,
-                          confirmPassword: text,
-                        })
-                      }
-                      placeholder="Xác nhận mật khẩu mới"
-                      placeholderTextColor="#9ca3af"
-                      secureTextEntry
-                    />
-                  </View>
+                    <Text style={styles.label}>Xác nhận mật khẩu</Text>
+                    <View style={styles.input}>
+                      <Ionicons
+                        name="lock-closed-outline"
+                        size={18}
+                        color="#64748b"
+                      />
+                      <TextInput
+                        style={styles.inputText}
+                        value={passwordData.confirmPassword}
+                        onChangeText={(text) =>
+                          setPasswordData({
+                            ...passwordData,
+                            confirmPassword: text,
+                          })
+                        }
+                        placeholder="Xác nhận mật khẩu mới"
+                        placeholderTextColor="#94a3b8"
+                        secureTextEntry
+                      />
+                    </View>
 
-                  <View style={styles.passwordActions}>
-                    <TouchableOpacity
-                      style={styles.cancelBtn}
-                      onPress={() => {
-                        setShowPasswordForm(false);
-                        setOtpSent(false);
-                        setTimer(0);
-                        setPasswordData({
-                          otp: "",
-                          newPassword: "",
-                          confirmPassword: "",
-                        });
-                      }}
-                    >
-                      <Text style={styles.cancelBtnText}>Hủy</Text>
-                    </TouchableOpacity>
+                    <View style={styles.passwordActions}>
+                      <TouchableOpacity
+                        style={styles.cancelBtn}
+                        onPress={() => {
+                          setShowPasswordForm(false);
+                          setOtpSent(false);
+                          setTimer(0);
+                          setPasswordData({
+                            otp: "",
+                            newPassword: "",
+                            confirmPassword: "",
+                          });
+                        }}
+                      >
+                        <Text style={styles.cancelBtnText}>Hủy</Text>
+                      </TouchableOpacity>
 
-                    <TouchableOpacity
-                      style={[
-                        styles.changePasswordBtn,
-                        changingPassword && styles.changePasswordBtnDisabled,
-                      ]}
-                      onPress={handleChangePassword}
-                      disabled={changingPassword}
-                    >
-                      {changingPassword ? (
-                        <ActivityIndicator color="#fff" size="small" />
-                      ) : (
-                        <>
-                          <Ionicons
-                            name="checkmark-circle"
-                            size={20}
-                            color="#fff"
-                          />
-                          <Text style={styles.changePasswordBtnText}>
-                            Đổi mật khẩu
-                          </Text>
-                        </>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                </>
-              )}
-            </>
-          )}
-        </View>
+                      <TouchableOpacity
+                        style={[
+                          styles.changePasswordBtn,
+                          changingPassword && { opacity: 0.55 },
+                        ]}
+                        onPress={handleChangePassword}
+                        disabled={changingPassword}
+                      >
+                        {changingPassword ? (
+                          <ActivityIndicator color="#fff" size="small" />
+                        ) : (
+                          <>
+                            <Ionicons
+                              name="checkmark-circle"
+                              size={18}
+                              color="#fff"
+                            />
+                            <Text style={styles.changePasswordBtnText}>
+                              Đổi mật khẩu
+                            </Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                )}
+              </>
+            )}
+          </View>
 
-        <View style={{ height: 40 }} />
-      </ScrollView>
-    </KeyboardAvoidingView>
+          <View style={{ height: 32 }} />
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
 export default ProfileScreen;
 
-// ========== STYLES (giữ nguyên như cũ) ==========
+// ========== STYLES ==========
 const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: "#f8fafc" },
   container: { flex: 1, backgroundColor: "#f8fafc" },
   center: {
     flex: 1,
@@ -836,36 +823,56 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#f8fafc",
   },
-  loadingText: { marginTop: 12, fontSize: 14, color: "#64748b" },
-  header: {
-    backgroundColor: "#fff",
-    padding: 20,
-    paddingTop: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
-  },
-  headerTitle: {
-    fontSize: 24,
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: "#64748b",
     fontWeight: "700",
-    color: "#111827",
-    marginBottom: 4,
   },
-  headerSubtitle: { fontSize: 14, color: "#6b7280" },
-  avatarSection: {
+
+  header: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 20,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 18,
+    elevation: 12,
+    backgroundColor: "#10b981",
+  },
+  headerTop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    marginBottom: 16,
+  },
+  headerTitle: { color: "#fff", fontSize: 24, fontWeight: "900" },
+  headerSubRow: {
+    flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 24,
-    backgroundColor: "#fff",
+    gap: 6,
+    marginTop: 6,
   },
+  headerSubtitle: {
+    color: "rgba(255,255,255,0.92)",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+
+  avatarSection: { alignItems: "center", paddingVertical: 8 },
   avatarWrapper: { position: "relative", marginBottom: 12 },
   avatar: {
     width: 120,
     height: 120,
     borderRadius: 60,
-    borderWidth: 3,
-    borderColor: "#e5e7eb",
+    borderWidth: 4,
+    borderColor: "rgba(255,255,255,0.28)",
   },
   avatarPlaceholder: {
-    backgroundColor: "#f3f4f6",
+    backgroundColor: "rgba(255,255,255,0.16)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -882,134 +889,161 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: "#fff",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
   },
-  avatarHint: { fontSize: 13, color: "#6b7280", marginBottom: 8 },
+  avatarHint: {
+    fontSize: 12,
+    color: "rgba(255,255,255,0.9)",
+    marginBottom: 8,
+    fontWeight: "700",
+  },
   removeBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: "#fef2f2",
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.92)",
   },
-  removeBtnText: { fontSize: 13, color: "#ef4444", fontWeight: "600" },
+  removeBtnText: { fontSize: 12, color: "#ef4444", fontWeight: "900" },
+
   formCard: {
     backgroundColor: "#fff",
     marginHorizontal: 16,
     marginTop: 16,
-    padding: 20,
-    borderRadius: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
+    padding: 18,
+    borderRadius: 20,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.06,
-    shadowRadius: 10,
-    elevation: 3,
+    shadowRadius: 14,
+    elevation: 4,
   },
+
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    marginBottom: 20,
+    gap: 12,
+    marginBottom: 18,
   },
-  sectionTitle: { fontSize: 18, fontWeight: "700", color: "#111827" },
-  label: { fontSize: 14, fontWeight: "600", color: "#374151", marginBottom: 8 },
+  sectionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: "#eff6ff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sectionTitle: { fontSize: 17, fontWeight: "900", color: "#0f172a" },
+
+  label: { fontSize: 13, fontWeight: "900", color: "#334155", marginBottom: 8 },
   required: { color: "#ef4444" },
+
   input: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f9fafb",
+    backgroundColor: "#f8fafc",
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    borderRadius: 12,
+    borderColor: "#e2e8f0",
+    borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 12,
     marginBottom: 16,
   },
-  inputDisabled: { backgroundColor: "#f3f4f6" },
-  inputText: { flex: 1, marginLeft: 10, fontSize: 15, color: "#111827" },
+  inputDisabled: { backgroundColor: "#f1f5f9" },
+  inputText: {
+    flex: 1,
+    marginLeft: 10,
+    fontSize: 14,
+    color: "#0f172a",
+    fontWeight: "700",
+  },
   inputTextDisabled: {
     flex: 1,
     marginLeft: 10,
-    fontSize: 15,
-    color: "#9ca3af",
+    fontSize: 14,
+    color: "#94a3b8",
+    fontWeight: "700",
   },
-  statusGrid: { flexDirection: "row", gap: 12, marginBottom: 20 },
-  statusCard: { flex: 1 },
-  statusLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#6b7280",
-    marginBottom: 8,
+
+  statusGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 18,
   },
-  statusBadge: {
+  statusPill: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingVertical: 10,
+    paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: 10,
-    backgroundColor: "#f3f4f6",
+    borderRadius: 999,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
   },
-  statusSuccess: { backgroundColor: "#ecfdf5" },
-  statusWarning: { backgroundColor: "#fef3c7" },
-  statusDanger: { backgroundColor: "#fef2f2" },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
-  statusText: { fontSize: 13, fontWeight: "700", color: "#374151", flex: 1 },
+  statusText: { fontSize: 12, fontWeight: "900", color: "#334155" },
+
   saveBtn: {
+    borderRadius: 16,
+    overflow: "hidden",
+    shadowColor: "#10b981",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  saveBtnGradient: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#10b981",
-    paddingVertical: 16,
-    borderRadius: 12,
+    paddingVertical: 14,
     gap: 8,
-    shadowColor: "#10b981",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 6,
   },
-  saveBtnDisabled: { backgroundColor: "#9ca3af" },
-  saveBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  saveBtnText: { color: "#fff", fontSize: 15, fontWeight: "900" },
+
   showPasswordBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
     paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 2,
-    borderColor: "#10b981",
-    borderStyle: "dashed",
+    borderColor: "#6366f1",
+    backgroundColor: "#eff6ff",
   },
-  showPasswordBtnText: { fontSize: 15, fontWeight: "700", color: "#10b981" },
+  showPasswordBtnText: { fontSize: 14, fontWeight: "900", color: "#6366f1" },
+
   otpBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: "#10b981",
+    backgroundColor: "#6366f1",
     paddingVertical: 14,
-    borderRadius: 12,
-    marginBottom: 20,
+    borderRadius: 14,
+    marginBottom: 18,
   },
-  otpBtnDisabled: { backgroundColor: "#9ca3af" },
-  otpBtnText: { color: "#fff", fontSize: 15, fontWeight: "700" },
-  passwordActions: { flexDirection: "row", gap: 12, marginTop: 4 },
+  otpBtnText: { color: "#fff", fontSize: 14, fontWeight: "900" },
+
+  passwordActions: { flexDirection: "row", gap: 10, marginTop: 4 },
   cancelBtn: {
     flex: 1,
     paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: "#e5e7eb",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f8fafc",
     alignItems: "center",
   },
-  cancelBtnText: { fontSize: 15, fontWeight: "700", color: "#6b7280" },
+  cancelBtnText: { fontSize: 14, fontWeight: "900", color: "#64748b" },
   changePasswordBtn: {
     flex: 1,
     flexDirection: "row",
@@ -1018,8 +1052,7 @@ const styles = StyleSheet.create({
     gap: 6,
     backgroundColor: "#ef4444",
     paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: 14,
   },
-  changePasswordBtnDisabled: { backgroundColor: "#9ca3af" },
-  changePasswordBtnText: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  changePasswordBtnText: { color: "#fff", fontSize: 14, fontWeight: "900" },
 });

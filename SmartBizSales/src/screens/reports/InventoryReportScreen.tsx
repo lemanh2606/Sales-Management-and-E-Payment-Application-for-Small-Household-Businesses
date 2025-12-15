@@ -1,5 +1,5 @@
 // src/screens/reports/InventoryReportScreen.tsx
-import React, { useState, useEffect, JSX } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -8,32 +8,20 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
-  RefreshControl,
-  FlatList,
   TextInput,
+  FlatList,
+  RefreshControl,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { Picker } from "@react-native-picker/picker";
-import dayjs from "dayjs";
-import quarterOfYear from "dayjs/plugin/quarterOfYear";
-import "dayjs/locale/vi";
+import * as XLSX from "xlsx";
+import { Directory, File, Paths } from "expo-file-system";
 import { useAuth } from "../../context/AuthContext";
 import apiClient from "../../api/apiClient";
 
-dayjs.extend(quarterOfYear);
-dayjs.locale("vi");
-
-// ========== TYPES ==========
+// ===== TYPES =====
 interface MongoDecimal {
   $numberDecimal: string;
-}
-
-interface PeriodInfo {
-  periodType: string;
-  periodKey: string;
-  from: string;
-  to: string;
 }
 
 interface SummaryInfo {
@@ -47,10 +35,6 @@ interface ProductDetail {
   productId: string;
   productName: string;
   sku: string;
-  openingStock: number;
-  importedQty: number;
-  exportedQty: number;
-  returnedQty: number;
   closingStock: number;
   costPrice: MongoDecimal;
   closingValue: number;
@@ -58,14 +42,8 @@ interface ProductDetail {
 }
 
 interface ReportData {
-  period: PeriodInfo;
   summary: SummaryInfo;
   details: ProductDetail[];
-}
-
-interface ApiErrorResponse {
-  message?: string;
-  error?: string;
 }
 
 interface ReportResponse {
@@ -74,50 +52,25 @@ interface ReportResponse {
   data: ReportData;
 }
 
-type PeriodType = "realtime" | "month" | "quarter" | "year" | "custom";
-
-// ========== MAIN COMPONENT ==========
+// ===== COMPONENT =====
 const InventoryReportScreen: React.FC = () => {
   const { currentStore } = useAuth();
   const storeId = currentStore?._id;
   const storeName = currentStore?.name || "Chưa chọn cửa hàng";
 
-  // States
+  const [reportData, setReportData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [refreshing, setRefreshing] = useState<boolean>(false);
-  const [reportData, setReportData] = useState<ReportData | null>(null);
+  const [exporting, setExporting] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
   const [searchText, setSearchText] = useState<string>("");
 
-  // ✅ Collapsible filter state
-  const [isFilterExpanded, setIsFilterExpanded] = useState<boolean>(true);
-
-  // Filters
-  const [periodType, setPeriodType] = useState<PeriodType>("month");
-  const [selectedYear, setSelectedYear] = useState<number>(dayjs().year());
-  const [selectedMonth, setSelectedMonth] = useState<number>(
-    dayjs().month() + 1
-  );
-  const [selectedQuarter, setSelectedQuarter] = useState<number>(
-    dayjs().quarter()
-  );
-  const [customMonthFrom, setCustomMonthFrom] = useState<number>(
-    dayjs().month() + 1
-  );
-  const [customYearFrom, setCustomYearFrom] = useState<number>(dayjs().year());
-  const [customMonthTo, setCustomMonthTo] = useState<number>(
-    dayjs().month() + 1
-  );
-  const [customYearTo, setCustomYearTo] = useState<number>(dayjs().year());
-
-  // ========== FORMAT VND ==========
-  const formatVND = (
-    value: number | MongoDecimal | undefined | null
-  ): string => {
-    if (!value) return "₫0";
+  // ===== HELPERS =====
+  const formatCurrency = (value: number | MongoDecimal): string => {
     const numValue =
-      typeof value === "object"
-        ? parseFloat(value.$numberDecimal)
-        : Number(value);
+      typeof value === "object" && (value as MongoDecimal)?.$numberDecimal
+        ? parseFloat((value as MongoDecimal).$numberDecimal)
+        : Number(value || 0);
     return new Intl.NumberFormat("vi-VN", {
       style: "currency",
       currency: "VND",
@@ -125,612 +78,474 @@ const InventoryReportScreen: React.FC = () => {
     }).format(numValue);
   };
 
-  // ========== FETCH REPORT ==========
-  const fetchReport = async (isRefresh: boolean = false): Promise<void> => {
+  const lowStockCount = useMemo(
+    () => reportData?.details.filter((item) => item.lowStock).length || 0,
+    [reportData]
+  );
+
+  const filteredData = useMemo(
+    () =>
+      reportData?.details.filter((item) => {
+        if (!searchText.trim()) return true;
+        const q = searchText.toLowerCase();
+        return (
+          item.productName.toLowerCase().includes(q) ||
+          item.sku.toLowerCase().includes(q)
+        );
+      }) || [],
+    [reportData, searchText]
+  );
+
+  const formatDateFile = (d: Date) => {
+    // yyyy-mm-dd
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const sanitizeFileName = (name: string) =>
+    name
+      .trim()
+      .replace(/[\/\\?%*:|"<>]/g, "-")
+      .replace(/\s+/g, "_")
+      .slice(0, 40);
+
+  // ===== API CALL =====
+  const fetchRealtimeReport = async (isRefresh: boolean = false) => {
     if (!storeId) {
-      Alert.alert("Lỗi", "Không tìm thấy thông tin cửa hàng");
+      setError("Không tìm thấy cửa hàng. Vui lòng chọn cửa hàng trước.");
       return;
     }
 
-    if (isRefresh) {
-      setRefreshing(true);
-    } else {
-      setLoading(true);
-    }
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+    setError(null);
 
     try {
-      const params: Record<string, string> = { storeId };
+      const res = await apiClient.get<ReportResponse>("/inventory-reports", {
+        params: { storeId },
+      });
 
-      if (periodType === "month") {
-        params.periodType = "month";
-        params.periodKey = `${selectedYear}-${String(selectedMonth).padStart(2, "0")}`;
-      } else if (periodType === "quarter") {
-        params.periodType = "quarter";
-        params.periodKey = `${selectedYear}-Q${selectedQuarter}`;
-      } else if (periodType === "year") {
-        params.periodType = "year";
-        params.periodKey = selectedYear.toString();
-      } else if (periodType === "custom") {
-        if (
-          !customYearFrom ||
-          !customMonthFrom ||
-          !customYearTo ||
-          !customMonthTo
-        ) {
-          Alert.alert("Cảnh báo", "Vui lòng chọn khoảng thời gian tùy chỉnh!");
-          setLoading(false);
-          setRefreshing(false);
-          return;
-        }
-        params.periodType = "custom";
-        params.monthFrom = `${customYearFrom}-${String(customMonthFrom).padStart(2, "0")}`;
-        params.monthTo = `${customYearTo}-${String(customMonthTo).padStart(2, "0")}`;
+      if (res.data.success) {
+        setReportData(res.data.data);
+      } else {
+        setReportData(null);
+        setError(res.data.message || "Không thể tải báo cáo tồn kho");
       }
-
-      const queryString = new URLSearchParams(params).toString();
-      const response = await apiClient.get<ReportResponse>(
-        `/inventory-reports?${queryString}`
-      );
-
-      if (response.data.success) {
-        setReportData(response.data.data);
-        // ✅ Auto collapse filter sau khi load thành công
-        setIsFilterExpanded(false);
-        console.log("✅ Tải báo cáo tồn kho thành công");
-      }
-    } catch (err) {
-      const axiosError = err as any;
-      console.error("❌ Lỗi tải báo cáo:", axiosError);
-
-      const errorMessage =
-        axiosError.response?.data?.message ||
-        axiosError.response?.data?.error ||
-        "Lỗi tải báo cáo";
-
-      Alert.alert("Lỗi", errorMessage);
+    } catch (err: any) {
+      console.error("❌ Lỗi tải tồn kho:", err);
       setReportData(null);
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Không thể tải báo cáo tồn kho"
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
-  // ========== FILTER DATA ==========
-  const getFilteredData = (): ProductDetail[] => {
-    if (!reportData) return [];
-    if (!searchText.trim()) return reportData.details;
+  useEffect(() => {
+    if (storeId) fetchRealtimeReport(false);
+  }, [storeId]);
 
-    const lower = searchText.toLowerCase();
-    return reportData.details.filter(
-      (item) =>
-        item.productName.toLowerCase().includes(lower) ||
-        item.sku.toLowerCase().includes(lower)
-    );
-  };
-
-  // ========== FORMAT PERIOD LABEL ==========
-  const formatPeriodLabel = (): string => {
-    if (!reportData || !reportData.period) return "Realtime";
-    const { periodType, periodKey } = reportData.period;
-
-    if (periodType === "month") return `Tháng ${periodKey}`;
-    if (periodType === "quarter") return `Quý ${periodKey}`;
-    if (periodType === "year") return `Năm ${periodKey}`;
-    if (periodType === "custom") {
-      return `${dayjs(reportData.period.from).format("MM/YYYY")} - ${dayjs(
-        reportData.period.to
-      ).format("MM/YYYY")}`;
+  // ===== EXPORT EXCEL (expo-file-system NEW API) =====
+  const exportExcel = async () => {
+    if (!reportData) {
+      Alert.alert(
+        "Chưa có dữ liệu",
+        "Vui lòng tải báo cáo trước khi xuất Excel."
+      );
+      return;
     }
-    return "Realtime";
-  };
 
-  // ========== GENERATE YEARS ==========
-  const generateYears = (): number[] => {
-    const currentYear = dayjs().year();
-    const years: number[] = [];
-    for (let i = currentYear; i >= currentYear - 5; i--) {
-      years.push(i);
+    setExporting(true);
+    try {
+      const now = new Date();
+      const ws_data: any[][] = [
+        [`BÁO CÁO TỒN KHO HIỆN TẠI - ${storeName}`],
+        [`Thời điểm: ${now.toLocaleString("vi-VN")}`],
+        [],
+        [
+          "STT",
+          "Tên sản phẩm",
+          "Mã SKU",
+          "Tồn kho",
+          "Giá vốn",
+          "Giá trị tồn",
+          "Cảnh báo",
+        ],
+      ];
+
+      reportData.details.forEach((item) => {
+        ws_data.push([
+          item.index,
+          item.productName,
+          item.sku,
+          item.closingStock,
+          parseFloat(item.costPrice?.$numberDecimal || "0"),
+          item.closingValue,
+          item.lowStock ? "Tồn thấp" : "",
+        ]);
+      });
+
+      ws_data.push([]);
+      ws_data.push([
+        "TỔNG CỘNG",
+        "",
+        "",
+        reportData.summary.totalStock,
+        "",
+        reportData.summary.totalValue,
+        "",
+      ]);
+
+      const ws = XLSX.utils.aoa_to_sheet(ws_data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Ton kho hien tai");
+
+      // Xuất ra ArrayBuffer -> Uint8Array
+      const buffer = XLSX.write(wb, {
+        bookType: "xlsx",
+        type: "array",
+      }) as ArrayBuffer;
+      const bytes = new Uint8Array(buffer);
+
+      // Lưu file vào Document/reports
+      const dir = new Directory(Paths.document, "reports");
+      dir.create({ intermediates: true, idempotent: true });
+
+      const filename = `TonKho_HienTai_${sanitizeFileName(storeName)}_${formatDateFile(now)}.xlsx`;
+      const file = new File(dir, filename);
+      file.create({ intermediates: true, overwrite: true });
+      file.write(bytes);
+
+      // Share (nếu có expo-sharing thì share luôn, không thì báo đường dẫn)
+      let shared = false;
+      try {
+        const Sharing = await import("expo-sharing");
+        const canShare = await Sharing.isAvailableAsync();
+        if (canShare) {
+          await Sharing.shareAsync(file.uri, {
+            mimeType:
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            dialogTitle: "Xuất báo cáo tồn kho",
+            UTI: "com.microsoft.excel.xlsx",
+          });
+          shared = true;
+        }
+      } catch {
+        // app chưa cài expo-sharing -> bỏ qua
+      }
+
+      if (!shared) {
+        Alert.alert(
+          "Xuất Excel thành công",
+          `Đã lưu file:\n${file.uri}\n\n(Gợi ý: cài expo-sharing để mở hộp thoại chia sẻ)`
+        );
+      }
+    } catch (err: any) {
+      console.error("❌ Export excel error:", err);
+      Alert.alert("Lỗi", err?.message || "Không thể xuất Excel");
+    } finally {
+      setExporting(false);
     }
-    return years;
   };
 
-  // ========== LOW STOCK COUNT ==========
-  const lowStockCount =
-    reportData?.details.filter((item) => item.lowStock).length || 0;
+  // ===== RENDER ITEM =====
+  const renderProductItem = ({ item }: { item: ProductDetail }) => {
+    const stockColor = item.lowStock ? "#f97316" : "#16a34a";
 
-  // ========== RENDER PRODUCT ITEM ==========
-  const renderProductItem = ({
-    item,
-  }: {
-    item: ProductDetail;
-  }): JSX.Element => {
     return (
-      <View
-        style={[
-          styles.productCard,
-          item.lowStock && styles.productCardLowStock,
-        ]}
-      >
-        {/* Header Row */}
-        <View style={styles.productHeader}>
-          <View style={{ flex: 1 }}>
-            <View style={styles.productNameRow}>
-              {item.lowStock && (
-                <Ionicons name="warning" size={18} color="#ef4444" />
-              )}
-              <Text
-                style={[
-                  styles.productName,
-                  item.lowStock && styles.productNameLow,
-                ]}
-              >
-                {item.productName}
-              </Text>
-            </View>
-            <Text style={styles.productSku}>SKU: {item.sku}</Text>
-          </View>
-          <Text style={styles.productIndex}>#{item.index}</Text>
-        </View>
-
-        {/* Stock Info Grid */}
-        <View style={styles.stockGrid}>
-          <View style={styles.stockItem}>
-            <Text style={styles.stockLabel}>Tồn đầu</Text>
-            <Text style={styles.stockValue}>{item.openingStock}</Text>
-          </View>
-          <View style={styles.stockItem}>
-            <Text style={styles.stockLabel}>Nhập</Text>
-            <Text style={[styles.stockValue, { color: "#52c41a" }]}>
-              +{item.importedQty}
-            </Text>
-          </View>
-          <View style={styles.stockItem}>
-            <Text style={styles.stockLabel}>Xuất</Text>
-            <Text style={[styles.stockValue, { color: "#ef4444" }]}>
-              -{item.exportedQty}
-            </Text>
-          </View>
-          <View style={styles.stockItem}>
-            <Text style={styles.stockLabel}>Trả NCC</Text>
-            <Text style={[styles.stockValue, { color: "#1890ff" }]}>
-              {item.returnedQty}
-            </Text>
-          </View>
-        </View>
-
-        {/* Closing Stock & Value */}
-        <View style={styles.productFooter}>
-          <View style={styles.footerItem}>
-            <Text style={styles.footerLabel}>Tồn cuối kỳ</Text>
+      <View style={styles.itemCard}>
+        <View style={styles.itemHeaderRow}>
+          <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
+            {item.lowStock && (
+              <Ionicons
+                name="warning"
+                size={16}
+                color="#ef4444"
+                style={{ marginRight: 6 }}
+              />
+            )}
             <Text
-              style={[
-                styles.footerValue,
-                { color: item.lowStock ? "#ef4444" : "#52c41a" },
-              ]}
+              style={[styles.itemName, item.lowStock && { color: "#b91c1c" }]}
+              numberOfLines={2}
             >
-              {item.closingStock}
+              {item.index}. {item.productName}
             </Text>
           </View>
-          <View style={styles.footerDivider} />
-          <View style={styles.footerItem}>
-            <Text style={styles.footerLabel}>Giá trị tồn</Text>
-            <Text style={[styles.footerValue, { color: "#1890ff" }]}>
-              {formatVND(item.closingValue)}
-            </Text>
+          <View style={styles.skuBadge}>
+            <Text style={styles.skuText}>{item.sku}</Text>
           </View>
         </View>
 
-        {/* Low Stock Badge */}
-        {item.lowStock && (
-          <View style={styles.lowStockBadge}>
-            <Ionicons name="alert-circle" size={14} color="#fff" />
-            <Text style={styles.lowStockText}>Tồn thấp</Text>
+        <View style={styles.itemRow}>
+          <Text style={styles.itemLabel}>Tồn kho</Text>
+          <Text style={[styles.itemValue, { color: stockColor }]}>
+            {item.closingStock}
+          </Text>
+        </View>
+
+        <View style={styles.itemRow}>
+          <Text style={styles.itemLabel}>Giá vốn</Text>
+          <Text style={styles.itemValue}>{formatCurrency(item.costPrice)}</Text>
+        </View>
+
+        <View style={styles.itemRow}>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <Ionicons
+              name="information-circle-outline"
+              size={14}
+              color="#0ea5e9"
+              style={{ marginRight: 4 }}
+            />
+            <Text style={styles.itemLabel}>Giá trị tồn</Text>
           </View>
-        )}
+          <Text style={[styles.itemValue, { color: "#f59e0b", fontSize: 15 }]}>
+            {formatCurrency(item.closingValue)}
+          </Text>
+        </View>
+
+        <View style={styles.statusRow}>
+          <View
+            style={[
+              styles.statusTag,
+              item.lowStock ? styles.statusTagDanger : styles.statusTagNormal,
+            ]}
+          >
+            <View
+              style={[
+                styles.statusDot,
+                { backgroundColor: item.lowStock ? "#ef4444" : "#22c55e" },
+              ]}
+            />
+            <Text
+              style={[styles.statusText, item.lowStock && { color: "#b91c1c" }]}
+            >
+              {item.lowStock ? "Tồn kho thấp" : "Bình thường"}
+            </Text>
+          </View>
+        </View>
       </View>
     );
   };
 
-  // ========== RENDER ==========
+  // ===== GUARD: CHƯA CHỌN CỬA HÀNG =====
   if (!storeId) {
     return (
-      <View style={styles.errorContainer}>
+      <View style={styles.center}>
         <Ionicons name="alert-circle-outline" size={64} color="#ef4444" />
-        <Text style={styles.errorTitle}>Chưa chọn cửa hàng</Text>
-        <Text style={styles.errorText}>Vui lòng chọn cửa hàng trước</Text>
+        <Text style={styles.centerTitle}>Chưa chọn cửa hàng</Text>
+        <Text style={styles.centerText}>
+          Vui lòng chọn cửa hàng trước khi xem báo cáo tồn kho.
+        </Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerIcon}>
-          <Ionicons name="cube" size={32} color="#13c2c2" />
-        </View>
-        <View style={styles.headerTextContainer}>
-          <Text style={styles.headerTitle}>Báo cáo tồn kho</Text>
-          <Text style={styles.headerSubtitle}>{storeName}</Text>
-        </View>
-      </View>
-
-      {/* ✅ Collapsible Filter Section */}
-      <View style={styles.filterSection}>
-        <TouchableOpacity
-          style={styles.filterToggle}
-          onPress={() => setIsFilterExpanded(!isFilterExpanded)}
-          activeOpacity={0.7}
-        >
-          <View style={styles.filterToggleLeft}>
-            <Ionicons name="funnel" size={20} color="#1890ff" />
-            <Text style={styles.filterToggleText}>
-              {isFilterExpanded ? "Thu gọn bộ lọc" : "Mở rộng bộ lọc"}
+      {/* HEADER */}
+      <LinearGradient
+        colors={["#0ea5e9", "#6366f1", "#8b5cf6"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.header}
+      >
+        <View style={styles.headerTopRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.headerTitle}>Báo cáo tồn kho</Text>
+            <View style={styles.headerStoreRow}>
+              <Ionicons
+                name="storefront-outline"
+                size={14}
+                color="rgba(255,255,255,0.9)"
+              />
+              <Text style={styles.headerStore}>{storeName}</Text>
+            </View>
+            <Text style={styles.headerSubtitle}>
+              Dữ liệu tồn kho cập nhật theo thời gian thực
             </Text>
           </View>
-          <Ionicons
-            name={isFilterExpanded ? "chevron-up" : "chevron-down"}
-            size={20}
-            color="#1890ff"
-          />
-        </TouchableOpacity>
 
-        {isFilterExpanded && (
-          <View style={styles.filterContent}>
-            {/* Period Type */}
-            <Text style={styles.filterLabel}>Kỳ báo cáo</Text>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={periodType}
-                onValueChange={(value: PeriodType) => setPeriodType(value)}
-                style={styles.picker}
-              >
-                <Picker.Item label="Realtime (tồn hiện tại)" value="realtime" />
-                <Picker.Item label="Theo tháng" value="month" />
-                <Picker.Item label="Theo quý" value="quarter" />
-                <Picker.Item label="Theo năm" value="year" />
-                <Picker.Item label="Tùy chỉnh khoảng tháng" value="custom" />
-              </Picker>
+          <View style={styles.headerButtons}>
+            {/* Export Excel */}
+            <TouchableOpacity
+              style={styles.headerIconBtn}
+              onPress={exportExcel}
+              disabled={exporting || loading || !reportData}
+            >
+              {exporting ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Ionicons name="download-outline" size={20} color="#fff" />
+              )}
+            </TouchableOpacity>
+
+            {/* Refresh */}
+            <TouchableOpacity
+              style={styles.headerIconBtn}
+              onPress={() => fetchRealtimeReport(false)}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Ionicons name="refresh" size={20} color="#fff" />
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* SUMMARY CHIP ROW */}
+        {reportData && (
+          <View style={styles.summaryChipsRow}>
+            <View style={styles.summaryChip}>
+              <Ionicons name="cube-outline" size={16} color="#e0f2fe" />
+              <Text style={styles.summaryChipLabel}>Sản phẩm</Text>
+              <Text style={styles.summaryChipValue}>
+                {reportData.summary.totalProducts}
+              </Text>
             </View>
 
-            {/* Period Selection */}
-            {periodType !== "realtime" && (
-              <>
-                <Text style={styles.filterLabel}>Năm</Text>
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    selectedValue={selectedYear}
-                    onValueChange={(value: number) => setSelectedYear(value)}
-                    style={styles.picker}
-                  >
-                    {generateYears().map((year) => (
-                      <Picker.Item
-                        key={year}
-                        label={year.toString()}
-                        value={year}
-                      />
-                    ))}
-                  </Picker>
-                </View>
+            <View style={styles.summaryChip}>
+              <Ionicons name="layers-outline" size={16} color="#dcfce7" />
+              <Text style={styles.summaryChipLabel}>Tổng tồn</Text>
+              <Text style={styles.summaryChipValue}>
+                {reportData.summary.totalStock}
+              </Text>
+            </View>
 
-                {periodType === "month" && (
-                  <>
-                    <Text style={styles.filterLabel}>Tháng</Text>
-                    <View style={styles.pickerContainer}>
-                      <Picker
-                        selectedValue={selectedMonth}
-                        onValueChange={(value: number) =>
-                          setSelectedMonth(value)
-                        }
-                        style={styles.picker}
-                      >
-                        {Array.from({ length: 12 }, (_, i) => i + 1).map(
-                          (month) => (
-                            <Picker.Item
-                              key={month}
-                              label={`Tháng ${month}`}
-                              value={month}
-                            />
-                          )
-                        )}
-                      </Picker>
-                    </View>
-                  </>
-                )}
+            <View style={styles.summaryChip}>
+              <Ionicons name="cash-outline" size={16} color="#fef3c7" />
+              <Text style={styles.summaryChipLabel}>Giá trị tồn</Text>
+              <Text style={styles.summaryChipValue} numberOfLines={1}>
+                {formatCurrency(reportData.summary.totalValue)}
+              </Text>
+            </View>
 
-                {periodType === "quarter" && (
-                  <>
-                    <Text style={styles.filterLabel}>Quý</Text>
-                    <View style={styles.pickerContainer}>
-                      <Picker
-                        selectedValue={selectedQuarter}
-                        onValueChange={(value: number) =>
-                          setSelectedQuarter(value)
-                        }
-                        style={styles.picker}
-                      >
-                        <Picker.Item label="Quý 1" value={1} />
-                        <Picker.Item label="Quý 2" value={2} />
-                        <Picker.Item label="Quý 3" value={3} />
-                        <Picker.Item label="Quý 4" value={4} />
-                      </Picker>
-                    </View>
-                  </>
-                )}
-
-                {periodType === "custom" && (
-                  <>
-                    <Text style={styles.filterLabel}>Từ tháng</Text>
-                    <View style={styles.customRangeRow}>
-                      <View style={[styles.pickerContainer, { flex: 1 }]}>
-                        <Picker
-                          selectedValue={customMonthFrom}
-                          onValueChange={(value: number) =>
-                            setCustomMonthFrom(value)
-                          }
-                          style={styles.picker}
-                        >
-                          {Array.from({ length: 12 }, (_, i) => i + 1).map(
-                            (month) => (
-                              <Picker.Item
-                                key={month}
-                                label={`Tháng ${month}`}
-                                value={month}
-                              />
-                            )
-                          )}
-                        </Picker>
-                      </View>
-                      <View
-                        style={[
-                          styles.pickerContainer,
-                          { flex: 1, marginLeft: 8 },
-                        ]}
-                      >
-                        <Picker
-                          selectedValue={customYearFrom}
-                          onValueChange={(value: number) =>
-                            setCustomYearFrom(value)
-                          }
-                          style={styles.picker}
-                        >
-                          {generateYears().map((year) => (
-                            <Picker.Item
-                              key={year}
-                              label={year.toString()}
-                              value={year}
-                            />
-                          ))}
-                        </Picker>
-                      </View>
-                    </View>
-
-                    <Text style={styles.filterLabel}>Đến tháng</Text>
-                    <View style={styles.customRangeRow}>
-                      <View style={[styles.pickerContainer, { flex: 1 }]}>
-                        <Picker
-                          selectedValue={customMonthTo}
-                          onValueChange={(value: number) =>
-                            setCustomMonthTo(value)
-                          }
-                          style={styles.picker}
-                        >
-                          {Array.from({ length: 12 }, (_, i) => i + 1).map(
-                            (month) => (
-                              <Picker.Item
-                                key={month}
-                                label={`Tháng ${month}`}
-                                value={month}
-                              />
-                            )
-                          )}
-                        </Picker>
-                      </View>
-                      <View
-                        style={[
-                          styles.pickerContainer,
-                          { flex: 1, marginLeft: 8 },
-                        ]}
-                      >
-                        <Picker
-                          selectedValue={customYearTo}
-                          onValueChange={(value: number) =>
-                            setCustomYearTo(value)
-                          }
-                          style={styles.picker}
-                        >
-                          {generateYears().map((year) => (
-                            <Picker.Item
-                              key={year}
-                              label={year.toString()}
-                              value={year}
-                            />
-                          ))}
-                        </Picker>
-                      </View>
-                    </View>
-                  </>
-                )}
-              </>
-            )}
-
-            {/* Action Buttons */}
-            <View style={styles.filterActions}>
-              <TouchableOpacity
-                style={[styles.actionBtn, styles.actionBtnPrimary]}
-                onPress={() => fetchReport(false)}
-                disabled={loading}
-                activeOpacity={0.8}
+            <View style={styles.summaryChip}>
+              <Ionicons
+                name="alert-circle-outline"
+                size={16}
+                color={lowStockCount > 0 ? "#fee2e2" : "#dcfce7"}
+              />
+              <Text style={styles.summaryChipLabel}>Tồn thấp</Text>
+              <Text
+                style={[
+                  styles.summaryChipValue,
+                  lowStockCount > 0 && { color: "#fee2e2" },
+                ]}
               >
-                <LinearGradient
-                  colors={["#1890ff", "#096dd9"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.actionBtnGradient}
-                >
-                  {loading ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <>
-                      <Ionicons name="search" size={18} color="#fff" />
-                      <Text style={styles.actionBtnText}>Xem báo cáo</Text>
-                    </>
-                  )}
-                </LinearGradient>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.actionBtn, styles.actionBtnSecondary]}
-                onPress={() => fetchReport(true)}
-                disabled={!reportData || loading}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="reload" size={18} color="#6b7280" />
-                <Text style={styles.actionBtnTextSecondary}>Làm mới</Text>
-              </TouchableOpacity>
+                {lowStockCount}/{reportData.summary.totalProducts}
+              </Text>
             </View>
           </View>
         )}
-      </View>
+      </LinearGradient>
 
+      {/* BODY */}
       <ScrollView
-        style={styles.scrollView}
+        style={styles.body}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => fetchReport(true)}
-            colors={["#13c2c2"]}
+            onRefresh={() => fetchRealtimeReport(true)}
+            colors={["#2563eb"]}
+            tintColor="#2563eb"
           />
         }
       >
-        {/* Loading */}
-        {loading && !refreshing && (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#13c2c2" />
-            <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
+        {/* Error */}
+        {error && (
+          <View style={styles.errorBox}>
+            <Ionicons name="alert-circle" size={20} color="#b91c1c" />
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity onPress={() => setError(null)}>
+              <Ionicons name="close-circle" size={20} color="#b91c1c" />
+            </TouchableOpacity>
           </View>
         )}
 
-        {/* Empty State */}
-        {!loading && !reportData && (
-          <View style={styles.emptyContainer}>
-            <Ionicons name="cube-outline" size={64} color="#d1d5db" />
-            <Text style={styles.emptyTitle}>Chưa có dữ liệu</Text>
-            <Text style={styles.emptyText}>
-              Chọn kỳ báo cáo và nhấn "Xem báo cáo" để hiển thị dữ liệu
+        {/* Info realtime */}
+        <View style={styles.infoBox}>
+          <Ionicons name="time-outline" size={20} color="#2563eb" />
+          <View style={{ flex: 1, marginLeft: 10 }}>
+            <Text style={styles.infoTitle}>Tồn kho hiện tại</Text>
+            <Text style={styles.infoDesc}>
+              Mỗi phiếu nhập, xuất, bán hàng sẽ tự động cập nhật số lượng tồn
+              ngay tại đây.
+            </Text>
+          </View>
+        </View>
+
+        {/* Search + Count */}
+        <View style={styles.searchRow}>
+          <View style={styles.searchInputWrapper}>
+            <Ionicons
+              name="search-outline"
+              size={18}
+              color="#6b7280"
+              style={{ marginRight: 6 }}
+            />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Tìm sản phẩm hoặc mã SKU..."
+              placeholderTextColor="#9ca3af"
+              value={searchText}
+              onChangeText={setSearchText}
+            />
+            {searchText ? (
+              <TouchableOpacity onPress={() => setSearchText("")}>
+                <Ionicons name="close-circle" size={18} color="#9ca3af" />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
+          {reportData && (
+            <Text style={styles.searchCount}>
+              {filteredData.length}/{reportData.summary.totalProducts} mặt hàng
+            </Text>
+          )}
+        </View>
+
+        {/* Loading */}
+        {loading && !refreshing && (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator size="large" color="#2563eb" />
+            <Text style={styles.loadingLabel}>
+              Đang tải tồn kho hiện tại...
             </Text>
           </View>
         )}
 
-        {/* Report Content */}
-        {!loading && reportData && (
-          <>
-            {/* Summary Cards */}
-            <View style={styles.summaryGrid}>
-              <View style={styles.summaryCard}>
-                <Ionicons name="albums" size={28} color="#1890ff" />
-                <Text style={styles.summaryLabel}>Tổng sản phẩm</Text>
-                <Text style={[styles.summaryValue, { color: "#1890ff" }]}>
-                  {reportData.summary.totalProducts}
-                </Text>
-              </View>
-
-              <View style={styles.summaryCard}>
-                <Ionicons name="cube" size={28} color="#52c41a" />
-                <Text style={styles.summaryLabel}>Tổng tồn kho</Text>
-                <Text style={[styles.summaryValue, { color: "#52c41a" }]}>
-                  {reportData.summary.totalStock}
-                </Text>
-              </View>
-
-              <View style={styles.summaryCard}>
-                <Ionicons name="cash" size={28} color="#faad14" />
-                <Text style={styles.summaryLabel}>Tổng giá trị</Text>
-                <Text
-                  style={[
-                    styles.summaryValue,
-                    { color: "#faad14", fontSize: 16 },
-                  ]}
-                >
-                  {formatVND(reportData.summary.totalValue)}
-                </Text>
-              </View>
-
-              <View style={styles.summaryCard}>
-                <Ionicons
-                  name="alert-circle"
-                  size={28}
-                  color={lowStockCount > 0 ? "#ef4444" : "#52c41a"}
-                />
-                <Text style={styles.summaryLabel}>Tồn thấp</Text>
-                <Text
-                  style={[
-                    styles.summaryValue,
-                    { color: lowStockCount > 0 ? "#ef4444" : "#52c41a" },
-                  ]}
-                >
-                  {lowStockCount}/{reportData.summary.totalProducts}
-                </Text>
-              </View>
-            </View>
-
-            {/* Low Stock Alert */}
-            {lowStockCount > 0 && (
-              <View style={styles.warningAlert}>
-                <Ionicons name="warning" size={20} color="#f59e0b" />
-                <Text style={styles.warningText}>
-                  Có {lowStockCount} sản phẩm tồn kho thấp! Vui lòng nhập hàng
-                  kịp thời.
-                </Text>
-              </View>
-            )}
-
-            {/* Search Box */}
-            <View style={styles.searchBox}>
-              <Ionicons name="search" size={20} color="#6b7280" />
-              <TextInput
-                style={styles.searchInput}
-                value={searchText}
-                onChangeText={setSearchText}
-                placeholder="Tìm tên sản phẩm hoặc SKU..."
-                placeholderTextColor="#9ca3af"
-              />
-              {searchText.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchText("")}>
-                  <Ionicons name="close-circle" size={20} color="#6b7280" />
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {/* Product List Header */}
-            <View style={styles.listHeader}>
-              <Text style={styles.listHeaderTitle}>
-                Chi tiết - {formatPeriodLabel()}
-              </Text>
-              <Text style={styles.listHeaderCount}>
-                {getFilteredData().length} sản phẩm
-              </Text>
-            </View>
-
-            {/* Product List */}
-            <FlatList
-              data={getFilteredData()}
-              renderItem={renderProductItem}
-              keyExtractor={(item) => item.productId}
-              scrollEnabled={false}
-              contentContainerStyle={styles.productList}
-              ListEmptyComponent={
-                <View style={styles.emptyContainer}>
-                  <Ionicons name="search-outline" size={48} color="#d1d5db" />
-                  <Text style={styles.emptyText}>Không tìm thấy sản phẩm</Text>
-                </View>
-              }
-            />
-          </>
+        {/* Empty */}
+        {!loading && reportData && reportData.details.length === 0 && (
+          <View style={styles.emptyBox}>
+            <Ionicons name="cube-outline" size={40} color="#9ca3af" />
+            <Text style={styles.emptyTitle}>Chưa có sản phẩm nào</Text>
+            <Text style={styles.emptyDesc}>
+              Vui lòng tạo sản phẩm và nhập kho để xem báo cáo tồn.
+            </Text>
+          </View>
         )}
 
-        <View style={styles.bottomSpacer} />
+        {/* List */}
+        {!loading && reportData && reportData.details.length > 0 && (
+          <FlatList
+            data={filteredData}
+            keyExtractor={(item) => item.productId}
+            renderItem={renderProductItem}
+            scrollEnabled={false}
+            contentContainerStyle={styles.listContent}
+          />
+        )}
+
+        <View style={{ height: 40 }} />
       </ScrollView>
     </View>
   );
@@ -738,384 +553,214 @@ const InventoryReportScreen: React.FC = () => {
 
 export default InventoryReportScreen;
 
-// ========== STYLES ==========
+// ===== STYLES =====
 const styles = StyleSheet.create({
-  container: {
+  container: { flex: 1, backgroundColor: "#f8fafc" },
+  center: {
     flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
     backgroundColor: "#f8fafc",
-  },
-  scrollView: {
-    flex: 1,
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#f8fafc",
-    padding: 32,
-  },
-  errorTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#111827",
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  errorText: {
-    fontSize: 14,
-    color: "#6b7280",
-    textAlign: "center",
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#fff",
-    padding: 20,
-    paddingTop: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
-    gap: 14,
-  },
-  headerIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: "#e6fffb",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerTextContainer: {
-    flex: 1,
-  },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#111827",
-    marginBottom: 4,
-  },
-  headerSubtitle: {
-    fontSize: 13,
-    color: "#6b7280",
-  },
-  // ✅ Collapsible Filter Styles
-  filterSection: {
-    backgroundColor: "#fff",
-    marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    elevation: 3,
-  },
-  filterToggle: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 16,
-  },
-  filterToggleLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  filterToggleText: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#1890ff",
-  },
-  filterContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-    borderTopWidth: 1,
-    borderTopColor: "#f3f4f6",
-  },
-  filterLabel: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#374151",
-    marginBottom: 8,
-    marginTop: 12,
-  },
-  pickerContainer: {
-    backgroundColor: "#f9fafb",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    borderRadius: 12,
-    overflow: "hidden",
-  },
-  picker: {
-    height: 50,
-  },
-  customRangeRow: {
-    flexDirection: "row",
-  },
-  filterActions: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 20,
-  },
-  actionBtn: {
-    flex: 1,
-    borderRadius: 12,
-    overflow: "hidden",
-  },
-  actionBtnPrimary: {
-    shadowColor: "#1890ff",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  actionBtnSecondary: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    backgroundColor: "#f3f4f6",
-    paddingVertical: 14,
-    borderRadius: 12,
-  },
-  actionBtnGradient: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 14,
-    gap: 8,
-  },
-  actionBtnText: {
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  actionBtnTextSecondary: {
-    color: "#6b7280",
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  loadingContainer: {
-    alignItems: "center",
-    paddingVertical: 60,
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: "#6b7280",
-  },
-  emptyContainer: {
-    alignItems: "center",
-    paddingVertical: 60,
     paddingHorizontal: 32,
   },
-  emptyTitle: {
-    fontSize: 18,
+  centerTitle: {
+    fontSize: 20,
     fontWeight: "700",
     color: "#111827",
     marginTop: 16,
-    marginBottom: 8,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: "#6b7280",
+    marginBottom: 6,
     textAlign: "center",
-    lineHeight: 20,
   },
-  summaryGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
+  centerText: { fontSize: 14, color: "#6b7280", textAlign: "center" },
+
+  header: {
+    paddingTop: 10,
+    paddingBottom: 18,
     paddingHorizontal: 16,
-    marginTop: 16,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+    elevation: 8,
+    backgroundColor: "#10b981",
   },
-  summaryCard: {
-    width: "48%",
-    backgroundColor: "#fff",
-    padding: 16,
-    borderRadius: 12,
+  headerTopRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  headerTitle: { color: "#fff", fontSize: 22, fontWeight: "900" },
+  headerStoreRow: {
+    flexDirection: "row",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    elevation: 3,
+    gap: 6,
+    marginTop: 6,
   },
-  summaryLabel: {
-    fontSize: 12,
-    color: "#6b7280",
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  summaryValue: {
-    fontSize: 20,
+  headerStore: {
+    color: "rgba(255,255,255,0.96)",
+    fontSize: 13,
     fontWeight: "700",
   },
-  warningAlert: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#fffbeb",
-    marginHorizontal: 16,
-    marginTop: 16,
-    padding: 14,
-    borderRadius: 12,
+  headerSubtitle: {
+    marginTop: 4,
+    color: "rgba(241,245,249,0.95)",
+    fontSize: 12,
+  },
+  headerButtons: { flexDirection: "row", alignItems: "center", gap: 8 },
+  headerIconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     borderWidth: 1,
-    borderColor: "#fef3c7",
-    gap: 10,
+    borderColor: "rgba(255,255,255,0.4)",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(15,23,42,0.12)",
   },
-  warningText: {
+
+  summaryChipsRow: {
+    marginTop: 16,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  summaryChip: {
     flex: 1,
-    fontSize: 13,
-    color: "#92400e",
-    lineHeight: 18,
+    minWidth: "45%",
+    maxWidth: "48%",
+    backgroundColor: "rgba(15,23,42,0.16)",
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 14,
   },
-  searchBox: {
+  summaryChipLabel: { fontSize: 11, color: "rgba(226,232,240,0.92)" },
+  summaryChipValue: {
+    marginTop: 2,
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#f9fafb",
+  },
+
+  body: { flex: 1 },
+
+  errorBox: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
     marginHorizontal: 16,
     marginTop: 16,
     padding: 12,
     borderRadius: 12,
+    backgroundColor: "#fef2f2",
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    gap: 10,
+    borderColor: "#fecaca",
+    gap: 8,
   },
-  searchInput: {
-    flex: 1,
-    fontSize: 15,
-    color: "#111827",
-  },
-  listHeader: {
+  errorText: { flex: 1, fontSize: 13, color: "#b91c1c", fontWeight: "600" },
+
+  infoBox: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: "#eff6ff",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+  },
+  infoTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#1d4ed8",
+    marginBottom: 2,
+  },
+  infoDesc: { fontSize: 12, color: "#1e40af" },
+
+  searchRow: {
+    flexDirection: "row",
     alignItems: "center",
     marginHorizontal: 16,
     marginTop: 16,
-    marginBottom: 12,
+    gap: 8,
   },
-  listHeaderTitle: {
+  searchInputWrapper: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f9fafb",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  searchInput: { flex: 1, fontSize: 14, color: "#111827" },
+  searchCount: { fontSize: 11, color: "#6b7280", fontWeight: "600" },
+
+  loadingBox: { alignItems: "center", paddingVertical: 32 },
+  loadingLabel: { marginTop: 10, fontSize: 14, color: "#6b7280" },
+
+  emptyBox: { marginHorizontal: 16, marginTop: 32, alignItems: "center" },
+  emptyTitle: {
+    marginTop: 12,
     fontSize: 16,
     fontWeight: "700",
     color: "#111827",
   },
-  listHeaderCount: {
+  emptyDesc: {
+    marginTop: 4,
     fontSize: 13,
     color: "#6b7280",
-    fontWeight: "600",
+    textAlign: "center",
   },
-  productList: {
-    paddingHorizontal: 16,
-  },
-  productCard: {
+
+  listContent: { paddingHorizontal: 16, paddingTop: 12 },
+
+  itemCard: {
     backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: "#000",
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 10,
+    shadowColor: "#0f172a",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    elevation: 3,
-    position: "relative",
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
   },
-  productCardLowStock: {
-    borderWidth: 2,
-    borderColor: "#fecaca",
-  },
-  productHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 12,
-  },
-  productNameRow: {
+  itemHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-  },
-  productName: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#111827",
-    flex: 1,
-  },
-  productNameLow: {
-    color: "#ef4444",
-  },
-  productSku: {
-    fontSize: 12,
-    color: "#6b7280",
-    marginTop: 4,
-  },
-  productIndex: {
-    fontSize: 14,
-    color: "#6b7280",
-    fontWeight: "600",
-  },
-  stockGrid: {
-    flexDirection: "row",
-    gap: 8,
-    marginBottom: 12,
-  },
-  stockItem: {
-    flex: 1,
-    backgroundColor: "#f9fafb",
-    padding: 10,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  stockLabel: {
-    fontSize: 10,
-    color: "#6b7280",
-    marginBottom: 4,
-  },
-  stockValue: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#111827",
-  },
-  productFooter: {
-    flexDirection: "row",
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#f3f4f6",
-  },
-  footerItem: {
-    flex: 1,
-    alignItems: "center",
-  },
-  footerDivider: {
-    width: 1,
-    backgroundColor: "#e5e7eb",
-    marginHorizontal: 12,
-  },
-  footerLabel: {
-    fontSize: 11,
-    color: "#6b7280",
     marginBottom: 6,
   },
-  footerValue: {
-    fontSize: 16,
-    fontWeight: "700",
+  itemName: { fontSize: 14, fontWeight: "700", color: "#111827", flex: 1 },
+  skuBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: "#eff6ff",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
   },
-  lowStockBadge: {
-    position: "absolute",
-    top: 12,
-    right: 12,
+  skuText: { fontSize: 11, color: "#1d4ed8", fontWeight: "700" },
+
+  itemRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 4,
+  },
+  itemLabel: { fontSize: 12, color: "#6b7280" },
+  itemValue: { fontSize: 14, fontWeight: "700", color: "#111827" },
+
+  statusRow: { marginTop: 8, flexDirection: "row", justifyContent: "flex-end" },
+  statusTag: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    backgroundColor: "#ef4444",
-    paddingVertical: 4,
     paddingHorizontal: 8,
-    borderRadius: 6,
+    paddingVertical: 4,
+    borderRadius: 999,
   },
-  lowStockText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#fff",
-  },
-  bottomSpacer: {
-    height: 40,
-  },
+  statusTagDanger: { backgroundColor: "#fef2f2" },
+  statusTagNormal: { backgroundColor: "#ecfdf5" },
+  statusDot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
+  statusText: { fontSize: 11, fontWeight: "700", color: "#166534" },
 });

@@ -1,5 +1,5 @@
 // src/screens/reports/ReportsDashboardScreen.tsx
-import React, { useState, useEffect } from "react";
+import React, { useMemo, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -10,10 +10,14 @@ import {
   Alert,
   TextInput,
   RefreshControl,
+  Modal,
+  Pressable,
+  Platform,
+  SafeAreaView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { Picker } from "@react-native-picker/picker";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import dayjs from "dayjs";
 import quarterOfYear from "dayjs/plugin/quarterOfYear";
 import "dayjs/locale/vi";
@@ -36,11 +40,6 @@ interface FinancialData {
   stockDisposalCost: number;
 }
 
-interface ApiErrorResponse {
-  message?: string;
-  error?: string;
-}
-
 interface FinancialResponse {
   data: FinancialData;
   message?: string;
@@ -48,47 +47,63 @@ interface FinancialResponse {
 
 type PeriodType = "" | "month" | "quarter" | "year";
 
-// ========== COLORS ==========
-const COLORS = {
-  revenue: "#1890ff",
-  grossProfit: "#52c41a",
-  netProfit: "#722ed1",
-  operatingCost: "#fa8c16",
-  vat: "#f5222d",
-  stockValue: "#13c2c2",
+type AppliedFilter = {
+  periodType: PeriodType;
+  year: number;
+  month: number; // 1-12
+  quarter: 1 | 2 | 3 | 4;
 };
 
-// ========== MAIN COMPONENT ==========
+type PickerKind = null | "month" | "year" | "quarterYear";
+
+const COLORS = {
+  revenue: "#2563eb",
+  grossProfit: "#16a34a",
+  netProfit: "#7c3aed",
+  operatingCost: "#f97316",
+  vat: "#ef4444",
+  stockValue: "#06b6d4",
+};
+
 const ReportsDashboardScreen: React.FC = () => {
   const { currentStore } = useAuth();
   const storeId = currentStore?._id;
   const storeName = currentStore?.name || "Chưa chọn cửa hàng";
 
-  // States
+  // API states
   const [loading, setLoading] = useState<boolean>(false);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<FinancialData | null>(null);
 
-  // ✅ Collapsible filter state
-  const [isFilterExpanded, setIsFilterExpanded] = useState<boolean>(true);
-
-  // Filters
-  const [periodType, setPeriodType] = useState<PeriodType>("");
-  const [periodKey, setPeriodKey] = useState<string>("");
+  // Extra expenses
   const [extraExpenses, setExtraExpenses] = useState<number[]>([]);
   const [newExpense, setNewExpense] = useState<string>("");
 
-  // Period selection
-  const [selectedYear, setSelectedYear] = useState<number>(dayjs().year());
-  const [selectedMonth, setSelectedMonth] = useState<number>(
-    dayjs().month() + 1
-  );
-  const [selectedQuarter, setSelectedQuarter] = useState<number>(
-    dayjs().quarter()
-  );
+  // Applied filter (chỉ đổi khi bấm "Áp dụng")
+  const [applied, setApplied] = useState<AppliedFilter>({
+    periodType: "month",
+    year: dayjs().year(),
+    month: dayjs().month() + 1,
+    quarter: dayjs().quarter() as 1 | 2 | 3 | 4,
+  });
 
-  // ========== FORMAT VND ==========
+  // Bottom sheet filter
+  const [filterOpen, setFilterOpen] = useState(false);
+
+  // Draft filter trong sheet
+  const [dPeriodType, setDPeriodType] = useState<PeriodType>(
+    applied.periodType
+  );
+  const [dYear, setDYear] = useState<number>(applied.year);
+  const [dMonth, setDMonth] = useState<number>(applied.month);
+  const [dQuarter, setDQuarter] = useState<1 | 2 | 3 | 4>(applied.quarter);
+
+  // DateTimePicker modal with Cancel/Apply
+  const [pickerKind, setPickerKind] = useState<PickerKind>(null);
+  const [tempPickedDate, setTempPickedDate] = useState<Date>(new Date());
+
+  // ========== FORMATTERS ==========
   const formatVND = (value: number | undefined | null): string => {
     if (value === null || value === undefined) return "₫0";
     return new Intl.NumberFormat("vi-VN", {
@@ -98,37 +113,46 @@ const ReportsDashboardScreen: React.FC = () => {
     }).format(value);
   };
 
-  // ========== FORMAT NUMBER ==========
   const formatNumber = (value: string): string => {
     const number = value.replace(/[^0-9]/g, "");
     return number.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
   };
 
-  // ========== GET PROFIT COLOR ==========
   const getProfitColor = (value: number | undefined | null): string => {
-    if (value == null) return "#fa8c16";
-    if (value > 0) return "#52c41a";
-    if (value < 0) return "#f5222d";
-    return "#fa8c16";
+    if (value == null) return "#f97316";
+    if (value > 0) return "#16a34a";
+    if (value < 0) return "#ef4444";
+    return "#f97316";
   };
 
-  // ========== UPDATE PERIOD KEY ==========
-  useEffect(() => {
-    if (!periodType) {
-      setPeriodKey("");
-      return;
+  // ========== PERIOD KEY ==========
+  const periodKey = useMemo(() => {
+    if (!applied.periodType) return "";
+    if (applied.periodType === "month") {
+      return `${applied.year}-${String(applied.month).padStart(2, "0")}`;
     }
+    if (applied.periodType === "quarter") {
+      return `${applied.year}-Q${applied.quarter}`;
+    }
+    if (applied.periodType === "year") {
+      return String(applied.year);
+    }
+    return "";
+  }, [applied]);
 
-    let key = "";
-    if (periodType === "month") {
-      key = `${selectedYear}-${String(selectedMonth).padStart(2, "0")}`;
-    } else if (periodType === "quarter") {
-      key = `${selectedYear}-Q${selectedQuarter}`;
-    } else if (periodType === "year") {
-      key = selectedYear.toString();
-    }
-    setPeriodKey(key);
-  }, [periodType, selectedYear, selectedMonth, selectedQuarter]);
+  const isReadyToFetch = useMemo(() => {
+    return !!storeId && !!applied.periodType && !!periodKey;
+  }, [storeId, applied.periodType, periodKey]);
+
+  const periodDisplay = useMemo(() => {
+    if (!applied.periodType) return "Chưa chọn kỳ";
+    if (applied.periodType === "month")
+      return `Tháng ${applied.month}/${applied.year}`;
+    if (applied.periodType === "quarter")
+      return `Quý ${applied.quarter}/${applied.year}`;
+    if (applied.periodType === "year") return `Năm ${applied.year}`;
+    return "Chưa chọn kỳ";
+  }, [applied]);
 
   // ========== FETCH FINANCIAL ==========
   const fetchFinancial = async (isRefresh: boolean = false): Promise<void> => {
@@ -137,22 +161,21 @@ const ReportsDashboardScreen: React.FC = () => {
       return;
     }
 
-    if (!periodType || !periodKey) {
+    if (!applied.periodType || !periodKey) {
+      setError(null);
       setData(null);
       return;
     }
 
-    if (isRefresh) {
-      setRefreshing(true);
-    } else {
-      setLoading(true);
-    }
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+
     setError(null);
 
     try {
       const params = new URLSearchParams({
         storeId,
-        periodType,
+        periodType: applied.periodType,
         periodKey,
       });
 
@@ -163,20 +186,12 @@ const ReportsDashboardScreen: React.FC = () => {
       const response = await apiClient.get<FinancialResponse>(
         `/financials?${params.toString()}`
       );
-
       setData(response.data.data);
-      // ✅ Auto collapse filter sau khi load thành công
-      setIsFilterExpanded(false);
-      console.log("✅ Lấy báo cáo tài chính thành công");
-    } catch (err) {
-      const axiosError = err as any;
-      console.error("❌ Lỗi lấy báo cáo:", axiosError);
-
+    } catch (err: any) {
       const errorMessage =
-        axiosError.response?.data?.message ||
-        axiosError.response?.data?.error ||
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
         "Lỗi tải báo cáo tài chính";
-
       setError(errorMessage);
     } finally {
       setLoading(false);
@@ -184,55 +199,158 @@ const ReportsDashboardScreen: React.FC = () => {
     }
   };
 
-  // ========== AUTO FETCH ==========
+  // Auto fetch lần đầu nếu có storeId
   useEffect(() => {
-    if (periodType && periodKey) {
-      fetchFinancial();
-    }
+    if (storeId && applied.periodType) fetchFinancial(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [periodType, periodKey, extraExpenses]);
+  }, [storeId]);
 
-  // ========== ADD EXPENSE ==========
+  // Khi extraExpenses thay đổi và đã có kỳ áp dụng -> tự load lại (đỡ phải bấm lại)
+  useEffect(() => {
+    if (!storeId) return;
+    if (!applied.periodType || !periodKey) return;
+    // tránh gọi khi đang mở filter sửa dở
+    if (filterOpen) return;
+    fetchFinancial(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [extraExpenses]);
+
+  // ========== EXPENSE ACTIONS ==========
   const addExtraExpense = (): void => {
     const value = parseFloat(newExpense.replace(/\./g, ""));
     if (!isNaN(value) && value > 0) {
-      setExtraExpenses([...extraExpenses, value]);
+      setExtraExpenses((prev) => [...prev, value]);
       setNewExpense("");
     } else {
       Alert.alert("Lỗi", "Vui lòng nhập số tiền hợp lệ");
     }
   };
 
-  // ========== REMOVE EXPENSE ==========
   const removeExpense = (index: number): void => {
-    setExtraExpenses(extraExpenses.filter((_, idx) => idx !== index));
+    setExtraExpenses((prev) => prev.filter((_, idx) => idx !== index));
   };
 
-  // ========== GENERATE YEARS ==========
-  const generateYears = (): number[] => {
-    const currentYear = dayjs().year();
-    const years: number[] = [];
-    for (let i = currentYear; i >= currentYear - 5; i--) {
-      years.push(i);
+  const clearAllExpense = (): void => {
+    Alert.alert("Xác nhận", "Xóa tất cả chi phí ngoài?", [
+      { text: "Hủy", style: "cancel" },
+      {
+        text: "Xóa",
+        style: "destructive",
+        onPress: () => setExtraExpenses([]),
+      },
+    ]);
+  };
+
+  // ========== FILTER SHEET ==========
+  const openFilter = () => {
+    setDPeriodType(applied.periodType);
+    setDYear(applied.year);
+    setDMonth(applied.month);
+    setDQuarter(applied.quarter);
+    setFilterOpen(true);
+  };
+
+  const closeFilter = () => setFilterOpen(false);
+
+  const validateDraft = (): string | null => {
+    if (!storeId) return "Vui lòng chọn cửa hàng";
+    if (!dPeriodType) return "Vui lòng chọn kỳ báo cáo";
+    if (dPeriodType === "month") {
+      if (dMonth < 1 || dMonth > 12) return "Tháng không hợp lệ";
+      if (dYear < 2000 || dYear > 2100) return "Năm không hợp lệ";
     }
-    return years;
-  };
-
-  // ========== GET PERIOD DISPLAY TEXT ==========
-  const getPeriodDisplayText = (): string => {
-    if (!periodType) return "Chưa chọn kỳ";
-
-    if (periodType === "month") {
-      return `Tháng ${selectedMonth}/${selectedYear}`;
-    } else if (periodType === "quarter") {
-      return `Quý ${selectedQuarter}/${selectedYear}`;
-    } else if (periodType === "year") {
-      return `Năm ${selectedYear}`;
+    if (dPeriodType === "quarter") {
+      if (![1, 2, 3, 4].includes(dQuarter)) return "Quý không hợp lệ";
+      if (dYear < 2000 || dYear > 2100) return "Năm không hợp lệ";
     }
-    return "";
+    if (dPeriodType === "year") {
+      if (dYear < 2000 || dYear > 2100) return "Năm không hợp lệ";
+    }
+    return null;
   };
 
-  // ========== RENDER ==========
+  const applyFilter = async () => {
+    const err = validateDraft();
+    if (err) return Alert.alert("Thiếu thông tin", err);
+
+    const next: AppliedFilter = {
+      periodType: dPeriodType,
+      year: dYear,
+      month: dMonth,
+      quarter: dQuarter,
+    };
+
+    setApplied(next);
+    setFilterOpen(false);
+
+    // fetch ngay sau apply (tránh cảm giác “bấm mà không chạy”)
+    // dùng setTimeout 0 để đảm bảo state đã commit trước khi fetch đọc applied/periodKey
+    setTimeout(() => {
+      fetchFinancial(false);
+    }, 0);
+  };
+
+  const FilterChip = ({
+    label,
+    active,
+    onPress,
+    icon,
+  }: {
+    label: string;
+    active?: boolean;
+    onPress: () => void;
+    icon?: keyof typeof Ionicons.glyphMap;
+  }) => (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.9}
+      style={[styles.chip, active ? styles.chipActive : styles.chipInactive]}
+    >
+      {!!icon && (
+        <Ionicons name={icon} size={14} color={active ? "#fff" : "#0f172a"} />
+      )}
+      <Text
+        style={[
+          styles.chipText,
+          active ? styles.chipTextActive : styles.chipTextInactive,
+        ]}
+      >
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
+
+  // ========== DATE PICKER HELPERS ==========
+  const openPicker = (kind: PickerKind) => {
+    setPickerKind(kind);
+
+    if (kind === "month") {
+      setTempPickedDate(
+        dayjs(`${dYear}-${String(dMonth).padStart(2, "0")}-01`).toDate()
+      );
+      return;
+    }
+    if (kind === "year" || kind === "quarterYear") {
+      setTempPickedDate(dayjs(`${dYear}-01-01`).toDate());
+      return;
+    }
+    setTempPickedDate(new Date());
+  };
+
+  const cancelPicker = () => setPickerKind(null);
+
+  const confirmPicker = () => {
+    const d = dayjs(tempPickedDate);
+    if (pickerKind === "month") {
+      setDYear(d.year());
+      setDMonth(d.month() + 1);
+    } else if (pickerKind === "year" || pickerKind === "quarterYear") {
+      setDYear(d.year());
+    }
+    setPickerKind(null);
+  };
+
+  // ========== RENDER GUARD ==========
   if (!storeId) {
     return (
       <View style={styles.errorContainer}>
@@ -244,416 +362,601 @@ const ReportsDashboardScreen: React.FC = () => {
   }
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerIcon}>
-          <Ionicons name="stats-chart" size={32} color="#1890ff" />
-        </View>
-        <View style={styles.headerTextContainer}>
-          <Text style={styles.headerTitle}>Báo cáo tổng quan</Text>
-          <Text style={styles.headerSubtitle}>{storeName}</Text>
-        </View>
-      </View>
-
-      {/* ✅ Collapsible Filter Section */}
-      <View style={styles.filterSection}>
-        <TouchableOpacity
-          style={styles.filterToggle}
-          onPress={() => setIsFilterExpanded(!isFilterExpanded)}
-          activeOpacity={0.7}
+    <SafeAreaView style={styles.safe}>
+      <View style={styles.container}>
+        {/* Header gradient */}
+        <LinearGradient
+          colors={["#0ea5e9", "#6366f1", "#7c3aed"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.header}
         >
-          <View style={styles.filterToggleLeft}>
-            <Ionicons name="funnel" size={20} color="#1890ff" />
+          <View style={styles.headerTop}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.filterToggleText}>
-                {isFilterExpanded ? "Thu gọn bộ lọc" : "Mở rộng bộ lọc"}
-              </Text>
-              {!isFilterExpanded && periodType && (
-                <Text style={styles.filterTogglePeriod}>
-                  {getPeriodDisplayText()}
-                  {extraExpenses.length > 0 &&
-                    ` • ${extraExpenses.length} chi phí ngoài`}
+              <Text style={styles.headerTitle}>Báo cáo tổng quan</Text>
+              <View style={styles.headerSubRow}>
+                <Ionicons
+                  name="storefront-outline"
+                  size={14}
+                  color="rgba(255,255,255,0.92)"
+                />
+                <Text style={styles.headerSubtitle} numberOfLines={1}>
+                  {storeName}
                 </Text>
-              )}
+              </View>
             </View>
+
+            <TouchableOpacity style={styles.headerIconBtn} onPress={openFilter}>
+              <Ionicons name="options-outline" size={20} color="#fff" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.headerIconBtn}
+              onPress={() => fetchFinancial(false)}
+              disabled={!isReadyToFetch || loading}
+            >
+              <Ionicons name="refresh" size={20} color="#fff" />
+            </TouchableOpacity>
           </View>
-          <Ionicons
-            name={isFilterExpanded ? "chevron-up" : "chevron-down"}
-            size={20}
-            color="#1890ff"
-          />
-        </TouchableOpacity>
 
-        {isFilterExpanded && (
-          <View style={styles.filterContent}>
-            {/* Period Type */}
-            <Text style={styles.filterLabel}>Kỳ báo cáo</Text>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={periodType}
-                onValueChange={(value: PeriodType) => {
-                  setPeriodType(value);
-                  setData(null);
-                }}
-                style={styles.picker}
-              >
-                <Picker.Item label="Chưa chọn" value="" />
-                <Picker.Item label="Theo tháng" value="month" />
-                <Picker.Item label="Theo quý" value="quarter" />
-                <Picker.Item label="Theo năm" value="year" />
-              </Picker>
+          <View style={styles.headerPills}>
+            <View style={styles.headerPill}>
+              <Ionicons name="calendar-outline" size={14} color="#fff" />
+              <Text style={styles.headerPillText}>{periodDisplay}</Text>
             </View>
 
-            {/* Period Selection */}
-            {periodType && (
+            <TouchableOpacity style={styles.headerPill} onPress={openFilter}>
+              <Ionicons name="funnel-outline" size={14} color="#fff" />
+              <Text style={styles.headerPillText}>
+                Bộ lọc{" "}
+                {extraExpenses.length > 0
+                  ? `• ${extraExpenses.length} CP ngoài`
+                  : ""}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </LinearGradient>
+
+        {/* Filter quick bar */}
+        <View style={styles.topBar}>
+          <TouchableOpacity
+            style={styles.primaryBtn}
+            onPress={openFilter}
+            activeOpacity={0.9}
+          >
+            <Ionicons name="funnel" size={18} color="#fff" />
+            <Text style={styles.primaryBtnText}>Chọn kỳ & chi phí</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.secondaryBtn,
+              (!isReadyToFetch || loading) && { opacity: 0.5 },
+            ]}
+            onPress={() => fetchFinancial(false)}
+            disabled={!isReadyToFetch || loading}
+            activeOpacity={0.9}
+          >
+            {loading ? (
+              <ActivityIndicator color="#0f172a" />
+            ) : (
               <>
-                <Text style={styles.filterLabel}>Năm</Text>
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    selectedValue={selectedYear}
-                    onValueChange={(value: number) => setSelectedYear(value)}
-                    style={styles.picker}
-                  >
-                    {generateYears().map((year) => (
-                      <Picker.Item
-                        key={year}
-                        label={year.toString()}
-                        value={year}
-                      />
-                    ))}
-                  </Picker>
-                </View>
-
-                {periodType === "month" && (
-                  <>
-                    <Text style={styles.filterLabel}>Tháng</Text>
-                    <View style={styles.pickerContainer}>
-                      <Picker
-                        selectedValue={selectedMonth}
-                        onValueChange={(value: number) =>
-                          setSelectedMonth(value)
-                        }
-                        style={styles.picker}
-                      >
-                        {Array.from({ length: 12 }, (_, i) => i + 1).map(
-                          (month) => (
-                            <Picker.Item
-                              key={month}
-                              label={`Tháng ${month}`}
-                              value={month}
-                            />
-                          )
-                        )}
-                      </Picker>
-                    </View>
-                  </>
-                )}
-
-                {periodType === "quarter" && (
-                  <>
-                    <Text style={styles.filterLabel}>Quý</Text>
-                    <View style={styles.pickerContainer}>
-                      <Picker
-                        selectedValue={selectedQuarter}
-                        onValueChange={(value: number) =>
-                          setSelectedQuarter(value)
-                        }
-                        style={styles.picker}
-                      >
-                        <Picker.Item label="Quý 1" value={1} />
-                        <Picker.Item label="Quý 2" value={2} />
-                        <Picker.Item label="Quý 3" value={3} />
-                        <Picker.Item label="Quý 4" value={4} />
-                      </Picker>
-                    </View>
-                  </>
-                )}
+                <Ionicons name="search" size={18} color="#0f172a" />
+                <Text style={styles.secondaryBtnText}>Xem</Text>
               </>
             )}
+          </TouchableOpacity>
+        </View>
 
-            {/* Extra Expenses */}
-            <Text style={styles.filterLabel}>Chi phí ngoài</Text>
-            <Text style={styles.hint}>
-              (Chi phí không trong hệ thống: mặt bằng, điện nước, marketing...)
-            </Text>
-            <View style={styles.expenseInputRow}>
-              <TextInput
-                style={styles.expenseInput}
-                value={formatNumber(newExpense)}
-                onChangeText={(text) => setNewExpense(text.replace(/\./g, ""))}
-                placeholder="VD: 1000000"
-                keyboardType="numeric"
-                placeholderTextColor="#9ca3af"
-              />
-              <TouchableOpacity
-                style={[
-                  styles.addExpenseBtn,
-                  !newExpense && styles.addExpenseBtnDisabled,
-                ]}
-                onPress={addExtraExpense}
-                disabled={!newExpense}
-              >
-                <Text style={styles.addExpenseBtnText}>Thêm</Text>
+        <ScrollView
+          style={styles.scrollView}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => fetchFinancial(true)}
+              colors={["#2563eb"]}
+              tintColor="#2563eb"
+            />
+          }
+        >
+          {/* Error alert */}
+          {error && (
+            <View style={styles.errorAlert}>
+              <Ionicons name="alert-circle" size={20} color="#ef4444" />
+              <Text style={styles.errorAlertText}>{error}</Text>
+              <TouchableOpacity onPress={() => setError(null)}>
+                <Ionicons name="close-circle" size={20} color="#ef4444" />
               </TouchableOpacity>
             </View>
+          )}
 
-            {extraExpenses.length > 0 && (
-              <View style={styles.expenseList}>
-                {extraExpenses.map((exp, index) => (
-                  <View key={index} style={styles.expenseChip}>
-                    <Text style={styles.expenseChipText}>{formatVND(exp)}</Text>
-                    <TouchableOpacity onPress={() => removeExpense(index)}>
-                      <Ionicons name="close-circle" size={18} color="#ef4444" />
-                    </TouchableOpacity>
+          {/* Info (no data yet) */}
+          {!loading && !data && (
+            <View style={styles.infoBox}>
+              <View style={styles.infoIcon}>
+                <Ionicons
+                  name="information-circle-outline"
+                  size={22}
+                  color="#2563eb"
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.infoTitle}>Chưa có dữ liệu hiển thị</Text>
+                <Text style={styles.infoText}>
+                  Mở bộ lọc để chọn kỳ báo cáo, sau đó bấm “Xem”.
+                </Text>
+              </View>
+              <TouchableOpacity onPress={openFilter} style={styles.infoCta}>
+                <Text style={styles.infoCtaText}>Mở</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Loading */}
+          {loading && !refreshing && (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#2563eb" />
+              <Text style={styles.loadingText}>Đang tải báo cáo...</Text>
+            </View>
+          )}
+
+          {/* Data */}
+          {!loading && data && (
+            <>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Tổng quan</Text>
+                <Text style={styles.sectionSubTitle}>{periodDisplay}</Text>
+              </View>
+
+              <View style={styles.statsGrid}>
+                <View
+                  style={[styles.statCard, { borderLeftColor: COLORS.revenue }]}
+                >
+                  <View style={styles.statTop}>
+                    <Ionicons
+                      name="trending-up"
+                      size={22}
+                      color={COLORS.revenue}
+                    />
+                    <Text style={styles.statLabel}>Doanh thu</Text>
                   </View>
-                ))}
-              </View>
-            )}
-
-            {/* Action Button */}
-            <TouchableOpacity
-              style={[
-                styles.actionBtn,
-                (!periodType || loading) && styles.actionBtnDisabled,
-              ]}
-              onPress={() => fetchFinancial(false)}
-              disabled={!periodType || loading}
-              activeOpacity={0.8}
-            >
-              <LinearGradient
-                colors={["#1890ff", "#096dd9"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.actionBtnGradient}
-              >
-                {loading ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <>
-                    <Ionicons name="search" size={18} color="#fff" />
-                    <Text style={styles.actionBtnText}>Xem báo cáo</Text>
-                  </>
-                )}
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
-
-      <ScrollView
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => fetchFinancial(true)}
-            colors={["#1890ff"]}
-          />
-        }
-      >
-        {/* Error Alert */}
-        {error && (
-          <View style={styles.errorAlert}>
-            <Ionicons name="alert-circle" size={20} color="#ef4444" />
-            <Text style={styles.errorAlertText}>{error}</Text>
-            <TouchableOpacity onPress={() => setError(null)}>
-              <Ionicons name="close-circle" size={20} color="#ef4444" />
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Loading */}
-        {loading && !refreshing && (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#1890ff" />
-            <Text style={styles.loadingText}>Đang tải báo cáo...</Text>
-          </View>
-        )}
-
-        {/* Info Alert - No selection */}
-        {!periodType && !loading && (
-          <View style={styles.infoAlert}>
-            <Ionicons name="information-circle" size={24} color="#1890ff" />
-            <Text style={styles.infoAlertText}>
-              Vui lòng chọn kỳ báo cáo để xem dữ liệu
-            </Text>
-          </View>
-        )}
-
-        {/* Data Display */}
-        {!loading && data && (
-          <>
-            {/* Statistics Cards */}
-            <View style={styles.statsGrid}>
-              <View
-                style={[styles.statCard, { borderLeftColor: COLORS.revenue }]}
-              >
-                <Ionicons name="trending-up" size={24} color={COLORS.revenue} />
-                <Text style={styles.statLabel}>Doanh thu</Text>
-                <Text style={[styles.statValue, { color: COLORS.revenue }]}>
-                  {formatVND(data.totalRevenue)}
-                </Text>
-              </View>
-
-              <View
-                style={[
-                  styles.statCard,
-                  { borderLeftColor: COLORS.grossProfit },
-                ]}
-              >
-                <Ionicons name="cash" size={24} color={COLORS.grossProfit} />
-                <Text style={styles.statLabel}>Lợi nhuận gộp</Text>
-                <Text style={[styles.statValue, { color: COLORS.grossProfit }]}>
-                  {formatVND(data.grossProfit)}
-                </Text>
-              </View>
-
-              <View
-                style={[
-                  styles.statCard,
-                  { borderLeftColor: COLORS.operatingCost },
-                ]}
-              >
-                <Ionicons
-                  name="wallet"
-                  size={24}
-                  color={COLORS.operatingCost}
-                />
-                <Text style={styles.statLabel}>Chi phí vận hành</Text>
-                <Text
-                  style={[styles.statValue, { color: COLORS.operatingCost }]}
-                >
-                  {formatVND(data.operatingCost)}
-                </Text>
-              </View>
-
-              <View
-                style={[
-                  styles.statCard,
-                  { borderLeftColor: getProfitColor(data.netProfit) },
-                ]}
-              >
-                <Ionicons
-                  name="trophy"
-                  size={24}
-                  color={getProfitColor(data.netProfit)}
-                />
-                <Text style={styles.statLabel}>Lợi nhuận ròng</Text>
-                <Text
-                  style={[
-                    styles.statValue,
-                    { color: getProfitColor(data.netProfit) },
-                  ]}
-                >
-                  {formatVND(data.netProfit)}
-                </Text>
-              </View>
-            </View>
-
-            {/* Tax & Stock */}
-            <View style={styles.detailCard}>
-              <Text style={styles.detailCardTitle}>Thuế & Tồn kho</Text>
-              <View style={styles.detailRow}>
-                <View style={styles.detailItem}>
-                  <View
-                    style={[styles.colorDot, { backgroundColor: COLORS.vat }]}
-                  />
-                  <Text style={styles.detailLabel}>Thuế GTGT</Text>
-                </View>
-                <Text style={[styles.detailValue, { color: COLORS.vat }]}>
-                  {formatVND(data.totalVAT)}
-                </Text>
-              </View>
-              <View style={styles.detailRow}>
-                <View style={styles.detailItem}>
-                  <View
-                    style={[
-                      styles.colorDot,
-                      { backgroundColor: COLORS.stockValue },
-                    ]}
-                  />
-                  <Text style={styles.detailLabel}>Tồn kho</Text>
-                </View>
-                <Text
-                  style={[styles.detailValue, { color: COLORS.stockValue }]}
-                >
-                  {formatVND(data.stockValue)}
-                </Text>
-              </View>
-            </View>
-
-            {/* Details */}
-            <View style={styles.detailCard}>
-              <Text style={styles.detailCardTitle}>Chi tiết</Text>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Chi phí nhập hàng (COGS)</Text>
-                <Text style={styles.detailValue}>
-                  {formatVND(data.totalCOGS)}
-                </Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Điều chỉnh tồn kho</Text>
-                <Text style={styles.detailValue}>
-                  {formatVND(data.stockAdjustmentValue)}
-                </Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Chi phí hàng hoá huỷ</Text>
-                <Text style={styles.detailValue}>
-                  {formatVND(data.stockDisposalCost)}
-                </Text>
-              </View>
-            </View>
-
-            {/* Performance */}
-            <View style={styles.detailCard}>
-              <Text style={styles.detailCardTitle}>Hiệu suất</Text>
-              <View style={styles.performanceRow}>
-                <View style={styles.performanceItem}>
-                  <Text style={styles.performanceLabel}>Lợi nhuận gộp</Text>
-                  <Text
-                    style={[
-                      styles.performanceValue,
-                      { color: getProfitColor(data.grossProfit) },
-                    ]}
-                  >
-                    {data.totalRevenue
-                      ? ((data.grossProfit / data.totalRevenue) * 100).toFixed(
-                          1
-                        )
-                      : 0}
-                    %
+                  <Text style={[styles.statValue, { color: COLORS.revenue }]}>
+                    {formatVND(data.totalRevenue)}
                   </Text>
                 </View>
-                <View style={styles.performanceItem}>
-                  <Text style={styles.performanceLabel}>Lợi nhuận ròng</Text>
+
+                <View
+                  style={[
+                    styles.statCard,
+                    { borderLeftColor: COLORS.grossProfit },
+                  ]}
+                >
+                  <View style={styles.statTop}>
+                    <Ionicons
+                      name="cash-outline"
+                      size={22}
+                      color={COLORS.grossProfit}
+                    />
+                    <Text style={styles.statLabel}>Lợi nhuận gộp</Text>
+                  </View>
+                  <Text
+                    style={[styles.statValue, { color: COLORS.grossProfit }]}
+                  >
+                    {formatVND(data.grossProfit)}
+                  </Text>
+                </View>
+
+                <View
+                  style={[
+                    styles.statCard,
+                    { borderLeftColor: COLORS.operatingCost },
+                  ]}
+                >
+                  <View style={styles.statTop}>
+                    <Ionicons
+                      name="wallet-outline"
+                      size={22}
+                      color={COLORS.operatingCost}
+                    />
+                    <Text style={styles.statLabel}>Chi phí vận hành</Text>
+                  </View>
+                  <Text
+                    style={[styles.statValue, { color: COLORS.operatingCost }]}
+                  >
+                    {formatVND(data.operatingCost)}
+                  </Text>
+                </View>
+
+                <View
+                  style={[
+                    styles.statCard,
+                    { borderLeftColor: getProfitColor(data.netProfit) },
+                  ]}
+                >
+                  <View style={styles.statTop}>
+                    <Ionicons
+                      name="trophy-outline"
+                      size={22}
+                      color={getProfitColor(data.netProfit)}
+                    />
+                    <Text style={styles.statLabel}>Lợi nhuận ròng</Text>
+                  </View>
                   <Text
                     style={[
-                      styles.performanceValue,
+                      styles.statValue,
                       { color: getProfitColor(data.netProfit) },
                     ]}
                   >
-                    {data.totalRevenue
-                      ? ((data.netProfit / data.totalRevenue) * 100).toFixed(1)
-                      : 0}
-                    %
+                    {formatVND(data.netProfit)}
                   </Text>
                 </View>
               </View>
-              <Text style={styles.performanceHint}>
-                💡 Lợi nhuận gộp = Doanh thu - Giá vốn hàng bán
-              </Text>
-              <Text style={styles.performanceHint}>
-                💡 Lợi nhuận ròng = Lợi nhuận gộp - Chi phí vận hành - Thuế
-              </Text>
-            </View>
-          </>
-        )}
 
-        <View style={styles.bottomSpacer} />
-      </ScrollView>
-    </View>
+              <View style={styles.detailCard}>
+                <Text style={styles.detailCardTitle}>Thuế & Tồn kho</Text>
+
+                <View style={styles.detailRow}>
+                  <View style={styles.detailItem}>
+                    <View
+                      style={[styles.colorDot, { backgroundColor: COLORS.vat }]}
+                    />
+                    <Text style={styles.detailLabel}>Thuế GTGT</Text>
+                  </View>
+                  <Text style={[styles.detailValue, { color: COLORS.vat }]}>
+                    {formatVND(data.totalVAT)}
+                  </Text>
+                </View>
+
+                <View style={styles.detailRow}>
+                  <View style={styles.detailItem}>
+                    <View
+                      style={[
+                        styles.colorDot,
+                        { backgroundColor: COLORS.stockValue },
+                      ]}
+                    />
+                    <Text style={styles.detailLabel}>Tồn kho</Text>
+                  </View>
+                  <Text
+                    style={[styles.detailValue, { color: COLORS.stockValue }]}
+                  >
+                    {formatVND(data.stockValue)}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.detailCard}>
+                <Text style={styles.detailCardTitle}>Chi tiết</Text>
+
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>
+                    Chi phí nhập hàng (COGS)
+                  </Text>
+                  <Text style={styles.detailValue}>
+                    {formatVND(data.totalCOGS)}
+                  </Text>
+                </View>
+
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Điều chỉnh tồn kho</Text>
+                  <Text style={styles.detailValue}>
+                    {formatVND(data.stockAdjustmentValue)}
+                  </Text>
+                </View>
+
+                <View style={[styles.detailRow, { borderBottomWidth: 0 }]}>
+                  <Text style={styles.detailLabel}>Chi phí hàng hoá huỷ</Text>
+                  <Text style={styles.detailValue}>
+                    {formatVND(data.stockDisposalCost)}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.detailCard}>
+                <Text style={styles.detailCardTitle}>Hiệu suất</Text>
+
+                <View style={styles.performanceRow}>
+                  <View style={styles.performanceItem}>
+                    <Text style={styles.performanceLabel}>Lợi nhuận gộp</Text>
+                    <Text
+                      style={[
+                        styles.performanceValue,
+                        { color: getProfitColor(data.grossProfit) },
+                      ]}
+                    >
+                      {data.totalRevenue
+                        ? (
+                            (data.grossProfit / data.totalRevenue) *
+                            100
+                          ).toFixed(1)
+                        : 0}
+                      %
+                    </Text>
+                  </View>
+
+                  <View style={styles.performanceItem}>
+                    <Text style={styles.performanceLabel}>Lợi nhuận ròng</Text>
+                    <Text
+                      style={[
+                        styles.performanceValue,
+                        { color: getProfitColor(data.netProfit) },
+                      ]}
+                    >
+                      {data.totalRevenue
+                        ? ((data.netProfit / data.totalRevenue) * 100).toFixed(
+                            1
+                          )
+                        : 0}
+                      %
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.tipBox}>
+                  <Ionicons name="bulb-outline" size={18} color="#0f172a" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.tipText}>
+                      Lợi nhuận gộp = Doanh thu - Giá vốn hàng bán
+                    </Text>
+                    <Text style={styles.tipText}>
+                      Lợi nhuận ròng = Lợi nhuận gộp - Chi phí vận hành - Thuế
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </>
+          )}
+
+          <View style={{ height: 28 }} />
+        </ScrollView>
+
+        {/* ================= FILTER BOTTOM SHEET ================= */}
+        <Modal
+          visible={filterOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={closeFilter}
+        >
+          <Pressable style={styles.overlay} onPress={closeFilter} />
+          <View style={styles.sheet}>
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>Bộ lọc báo cáo</Text>
+              <TouchableOpacity style={styles.sheetClose} onPress={closeFilter}>
+                <Ionicons name="close" size={18} color="#0f172a" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 14 }}
+            >
+              <Text style={styles.blockTitle}>Kỳ báo cáo</Text>
+              <View style={styles.chipRow}>
+                <FilterChip
+                  label="Tháng"
+                  icon="calendar-outline"
+                  active={dPeriodType === "month"}
+                  onPress={() => setDPeriodType("month")}
+                />
+                <FilterChip
+                  label="Quý"
+                  icon="grid-outline"
+                  active={dPeriodType === "quarter"}
+                  onPress={() => setDPeriodType("quarter")}
+                />
+                <FilterChip
+                  label="Năm"
+                  icon="time-outline"
+                  active={dPeriodType === "year"}
+                  onPress={() => setDPeriodType("year")}
+                />
+              </View>
+
+              <View style={styles.fieldCard}>
+                <View style={styles.fieldTop}>
+                  <Ionicons
+                    name="calendar-clear-outline"
+                    size={16}
+                    color="#0f172a"
+                  />
+                  <Text style={styles.fieldTitle}>Đang chọn</Text>
+                </View>
+
+                <Text style={styles.fieldValue}>
+                  {!dPeriodType
+                    ? "Chưa chọn"
+                    : dPeriodType === "month"
+                      ? `Tháng ${dMonth}/${dYear}`
+                      : dPeriodType === "quarter"
+                        ? `Quý ${dQuarter}/${dYear}`
+                        : `Năm ${dYear}`}
+                </Text>
+
+                {dPeriodType === "month" && (
+                  <TouchableOpacity
+                    style={styles.pickBtn}
+                    onPress={() => openPicker("month")}
+                  >
+                    <Ionicons name="calendar" size={16} color="#fff" />
+                    <Text style={styles.pickBtnText}>Chọn tháng/năm</Text>
+                  </TouchableOpacity>
+                )}
+
+                {dPeriodType === "quarter" && (
+                  <View style={{ marginTop: 12, gap: 10 }}>
+                    <TouchableOpacity
+                      style={[styles.pickBtn, { backgroundColor: "#0ea5e9" }]}
+                      onPress={() => openPicker("quarterYear")}
+                    >
+                      <Ionicons name="time-outline" size={16} color="#fff" />
+                      <Text style={styles.pickBtnText}>Chọn năm</Text>
+                    </TouchableOpacity>
+
+                    <View style={styles.chipRow}>
+                      {[1, 2, 3, 4].map((q) => (
+                        <FilterChip
+                          key={q}
+                          label={`Q${q}`}
+                          icon="pie-chart-outline"
+                          active={dQuarter === q}
+                          onPress={() => setDQuarter(q as 1 | 2 | 3 | 4)}
+                        />
+                      ))}
+                    </View>
+                  </View>
+                )}
+
+                {dPeriodType === "year" && (
+                  <TouchableOpacity
+                    style={styles.pickBtn}
+                    onPress={() => openPicker("year")}
+                  >
+                    <Ionicons name="time" size={16} color="#fff" />
+                    <Text style={styles.pickBtnText}>Chọn năm</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              <Text style={styles.blockTitle}>Chi phí ngoài</Text>
+              <Text style={styles.blockHint}>
+                (Chi phí không trong hệ thống: mặt bằng, điện nước,
+                marketing...)
+              </Text>
+
+              <View style={styles.expenseRow}>
+                <View style={styles.expenseInputWrap}>
+                  <Ionicons name="cash-outline" size={16} color="#334155" />
+                  <TextInput
+                    style={styles.expenseInput}
+                    value={formatNumber(newExpense)}
+                    onChangeText={(t) => setNewExpense(t.replace(/\./g, ""))}
+                    placeholder="VD: 1000000"
+                    keyboardType="numeric"
+                    placeholderTextColor="#94a3b8"
+                  />
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.addBtn, !newExpense && { opacity: 0.5 }]}
+                  onPress={addExtraExpense}
+                  disabled={!newExpense}
+                >
+                  <Ionicons name="add" size={18} color="#fff" />
+                </TouchableOpacity>
+              </View>
+
+              {extraExpenses.length > 0 && (
+                <>
+                  <View style={styles.expenseHeaderRow}>
+                    <Text style={styles.expenseHeaderText}>Đã thêm</Text>
+                    <TouchableOpacity onPress={clearAllExpense}>
+                      <Text style={styles.clearAllText}>Xóa tất cả</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.expenseChips}>
+                    {extraExpenses.map((exp, index) => (
+                      <View key={index} style={styles.expenseChip}>
+                        <Text style={styles.expenseChipText}>
+                          {formatVND(exp)}
+                        </Text>
+                        <TouchableOpacity onPress={() => removeExpense(index)}>
+                          <Ionicons
+                            name="close-circle"
+                            size={18}
+                            color="#ef4444"
+                          />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                </>
+              )}
+            </ScrollView>
+
+            <View style={styles.sheetFooter}>
+              <TouchableOpacity
+                style={styles.footerGhost}
+                onPress={closeFilter}
+              >
+                <Text style={styles.footerGhostText}>Hủy</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.footerPrimary}
+                onPress={applyFilter}
+              >
+                <Ionicons
+                  name="checkmark-circle-outline"
+                  size={18}
+                  color="#fff"
+                />
+                <Text style={styles.footerPrimaryText}>Áp dụng</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* ================= DATE PICKER MODAL (CANCEL/APPLY) ================= */}
+          <Modal
+            visible={!!pickerKind}
+            transparent
+            animationType="fade"
+            onRequestClose={cancelPicker}
+          >
+            <Pressable style={styles.pickerOverlay} onPress={cancelPicker} />
+            <View style={styles.pickerSheet}>
+              <View style={styles.pickerHeader}>
+                <Text style={styles.pickerTitle}>Chọn thời gian</Text>
+                <TouchableOpacity
+                  style={styles.sheetClose}
+                  onPress={cancelPicker}
+                >
+                  <Ionicons name="close" size={18} color="#0f172a" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.pickerBody}>
+                <DateTimePicker
+                  value={tempPickedDate}
+                  mode="date"
+                  display={Platform.OS === "ios" ? "spinner" : "default"}
+                  onChange={(_, date) => {
+                    if (!date) return;
+                    setTempPickedDate(date);
+                  }}
+                  minimumDate={new Date(2000, 0, 1)}
+                  maximumDate={new Date(2100, 11, 31)}
+                  locale="vi-VN"
+                  style={{ backgroundColor: "#fff" }}
+                  textColor="#000000"
+                  themeVariant="light"
+                />
+                <Text style={styles.pickerHint}>
+                  Mẹo: chọn một ngày bất kỳ, hệ thống sẽ lấy đúng tháng/năm.
+                </Text>
+              </View>
+
+              <View style={styles.sheetFooter}>
+                <TouchableOpacity
+                  style={styles.footerGhost}
+                  onPress={cancelPicker}
+                >
+                  <Text style={styles.footerGhostText}>Hủy</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.footerPrimary}
+                  onPress={confirmPicker}
+                >
+                  <Text style={styles.footerPrimaryText}>Áp dụng</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
+        </Modal>
+      </View>
+    </SafeAreaView>
   );
 };
 
@@ -661,13 +964,11 @@ export default ReportsDashboardScreen;
 
 // ========== STYLES ==========
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f8fafc",
-  },
-  scrollView: {
-    flex: 1,
-  },
+  safe: { flex: 1, backgroundColor: "#f8fafc" },
+  container: { flex: 1, backgroundColor: "#f8fafc" },
+  scrollView: { flex: 1 },
+
+  // Error
   errorContainer: {
     flex: 1,
     justifyContent: "center",
@@ -677,185 +978,108 @@ const styles = StyleSheet.create({
   },
   errorTitle: {
     fontSize: 20,
-    fontWeight: "700",
-    color: "#111827",
+    fontWeight: "800",
+    color: "#0f172a",
     marginTop: 16,
     marginBottom: 8,
   },
-  errorText: {
-    fontSize: 14,
-    color: "#6b7280",
-    textAlign: "center",
-  },
+  errorText: { fontSize: 14, color: "#64748b", textAlign: "center" },
+
+  // Header
   header: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 14,
+    borderBottomLeftRadius: 22,
+    borderBottomRightRadius: 22,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    elevation: 12,
+    backgroundColor: "#10b981",
+  },
+  headerTop: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  headerTitle: { color: "#fff", fontSize: 20, fontWeight: "900" },
+  headerSubRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
-    padding: 20,
-    paddingTop: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
-    gap: 14,
-  },
-  headerIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: "#e6f4ff",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerTextContainer: {
-    flex: 1,
-  },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#111827",
-    marginBottom: 4,
+    gap: 6,
+    marginTop: 6,
   },
   headerSubtitle: {
-    fontSize: 13,
-    color: "#6b7280",
-  },
-  // ✅ Collapsible Filter Styles
-  filterSection: {
-    backgroundColor: "#fff",
-    marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    elevation: 3,
-  },
-  filterToggle: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 16,
-  },
-  filterToggleLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    flex: 1,
-  },
-  filterToggleText: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#1890ff",
-  },
-  filterTogglePeriod: {
+    color: "rgba(255,255,255,0.92)",
     fontSize: 12,
-    color: "#6b7280",
-    marginTop: 4,
-  },
-  filterContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-    borderTopWidth: 1,
-    borderTopColor: "#f3f4f6",
-  },
-  filterLabel: {
-    fontSize: 14,
     fontWeight: "700",
-    color: "#374151",
-    marginBottom: 8,
-    marginTop: 12,
-  },
-  hint: {
-    fontSize: 11,
-    color: "#1890ff",
-    marginBottom: 8,
-    fontStyle: "italic",
-  },
-  pickerContainer: {
-    backgroundColor: "#f9fafb",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    borderRadius: 12,
-    overflow: "hidden",
-  },
-  picker: {
-    height: 50,
-  },
-  expenseInputRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  expenseInput: {
     flex: 1,
-    backgroundColor: "#f9fafb",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: "#111827",
   },
-  addExpenseBtn: {
-    backgroundColor: "#1890ff",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
+  headerIconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.16)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
+    alignItems: "center",
     justifyContent: "center",
   },
-  addExpenseBtnDisabled: {
-    backgroundColor: "#d1d5db",
-  },
-  addExpenseBtnText: {
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  expenseList: {
+  headerPills: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    gap: 10,
     marginTop: 12,
   },
-  expenseChip: {
+  headerPill: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f3f4f6",
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
     gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.16)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
   },
-  expenseChipText: {
-    fontSize: 13,
-    color: "#374151",
-    fontWeight: "600",
+  headerPillText: { color: "#fff", fontWeight: "800", fontSize: 12 },
+
+  // Top bar
+  topBar: {
+    flexDirection: "row",
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingTop: 12,
   },
-  actionBtn: {
-    borderRadius: 12,
-    overflow: "hidden",
-    marginTop: 20,
-    shadowColor: "#1890ff",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  actionBtnDisabled: {
-    opacity: 0.6,
-  },
-  actionBtnGradient: {
+  primaryBtn: {
+    flex: 1,
+    height: 46,
+    borderRadius: 16,
+    backgroundColor: "#2563eb",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 14,
+    gap: 8,
+    shadowColor: "#1d4ed8",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  primaryBtnText: { color: "#fff", fontWeight: "900" },
+  secondaryBtn: {
+    width: 92,
+    height: 46,
+    borderRadius: 16,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 8,
   },
-  actionBtnText: {
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: "700",
-  },
+  secondaryBtnText: { color: "#0f172a", fontWeight: "900" },
+
+  // Alerts
   errorAlert: {
     flexDirection: "row",
     alignItems: "center",
@@ -863,7 +1087,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 16,
     padding: 14,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: "#fecaca",
     gap: 10,
@@ -872,81 +1096,96 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     color: "#991b1b",
-    fontWeight: "600",
+    fontWeight: "700",
   },
-  loadingContainer: {
+
+  infoBox: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: "#eff6ff",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    flexDirection: "row",
+    gap: 12,
     alignItems: "center",
-    paddingVertical: 40,
   },
+  infoIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: "#dbeafe",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  infoTitle: { color: "#0f172a", fontWeight: "900" },
+  infoText: {
+    color: "#1e3a8a",
+    marginTop: 4,
+    fontWeight: "600",
+    lineHeight: 18,
+  },
+  infoCta: {
+    paddingHorizontal: 12,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: "#2563eb",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  infoCtaText: { color: "#fff", fontWeight: "900" },
+
+  loadingContainer: { alignItems: "center", paddingVertical: 40 },
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: "#6b7280",
+    color: "#64748b",
+    fontWeight: "600",
   },
-  infoAlert: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#eff6ff",
-    marginHorizontal: 16,
-    marginTop: 16,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#bfdbfe",
-    gap: 12,
-  },
-  infoAlertText: {
-    flex: 1,
-    fontSize: 14,
-    color: "#1e40af",
-    lineHeight: 20,
-  },
-  statsGrid: {
-    paddingHorizontal: 16,
-    marginTop: 16,
-    gap: 12,
-  },
+
+  sectionHeader: { marginTop: 18, paddingHorizontal: 16 },
+  sectionTitle: { color: "#0f172a", fontWeight: "900", fontSize: 16 },
+  sectionSubTitle: { color: "#64748b", marginTop: 4, fontWeight: "700" },
+
+  // Cards
+  statsGrid: { paddingHorizontal: 16, marginTop: 12, gap: 12 },
   statCard: {
     backgroundColor: "#fff",
     padding: 16,
-    borderRadius: 12,
-    borderLeftWidth: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
+    borderRadius: 16,
+    borderLeftWidth: 5,
+    borderColor: "#eef2f7",
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.06,
     shadowRadius: 10,
     elevation: 3,
   },
-  statLabel: {
-    fontSize: 13,
-    color: "#6b7280",
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  statValue: {
-    fontSize: 20,
-    fontWeight: "700",
-  },
+  statTop: { flexDirection: "row", alignItems: "center", gap: 10 },
+  statLabel: { color: "#64748b", fontWeight: "800" },
+  statValue: { marginTop: 10, fontSize: 20, fontWeight: "900" },
+
   detailCard: {
     backgroundColor: "#fff",
     marginHorizontal: 16,
-    marginTop: 16,
-    padding: 20,
-    borderRadius: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
+    marginTop: 12,
+    padding: 18,
+    borderRadius: 18,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.06,
     shadowRadius: 10,
     elevation: 3,
   },
   detailCardTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#111827",
-    marginBottom: 16,
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#0f172a",
+    marginBottom: 12,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
+    borderBottomColor: "#e2e8f0",
   },
   detailRow: {
     flexDirection: "row",
@@ -954,56 +1193,256 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#f3f4f6",
+    borderBottomColor: "#f1f5f9",
   },
-  detailItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  colorDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-  },
-  detailLabel: {
-    fontSize: 14,
-    color: "#6b7280",
-  },
-  detailValue: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#111827",
-  },
-  performanceRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginBottom: 16,
-  },
+  detailItem: { flexDirection: "row", alignItems: "center", gap: 8 },
+  colorDot: { width: 10, height: 10, borderRadius: 5 },
+  detailLabel: { fontSize: 13, color: "#64748b", fontWeight: "700" },
+  detailValue: { fontSize: 14, fontWeight: "900", color: "#0f172a" },
+
+  performanceRow: { flexDirection: "row", gap: 12, marginBottom: 12 },
   performanceItem: {
     flex: 1,
-    backgroundColor: "#f9fafb",
-    padding: 16,
-    borderRadius: 12,
+    backgroundColor: "#f8fafc",
+    padding: 14,
+    borderRadius: 16,
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
   },
   performanceLabel: {
-    fontSize: 13,
-    color: "#6b7280",
+    fontSize: 12,
+    color: "#64748b",
     marginBottom: 8,
     textAlign: "center",
+    fontWeight: "800",
   },
-  performanceValue: {
-    fontSize: 24,
+  performanceValue: { fontSize: 22, fontWeight: "900" },
+
+  tipBox: {
+    marginTop: 4,
+    borderRadius: 16,
+    backgroundColor: "#f1f5f9",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    padding: 12,
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "flex-start",
+  },
+  tipText: { color: "#0f172a", fontWeight: "700", lineHeight: 18 },
+
+  // Bottom sheet
+  overlay: { flex: 1, backgroundColor: "rgba(2,6,23,0.45)" },
+  sheet: {
+    position: "absolute",
+    left: 12,
+    right: 12,
+    bottom: 12,
+    maxHeight: "86%",
+    backgroundColor: "#fff",
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    overflow: "hidden",
+  },
+  sheetHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eef2f7",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  sheetTitle: { color: "#0f172a", fontWeight: "900", fontSize: 16 },
+  sheetClose: {
+    width: 36,
+    height: 36,
+    borderRadius: 14,
+    backgroundColor: "#f1f5f9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  blockTitle: {
+    marginTop: 14,
+    marginBottom: 10,
+    paddingHorizontal: 16,
+    color: "#0f172a",
+    fontWeight: "900",
+  },
+  blockHint: {
+    marginTop: -6,
+    marginBottom: 10,
+    paddingHorizontal: 16,
+    color: "#64748b",
+    fontWeight: "600",
+  },
+
+  chipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    paddingHorizontal: 16,
+  },
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  chipActive: { backgroundColor: "#0f172a", borderColor: "#0f172a" },
+  chipInactive: { backgroundColor: "#f8fafc", borderColor: "#e2e8f0" },
+  chipText: { fontSize: 12, fontWeight: "900" },
+  chipTextActive: { color: "#fff" },
+  chipTextInactive: { color: "#0f172a" },
+
+  fieldCard: {
+    marginTop: 12,
+    marginHorizontal: 16,
+    padding: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f8fafc",
+  },
+  fieldTop: { flexDirection: "row", alignItems: "center", gap: 8 },
+  fieldTitle: { color: "#334155", fontWeight: "900" },
+  fieldValue: {
+    marginTop: 8,
+    color: "#0f172a",
+    fontWeight: "900",
+    fontSize: 14,
+  },
+
+  pickBtn: {
+    marginTop: 12,
+    height: 46,
+    borderRadius: 16,
+    backgroundColor: "#2563eb",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  pickBtnText: { color: "#fff", fontWeight: "900" },
+
+  expenseRow: { flexDirection: "row", gap: 10, paddingHorizontal: 16 },
+  expenseInputWrap: {
+    flex: 1,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  expenseInput: { flex: 1, color: "#0f172a", fontWeight: "900" },
+  addBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: "#16a34a",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  expenseHeaderRow: {
+    marginTop: 12,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  expenseHeaderText: { color: "#0f172a", fontWeight: "900" },
+  clearAllText: { color: "#ef4444", fontWeight: "900" },
+
+  expenseChips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 10,
+    paddingHorizontal: 16,
+  },
+  expenseChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f1f5f9",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    gap: 8,
+  },
+  expenseChipText: { fontSize: 12, color: "#0f172a", fontWeight: "900" },
+
+  sheetFooter: {
+    flexDirection: "row",
+    gap: 10,
+    padding: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#eef2f7",
+    backgroundColor: "#fff",
+  },
+  footerGhost: {
+    flex: 1,
+    height: 46,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f8fafc",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  footerGhostText: { color: "#0f172a", fontWeight: "900" },
+  footerPrimary: {
+    flex: 1,
+    height: 46,
+    borderRadius: 16,
+    backgroundColor: "#16a34a",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  footerPrimaryText: { color: "#fff", fontWeight: "900" },
+
+  // Picker modal
+  pickerOverlay: { flex: 1, backgroundColor: "rgba(2,6,23,0.45)" },
+  pickerSheet: {
+    position: "absolute",
+    left: 12,
+    right: 12,
+    bottom: 12,
+    backgroundColor: "#fff",
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    overflow: "hidden",
+  },
+  pickerHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eef2f7",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  pickerTitle: { color: "#0f172a", fontWeight: "900", fontSize: 15 },
+  pickerBody: { backgroundColor: "#fff" },
+  pickerHint: {
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+    color: "#64748b",
     fontWeight: "700",
-  },
-  performanceHint: {
-    fontSize: 12,
-    color: "#6b7280",
-    marginBottom: 6,
-    lineHeight: 18,
-  },
-  bottomSpacer: {
-    height: 40,
   },
 });

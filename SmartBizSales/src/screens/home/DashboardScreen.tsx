@@ -928,8 +928,9 @@ const styles = StyleSheet.create({
   },
   loadingSubtext: { fontSize: 14, color: "#6b7280", fontWeight: "500" },
   header: {
-    paddingTop: 60,
-    paddingBottom: 20,
+    backgroundColor: "#10b981",
+    paddingTop: 5,
+    paddingBottom: 10,
     paddingHorizontal: 16,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
