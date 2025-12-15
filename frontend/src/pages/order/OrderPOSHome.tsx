@@ -1,5 +1,11 @@
 // src/pages/order/OrderPOSHome.tsx
-import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+} from "react";
 import {
   Table,
   Input,
@@ -216,7 +222,9 @@ const OrderPOSHome: React.FC = () => {
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
 
   // Thêm state để lưu employee hiện tại của user đang login
-  const [currentUserEmployee, setCurrentUserEmployee] = useState<Seller | null>(null);
+  const [currentUserEmployee, setCurrentUserEmployee] = useState<Seller | null>(
+    null
+  );
 
   // Helper - Lấy giá trị số từ price
   const getPriceNumber = (price: any): number => {
@@ -311,20 +319,56 @@ const OrderPOSHome: React.FC = () => {
   // Khi load employees, tìm employee tương ứng với user đang login
   const loadEmployees = async () => {
     try {
-      const res = await axios.get(`${API_BASE}/stores/${storeId}/employees?deleted=false`, { headers });
-
-      const employeesList: Employee[] = res.data.employees || [];
-      setEmployees(employeesList);
-
       const loggedInUser = JSON.parse(localStorage.getItem("user") || "{}");
 
       if (!loggedInUser?.id) return;
+
+      // Nếu là STAFF → chỉ lấy thông tin từ user, không cần load API employees
+      if (loggedInUser.role === "STAFF") {
+        // Tạo object employee từ thông tin user
+        const staffEmployee: Seller = {
+          _id: loggedInUser.id,
+          fullName:
+            loggedInUser.fullname || loggedInUser.username || "Nhân viên",
+          user_id: {
+            _id: loggedInUser.id,
+            username: loggedInUser.username,
+            role: loggedInUser.role,
+            email: loggedInUser.email,
+            phone: loggedInUser.phone,
+            menu: loggedInUser.menu,
+          },
+        };
+
+        setCurrentUserEmployee(staffEmployee);
+        setEmployees([staffEmployee as Employee]); // Set danh sách chỉ có 1 nhân viên (chính mình)
+
+        // Set mặc định employeeId = id của staff
+        setOrders((prev) =>
+          prev.map((tab) => ({
+            ...tab,
+            employeeId: loggedInUser.id,
+          }))
+        );
+
+        return;
+      }
+
+      // Manager / Owner → load danh sách employees từ API
+      const res = await axios.get(
+        `${API_BASE}/stores/${storeId}/employees?deleted=false`,
+        { headers }
+      );
+
+      const employeesList: Employee[] = res.data.employees || [];
+      setEmployees(employeesList);
 
       // Manager / Owner → luôn là virtual owner
       if (loggedInUser.role === "MANAGER" || loggedInUser.role === "OWNER") {
         const virtualOwner: VirtualOwner = {
           _id: "virtual-owner",
-          fullName: loggedInUser.fullname || loggedInUser.username || "Chủ cửa hàng",
+          fullName:
+            loggedInUser.fullname || loggedInUser.username || "Chủ cửa hàng",
           isOwner: true,
         };
 
@@ -335,22 +379,6 @@ const OrderPOSHome: React.FC = () => {
           prev.map((tab) => ({
             ...tab,
             employeeId: null,
-          }))
-        );
-
-        return;
-      }
-
-      // STAFF → tìm employee thật
-      const myEmployee = employeesList.find((emp) => emp.user_id && emp.user_id._id === loggedInUser.id);
-
-      if (myEmployee) {
-        setCurrentUserEmployee(myEmployee);
-
-        setOrders((prev) =>
-          prev.map((tab) => ({
-            ...tab,
-            employeeId: myEmployee._id,
           }))
         );
       }
@@ -391,7 +419,12 @@ const OrderPOSHome: React.FC = () => {
         return;
       }
       try {
-        const res = await axios.get(`${API_BASE}/products/search?query=${encodeURIComponent(query)}&storeId=${storeId}`, { headers });
+        const res = await axios.get(
+          `${API_BASE}/products/search?query=${encodeURIComponent(
+            query
+          )}&storeId=${storeId}`,
+          { headers }
+        );
         setSearchedProducts(res.data.products || []);
       } catch (err) {
         Swal.fire({
@@ -491,7 +524,10 @@ const OrderPOSHome: React.FC = () => {
   );
 
   // Cập nhật thông tin tab đơn hàng
-  const updateOrderTab = (updater: (tab: OrderTab) => void, key = activeTab) => {
+  const updateOrderTab = (
+    updater: (tab: OrderTab) => void,
+    key = activeTab
+  ) => {
     setOrders((prev) =>
       prev.map((tab) => {
         if (tab.key !== key) return tab;
@@ -511,7 +547,9 @@ const OrderPOSHome: React.FC = () => {
         key: newKey,
         cart: [],
         customer: null,
-        employeeId: currentUserEmployee?.isOwner ? null : currentUserEmployee?._id || null,
+        employeeId: currentUserEmployee?.isOwner
+          ? null
+          : currentUserEmployee?._id || null,
         usedPoints: 0,
         usedPointsEnabled: false,
         isVAT: false,
@@ -547,13 +585,28 @@ const OrderPOSHome: React.FC = () => {
   };
 
   const currentTab = orders.find((tab) => tab.key === activeTab)!;
-  const selectValue = currentTab.employeeId === null ? "virtual-owner" : currentTab.employeeId;
+  const selectValue =
+    currentTab.employeeId === null ? "virtual-owner" : currentTab.employeeId;
 
   // Tính toán các giá trị thanh toán
-  const subtotal = useMemo(() => currentTab.cart.reduce((sum, item) => sum + getItemUnitPrice(item) * item.quantity, 0), [currentTab.cart]);
+  const subtotal = useMemo(
+    () =>
+      currentTab.cart.reduce(
+        (sum, item) => sum + getItemUnitPrice(item) * item.quantity,
+        0
+      ),
+    [currentTab.cart]
+  );
   const discount = useMemo(
-    () => (currentTab.usedPointsEnabled ? currentTab.usedPoints * (loyaltySetting?.vndPerPoint || 0) : 0),
-    [currentTab.usedPoints, currentTab.usedPointsEnabled, loyaltySetting?.vndPerPoint]
+    () =>
+      currentTab.usedPointsEnabled
+        ? currentTab.usedPoints * (loyaltySetting?.vndPerPoint || 0)
+        : 0,
+    [
+      currentTab.usedPoints,
+      currentTab.usedPointsEnabled,
+      loyaltySetting?.vndPerPoint,
+    ]
   );
   const beforeTax = Math.max(subtotal - discount, 0);
   const vatAmount = currentTab.isVAT ? beforeTax * 0.1 : 0;
@@ -578,7 +631,8 @@ const OrderPOSHome: React.FC = () => {
     //   });
 
     // === CHUYỂN VIRTUAL-OWNER VỀ NULL TRƯỚC KHI GỬI ===
-    const sendEmployeeId = currentTab.employeeId === "virtual-owner" ? null : currentTab.employeeId;
+    const sendEmployeeId =
+      currentTab.employeeId === "virtual-owner" ? null : currentTab.employeeId;
 
     setLoading(true);
     try {
@@ -610,11 +664,19 @@ const OrderPOSHome: React.FC = () => {
       }
 
       // Chỉ gửi usedPoints khi user bật tính năng và có điểm > 0
-      if (currentTab.usedPointsEnabled && currentTab.usedPoints && currentTab.usedPoints > 0) {
+      if (
+        currentTab.usedPointsEnabled &&
+        currentTab.usedPoints &&
+        currentTab.usedPoints > 0
+      ) {
         payload.usedPoints = currentTab.usedPoints;
       }
 
-      const res = await axios.post<OrderResponse>(`${API_BASE}/orders`, payload, { headers });
+      const res = await axios.post<OrderResponse>(
+        `${API_BASE}/orders`,
+        payload,
+        { headers }
+      );
       const order = res.data.order;
       const orderId = order._id;
 
@@ -622,15 +684,20 @@ const OrderPOSHome: React.FC = () => {
       updateOrderTab((tab) => {
         tab.pendingOrderId = orderId;
         tab.orderCreatedAt = order.createdAt || "";
-        tab.orderPrintCount = typeof order.printCount === "number" ? order.printCount : 0;
+        tab.orderPrintCount =
+          typeof order.printCount === "number" ? order.printCount : 0;
         tab.orderEarnedPoints = (order as any).earnedPoints ?? 0;
         tab.orderCreatedPaymentMethod = currentTab.paymentMethod;
 
         if (currentTab.paymentMethod === "qr" && res.data.qrDataURL) {
           tab.qrImageUrl = res.data.qrDataURL;
           tab.savedQrImageUrl = res.data.qrDataURL; // 🟢 Lưu giữ QR để restore lại
-          tab.qrExpiryTs = res.data.order?.qrExpiry ? new Date(res.data.order.qrExpiry).getTime() : null;
-          tab.savedQrExpiryTs = res.data.order?.qrExpiry ? new Date(res.data.order.qrExpiry).getTime() : null; // 🟢 Lưu giữ
+          tab.qrExpiryTs = res.data.order?.qrExpiry
+            ? new Date(res.data.order.qrExpiry).getTime()
+            : null;
+          tab.savedQrExpiryTs = res.data.order?.qrExpiry
+            ? new Date(res.data.order.qrExpiry).getTime()
+            : null; // 🟢 Lưu giữ
         }
       });
     } catch (err: any) {
@@ -649,7 +716,11 @@ const OrderPOSHome: React.FC = () => {
   // In hóa đơn
   const triggerPrint = async (orderId: string) => {
     try {
-      await axios.post(`${API_BASE}/orders/${orderId}/print-bill`, {}, { headers });
+      await axios.post(
+        `${API_BASE}/orders/${orderId}/print-bill`,
+        {},
+        { headers }
+      );
       Swal.fire({
         icon: "success",
         title: "Thành công!",
@@ -670,7 +741,8 @@ const OrderPOSHome: React.FC = () => {
     }
   };
 
-  const currentEmployeeName = employees.find((e) => e._id === currentTab.employeeId)?.fullName || "N/A";
+  const currentEmployeeName =
+    employees.find((e) => e._id === currentTab.employeeId)?.fullName || "N/A";
   const currentCustomerName = currentTab?.customer?.name || "Khách vãng lai";
   const currentCustomerPhone = currentTab?.customer?.phone || "Không có";
 
@@ -684,7 +756,8 @@ const OrderPOSHome: React.FC = () => {
 
   const openPriceModal = (record: CartItem) => {
     // tìm object gốc trong currentTab.cart bằng productId
-    const realItem = currentTab.cart.find((i) => i.productId === record.productId) || record;
+    const realItem =
+      currentTab.cart.find((i) => i.productId === record.productId) || record;
     setPriceEditModal({
       visible: true,
       item: realItem,
@@ -734,10 +807,15 @@ const OrderPOSHome: React.FC = () => {
         >
           <ShopOutlined style={{ fontSize: 28, color: "#fff" }} />
           <div>
-            <Title level={4} style={{ margin: 0, color: "#fff", fontSize: "20px" }}>
+            <Title
+              level={4}
+              style={{ margin: 0, color: "#fff", fontSize: "20px" }}
+            >
               {currentStore.name || "Cửa Hàng"}
             </Title>
-            <Text style={{ color: "rgba(255,255,255,0.85)", fontSize: "12px" }}>Hệ thống bán hàng POS</Text>
+            <Text style={{ color: "rgba(255,255,255,0.85)", fontSize: "12px" }}>
+              Hệ thống bán hàng POS
+            </Text>
           </div>
         </div>
 
@@ -788,7 +866,9 @@ const OrderPOSHome: React.FC = () => {
             scrollbarWidth: "thin",
             transition: "transform 0.15s ease, opacity 0.15s ease",
             opacity: searchedProducts.length > 0 ? 1 : 0,
-            transform: `translateX(-50%) ${searchedProducts.length > 0 ? "translateY(0)" : "translateY(-5px)"}`,
+            transform: `translateX(-50%) ${
+              searchedProducts.length > 0 ? "translateY(0)" : "translateY(-5px)"
+            }`,
           }}
         >
           {searchedProducts.map((prod) => (
@@ -803,7 +883,9 @@ const OrderPOSHome: React.FC = () => {
                 transition: "all 0.2s ease",
                 marginBottom: "4px",
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "#f5faff")}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.background = "#f5faff")
+              }
               onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
             >
               <div
@@ -821,7 +903,10 @@ const OrderPOSHome: React.FC = () => {
                     <Text type="secondary" style={{ fontSize: "12px" }}>
                       Mã SKU: {prod.sku}
                     </Text>
-                    <Text type="secondary" style={{ fontSize: "12px", marginLeft: 12 }}>
+                    <Text
+                      type="secondary"
+                      style={{ fontSize: "12px", marginLeft: 12 }}
+                    >
                       Đơn vị: {prod.unit}
                     </Text>
                   </div>
@@ -833,7 +918,10 @@ const OrderPOSHome: React.FC = () => {
                   </Text>
                   <div style={{ marginTop: 2 }}>
                     Tồn kho:{" "}
-                    <Tag color={prod.stock_quantity > 0 ? "green" : "red"} style={{ fontWeight: 500, fontSize: "12px" }}>
+                    <Tag
+                      color={prod.stock_quantity > 0 ? "green" : "red"}
+                      style={{ fontWeight: 500, fontSize: "12px" }}
+                    >
                       {prod.stock_quantity}
                     </Tag>
                   </div>
@@ -846,7 +934,13 @@ const OrderPOSHome: React.FC = () => {
       {/* BODY - 2 CỘT (GRID 24 CỘT) */}
       <Row gutter={[16, 16]} style={{ flex: 1, padding: 16 }}>
         {/* CỘT TRÁI - GIỎ HÀNG (CHIẾM 16/24) */}
-        <Col xs={24} md={16} lg={17} xl={18} style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+        <Col
+          xs={24}
+          md={16}
+          lg={17}
+          xl={18}
+          style={{ display: "flex", flexDirection: "column", height: "100%" }}
+        >
           {/* Row 1 - Card chính (chiếm hết chiều cao trừ footer) */}
           <Row style={{ flex: 1, overflow: "hidden" }}>
             <Col span={24}>
@@ -874,12 +968,15 @@ const OrderPOSHome: React.FC = () => {
                   type="editable-card"
                   onEdit={(targetKey, action) => {
                     if (action === "add") addNewOrderTab();
-                    else if (action === "remove") removeOrderTab(targetKey as string);
+                    else if (action === "remove")
+                      removeOrderTab(targetKey as string);
                   }}
                   style={{ flex: 1, display: "flex", flexDirection: "column" }}
                   items={orders.map((tab) => ({
                     key: tab.key,
-                    label: <span style={{ fontWeight: 600 }}>Đơn {tab.key}</span>,
+                    label: (
+                      <span style={{ fontWeight: 600 }}>Đơn {tab.key}</span>
+                    ),
                     closable: orders.length > 1,
                     children: (
                       <div
@@ -912,9 +1009,18 @@ const OrderPOSHome: React.FC = () => {
                               ellipsis: true,
                               width: 250,
                               render: (_text, record: CartItem) => (
-                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 8,
+                                  }}
+                                >
                                   <img
-                                    src={record.image?.url || "/default-product.png"}
+                                    src={
+                                      record.image?.url ||
+                                      "/default-product.png"
+                                    }
                                     alt={record.name}
                                     style={{
                                       width: 40,
@@ -942,7 +1048,9 @@ const OrderPOSHome: React.FC = () => {
                                 <InputNumber
                                   min={1}
                                   value={r.quantity}
-                                  onChange={(v) => updateQuantity(r.productId, v || 1)}
+                                  onChange={(v) =>
+                                    updateQuantity(r.productId, v || 1)
+                                  }
                                   style={{ width: "60%" }}
                                 />
                               ),
@@ -953,15 +1061,30 @@ const OrderPOSHome: React.FC = () => {
                               align: "right",
                               render: (_, record) => {
                                 const unitPrice = getItemUnitPrice(record);
-                                const isCustom = record.saleType && record.saleType !== "NORMAL";
+                                const isCustom =
+                                  record.saleType &&
+                                  record.saleType !== "NORMAL";
 
                                 return (
                                   <div style={{ textAlign: "right" }}>
                                     <div style={{ fontWeight: 500 }}>
                                       {formatPrice(unitPrice)}
                                       {isCustom && (
-                                        <Tag color="blue" style={{ marginLeft: 6, fontSize: 10, padding: "0 4px", height: 16, lineHeight: "16px" }}>
-                                          {SALE_TYPE_LABEL[record.saleType || "NORMAL"]}
+                                        <Tag
+                                          color="blue"
+                                          style={{
+                                            marginLeft: 6,
+                                            fontSize: 10,
+                                            padding: "0 4px",
+                                            height: 16,
+                                            lineHeight: "16px",
+                                          }}
+                                        >
+                                          {
+                                            SALE_TYPE_LABEL[
+                                              record.saleType || "NORMAL"
+                                            ]
+                                          }
                                         </Tag>
                                       )}
                                     </div>
@@ -969,7 +1092,11 @@ const OrderPOSHome: React.FC = () => {
                                       type="link"
                                       size="small"
                                       icon={<EditOutlined />}
-                                      style={{ padding: 0, fontSize: 12, color: "#1890ff" }}
+                                      style={{
+                                        padding: 0,
+                                        fontSize: 12,
+                                        color: "#1890ff",
+                                      }}
                                       onClick={() => openPriceModal(record)}
                                     >
                                       Tuỳ chỉnh
@@ -983,7 +1110,8 @@ const OrderPOSHome: React.FC = () => {
                               dataIndex: "unit",
                               width: 100,
                               align: "center",
-                              render: (value: string) => (value && String(value).trim() ? value : "---"),
+                              render: (value: string) =>
+                                value && String(value).trim() ? value : "---",
                             },
                             {
                               title: "Thành tiền",
@@ -991,7 +1119,8 @@ const OrderPOSHome: React.FC = () => {
                               align: "right",
                               width: 150,
                               render: (_sub, record: CartItem) => {
-                                const amount = getItemUnitPrice(record) * record.quantity;
+                                const amount =
+                                  getItemUnitPrice(record) * record.quantity;
                                 return (
                                   <Text strong style={{ color: "#1890ff" }}>
                                     {formatPrice(amount)}
@@ -1010,7 +1139,9 @@ const OrderPOSHome: React.FC = () => {
                                   icon={<DeleteOutlined />}
                                   onClick={() =>
                                     updateOrderTab((t) => {
-                                      t.cart = t.cart.filter((i) => i.productId !== r.productId);
+                                      t.cart = t.cart.filter(
+                                        (i) => i.productId !== r.productId
+                                      );
                                     })
                                   }
                                 />
@@ -1112,7 +1243,9 @@ const OrderPOSHome: React.FC = () => {
                   placeholder="Nhập SĐT khách hàng..."
                   prefix={<UserOutlined />}
                   suffix={
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div
+                      style={{ display: "flex", alignItems: "center", gap: 8 }}
+                    >
                       <div
                         style={{
                           width: 1,
@@ -1145,7 +1278,9 @@ const OrderPOSHome: React.FC = () => {
                     setShowCustomerDropdown(true);
                   }}
                   onFocus={() => setShowCustomerDropdown(true)}
-                  onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 200)}
+                  onBlur={() =>
+                    setTimeout(() => setShowCustomerDropdown(false), 200)
+                  }
                   style={{
                     marginBottom: 12,
                     borderRadius: 8,
@@ -1206,8 +1341,12 @@ const OrderPOSHome: React.FC = () => {
                           cursor: "pointer",
                           borderBottom: "1px solid #f0f0f0",
                         }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = "#f5faff")}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
+                        onMouseEnter={(e) =>
+                          (e.currentTarget.style.background = "#f5faff")
+                        }
+                        onMouseLeave={(e) =>
+                          (e.currentTarget.style.background = "#fff")
+                        }
                       >
                         <Space direction="vertical" size={0}>
                           <Text strong>{c.name}</Text>
@@ -1246,7 +1385,10 @@ const OrderPOSHome: React.FC = () => {
                 <Space>
                   <UserOutlined style={{ color: "#52c41a" }} />
                   <Text strong>{currentTab.customer.name}</Text>
-                  <Badge count={`${currentTab.customer.loyaltyPoints} điểm`} style={{ backgroundColor: "#faad14" }} />
+                  <Badge
+                    count={`${currentTab.customer.loyaltyPoints} điểm`}
+                    style={{ backgroundColor: "#faad14" }}
+                  />
                 </Space>
               </div>
             )}
@@ -1299,7 +1441,9 @@ const OrderPOSHome: React.FC = () => {
                 >
                   <Space>
                     <GiftOutlined style={{ color: "#faad14" }} />
-                    <Text style={{ fontWeight: 500 }}>Áp dụng điểm giảm giá:</Text>
+                    <Text style={{ fontWeight: 500 }}>
+                      Áp dụng điểm giảm giá:
+                    </Text>
                   </Space>
 
                   <Switch
@@ -1323,7 +1467,8 @@ const OrderPOSHome: React.FC = () => {
                       value={currentTab.usedPoints}
                       onChange={(val) => {
                         const n = Math.max(0, Math.floor((val as number) || 0));
-                        const maxAllowed = currentTab.customer?.loyaltyPoints ?? n;
+                        const maxAllowed =
+                          currentTab.customer?.loyaltyPoints ?? n;
                         const clamped = Math.min(n, maxAllowed);
                         updateOrderTab((t) => {
                           t.usedPoints = clamped;
@@ -1332,8 +1477,12 @@ const OrderPOSHome: React.FC = () => {
                       size="large"
                       style={{ width: "100%" }}
                       placeholder="Nhập số điểm muốn sử dụng"
-                      formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
-                      parser={(v) => parseInt((v || "0").toString().replace(/(,*)/g, ""), 10)}
+                      formatter={(v) =>
+                        `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+                      }
+                      parser={(v) =>
+                        parseInt((v || "0").toString().replace(/(,*)/g, ""), 10)
+                      }
                       addonAfter="điểm"
                     />
 
@@ -1367,7 +1516,9 @@ const OrderPOSHome: React.FC = () => {
                       alignItems: "center",
                     }}
                   >
-                    <Text style={{ color: "#389e0d" }}>Giảm giá từ điểm tích lũy:</Text>
+                    <Text style={{ color: "#389e0d" }}>
+                      Giảm giá từ điểm tích lũy:
+                    </Text>
                     <Text strong style={{ color: "#389e0d", fontSize: 16 }}>
                       -{formatPrice(discount)}
                     </Text>
@@ -1379,7 +1530,11 @@ const OrderPOSHome: React.FC = () => {
                       textAlign: "right",
                     }}
                   >
-                    Tỷ lệ quy đổi: <Text strong>{loyaltySetting?.vndPerPoint?.toLocaleString()}đ</Text> / điểm
+                    Tỷ lệ quy đổi:{" "}
+                    <Text strong>
+                      {loyaltySetting?.vndPerPoint?.toLocaleString()}đ
+                    </Text>{" "}
+                    / điểm
                   </div>
                 </div>
               )}
@@ -1457,7 +1612,9 @@ const OrderPOSHome: React.FC = () => {
                       t.paymentMethod = "cash";
                     })
                   }
-                  type={currentTab.paymentMethod === "cash" ? "primary" : "default"}
+                  type={
+                    currentTab.paymentMethod === "cash" ? "primary" : "default"
+                  }
                   size="large"
                   style={{ flex: 1, borderRadius: "8px" }}
                 >
@@ -1470,7 +1627,9 @@ const OrderPOSHome: React.FC = () => {
                       t.paymentMethod = "qr";
                     })
                   }
-                  type={currentTab.paymentMethod === "qr" ? "primary" : "default"}
+                  type={
+                    currentTab.paymentMethod === "qr" ? "primary" : "default"
+                  }
                   size="large"
                   style={{ flex: 1, borderRadius: "8px" }}
                 >
@@ -1482,7 +1641,9 @@ const OrderPOSHome: React.FC = () => {
               {currentTab.paymentMethod === "cash" && (
                 <>
                   <div style={{ marginTop: 8 }}>
-                    <Text style={{ display: "block", marginBottom: 8 }}>Tiền khách đưa:</Text>
+                    <Text style={{ display: "block", marginBottom: 8 }}>
+                      Tiền khách đưa:
+                    </Text>
                     <InputNumber
                       min={0}
                       value={currentTab.cashReceived}
@@ -1491,8 +1652,12 @@ const OrderPOSHome: React.FC = () => {
                           t.cashReceived = v || 0;
                         })
                       }
-                      formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
-                      parser={(v) => parseFloat(v?.replace(/\$\s?|(,*)/g, "") || "0")}
+                      formatter={(v) =>
+                        `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+                      }
+                      parser={(v) =>
+                        parseFloat(v?.replace(/\$\s?|(,*)/g, "") || "0")
+                      }
                       size="large"
                       style={{ width: "100%" }}
                       addonAfter="đ"
@@ -1505,7 +1670,10 @@ const OrderPOSHome: React.FC = () => {
                       background: changeAmount >= 0 ? "#f6ffed" : "#fff1f0",
                       padding: "12px",
                       borderRadius: "8px",
-                      border: changeAmount >= 0 ? "1px solid #b7eb8f" : "1px solid #ffa39e",
+                      border:
+                        changeAmount >= 0
+                          ? "1px solid #b7eb8f"
+                          : "1px solid #ffa39e",
                     }}
                   >
                     <Text
@@ -1543,87 +1711,98 @@ const OrderPOSHome: React.FC = () => {
                   fontSize: "16px",
                   fontWeight: 600,
                   borderRadius: "8px",
-                  background: currentTab.pendingOrderId ? "#ccc" : "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                  background: currentTab.pendingOrderId
+                    ? "#ccc"
+                    : "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
                   border: "none",
                   cursor: currentTab.pendingOrderId ? "not-allowed" : "pointer",
                 }}
               >
-                {currentTab.paymentMethod === "qr" ? "Tạo QR Thanh Toán" : "Tạo Đơn Hàng"}
+                {currentTab.paymentMethod === "qr"
+                  ? "Tạo QR Thanh Toán"
+                  : "Tạo Đơn Hàng"}
               </Button>
 
               {/* Tiếp tục thanh toán QR - Show khi đã tạo đơn QR */}
-              {currentTab.pendingOrderId && currentTab.paymentMethod === "qr" && !currentTab.qrImageUrl && (
-                <Button
-                  type="default"
-                  size="large"
-                  block
-                  onClick={() => {
-                    // 🟢 Restore từ saved QR data
-                    if (currentTab.savedQrImageUrl) {
-                      updateOrderTab((tab) => {
-                        tab.qrImageUrl = tab.savedQrImageUrl;
-                        tab.qrPayload = tab.savedQrPayload;
-                        tab.qrExpiryTs = tab.savedQrExpiryTs;
-                      });
-                    } else {
-                      Swal.fire({
-                        icon: "warning",
-                        title: "QR không hợp lệ",
-                        text: "QR đã hết hạn hoặc không có dữ liệu, vui lòng tạo QR mới",
-                        confirmButtonText: "Đã hiểu",
-                      });
-                    }
-                  }}
-                  style={{
-                    marginTop: 8,
-                    height: "45px",
-                    fontSize: "15px",
-                    fontWeight: 500,
-                    borderRadius: "8px",
-                    border: "1px solid #1890ff",
-                    color: "#1890ff",
-                  }}
-                >
-                  📱 Tiếp tục thanh toán QR
-                </Button>
-              )}
-
-              {/* Xác nhận thanh toán tiền mặt */}
-              {currentTab.pendingOrderId && currentTab.paymentMethod === "cash" && (
-                <Popconfirm
-                  title={`Xác nhận khách đã đưa ${formatPrice(totalAmount)}?`}
-                  onConfirm={async () => {
-                    try {
-                      await axios.post(`${API_BASE}/orders/${currentTab.pendingOrderId}/set-paid-cash`, {}, { headers });
-                      setBillModalOpen(true);
-                    } catch (err: any) {
-                      Swal.fire({
-                        title: "❌ Lỗi!",
-                        text: "Lỗi xác nhận thanh toán",
-                        icon: "error",
-                        confirmButtonText: "OK",
-                        confirmButtonColor: "#ff4d4f",
-                        timer: 2000,
-                      });
-                    }
-                  }}
-                >
+              {currentTab.pendingOrderId &&
+                currentTab.paymentMethod === "qr" &&
+                !currentTab.qrImageUrl && (
                   <Button
-                    type="primary"
-                    danger
+                    type="default"
                     size="large"
                     block
+                    onClick={() => {
+                      // 🟢 Restore từ saved QR data
+                      if (currentTab.savedQrImageUrl) {
+                        updateOrderTab((tab) => {
+                          tab.qrImageUrl = tab.savedQrImageUrl;
+                          tab.qrPayload = tab.savedQrPayload;
+                          tab.qrExpiryTs = tab.savedQrExpiryTs;
+                        });
+                      } else {
+                        Swal.fire({
+                          icon: "warning",
+                          title: "QR không hợp lệ",
+                          text: "QR đã hết hạn hoặc không có dữ liệu, vui lòng tạo QR mới",
+                          confirmButtonText: "Đã hiểu",
+                        });
+                      }
+                    }}
                     style={{
-                      height: "50px",
-                      fontSize: "16px",
-                      fontWeight: 600,
+                      marginTop: 8,
+                      height: "45px",
+                      fontSize: "15px",
+                      fontWeight: 500,
                       borderRadius: "8px",
+                      border: "1px solid #1890ff",
+                      color: "#1890ff",
                     }}
                   >
-                    Xác Nhận Thanh Toán Tiền Mặt
+                    📱 Tiếp tục thanh toán QR
                   </Button>
-                </Popconfirm>
-              )}
+                )}
+
+              {/* Xác nhận thanh toán tiền mặt */}
+              {currentTab.pendingOrderId &&
+                currentTab.paymentMethod === "cash" && (
+                  <Popconfirm
+                    title={`Xác nhận khách đã đưa ${formatPrice(totalAmount)}?`}
+                    onConfirm={async () => {
+                      try {
+                        await axios.post(
+                          `${API_BASE}/orders/${currentTab.pendingOrderId}/set-paid-cash`,
+                          {},
+                          { headers }
+                        );
+                        setBillModalOpen(true);
+                      } catch (err: any) {
+                        Swal.fire({
+                          title: "❌ Lỗi!",
+                          text: "Lỗi xác nhận thanh toán",
+                          icon: "error",
+                          confirmButtonText: "OK",
+                          confirmButtonColor: "#ff4d4f",
+                          timer: 2000,
+                        });
+                      }
+                    }}
+                  >
+                    <Button
+                      type="primary"
+                      danger
+                      size="large"
+                      block
+                      style={{
+                        height: "50px",
+                        fontSize: "16px",
+                        fontWeight: 600,
+                        borderRadius: "8px",
+                      }}
+                    >
+                      Xác Nhận Thanh Toán Tiền Mặt
+                    </Button>
+                  </Popconfirm>
+                )}
             </div>
           </Card>
         </Col>
@@ -1687,7 +1866,11 @@ const OrderPOSHome: React.FC = () => {
                 // 🔴 Call API set-paid-QR + in bill trong 1 request
                 (async () => {
                   try {
-                    await axios.post(`${API_BASE}/orders/${currentTab.pendingOrderId}/print-bill`, {}, { headers });
+                    await axios.post(
+                      `${API_BASE}/orders/${currentTab.pendingOrderId}/print-bill`,
+                      {},
+                      { headers }
+                    );
                     // Reset QR
                     updateOrderTab((tab) => {
                       tab.qrImageUrl = null;
@@ -1734,7 +1917,11 @@ const OrderPOSHome: React.FC = () => {
             }}
           >
             {currentTab.qrImageUrl ? (
-              <img src={currentTab.qrImageUrl} alt="QR code" style={{ width: 410, height: 410 }} />
+              <img
+                src={currentTab.qrImageUrl}
+                alt="QR code"
+                style={{ width: 410, height: 410 }}
+              />
             ) : currentTab.qrPayload ? (
               <QRCode value={currentTab.qrPayload} size={410} />
             ) : null}
@@ -1811,14 +1998,21 @@ const OrderPOSHome: React.FC = () => {
           if (priceEditModal.tempSaleType === "FREE") {
             finalPrice = 0;
           } else if (priceEditModal.tempSaleType === "AT_COST") {
-            finalPrice = getPriceNumber(priceEditModal.item.cost_price || priceEditModal.item.price);
-          } else if (priceEditModal.tempOverridePrice !== null && priceEditModal.tempOverridePrice !== undefined) {
+            finalPrice = getPriceNumber(
+              priceEditModal.item.cost_price || priceEditModal.item.price
+            );
+          } else if (
+            priceEditModal.tempOverridePrice !== null &&
+            priceEditModal.tempOverridePrice !== undefined
+          ) {
             finalPrice = priceEditModal.tempOverridePrice;
           } else {
             finalPrice = getPriceNumber(priceEditModal.item.price);
           }
 
-          const newSubtotal = (finalPrice * priceEditModal.item.quantity).toFixed(2);
+          const newSubtotal = (
+            finalPrice * priceEditModal.item.quantity
+          ).toFixed(2);
 
           updateOrderTab((tab) => {
             tab.cart = tab.cart.map((i) =>
@@ -1826,7 +2020,10 @@ const OrderPOSHome: React.FC = () => {
                 ? {
                     ...i,
                     saleType: priceEditModal.tempSaleType!,
-                    overridePrice: priceEditModal.tempSaleType === "NORMAL" ? null : finalPrice,
+                    overridePrice:
+                      priceEditModal.tempSaleType === "NORMAL"
+                        ? null
+                        : finalPrice,
                     subtotal: newSubtotal,
                   }
                 : i
@@ -1839,7 +2036,9 @@ const OrderPOSHome: React.FC = () => {
         {priceEditModal.item && (
           <Space direction="vertical" style={{ width: "100%" }}>
             <Text strong>{priceEditModal.item.name}</Text>
-            <Text type="secondary">Số lượng: {priceEditModal.item.quantity}</Text>
+            <Text type="secondary">
+              Số lượng: {priceEditModal.item.quantity}
+            </Text>
 
             <Select
               style={{ width: "100%" }}
@@ -1852,21 +2051,30 @@ const OrderPOSHome: React.FC = () => {
                     value === "FREE"
                       ? 0
                       : value === "AT_COST"
-                      ? getPriceNumber(prev.item!.cost_price || prev.item!.price)
+                      ? getPriceNumber(
+                          prev.item!.cost_price || prev.item!.price
+                        )
                       : value === "NORMAL"
                       ? null
                       : prev.tempOverridePrice,
                 }));
               }}
             >
-              <Option value="NORMAL">Giá niêm yết ({formatPrice(priceEditModal.item.price)})</Option>
+              <Option value="NORMAL">
+                Giá niêm yết ({formatPrice(priceEditModal.item.price)})
+              </Option>
               <Option value="VIP">Giá ưu đãi (nhập tay)</Option>
-              <Option value="AT_COST">Giá vốn ({formatPrice(getPriceNumber(priceEditModal.item.cost_price))})</Option>
+              <Option value="AT_COST">
+                Giá vốn (
+                {formatPrice(getPriceNumber(priceEditModal.item.cost_price))})
+              </Option>
               <Option value="CLEARANCE">Xả kho (nhập tay)</Option>
               <Option value="FREE">Miễn phí (0đ)</Option>
             </Select>
 
-            {["VIP", "CLEARANCE"].includes(priceEditModal.tempSaleType || "NORMAL") && (
+            {["VIP", "CLEARANCE"].includes(
+              priceEditModal.tempSaleType || "NORMAL"
+            ) && (
               <InputNumber
                 style={{ width: "100%" }}
                 value={priceEditModal.tempOverridePrice ?? undefined}
@@ -1883,17 +2091,29 @@ const OrderPOSHome: React.FC = () => {
               />
             )}
 
-            <div style={{ marginTop: 16, padding: "8px 12px", background: "#f5f5f5", borderRadius: 6 }}>
+            <div
+              style={{
+                marginTop: 16,
+                padding: "8px 12px",
+                background: "#f5f5f5",
+                borderRadius: 6,
+              }}
+            >
               <Text strong>Thành tiền sau thay đổi:</Text>
               <br />
               <Text type="danger" style={{ fontSize: 18 }}>
-                {(priceEditModal.tempOverridePrice !== null && priceEditModal.tempOverridePrice !== undefined
+                {(priceEditModal.tempOverridePrice !== null &&
+                priceEditModal.tempOverridePrice !== undefined
                   ? priceEditModal.tempOverridePrice
                   : priceEditModal.tempSaleType === "FREE"
                   ? 0
                   : priceEditModal.tempSaleType === "AT_COST"
-                  ? getPriceNumber(priceEditModal.item.cost_price || priceEditModal.item.price)
-                  : getPriceNumber(priceEditModal.item.price)) * priceEditModal.item.quantity}
+                  ? getPriceNumber(
+                      priceEditModal.item.cost_price ||
+                        priceEditModal.item.price
+                    )
+                  : getPriceNumber(priceEditModal.item.price)) *
+                  priceEditModal.item.quantity}
                 {" đ"}
               </Text>
             </div>
