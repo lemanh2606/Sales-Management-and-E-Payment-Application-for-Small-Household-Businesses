@@ -23,8 +23,18 @@ export const updateCustomer = async (id, data) => (await apiClient.put(`/custome
 // SOFT DELETE - DELETE /api/customers/:id
 export const softDeleteCustomer = async (id) => (await apiClient.delete(`/customers/${id}`)).data;
 
-// 🆕 GET BY STORE - GET /api/customers/store/:storeId
-export const getCustomersByStore = async (storeId) => (await apiClient.get(`/customers/store/${storeId}`)).data;
+// 🆕 RESTORE - PUT /api/customers/:id/restore (khôi phục khách hàng đã bị xóa)
+export const restoreCustomer = async (id) => (await apiClient.put(`/customers/${id}/restore`)).data;
+
+// 🆕 GET BY STORE - GET /api/customers/store/:storeId?page=1&limit=10&query=abc&deleted=false
+export const getCustomersByStore = async (storeId, params = {}) => {
+  const { page = 1, limit = 10, query = "", deleted = false } = params;
+  return (
+    await apiClient.get(`/customers/store/${storeId}`, {
+      params: { page, limit, query, deleted: deleted ? "true" : "false" },
+    })
+  ).data;
+};
 
 // 🆕 EXPORT EXCEL - GET /api/customers/store/:storeId/export
 export const exportCustomers = async (storeId) => {
@@ -40,6 +50,7 @@ export default {
   createCustomer,
   updateCustomer,
   softDeleteCustomer,
+  restoreCustomer,
   getCustomersByStore,
   exportCustomers,
 };

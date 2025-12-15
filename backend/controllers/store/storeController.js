@@ -87,15 +87,25 @@ const createStore = async (req, res) => {
 /**
  * Lấy thông tin store theo id
  */
+/**
+ * Lấy thông tin store theo id
+ * Owner có thể xem cả deleted stores
+ */
 const getStoreById = async (req, res) => {
   try {
     const { storeId } = req.params;
-    // trả về cả khi owner xem store bị deleted? Ở đây ta chỉ lấy khi deleted: false
-    const store = await Store.findOne({ _id: storeId, deleted: false })
+    const userId = req.user?.id || req.user?._id;
+
+    const store = await Store.findById(storeId)
       .populate("owner_id", "_id name email")
       .populate("staff_ids", "_id name email");
 
     if (!store) return res.status(404).json({ message: "Không tìm thấy cửa hàng" });
+
+    // Nếu store bị deleted, chỉ owner mới được xem
+    if (store.deleted && (!userId || !store.owner_id.equals(userId))) {
+      return res.status(404).json({ message: "Không tìm thấy cửa hàng" });
+    }
 
     return res.json({ store });
   } catch (err) {
@@ -201,7 +211,7 @@ const deleteStore = async (req, res) => {
 
 /**
  * Lấy danh sách store của Manager (owner)
- * optional query params: ?page=1&limit=20&q=search
+ * optional query params: ?page=1&limit=20&q=search&deleted=true (để lấy deleted stores)
  */
 const getStoresByManager = async (req, res) => {
   try {
@@ -216,8 +226,10 @@ const getStoresByManager = async (req, res) => {
     const page = Math.max(1, parseInt(req.query.page || "1", 10));
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || "50", 10)));
     const q = (req.query.q || "").trim();
+    const includeDeleted = req.query.deleted === "true"; // ?deleted=true để lấy deleted stores
 
-    const filter = { owner_id: userId, deleted: false };
+    // Filter: mặc định lấy active stores, nếu ?deleted=true thì lấy deleted stores
+    const filter = { owner_id: userId, deleted: includeDeleted };
     if (q) {
       // tìm theo name / address / tags
       filter.$or = [{ name: { $regex: q, $options: "i" } }, { address: { $regex: q, $options: "i" } }, { tags: { $regex: q, $options: "i" } }];
@@ -849,10 +861,82 @@ const exportEmployeesToExcel = async (req, res) => {
   }
 };
 
+/**
+ * Khôi phục store bị xóa mềm (deleted = false)
+ * PUT /api/stores/:storeId/restore
+ */
+const restoreStore = async (req, res) => {
+  try {
+    const { storeId } = req.params;
+    const userId = req.user.id || req.user._id;
+
+    if (!mongoose.Types.ObjectId.isValid(storeId)) {
+      return res.status(400).json({ message: "storeId không hợp lệ" });
+    }
+
+    const store = await Store.findById(storeId);
+    if (!store) return res.status(404).json({ message: "Không tìm thấy cửa hàng" });
+
+    // Chỉ owner mới được khôi phục
+    if (!store.owner_id.equals(userId)) {
+      return res.status(403).json({ message: "Chỉ owner mới được khôi phục cửa hàng" });
+    }
+
+    // Nếu chưa bị xóa
+    if (!store.deleted) {
+      return res.status(400).json({ message: "Cửa hàng này chưa bị xóa" });
+    }
+
+    // Khôi phục: đổi deleted = false
+    store.deleted = false;
+    await store.save();
+
+    // Thêm lại store vào user.stores nếu cần
+    const user = await User.findById(userId);
+    if (user) {
+      user.stores = user.stores || [];
+      if (!user.stores.find((s) => s.toString() === storeId)) {
+        user.stores.push(storeId);
+      }
+
+      // Thêm lại vào store_roles nếu cần
+      user.store_roles = user.store_roles || [];
+      if (!user.store_roles.find((r) => r.store.toString() === storeId)) {
+        user.store_roles.push({ store: storeId, role: "OWNER" });
+      }
+
+      await user.save();
+    }
+
+    const populatedStore = await Store.findById(store._id).populate("owner_id", "_id name email").populate("staff_ids", "_id name email");
+
+    // Log hoạt động
+    await logActivity({
+      user: req.user,
+      store: { _id: store._id },
+      action: "restore",
+      entity: "Store",
+      entityId: store._id,
+      entityName: store.name,
+      req,
+      description: `Khôi phục cửa hàng "${store.name}"`,
+    });
+
+    return res.json({
+      message: "Đã khôi phục cửa hàng thành công",
+      store: populatedStore,
+    });
+  } catch (err) {
+    console.error("restoreStore error:", err);
+    return res.status(500).json({ message: "Lỗi server khi khôi phục store" });
+  }
+};
+
 module.exports = {
   createStore,
   updateStore,
   deleteStore,
+  restoreStore,
   selectStore,
   ensureStore,
   getStoreById,

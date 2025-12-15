@@ -431,11 +431,12 @@ const generateEndOfDayReport = async (req, res) => {
       },
     ]);
 
-    // 3. Phân loại theo nhân viên
+    // 3. Phân loại theo nhân viên (chỉ nhân viên thực, không lấy owner/manager bán)
     const byEmployee = await Order.aggregate([
       {
         $match: {
           storeId: new mongoose.Types.ObjectId(storeId),
+          employeeId: { $ne: null }, // 🟢 Chỉ lấy orders có employeeId (loại owner tức chủ đứng bán)
           createdAt: { $gte: start, $lte: end },
           status: { $in: ["paid", "partially_refunded"] },
         },

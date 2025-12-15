@@ -214,10 +214,30 @@ const updateCustomer = async (req, res) => {
 const softDeleteCustomer = async (req, res) => {
   try {
     const { id } = req.params; // ID khách hàng từ params
+    const userId = req.user?.id || req.user?._id;
 
     const customer = await Customer.findById(id);
     if (!customer || customer.isDeleted) {
       return res.status(404).json({ message: "Khách hàng không tồn tại" });
+    }
+
+    // Verify user has access to this customer's store
+    const store = await Store.findById(customer.storeId).lean();
+    if (!store) {
+      return res.status(404).json({ message: "Cửa hàng không tồn tại" });
+    }
+
+    // Check permission based on role
+    if (req.user.role === "MANAGER") {
+      if (String(store.owner_id) !== String(userId)) {
+        return res.status(403).json({ message: "Bạn không có quyền xóa khách hàng ở cửa hàng này" });
+      }
+    } else if (req.user.role === "STAFF") {
+      const userData = await User.findById(userId).lean();
+      const roleMapping = (userData?.store_roles || []).find((r) => String(r.store) === String(store._id)) || null;
+      if (!roleMapping) {
+        return res.status(403).json({ message: "Bạn không có quyền xóa khách hàng ở cửa hàng này" });
+      }
     }
 
     // Check ko có Order pending/refunded (an toàn, ko xóa nếu có Order active)
@@ -252,11 +272,11 @@ const softDeleteCustomer = async (req, res) => {
 };
 
 // GET /api/customers/store/:storeId - Lấy toàn bộ khách hàng của 1 cửa hàng
-// GET /api/customers/store/:storeId?page=1&limit=10&query=abc
+// GET /api/customers/store/:storeId?page=1&limit=10&query=abc&deleted=false
 const getCustomersByStore = async (req, res) => {
   try {
     const { storeId } = req.params;
-    const { page = 1, limit = 10, query = "" } = req.query;
+    const { page = 1, limit = 10, query = "", deleted = "false" } = req.query;
 
     if (!storeId) {
       return res.status(400).json({ message: "Thiếu storeId trong URL" });
@@ -265,7 +285,7 @@ const getCustomersByStore = async (req, res) => {
     // Chuẩn bị bộ lọc
     const filter = {
       storeId,
-      isDeleted: { $ne: true },
+      isDeleted: deleted === "true" ? true : { $ne: true },
     };
 
     // Nếu có từ khóa tìm kiếm
@@ -568,6 +588,59 @@ const exportCustomers = async (req, res) => {
   }
 };
 
+// PUT /api/customers/:id/restore - Khôi phục khách hàng đã bị xóa
+const restoreCustomer = async (req, res) => {
+  try {
+    const { id } = req.params; // ID khách hàng từ params
+    const userId = req.user?.id || req.user?._id;
+
+    const customer = await Customer.findById(id);
+    if (!customer || !customer.isDeleted) {
+      return res.status(404).json({ message: "Khách hàng không tồn tại hoặc chưa bị xóa" });
+    }
+
+    // Verify user has access to this customer's store
+    const store = await Store.findById(customer.storeId).lean();
+    if (!store) {
+      return res.status(404).json({ message: "Cửa hàng không tồn tại" });
+    }
+
+    // Check permission based on role
+    if (req.user.role === "MANAGER") {
+      if (String(store.owner_id) !== String(userId)) {
+        return res.status(403).json({ message: "Bạn không có quyền khôi phục khách hàng ở cửa hàng này" });
+      }
+    } else if (req.user.role === "STAFF") {
+      const userData = await User.findById(userId).lean();
+      const roleMapping = (userData?.store_roles || []).find((r) => String(r.store) === String(store._id)) || null;
+      if (!roleMapping) {
+        return res.status(403).json({ message: "Bạn không có quyền khôi phục khách hàng ở cửa hàng này" });
+      }
+    }
+
+    customer.isDeleted = false; // Khôi phục khách hàng
+    await customer.save();
+    
+    // log nhật ký hoạt động
+    await logActivity({
+      user: req.user,
+      store: { _id: customer.storeId },
+      action: "restore",
+      entity: "Customer",
+      entityId: customer._id,
+      entityName: customer.name,
+      req,
+      description: `Khôi phục khách hàng ${customer.name} (${customer.phone})`,
+    });
+
+    console.log(`Khôi phục khách hàng thành công: ${customer.name}`);
+    res.json({ message: "Khôi phục khách hàng thành công", customer });
+  } catch (err) {
+    console.error("Lỗi khôi phục khách hàng:", err.message);
+    res.status(500).json({ message: "Lỗi server khi khôi phục khách hàng" });
+  }
+};
+
 module.exports = {
   searchCustomers,
   createCustomer,
@@ -579,4 +652,5 @@ module.exports = {
   getCustomerById,
   getAllCustomers,
   exportCustomers,
+  restoreCustomer,
 };
