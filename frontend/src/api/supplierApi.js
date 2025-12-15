@@ -2,15 +2,22 @@
 import apiClient from "./apiClient";
 
 // Lấy danh sách nhà cung cấp theo cửa hàng
-export const getSuppliers = async (storeId) => {
+// - getSuppliers(storeId, { deleted: false }) -> active
+// - getSuppliers(storeId, { deleted: true }) -> deleted
+export const getSuppliers = async (storeId, options = {}) => {
   if (!storeId) throw new Error("Thiếu storeId khi lấy danh sách nhà cung cấp");
-  const res = await apiClient.get(`/suppliers/stores/${storeId}`);
+
+  const { deleted } = options;
+  const res = await apiClient.get(`/suppliers/stores/${storeId}`, {
+    params: typeof deleted === "boolean" ? { deleted } : undefined,
+  });
   return res.data;
 };
 
 // Lấy chi tiết một nhà cung cấp
 export const getSupplierById = async (supplierId) => {
-  if (!supplierId) throw new Error("Thiếu supplierId khi lấy chi tiết nhà cung cấp");
+  if (!supplierId)
+    throw new Error("Thiếu supplierId khi lấy chi tiết nhà cung cấp");
   const res = await apiClient.get(`/suppliers/${supplierId}`);
   return res.data;
 };
@@ -25,7 +32,8 @@ export const createSupplier = async (storeId, data) => {
 
 // Cập nhật thông tin nhà cung cấp
 export const updateSupplier = async (supplierId, data) => {
-  if (!supplierId) throw new Error("Thiếu supplierId khi cập nhật nhà cung cấp");
+  if (!supplierId)
+    throw new Error("Thiếu supplierId khi cập nhật nhà cung cấp");
   const res = await apiClient.put(`/suppliers/${supplierId}`, data);
   return res.data;
 };
@@ -37,19 +45,27 @@ export const deleteSupplier = async (supplierId) => {
   return res.data;
 };
 
+// Khôi phục nhà cung cấp
+export const restoreSupplier = async (supplierId) => {
+  if (!supplierId)
+    throw new Error("Thiếu supplierId khi khôi phục nhà cung cấp");
+  const res = await apiClient.put(`/suppliers/${supplierId}/restore`, {});
+  return res.data;
+};
+
 // Xuất danh sách nhà cung cấp ra Excel
 export const exportSuppliers = async (storeId) => {
-  if (!storeId) throw new Error("Thiếu storeId khi xuất danh sách nhà cung cấp");
+  if (!storeId)
+    throw new Error("Thiếu storeId khi xuất danh sách nhà cung cấp");
 
   const res = await apiClient.get(`/suppliers/stores/${storeId}/export`, {
-    responseType: "blob", // rất quan trọng
+    responseType: "blob",
   });
 
-  // Tạo link download
   const url = window.URL.createObjectURL(new Blob([res.data]));
   const link = document.createElement("a");
   link.href = url;
-  link.setAttribute("download", "suppliers.xlsx"); // tên file khi download
+  link.setAttribute("download", "suppliers.xlsx");
   document.body.appendChild(link);
   link.click();
   link.remove();
