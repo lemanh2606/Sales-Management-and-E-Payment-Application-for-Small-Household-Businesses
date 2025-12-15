@@ -30,6 +30,7 @@ interface SummaryInfo {
   totalProducts: number;
   totalStock: number;
   totalValue: number;
+  totalCostPrice: number;
 }
 
 interface ProductDetail {
@@ -41,6 +42,7 @@ interface ProductDetail {
   costPrice: MongoDecimal;
   closingValue: number;
   lowStock: boolean;
+  minStock: number;
 }
 
 interface ReportData {
@@ -148,7 +150,7 @@ const InventoryReport: React.FC = () => {
       title: "STT",
       dataIndex: "index",
       key: "index",
-      width: 60,
+      width: 50,
       align: "center",
       fixed: "left",
     },
@@ -190,17 +192,39 @@ const InventoryReport: React.FC = () => {
       ),
     },
     {
+      title: "Tồn tối thiểu",
+      dataIndex: "minStock",
+      key: "minStock",
+      width: 120,
+      align: "center",
+      render: (val: number) => (
+        <Text strong style={{ color: "#faad14" }}>
+          {val}
+        </Text>
+      ),
+    },
+    {
       title: "Giá vốn",
       dataIndex: "costPrice",
       key: "costPrice",
       width: 110,
       align: "right",
-      render: (val: MongoDecimal) => formatCurrency(val),
+      render: (val: MongoDecimal) => (
+        <Text strong style={{ color: "#1890ff" }}>
+          {formatCurrency(val)}
+        </Text>
+      ),
     },
     {
       title: (
         <Tooltip title="Tồn kho × Giá vốn">
-          <span>
+          <span
+            style={{
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+            }}
+          >
             <InfoCircleOutlined style={{ color: "#1890ff", marginRight: 4 }} />
             Giá trị tồn
           </span>
@@ -360,7 +384,7 @@ const InventoryReport: React.FC = () => {
                   allowClear
                   value={searchText}
                   onChange={(e) => setSearchText(e.target.value)}
-                  style={{ width: 300 }}
+                  style={{ width: 500 }}
                 />
               }
               style={{ borderRadius: 12, border: "1px solid #8c8c8c" }}
@@ -395,13 +419,21 @@ const InventoryReport: React.FC = () => {
                           {reportData.summary.totalStock}
                         </Text>
                       </Table.Summary.Cell>
-                      <Table.Summary.Cell index={4} />
+                      <Table.Summary.Cell index={4} /> {/* trống cho minStock */}
+                      {/* Tổng giá vốn */}
                       <Table.Summary.Cell index={5} align="right">
+                        <Text strong style={{ color: "#1890ff" }}>
+                          {formatCurrency(reportData.summary.totalCostPrice)}
+                        </Text>
+                      </Table.Summary.Cell>
+                      <Table.Summary.Cell index={6} align="right">
+                        {" "}
+                        {/* giá trị tồn */}
                         <Text strong style={{ color: "#faad14" }}>
                           {formatCurrency(reportData.summary.totalValue)}
                         </Text>
                       </Table.Summary.Cell>
-                      <Table.Summary.Cell index={6} />
+                      <Table.Summary.Cell index={7} /> {/* trống cho trạng thái */}
                     </Table.Summary.Row>
                   </Table.Summary>
                 )}
