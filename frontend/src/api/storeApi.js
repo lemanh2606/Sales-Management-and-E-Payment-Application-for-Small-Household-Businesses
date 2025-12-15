@@ -76,12 +76,17 @@ export const updateEmployee = async (storeId, employeeId, data) =>
 export const deleteEmployee = async (storeId, employeeId) =>
   (await apiClient.delete(`/stores/${storeId}/employees/${employeeId}`)).data;
 
+// Khôi phục cửa hàng (restore soft delete)
+export const restoreStore = async (storeId) =>
+  (await apiClient.put(`/stores/${storeId}/restore`)).data;
+
 export default {
   createStore,
   getStoresByManager,
   getStoreById,
   updateStore,
   deleteStore,
+  restoreStore,
   ensureStore,
   selectStore,
   getStoreDashboard,

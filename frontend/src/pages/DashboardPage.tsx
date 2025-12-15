@@ -136,9 +136,9 @@ export default function DashboardPage() {
       {
         key: "add-product",
         title: "Thêm sản phẩm đầu tiên",
-        description: "Bạn kinh doanh sản phẩm gì? Hãy thêm sản phẩm đầu tiên để bắt đầu quản lý.",
+        description: "Bạn kinh doanh sản phẩm gì? Hãy tạo nhóm sản phẩm, sau đó thêm sản phẩm đầu tiên để bắt đầu quản lý.",
         completed: false,
-        actions: [{ label: "Thêm sản phẩm", link: "/products" }],
+        actions: [{ label: "Tạo nhóm hàng hoá", link: "/product-groups" }],
       },
       {
         key: "connect-channel",
@@ -460,8 +460,8 @@ export default function DashboardPage() {
                 <Menu.Item key="newbie" icon={<BulbOutlined />}>
                   Dành cho khách hàng mới: cùng SmartRetail làm quen phần mềm qua các bước đơn giản
                   <div style={{ marginTop: 8 }}>
-                    <Link to="/products" style={{ fontSize: 14, color: "#1890ff" }}>
-                      Thêm sản phẩm
+                    <Link to="/product-groups" style={{ fontSize: 14, color: "#1890ff" }}>
+                      Tạo nhóm hàng hoá
                     </Link>
                   </div>
                 </Menu.Item>

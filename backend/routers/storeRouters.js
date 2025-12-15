@@ -65,6 +65,17 @@ router.delete(
   storeController.deleteStore
 );
 
+// Khôi phục cửa hàng (restore soft delete)
+router.put(
+  "/:storeId/restore",
+  verifyToken,
+  checkSubscriptionExpiry,
+  checkStoreAccess,
+  isManager,
+  requirePermission("store:update"),
+  storeController.restoreStore
+);
+
 //
 // ===================== DASHBOARD & SELECT STORE =====================
 //

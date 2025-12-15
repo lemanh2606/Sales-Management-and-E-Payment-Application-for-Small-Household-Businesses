@@ -42,10 +42,11 @@ import {
   AppstoreOutlined,
   UnorderedListOutlined,
   StarFilled,
+  UndoOutlined,
 } from "@ant-design/icons";
 import StoreFormModal from "../../components/store/StoreFormModal";
 import StoreDetailModal from "../../components/store/StoreDetailModal";
-import { selectStore, createStore, updateStore, deleteStore, getStoresByManager, getStoreById } from "../../api/storeApi";
+import { selectStore, createStore, updateStore, deleteStore, getStoresByManager, getStoreById, restoreStore } from "../../api/storeApi";
 
 const { Content } = Layout;
 const { Title, Text, Paragraph } = Typography;
@@ -53,6 +54,7 @@ const { Title, Text, Paragraph } = Typography;
 export default function SelectStorePage() {
   const [api, contextHolder] = notification.useNotification();
   const [stores, setStores] = useState([]);
+  const [deletedStores, setDeletedStores] = useState([]);
   const [filteredStores, setFilteredStores] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingStore, setEditingStore] = useState(null);
@@ -64,6 +66,7 @@ export default function SelectStorePage() {
   const [viewMode, setViewMode] = useState("grid"); // grid | list
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(12);
+  const [storeTab, setStoreTab] = useState("active"); // active | deleted
   const [isMobile, setIsMobile] = useState(typeof window !== "undefined" ? window.innerWidth < 768 : false);
 
   const [storeForm, setStoreForm] = useState({
@@ -89,12 +92,19 @@ export default function SelectStorePage() {
   const loadStores = async () => {
     setLoading(true);
     try {
-      const res = await getStoresByManager();
-      const list = (res && (res.stores || res.data || res)) || [];
-      const arr = Array.isArray(list) ? list : list.stores || [];
-      const activeList = arr.filter((s) => !s?.deleted);
-      setStores(activeList);
-      setFilteredStores(activeList);
+      // Lấy cửa hàng active
+      const activeRes = await getStoresByManager({ deleted: false });
+      const activeList = (activeRes && (activeRes.stores || activeRes.data || activeRes)) || [];
+      const activeArr = Array.isArray(activeList) ? activeList : activeList.stores || [];
+
+      // Lấy cửa hàng đã xoá
+      const deletedRes = await getStoresByManager({ deleted: true });
+      const deletedList = (deletedRes && (deletedRes.stores || deletedRes.data || deletedRes)) || [];
+      const deletedArr = Array.isArray(deletedList) ? deletedList : deletedList.stores || [];
+
+      setStores(activeArr);
+      setDeletedStores(deletedArr);
+      setFilteredStores(activeArr);
     } catch (e) {
       console.error(e);
       api.error({
@@ -126,13 +136,14 @@ export default function SelectStorePage() {
 
   // Search filter
   useEffect(() => {
+    const displayStores = storeTab === "active" ? stores : deletedStores;
     if (!search) {
-      setFilteredStores(stores);
+      setFilteredStores(displayStores);
       setCurrentPage(1);
       return;
     }
     const q = search.trim().toLowerCase();
-    const filtered = stores.filter(
+    const filtered = displayStores.filter(
       (s) =>
         (s.name || "").toLowerCase().includes(q) ||
         (s.address || "").toLowerCase().includes(q) ||
@@ -141,7 +152,7 @@ export default function SelectStorePage() {
     );
     setFilteredStores(filtered);
     setCurrentPage(1);
-  }, [search, stores]);
+  }, [search, stores, deletedStores, storeTab]);
 
   // Suggestions
   const searchOptions = useMemo(() => {
@@ -355,6 +366,27 @@ export default function SelectStorePage() {
     }
   };
 
+  const handleRestore = async (storeId) => {
+    try {
+      setBusy(true);
+      await restoreStore(storeId);
+      api.success({
+        message: "✅ Khôi phục cửa hàng thành công!",
+        placement: "topRight",
+      });
+      setShowDetailModal(false);
+      await loadStores();
+    } catch (e) {
+      api.error({
+        message: "❌ Lỗi khôi phục cửa hàng",
+        description: e?.response?.data?.message || "Không thể khôi phục cửa hàng",
+        placement: "topRight",
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const paginatedStores = filteredStores.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   // Filter dropdown (demo)
@@ -498,6 +530,52 @@ export default function SelectStorePage() {
             }}
             bodyStyle={{ padding: isMobile ? "16px" : "24px" }}
           >
+            {/* Tab Navigation */}
+            <div style={{ marginBottom: 20, display: "flex", gap: 8, borderBottom: "2px solid #f0f0f0", paddingBottom: 12 }}>
+              <Button
+                type={storeTab === "active" ? "primary" : "default"}
+                onClick={() => {
+                  setStoreTab("active");
+                  setSearch("");
+                  setCurrentPage(1);
+                }}
+                icon={<ShopOutlined />}
+                style={{
+                  borderRadius: 10,
+                  height: 40,
+                  paddingLeft: 16,
+                  paddingRight: 16,
+                  fontWeight: 600,
+                  background: storeTab === "active" ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" : "#fff",
+                  border: storeTab === "active" ? "none" : "1px solid #d9d9d9",
+                  color: storeTab === "active" ? "#fff" : "#262626",
+                }}
+              >
+                Cửa Hàng Hoạt Động ({stores.length})
+              </Button>
+              <Button
+                type={storeTab === "deleted" ? "primary" : "default"}
+                onClick={() => {
+                  setStoreTab("deleted");
+                  setSearch("");
+                  setCurrentPage(1);
+                }}
+                icon={<UndoOutlined />}
+                style={{
+                  borderRadius: 10,
+                  height: 40,
+                  paddingLeft: 16,
+                  paddingRight: 16,
+                  fontWeight: 600,
+                  background: storeTab === "deleted" ? "linear-gradient(135deg, #fa541c 0%, #ff7a45 100%)" : "#fff",
+                  border: storeTab === "deleted" ? "none" : "1px solid #d9d9d9",
+                  color: storeTab === "deleted" ? "#fff" : "#262626",
+                }}
+              >
+                Cửa Hàng Đã Xoá ({deletedStores.length})
+              </Button>
+            </div>
+
             <Row gutter={[16, 16]} align="middle">
               <Col xs={24} lg={13}>
                 <AutoComplete
@@ -521,7 +599,7 @@ export default function SelectStorePage() {
                       />
                     }
                     suffix={
-                      filteredStores.length !== stores.length && (
+                      filteredStores.length !== (storeTab === "active" ? stores.length : deletedStores.length) && (
                         <Badge
                           count={filteredStores.length}
                           style={{
@@ -607,29 +685,31 @@ export default function SelectStorePage() {
                   <Text strong style={{ color: "#667eea" }}>
                     {filteredStores.length}
                   </Text>{" "}
-                  cửa hàng
+                  cửa hàng {storeTab === "deleted" ? "đã xoá" : ""}
                 </Text>
               </Col>
-              <Col>
-                <Button
-                  type="primary"
-                  icon={<PlusOutlined />}
-                  onClick={handleAdd}
-                  size="large"
-                  style={{
-                    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                    border: "none",
-                    borderRadius: 12,
-                    height: 48,
-                    paddingLeft: 24,
-                    paddingRight: 24,
-                    fontWeight: 600,
-                    boxShadow: "0 4px 15px rgba(102, 126, 234, 0.4)",
-                  }}
-                >
-                  Thêm Cửa Hàng
-                </Button>
-              </Col>
+              {storeTab === "active" && (
+                <Col>
+                  <Button
+                    type="primary"
+                    icon={<PlusOutlined />}
+                    onClick={handleAdd}
+                    size="large"
+                    style={{
+                      background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                      border: "none",
+                      borderRadius: 12,
+                      height: 48,
+                      paddingLeft: 24,
+                      paddingRight: 24,
+                      fontWeight: 600,
+                      boxShadow: "0 4px 15px rgba(102, 126, 234, 0.4)",
+                    }}
+                  >
+                    Thêm Cửa Hàng
+                  </Button>
+                </Col>
+              )}
             </Row>
           </Card>
 
@@ -869,16 +949,19 @@ export default function SelectStorePage() {
                                   handleSelect(store);
                                 }}
                                 loading={busy}
+                                disabled={store.deleted}
                                 block
                                 style={{
-                                  background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                                  background: store.deleted ? "#ccc" : "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
                                   border: "none",
                                   borderRadius: 10,
                                   fontWeight: 600,
                                   height: 40,
                                   fontSize: 13,
-                                  boxShadow: "0 4px 12px rgba(102, 126, 234, 0.3)",
+                                  boxShadow: store.deleted ? "none" : "0 4px 12px rgba(102, 126, 234, 0.3)",
+                                  cursor: store.deleted ? "not-allowed" : "pointer",
                                 }}
+                                title={store.deleted ? "Cửa hàng đã bị xóa, vui lòng khôi phục trước" : "Chọn cửa hàng này"}
                               >
                                 Chọn
                               </Button>
@@ -909,10 +992,12 @@ export default function SelectStorePage() {
                                     handleEdit(store);
                                   }}
                                   block
+                                  disabled={store.deleted}
                                   style={{
                                     borderRadius: 10,
                                     height: 40,
                                     border: "2px solid #f0f0f0",
+                                    cursor: store.deleted ? "not-allowed" : "pointer",
                                   }}
                                 />
                               </Tooltip>
@@ -1074,16 +1159,19 @@ export default function SelectStorePage() {
                             handleSelect(store);
                           }}
                           loading={busy}
+                          disabled={store.deleted}
                           style={{
-                            background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                            background: store.deleted ? "#ccc" : "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
                             border: "none",
                             borderRadius: 10,
                             fontWeight: 600,
                             height: 40,
                             paddingLeft: 20,
                             paddingRight: 20,
-                            boxShadow: "0 4px 12px rgba(102, 126, 234, 0.3)",
+                            boxShadow: store.deleted ? "none" : "0 4px 12px rgba(102, 126, 234, 0.3)",
+                            cursor: store.deleted ? "not-allowed" : "pointer",
                           }}
+                          title={store.deleted ? "Cửa hàng đã bị xóa, vui lòng khôi phục trước" : ""}
                         >
                           Chọn
                         </Button>
@@ -1105,10 +1193,12 @@ export default function SelectStorePage() {
                             e.stopPropagation();
                             handleEdit(store);
                           }}
+                          disabled={store.deleted}
                           style={{
                             borderRadius: 10,
                             height: 40,
                             border: "2px solid #f0f0f0",
+                            cursor: store.deleted ? "not-allowed" : "pointer",
                           }}
                         />
                       </Space>
@@ -1160,6 +1250,7 @@ export default function SelectStorePage() {
         onEdit={(s) => handleEdit(s)}
         onSelect={(s) => handleSelect(s)}
         onDelete={(id) => handleDelete(id)}
+        onRestore={(id) => handleRestore(id)}
       />
 
       {/* Custom Styles */}
