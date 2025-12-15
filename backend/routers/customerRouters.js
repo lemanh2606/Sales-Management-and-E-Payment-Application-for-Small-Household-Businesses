@@ -6,6 +6,7 @@ const {
   searchCustomers,
   updateCustomer,
   softDeleteCustomer,
+  restoreCustomer,
   getCustomersByStore,
   importCustomers,
   downloadCustomerTemplate,
@@ -40,8 +41,10 @@ router.post("/", verifyToken, checkSubscriptionExpiry, checkStoreAccess, require
 router.get("/search", verifyToken, checkSubscriptionExpiry, checkStoreAccess, requirePermission("customers:search"), searchCustomers);
 //Route: PUT /api/customers/:id
 router.put("/:id", verifyToken, checkSubscriptionExpiry, checkStoreAccess, requirePermission("customers:update"), updateCustomer);
-//Route: DELETE /api/customers/:id
-router.delete("/:id", verifyToken, checkSubscriptionExpiry, checkStoreAccess, requirePermission("customers:delete"), softDeleteCustomer);
+//Route: DELETE /api/customers/:id (checkStoreAccess removed vì storeId sẽ được verify từ customer document)
+router.delete("/:id", verifyToken, checkSubscriptionExpiry, requirePermission("customers:delete"), softDeleteCustomer);
+//Route: PUT /api/customers/:id/restore (khôi phục khách hàng đã bị xóa)
+router.put("/:id/restore", verifyToken, checkSubscriptionExpiry, requirePermission("customers:update"), restoreCustomer);
 //Route: GET /api/customers/store/:storeId
 router.get("/store/:storeId", verifyToken, checkSubscriptionExpiry, checkStoreAccess, requirePermission("customers:search"), getCustomersByStore);
 // Export danh sách khách hàng theo cửa hàng

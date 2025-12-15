@@ -130,6 +130,21 @@ interface OrderTab {
   isVAT: boolean;
   paymentMethod: "cash" | "qr";
   cashReceived: number;
+
+  // Per-tab order data (not global anymore)
+  pendingOrderId: string | null;
+  orderCreatedPaymentMethod: "cash" | "qr" | null;
+  orderCreatedAt: string;
+  orderPrintCount: number;
+  orderEarnedPoints: number;
+
+  // Per-tab QR data
+  qrImageUrl: string | null;
+  qrPayload: string | null;
+  qrExpiryTs: number | null;
+  savedQrImageUrl: string | null;
+  savedQrPayload: string | null;
+  savedQrExpiryTs: number | null;
 }
 
 interface OrderResponse {
@@ -172,6 +187,17 @@ const OrderPOSHome: React.FC = () => {
       isVAT: false,
       paymentMethod: "cash",
       cashReceived: 0,
+      pendingOrderId: null,
+      orderCreatedPaymentMethod: null,
+      orderCreatedAt: "",
+      orderPrintCount: 0,
+      orderEarnedPoints: 0,
+      qrImageUrl: null,
+      qrPayload: null,
+      qrExpiryTs: null,
+      savedQrImageUrl: null,
+      savedQrPayload: null,
+      savedQrExpiryTs: null,
     },
   ]);
   const [activeTab, setActiveTab] = useState("1");
@@ -184,19 +210,10 @@ const OrderPOSHome: React.FC = () => {
   const [newCustomerModal, setNewCustomerModal] = useState(false);
   const [tempPhone, setTempPhone] = useState("");
   const [phoneInput, setPhoneInput] = useState("");
-  const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
   const [billModalOpen, setBillModalOpen] = useState(false);
-
-  const [qrImageUrl, setQrImageUrl] = useState<string | null>(null);
-  const [qrPayload, setQrPayload] = useState<string | null>(null);
-  const [qrExpiryTs, setQrExpiryTs] = useState<number | null>(null);
 
   const [foundCustomers, setFoundCustomers] = useState<Customer[]>([]);
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
-
-  const [orderCreatedAt, setOrderCreatedAt] = useState<string>(""); // ngày tạo order
-  const [orderPrintCount, setOrderPrintCount] = useState<number>(0); // số lần in
-  const [orderEarnedPoints, setOrderEarnedPoints] = useState<number>(0); // điểm tích
 
   // Thêm state để lưu employee hiện tại của user đang login
   const [currentUserEmployee, setCurrentUserEmployee] = useState<Seller | null>(null);
@@ -252,23 +269,33 @@ const OrderPOSHome: React.FC = () => {
       tab.isVAT = false;
       tab.paymentMethod = "cash";
       tab.cashReceived = 0;
+      // Reset order data
+      tab.pendingOrderId = null;
+      tab.orderCreatedPaymentMethod = null;
+      tab.orderCreatedAt = "";
+      tab.orderPrintCount = 0;
+      tab.orderEarnedPoints = 0;
+      // Reset QR data
+      tab.qrImageUrl = null;
+      tab.qrPayload = null;
+      tab.qrExpiryTs = null;
+      tab.savedQrImageUrl = null;
+      tab.savedQrPayload = null;
+      tab.savedQrExpiryTs = null;
     });
-    // Optional: Tạo tab mới tự động nếu muốn
-    // addNewOrderTab();
+    // Clear customer search input
+    setPhoneInput(""); // 🟢 Clear search box
+    setTempPhone(""); // Clear temp phone
+    setFoundCustomers([]); // Clear customer dropdown
+    setShowCustomerDropdown(false); // Close dropdown
   };
 
-  // Socket - Kết nối socket để nhận thông báo thanh toán
+  // Socket - Kết nối socket để nhận các thông báo khác (low_stock, etc) - WEBHOOK PAYMENT KHÔNG DÙNG NỮA
   useEffect(() => {
     const s = io(SOCKET_URL, { auth: { token } });
     setSocket(s);
-    s.on("payment_success", (data) => {
-      setPendingOrderId(data.orderId); // luôn dùng orderId Mongo chứ không dùng ref
-      setBillModalOpen(true);
-      // Thêm reset QR ngay lập tức
-      setQrImageUrl(null);
-      setQrPayload(null);
-      setQrExpiryTs(null);
-    });
+    // NOTE: payment_success listener REMOVED vì không dùng webhook, thanh toán QR bây giờ là thủ công
+    // Khi user nhấn "In hoá đơn" ở QR Modal → API gọi printBill → tự động set paid
     return () => {
       s.disconnect();
     };
@@ -484,12 +511,27 @@ const OrderPOSHome: React.FC = () => {
         key: newKey,
         cart: [],
         customer: null,
-        employeeId: currentUserEmployee?.isOwner ? null : currentUserEmployee?._id || null, // ← mặc định là user hiện tại
+        employeeId: currentUserEmployee?.isOwner ? null : currentUserEmployee?._id || null,
         usedPoints: 0,
         usedPointsEnabled: false,
         isVAT: false,
         paymentMethod: "cash",
         cashReceived: 0,
+
+        // Thêm các field mới theo interface OrderTab
+        pendingOrderId: null,
+        orderCreatedPaymentMethod: null,
+        orderCreatedAt: "",
+        orderPrintCount: 0,
+        orderEarnedPoints: 0,
+
+        // Thêm field QR
+        qrImageUrl: null,
+        qrPayload: null,
+        qrExpiryTs: null,
+        savedQrImageUrl: null,
+        savedQrPayload: null,
+        savedQrExpiryTs: null,
       },
     ]);
     setActiveTab(newKey);
@@ -576,20 +618,21 @@ const OrderPOSHome: React.FC = () => {
       const order = res.data.order;
       const orderId = order._id;
 
-      // set thông tin cho modal in hóa đơn (an toàn với undefined/null)
-      setPendingOrderId(orderId);
-      setOrderCreatedAt(order.createdAt || "");
-      setOrderPrintCount(typeof order.printCount === "number" ? order.printCount : 0);
-      setOrderEarnedPoints((order as any).earnedPoints ?? 0);
+      // Set thông tin cho current tab (per-tab, not global)
+      updateOrderTab((tab) => {
+        tab.pendingOrderId = orderId;
+        tab.orderCreatedAt = order.createdAt || "";
+        tab.orderPrintCount = typeof order.printCount === "number" ? order.printCount : 0;
+        tab.orderEarnedPoints = (order as any).earnedPoints ?? 0;
+        tab.orderCreatedPaymentMethod = currentTab.paymentMethod;
 
-      if (currentTab.paymentMethod === "qr" && res.data.qrDataURL) {
-        setQrImageUrl(res.data.qrDataURL);
-        setQrExpiryTs(res.data.order?.qrExpiry ? new Date(res.data.order.qrExpiry).getTime() : null);
-        setPendingOrderId(orderId);
-        //QR đã tạo, đang chờ thanh toán
-      } else {
-        setPendingOrderId(orderId);
-      }
+        if (currentTab.paymentMethod === "qr" && res.data.qrDataURL) {
+          tab.qrImageUrl = res.data.qrDataURL;
+          tab.savedQrImageUrl = res.data.qrDataURL; // 🟢 Lưu giữ QR để restore lại
+          tab.qrExpiryTs = res.data.order?.qrExpiry ? new Date(res.data.order.qrExpiry).getTime() : null;
+          tab.savedQrExpiryTs = res.data.order?.qrExpiry ? new Date(res.data.order.qrExpiry).getTime() : null; // 🟢 Lưu giữ
+        }
+      });
     } catch (err: any) {
       Swal.fire({
         title: "❌ Lỗi!",
@@ -615,12 +658,7 @@ const OrderPOSHome: React.FC = () => {
         timer: 1500,
       });
       setBillModalOpen(false); // Đóng modal ngay
-      setPendingOrderId(null); // Reset pending để nút xác nhận biến mất
-      resetCurrentTab(); // Reset tab về trạng thái ban đầu
-      // Reset QR nếu có
-      setQrImageUrl(null);
-      setQrPayload(null);
-      setQrExpiryTs(null);
+      resetCurrentTab(); // Reset tab về trạng thái ban đầu (tất cả per-tab data)
     } catch (err: any) {
       Swal.fire({
         icon: "error",
@@ -1498,26 +1536,65 @@ const OrderPOSHome: React.FC = () => {
                 block
                 loading={loading}
                 onClick={createOrder}
+                disabled={!!currentTab.pendingOrderId} // 🔴 Disable khi đã tạo đơn (per-tab)
                 style={{
                   marginTop: 12,
                   height: "50px",
                   fontSize: "16px",
                   fontWeight: 600,
                   borderRadius: "8px",
-                  background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                  background: currentTab.pendingOrderId ? "#ccc" : "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
                   border: "none",
+                  cursor: currentTab.pendingOrderId ? "not-allowed" : "pointer",
                 }}
               >
                 {currentTab.paymentMethod === "qr" ? "Tạo QR Thanh Toán" : "Tạo Đơn Hàng"}
               </Button>
 
+              {/* Tiếp tục thanh toán QR - Show khi đã tạo đơn QR */}
+              {currentTab.pendingOrderId && currentTab.paymentMethod === "qr" && !currentTab.qrImageUrl && (
+                <Button
+                  type="default"
+                  size="large"
+                  block
+                  onClick={() => {
+                    // 🟢 Restore từ saved QR data
+                    if (currentTab.savedQrImageUrl) {
+                      updateOrderTab((tab) => {
+                        tab.qrImageUrl = tab.savedQrImageUrl;
+                        tab.qrPayload = tab.savedQrPayload;
+                        tab.qrExpiryTs = tab.savedQrExpiryTs;
+                      });
+                    } else {
+                      Swal.fire({
+                        icon: "warning",
+                        title: "QR không hợp lệ",
+                        text: "QR đã hết hạn hoặc không có dữ liệu, vui lòng tạo QR mới",
+                        confirmButtonText: "Đã hiểu",
+                      });
+                    }
+                  }}
+                  style={{
+                    marginTop: 8,
+                    height: "45px",
+                    fontSize: "15px",
+                    fontWeight: 500,
+                    borderRadius: "8px",
+                    border: "1px solid #1890ff",
+                    color: "#1890ff",
+                  }}
+                >
+                  📱 Tiếp tục thanh toán QR
+                </Button>
+              )}
+
               {/* Xác nhận thanh toán tiền mặt */}
-              {pendingOrderId && currentTab.paymentMethod === "cash" && (
+              {currentTab.pendingOrderId && currentTab.paymentMethod === "cash" && (
                 <Popconfirm
                   title={`Xác nhận khách đã đưa ${formatPrice(totalAmount)}?`}
                   onConfirm={async () => {
                     try {
-                      await axios.post(`${API_BASE}/orders/${pendingOrderId}/set-paid-cash`, {}, { headers });
+                      await axios.post(`${API_BASE}/orders/${currentTab.pendingOrderId}/set-paid-cash`, {}, { headers });
                       setBillModalOpen(true);
                     } catch (err: any) {
                       Swal.fire({
@@ -1586,14 +1663,60 @@ const OrderPOSHome: React.FC = () => {
           }
         }}
       />
-      {/* Modal QR Code */}
       <Modal
-        open={!!(qrImageUrl || qrPayload)}
-        footer={null}
+        open={!!(currentTab.qrImageUrl || currentTab.qrPayload)}
+        footer={[
+          <Button
+            key="cancel"
+            onClick={() => {
+              updateOrderTab((tab) => {
+                tab.qrImageUrl = null;
+                tab.qrPayload = null;
+                tab.qrExpiryTs = null;
+              });
+            }}
+          >
+            Huỷ
+          </Button>,
+          <Button
+            key="print"
+            type="primary"
+            danger
+            onClick={() => {
+              if (currentTab.pendingOrderId) {
+                // 🔴 Call API set-paid-QR + in bill trong 1 request
+                (async () => {
+                  try {
+                    await axios.post(`${API_BASE}/orders/${currentTab.pendingOrderId}/print-bill`, {}, { headers });
+                    // Reset QR
+                    updateOrderTab((tab) => {
+                      tab.qrImageUrl = null;
+                      tab.qrPayload = null;
+                      tab.qrExpiryTs = null;
+                    });
+                    setBillModalOpen(true);
+                  } catch (err: any) {
+                    Swal.fire({
+                      icon: "error",
+                      title: "In hoá đơn thất bại",
+                      text: err.response?.data?.message || "Lỗi khi in hoá đơn",
+                      confirmButtonText: "OK",
+                    });
+                  }
+                })();
+              }
+            }}
+            style={{ background: "#ff7a45", borderColor: "#ff7a45" }}
+          >
+            🖨️ In hoá đơn (Xác nhận thanh toán)
+          </Button>,
+        ]}
         onCancel={() => {
-          setQrImageUrl(null);
-          setQrPayload(null);
-          setQrExpiryTs(null);
+          updateOrderTab((tab) => {
+            tab.qrImageUrl = null;
+            tab.qrPayload = null;
+            tab.qrExpiryTs = null;
+          });
         }}
         centered
         width={600}
@@ -1610,13 +1733,13 @@ const OrderPOSHome: React.FC = () => {
               padding: "10px",
             }}
           >
-            {qrImageUrl ? (
-              <img src={qrImageUrl} alt="QR code" style={{ width: 410, height: 410 }} />
-            ) : qrPayload ? (
-              <QRCode value={qrPayload} size={410} />
+            {currentTab.qrImageUrl ? (
+              <img src={currentTab.qrImageUrl} alt="QR code" style={{ width: 410, height: 410 }} />
+            ) : currentTab.qrPayload ? (
+              <QRCode value={currentTab.qrPayload} size={410} />
             ) : null}
           </div>
-          {qrExpiryTs && (
+          {currentTab.qrExpiryTs && (
             <div
               style={{
                 background: "#fff7e6",
@@ -1627,7 +1750,7 @@ const OrderPOSHome: React.FC = () => {
             >
               <Text strong>Thời gian còn lại: </Text>
               <Countdown
-                value={qrExpiryTs}
+                value={currentTab.qrExpiryTs}
                 format="mm:ss"
                 onFinish={() => {
                   Swal.fire({
@@ -1639,9 +1762,11 @@ const OrderPOSHome: React.FC = () => {
                     timer: 2000,
                   });
 
-                  setQrImageUrl(null);
-                  setQrPayload(null);
-                  setQrExpiryTs(null);
+                  updateOrderTab((tab) => {
+                    tab.qrImageUrl = null;
+                    tab.qrPayload = null;
+                    tab.qrExpiryTs = null;
+                  });
                 }}
                 valueStyle={{ fontSize: "24px", color: "#faad14" }}
               />
@@ -1654,18 +1779,17 @@ const OrderPOSHome: React.FC = () => {
         open={billModalOpen}
         onCancel={() => {
           setBillModalOpen(false);
-          setPendingOrderId(null); // Reset nếu đóng thủ công
-          resetCurrentTab(); // Optional: Reset tab luôn
+          resetCurrentTab(); // Reset tab (sẽ clear tất cả per-tab data)
         }}
         onPrint={() => {
-          if (pendingOrderId) {
-            triggerPrint(pendingOrderId);
+          if (currentTab.pendingOrderId) {
+            triggerPrint(currentTab.pendingOrderId);
           }
         }}
-        orderId={pendingOrderId || undefined}
-        createdAt={orderCreatedAt}
-        printCount={orderPrintCount}
-        earnedPoints={orderEarnedPoints}
+        orderId={currentTab.pendingOrderId || undefined}
+        createdAt={currentTab.orderCreatedAt}
+        printCount={currentTab.orderPrintCount}
+        earnedPoints={currentTab.orderEarnedPoints}
         cart={currentTab.cart}
         totalAmount={totalAmount}
         storeName={currentStore.name || "Cửa hàng"}

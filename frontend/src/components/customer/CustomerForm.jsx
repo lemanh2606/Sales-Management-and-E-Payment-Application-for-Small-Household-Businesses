@@ -49,7 +49,7 @@ export default function CustomerForm({ customer, onSuccess, onCancel }) {
           title: "🎉 Thành công!",
           text: "Cập nhật khách hàng thành công!",
           icon: "success",
-          confirmButtonText: "Tuyệt vời!",
+          confirmButtonText: "OK",
           confirmButtonColor: "#52c41a",
           buttonsStyling: false,
         });

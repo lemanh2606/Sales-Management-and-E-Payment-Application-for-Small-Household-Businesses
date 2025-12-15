@@ -717,7 +717,17 @@ export default function EmployeesPage() {
     },
   ];
 
-  const [pagination, setPagination] = useState({
+  const [paginationActive, setPaginationActive] = useState({
+    current: 1,
+    pageSize: 10,
+  });
+
+  const [paginationDeleted, setPaginationDeleted] = useState({
+    current: 1,
+    pageSize: 10,
+  });
+
+  const [permissionPagination, setPermissionPagination] = useState({
     current: 1,
     pageSize: 10,
   });
@@ -772,7 +782,8 @@ export default function EmployeesPage() {
             enterButton
             allowClear
             size="large"
-            className="w-full max-w-md"
+            className="w-full max-w-2xl"
+            style={{ width: "100%", maxWidth: "600px" }}
           />
         </div>
 
@@ -790,9 +801,12 @@ export default function EmployeesPage() {
                   dataSource={filteredActive}
                   rowKey="_id"
                   pagination={{
-                    position: ["bottomRight"], // 👉 cho thanh phân trang nằm bên phải
+                    position: ["bottomRight"],
                     showSizeChanger: true,
                     responsive: true,
+                    current: paginationActive.current,
+                    pageSize: paginationActive.pageSize,
+                    total: filteredActive.length,
                     showTotal: (total, range) => (
                       <div>
                         Đang xem{" "}
@@ -806,6 +820,7 @@ export default function EmployeesPage() {
                   loading={loading && tabKey === "active"}
                   scroll={{ x: "max-content" }}
                   locale={{ emptyText: "Chưa có nhân viên đang làm việc" }}
+                  onChange={(pag) => setPaginationActive({ current: pag.current, pageSize: pag.pageSize })}
                 />
               ),
             },
@@ -818,9 +833,12 @@ export default function EmployeesPage() {
                   dataSource={filteredDeleted}
                   rowKey="_id"
                   pagination={{
-                    position: ["bottomRight"], // 👉 cho thanh phân trang nằm bên phải
+                    position: ["bottomRight"],
                     showSizeChanger: true,
                     responsive: true,
+                    current: paginationDeleted.current,
+                    pageSize: paginationDeleted.pageSize,
+                    total: filteredDeleted.length,
                     showTotal: (total, range) => (
                       <div>
                         Đang xem{" "}
@@ -834,6 +852,7 @@ export default function EmployeesPage() {
                   loading={loading && tabKey === "deleted"}
                   scroll={{ x: "max-content" }}
                   locale={{ emptyText: "Chưa có nhân viên bị xóa" }}
+                  onChange={(pag) => setPaginationDeleted({ current: pag.current, pageSize: pag.pageSize })}
                 />
               ),
             },
@@ -864,8 +883,8 @@ export default function EmployeesPage() {
                             showSizeChanger: true,
                             responsive: true,
                             size: "small",
-                            current: pagination.current,
-                            pageSize: pagination.pageSize,
+                            current: permissionPagination.current,
+                            pageSize: permissionPagination.pageSize,
                             total: filteredActive.length,
                             showTotal: (total, range) => (
                               <div>
@@ -880,7 +899,7 @@ export default function EmployeesPage() {
                           loading={loading && tabKey === "permissions"}
                           scroll={{ x: "max-content" }}
                           size="small"
-                          onChange={(pag) => setPagination({ current: pag.current, pageSize: pag.pageSize })}
+                          onChange={(pag) => setPermissionPagination({ current: pag.current, pageSize: pag.pageSize })}
                           onRow={(record) => ({
                             onClick: () => handleSelectStaff(record),
                             style: {

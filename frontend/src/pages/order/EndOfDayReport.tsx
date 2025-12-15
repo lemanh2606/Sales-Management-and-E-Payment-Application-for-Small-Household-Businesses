@@ -653,6 +653,9 @@ const EndOfDayReport: React.FC = () => {
               <span>
                 <UserOutlined style={{ marginRight: 8 }} />
                 Doanh Thu Theo Nhân Viên
+                <AntdTooltip title="Chỉ tính doanh thu đối với nhân viên bán hàng, không tính đối với chủ cửa hàng tự bán hàng">
+                  <InfoCircleOutlined style={{ marginLeft: 6, color: "#1890ff", cursor: "pointer" }} />
+                </AntdTooltip>
               </span>
             }
             style={{ borderRadius: 12 }}
