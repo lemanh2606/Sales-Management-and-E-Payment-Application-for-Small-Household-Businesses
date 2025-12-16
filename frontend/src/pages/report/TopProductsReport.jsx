@@ -1,6 +1,6 @@
 // src/pages/report/TopProductsReport.jsx
 import React, { useState, useEffect, useCallback } from "react";
-import { Card, Col, Row, Select, InputNumber, Table, Space, Typography, Spin, Empty, Dropdown, Menu, DatePicker, Button } from "antd";
+import { Card, Col, Row, Select, InputNumber, Table, Space, Typography, Spin, Empty, Dropdown, Menu, DatePicker, Button, Tag } from "antd";
 import { FileExcelOutlined, FilePdfOutlined, DownloadOutlined } from "@ant-design/icons";
 import axios from "axios";
 import Layout from "../../components/Layout";
@@ -208,7 +208,7 @@ const TopProductsReport = () => {
   return (
     <Layout>
       <Space direction="vertical" size="large" style={{ width: "100%" }}>
-        <Card>
+        <Card style={{ border: "1px solid #8c8c8c" }}>
           <Row gutter={[16, 16]} align="middle">
             <Col span={8}>
               <Title level={3} style={{ margin: 0, color: "#1890ff" }}>
@@ -373,21 +373,28 @@ const TopProductsReport = () => {
 
         {/* BẢNG DỮ LIỆU */}
         {!isReadyToLoad() ? (
-          <Card>
+          <Card style={{ border: "1px solid #8c8c8c" }}>
             <Empty description="Vui lòng chọn kỳ báo cáo để xem top sản phẩm" />
           </Card>
         ) : loading ? (
-          <Card>
+          <Card style={{ border: "1px solid #8c8c8c" }}>
             <div style={{ textAlign: "center", padding: "80px 0" }}>
               <Spin size="large" tip="Đang tải top sản phẩm..." />
             </div>
           </Card>
         ) : products.length === 0 ? (
-          <Card>
+          <Card style={{ border: "1px solid #8c8c8c" }}>
             <Empty description="Không có dữ liệu trong kỳ này" />
           </Card>
         ) : (
-          <Card title={`Top sản phẩm bán chạy – ${getPeriodDisplay()}`}>
+          <Card
+            title={
+              <>
+                Top sản phẩm bán chạy – <Tag color="blue">{getPeriodDisplay()}</Tag>
+              </>
+            }
+            style={{ border: "1px solid #8c8c8c" }}
+          >
             <Table
               columns={columns}
               dataSource={products}

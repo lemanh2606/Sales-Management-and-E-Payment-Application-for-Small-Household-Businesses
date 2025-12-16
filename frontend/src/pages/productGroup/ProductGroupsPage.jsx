@@ -199,9 +199,9 @@ export default function ProductGroupsPage() {
         <Card
           style={{
             marginBottom: 24,
-            borderRadius: 16,
-            background: "linear-gradient(135deg, #52c41a 0%, #73d13d 100%)",
-            border: "none",
+            borderRadius: 12,
+            border: "1px solid #8c8c8c",
+            background: "linear-gradient(135deg, #52c41a 0%, #3080e9ff 100%)",
             boxShadow: "0 8px 24px rgba(82, 196, 26, 0.25)",
           }}
           styles={{ body: { padding: "32px" } }}
@@ -247,6 +247,7 @@ export default function ProductGroupsPage() {
             style={{
               marginBottom: 24,
               borderRadius: 12,
+              border: "1px solid #8c8c8c",
               boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
             }}
           >
@@ -313,7 +314,7 @@ export default function ProductGroupsPage() {
             <Spin size="large" tip={<Text style={{ fontSize: 16, marginTop: 16 }}>Đang tải...</Text>} />
           </div>
         ) : groups.length === 0 ? (
-          <Card style={{ borderRadius: 12, textAlign: "center", padding: "60px 20px" }}>
+          <Card style={{ borderRadius: 12, textAlign: "center", padding: "60px 20px", border: "1px solid #8c8c8c" }}>
             <Empty
               image={Empty.PRESENTED_IMAGE_SIMPLE}
               imageStyle={{ height: 120 }}
@@ -358,7 +359,7 @@ export default function ProductGroupsPage() {
                     style={{
                       borderRadius: 16,
                       height: "100%",
-                      border: "1px solid #e8e8e8",
+                      border: "1px solid #8c8c8c",
                       transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
                     }}
                     styles={{ body: { padding: 20 } }}

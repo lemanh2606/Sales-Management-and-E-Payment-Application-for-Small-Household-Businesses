@@ -694,7 +694,10 @@ export default function ProductListPage() {
   };
 
   const columnSelectorContent = (
-    <Card style={{ width: "100%", maxHeight: isMobile ? "70vh" : 400, overflowY: "auto" }} styles={{ body: { padding: 16 } }}>
+    <Card
+      style={{ width: "100%", border: "1px solid #8c8c8c", maxHeight: isMobile ? "70vh" : 400, overflowY: "auto" }}
+      styles={{ body: { padding: 16 } }}
+    >
       <Text strong style={{ fontSize: "clamp(13px, 3vw, 14px)" }}>
         Chọn cột hiển thị
       </Text>
@@ -875,7 +878,7 @@ export default function ProductListPage() {
     return (
       <Layout>
         {contextHolder}
-        <Card style={{ margin: isMobile ? 12 : 0, borderRadius: 16 }}>
+        <Card style={{ border: "1px solid #8c8c8c", margin: isMobile ? 12 : 0, borderRadius: 16 }}>
           <Title level={2} style={{ fontSize: "clamp(20px, 5vw, 32px)" }}>
             Danh sách sản phẩm
           </Title>
@@ -902,6 +905,7 @@ export default function ProductListPage() {
         <Card
           style={{
             borderRadius: 16,
+            border: "1px solid #8c8c8c",
             marginBottom: isMobile ? 10 : 15,
           }}
         >

@@ -625,12 +625,9 @@ const TopCustomer = () => {
             title={
               <Space>
                 <DollarOutlined style={{ color: "#d4380d" }} />
-                <Text strong>
-                  Top {filtered.length} khách hàng thân thiết{" "}
                   <Text strong>
                     Top {filtered.length} khách hàng thân thiết - <Tag color="blue">{getPeriodDisplayText()}</Tag>
                   </Text>
-                </Text>
               </Space>
             }
           >

@@ -1,7 +1,7 @@
 // src/pages/report/RevenueReport.jsx
 import React, { useState, useEffect } from "react";
-import { Card, Col, Row, Select, DatePicker, Statistic, Table, Spin, Alert, Space, Button, Dropdown, message, Typography } from "antd";
-import { DownloadOutlined, FileExcelOutlined, DollarOutlined, ShoppingOutlined } from "@ant-design/icons";
+import { Card, Col, Row, Select, DatePicker, Statistic, Table, Spin, Alert, Space, Button, Tooltip, message, Typography } from "antd";
+import { DownloadOutlined, FileExcelOutlined, DollarOutlined, ShoppingOutlined, InfoCircleOutlined } from "@ant-design/icons";
 import axios from "axios";
 import dayjs from "dayjs";
 import "dayjs/locale/vi";
@@ -340,14 +340,43 @@ const RevenueReport = () => {
                   </Card>
                 </Col>
                 <Col xs={24} sm={12} lg={12}>
-                  <Card style={{ border: "1px solid #8c8c8c", borderLeft: "4px solid #52c41a" }}>
-                    <Statistic
-                      title={<span style={{ fontSize: "16px", color: "#595959" }}>Số hóa đơn đã bán</span>}
-                      value={summary.countOrders}
-                      valueStyle={{ color: "#52c41a", fontSize: 32, fontWeight: 700 }}
-                      prefix={<ShoppingOutlined />}
-                    />
-                  </Card>
+                  <Tooltip
+                    title="Tổng số hóa đơn đã bán trong khoảng thời gian đã chọn, tính cả trường hợp chủ cửa hàng trực tiếp bán"
+                    placement="top"
+                  >
+                    <Card
+                      hoverable
+                      style={{
+                        border: "1px solid #8c8c8c",
+                        borderLeft: "4px solid #52c41a",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <Statistic
+                        title={
+                          <span
+                            style={{
+                              fontSize: 16,
+                              color: "#595959",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                            }}
+                          >
+                            Số hóa đơn đã bán
+                            <InfoCircleOutlined style={{ color: "#1890ff", fontSize: 14 }} />
+                          </span>
+                        }
+                        value={summary.countOrders}
+                        valueStyle={{
+                          color: "#52c41a",
+                          fontSize: 32,
+                          fontWeight: 700,
+                        }}
+                        prefix={<ShoppingOutlined />}
+                      />
+                    </Card>
+                  </Tooltip>
                 </Col>
               </Row>
 
@@ -361,6 +390,30 @@ const RevenueReport = () => {
                 }
                 style={{ border: "1px solid #8c8c8c" }}
               >
+                {/* MÔ TẢ NHẸ */}
+                <Alert
+                  type="info"
+                  showIcon
+                  style={{
+                    borderRadius: 8,
+                    marginBottom: 16,
+                  }}
+                  message={
+                    <span style={{ fontSize: 14 }}>
+                      Bảng này <strong>chỉ thống kê doanh thu từ các hóa đơn do nhân viên trực tiếp bán</strong>. Không bao gồm các hóa đơn do{" "}
+                      <strong>chủ cửa hàng trực tiếp bán</strong>
+                    </span>
+                  }
+                />
+
+                {/* ĐƯỜNG NGĂN */}
+                <div
+                  style={{
+                    borderBottom: "2px solid #e8e8e8",
+                    margin: "5px 0 16px",
+                  }}
+                />
+
                 <Table
                   columns={columns}
                   dataSource={employeeData}

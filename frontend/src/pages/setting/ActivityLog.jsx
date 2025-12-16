@@ -520,7 +520,7 @@ const ActivityLog = () => {
                     <RangePicker style={{ width: "100%" }} onChange={handleDateRange} format="YYYY-MM-DD" placeholder={["Từ ngày", "Đến ngày"]} />
                   </Col>
                   <Col span={6}>
-                    <Input placeholder="Tìm kiếm keyword" onChange={(e) => handleFilterChange("keyword", e.target.value)} style={{ width: "100%" }} />
+                    <Input placeholder="Tìm kiếm từ khoá" onChange={(e) => handleFilterChange("keyword", e.target.value)} style={{ width: "100%" }} />
                   </Col>
                 </Row>
                 <Row style={{ marginTop: 16 }}>

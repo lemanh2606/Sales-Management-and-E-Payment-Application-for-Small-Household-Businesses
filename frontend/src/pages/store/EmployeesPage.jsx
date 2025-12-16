@@ -749,30 +749,80 @@ export default function EmployeesPage() {
 
   return (
     <Layout>
-      <div className="p-6 bg-white rounded-lg shadow-md">
-        <div className="flex justify-between items-center mb-6">
-          {/* LEFT: Title + Store name */}
-          <div className="flex items-center space-x-4">
-            <h2 className="text-2xl font-bold text-gray-800">Quản lý nhân viên cửa hàng</h2>
-            <span
-              className="px-4 py-2 text-base font-semibold bg-[#e6f4ff] text-[#1890ff]
-                 rounded-xl shadow-sm border border-[#91caff]"
+      <div className="p-6 bg-white rounded-lg" style={{ border: "1px solid #8c8c8c" }}>
+        {/* HEADER */}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            marginBottom: 16,
+          }}
+        >
+          {/* BÊN TRÁI: TÊN CỬA HÀNG + MÔ TẢ */}
+          <div>
+            <Typography.Title
+              level={2}
+              style={{
+                margin: 0,
+                color: "#1890ff",
+                lineHeight: 1.2,
+              }}
             >
-              {currentStore?.name}
-            </span>
+              {currentStore?.name || "Đang tải..."}
+            </Typography.Title>
+
+            <Typography.Text
+              style={{
+                color: "#595959",
+                fontSize: 16,
+                display: "block",
+                marginTop: 6,
+              }}
+            >
+              Quản lý danh sách nhân viên, trạng thái làm việc và phân quyền hệ thống
+            </Typography.Text>
           </div>
 
-          {/* RIGHT: Buttons */}
-          <div className="flex items-center space-x-3">
-            <Button icon={<FileExcelOutlined />} onClick={handleExportExcel} style={{ backgroundColor: "#22c55e", color: "white", border: "none" }}>
+          {/* BÊN PHẢI: BUTTONS */}
+          <Space size="middle">
+            <Button
+              icon={<FileExcelOutlined />}
+              onClick={handleExportExcel}
+              size="large"
+              style={{
+                backgroundColor: "#22c55e",
+                color: "white",
+                border: "none",
+              }}
+            >
               Xuất Excel
             </Button>
 
-            <Button size="large" onClick={handleCreate} style={{ backgroundColor: "#3b82f6", color: "white", border: "none", marginLeft: 12 }}>
+            <Button
+              size="large"
+              onClick={handleCreate}
+              style={{
+                backgroundColor: "#3b82f6",
+                color: "white",
+                border: "none",
+              }}
+            >
               + Tạo nhân viên mới
             </Button>
-          </div>
+          </Space>
         </div>
+
+        {/* ĐƯỜNG NGĂN */}
+        <div style={{ borderBottom: "2px solid #e8e8e8", margin: "16px 0" }} />
+
+        {/* MÔ TẢ NHẸ */}
+        <Alert
+          message="Quản lý nhân viên đang làm việc, nhân viên đã xóa và phân quyền truy cập hệ thống."
+          type="info"
+          showIcon
+          style={{ borderRadius: 8, marginBottom: 20, cursor: "pointer" }}
+        />
 
         <div className="mb-4">
           <Search
