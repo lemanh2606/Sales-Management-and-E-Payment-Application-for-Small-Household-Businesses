@@ -1,29 +1,85 @@
+// backend/routers/supplierRouters.js
 const express = require("express");
 const router = express.Router();
+
 const {
   createSupplier,
   getSuppliersByStore,
   getSupplierById,
   updateSupplier,
   deleteSupplier,
+  exportSuppliersByStore,
+  restoreSupplier, // ✅ thêm
 } = require("../controllers/supplier/supplierController");
-const { verifyToken } = require("../middlewares/authMiddleware");
 
-// ============= CRUD Routes cho Supplier =============
+const {
+  verifyToken,
+  checkStoreAccess,
+  isManager,
+  requirePermission,
+} = require("../middlewares/authMiddleware");
 
-// Tạo nhà cung cấp mới cho một cửa hàng
-router.post("/stores/:storeId", verifyToken, createSupplier);
+// Tạo nhà cung cấp mới cho cửa hàng
+router.post(
+  "/stores/:storeId",
+  verifyToken,
+  checkStoreAccess,
+  isManager,
+  requirePermission("supplier:create"),
+  createSupplier
+);
 
-// Lấy tất cả nhà cung cấp của một cửa hàng
-router.get("/stores/:storeId", verifyToken, getSuppliersByStore);
+// Lấy danh sách nhà cung cấp trong cửa hàng
+router.get(
+  "/stores/:storeId",
+  verifyToken,
+  checkStoreAccess,
+  requirePermission("supplier:view"),
+  getSuppliersByStore
+);
 
-// Lấy thông tin chi tiết một nhà cung cấp
-router.get("/:supplierId", verifyToken, getSupplierById);
+// Xuất danh sách nhà cung cấp trong cửa hàng ra file Excel
+router.get(
+  "/stores/:storeId/export",
+  verifyToken,
+  checkStoreAccess,
+  requirePermission("supplier:export"),
+  exportSuppliersByStore
+);
 
-// Cập nhật nhà cung cấp
-router.put("/:supplierId", verifyToken, updateSupplier);
+// ✅ Khôi phục nhà cung cấp đã bị xóa (soft delete restore)
+// Lưu ý: đặt trước "/:supplierId" để không bị route param bắt nhầm. [web:52][web:53]
+router.put(
+  "/:id/restore",
+  verifyToken,
+  requirePermission("supplier:restore"),
+  restoreSupplier
+);
 
-// Xóa nhà cung cấp
-router.delete("/:supplierId", verifyToken, deleteSupplier);
+// Lấy thông tin chi tiết 1 nhà cung cấp
+router.get(
+  "/:supplierId",
+  verifyToken,
+  requirePermission("supplier:view"),
+  getSupplierById
+);
+
+// Cập nhật thông tin nhà cung cấp
+router.put(
+  "/:supplierId",
+  verifyToken,
+  isManager,
+  requirePermission("supplier:update"),
+  updateSupplier
+);
+
+// Xóa nhà cung cấp (soft delete khuyến nghị)
+router.delete(
+  "/:supplierId",
+  verifyToken,
+  isManager,
+  requirePermission("supplier:delete"),
+  deleteSupplier
+);
 
 module.exports = router;

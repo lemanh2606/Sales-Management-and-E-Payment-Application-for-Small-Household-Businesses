@@ -1,0 +1,195 @@
+/* src/pages/report/TaxDeclaration.css */
+
+/* Row highlighting based on status */
+.row-approved {
+  background-color: #f6ffed !important;
+}
+
+.row-rejected {
+  background-color: #fff1f0 !important;
+}
+
+.row-submitted {
+  background-color: #fffbe6 !important;
+}
+
+/* Hover effects */
+.ant-table-tbody > tr:hover.row-approved {
+  background-color: #d9f7be !important;
+}
+
+.ant-table-tbody > tr:hover.row-rejected {
+  background-color: #ffccc7 !important;
+}
+
+.ant-table-tbody > tr:hover.row-submitted {
+  background-color: #fff7cc !important;
+}
+
+/* Form improvements */
+.ant-form-item-label > label {
+  font-weight: 500;
+}
+
+/* Notification custom styles */
+.ant-notification-notice {
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Card improvements */
+.ant-card {
+  transition: all 0.3s ease;
+}
+
+.ant-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+/* Collapse improvements */
+.ant-collapse-header {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+/* Progress bar for loading */
+.ant-spin-nested-loading > div > .ant-spin {
+  max-height: 100vh;
+}
+
+/* Statistic improvements */
+.ant-statistic-title {
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.ant-statistic-content {
+  font-size: 24px;
+  font-weight: 600;
+}
+
+/* Button improvements */
+.ant-btn-lg {
+  font-weight: 500;
+  border-radius: 6px;
+}
+
+/* Tag improvements */
+.ant-tag {
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-weight: 500;
+}
+
+/* Input improvements */
+.ant-input-lg,
+.ant-input-number-lg {
+  border-radius: 6px;
+}
+
+/* Select improvements */
+.ant-select-selector {
+  border-radius: 6px !important;
+}
+
+/* Alert improvements */
+.ant-alert {
+  border-radius: 8px;
+}
+
+.ant-alert-with-description {
+  padding: 16px;
+}
+
+/* Modal improvements */
+.ant-modal-header {
+  border-radius: 8px 8px 0 0;
+  padding: 20px 24px;
+}
+
+.ant-modal-body {
+  padding: 24px;
+}
+
+/* Table improvements */
+.ant-table {
+  font-size: 14px;
+}
+
+.ant-table-thead > tr > th {
+  background: #fafafa;
+  font-weight: 600;
+}
+
+/* Empty state improvements */
+.ant-empty-description {
+  color: #8c8c8c;
+}
+
+/* Tooltip improvements */
+.ant-tooltip-inner {
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+
+/* Descriptions improvements */
+.ant-descriptions-item-label {
+  font-weight: 500;
+  background: #fafafa;
+}
+
+/* Progress improvements for loading */
+.ant-progress-text {
+  font-weight: 500;
+}
+
+/* Divider improvements */
+.ant-divider-horizontal.ant-divider-with-text {
+  font-weight: 600;
+  color: #262626;
+}
+
+/* Badge improvements */
+.ant-badge-count {
+  font-weight: 600;
+}
+
+/* Space improvements */
+.ant-space-item {
+  display: flex;
+  align-items: center;
+}
+
+/* Smooth animations */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ant-card,
+.ant-alert,
+.ant-notification-notice {
+  animation: slideIn 0.3s ease;
+}
+
+/* Responsive improvements */
+@media (max-width: 768px) {
+  .ant-statistic-content {
+    font-size: 20px;
+  }
+
+  .ant-card-body {
+    padding: 16px;
+  }
+
+  .ant-table {
+    font-size: 12px;
+  }
+}

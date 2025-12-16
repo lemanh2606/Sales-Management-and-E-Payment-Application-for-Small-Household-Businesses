@@ -4,24 +4,25 @@
 const crypto = require("crypto");
 
 // ==== PASTE EXACT RAW BODY string từ log webhook vào đây (copy nguyên JSON như console in) ====
-const rawBody = `{
+const rawBody = `
+{
   "code": "00",
   "desc": "success",
   "data": {
-    "orderCode": 123,
-    "amount": 3000,
-    "description": "VQRIO123",
-    "accountNumber": "12345678",
-    "reference": "TF230204212323",
-    "transactionDateTime": "2023-02-04 18:25:00",
-    "paymentLinkId": "124c33293c43417ab7879e14c8d9eb18"
+    "orderCode": 1765204399783,
+    "amount": 5000,
+    "description": "HD1765204399783",
+    "accountNumber": "3863666898666",
+    "reference": "TF250101010101",
+    "transactionDateTime": "2025-10-11 10:30:00",
+    "paymentLinkId": "48dc259d905d4209a0d0b694b3220c40"
   },
-  "signature": "1FF909E84DEC9140BD08C03949604E63F0F344FA42AA2EC0C85838AFA912D4EE"
-}`;
+  "signature": "651E65C315449A66F25AE122F1AE5318D769A90059FD653B1BAA0140C5A21021"
+}
+  `;
 
 // ==== PASTE PAYOS_CHECKSUM_KEY (secret) từ .env ====
-const secret =
-  "cb5fef9752968a4b5da4350bf9c0624a4aa42e9eee9dbfc4938ba30a3bf98b68";
+const secret = "cb5fef9752968a4b5da4350bf9c0624a4aa42e9eee9dbfc4938ba30a3bf98b68";
 
 const parsed = JSON.parse(rawBody);
 const dataObj = parsed.data;
@@ -43,11 +44,7 @@ function buildKeyValueStringFromData(data) {
 // --- Tính chữ ký theo chuẩn PayOS ---
 function computePayOSSignatureFromData(data, secret) {
   const kvString = buildKeyValueStringFromData(data);
-  return crypto
-    .createHmac("sha256", secret)
-    .update(kvString, "utf8")
-    .digest("hex")
-    .toUpperCase();
+  return crypto.createHmac("sha256", secret).update(kvString, "utf8").digest("hex").toUpperCase();
 }
 
 // --- Debug ---

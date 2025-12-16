@@ -3,12 +3,12 @@ const cron = require("node-cron"); // Scheduler cron
 const { transporter } = require("./emailService"); // Import transporter từ emailService (sẵn có Gmail config .env)
 const User = require("../models/User"); // Require User cho MANAGER
 const Product = require("../models/Product"); // Require Product cho low stock
+const ActivityLog = require("../models/ActivityLog"); // require activityLog để xoá log cũ > 6 tháng
 
-// Cron chạy hàng ngày 8h sáng ('0 8 * * *')
+// 1. Cảnh báo tồn kho: mỗi ngày lúc 8h sáng
 cron.schedule("0 8 * * *", async () => {
   try {
     console.log("Bắt đầu cron cảnh báo tồn kho thấp");
-
     // Aggregation query low stock group by store_id, chỉ lấy store có low stock
     const lowStockByStore = await Product.aggregate([
       {
@@ -137,4 +137,85 @@ cron.schedule("0 8 * * *", async () => {
   }
 });
 
-console.log("Cron cảnh báo tồn kho thấp đã khởi động (8h sáng hàng ngày)");
+console.log("✅ Cron cảnh báo tồn kho thấp đã khởi động (8h sáng hàng ngày)");
+
+// 2. Xóa log cũ: mỗi ngày lúc 2h sáng, xoá những log đã hơn 6 tháng - (khung giờ ít truy cập)
+cron.schedule("0 2 * * *", async () => {
+  console.log("Bắt đầu dọn dẹp ActivityLog cũ (> 6 tháng)...");
+
+  try {
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+    const result = await ActivityLog.deleteMany({
+      createdAt: { $lt: sixMonthsAgo },
+    });
+
+    if (result.deletedCount > 0) {
+      console.log(`Đã xóa ${result.deletedCount} bản ghi log cũ (trước ${sixMonthsAgo.toLocaleDateString()})`);
+    } else {
+      console.log("Không có log nào cần xóa.");
+    }
+  } catch (error) {
+    console.error("Lỗi xóa log cũ:", error.message);
+  }
+});
+
+console.log("✅ Cron job xóa ActivityLog cũ đã được khởi động (2h sáng hàng ngày)!");
+
+// 3. Check subscription expired: mỗi ngày lúc 3h sáng
+const Subscription = require("../models/Subscription");
+
+cron.schedule("0 3 * * *", async () => {
+  try {
+    console.log("Bắt đầu cron check subscription expired");
+
+    const now = new Date();
+
+    // Tìm subscription TRIAL hết hạn
+    const expiredTrials = await Subscription.find({
+      status: "TRIAL",
+      trial_ends_at: { $lt: now },
+    });
+
+    for (const sub of expiredTrials) {
+      sub.status = "EXPIRED";
+      await sub.save();
+
+      // Update User is_premium flag
+      const user = await User.findById(sub.user_id);
+      if (user) {
+        user.is_premium = false;
+        await user.save();
+        console.log(`❌ Trial expired for user ${user.username}`);
+      }
+    }
+
+    // Tìm subscription ACTIVE hết hạn
+    const expiredPremiums = await Subscription.find({
+      status: "ACTIVE",
+      expires_at: { $lt: now },
+    });
+
+    for (const sub of expiredPremiums) {
+      sub.status = "EXPIRED";
+      await sub.save();
+
+      // Update User is_premium flag
+      const user = await User.findById(sub.user_id);
+      if (user) {
+        user.is_premium = false;
+        await user.save();
+        console.log(`❌ Premium expired for user ${user.username}`);
+      }
+    }
+
+    console.log(
+      `✅ Subscription check completed: ${expiredTrials.length} trials, ${expiredPremiums.length} premiums expired`
+    );
+  } catch (err) {
+    console.error("Lỗi cron check subscription:", err.message);
+  }
+});
+
+console.log("✅ Cron job check subscription expired đã khởi động (3h sáng hàng ngày)!");

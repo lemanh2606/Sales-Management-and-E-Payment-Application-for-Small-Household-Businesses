@@ -1,41 +1,72 @@
-import axios from "axios";
+// src/api/productApi.js
+// Sử dụng apiClient chung để gọi API sản phẩm
+import apiClient from "./apiClient";
 
-const API_URL = import.meta.env.VITE_API_URL;
+/*
+  PRODUCT API
+  - Dùng chung instance apiClient (có sẵn baseURL + token interceptor)
+  - Các hàm trả về .data để component gọi trực tiếp
+*/
 
-//  Tạo 1 instance axios duy nhất
-const productApi = axios.create({
-  baseURL: API_URL,
-  withCredentials: true, // cho phép gửi cookie
-});
+// ========================= PRODUCT CRUD =========================
 
-//  Interceptor để tự động thêm token từ localStorage
-productApi.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
+// Tạo sản phẩm mới trong cửa hàng – CÓ FILE ẢNH
+export const createProduct = async (storeId, data) => {
+  return await apiClient.post(`/products/store/${storeId}`, data, {});
+};
 
-// ------------------ PRODUCT API ------------------
+// Cập nhật sản phẩm trong cửa hàng – CÓ THỂ CÓ FILE ẢNH
+export const updateProduct = async (productId, storeId, data) => {
+  return await apiClient.put(`/products/${productId}?storeId=${storeId}`, data, {});
+};
 
-//  Tạo sản phẩm mới trong cửa hàng
-export const createProduct = async (storeId, data) =>
-  (await productApi.post(`/products/store/${storeId}`, data)).data;
+//  Xóa sản phẩm khỏi cửa hàng
+export const deleteProduct = async (productId) => (await apiClient.delete(`/products/${productId}`)).data;
 
-//  Cập nhật sản phẩm
-export const updateProduct = async (productId, data) =>
-  (await productApi.put(`/products/${productId}`, data)).data;
+// Lấy danh sách sản phẩm của cửa hàng với phân trang
+export const getProductsByStore = async (storeId, { page = 1, limit = 10 } = {}) => {
+  try {
+    const response = await apiClient.get(`/products/store/${storeId}`, {
+      params: { page, limit },
+    });
+    return response.data; // trả về object chứa total, page, limit, products
+  } catch (error) {
+    console.error("❌ Lỗi khi lấy sản phẩm:", error);
+    throw error;
+  }
+};
 
-//  Xoá sản phẩm
-export const deleteProduct = async (productId) =>
-  (await productApi.delete(`/products/${productId}`)).data;
+//  Lấy chi tiết 1 sản phẩm cụ thể
+export const getProductById = async (productId) => (await apiClient.get(`/products/${productId}`)).data;
 
-//  Lấy danh sách sản phẩm của cửa hàng
-export const getProductsByStore = async (storeId) =>
-  (await productApi.get(`/products/store/${storeId}`)).data;
+//  Import sản phẩm bằng file Excel/CSV
+export const importProductsByExcel = async (storeId, file) => {
+  const formData = new FormData();
+  formData.append("file", file);
 
-export default productApi;
+  const response = await apiClient.post(`/products/store/${storeId}/import`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+
+  return response.data;
+};
+
+// ========================= EXPORT =========================
+// Xuất danh sách sản phẩm ra Excel
+export const exportProducts = async (storeId) => {
+  const response = await apiClient.get(`/products/store/${storeId}/export`, {
+    responseType: "blob", // quan trọng!!! để nhận file nhị phân
+  });
+
+  return response; // không .data vì blob nằm trong response
+};
+
+export default {
+  createProduct,
+  updateProduct,
+  deleteProduct,
+  getProductsByStore,
+  getProductById,
+  importProductsByExcel,
+  exportProducts,
+};

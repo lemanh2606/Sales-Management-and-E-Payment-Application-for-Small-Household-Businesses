@@ -38,7 +38,7 @@ const createPurchaseReturn = async (req, res) => {
     return_date,
     supplier_refund,
   } = req.body;
-  const userId = req.user.id;
+  const userId = req.user.id || req.user._id;
 
   if (!supplier_id || !items || items.length === 0) {
     return res
@@ -55,7 +55,7 @@ const createPurchaseReturn = async (req, res) => {
     }
 
     const store = await Store.findById(storeId);
-    if (!store || store.owner_id.toString() !== userId) {
+    if (!store || !store.owner_id.equals(userId)) {
       return res
         .status(403)
         .json({
@@ -223,7 +223,7 @@ const getPurchaseReturnsByStore = async (req, res) => {
     const { storeId } = req.params;
     // Kiểm tra quyền truy cập tương tự như các controller khác
     const purchaseReturns = await PurchaseReturn.find({ store_id: storeId })
-      .populate("supplier_id", "name")
+      .populate("supplier_id", "name taxcode")
       .populate("created_by", "username email")
       .sort({ createdAt: -1 });
 
@@ -238,7 +238,7 @@ const getPurchaseReturnById = async (req, res) => {
   try {
     const { returnId } = req.params;
     const purchaseReturn = await PurchaseReturn.findById(returnId)
-      .populate("supplier_id", "name phone email")
+      .populate("supplier_id", "name phone email taxcode")
       .populate("created_by", "username email")
       .populate("store_id", "name address")
       .populate("purchase_order_id", "purchase_order_code");
@@ -259,7 +259,7 @@ const getPurchaseReturnById = async (req, res) => {
 const updatePurchaseReturn = async (req, res) => {
   const { returnId } = req.params;
   const updates = req.body;
-  const userId = req.user.id;
+  const userId = req.user.id || req.user._id;
 
   try {
     const user = await User.findById(userId);
@@ -349,7 +349,7 @@ const updatePurchaseReturn = async (req, res) => {
 // ============= DELETE - Hủy phiếu trả hàng =============
 const deletePurchaseReturn = async (req, res) => {
   const { returnId } = req.params;
-  const userId = req.user.id;
+  const userId = req.user.id || req.user._id;
 
   try {
     const user = await User.findById(userId);

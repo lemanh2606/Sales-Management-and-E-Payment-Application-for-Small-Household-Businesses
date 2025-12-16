@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "SmartBizSales",
+    "slug": "SmartBizSales",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/playstore.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "SmartBizSales needs microphone access to record audio for speech recognition.",
+        "NSSpeechRecognitionUsageDescription": "SmartBizSales needs speech recognition to convert your voice to text."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false,
+      "package": "com.manh2606.SmartBizSales",
+      "permissions": ["android.permission.RECORD_AUDIO"]
+    },
+    "scheme": "posapp",
+    "plugins": [
+      [
+        "expo-document-picker",
+        {
+          "iCloudContainerEnvironment": "Production"
+        }
+      ],
+      "expo-web-browser"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "6778f638-7c6c-403f-b63d-dbc1c51e945b"
+      }
+    }
+  }
+}

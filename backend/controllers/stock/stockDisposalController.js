@@ -77,7 +77,7 @@ const createStockDisposal = async (req, res) => {
       return res.status(404).json({ message: "Cửa hàng không tồn tại" });
     }
 
-    if (store.owner_id.toString() !== userId) {
+    if (!store.owner_id.equals(userId)) {
       return res
         .status(403)
         .json({
@@ -200,7 +200,8 @@ const getStockDisposalsByStore = async (req, res) => {
     }
 
     // Kiểm tra quyền truy cập
-    if (user.role === "MANAGER" && store.owner_id.toString() !== userId) {
+    if (user.role === "MANAGER" && 
+!store.owner_id.equals(user._id)) {
       return res
         .status(403)
         .json({ message: "Bạn không có quyền truy cập cửa hàng này" });
@@ -281,7 +282,7 @@ const getStockDisposalById = async (req, res) => {
     const user = await User.findById(userId);
     if (
       user.role === "MANAGER" &&
-      stockDisposal.store_id.owner_id.toString() !== userId
+      !stockDisposal.store_id.owner_id.equals(user._id)
     ) {
       return res
         .status(403)
@@ -374,7 +375,7 @@ const updateStockDisposal = async (req, res) => {
       return res.status(404).json({ message: "Phiếu xuất hủy không tồn tại" });
     }
 
-    if (stockDisposal.store_id.owner_id.toString() !== userId) {
+    if (!stockDisposal.store_id.owner_id.equals(user._id)) {
       return res
         .status(403)
         .json({
@@ -512,7 +513,7 @@ const deleteStockDisposal = async (req, res) => {
       return res.status(404).json({ message: "Phiếu xuất hủy không tồn tại" });
     }
 
-    if (stockDisposal.store_id.owner_id.toString() !== userId) {
+    if (!stockDisposal.store_id.owner_id.equals(user._id)) {
       return res
         .status(403)
         .json({

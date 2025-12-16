@@ -3,16 +3,35 @@ const mongoose = require("mongoose");
 const Employee = require("../../models/Employee");
 const Store = require("../../models/Store");
 const User = require("../../models/User");
+const logActivity = require("../../utils/logActivity");
 const bcrypt = require("bcryptjs");
+const { STAFF_DEFAULT_MENU } = require("../../config/constants/permissions");
+const XLSX = require("xlsx");
+const dayjs = require("dayjs");
 
 /**
  * Tạo store mới (MANAGER)
  * Body: { name, address, phone }
  */
+/**
+ * Tạo store (Manager)
+ * Body có thể chứa: { name, address, phone, description, imageUrl, tags, staff_ids, location, openingHours, isDefault }
+ */
 const createStore = async (req, res) => {
   try {
-    const { name, address, phone } = req.body;
-    const userId = req.user.id;
+    const {
+      name,
+      address,
+      phone,
+      description,
+      imageUrl,
+      tags,
+      staff_ids,
+      location,
+      openingHours,
+      isDefault,
+    } = req.body;
+    const userId = req.user.id || req.user._id;
 
     const user = await User.findById(userId);
     if (!user || user.role !== "MANAGER") {
@@ -28,25 +47,59 @@ const createStore = async (req, res) => {
       name: name.trim(),
       address: (address || "").trim(),
       phone: (phone || "").trim(),
+      description: (description || "").trim(),
+      imageUrl: imageUrl || "",
+      tags: Array.isArray(tags) ? tags.map((t) => String(t).trim()) : [],
+      staff_ids: Array.isArray(staff_ids) ? staff_ids : [],
+      location: location || {},
+      openingHours: openingHours || {},
+      isDefault: !!isDefault,
       owner_id: userId,
-      isDefault: false,
+      deleted: false,
     });
 
     await newStore.save();
 
-    // Thêm store vào danh sách owner của user
+    // Cập nhật user: thêm store vào danh sách, gán current_store và role OWNER
     user.stores = user.stores || [];
-    user.stores.push(newStore._id);
+    if (!user.stores.find((s) => s.toString() === newStore._id.toString())) {
+      user.stores.push(newStore._id);
+    }
+
     // Option: set current_store tự động sau tạo store mới
     user.current_store = newStore._id;
-    // Gán store_roles cho owner
+
     user.store_roles = user.store_roles || [];
-    user.store_roles.push({ store: newStore._id, role: "OWNER" });
+    if (
+      !user.store_roles.find(
+        (r) => r.store.toString() === newStore._id.toString()
+      )
+    ) {
+      user.store_roles.push({ store: newStore._id, role: "OWNER" });
+    }
+
     await user.save();
+
+    // Populate before trả về để front-end có thể dùng ngay
+    const populatedStore = await Store.findById(newStore._id)
+      .populate("owner_id", "_id name email")
+      .populate("staff_ids", "_id name email");
+
+    // log hoạt động
+    await logActivity({
+      user: req.user,
+      store: { _id: newStore._id },
+      action: "create",
+      entity: "Store",
+      entityId: newStore._id,
+      entityName: newStore.name,
+      req,
+      description: `Tạo cửa hàng "${newStore.name}"`,
+    });
 
     return res
       .status(201)
-      .json({ message: "Tạo cửa hàng thành công", store: newStore });
+      .json({ message: "Tạo cửa hàng thành công", store: populatedStore });
   } catch (err) {
     console.error("createStore error:", err);
     return res.status(500).json({ message: "Lỗi server" });
@@ -56,86 +109,201 @@ const createStore = async (req, res) => {
 /**
  * Lấy thông tin store theo id
  */
+/**
+ * Lấy thông tin store theo id
+ * Owner có thể xem cả deleted stores
+ */
 const getStoreById = async (req, res) => {
   try {
     const { storeId } = req.params;
-    const store = await Store.findOne({ _id: storeId, deleted: false });
+    const userId = req.user?.id || req.user?._id;
+
+    const store = await Store.findById(storeId)
+      .populate("owner_id", "_id name email")
+      .populate("staff_ids", "_id name email");
+
     if (!store)
       return res.status(404).json({ message: "Không tìm thấy cửa hàng" });
-    res.json({ store });
+
+    // Nếu store bị deleted, chỉ owner mới được xem
+    if (store.deleted && (!userId || !store.owner_id.equals(userId))) {
+      return res.status(404).json({ message: "Không tìm thấy cửa hàng" });
+    }
+
+    return res.json({ store });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Lỗi server khi lấy store" });
+    console.error("getStoreById error:", err);
+    return res.status(500).json({ message: "Lỗi server khi lấy store" });
   }
 };
 
 /**
- * Cập nhật thông tin store (MANAGER)
- * Body: { name, address, phone }
+ * Cập nhật thông tin store (MANAGER / owner)
+ * Body: { name, address, phone, description, imageUrl, tags, staff_ids, location, openingHours, isDefault }
  */
 const updateStore = async (req, res) => {
   try {
     const { storeId } = req.params;
-    const { name, address, phone } = req.body;
-    const userId = req.user.id;
+    const {
+      name,
+      address,
+      phone,
+      description,
+      imageUrl,
+      tags,
+      staff_ids,
+      location,
+      openingHours,
+      isDefault,
+    } = req.body;
+    const userId = req.user.id || req.user._id;
 
     const store = await Store.findById(storeId);
     if (!store || store.deleted)
       return res.status(404).json({ message: "Không tìm thấy cửa hàng" });
-    if (store.owner_id.toString() !== userId)
+    if (!store.owner_id.equals(userId))
       return res.status(403).json({ message: "Chỉ owner mới được chỉnh sửa" });
 
-    if (name) store.name = name.trim();
-    if (address) store.address = address.trim();
-    if (phone) store.phone = phone.trim();
+    if (name !== undefined) store.name = String(name).trim();
+    if (address !== undefined) store.address = String(address).trim();
+    if (phone !== undefined) store.phone = String(phone).trim();
+    if (description !== undefined)
+      store.description = String(description).trim();
+    if (imageUrl !== undefined) store.imageUrl = imageUrl;
+    if (tags !== undefined)
+      store.tags = Array.isArray(tags) ? tags.map((t) => String(t).trim()) : [];
+    if (staff_ids !== undefined)
+      store.staff_ids = Array.isArray(staff_ids) ? staff_ids : [];
+    if (location !== undefined) store.location = location;
+    if (openingHours !== undefined) store.openingHours = openingHours;
+    if (isDefault !== undefined) store.isDefault = !!isDefault;
 
     await store.save();
-    res.json({ store });
+
+    const populatedStore = await Store.findById(store._id)
+      .populate("owner_id", "_id name email")
+      .populate("staff_ids", "_id name email");
+
+    //log hoạt động
+    await logActivity({
+      user: req.user,
+      store: { _id: store._id },
+      action: "update",
+      entity: "Store",
+      entityId: store._id,
+      entityName: store.name,
+      req,
+      description: `Cập nhật cửa hàng "${store.name}"`,
+    });
+
+    return res.json({ message: "Cập nhật thành công", store: populatedStore });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Lỗi server khi cập nhật store" });
+    console.error("updateStore error:", err);
+    return res.status(500).json({ message: "Lỗi server khi cập nhật store" });
   }
 };
 
 /**
- * Xóa store (soft delete) - chỉ ẩn
+ * Xóa store (soft delete) - chỉ ẩn (deleted = true)
  */
 const deleteStore = async (req, res) => {
   try {
     const { storeId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
     const store = await Store.findById(storeId);
     if (!store || store.deleted)
       return res.status(404).json({ message: "Không tìm thấy cửa hàng" });
-    if (store.owner_id.toString() !== userId)
+    if (!store.owner_id.equals(userId))
       return res.status(403).json({ message: "Chỉ owner mới được xóa" });
 
     store.deleted = true;
     await store.save();
-    res.json({ message: "Đã xóa cửa hàng (soft delete)" });
+
+    // (Option) Xóa tham chiếu trong User.stores nếu bạn muốn -> comment nếu không cần
+    try {
+      await User.updateOne(
+        { _id: userId },
+        { $pull: { stores: store._id, store_roles: { store: store._id } } }
+      );
+    } catch (e) {
+      // không bắt lỗi lớn, chỉ log để không block flow
+      console.warn("Failed to pull store ref from user:", e);
+    }
+
+    const populatedStore = await Store.findById(store._id)
+      .populate("owner_id", "_id name email")
+      .populate("staff_ids", "_id name email");
+
+    //log hoạt động
+    await logActivity({
+      user: req.user,
+      store: { _id: store._id },
+      action: "delete",
+      entity: "Store",
+      entityId: store._id,
+      entityName: store.name,
+      req,
+      description: `Xóa cửa hàng "${store.name}" (soft delete)`,
+    });
+
+    return res.json({
+      message: "Đã xóa cửa hàng (soft delete)",
+      store: populatedStore,
+    });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Lỗi server khi xóa store" });
+    console.error("deleteStore error:", err);
+    return res.status(500).json({ message: "Lỗi server khi xóa store" });
   }
 };
+
 /**
  * Lấy danh sách store của Manager (owner)
+ * optional query params: ?page=1&limit=20&q=search&deleted=true (để lấy deleted stores)
  */
 const getStoresByManager = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id; // fallback
     const user = await User.findById(userId);
+
     if (!user || user.role !== "MANAGER") {
       return res
         .status(403)
         .json({ message: "Chỉ Manager mới xem được danh sách store" });
     }
 
-    const stores = await Store.find({ owner_id: userId }).sort({
-      createdAt: -1,
+    // Basic paging & search support
+    const page = Math.max(1, parseInt(req.query.page || "1", 10));
+    const limit = Math.min(
+      100,
+      Math.max(1, parseInt(req.query.limit || "50", 10))
+    );
+    const q = (req.query.q || "").trim();
+    const includeDeleted = req.query.deleted === "true"; // ?deleted=true để lấy deleted stores
+
+    // Filter: mặc định lấy active stores, nếu ?deleted=true thì lấy deleted stores
+    const filter = { owner_id: userId, deleted: includeDeleted };
+    if (q) {
+      // tìm theo name / address / tags
+      filter.$or = [
+        { name: { $regex: q, $options: "i" } },
+        { address: { $regex: q, $options: "i" } },
+        { tags: { $regex: q, $options: "i" } },
+      ];
+    }
+
+    const total = await Store.countDocuments(filter);
+    const stores = await Store.find(filter)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .populate("owner_id", "_id name email")
+      .populate("staff_ids", "_id name email");
+
+    return res.json({
+      meta: { total, page, limit, pages: Math.ceil(total / limit) },
+      stores,
     });
-    return res.json({ stores });
   } catch (err) {
     console.error("getStoresByManager error:", err);
     return res.status(500).json({ message: "Lỗi server" });
@@ -149,7 +317,7 @@ const getStoresByManager = async (req, res) => {
 const selectStore = async (req, res) => {
   try {
     const { storeId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id; //đừng nhầm .id và ._id nhé ko check toàn sai thôi
 
     if (!mongoose.Types.ObjectId.isValid(storeId))
       return res.status(400).json({ message: "storeId không hợp lệ" });
@@ -176,6 +344,21 @@ const selectStore = async (req, res) => {
     user.current_store = store._id;
     await user.save();
 
+    // ===== GHI LOG: NHÂN VIÊN VÀO CA LÀM TẠI CỬA HÀNG =====
+    await logActivity({
+      user, // user object
+      store: { _id: store._id }, // store object
+      action: "auth",
+      entity: "Store",
+      entityId: store._id,
+      entityName: store.name || store.store_name || "Cửa hàng",
+      description: `Đăng nhập vào cửa hàng: ${
+        store.name || store.store_name || "Cửa hàng"
+      }`,
+      req,
+    });
+    // =================================================
+
     return res.json({ message: "Đã chọn cửa hàng", store });
   } catch (err) {
     console.error("selectStore error:", err);
@@ -189,49 +372,71 @@ const selectStore = async (req, res) => {
  */
 const ensureStore = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
     const user = await User.findById(userId);
 
     if (!user) return res.status(404).json({ message: "User không tìm thấy" });
 
-    // Lấy tất cả store owner
-    const stores = await Store.find({ owner_id: userId }).sort({
-      createdAt: -1,
-    });
+    let stores = [];
 
-    // Nếu manager chưa có store -> tạo default
-    if (user.role === "MANAGER" && (!stores || stores.length === 0)) {
-      const defaultStore = new Store({
-        name: `My Store - ${user.username}`,
-        address: "",
-        phone: user.phone || "",
-        owner_id: user._id,
-        isDefault: true,
+    if (user.role === "MANAGER") {
+      stores = await Store.find({ owner_id: userId, deleted: false }).sort({
+        createdAt: -1,
       });
-      await defaultStore.save();
 
-      user.stores = user.stores || [];
-      user.stores.push(defaultStore._id);
-      user.current_store = defaultStore._id;
-      user.store_roles = user.store_roles || [];
-      user.store_roles.push({ store: defaultStore._id, role: "OWNER" });
-      await user.save();
+      if (!stores || stores.length === 0) {
+        const defaultStore = new Store({
+          name: `My Store - ${user.username}`,
+          address: "",
+          phone: user.phone || "",
+          owner_id: user._id,
+          isDefault: true,
+        });
+        await defaultStore.save();
 
-      return res.status(201).json({ created: true, store: defaultStore });
+        user.stores = user.stores || [];
+        user.stores.push(defaultStore._id);
+        user.current_store = defaultStore._id;
+        user.store_roles = user.store_roles || [];
+        user.store_roles.push({ store: defaultStore._id, role: "OWNER" });
+        await user.save();
+
+        return res.status(201).json({ created: true, store: defaultStore });
+      }
+    } else {
+      const assignedStoreIds = (user.store_roles || [])
+        .filter((entry) => entry?.store)
+        .map((entry) => entry.store);
+
+      if (!assignedStoreIds.length) {
+        return res
+          .status(403)
+          .json({ message: "Bạn chưa được phân vào cửa hàng nào" });
+      }
+
+      stores = await Store.find({
+        _id: { $in: assignedStoreIds },
+        deleted: false,
+      }).sort({ createdAt: -1 });
+
+      if (!stores.length) {
+        return res
+          .status(404)
+          .json({ message: "Không tìm thấy cửa hàng được phân công" });
+      }
     }
 
-    // Nếu user đã có store nhưng chưa chọn current_store -> gán store đầu tiên
     let currentStore = null;
-    if (!user.current_store && stores.length > 0) {
+    if (user.current_store) {
+      currentStore = stores.find(
+        (store) => String(store._id) === String(user.current_store)
+      );
+    }
+
+    if (!currentStore && stores.length > 0) {
       currentStore = stores[0];
       user.current_store = currentStore._id;
       await user.save();
-      return res.json({ created: false, stores, currentStore });
-    }
-
-    // Nếu đã có current_store -> trả về nó
-    if (user.current_store) {
-      currentStore = await Store.findById(user.current_store);
     }
 
     return res.json({ created: false, stores, currentStore });
@@ -273,7 +478,7 @@ const getStoreDashboard = async (req, res) => {
  */
 const assignStaffToStore = async (req, res) => {
   try {
-    const userId = req.user.id; // caller
+    const userId = req.user.id || req.user._id; // caller
     const { storeId } = req.params;
     const { staffUserId, role = "STAFF" } = req.body;
 
@@ -407,9 +612,11 @@ const createEmployee = async (req, res) => {
           role: "STAFF",
         },
       ],
+      menu: STAFF_DEFAULT_MENU.slice(),
       isVerified: true, // Default verified, staff đổi pass sau
     });
     await newUser.save();
+
     console.log(
       `Tạo User STAFF thành công: ${usernameTrim} cho cửa hàng ${store.name}`
     );
@@ -433,6 +640,18 @@ const createEmployee = async (req, res) => {
       .populate("user_id", "username email role") // Populate user info cơ bản
       .populate("store_id", "name"); // Tên store
 
+    //log hoạt động
+    await logActivity({
+      user: req.user,
+      store: { _id: store._id },
+      action: "create",
+      entity: "Employee",
+      entityId: newEmployee._id,
+      entityName: fullName,
+      req,
+      description: `Tạo nhân viên thành công với username "${usernameTrim}" cho cửa hàng "${store.name}"`,
+    });
+
     res.status(201).json({
       message: "Tạo nhân viên và tài khoản cho nhân viên thành công",
       user: newUser,
@@ -447,9 +666,11 @@ const createEmployee = async (req, res) => {
 };
 
 // GET /api/stores/:storeId/employees - Lấy danh sách nhân viên theo store (chỉ manager store xem)
+// Chỉ sửa hàm getEmployeesByStore để hỗ trợ query ?deleted=1 (lấy deleted) hoặc default false (lấy active)
 const getEmployeesByStore = async (req, res) => {
   try {
     const { storeId } = req.params;
+    const { deleted } = req.query; // Thêm query param ?deleted=1 để lấy nhân viên đã xóa
 
     // Validate store và quyền (đã check qua middleware)
     const store = req.store; // 👈 Dùng req.store từ middleware
@@ -461,15 +682,26 @@ const getEmployeesByStore = async (req, res) => {
         .json({ message: "Bạn không có quyền xem nhân viên cửa hàng này" });
     }
 
-    // Lấy list employee của store, populate user_id nếu cần (name từ User)
-    const employees = await Employee.find({ store_id: storeId })
-      .populate("user_id", "name email") // Populate info user (tên, email)
-      .populate("store_id", "name") // Tên store
-      .sort({ createdAt: -1 }) // Mới nhất trước
-      .lean();
+    // Filter với isDeleted dựa trên query (default false)
+    const isDeleted = deleted === "true";
+
+    const employees = (
+      await Employee.find({ store_id: storeId, isDeleted })
+        .populate("user_id", "username email phone role menu")
+        .populate("store_id", "name")
+        .lean()
+    ).map((emp) => ({
+      ...emp,
+      salary: emp.salary ? Number(emp.salary.toString()) : 0,
+      commission_rate: emp.commission_rate
+        ? Number(emp.commission_rate.toString())
+        : 0,
+    }));
 
     console.log(
-      `Lấy danh sách nhân viên thành công cho cửa hàng ${store.name}`
+      `Lấy danh sách nhân viên ${
+        isDeleted ? "đã xóa" : "đang làm"
+      } thành công cho cửa hàng ${store.name}`
     );
     res.json({ message: "Lấy danh sách nhân viên thành công", employees });
   } catch (err) {
@@ -484,7 +716,7 @@ const getEmployeeById = async (req, res) => {
     const { id, storeId } = req.params; // 👈 Add storeId từ params
 
     const employee = await Employee.findById(id)
-      .populate("user_id", "name email role") // Populate user info
+      .populate("user_id", "name username email phone role menu") // Populate user info
       .populate("store_id", "name") // Store name
       .lean();
 
@@ -518,37 +750,29 @@ const getEmployeeById = async (req, res) => {
 };
 
 // PUT /api/stores/:storeId/employees/:id - Update nhân viên (ko đổi store_id/user_id, validate quyền)
+
 const updateEmployee = async (req, res) => {
   try {
-    const { id, storeId } = req.params; // 👈 Add storeId từ params
-    const { fullName, salary, shift, commission_rate } = req.body; // Ko cho update store_id/user_id (cố định)
+    const { id, storeId } = req.params;
+    const { fullName, salary, shift, commission_rate, email, phone } = req.body; // thêm email + phone
 
     const employee = await Employee.findById(id);
-    if (!employee) {
-      console.log("Lỗi: Không tìm thấy nhân viên để update:", id);
+    if (!employee)
       return res.status(404).json({ message: "Nhân viên không tồn tại" });
-    }
 
-    // Check employee thuộc storeId này
     if (String(employee.store_id) !== String(storeId)) {
-      console.log(
-        "Lỗi: Nhân viên không thuộc cửa hàng này:",
-        employee.fullName
-      );
-      return res.status(403).json({
-        message: `Nhân viên ${employee.fullName} không thuộc cửa hàng này`,
-      });
+      return res
+        .status(403)
+        .json({ message: "Nhân viên không thuộc cửa hàng này" });
     }
 
-    // Validate quyền store (dùng req.storeRole từ middleware)
     if (req.storeRole !== "OWNER") {
-      console.log("Lỗi: Bạn không có quyền update nhân viên này");
       return res
         .status(403)
         .json({ message: "Bạn không có quyền update nhân viên này" });
     }
 
-    // Update fields cho phép (ko chạm store_id/user_id)
+    // Update Employee fields
     if (fullName) employee.fullName = fullName;
     if (salary) employee.salary = salary.toString();
     if (shift !== undefined) employee.shift = shift;
@@ -558,11 +782,328 @@ const updateEmployee = async (req, res) => {
         : null;
 
     await employee.save();
-    console.log(`Update nhân viên thành công: ${employee.fullName}`);
-    res.json({ message: "Update nhân viên thành công", employee });
+
+    // Update User fields (email, phone)
+    const user = await User.findById(employee.user_id);
+    if (user) {
+      if (email !== undefined) user.email = email.trim().toLowerCase();
+      if (phone !== undefined) user.phone = phone.trim();
+      await user.save();
+    }
+
+    // log hoạt động
+    await logActivity({
+      user: req.user,
+      store: { _id: employee.store_id },
+      action: "update",
+      entity: "Employee",
+      entityId: employee._id,
+      entityName: employee.fullName,
+      req,
+      description: `Cập nhật thông tin nhân viên "${employee.fullName}"`,
+    });
+
+    res.json({ message: "Cập nhật nhân viên thành công", employee });
   } catch (err) {
     console.error("Lỗi update nhân viên:", err.message);
     res.status(500).json({ message: "Lỗi server khi update nhân viên" });
+  }
+};
+
+// DELETE /api/stores/:storeId/employees/:id - Xóa mềm nhân viên
+const softDeleteEmployee = async (req, res) => {
+  try {
+    const { id, storeId } = req.params;
+
+    // Tìm employee
+    const employee = await Employee.findById(id).populate("store_id", "name");
+    if (!employee) {
+      console.log("Lỗi: Không tìm thấy nhân viên cần xóa:", id);
+      return res.status(404).json({ message: "Nhân viên không tồn tại" });
+    }
+
+    // Check employee thuộc cửa hàng này
+    if (String(employee.store_id._id) !== String(storeId)) {
+      console.log("Lỗi: Nhân viên không thuộc cửa hàng này:", id);
+      return res
+        .status(403)
+        .json({ message: "Nhân viên không thuộc cửa hàng này" });
+    }
+
+    // Check quyền
+    if (req.storeRole !== "OWNER") {
+      console.log("Lỗi: Không có quyền xóa nhân viên:", id);
+      return res
+        .status(403)
+        .json({ message: "Bạn không có quyền xóa nhân viên này" });
+    }
+
+    // Nếu đã xóa trước đó
+    if (employee.isDeleted) {
+      return res
+        .status(400)
+        .json({ message: "Nhân viên này đã bị xóa mềm trước đó" });
+    }
+
+    // Đánh dấu xóa mềm
+    employee.isDeleted = true;
+    await employee.save();
+
+    // Ghi log
+    await logActivity({
+      user: req.user,
+      store: { _id: employee.store_id._id },
+      action: "delete",
+      entity: "Employee",
+      entityId: employee._id,
+      entityName: employee.fullName,
+      req,
+      description: `Đã xóa mềm nhân viên "${employee.fullName}" khỏi cửa hàng "${employee.store_id.name}"`,
+    });
+
+    res.json({
+      message: `Đã xóa mềm nhân viên "${employee.fullName}" thành công`,
+      employee,
+    });
+  } catch (err) {
+    console.error("Lỗi xóa mềm nhân viên:", err.message);
+    res
+      .status(500)
+      .json({ message: "Lỗi server khi xóa mềm nhân viên: " + err.message });
+  }
+};
+
+// PUT /api/stores/:storeId/employees/:id/restore - Khôi phục nhân viên bị xóa mềm
+const restoreEmployee = async (req, res) => {
+  try {
+    const { id, storeId } = req.params;
+
+    // Tìm employee
+    const employee = await Employee.findById(id).populate("store_id", "name");
+    if (!employee) {
+      return res.status(404).json({ message: "Nhân viên không tồn tại" });
+    }
+
+    // Check employee thuộc cửa hàng này
+    if (String(employee.store_id._id) !== String(storeId)) {
+      return res
+        .status(403)
+        .json({ message: "Nhân viên không thuộc cửa hàng này" });
+    }
+
+    // Check quyền
+    if (req.storeRole !== "OWNER") {
+      return res
+        .status(403)
+        .json({ message: "Bạn không có quyền khôi phục nhân viên này" });
+    }
+
+    // Nếu chưa bị xóa
+    if (!employee.isDeleted) {
+      return res.status(400).json({ message: "Nhân viên này chưa bị xóa mềm" });
+    }
+
+    // Khôi phục
+    employee.isDeleted = false;
+    await employee.save();
+
+    // Ghi log
+    await logActivity({
+      user: req.user,
+      store: { _id: employee.store_id._id },
+      action: "restore",
+      entity: "Employee",
+      entityId: employee._id,
+      entityName: employee.fullName,
+      req,
+      description: `Khôi phục nhân viên "${employee.fullName}" cho cửa hàng "${employee.store_id.name}"`,
+    });
+
+    res.json({
+      message: `Đã khôi phục nhân viên "${employee.fullName}" thành công`,
+      employee,
+    });
+  } catch (err) {
+    console.error("Lỗi khôi phục nhân viên:", err.message);
+    res
+      .status(500)
+      .json({ message: "Lỗi server khi khôi phục nhân viên: " + err.message });
+  }
+};
+
+const exportEmployeesToExcel = async (req, res) => {
+  try {
+    const { storeId } = req.params;
+
+    // Kiểm tra store tồn tại và user có quyền
+    const store = await Store.findById(storeId);
+    if (!store)
+      return res.status(404).json({ message: "Cửa hàng không tồn tại" });
+
+    // Lấy danh sách nhân viên (chỉ những người chưa xóa mềm)
+    const employees = await Employee.find({
+      store_id: storeId,
+      isDeleted: false,
+    })
+      .populate("user_id", "name email phone")
+      .lean();
+
+    if (!employees || employees.length === 0) {
+      return res.status(404).json({ message: "Không có nhân viên để xuất" });
+    }
+
+    const toNumber = (val) => {
+      if (!val) return 0;
+      if (typeof val === "number") return val;
+      if (val?.$numberDecimal) return parseFloat(val.$numberDecimal);
+      const n = parseFloat(val.toString());
+      return Number.isFinite(n) ? n : 0;
+    };
+
+    const data = employees.map((emp) => ({
+      "Họ và tên": emp.fullName || "",
+      "Số điện thoại": emp.user_id?.phone || emp.phone || "",
+      Email: emp.user_id?.email || "",
+      "Lương cơ bản": toNumber(emp.salary),
+      "Ca làm việc": emp.shift || "",
+      "Tỷ lệ hoa hồng (%)": toNumber(emp.commission_rate),
+      "Ngày tuyển dụng": emp.hired_date
+        ? dayjs(emp.hired_date).format("DD/MM/YYYY")
+        : "",
+      "Trạng thái": "Đang làm việc",
+    }));
+
+    // Tạo workbook
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(data);
+
+    // Tự động điều chỉnh độ rộng cột
+    ws["!cols"] = [
+      { wch: 20 }, // Họ và tên
+      { wch: 15 }, // SĐT
+      { wch: 25 }, // Email
+      { wch: 15 }, // Lương
+      { wch: 12 }, // Ca
+      { wch: 15 }, // Hoa hồng
+      { wch: 15 }, // Ngày tuyển
+      { wch: 12 }, // Trạng thái
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, "NhanVien");
+
+    // Xuất buffer
+    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+
+    // ====== FIX Content-Disposition (tránh ERR_INVALID_CHAR) ======
+    const dateStr = dayjs().format("DD-MM-YYYY");
+
+    // Tên file gốc (có thể có dấu) -> dùng cho filename* (UTF-8)
+    const rawFileName = `Danh_Sach_Nhan_Vien_${store.name}_${dateStr}.xlsx`;
+
+    // Tên file fallback ASCII -> dùng cho filename=""
+    // 1) bỏ dấu 2) thay ký tự không hợp lệ 3) thay space thành _
+    const asciiStoreName = String(store.name || "Cua_hang")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "") // bỏ dấu
+      .replace(/[\/\\:*?"<>|]/g, "_")
+      .replace(/\s+/g, "_");
+
+    const fallbackFileName = `Danh_Sach_Nhan_Vien_${asciiStoreName}_${dateStr}.xlsx`;
+
+    // Set header đúng: filename (ASCII) + filename* (UTF-8 percent-encoded)
+    // Cách này tránh đưa Unicode trực tiếp vào header nên không văng ERR_INVALID_CHAR. [web:4][web:10]
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${fallbackFileName}"; filename*=UTF-8''${encodeURIComponent(
+        rawFileName
+      )}`
+    );
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+
+    res.send(buffer);
+  } catch (error) {
+    console.error("Lỗi export nhân viên:", error);
+    res.status(500).json({ message: "Lỗi server khi xuất Excel" });
+  }
+};
+
+/**
+ * Khôi phục store bị xóa mềm (deleted = false)
+ * PUT /api/stores/:storeId/restore
+ */
+const restoreStore = async (req, res) => {
+  try {
+    const { storeId } = req.params;
+    const userId = req.user.id || req.user._id;
+
+    if (!mongoose.Types.ObjectId.isValid(storeId)) {
+      return res.status(400).json({ message: "storeId không hợp lệ" });
+    }
+
+    const store = await Store.findById(storeId);
+    if (!store)
+      return res.status(404).json({ message: "Không tìm thấy cửa hàng" });
+
+    // Chỉ owner mới được khôi phục
+    if (!store.owner_id.equals(userId)) {
+      return res
+        .status(403)
+        .json({ message: "Chỉ owner mới được khôi phục cửa hàng" });
+    }
+
+    // Nếu chưa bị xóa
+    if (!store.deleted) {
+      return res.status(400).json({ message: "Cửa hàng này chưa bị xóa" });
+    }
+
+    // Khôi phục: đổi deleted = false
+    store.deleted = false;
+    await store.save();
+
+    // Thêm lại store vào user.stores nếu cần
+    const user = await User.findById(userId);
+    if (user) {
+      user.stores = user.stores || [];
+      if (!user.stores.find((s) => s.toString() === storeId)) {
+        user.stores.push(storeId);
+      }
+
+      // Thêm lại vào store_roles nếu cần
+      user.store_roles = user.store_roles || [];
+      if (!user.store_roles.find((r) => r.store.toString() === storeId)) {
+        user.store_roles.push({ store: storeId, role: "OWNER" });
+      }
+
+      await user.save();
+    }
+
+    const populatedStore = await Store.findById(store._id)
+      .populate("owner_id", "_id name email")
+      .populate("staff_ids", "_id name email");
+
+    // Log hoạt động
+    await logActivity({
+      user: req.user,
+      store: { _id: store._id },
+      action: "restore",
+      entity: "Store",
+      entityId: store._id,
+      entityName: store.name,
+      req,
+      description: `Khôi phục cửa hàng "${store.name}"`,
+    });
+
+    return res.json({
+      message: "Đã khôi phục cửa hàng thành công",
+      store: populatedStore,
+    });
+  } catch (err) {
+    console.error("restoreStore error:", err);
+    return res.status(500).json({ message: "Lỗi server khi khôi phục store" });
   }
 };
 
@@ -570,15 +1111,19 @@ module.exports = {
   createStore,
   updateStore,
   deleteStore,
-  getStoreById,
-  getStoresByManager,
+  restoreStore,
   selectStore,
   ensureStore,
+  getStoreById,
+  getStoresByManager,
   getStoreDashboard,
   assignStaffToStore,
   //tạo nhân viên cho store
-  createEmployee,
   getEmployeesByStore,
   getEmployeeById,
+  createEmployee,
   updateEmployee,
+  softDeleteEmployee,
+  restoreEmployee,
+  exportEmployeesToExcel,
 };

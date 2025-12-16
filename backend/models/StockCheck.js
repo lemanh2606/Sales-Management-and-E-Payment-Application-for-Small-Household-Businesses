@@ -1,3 +1,4 @@
+// backend/models/StockCheck.js
 const mongoose = require('mongoose');
 
 // Schema cho item trong phiếu kiểm kho

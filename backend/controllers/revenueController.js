@@ -1,294 +1,212 @@
-// controllers/revenueController.js (fix exportRevenue: buffer PDF full trước res.send, catch pdfkit error - paste thay file)
+// backend/controllers/revenueController.js
 const mongoose = require("mongoose");
 const Order = require("../models/Order");
-const { periodToRange } = require("../utils/period"); //  Reuse từ period.js
-const { Parser } = require("json2csv"); //  Export CSV
-const PDFDocument = require("pdfkit"); //  Export PDF
+const { periodToRange } = require("../utils/period");
+const { Parser } = require("json2csv");
+const PDFDocument = require("pdfkit");
+const XLSX = require("xlsx");
+const dayjs = require("dayjs");
+require("dayjs/locale/vi");
+dayjs.locale("vi");
 
-// GET /api/revenue - Tổng doanh thu theo period (sum totalAmount from Order paid/printDate in range)
-const getRevenueByPeriod = async (req, res) => {
-  try {
-    const storeId = req.query.storeId || req.query.shopId;
-    const { periodType, periodKey } = req.query; // Params: periodType, periodKey, storeId (optional)
+// ========== HÀM TÍNH DOANH THU – CÓ CẢ HOÀN 1 NỬA partially_refunded ==========
+async function calcRevenueByPeriod({ storeId, periodType, periodKey, type = "total" }) {
+  const { start, end } = periodToRange(periodType, periodKey);
 
-    if (!periodType || !storeId) {
-      return res.status(400).json({ message: "Thiếu periodType hoặc storeId" });
-    }
-    if (!storeId) {
-      return res
-        .status(400)
-        .json({ message: "Thiếu storeId hoặc shopId để xác định cửa hàng" });
-    }
-    const { start, end } = periodToRange(periodType, periodKey); //  Lấy range từ period.js
+  // Chỉ lấy các đơn ĐÃ THANH TOÁN (toàn bộ hoặc 1 phần)
+  const baseMatch = {
+    storeId: new mongoose.Types.ObjectId(storeId),
+    status: { $in: ["paid", "partially_refunded"] }, // ← quan trọng: lấy cả 2 loại
+    createdAt: { $gte: start, $lte: end },
+  };
 
+  if (type === "total") {
+    const pipeline = [
+      { $match: baseMatch },
+      {
+        $group: {
+          _id: null,
+          totalRevenue: {
+            $sum: {
+              $toDecimal: "$totalAmount",
+            },
+          },
+          countOrders: { $sum: 1 },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          totalRevenue: { $toDouble: "$totalRevenue" },
+          countOrders: 1,
+        },
+      },
+    ];
+
+    const result = await Order.aggregate(pipeline);
+    const row = result[0] || { totalRevenue: 0, countOrders: 0 };
+
+    return [
+      {
+        periodType,
+        periodKey,
+        totalRevenue: row.totalRevenue,
+        countOrders: row.countOrders,
+      },
+    ];
+  }
+
+  // =================== THEO NHÂN VIÊN ===================
+  if (type === "employee") {
     const pipeline = [
       {
         $match: {
-          storeId: new mongoose.Types.ObjectId(storeId), //  Filter storeId
-          status: "paid", //  Chỉ order đã thanh toán
-          printDate: { $gte: start, $lte: end }, //  Filter printDate in range (đã in bill = xác nhận bán)
+          ...baseMatch,
+          employeeId: { $ne: null }, // ⭐ DÒNG QUAN TRỌNG
         },
       },
       {
         $group: {
-          _id: null, //  Group tổng
-          totalRevenue: { $sum: "$totalAmount" }, //  Sum totalAmount (Decimal128, Mongo aggregate ok)
-          countOrders: { $sum: 1 }, //  Số order
+          _id: "$employeeId",
+          totalRevenue: { $sum: { $toDecimal: "$totalAmount" } },
+          countOrders: { $sum: 1 },
         },
       },
-      { $project: { _id: 0 } }, //  Loại bỏ _id null, response sạch { totalRevenue, countOrders }
+      {
+        $lookup: {
+          from: "employees",
+          localField: "_id",
+          foreignField: "_id",
+          as: "employeeInfo",
+          pipeline: [{ $project: { fullName: 1, phone: 1 } }],
+        },
+      },
+      { $unwind: "$employeeInfo" },
+      { $sort: { totalRevenue: -1 } },
     ];
 
-    const result = await Order.aggregate(pipeline); //  Aggregate từ Order
+    const result = await Order.aggregate(pipeline);
+    return result;
+  }
 
-    const revenue = result[0] || { totalRevenue: 0, countOrders: 0 }; //  Default 0 nếu ko data
-    console.log(
-      `Báo cáo doanh thu thành công cho period ${periodType} ${periodKey}, store ${storeId}: ${revenue.totalRevenue} VND, ${revenue.countOrders} hóa đơn`
-    );
+  return [];
+}
 
-    res.json({ message: "Báo cáo doanh thu thành công", revenue }); //  Response { totalRevenue Decimal, countOrders }
+// ========== 1️⃣ GET /api/revenue ==========
+const getRevenueByPeriod = async (req, res) => {
+  try {
+    const storeId = req.query.storeId || req.query.shopId;
+    const { periodType, periodKey } = req.query;
+
+    if (!periodType || !storeId) {
+      return res.status(400).json({ message: "Thiếu periodType hoặc storeId" });
+    }
+
+    const data = await calcRevenueByPeriod({ storeId, periodType, periodKey, type: "total" });
+    const revenue = data[0] || { totalRevenue: 0, countOrders: 0 };
+    res.json({ message: "Báo cáo doanh thu thành công", revenue });
   } catch (err) {
     console.error("Lỗi báo cáo doanh thu:", err.message);
     res.status(500).json({ message: "Lỗi server khi báo cáo doanh thu" });
   }
 };
 
-// GET /api/revenue/employee - Doanh thu theo nhân viên (group by employeeId, sum totalAmount in period)
+// ========== 2️⃣ GET /api/revenue/employee ==========
 const getRevenueByEmployee = async (req, res) => {
   try {
-    const { periodType, periodKey, storeId } = req.query; // Params: periodType, periodKey, storeId
+    const { periodType, periodKey, storeId } = req.query;
 
     if (!periodType || !storeId) {
       return res.status(400).json({ message: "Thiếu periodType hoặc storeId" });
     }
 
-    const { start, end } = periodToRange(periodType, periodKey); //  Lấy range từ period.js
-
-    const pipeline = [
-      {
-        $match: {
-          storeId: new mongoose.Types.ObjectId(storeId), //  Filter storeId
-          status: "paid", //  Chỉ order đã thanh toán
-          printDate: { $gte: start, $lte: end }, //  Filter printDate in range
-        },
-      },
-      {
-        $group: {
-          _id: "$employeeId", //  Group by nhân viên ID
-          totalRevenue: { $sum: "$totalAmount" }, //  Sum totalAmount per nhân viên
-          countOrders: { $sum: 1 }, //  Số order per nhân viên
-        },
-      },
-      {
-        $lookup: {
-          //  Populate nhân viên info từ Employee
-          from: "employees",
-          localField: "_id",
-          foreignField: "_id",
-          as: "employeeInfo",
-          pipeline: [{ $project: { fullName: 1, phone: 1 } }], // Chỉ lấy fullName, phone
-        },
-      },
-      { $unwind: "$employeeInfo" }, //  Unwind để object
-      { $sort: { totalRevenue: -1 } }, //  Sắp xếp doanh thu cao nhất trước
-    ];
-
-    const results = await Order.aggregate(pipeline); //  Aggregate từ Order
-
-    console.log(
-      `Báo cáo doanh thu theo nhân viên thành công cho period ${periodType} ${periodKey}, store ${storeId}: ${results.length} nhân viên`
-    );
-
-    res.json({
-      message: "Báo cáo doanh thu theo nhân viên thành công",
-      data: results,
-    }); //  Response array { _id employeeId, totalRevenue, countOrders, employeeInfo { fullName, phone } }
+    const data = await calcRevenueByPeriod({ storeId, periodType, periodKey, type: "employee" });
+    res.json({ message: "Báo cáo doanh thu theo nhân viên thành công", data });
   } catch (err) {
     console.error("Lỗi báo cáo doanh thu theo nhân viên:", err.message);
-    res
-      .status(500)
-      .json({ message: "Lỗi server khi báo cáo doanh thu theo nhân viên" });
+    res.status(500).json({ message: "Lỗi server khi báo cáo doanh thu theo nhân viên" });
   }
 };
 
-// GET /api/revenue/export - Export báo cáo doanh thu CSV/PDF (total or by employee)
+// ========== 3️⃣ GET /api/revenue/export ==========
 const exportRevenue = async (req, res) => {
   try {
-    const {
-      type = "total",
-      periodType,
-      periodKey,
-      storeId,
-      format = "csv",
-    } = req.query;
-    if (!periodType || !storeId || !format) {
-      return res
-        .status(400)
-        .json({ message: "Thiếu periodType, storeId hoặc format" });
-    }
-    const { start, end } = periodToRange(periodType, periodKey); //  Lấy range từ period.js
+    const { periodType, periodKey, storeId, format = "xlsx" } = req.query;
 
-    let data = [];
-    if (type === "total") {
-      const pipeline = [
-        {
-          $match: {
-            storeId: new mongoose.Types.ObjectId(storeId), //  Filter storeId
-            status: "paid", //  Chỉ order đã thanh toán
-            printDate: { $gte: start, $lte: end }, //  Filter printDate in range
-          },
-        },
-        {
-          $group: {
-            _id: null,
-            totalRevenue: { $sum: "$totalAmount" }, //  Sum totalAmount
-            countOrders: { $sum: 1 }, //  Số order
-          },
-        },
-        { $project: { _id: 0 } }, //  Loại bỏ _id null, response sạch
-      ];
-      const result = await Order.aggregate(pipeline); //  Aggregate từ Order
-      data = [
-        {
-          periodType,
-          periodKey,
-          totalRevenue: result[0]?.totalRevenue || 0,
-          countOrders: result[0]?.countOrders || 0,
-        },
-      ]; //  Data array cho export
-    } else if (type === "employee") {
-      const pipeline = [
-        {
-          $match: {
-            storeId: new mongoose.Types.ObjectId(storeId), //  Filter storeId
-            status: "paid", //  Chỉ order đã thanh toán
-            printDate: { $gte: start, $lte: end }, //  Filter printDate in range
-          },
-        },
-        {
-          $group: {
-            _id: "$employeeId", //  Group by nhân viên ID
-            totalRevenue: { $sum: "$totalAmount" }, //  Sum totalAmount per nhân viên
-            countOrders: { $sum: 1 }, //  Số order per nhân viên
-          },
-        },
-        {
-          $lookup: {
-            //  Populate nhân viên info từ Employee
-            from: "employees",
-            localField: "_id",
-            foreignField: "_id",
-            as: "employeeInfo",
-            pipeline: [{ $project: { fullName: 1, phone: 1 } }], // Chỉ lấy fullName, phone
-          },
-        },
-        { $unwind: "$employeeInfo" }, //  Unwind để object
-        { $sort: { totalRevenue: -1 } }, //  Sắp xếp doanh thu cao nhất trước
-      ];
-      data = await Order.aggregate(pipeline); //  Aggregate từ Order
+    if (!periodType || !storeId) {
+      return res.status(400).json({ message: "Thiếu periodType hoặc storeId" });
     }
 
-    if (format === "csv") {
-      const fields = Object.keys(data[0] || {}); //  Fields từ data đầu
-      const parser = new Parser({ fields });
-      const csv = parser.parse(data); //  Parse array thành CSV
-      res.header("Content-Type", "text/csv");
-      res.attachment(`doanh_thu_${type}_${periodKey}_${periodType}.csv`); //  Tên file CSV
-      return res.send(csv);
-    } else if (format === "pdf") {
-      try {
-        res.setHeader("Content-Type", "application/pdf");
-        res.setHeader(
-          "Content-Disposition",
-          `attachment; filename=doanh_thu_${type}_${periodKey}_${periodType}.pdf`
-        );
+    if (format !== "xlsx") {
+      return res.status(400).json({ message: "Chỉ hỗ trợ xuất Excel (.xlsx)" });
+    }
 
-        const doc = new PDFDocument({ margin: 50 });
-        doc.pipe(res);
+    // LẤY CẢ 2 DỮ LIỆU
+    const [totalData, empData] = await Promise.all([
+      calcRevenueByPeriod({ storeId, periodType, periodKey, type: "total" }),
+      calcRevenueByPeriod({ storeId, periodType, periodKey, type: "employee" }),
+    ]);
 
-        // ====== HEADER ======
-        doc
-          .fontSize(18)
-          .text("BÁO CÁO DOANH THU", { align: "center", underline: true });
-        doc.moveDown();
-        doc
-          .fontSize(12)
-          .text(`Kỳ báo cáo: ${periodKey} (${periodType.toUpperCase()})`, {
-            align: "center",
-          });
-        doc.moveDown(2);
+    const wb = XLSX.utils.book_new();
 
-        if (type === "total") {
-          // ====== CHẾ ĐỘ: TỔNG DOANH THU ======
-          doc
-            .fontSize(12)
-            .text(`Tổng doanh thu: ${data[0].totalRevenue.toString()} VND`);
-          doc.text(`Số hóa đơn: ${data[0].countOrders}`);
-        } else {
-          // ====== CHẾ ĐỘ: THEO NHÂN VIÊN ======
-          doc
-            .fontSize(14)
-            .text("Doanh thu theo nhân viên", { underline: true });
-          doc.moveDown();
+    // Sheet 1: Tổng hợp
+    if (totalData && totalData.length > 0) {
+      const totalSheetData = totalData.map((item) => ({
+        "Kỳ báo cáo": item.periodKey,
+        "Tổng doanh thu (₫)": Number(item.totalRevenue),
+        "Số hóa đơn": item.countOrders,
+      }));
+      const ws1 = XLSX.utils.json_to_sheet(totalSheetData);
+      ws1["!cols"] = [{ wch: 20 }, { wch: 22 }, { wch: 15 }];
+      XLSX.utils.book_append_sheet(wb, ws1, "Tổng hợp");
+    }
 
-          // === TABLE HEADER ===
-          const tableTop = doc.y;
-          const col1 = 50; // Tên nhân viên
-          const col2 = 280; // Số hóa đơn
-          const col3 = 400; // Doanh thu
+    // Sheet 2: Nhân viên
+    if (empData && empData.length > 0) {
+      const empSheetData = empData.map((item) => ({
+        "Nhân viên": item.employeeInfo?.fullName || "Nhân viên đã nghỉ",
+        "Số điện thoại": item.employeeInfo?.phone || "—",
+        "Doanh thu (₫)": Number(item.totalRevenue),
+        "Số hóa đơn": item.countOrders,
+      }));
 
-          doc
-            .fontSize(12)
-            .text("Nhân viên", col1, tableTop)
-            .text("Số HĐ", col2, tableTop)
-            .text("Doanh thu (VND)", col3, tableTop);
+      const ws2 = XLSX.utils.json_to_sheet(empSheetData);
+      ws2["!cols"] = [
+        { wch: 28 }, // Nhân viên
+        { wch: 16 }, // Số điện thoại
+        { wch: 22 }, // Doanh thu
+        { wch: 14 }, // Số hóa đơn
+      ];
 
-          doc
-            .moveTo(50, tableTop + 15) // kẻ line dưới header
-            .lineTo(550, tableTop + 15)
-            .stroke();
-
-          // === TABLE ROWS ===
-          let y = tableTop + 25;
-          let totalAll = 0;
-          data.forEach((row) => {
-            const revenue = parseFloat(row.totalRevenue.toString());
-            totalAll += revenue;
-
-            doc
-              .fontSize(11)
-              .text(row.employeeInfo.fullName, col1, y)
-              .text(row.countOrders.toString(), col2, y)
-              .text(revenue.toLocaleString("vi-VN"), col3, y, {
-                align: "left",
-              });
-
-            y += 20;
-          });
-
-          // === TOTAL ===
-          doc.moveTo(50, y).lineTo(550, y).stroke();
-
-          doc
-            .fontSize(12)
-            .text(
-              `TỔNG DOANH THU: ${totalAll.toLocaleString("vi-VN")} VND`,
-              col1,
-              y + 10
-            );
-        }
-
-        doc.end(); // 🚨 QUAN TRỌNG: kết thúc stream
-        return; // ❗ Không res.json nữa
-      } catch (pdfErr) {
-        console.error("Lỗi tạo PDF:", pdfErr.message);
-        res.status(500).json({ message: "Lỗi tạo file PDF" });
+      // Tô đậm header
+      const headerRange = XLSX.utils.decode_range(ws2["!ref"]);
+      for (let C = headerRange.s.c; C <= headerRange.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: 0, c: C });
+        if (!ws2[cellAddress]) continue;
+        ws2[cellAddress].s = {
+          font: { bold: true, color: { rgb: "FFFFFF" } },
+          fill: { fgColor: { rgb: "1890ff" } },
+          alignment: { horizontal: "center", vertical: "center" },
+        };
       }
+
+      XLSX.utils.book_append_sheet(wb, ws2, "Nhân viên");
     }
+
+    if (!totalData?.length && !empData?.length) {
+      return res.status(404).json({ message: "Không có dữ liệu để xuất" });
+    }
+
+    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+
+    const fileName = `Bao_Cao_Doanh_Thu_${periodKey || "hien_tai"}_${dayjs().format("DD-MM-YYYY")}.xlsx`;
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    res.send(buffer);
   } catch (err) {
-    console.error("Lỗi export báo cáo doanh thu:", err.message);
-    res.status(500).json({ message: "Lỗi server khi export báo cáo" });
+    console.error("Lỗi export báo cáo doanh thu:", err);
+    res.status(500).json({ message: "Lỗi server khi xuất Excel" });
   }
 };
 
-module.exports = { getRevenueByPeriod, getRevenueByEmployee, exportRevenue };
+module.exports = { calcRevenueByPeriod, getRevenueByPeriod, getRevenueByEmployee, exportRevenue };

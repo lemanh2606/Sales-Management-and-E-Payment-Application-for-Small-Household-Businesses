@@ -1,45 +1,72 @@
-import axios from "axios";
+// src/api/supplierApi.js
+import apiClient from "./apiClient";
 
-const API_URL = import.meta.env.VITE_API_URL;
+// Lấy danh sách nhà cung cấp theo cửa hàng
+// - getSuppliers(storeId, { deleted: false }) -> active
+// - getSuppliers(storeId, { deleted: true }) -> deleted
+export const getSuppliers = async (storeId, options = {}) => {
+  if (!storeId) throw new Error("Thiếu storeId khi lấy danh sách nhà cung cấp");
 
-//  Tạo 1 instance axios duy nhất
-const supplierApi = axios.create({
-  baseURL: API_URL,
-  withCredentials: true, // cho phép gửi cookie
-});
+  const { deleted } = options;
+  const res = await apiClient.get(`/suppliers/stores/${storeId}`, {
+    params: typeof deleted === "boolean" ? { deleted } : undefined,
+  });
+  return res.data;
+};
 
-//  Interceptor để tự động thêm token từ localStorage
-supplierApi.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
+// Lấy chi tiết một nhà cung cấp
+export const getSupplierById = async (supplierId) => {
+  if (!supplierId)
+    throw new Error("Thiếu supplierId khi lấy chi tiết nhà cung cấp");
+  const res = await apiClient.get(`/suppliers/${supplierId}`);
+  return res.data;
+};
 
-// ------------------ SUPPLIER API ------------------
+// Tạo mới nhà cung cấp cho cửa hàng
+export const createSupplier = async (storeId, data) => {
+  if (!storeId) throw new Error("Thiếu storeId khi tạo nhà cung cấp");
+  if (!data?.name) throw new Error("Thiếu dữ liệu nhà cung cấp");
+  const res = await apiClient.post(`/suppliers/stores/${storeId}`, data);
+  return res.data;
+};
 
-//  Lấy danh sách nhà cung cấp theo cửa hàng
-export const getSuppliers = async (storeId) =>
-  (await supplierApi.get(`/suppliers/stores/${storeId}`)).data;
+// Cập nhật thông tin nhà cung cấp
+export const updateSupplier = async (supplierId, data) => {
+  if (!supplierId)
+    throw new Error("Thiếu supplierId khi cập nhật nhà cung cấp");
+  const res = await apiClient.put(`/suppliers/${supplierId}`, data);
+  return res.data;
+};
 
-//  Lấy chi tiết 1 nhà cung cấp
-export const getSupplierById = async (supplierId) =>
-  (await supplierApi.get(`/suppliers/${supplierId}`)).data;
+// Xóa nhà cung cấp
+export const deleteSupplier = async (supplierId) => {
+  if (!supplierId) throw new Error("Thiếu supplierId khi xóa nhà cung cấp");
+  const res = await apiClient.delete(`/suppliers/${supplierId}`);
+  return res.data;
+};
 
-//  Tạo nhà cung cấp mới
-export const createSupplier = async (storeId, data) =>
-  (await supplierApi.post(`/suppliers/stores/${storeId}`, data)).data;
+// Khôi phục nhà cung cấp
+export const restoreSupplier = async (supplierId) => {
+  if (!supplierId)
+    throw new Error("Thiếu supplierId khi khôi phục nhà cung cấp");
+  const res = await apiClient.put(`/suppliers/${supplierId}/restore`, {});
+  return res.data;
+};
 
-//  Cập nhật nhà cung cấp
-export const updateSupplier = async (supplierId, data) =>
-  (await supplierApi.put(`/suppliers/${supplierId}`, data)).data;
+// Xuất danh sách nhà cung cấp ra Excel
+export const exportSuppliers = async (storeId) => {
+  if (!storeId)
+    throw new Error("Thiếu storeId khi xuất danh sách nhà cung cấp");
 
-//  Xoá nhà cung cấp
-export const deleteSupplier = async (supplierId) =>
-  (await supplierApi.delete(`/suppliers/${supplierId}`)).data;
+  const res = await apiClient.get(`/suppliers/stores/${storeId}/export`, {
+    responseType: "blob",
+  });
 
-export default supplierApi;
+  const url = window.URL.createObjectURL(new Blob([res.data]));
+  const link = document.createElement("a");
+  link.href = url;
+  link.setAttribute("download", "suppliers.xlsx");
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+};

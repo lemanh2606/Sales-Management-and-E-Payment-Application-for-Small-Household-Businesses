@@ -6,11 +6,12 @@ const Store = require("../../models/Store");
 const User = require("../../models/User");
 const Employee = require("../../models/Employee");
 const Supplier = require("../../models/Supplier");
+const logActivity = require("../../utils/logActivity");
+const path = require("path");
 const { cloudinary, deleteFromCloudinary } = require("../../utils/cloudinary");
+const { parseExcelToJSON, validateRequiredFields, validateNumericField, sanitizeData } = require("../../utils/fileImport");
 
 // ============= HELPER FUNCTIONS =============
-// Tạo SKU tự động với format SPXXXXXX (X là số) - duy nhất theo từng cửa hàng
-// Tự động mở rộng khi vượt quá SP999999
 const generateSKU = async (storeId) => {
   const lastProduct = await Product.findOne({ store_id: storeId }).sort({
     createdAt: -1,
@@ -19,16 +20,11 @@ const generateSKU = async (storeId) => {
 
   if (lastProduct && lastProduct.sku && lastProduct.sku.startsWith("SP")) {
     const lastNumber = parseInt(lastProduct.sku.substring(2));
-    if (!isNaN(lastNumber)) {
-      nextNumber = lastNumber + 1;
-    }
+    if (!isNaN(lastNumber)) nextNumber = lastNumber + 1;
   }
 
-  // Tự động mở rộng độ dài khi vượt quá 999999
   let paddingLength = 6;
-  if (nextNumber > 999999) {
-    paddingLength = Math.max(6, nextNumber.toString().length);
-  }
+  if (nextNumber > 999999) paddingLength = Math.max(6, nextNumber.toString().length);
 
   return `SP${nextNumber.toString().padStart(paddingLength, "0")}`;
 };
@@ -36,176 +32,77 @@ const generateSKU = async (storeId) => {
 // ============= CREATE - Tạo sản phẩm mới =============
 const createProduct = async (req, res) => {
   try {
-    // Kiểm tra xem request body có tồn tại không
+    console.log("----- CREATE PRODUCT REQUEST -----");
+    console.log("User:", req.user?.id || req.user?._id);
+    console.log("storeId param:", req.params.storeId);
+    console.log("req.body keys:", Object.keys(req.body || {}));
+    console.log("req.body sample:", req.body);
+    console.log("req.file (multer):", req.file);
+
     if (!req.body || Object.keys(req.body).length === 0) {
       return res.status(400).json({
-        message:
-          "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json",
+        message: "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json",
       });
     }
 
-    const {
-      name,
-      description,
-      sku,
-      price,
-      cost_price,
-      stock_quantity,
-      min_stock,
-      max_stock,
-      unit,
-      status,
-      supplier_id,
-      group_id,
-    } = req.body;
+    const { name, description, sku, price, cost_price, stock_quantity, min_stock, max_stock, unit, status, supplier_id, group_id } = req.body;
     const { storeId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
-    // Kiểm tra và xác thực dữ liệu đầu vào
-    if (!name || !price || !cost_price) {
-      return res
-        .status(400)
-        .json({ message: "Tên sản phẩm, giá bán và giá vốn là bắt buộc" });
-    }
+    if (!name || !price || !cost_price) return res.status(400).json({ message: "Tên sản phẩm, giá bán và giá vốn là bắt buộc" });
+    if (isNaN(price) || price < 0) return res.status(400).json({ message: "Giá bán phải là số dương" });
+    if (isNaN(cost_price) || cost_price < 0) return res.status(400).json({ message: "Giá vốn phải là số dương" });
 
-    if (isNaN(price) || price < 0) {
-      return res.status(400).json({ message: "Giá bán phải là số dương" });
-    }
-
-    if (isNaN(cost_price) || cost_price < 0) {
-      return res.status(400).json({ message: "Giá vốn phải là số dương" });
-    }
-
-    if (
-      stock_quantity !== undefined &&
-      (isNaN(stock_quantity) || stock_quantity < 0)
-    ) {
-      return res
-        .status(400)
-        .json({ message: "Số lượng tồn kho phải là số không âm" });
-    }
-
-    if (min_stock !== undefined && (isNaN(min_stock) || min_stock < 0)) {
-      return res
-        .status(400)
-        .json({ message: "Tồn kho tối thiểu phải là số không âm" });
-    }
-
-    if (max_stock !== undefined && (isNaN(max_stock) || max_stock < 0)) {
-      return res
-        .status(400)
-        .json({ message: "Tồn kho tối đa phải là số không âm" });
-    }
-
-    if (
-      min_stock !== undefined &&
-      max_stock !== undefined &&
-      min_stock > max_stock
-    ) {
+    if (stock_quantity !== undefined && (isNaN(stock_quantity) || stock_quantity < 0))
+      return res.status(400).json({ message: "Số lượng tồn kho phải là số không âm" });
+    if (min_stock !== undefined && (isNaN(min_stock) || min_stock < 0))
+      return res.status(400).json({ message: "Tồn kho tối thiểu phải là số không âm" });
+    if (max_stock !== undefined && (isNaN(max_stock) || max_stock < 0))
+      return res.status(400).json({ message: "Tồn kho tối đa phải là số không âm" });
+    if (min_stock !== undefined && max_stock !== undefined && min_stock > max_stock)
       return res.status(400).json({
         message: "Tồn kho tối thiểu không thể lớn hơn tồn kho tối đa",
       });
+
+    if (status && !["Đang kinh doanh", "Ngừng kinh doanh", "Ngừng bán"].includes(status)) {
+      return res.status(400).json({ message: "Trạng thái sản phẩm không hợp lệ" });
     }
 
-    if (
-      status &&
-      !["Đang kinh doanh", "Ngừng kinh doanh", "Ngừng bán"].includes(status)
-    ) {
-      return res
-        .status(400)
-        .json({ message: "Trạng thái sản phẩm không hợp lệ" });
-    }
-
-    // Kiểm tra user là manager
     const user = await User.findById(userId);
-    if (!user || user.role !== "MANAGER") {
-      return res
-        .status(403)
-        .json({ message: "Chỉ Manager mới được tạo sản phẩm" });
-    }
+    if (!user) return res.status(404).json({ message: "Người dùng không tồn tại" });
 
-    // Kiểm tra store có tồn tại và thuộc quyền quản lý
     const store = await Store.findById(storeId);
-    if (!store) {
-      return res.status(404).json({ message: "Cửa hàng không tồn tại" });
-    }
+    if (!store) return res.status(404).json({ message: "Cửa hàng không tồn tại" });
 
-    if (store.owner_id.toString() !== userId) {
-      return res.status(403).json({
-        message: "Bạn chỉ có thể tạo sản phẩm trong cửa hàng của mình",
-      });
-    }
-
-    // Kiểm tra ProductGroup nếu được cung cấp (chỉ kiểm tra nhóm chưa bị xóa)
     if (group_id) {
       const productGroup = await ProductGroup.findOne({
         _id: group_id,
         isDeleted: false,
       });
-      if (!productGroup) {
-        return res.status(404).json({ message: "Nhóm sản phẩm không tồn tại" });
-      }
-      if (productGroup.storeId.toString() !== storeId) {
-        return res
-          .status(400)
-          .json({ message: "Nhóm sản phẩm không thuộc cửa hàng này" });
-      }
+      if (!productGroup) return res.status(404).json({ message: "Nhóm sản phẩm không tồn tại" });
+      if (productGroup.storeId.toString() !== storeId) return res.status(400).json({ message: "Nhóm sản phẩm không thuộc cửa hàng này" });
     }
 
-    // Kiểm tra Supplier nếu được cung cấp (chỉ kiểm tra nhà cung cấp chưa bị xóa)
     if (supplier_id) {
       const supplier = await Supplier.findOne({
         _id: supplier_id,
         isDeleted: false,
       });
-      if (!supplier) {
-        return res.status(404).json({ message: "Nhà cung cấp không tồn tại" });
-      }
-      if (supplier.store_id.toString() !== storeId) {
-        return res
-          .status(400)
-          .json({ message: "Nhà cung cấp không thuộc cửa hàng này" });
-      }
+      if (!supplier) return res.status(404).json({ message: "Nhà cung cấp không tồn tại" });
+      if (supplier.store_id.toString() !== storeId) return res.status(400).json({ message: "Nhà cung cấp không thuộc cửa hàng này" });
     }
 
-    // Kiểm tra SKU tùy chỉnh có trùng trong cửa hàng không (chỉ kiểm tra sản phẩm chưa bị xóa)
     if (sku) {
       const existingProduct = await Product.findOne({
-        sku: sku,
+        sku,
         store_id: storeId,
         isDeleted: false,
       });
-      if (existingProduct) {
-        return res
-          .status(409)
-          .json({ message: "Mã SKU này đã tồn tại trong cửa hàng" });
-      }
+      if (existingProduct) return res.status(409).json({ message: "Mã SKU này đã tồn tại trong cửa hàng" });
     }
-
-    // Tạo SKU tự động nếu không được cung cấp
     const productSKU = sku || (await generateSKU(storeId));
 
-    // Xử lý ảnh upload (nếu có)
-    let imageData = null;
-    if (req.file) {
-      console.log("📸 req.file received:", JSON.stringify(req.file, null, 2)); // Debug log
-      try {
-        // Multer-storage-cloudinary stores info in req.file
-        imageData = {
-          url: req.file.path || req.file.secure_url || req.file.url, // Cloudinary URL
-          public_id: req.file.filename || req.file.public_id, // Cloudinary public_id
-        };
-        console.log("📸 imageData created:", imageData); // Debug log
-      } catch (imgError) {
-        console.error("❌ Error processing image:", imgError);
-        throw new Error("Lỗi xử lý ảnh upload: " + imgError.message);
-      }
-    } else {
-      console.log("ℹ️ No file uploaded (req.file is undefined)");
-    }
-
-    // Tạo sản phẩm mới
-    const newProduct = new Product({
+    const productData = {
       name,
       description,
       sku: productSKU,
@@ -219,12 +116,25 @@ const createProduct = async (req, res) => {
       store_id: storeId,
       supplier_id: supplier_id || null,
       group_id: group_id || null,
-      image: imageData,
-    });
+      createdBy: userId,
+    };
+
+    if (req.file) {
+      productData.image = {
+        url: req.file.path,
+        public_id: req.file.filename || req.file.path.split("/").pop().split(".")[0],
+      };
+      console.log("Ảnh sản phẩm đã upload lên Cloudinary:", productData.image);
+      console.log("---- MULTER REQ.FILE ----");
+      console.log(req.file);
+      console.log("---- REQ.BODY ----");
+      console.log(req.body);
+    }
+
+    const newProduct = new Product(productData);
 
     await newProduct.save();
 
-    // Lấy thông tin chi tiết và định dạng dữ liệu trả về (chỉ lấy sản phẩm chưa bị xóa)
     const populatedProduct = await Product.findOne({
       _id: newProduct._id,
       isDeleted: false,
@@ -233,54 +143,93 @@ const createProduct = async (req, res) => {
       .populate("store_id", "name")
       .populate("group_id", "name");
 
-    const formattedProduct = {
-      _id: populatedProduct._id,
-      name: populatedProduct.name,
-      description: populatedProduct.description,
-      sku: populatedProduct.sku,
-      price: parseFloat(populatedProduct.price.toString()),
-      cost_price: parseFloat(populatedProduct.cost_price.toString()),
-      stock_quantity: populatedProduct.stock_quantity,
-      min_stock: populatedProduct.min_stock,
-      max_stock: populatedProduct.max_stock,
-      unit: populatedProduct.unit,
-      status: populatedProduct.status,
-      image: populatedProduct.image,
-      store: populatedProduct.store_id,
-      supplier: populatedProduct.supplier_id,
-      group: populatedProduct.group_id,
-      createdAt: populatedProduct.createdAt,
-      updatedAt: populatedProduct.updatedAt,
-    };
-
-    res.status(201).json({
-      message: "Tạo sản phẩm thành công",
-      product: formattedProduct,
+    // log hoạt động
+    await logActivity({
+      user: req.user,
+      store: { _id: storeId },
+      action: "create",
+      entity: "Product",
+      entityId: newProduct._id,
+      entityName: newProduct.name,
+      req,
+      description: `Tạo mới sản phẩm ${newProduct.name} (SKU: ${newProduct.sku}) tại cửa hàng ${storeId}`,
     });
+
+    res.status(201).json({ message: "Tạo sản phẩm thành công", product: populatedProduct });
   } catch (error) {
     console.error("❌ Lỗi createProduct:", error);
-    console.error("❌ Error stack:", error.stack);
-    res.status(500).json({
-      message: "Lỗi server",
-      error: error.message,
-      details: process.env.NODE_ENV === "development" ? error.stack : undefined,
-    });
+    res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
 
 // ============= UPDATE - Cập nhật sản phẩm đầy đủ =============
 const updateProduct = async (req, res) => {
   try {
-    // Kiểm tra xem request body có tồn tại không
-    if (!req.body || Object.keys(req.body).length === 0) {
-      return res.status(400).json({
-        message:
-          "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json",
-      });
-    }
+    if (!req.body || Object.keys(req.body).length === 0) return res.status(400).json({ message: "Dữ liệu request body trống" });
 
     const { productId } = req.params;
-    const {
+    const { storeId } = req.query;
+    const userId = req.user.id || req.user._id;
+    const { name, description, sku, price, cost_price, stock_quantity, min_stock, max_stock, unit, status, supplier_id, group_id } = req.body;
+
+    const product = await Product.findOne({
+      _id: productId,
+      isDeleted: false,
+    }).populate("store_id", "owner_id");
+    if (!product) return res.status(404).json({ message: "Sản phẩm không tồn tại" });
+
+    // ĐÃ LOẠI BỎ CHECK ROLE - Chỉ kiểm tra user tồn tại
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: "Người dùng không tồn tại" });
+
+    // Validate numeric fields
+    if (price !== undefined && (isNaN(price) || price < 0)) return res.status(400).json({ message: "Giá bán phải là số dương" });
+    if (cost_price !== undefined && (isNaN(cost_price) || cost_price < 0)) return res.status(400).json({ message: "Giá vốn phải là số dương" });
+    if (stock_quantity !== undefined && (isNaN(stock_quantity) || stock_quantity < 0))
+      return res.status(400).json({ message: "Số lượng tồn kho phải là số không âm" });
+    if (min_stock !== undefined && (isNaN(min_stock) || min_stock < 0))
+      return res.status(400).json({ message: "Tồn kho tối thiểu phải là số không âm" });
+    if (max_stock !== undefined && (isNaN(max_stock) || max_stock < 0))
+      return res.status(400).json({ message: "Tồn kho tối đa phải là số không âm" });
+    if (min_stock !== undefined && max_stock !== undefined && min_stock > max_stock)
+      return res.status(400).json({
+        message: "Tồn kho tối thiểu không thể lớn hơn tồn kho tối đa",
+      });
+
+    if (status && !["Đang kinh doanh", "Ngừng kinh doanh", "Ngừng bán"].includes(status))
+      return res.status(400).json({ message: "Trạng thái sản phẩm không hợp lệ" });
+
+    if (sku !== undefined && sku !== product.sku) {
+      const existingProduct = await Product.findOne({
+        sku,
+        store_id: product.store_id._id,
+        _id: { $ne: productId },
+        isDeleted: false,
+      });
+      if (existingProduct) return res.status(409).json({ message: "Mã SKU này đã tồn tại trong cửa hàng" });
+    }
+
+    if (group_id) {
+      const productGroup = await ProductGroup.findOne({
+        _id: group_id,
+        isDeleted: false,
+      });
+      if (!productGroup) return res.status(404).json({ message: "Nhóm sản phẩm không tồn tại" });
+      if (productGroup.storeId.toString() !== product.store_id._id.toString())
+        return res.status(400).json({ message: "Nhóm sản phẩm không thuộc cửa hàng này" });
+    }
+
+    if (supplier_id) {
+      const supplier = await Supplier.findOne({
+        _id: supplier_id,
+        isDeleted: false,
+      });
+      if (!supplier) return res.status(404).json({ message: "Nhà cung cấp không tồn tại" });
+      if (supplier.store_id.toString() !== product.store_id._id.toString())
+        return res.status(400).json({ message: "Nhà cung cấp không thuộc cửa hàng này" });
+    }
+
+    const updateData = {
       name,
       description,
       sku,
@@ -293,207 +242,42 @@ const updateProduct = async (req, res) => {
       status,
       supplier_id,
       group_id,
-    } = req.body;
-    const userId = req.user.id;
+    };
+    Object.keys(updateData).forEach((k) => updateData[k] === undefined && delete updateData[k]);
 
-    // Kiểm tra và xác thực dữ liệu đầu vào
-    if (price !== undefined && (isNaN(price) || price < 0)) {
-      return res.status(400).json({ message: "Giá bán phải là số dương" });
-    }
-
-    if (cost_price !== undefined && (isNaN(cost_price) || cost_price < 0)) {
-      return res.status(400).json({ message: "Giá vốn phải là số dương" });
-    }
-
-    if (
-      stock_quantity !== undefined &&
-      (isNaN(stock_quantity) || stock_quantity < 0)
-    ) {
-      return res
-        .status(400)
-        .json({ message: "Số lượng tồn kho phải là số không âm" });
-    }
-
-    if (min_stock !== undefined && (isNaN(min_stock) || min_stock < 0)) {
-      return res
-        .status(400)
-        .json({ message: "Tồn kho tối thiểu phải là số không âm" });
-    }
-
-    if (max_stock !== undefined && (isNaN(max_stock) || max_stock < 0)) {
-      return res
-        .status(400)
-        .json({ message: "Tồn kho tối đa phải là số không âm" });
-    }
-
-    if (
-      min_stock !== undefined &&
-      max_stock !== undefined &&
-      min_stock > max_stock
-    ) {
-      return res.status(400).json({
-        message: "Tồn kho tối thiểu không thể lớn hơn tồn kho tối đa",
-      });
-    }
-
-    if (
-      status &&
-      !["Đang kinh doanh", "Ngừng kinh doanh", "Ngừng bán"].includes(status)
-    ) {
-      return res
-        .status(400)
-        .json({ message: "Trạng thái sản phẩm không hợp lệ" });
-    }
-
-    // Kiểm tra user là manager
-    const user = await User.findById(userId);
-    if (!user || user.role !== "MANAGER") {
-      return res
-        .status(403)
-        .json({ message: "Chỉ Manager mới được cập nhật sản phẩm" });
-    }
-
-    // Tìm sản phẩm và kiểm tra quyền (chỉ tìm sản phẩm chưa bị xóa)
-    const product = await Product.findOne({
-      _id: productId,
-      isDeleted: false,
-    }).populate("store_id", "owner_id");
-    if (!product) {
-      return res.status(404).json({ message: "Sản phẩm không tồn tại" });
-    }
-
-    if (product.store_id.owner_id.toString() !== userId) {
-      return res.status(403).json({
-        message: "Bạn chỉ có thể cập nhật sản phẩm trong cửa hàng của mình",
-      });
-    }
-
-    // Kiểm tra ProductGroup nếu được cung cấp (chỉ kiểm tra nhóm chưa bị xóa)
-    if (group_id) {
-      const productGroup = await ProductGroup.findOne({
-        _id: group_id,
-        isDeleted: false,
-      });
-      if (!productGroup) {
-        return res.status(404).json({ message: "Nhóm sản phẩm không tồn tại" });
-      }
-      if (productGroup.storeId.toString() !== product.store_id._id.toString()) {
-        return res
-          .status(400)
-          .json({ message: "Nhóm sản phẩm không thuộc cửa hàng này" });
-      }
-    }
-
-    // Kiểm tra Supplier nếu được cung cấp (chỉ kiểm tra nhà cung cấp chưa bị xóa)
-    if (supplier_id) {
-      const supplier = await Supplier.findOne({
-        _id: supplier_id,
-        isDeleted: false,
-      });
-      if (!supplier) {
-        return res.status(404).json({ message: "Nhà cung cấp không tồn tại" });
-      }
-      if (supplier.store_id.toString() !== product.store_id._id.toString()) {
-        return res
-          .status(400)
-          .json({ message: "Nhà cung cấp không thuộc cửa hàng này" });
-      }
-    }
-
-    // Kiểm tra SKU tùy chỉnh có trùng trong cửa hàng không (nếu thay đổi SKU, chỉ kiểm tra sản phẩm chưa bị xóa)
-    if (sku !== undefined && sku !== product.sku) {
-      const existingProduct = await Product.findOne({
-        sku: sku,
-        store_id: product.store_id._id,
-        _id: { $ne: productId }, // Loại trừ chính sản phẩm đang cập nhật
-        isDeleted: false,
-      });
-      if (existingProduct) {
-        return res
-          .status(409)
-          .json({ message: "Mã SKU này đã tồn tại trong cửa hàng" });
-      }
-    }
-
-    // Chuẩn bị dữ liệu cập nhật
-    const updateData = {};
-    if (name !== undefined) updateData.name = name;
-    if (description !== undefined) updateData.description = description;
-    if (sku !== undefined) updateData.sku = sku;
-    if (price !== undefined) updateData.price = price;
-    if (cost_price !== undefined) updateData.cost_price = cost_price;
-    if (stock_quantity !== undefined)
-      updateData.stock_quantity = stock_quantity;
-    if (min_stock !== undefined) updateData.min_stock = min_stock;
-    if (max_stock !== undefined) updateData.max_stock = max_stock;
-    if (unit !== undefined) updateData.unit = unit;
-    if (status !== undefined) updateData.status = status;
-    if (supplier_id !== undefined) updateData.supplier_id = supplier_id;
-    if (group_id !== undefined) updateData.group_id = group_id;
-
-    // Xử lý cập nhật ảnh (nếu có file mới)
     if (req.file) {
-      // Xóa ảnh cũ trên Cloudinary nếu có
-      if (product.image && product.image.public_id) {
-        try {
-          await deleteFromCloudinary(product.image.public_id);
-        } catch (error) {
-          console.error("Lỗi xóa ảnh cũ:", error);
-        }
+      // XÓA ảnh cũ nếu có
+      if (product.image?.public_id) {
+        await deleteFromCloudinary(product.image.public_id);
       }
-      // Cập nhật ảnh mới
       updateData.image = {
-        url: req.file.path || req.file.secure_url,
-        public_id: req.file.filename || req.file.public_id,
+        url: req.file.path,
+        public_id: req.file.filename,
       };
     }
-
-    // Thêm logic reset lowStockAlerted (explicit trong controller, double-check với pre-save hook)
-    if (stock_quantity !== undefined && min_stock !== undefined) {
-      if (stock_quantity <= min_stock) {
-        updateData.lowStockAlerted = true; // Bật cảnh báo thiếu hàng và sẽ gửi email
-      } else {
-        updateData.lowStockAlerted = false; // Tắt cảnh báo vì đã đủ hàng và sẽ reset để gửi cảnh báo sau này
-      }
-    }
-
-    // Cập nhật sản phẩm
-    const updatedProduct = await Product.findByIdAndUpdate(
-      productId,
-      updateData,
-      { new: true }
-    )
+    const updatedProduct = await Product.findByIdAndUpdate(productId, updateData, { new: true })
       .populate("supplier_id", "name")
       .populate("store_id", "name")
       .populate("group_id", "name");
 
-    // Định dạng lại dữ liệu trả về
-    const formattedProduct = {
-      _id: updatedProduct._id,
-      name: updatedProduct.name,
-      description: updatedProduct.description,
-      sku: updatedProduct.sku,
-      price: parseFloat(updatedProduct.price.toString()),
-      cost_price: parseFloat(updatedProduct.cost_price.toString()),
-      stock_quantity: updatedProduct.stock_quantity,
-      min_stock: updatedProduct.min_stock,
-      max_stock: updatedProduct.max_stock,
-      unit: updatedProduct.unit,
-      status: updatedProduct.status,
-      image: updatedProduct.image,
-      store: updatedProduct.store_id,
-      supplier: updatedProduct.supplier_id,
-      group: updatedProduct.group_id,
-      createdAt: updatedProduct.createdAt,
-      updatedAt: updatedProduct.updatedAt,
-    };
+    //log hoạt động
+    await logActivity({
+      user: req.user,
+      store: { _id: updatedProduct.store_id._id },
+      action: "update",
+      entity: "Product",
+      entityId: updatedProduct._id,
+      entityName: updatedProduct.name,
+      req,
+      description: `Cập nhật sản phẩm ${updatedProduct.name} (SKU: ${updatedProduct.sku})`,
+    });
 
     res.status(200).json({
       message: "Cập nhật sản phẩm thành công",
-      product: formattedProduct,
+      product: updatedProduct,
     });
   } catch (error) {
-    console.error("Lỗi updateProduct:", error);
+    console.error("❌ Lỗi updateProduct:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
@@ -502,34 +286,31 @@ const updateProduct = async (req, res) => {
 const deleteProduct = async (req, res) => {
   try {
     const { productId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
-    // Kiểm tra user là manager
-    const user = await User.findById(userId);
-    if (!user || user.role !== "MANAGER") {
-      return res
-        .status(403)
-        .json({ message: "Chỉ Manager mới được xóa sản phẩm" });
-    }
-
-    // Tìm sản phẩm và kiểm tra quyền (chỉ tìm sản phẩm chưa bị xóa)
     const product = await Product.findOne({
       _id: productId,
       isDeleted: false,
     }).populate("store_id", "owner_id");
-    if (!product) {
-      return res.status(404).json({ message: "Sản phẩm không tồn tại" });
-    }
+    if (!product) return res.status(404).json({ message: "Sản phẩm không tồn tại" });
 
-    if (product.store_id.owner_id.toString() !== userId) {
-      return res.status(403).json({
-        message: "Bạn chỉ có thể xóa sản phẩm trong cửa hàng của mình",
-      });
-    }
+    // ĐÃ LOẠI BỎ CHECK ROLE - Chỉ kiểm tra user tồn tại
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: "Người dùng không tồn tại" });
 
-    // Soft delete - đánh dấu sản phẩm đã bị xóa
     product.isDeleted = true;
     await product.save();
+    //log hoạt động
+    await logActivity({
+      user: req.user,
+      store: { _id: product.store_id._id },
+      action: "delete",
+      entity: "Product",
+      entityId: product._id,
+      entityName: product.name,
+      req,
+      description: `Xóa mềm sản phẩm ${product.name} (SKU: ${product.sku})`,
+    });
 
     res.status(200).json({
       message: "Xóa sản phẩm thành công",
@@ -545,13 +326,7 @@ const deleteProduct = async (req, res) => {
 const getProductsByStore = async (req, res) => {
   try {
     const { storeId } = req.params;
-    const userId = req.user.id;
-
-    // Kiểm tra user có quyền truy cập store này không
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ message: "Người dùng không tồn tại" });
-    }
+    const { page = 1, limit = 10, query = "", status } = req.query;
 
     // Kiểm tra store có tồn tại không
     const store = await Store.findById(storeId);
@@ -559,59 +334,57 @@ const getProductsByStore = async (req, res) => {
       return res.status(404).json({ message: "Cửa hàng không tồn tại" });
     }
 
-    // Kiểm tra quyền truy cập: owner của store hoặc employee thuộc store đó
-    if (user.role === "MANAGER" && store.owner_id.toString() !== userId) {
-      return res
-        .status(403)
-        .json({ message: "Bạn không có quyền truy cập cửa hàng này" });
+    // Phân trang
+    const skip = (Number(page) - 1) * Number(limit);
+    const filter = { store_id: storeId, isDeleted: false };
+
+    // Thêm filter theo query tìm kiếm
+    if (query && query.trim() !== "") {
+      const searchRegex = new RegExp(query.trim(), "i");
+      filter.$or = [{ name: searchRegex }, { sku: searchRegex }, { description: searchRegex }];
     }
 
-    if (user.role === "STAFF") {
-      // Tìm thông tin employee để lấy store_id
-      const employee = await Employee.findOne({ user_id: userId });
-      if (!employee) {
-        return res
-          .status(404)
-          .json({ message: "Không tìm thấy thông tin nhân viên" });
-      }
-      if (employee.store_id.toString() !== storeId) {
-        return res
-          .status(403)
-          .json({ message: "Bạn không có quyền truy cập cửa hàng này" });
-      }
+    // Thêm filter theo status
+    if (status && status !== "all") {
+      filter.status = status;
     }
 
-    // Lấy tất cả sản phẩm của store với thông tin supplier (chỉ lấy sản phẩm chưa bị xóa)
-    const products = await Product.find({ store_id: storeId, isDeleted: false })
-      .populate("supplier_id", "name")
-      .populate("store_id", "name")
-      .populate("group_id", "name")
-      .sort({ createdAt: -1 }); // Sắp xếp theo ngày tạo mới nhất
+    const [total, products] = await Promise.all([
+      Product.countDocuments(filter),
+      Product.find(filter)
+        .populate("supplier_id", "name")
+        .populate("store_id", "name")
+        .populate("group_id", "name")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(Number(limit)),
+    ]);
 
-    // Chuyển đổi price và cost_price từ Decimal128 sang number
-    const formattedProducts = products.map((product) => ({
-      _id: product._id,
-      name: product.name,
-      description: product.description,
-      sku: product.sku,
-      price: parseFloat(product.price.toString()),
-      cost_price: parseFloat(product.cost_price.toString()),
-      stock_quantity: product.stock_quantity,
-      min_stock: product.min_stock,
-      max_stock: product.max_stock,
-      unit: product.unit,
-      status: product.status,
-      image: product.image,
-      store: product.store_id,
-      supplier: product.supplier_id,
-      group: product.group_id,
-      createdAt: product.createdAt,
-      updatedAt: product.updatedAt,
+    const formattedProducts = products.map((p) => ({
+      _id: p._id,
+      name: p.name,
+      sku: p.sku,
+      description: p.description,
+      price: parseFloat(p.price?.toString() || 0),
+      cost_price: parseFloat(p.cost_price?.toString() || 0),
+      stock_quantity: p.stock_quantity,
+      min_stock: p.min_stock,
+      max_stock: p.max_stock,
+      unit: p.unit,
+      status: p.status,
+      image: p.image,
+      store: p.store_id,
+      supplier: p.supplier_id,
+      group: p.group_id,
+      createdAt: p.createdAt,
+      updatedAt: p.updatedAt,
     }));
 
     res.status(200).json({
       message: "Lấy danh sách sản phẩm thành công",
-      total: formattedProducts.length,
+      total,
+      page: Number(page),
+      limit: Number(limit),
       products: formattedProducts,
     });
   } catch (error) {
@@ -624,7 +397,6 @@ const getProductsByStore = async (req, res) => {
 const getProductById = async (req, res) => {
   try {
     const { productId } = req.params;
-    const userId = req.user.id;
 
     const product = await Product.findOne({ _id: productId, isDeleted: false })
       .populate("supplier_id", "name")
@@ -635,31 +407,7 @@ const getProductById = async (req, res) => {
       return res.status(404).json({ message: "Sản phẩm không tồn tại" });
     }
 
-    // Kiểm tra quyền truy cập
-    const user = await User.findById(userId);
-    if (
-      user.role === "MANAGER" &&
-      product.store_id.owner_id.toString() !== userId
-    ) {
-      return res
-        .status(403)
-        .json({ message: "Bạn không có quyền truy cập sản phẩm này" });
-    }
-
-    if (user.role === "STAFF") {
-      // Tìm thông tin employee để lấy store_id
-      const employee = await Employee.findOne({ user_id: userId });
-      if (!employee) {
-        return res
-          .status(404)
-          .json({ message: "Không tìm thấy thông tin nhân viên" });
-      }
-      if (employee.store_id.toString() !== product.store_id._id.toString()) {
-        return res
-          .status(403)
-          .json({ message: "Bạn không có quyền truy cập sản phẩm này" });
-      }
-    }
+    // ĐÃ LOẠI BỎ CHECK ROLE - Mọi user đã xác thực đều có thể xem
 
     // Định dạng lại dữ liệu trả về
     const formattedProduct = {
@@ -692,20 +440,19 @@ const getProductById = async (req, res) => {
   }
 };
 
-// Cập nhật giá bán sản phẩm (chỉ manager)
+// Cập nhật giá bán sản phẩm
 const updateProductPrice = async (req, res) => {
   try {
     // Kiểm tra xem request body có tồn tại không
     if (!req.body || Object.keys(req.body).length === 0) {
       return res.status(400).json({
-        message:
-          "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json",
+        message: "Dữ liệu request body trống. Vui lòng gửi dữ liệu JSON với Content-Type: application/json",
       });
     }
 
     const { productId } = req.params;
     const { price } = req.body;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
     // Kiểm tra và xác thực dữ liệu đầu vào
     if (!price) {
@@ -716,13 +463,7 @@ const updateProductPrice = async (req, res) => {
       return res.status(400).json({ message: "Giá bán phải là số dương" });
     }
 
-    // Kiểm tra user là manager
-    const user = await User.findById(userId);
-    if (!user || user.role !== "MANAGER") {
-      return res
-        .status(403)
-        .json({ message: "Chỉ Manager mới được cập nhật giá sản phẩm" });
-    }
+    // ĐÃ LOẠI BỎ CHECK ROLE - Mọi user đã xác thực đều có thể cập nhật giá
 
     // Tìm sản phẩm và populate store để kiểm tra quyền (chỉ tìm sản phẩm chưa bị xóa)
     const product = await Product.findOne({
@@ -733,19 +474,8 @@ const updateProductPrice = async (req, res) => {
       return res.status(404).json({ message: "Sản phẩm không tồn tại" });
     }
 
-    // Kiểm tra quyền: chỉ owner của store mới được cập nhật giá
-    if (product.store_id.owner_id.toString() !== userId) {
-      return res.status(403).json({
-        message: "Bạn chỉ có thể cập nhật giá sản phẩm trong cửa hàng của mình",
-      });
-    }
-
     // Cập nhật giá bán sản phẩm
-    const updatedProduct = await Product.findByIdAndUpdate(
-      productId,
-      { price: price },
-      { new: true }
-    )
+    const updatedProduct = await Product.findByIdAndUpdate(productId, { price: price }, { new: true })
       .populate("supplier_id", "name")
       .populate("store_id", "name")
       .populate("group_id", "name");
@@ -771,6 +501,18 @@ const updateProductPrice = async (req, res) => {
       updatedAt: updatedProduct.updatedAt,
     };
 
+    // log hoạt động
+    await logActivity({
+      user: req.user,
+      store: { _id: updatedProduct.store_id._id },
+      action: "update",
+      entity: "Product",
+      entityId: updatedProduct._id,
+      entityName: updatedProduct.name,
+      req,
+      description: `Cập nhật giá bán sản phẩm ${updatedProduct.name} (SKU: ${updatedProduct.sku}) từ ${product.price} → ${price}`,
+    });
+
     res.status(200).json({
       message: "Cập nhật giá bán sản phẩm thành công",
       product: formattedProduct,
@@ -791,9 +533,7 @@ const getLowStockProducts = async (req, res) => {
       status: "Đang kinh doanh", // Chỉ sản phẩm đang bán
       min_stock: { $gt: 0 }, // Min stock > 0 tránh cảnh báo ảo
       lowStockAlerted: false, // Chưa cảnh báo
-      store_id: storeId
-        ? new mongoose.Types.ObjectId(storeId)
-        : { $exists: true }, // Filter store nếu có
+      store_id: storeId ? new mongoose.Types.ObjectId(storeId) : { $exists: true }, // Filter store nếu có
       isDeleted: false, // Chỉ lấy sản phẩm chưa bị xóa
     };
 
@@ -803,11 +543,7 @@ const getLowStockProducts = async (req, res) => {
       .limit(20) // Limit 20 để tránh query lớn
       .lean(); // Lean cho nhanh
 
-    console.log(
-      `Query low stock thành công, số lượng: ${
-        lowStockProds.length
-      } sản phẩm cho store ${storeId || "tất cả"}`
-    );
+    console.log(`Query low stock thành công, số lượng: ${lowStockProds.length} sản phẩm cho store ${storeId || "tất cả"}`);
     res.json({
       message: "Lấy danh sách tồn kho thấp thành công",
       products: lowStockProds,
@@ -824,9 +560,7 @@ const searchProducts = async (req, res) => {
     const { query, storeId, limit = 10 } = req.query; // Params: query (tên/SKU), storeId, limit (default 10)
 
     if (!query || query.trim().length === 0) {
-      return res
-        .status(400)
-        .json({ message: "Query tìm kiếm không được để trống" });
+      return res.status(400).json({ message: "Query tìm kiếm không được để trống" });
     }
 
     const searchQuery = {
@@ -840,14 +574,12 @@ const searchProducts = async (req, res) => {
     };
 
     const products = await Product.find(searchQuery)
-      .select("name sku price stock_quantity unit") // Chỉ lấy field cần thiết
+      .select("image name sku price cost_price stock_quantity unit") // Chỉ lấy field cần thiết
       .sort({ name: 1 }) // Sắp xếp theo tên A-Z
       .limit(parseInt(limit)) // Limit số kết quả
       .lean(); // Lean cho nhanh
 
-    console.log(
-      `Tìm kiếm sản phẩm thành công: "${query}" trong store ${storeId}, kết quả: ${products.length} sản phẩm`
-    );
+    console.log(`Tìm kiếm sản phẩm thành công: "${query}" trong store ${storeId}, kết quả: ${products.length} sản phẩm`);
     res.json({ message: `Tìm thấy ${products.length} sản phẩm`, products });
   } catch (err) {
     console.error("Lỗi search sản phẩm:", err.message);
@@ -855,19 +587,13 @@ const searchProducts = async (req, res) => {
   }
 };
 
-// DELETE IMAGE - Xóa ảnh sản phẩm (chỉ manager)
+// DELETE IMAGE - Xóa ảnh sản phẩm
 const deleteProductImage = async (req, res) => {
   try {
     const { productId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
-    // Kiểm tra user là manager
-    const user = await User.findById(userId);
-    if (!user || user.role !== "MANAGER") {
-      return res
-        .status(403)
-        .json({ message: "Chỉ Manager mới được xóa ảnh sản phẩm" });
-    }
+    // ĐÃ LOẠI BỎ CHECK ROLE - Mọi user đã xác thực đều có thể xóa ảnh
 
     // Tìm sản phẩm và kiểm tra quyền (chỉ tìm sản phẩm chưa bị xóa)
     const product = await Product.findOne({
@@ -876,12 +602,6 @@ const deleteProductImage = async (req, res) => {
     }).populate("store_id", "owner_id");
     if (!product) {
       return res.status(404).json({ message: "Sản phẩm không tồn tại" });
-    }
-
-    if (product.store_id.owner_id.toString() !== userId) {
-      return res.status(403).json({
-        message: "Bạn chỉ có thể xóa ảnh sản phẩm trong cửa hàng của mình",
-      });
     }
 
     // Kiểm tra có ảnh không
@@ -901,12 +621,831 @@ const deleteProductImage = async (req, res) => {
     product.image = null;
     await product.save();
 
+    // log hoạt động
+    await logActivity({
+      user: req.user,
+      store: { _id: product.store_id._id },
+      action: "delete",
+      entity: "ProductImage",
+      entityId: product._id,
+      entityName: product.name,
+      req,
+      description: `Xóa ảnh sản phẩm ${product.name} (SKU: ${product.sku})`,
+    });
+
     res.status(200).json({
       message: "Xóa ảnh sản phẩm thành công",
       productId: productId,
     });
   } catch (error) {
     console.error("❌ Lỗi deleteProductImage:", error);
+    res.status(500).json({ message: "Lỗi server", error: error.message });
+  }
+};
+
+// importProducts (chỉ hàm này)
+const importProducts = async (req, res) => {
+  try {
+    const { storeId } = req.params;
+    const userId = req.user?.id || req.user?._id;
+
+    if (!req.file) {
+      return res.status(400).json({ message: "Vui lòng tải lên file" });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: "Người dùng không tồn tại" });
+
+    const store = await Store.findById(storeId);
+    if (!store) return res.status(404).json({ message: "Cửa hàng không tồn tại" });
+
+    // quyền: owner hoặc nhân viên thuộc store
+    const storeOwnerId = store.owner_id ? store.owner_id.toString() : null;
+    if (storeOwnerId !== (userId ? userId.toString() : null)) {
+      if (user.role === "STAFF") {
+        const employee = await Employee.findOne({
+          user_id: userId,
+          store_id: storeId,
+        });
+        if (!employee) {
+          return res.status(403).json({ message: "Bạn không có quyền import" });
+        }
+      } else {
+        return res.status(403).json({ message: "Bạn không có quyền import" });
+      }
+    }
+
+    const data = await parseExcelToJSON(req.file.buffer);
+    if (!Array.isArray(data) || data.length === 0) {
+      return res.status(400).json({ message: "File không chứa dữ liệu hợp lệ" });
+    }
+
+    const results = {
+      success: [],
+      failed: [],
+      total: data.length,
+      debug: {
+        suppliersCreated: 0,
+        groupsCreated: 0,
+        processedRows: 0,
+        skuConflicts: 0,
+      },
+    };
+
+    // lấy dữ liệu tham chiếu
+    const suppliers = await Supplier.find({
+      store_id: storeId,
+      isDeleted: false,
+    }).lean();
+    const productGroups = await ProductGroup.find({
+      store_id: storeId,
+      isDeleted: false,
+    }).lean();
+
+    // Lấy danh sách SKU hiện có TRONG CỬA HÀNG NÀY để tránh trùng lặp
+    const existingProducts = await Product.find({
+      store_id: storeId, // CHỈ kiểm tra trong cửa hàng hiện tại
+      isDeleted: false,
+    })
+      .select("sku")
+      .lean();
+
+    const existingSKUs = new Set(existingProducts.map((p) => p.sku));
+    const usedSKUsInThisImport = new Set(); // Để theo dõi SKU đã dùng trong import này
+
+    const lastProductGlobal = await Product.findOne({ isDeleted: false }).sort({ sku: -1 }).select("sku").lean();
+
+    const extractSkuNumber = (sku) => {
+      if (!sku) return 0;
+      const match = sku.match(/\d+$/);
+      return match ? parseInt(match[0], 10) : 0;
+    };
+
+    let globalSkuCounter = extractSkuNumber(lastProductGlobal?.sku);
+
+    const supplierMap = new Map(
+      suppliers.map((s) => [
+        String((s.name || "").toLowerCase()).trim(),
+        {
+          _id: s._id,
+          exists: true,
+        },
+      ])
+    );
+    const groupMap = new Map(
+      productGroups.map((g) => [
+        String((g.name || "").toLowerCase()).trim(),
+        {
+          _id: g._id,
+          exists: true,
+        },
+      ])
+    );
+
+    // Hàm generate SKU duy nhất TRONG CỬA HÀNG
+    const generateUniqueSKU = async (usedSKUs) => {
+      let attempt = 0;
+      const maxAttempts = 500;
+
+      while (attempt < maxAttempts) {
+        globalSkuCounter += 1;
+        const newSKU = `SP${globalSkuCounter.toString().padStart(6, "0")}`;
+
+        if (existingSKUs.has(newSKU) || usedSKUs.has(newSKU)) {
+          attempt++;
+          continue;
+        }
+
+        usedSKUs.add(newSKU);
+        return newSKU;
+      }
+
+      throw new Error(`Không thể tạo SKU duy nhất sau ${maxAttempts} lần thử`);
+    };
+
+    // Hàm tạo nhà cung cấp mới nếu chưa tồn tại TRONG CỬA HÀNG
+    const createSupplierIfNotExists = async (supplierName) => {
+      try {
+        const trimmedName = supplierName.trim();
+        const normalizedName = trimmedName.toLowerCase();
+
+        // Kiểm tra xem đã có trong map chưa
+        if (supplierMap.has(normalizedName)) {
+          return supplierMap.get(normalizedName)._id;
+        }
+
+        // Kiểm tra trong database (tránh race condition) - CHỈ trong cửa hàng này
+        const existingSupplier = await Supplier.findOne({
+          name: { $regex: new RegExp(`^${trimmedName}$`, "i") },
+          store_id: storeId, // CHỈ kiểm tra trong cửa hàng hiện tại
+          isDeleted: false,
+        }).collation({ locale: "vi", strength: 2 });
+
+        if (existingSupplier) {
+          supplierMap.set(normalizedName, {
+            _id: existingSupplier._id,
+            exists: true,
+          });
+          return existingSupplier._id;
+        }
+
+        // Tạo nhà cung cấp mới CHO CỬA HÀNG NÀY
+        const newSupplier = new Supplier({
+          name: trimmedName,
+          phone: "",
+          email: "",
+          address: "",
+          taxcode: "",
+          notes: "",
+          status: "đang hoạt động",
+          store_id: storeId, // Liên kết với cửa hàng hiện tại
+          created_by: userId,
+        });
+
+        await newSupplier.save();
+        results.debug.suppliersCreated++;
+
+        // Log activity
+        await logActivity({
+          user: req.user,
+          store: { _id: storeId },
+          action: "create",
+          entity: "Supplier",
+          entityId: newSupplier._id,
+          entityName: newSupplier.name,
+          req,
+          description: `Tự động tạo nhà cung cấp "${newSupplier.name}" từ import sản phẩm`,
+        });
+
+        supplierMap.set(normalizedName, {
+          _id: newSupplier._id,
+          exists: false, // mới tạo
+        });
+        return newSupplier._id;
+      } catch (error) {
+        console.error(`Lỗi khi tạo nhà cung cấp ${supplierName}:`, error);
+        throw new Error(`Không thể tạo nhà cung cấp: ${supplierName} - ${error.message}`);
+      }
+    };
+
+    // Hàm tạo nhóm sản phẩm mới nếu chưa tồn tại TRONG CỬA HÀNG
+    const createProductGroupIfNotExists = async (groupName) => {
+      try {
+        const trimmedName = groupName.trim();
+        const normalizedName = trimmedName.toLowerCase();
+
+        // Kiểm tra xem đã có trong map chưa
+        if (groupMap.has(normalizedName)) {
+          return groupMap.get(normalizedName)._id;
+        }
+
+        // Kiểm tra trong database (tránh race condition) - CHỈ trong cửa hàng này
+        const existingGroup = await ProductGroup.findOne({
+          name: { $regex: new RegExp(`^${trimmedName}$`, "i") },
+          storeId: storeId, // CHỈ kiểm tra trong cửa hàng hiện tại
+          isDeleted: false,
+        });
+
+        if (existingGroup) {
+          groupMap.set(normalizedName, {
+            _id: existingGroup._id,
+            exists: true,
+          });
+          return existingGroup._id;
+        }
+
+        // Tạo nhóm sản phẩm mới CHO CỬA HÀNG NÀY
+        const newProductGroup = new ProductGroup({
+          name: trimmedName,
+          description: `Nhóm sản phẩm được tạo tự động từ import`,
+          storeId: storeId, // Liên kết với cửa hàng hiện tại
+        });
+
+        await newProductGroup.save();
+        results.debug.groupsCreated++;
+
+        // Log activity
+        await logActivity({
+          user: req.user,
+          store: { _id: storeId },
+          action: "create",
+          entity: "ProductGroup",
+          entityId: newProductGroup._id,
+          entityName: newProductGroup.name,
+          req,
+          description: `Tự động tạo nhóm sản phẩm "${newProductGroup.name}" từ import sản phẩm`,
+        });
+
+        groupMap.set(normalizedName, {
+          _id: newProductGroup._id,
+          exists: false, // mới tạo
+        });
+        return newProductGroup._id;
+      } catch (error) {
+        console.error(`Lỗi khi tạo nhóm sản phẩm ${groupName}:`, error);
+        throw new Error(`Không thể tạo nhóm sản phẩm: ${groupName} - ${error.message}`);
+      }
+    };
+
+    console.log(`🟢 Bắt đầu import ${data.length} sản phẩm cho store: ${storeId}`);
+    console.log(`📊 SKU hiện có trong cửa hàng:`, Array.from(existingSKUs).slice(0, 5));
+
+    for (let i = 0; i < data.length; i++) {
+      results.debug.processedRows++;
+      const row = sanitizeData(data[i]);
+      const rowNumber = i + 2; // header giả định ở row 1
+
+      console.log(`📝 Xử lý dòng ${rowNumber}:`, {
+        name: row["Tên sản phẩm"],
+        supplier: row["Nhà cung cấp"],
+        group: row["Nhóm sản phẩm"],
+      });
+
+      try {
+        // required
+        const validation = validateRequiredFields(row, ["Tên sản phẩm", "Giá bán", "Giá vốn"]);
+        if (!validation.isValid) {
+          const errorMsg = `Thiếu trường bắt buộc: ${validation.missingFields.join(", ")}`;
+          console.log(`❌ Dòng ${rowNumber} lỗi:`, errorMsg);
+          results.failed.push({
+            row: rowNumber,
+            data: row,
+            error: errorMsg,
+            type: "VALIDATION_ERROR",
+          });
+          continue;
+        }
+
+        // numeric validations
+        const priceVal = validateNumericField(row["Giá bán"], { min: 0 });
+        if (!priceVal.isValid) {
+          console.log(`❌ Dòng ${rowNumber} lỗi giá bán:`, priceVal.error);
+          results.failed.push({
+            row: rowNumber,
+            data: row,
+            error: `Giá bán: ${priceVal.error}`,
+            type: "PRICE_ERROR",
+          });
+          continue;
+        }
+
+        const costVal = validateNumericField(row["Giá vốn"], { min: 0 });
+        if (!costVal.isValid) {
+          console.log(`❌ Dòng ${rowNumber} lỗi giá vốn:`, costVal.error);
+          results.failed.push({
+            row: rowNumber,
+            data: row,
+            error: `Giá vốn: ${costVal.error}`,
+            type: "COST_ERROR",
+          });
+          continue;
+        }
+
+        const stockVal = validateNumericField(row["Tồn kho"] || 0, {
+          min: 0,
+          allowDecimal: false,
+        });
+        if (!stockVal.isValid) {
+          console.log(`❌ Dòng ${rowNumber} lỗi tồn kho:`, stockVal.error);
+          results.failed.push({
+            row: rowNumber,
+            data: row,
+            error: `Tồn kho: ${stockVal.error}`,
+            type: "STOCK_ERROR",
+          });
+          continue;
+        }
+
+        const minStockVal = validateNumericField(row["Tồn kho tối thiểu"] || 0, { min: 0, allowDecimal: false });
+        if (!minStockVal.isValid) {
+          console.log(`❌ Dòng ${rowNumber} lỗi tồn kho tối thiểu:`, minStockVal.error);
+          results.failed.push({
+            row: rowNumber,
+            data: row,
+            error: `Tồn kho tối thiểu: ${minStockVal.error}`,
+            type: "MIN_STOCK_ERROR",
+          });
+          continue;
+        }
+
+        const maxStockVal = validateNumericField(row["Tồn kho tối đa"] || null, { min: 0, allowDecimal: false });
+        if (!maxStockVal.isValid) {
+          console.log(`❌ Dòng ${rowNumber} lỗi tồn kho tối đa:`, maxStockVal.error);
+          results.failed.push({
+            row: rowNumber,
+            data: row,
+            error: `Tồn kho tối đa: ${maxStockVal.error}`,
+            type: "MAX_STOCK_ERROR",
+          });
+          continue;
+        }
+
+        // status
+        const status = row["Trạng thái"] || "Đang kinh doanh";
+        if (!["Đang kinh doanh", "Ngừng kinh doanh", "Ngừng bán"].includes(status)) {
+          const errorMsg = `Trạng thái không hợp lệ: ${status}`;
+          console.log(`❌ Dòng ${rowNumber} lỗi trạng thái:`, errorMsg);
+          results.failed.push({
+            row: rowNumber,
+            data: row,
+            error: errorMsg,
+            type: "STATUS_ERROR",
+          });
+          continue;
+        }
+
+        // supplier mapping (optional) - TẠO MỚI NẾU CHƯA CÓ
+        let supplierId = null;
+        if (row["Nhà cung cấp"]) {
+          try {
+            supplierId = await createSupplierIfNotExists(row["Nhà cung cấp"]);
+            console.log(`✅ Đã xử lý nhà cung cấp "${row["Nhà cung cấp"]}": ${supplierId}`);
+          } catch (supplierError) {
+            console.log(`❌ Dòng ${rowNumber} lỗi nhà cung cấp:`, supplierError.message);
+            results.failed.push({
+              row: rowNumber,
+              data: row,
+              error: supplierError.message,
+              type: "SUPPLIER_ERROR",
+            });
+            continue;
+          }
+        }
+
+        // group mapping (optional) - TẠO MỚI NẾU CHƯA CÓ
+        let groupId = null;
+        if (row["Nhóm sản phẩm"]) {
+          try {
+            groupId = await createProductGroupIfNotExists(row["Nhóm sản phẩm"]);
+            console.log(`✅ Đã xử lý nhóm sản phẩm "${row["Nhóm sản phẩm"]}": ${groupId}`);
+          } catch (groupError) {
+            console.log(`❌ Dòng ${rowNumber} lỗi nhóm sản phẩm:`, groupError.message);
+            results.failed.push({
+              row: rowNumber,
+              data: row,
+              error: groupError.message,
+              type: "GROUP_ERROR",
+            });
+            continue;
+          }
+        }
+
+        // SKU: xử lý trùng lặp TRONG CÙNG CỬA HÀNG
+        let sku = row["Mã SKU"] ? String(row["Mã SKU"]).trim() : null;
+
+        if (sku) {
+          // Kiểm tra SKU đã tồn tại TRONG CỬA HÀNG NÀY
+          if (existingSKUs.has(sku)) {
+            results.debug.skuConflicts++;
+            const errorMsg = `Mã SKU "${sku}" đã tồn tại trong cửa hàng này`;
+            console.log(`❌ Dòng ${rowNumber} lỗi SKU:`, errorMsg);
+            results.failed.push({
+              row: rowNumber,
+              data: row,
+              error: errorMsg,
+              type: "SKU_DUPLICATE",
+            });
+            continue;
+          }
+
+          // Kiểm tra SKU đã được dùng trong import này
+          if (usedSKUsInThisImport.has(sku)) {
+            results.debug.skuConflicts++;
+            const errorMsg = `Mã SKU "${sku}" trùng trong file import`;
+            console.log(`❌ Dòng ${rowNumber} lỗi SKU:`, errorMsg);
+            results.failed.push({
+              row: rowNumber,
+              data: row,
+              error: errorMsg,
+              type: "SKU_DUPLICATE_IN_FILE",
+            });
+            continue;
+          }
+
+          usedSKUsInThisImport.add(sku);
+
+          // Cho phép trùng SKU giữa các cửa hàng khác nhau nên không kiểm tra toàn hệ thống
+        } else {
+          try {
+            sku = await generateUniqueSKU(usedSKUsInThisImport);
+            console.log(`✅ Đã generate SKU mới: ${sku}`);
+          } catch (error) {
+            console.log(`❌ Dòng ${rowNumber} lỗi generate SKU:`, error.message);
+            results.failed.push({
+              row: rowNumber,
+              data: row,
+              error: `Lỗi generate SKU: ${error.message}`,
+              type: "SKU_GENERATE_ERROR",
+            });
+            continue;
+          }
+        }
+
+        // build và lưu product CHO CỬA HÀNG NÀY
+        const newProduct = new Product({
+          name: row["Tên sản phẩm"],
+          description: row["Mô tả"] || "",
+          sku,
+          price: priceVal.value,
+          cost_price: costVal.value,
+          stock_quantity: stockVal.value,
+          min_stock: minStockVal.value,
+          max_stock: maxStockVal.value || null,
+          unit: row["Đơn vị"] || "",
+          status,
+          store_id: storeId, // Liên kết với cửa hàng hiện tại
+          supplier_id: supplierId,
+          group_id: groupId,
+        });
+
+        try {
+          await newProduct.save();
+          console.log(`✅ Đã tạo sản phẩm thành công: ${newProduct.name} (${newProduct.sku})`);
+
+          // Thêm SKU vào danh sách đã tồn tại TRONG CỬA HÀNG NÀY để tránh trùng trong tương lai
+          existingSKUs.add(sku);
+
+          // Log activity cho sản phẩm mới
+          await logActivity({
+            user: req.user,
+            store: { _id: storeId },
+            action: "create",
+            entity: "Product",
+            entityId: newProduct._id,
+            entityName: newProduct.name,
+            req,
+            description: `Tạo sản phẩm "${newProduct.name}" từ import file`,
+          });
+
+          results.success.push({
+            row: rowNumber,
+            product: {
+              _id: newProduct._id,
+              name: newProduct.name,
+              sku: newProduct.sku,
+              price: newProduct.price,
+              supplier: supplierId,
+              group: groupId,
+            },
+          });
+        } catch (saveError) {
+          if (saveError.code === 11000) {
+            // Duplicate key error - thêm vào existing SKUs và thử lại với SKU mới
+            existingSKUs.add(sku);
+            results.debug.skuConflicts++;
+
+            console.log(`🔄 SKU ${sku} bị trùng, thử generate SKU mới...`);
+            try {
+              const newSKU = await generateUniqueSKU(usedSKUsInThisImport);
+              newProduct.sku = newSKU;
+              await newProduct.save();
+
+              console.log(`✅ Đã tạo sản phẩm thành công với SKU mới: ${newProduct.name} (${newSKU})`);
+
+              results.success.push({
+                row: rowNumber,
+                product: {
+                  _id: newProduct._id,
+                  name: newProduct.name,
+                  sku: newSKU,
+                  price: newProduct.price,
+                  supplier: supplierId,
+                  group: groupId,
+                },
+              });
+            } catch (retryError) {
+              console.log(`❌ Lỗi khi thử lại với SKU mới:`, retryError.message);
+              results.failed.push({
+                row: rowNumber,
+                data: row,
+                error: `Lỗi lưu sản phẩm: ${retryError.message}`,
+                type: "SAVE_ERROR",
+              });
+            }
+          } else {
+            throw saveError;
+          }
+        }
+      } catch (errRow) {
+        console.error(`💥 Lỗi không xác định tại dòng ${rowNumber}:`, errRow);
+        results.failed.push({
+          row: rowNumber,
+          data: row,
+          error: errRow.message || String(errRow),
+          type: "UNKNOWN_ERROR",
+          stack: process.env.NODE_ENV === "development" ? errRow.stack : undefined,
+        });
+      }
+    }
+
+    console.log(`📊 Kết quả import:`, {
+      total: results.total,
+      success: results.success.length,
+      failed: results.failed.length,
+      suppliersCreated: results.debug.suppliersCreated,
+      groupsCreated: results.debug.groupsCreated,
+      skuConflicts: results.debug.skuConflicts,
+    });
+
+    const newlyCreated = {
+      suppliers: results.debug.suppliersCreated,
+      productGroups: results.debug.groupsCreated,
+    };
+
+    const responseMessage =
+      results.success.length === 0
+        ? "Import thất bại. Vui lòng kiểm tra file."
+        : results.failed.length > 0
+        ? "Import hoàn tất với một số dòng lỗi."
+        : "Import hoàn tất";
+
+    const statusCode = results.success.length === 0 ? 400 : 200;
+
+    return res.status(statusCode).json({
+      message: responseMessage,
+      results: {
+        success: results.success,
+        failed: results.failed,
+        total: results.total,
+      },
+      newlyCreated,
+      hasErrors: results.failed.length > 0,
+      debug: process.env.NODE_ENV === "development" ? results.debug : undefined,
+    });
+  } catch (error) {
+    console.error("💥 Lỗi importProducts:", error);
+    return res.status(500).json({
+      message: "Lỗi server",
+      error: error.message || String(error),
+      stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
+    });
+  }
+};
+// Download Product Template
+const downloadProductTemplate = (req, res) => {
+  const filePath = path.resolve(__dirname, "../../templates/product_template.xlsx");
+
+  return res.sendFile(
+    filePath,
+    {
+      headers: {
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": "attachment; filename=product_template.xlsx",
+      },
+    },
+    (err) => {
+      if (err) {
+        console.error("Lỗi downloadProductTemplate:", err);
+        if (!res.headersSent) {
+          res.status(500).json({ message: "Lỗi server", error: err.message });
+        }
+      }
+    }
+  );
+};
+
+// ============= EXPORT - Xuất danh sách sản phẩm ra Excel =============
+const exportProducts = async (req, res) => {
+  try {
+    const { storeId } = req.params;
+    const userId = req.user.id || req.user._id;
+
+    console.log(`🔄 Export products request for store: ${storeId}, user: ${userId}`);
+
+    // Kiểm tra cửa hàng tồn tại
+    const store = await Store.findById(storeId);
+    if (!store) {
+      console.log(`❌ Store not found: ${storeId}`);
+      return res.status(404).json({ message: "Cửa hàng không tồn tại" });
+    }
+
+    // ĐÃ LOẠI BỎ CHECK ROLE - Mọi user đã xác thực đều có thể export
+
+    // Lấy tất cả sản phẩm của cửa hàng
+    const products = await Product.find({
+      store_id: storeId,
+      isDeleted: false,
+    })
+      .populate("supplier_id", "name")
+      .populate("group_id", "name")
+      .sort({ createdAt: -1 });
+
+    console.log(`📊 Found ${products.length} products for export`);
+
+    if (products.length === 0) {
+      return res.status(404).json({
+        message: "Không có sản phẩm nào để xuất",
+      });
+    }
+
+    // Chuẩn bị dữ liệu cho Excel
+    const excelData = products.map((product) => ({
+      "Tên sản phẩm": product.name || "",
+      "Mô tả": product.description || "",
+      "Mã SKU": product.sku || "",
+      "Giá bán": product.price ? parseFloat(product.price.toString()) : 0,
+      "Giá vốn": product.cost_price ? parseFloat(product.cost_price.toString()) : 0,
+      "Tồn kho": product.stock_quantity || 0,
+      "Tồn kho tối thiểu": product.min_stock || 0,
+      "Tồn kho tối đa": product.max_stock || "",
+      "Đơn vị": product.unit || "",
+      "Trạng thái": product.status || "Đang kinh doanh",
+      "Nhà cung cấp": product.supplier_id ? product.supplier_id.name : "",
+      "Nhóm sản phẩm": product.group_id ? product.group_id.name : "",
+    }));
+
+    // Tạo workbook và worksheet
+    const XLSX = require("xlsx");
+    const workbook = XLSX.utils.book_new();
+
+    // Tạo worksheet với dữ liệu
+    const worksheet = XLSX.utils.json_to_sheet(excelData);
+
+    // Đặt tiêu đề cột theo template
+    const headers = [
+      "Tên sản phẩm",
+      "Mô tả",
+      "Mã SKU",
+      "Giá bán",
+      "Giá vốn",
+      "Tồn kho",
+      "Tồn kho tối thiểu",
+      "Tồn kho tối đa",
+      "Đơn vị",
+      "Trạng thái",
+      "Nhà cung cấp",
+      "Nhóm sản phẩm",
+    ];
+
+    XLSX.utils.sheet_add_aoa(worksheet, [headers], { origin: "A1" });
+
+    // Định dạng cột
+    const columnWidths = [
+      { wch: 20 }, // Tên sản phẩm
+      { wch: 15 }, // Mô tả
+      { wch: 12 }, // Mã SKU
+      { wch: 10 }, // Giá bán
+      { wch: 10 }, // Giá vốn
+      { wch: 10 }, // Tồn kho
+      { wch: 15 }, // Tồn kho tối thiểu
+      { wch: 15 }, // Tồn kho tối đa
+      { wch: 8 }, // Đơn vị
+      { wch: 15 }, // Trạng thái
+      { wch: 15 }, // Nhà cung cấp
+      { wch: 15 }, // Nhóm sản phẩm
+    ];
+
+    worksheet["!cols"] = columnWidths;
+
+    // Thêm worksheet vào workbook
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Sản phẩm");
+
+    // Tạo buffer từ workbook
+    const excelBuffer = XLSX.write(workbook, {
+      bookType: "xlsx",
+      type: "buffer",
+    });
+
+    // Tạo tên file an toàn (loại bỏ ký tự đặc biệt)
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/[:]/g, "-");
+    const safeStoreName = store.name.replace(/[^a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF\s]/g, "").trim();
+    const filename = `danh_sach_san_pham_${safeStoreName}_${timestamp}.xlsx`;
+
+    // Encode filename cho an toàn
+    const encodedFilename = encodeURIComponent(filename).replace(/['()]/g, escape);
+
+    // Thiết lập headers cho response
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${encodedFilename}"; filename*=UTF-8''${encodedFilename}`);
+    res.setHeader("Content-Length", excelBuffer.length);
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Pragma", "no-cache");
+
+    console.log(`✅ Export successful: ${filename}, ${products.length} products`);
+
+    // Ghi log hoạt động
+    try {
+      await logActivity({
+        user: req.user,
+        store: { _id: storeId },
+        action: "export",
+        entity: "Product",
+        entityId: storeId,
+        entityName: "Danh sách sản phẩm",
+        req,
+        description: `Xuất danh sách ${products.length} sản phẩm từ cửa hàng ${store.name}`,
+      });
+      console.log("✅ Activity log created for export");
+    } catch (logError) {
+      console.error("❌ Lỗi ghi Activity Log (không ảnh hưởng export):", logError.message);
+    }
+
+    // Gửi file về client
+    res.send(excelBuffer);
+  } catch (error) {
+    console.error("❌ Lỗi exportProducts:", error);
+    res.status(500).json({
+      message: "Lỗi server khi xuất danh sách sản phẩm",
+      error: error.message,
+    });
+  }
+};
+
+// ============= GET ALL PRODUCTS - Lấy tất cả sản phẩm (cho dashboard, reports) =============
+const getAllProducts = async (req, res) => {
+  try {
+    const { storeId, page = 1, limit = 50, status, category } = req.query;
+
+    const filter = { isDeleted: false };
+
+    if (storeId) {
+      filter.store_id = storeId;
+    }
+
+    if (status && status !== "all") {
+      filter.status = status;
+    }
+
+    if (category) {
+      filter.group_id = category;
+    }
+
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const [total, products] = await Promise.all([
+      Product.countDocuments(filter),
+      Product.find(filter).populate("supplier_id", "name").populate("group_id", "name").sort({ createdAt: -1 }).skip(skip).limit(Number(limit)),
+    ]);
+
+    const formattedProducts = products.map((p) => ({
+      _id: p._id,
+      name: p.name,
+      sku: p.sku,
+      description: p.description,
+      price: parseFloat(p.price?.toString() || 0),
+      cost_price: parseFloat(p.cost_price?.toString() || 0),
+      stock_quantity: p.stock_quantity,
+      min_stock: p.min_stock,
+      max_stock: p.max_stock,
+      unit: p.unit,
+      status: p.status,
+      image: p.image,
+      store: p.store_id,
+      supplier: p.supplier_id,
+      group: p.group_id,
+      createdAt: p.createdAt,
+      updatedAt: p.updatedAt,
+    }));
+
+    res.status(200).json({
+      message: "Lấy danh sách sản phẩm thành công",
+      total,
+      page: Number(page),
+      limit: Number(limit),
+      products: formattedProducts,
+    });
+  } catch (error) {
+    console.error("❌ Lỗi getAllProducts:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
@@ -921,8 +1460,13 @@ module.exports = {
   // Reads
   getProductsByStore,
   getProductById,
+  getAllProducts,
   // Updates
   updateProductPrice,
   // thông báo, cảnh báo
   getLowStockProducts,
+  // Import/Export
+  importProducts,
+  downloadProductTemplate,
+  exportProducts,
 };

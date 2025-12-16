@@ -1,14 +1,15 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
-
+// src/context/AuthContext.jsx
+import React, { createContext, useContext, useEffect, useState, useRef } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
-import userApi from "../api/userApi";
+import { apiClient, userApi, subscriptionApi } from "../api";
 import { ensureStore } from "../api/storeApi";
 
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
     const navigate = useNavigate();
+    const [loading, setLoading] = useState(true);
     const [user, setUser] = useState(() => {
         const u = localStorage.getItem("user");
         return u ? JSON.parse(u) : null;
@@ -19,88 +20,408 @@ export const AuthProvider = ({ children }) => {
         return s ? JSON.parse(s) : null;
     });
 
-    // Set bearer header when token changes
-    useEffect(() => {
-        if (token) axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-        else delete axios.defaults.headers.common["Authorization"];
-    }, [token]);
+    // ✅ Token Refresh Queue - Tránh multiple refresh cùng lúc
+    const isRefreshing = useRef(false);
+    const failedQueue = useRef([]);
 
-    // Helper: save auth to storage
-    const persist = (u, t, store) => {
-        if (u) localStorage.setItem("user", JSON.stringify(u)); else localStorage.removeItem("user");
-        if (t) localStorage.setItem("token", t); else localStorage.removeItem("token");
-        if (store) localStorage.setItem("currentStore", JSON.stringify(store)); else localStorage.removeItem("currentStore");
+    const processQueue = (error, token = null) => {
+        failedQueue.current.forEach(prom => {
+            if (error) {
+                prom.reject(error);
+            } else {
+                prom.resolve(token);
+            }
+        });
+
+        failedQueue.current = [];
     };
 
-    /**
-     * login: lưu user + token, then call ensureStore to decide where to go next
-     * - Nếu user.role === "STAFF": try to read current_store from backend via ensureStore or from user (backend may return)
-     * - Nếu user.role === "MANAGER": call ensureStore(), backend will create default store if none, or return stores/currentStore.
-     */
-    const login = async (userData, tokenData) => {
-        setUser(userData);
-        setToken(tokenData);
-        persist(userData, tokenData, null);
+    const managerSubscriptionKey = "managerSubscriptionExpired";
+    const [managerSubscriptionExpired, setManagerSubscriptionExpiredState] = useState(() => {
+        if (typeof window === "undefined") {
+            return false;
+        }
+        return localStorage.getItem(managerSubscriptionKey) === "true";
+    });
 
-        // Set header for subsequent calls
-        axios.defaults.headers.common["Authorization"] = `Bearer ${tokenData}`;
-
-        // Call ensureStore to let backend prepare stores/currentStore
-        try {
-            const res = await ensureStore();
-            // Backend may return various shapes; handle flexibly
-            // Examples:
-            // { created: true, store: {...} }
-            // { created: false, stores: [...], currentStore: {...} }
-            // Or simple { store: {...} }
-            const store = res.store || res.currentStore || (res.stores && res.stores[0]) || null;
-            if (store) {
-                setCurrentStore(store);
-                persist(userData, tokenData, store);
-            }
-            // Decide navigation:
-            if (userData.role === "STAFF") {
-                // Staff: go straight to dashboard of assigned store (if provided)
-                if (store) navigate("/dashboard");
-                else {
-                    // no store assigned — show select store or error
-                    navigate("/select-store");
-                }
-            } else if (userData.role === "MANAGER") {
-                // Manager: if multiple stores, let frontend show selection page.
-                if (res.stores && res.stores.length > 1) {
-                    // send stores array to select page via state (or fetch there)
-                    navigate("/select-store");
-                } else {
-                    // single store -> go to dashboard
-                    if (store) navigate("/dashboard");
-                    else navigate("/select-store");
-                }
-            } else {
-                navigate("/dashboard");
-            }
-        } catch (err) {
-            console.error("ensureStore error in login:", err);
-            // Fallback: go to select-store page
-            navigate("/select-store");
+    const updateManagerSubscriptionExpired = (expired) => {
+        setManagerSubscriptionExpiredState(expired);
+        if (typeof window === "undefined") {
+            return;
+        }
+        if (expired) {
+            localStorage.setItem(managerSubscriptionKey, "true");
+        } else {
+            localStorage.removeItem(managerSubscriptionKey);
         }
     };
 
+    useEffect(() => {
+        const initAuth = async () => {
+            const storedToken = localStorage.getItem("token");
+            const storedUser = localStorage.getItem("user");
+
+            if (storedToken && storedUser) {
+                try {
+                    const parsedUser = JSON.parse(storedUser);
+                    setUser(parsedUser);
+                    setToken(storedToken);
+                } catch (e) {
+                    console.error("❌ Failed to parse stored user:", e);
+                    localStorage.removeItem("user");
+                    localStorage.removeItem("token");
+                }
+            }
+
+            setLoading(false);
+        };
+
+        initAuth();
+    }, []);
+
+    const persist = (u, t, store) => {
+        if (u) localStorage.setItem("user", JSON.stringify(u));
+        else localStorage.removeItem("user");
+
+        if (t) localStorage.setItem("token", t);
+        else localStorage.removeItem("token");
+
+        if (store) localStorage.setItem("currentStore", JSON.stringify(store));
+        else localStorage.removeItem("currentStore");
+    };
+
     const logout = async () => {
+        console.log("🚪 Logging out and clearing all data...");
+
+        // Clear state immediately
         setUser(null);
         setToken(null);
         setCurrentStore(null);
-        localStorage.removeItem("user");
-        localStorage.removeItem("token");
-        localStorage.removeItem("currentStore");
+        updateManagerSubscriptionExpired(false);
+
+        // Reset refresh queue
+        isRefreshing.current = false;
+        failedQueue.current = [];
+
+        // Clear ALL localStorage keys related to auth
+        const keysToRemove = [
+            "user",
+            "token",
+            "currentStore",
+            managerSubscriptionKey,
+            "productVisibleColumns",
+        ];
+
+        keysToRemove.forEach(key => {
+            localStorage.removeItem(key);
+        });
+
+        // Clear keys with prefix
+        Object.keys(localStorage).forEach(storageKey => {
+            if (storageKey.startsWith("onboardingSteps_")) {
+                localStorage.removeItem(storageKey);
+            }
+        });
+
+        // Clear axios headers
         delete axios.defaults.headers.common["Authorization"];
-        // optional: call backend logout to clear refresh cookie
-        try { await userApi.post("/logout"); } catch (e) { /* ignore */ }
-        navigate("/login");
+        if (apiClient && apiClient.defaults) {
+            delete apiClient.defaults.headers.common["Authorization"];
+        }
+
+        // Optional: Call logout API
+        try {
+            await apiClient.post("/users/logout");
+            console.log("✅ Logout API called successfully");
+        } catch (e) {
+            console.warn("⚠️ Logout API failed (ignored):", e?.message || e);
+        }
+
+        // Navigate to login page
+        navigate("/login", { replace: true });
+    };
+
+    useEffect(() => {
+        const setAuthHeader = (t) => {
+            if (t) {
+                axios.defaults.headers.common["Authorization"] = `Bearer ${t}`;
+                if (apiClient && apiClient.defaults) {
+                    apiClient.defaults.headers.common["Authorization"] = `Bearer ${t}`;
+                }
+            } else {
+                delete axios.defaults.headers.common["Authorization"];
+                if (apiClient && apiClient.defaults) {
+                    delete apiClient.defaults.headers.common["Authorization"];
+                }
+            }
+        };
+        setAuthHeader(token);
+
+        // ✅ IMPROVED AXIOS INTERCEPTOR với Token Refresh Queue
+        const interceptor = apiClient.interceptors.response.use(
+            (response) => response,
+            async (error) => {
+                const originalRequest = error.config;
+
+                // Skip if marked
+                if (originalRequest?.skipAuthRefresh) {
+                    return Promise.reject(error);
+                }
+
+                // Public endpoints
+                const isPublicAuthRequest = (() => {
+                    if (!originalRequest?.url) return false;
+                    const skipPaths = [
+                        "/users/login",
+                        "/users/register",
+                        "/users/verify-otp",
+                        "/users/forgot-password",
+                        "/users/forgot-password/send-otp",
+                        "/users/forgot-password/change",
+                        "/users/password/send-otp",
+                        "/users/password/change",
+                        "/users/refresh-token",
+                        "/users/resend-register-otp",
+                        "/users/logout",
+                    ];
+                    return skipPaths.some((path) => originalRequest.url.includes(path));
+                })();
+
+                // ✅ HANDLE 401 với Token Refresh Queue
+                if (
+                    !isPublicAuthRequest &&
+                    error.response &&
+                    error.response.status === 401 &&
+                    !originalRequest._retry
+                ) {
+                    // Nếu đang refresh, đưa request vào queue
+                    if (isRefreshing.current) {
+                        return new Promise((resolve, reject) => {
+                            failedQueue.current.push({ resolve, reject });
+                        })
+                            .then(token => {
+                                originalRequest.headers['Authorization'] = `Bearer ${token}`;
+                                return apiClient(originalRequest);
+                            })
+                            .catch(err => {
+                                return Promise.reject(err);
+                            });
+                    }
+
+                    originalRequest._retry = true;
+                    isRefreshing.current = true;
+
+                    console.warn("⚠️ 401 Unauthorized - Attempting token refresh...");
+
+                    try {
+                        // Try to refresh token
+                        const data = await userApi.refreshToken();
+
+                        console.log("✅ Token refreshed successfully");
+
+                        // Update token
+                        const newToken = data.token;
+                        setToken(newToken);
+                        persist(user, newToken, currentStore);
+
+                        // Update headers
+                        apiClient.defaults.headers.common["Authorization"] = `Bearer ${newToken}`;
+                        originalRequest.headers["Authorization"] = `Bearer ${newToken}`;
+
+                        // Process queued requests
+                        processQueue(null, newToken);
+
+                        // Retry original request
+                        return apiClient(originalRequest);
+                    } catch (refreshError) {
+                        console.error("❌ Token refresh failed:", refreshError);
+
+                        // Process queue with error
+                        processQueue(refreshError, null);
+
+                        // Auto logout
+                        console.log("🔒 Auto logout: Token refresh failed");
+                        await logout();
+
+                        return Promise.reject(refreshError);
+                    } finally {
+                        isRefreshing.current = false;
+                    }
+                }
+
+                // ✅ HANDLE 403
+                if (
+                    !isPublicAuthRequest &&
+                    error.response &&
+                    error.response.status === 403
+                ) {
+                    const errorData = error.response.data || {};
+
+                    const isTokenError =
+                        errorData.message?.toLowerCase().includes("token") ||
+                        errorData.message?.toLowerCase().includes("unauthorized") ||
+                        errorData.message?.toLowerCase().includes("invalid token") ||
+                        errorData.message?.toLowerCase().includes("jwt") ||
+                        errorData.message?.toLowerCase().includes("expired") ||
+                        errorData.message?.toLowerCase().includes("authentication");
+
+                    if (isTokenError) {
+                        console.error("❌ 403 Forbidden - Invalid/Expired token");
+                        console.log("🔒 Auto logout: Token authentication error");
+                        await logout();
+                        return Promise.reject(error);
+                    }
+
+                    console.warn("⚠️ 403 Forbidden - Not token related:", errorData.message);
+                }
+
+                return Promise.reject(error);
+            }
+        );
+
+        return () => {
+            apiClient.interceptors.response.eject(interceptor);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [token, user, currentStore]);
+
+    const login = async (userData, tokenData) => {
+        setLoading(true);
+
+        try {
+            setUser(userData);
+            setToken(tokenData);
+
+            const initialStore = (userData?.role === "STAFF" && currentStore) ? currentStore : null;
+            persist(userData, tokenData, initialStore);
+
+            let resolvedStore = null;
+            try {
+                const res = await ensureStore();
+                resolvedStore =
+                    res?.store || res?.currentStore || (res?.stores && res.stores[0]) || null;
+
+                if (resolvedStore) {
+                    setCurrentStore(resolvedStore);
+                    persist(userData, tokenData, resolvedStore);
+                }
+            } catch (err) {
+                console.warn("ensureStore error in login (ignored):", err);
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // ✅ SỬA NAVIGATION CHO STAFF
+            if (userData?.role === "STAFF") {
+                try {
+                    const response = await apiClient.get('/products', {
+                        params: { limit: 1 }
+                    });
+
+                    // ✅ FIX: STAFF cần navigate với storeId
+                    // Lấy storeId từ currentStore hoặc resolvedStore
+                    const staffStoreId = currentStore?._id || resolvedStore?._id;
+
+                    if (staffStoreId) {
+                        // Tuỳ thuộc vào route config của bạn, chọn 1 trong các cách:
+
+                        // Cách 1: Query parameter (recommended)
+                        navigate(`/dashboard?storeId=${staffStoreId}`);
+
+                        // Cách 2: Dynamic route
+                        // navigate(`/dashboard/${staffStoreId}`);
+
+                        // Cách 3: State
+                        // navigate("/dashboard", { state: { storeId: staffStoreId } });
+
+                        console.log(`✅ STAFF logged in, store: ${staffStoreId}`);
+                    } else {
+                        // Nếu không có storeId, chuyển đến select-store
+                        console.warn("No store found for STAFF, redirecting to select-store");
+                        navigate("/select-store");
+                    }
+
+                } catch (err) {
+                    if (err.response?.status === 403) {
+                        const errorData = err.response.data;
+
+                        if (errorData.manager_expired || errorData.is_staff) {
+                            // Vẫn navigate với storeId nếu có
+                            const staffStoreId = currentStore?._id || resolvedStore?._id;
+                            if (staffStoreId) {
+                                navigate(`/dashboard/${staffStoreId}`);
+                            } else {
+                                navigate("/dashboard");
+                            }
+                            return;
+                        }
+                    }
+
+                    console.error('STAFF subscription check error:', err);
+
+                    // Fallback navigation với storeId
+                    const staffStoreId = currentStore?._id || resolvedStore?._id;
+                    if (staffStoreId) {
+                        navigate(`/dashboard/${staffStoreId}`);
+                    } else {
+                        navigate("/dashboard");
+                    }
+                }
+                return;
+            }
+
+            if (userData?.role === "MANAGER") {
+                try {
+                    const subResponse = await subscriptionApi.getCurrentSubscription();
+                    const subData = subResponse.data || subResponse;
+
+                    const isExpired =
+                        subData.status === "EXPIRED" ||
+                        (subData.status === "TRIAL" && subData.trial && !subData.trial.is_active);
+
+                    if (isExpired) {
+                        updateManagerSubscriptionExpired(true);
+                    } else {
+                        updateManagerSubscriptionExpired(false);
+                    }
+                } catch (subErr) {
+                    console.warn("Subscription check error in login (ignored):", subErr);
+                    if (subErr.response?.status === 403) {
+                        updateManagerSubscriptionExpired(true);
+                    }
+                }
+
+                navigate("/select-store");
+                return;
+            }
+
+            navigate("/dashboard");
+        } catch (error) {
+            console.error("❌ Login failed:", error);
+            setUser(null);
+            setToken(null);
+            persist(null, null, null);
+            await logout();
+        } finally {
+            setTimeout(() => {
+                setLoading(false);
+            }, 200);
+        }
     };
 
     return (
-        <AuthContext.Provider value={{ user, token, currentStore, setCurrentStore, login, logout }}>
+        <AuthContext.Provider value={{
+            user,
+            setUser,
+            token,
+            currentStore,
+            setCurrentStore,
+            login,
+            logout,
+            loading,
+            managerSubscriptionExpired,
+            setManagerSubscriptionExpired: updateManagerSubscriptionExpired
+        }}>
             {children}
         </AuthContext.Provider>
     );

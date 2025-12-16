@@ -11,25 +11,42 @@ const PAYOS_CHECKSUM_KEY = process.env.PAYOS_CHECKSUM_KEY;
 const VIETQR_ACQ_ID = process.env.VIETQR_ACQ_ID;
 const VIETQR_ACCOUNT_NO = process.env.VIETQR_ACCOUNT_NO;
 const VIETQR_ACCOUNT_NAME = process.env.VIETQR_ACCOUNT_NAME;
+const API_URL = process.env.API_URL;
 
 /**
  * 🧩 Tạo QR thanh toán qua PayOS (nhưng render ảnh bằng VietQR vì 2 cái này là đối tác)
  */
-async function generateQRWithPayOS(req) {
+async function generateQRWithPayOS(input = {}) {
   if (!PAYOS_CLIENT_ID || !PAYOS_API_KEY || !PAYOS_CHECKSUM_KEY) {
     throw new Error("Missing PayOS env variables");
   }
 
-  const amount = Number(req.body?.amount) || 1000;
-  const txnRef = Math.floor(Date.now() / 1000); // dùng timestamp làm txnRef đơn giản
-  const orderInfo = `HD${txnRef}`.slice(0, 25); // mô tả ngắn gọn, max 25 ký tự
+  const payload = input.body || input; // chấp nhận req Express hoặc object thuần
+
+  const amount = Number(payload.amount ?? input.amount) || 1000;
+
+  const providedOrderCode = payload.orderCode || payload.txnRef || input.orderCode || input.txnRef;
+
+  const txnRef = providedOrderCode ? Number(providedOrderCode) : Math.floor(Date.now() / 1000);
+
+  const rawInfo = payload.orderInfo || payload.description || input.orderInfo || input.description || `HD${txnRef}`;
+
+  const orderInfo = rawInfo.toString();
+  const description = orderInfo.slice(0, 25);
+  //2 đường dẫn quan trọng của webhook khi thanh toán thành công hoặc huỷ
+  const returnUrl = payload.returnUrl || input.returnUrl || process.env.PAYOS_RETURN_URL;
+  const cancelUrl = payload.cancelUrl || input.cancelUrl || process.env.PAYOS_CANCEL_URL;
+
+  const webhookUrl = payload.webhookUrl || input.webhookUrl || process.env.PAYOS_WEBHOOK_URL;
+
+  const simulateWebhook = payload.simulateWebhook ?? input.simulateWebhook ?? true;
 
   const bodyData = {
     orderCode: txnRef,
     amount,
-    description: orderInfo,
-    returnUrl: "http://localhost:9999/api/orders/payments/vietqr_return",
-    cancelUrl: "http://localhost:9999/api/orders/payments/vietqr_cancel",
+    description,
+    returnUrl,
+    cancelUrl,
   };
 
   // Tạo signature chuẩn
@@ -38,40 +55,31 @@ async function generateQRWithPayOS(req) {
     .map((k) => `${k}=${bodyData[k]}`)
     .join("&");
 
-  const signature = crypto
-    .createHmac("sha256", PAYOS_CHECKSUM_KEY)
-    .update(kvString, "utf8")
-    .digest("hex");
+  const signature = crypto.createHmac("sha256", PAYOS_CHECKSUM_KEY).update(kvString, "utf8").digest("hex");
 
   const finalBody = { ...bodyData, signature };
 
   // Gửi request tạo link thanh toán PayOS
-  const response = await axios.post(
-    `${PAYOS_HOST}/v2/payment-requests`,
-    finalBody,
-    {
-      headers: {
-        "x-client-id": PAYOS_CLIENT_ID,
-        "x-api-key": PAYOS_API_KEY,
-        "Content-Type": "application/json",
-      },
-      timeout: 30000,
-    }
-  );
+  const response = await axios.post(`${PAYOS_HOST}/v2/payment-requests`, finalBody, {
+    headers: {
+      "x-client-id": PAYOS_CLIENT_ID,
+      "x-api-key": PAYOS_API_KEY,
+      "Content-Type": "application/json",
+    },
+    timeout: 30000,
+  });
 
   console.log("PayOS Response full:", JSON.stringify(response.data, null, 2));
 
   if (response.data.code !== "00") {
-    throw new Error(
-      `PayOS create error: ${response.data.desc || "Unknown error"}`
-    );
+    throw new Error(`PayOS create error: ${response.data.desc || "Unknown error"}`);
   }
 
   const data = response.data.data;
 
   // ✅ Dùng VietQR API render ảnh QR thật, có amount + addInfo
   const qrDataURL = `https://img.vietqr.io/image/${VIETQR_ACQ_ID}-${VIETQR_ACCOUNT_NO}-compact2.png?amount=${amount}&addInfo=${encodeURIComponent(
-    data.description
+    description
   )}&accountName=${encodeURIComponent(VIETQR_ACCOUNT_NAME)}`;
 
   console.log("=== PAYOS QR DEBUG ===");
@@ -79,55 +87,6 @@ async function generateQRWithPayOS(req) {
   console.log("Checkout URL:", data.checkoutUrl);
   console.log("QR Image URL:", qrDataURL);
   console.log("===============================");
-
-  // ✅ Giả lập webhook sau 30s nếu PayOS không gửi thật
-  setTimeout(async () => {
-    try {
-      console.log(`⏳ [SIMULATOR] Auto-simulating webhook cho đơn ${txnRef}`);
-
-      const fakeWebhook = {
-        code: "00",
-        desc: "success",
-        data: {
-          orderCode: Number(txnRef),
-          amount,
-          description: orderInfo,
-          accountNumber: process.env.VIETQR_ACCOUNT_NO,
-          reference: "SIMULATED_" + Date.now(),
-          transactionDateTime: new Date()
-            .toISOString()
-            .replace("T", " ")
-            .split(".")[0],
-          paymentLinkId: "SIM-" + txnRef,
-        },
-      };
-
-      // 🧮 Tính chữ ký HMAC giống thật
-      const kvString = Object.keys(fakeWebhook.data)
-        .sort()
-        .map((k) => `${k}=${fakeWebhook.data[k]}`)
-        .join("&");
-
-      fakeWebhook.signature = crypto
-        .createHmac("sha256", PAYOS_CHECKSUM_KEY)
-        .update(kvString, "utf8")
-        .digest("hex")
-        .toUpperCase();
-
-      await axios.post(`${process.env.PAYOS_WEBHOOK_URL}`, fakeWebhook, {
-        headers: { "Content-Type": "application/json" },
-      });
-
-      console.log(
-        `✅ [SIMULATOR] Webhook giả lập gửi thành công cho đơn ${txnRef}`
-      );
-    } catch (err) {
-      console.error(
-        "❌ [SIMULATOR] Gửi webhook giả lập thất bại, hãy bật ngrok:",
-        err.message
-      );
-    }
-  }, 30000); // sau 30s
 
   return { txnRef, amount, paymentLink: data.checkoutUrl, qrDataURL };
 }
@@ -139,21 +98,10 @@ async function verifyPaymentWithPayOS(parsedWebhook) {
     if (!secret) throw new Error("Missing PAYOS_CHECKSUM_KEY");
 
     const receivedSignature = (parsedWebhook.signature || "").toUpperCase();
-    const expectedSignature = computePayOSSignatureFromData(
-      parsedWebhook.data,
-      secret
-    );
+    const expectedSignature = computePayOSSignatureFromData(parsedWebhook.data, secret);
 
-    console.log(
-      "KV preview:",
-      buildKeyValueStringFromData(parsedWebhook.data).slice(0, 200)
-    );
-    console.log(
-      "So sánh 'Signature': nhận được",
-      receivedSignature,
-      "mong đợi",
-      expectedSignature
-    );
+    console.log("KV preview:", buildKeyValueStringFromData(parsedWebhook.data).slice(0, 200));
+    console.log("So sánh 'Signature': nhận được", receivedSignature, "mong đợi", expectedSignature);
 
     if (receivedSignature !== expectedSignature) {
       console.log("❌ Sai chữ ký webhook PayOS, từ chối cập nhật");
@@ -168,11 +116,7 @@ async function verifyPaymentWithPayOS(parsedWebhook) {
     const tx = parsedWebhook.data;
     const order = await Order.findOne({ paymentRef: tx.orderCode });
     if (!order) {
-      console.log(
-        "⚠ Không tìm thấy order",
-        tx.orderCode,
-        "→ Nhưng chữ ký đúng → OK 200 cho PayOS"
-      );
+      console.log("⚠ Không tìm thấy order", tx.orderCode, "→ Nhưng chữ ký đúng → OK 200 cho PayOS");
       return true; // ✅ KHÔNG trả false nữa
     }
     if (order.status !== "pending") {
@@ -206,11 +150,11 @@ function buildKeyValueStringFromData(data) {
 
 function computePayOSSignatureFromData(data, secret) {
   const kvString = buildKeyValueStringFromData(data);
-  return crypto
-    .createHmac("sha256", secret)
-    .update(kvString, "utf8")
-    .digest("hex")
-    .toUpperCase();
+  return crypto.createHmac("sha256", secret).update(kvString, "utf8").digest("hex").toUpperCase();
 }
 
-module.exports = { generateQRWithPayOS, verifyPaymentWithPayOS };
+module.exports = {
+  generateQRWithPayOS,
+  verifyPaymentWithPayOS,
+  computePayOSSignatureFromData,
+};

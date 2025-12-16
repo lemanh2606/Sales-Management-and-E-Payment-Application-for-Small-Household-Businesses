@@ -1,5 +1,7 @@
 // routers/orderWebhookHandler.js
 const { verifyPaymentWithPayOS } = require("../services/payOSService");
+const Notification = require("../models/Notification");
+const Order = require("../models/Order");
 
 module.exports = async (req, res) => {
   try {
@@ -25,17 +27,35 @@ module.exports = async (req, res) => {
     const ok = await verifyPaymentWithPayOS(parsed, rawBody);
 
     if (ok) {
+      // Tìm order thật bằng paymentRef
+      const order = await Order.findOne({ paymentRef: parsed.data?.orderCode.toString() });
+      if (!order) {
+        console.error("Không tìm thấy order tương ứng với paymentRef", parsed.data?.orderCode);
+        return res.status(404).send("Order not found");
+      }
+
       console.log(`✅ Đã nhận tiền, đặt trạng thái 'paid' cho orderRef=${parsed.data?.orderCode}`);
       // 🔔 Emit socket thông báo thanh toán thành công (cho QR)
       const io = req.app.get("io");
       if (io) {
         io.emit("payment_success", {
-          ref: parsed.data?.orderCode,
+          orderId: order._id.toString(), // ✅ chính xác FE dùng để print
+          ref: order.paymentRef, 
           amount: parsed.data?.amount,
           method: "qr",
-          message: `Đơn hàng ${parsed.data?.orderCode} (QR) đã thanh toán thành công!`,
+          message: `Đơn hàng ${order._id} đã thanh toán thành công! Phương thức QR CODE`,
         });
-        console.log(`🔔 [SOCKET] Gửi thông báo: Chuyển khoản QR thành công, số tiền (${parsed.data?.amount}đ) - Mã đơn hàng: ${parsed.data?.orderCode}`);
+
+        // // 🧠 Lưu thông báo vào DB
+        // await Notification.create({
+        //   storeId: parsed.data?.storeId, // nếu có trong payload, không thì thêm field này từ order lookup sau cũng được
+        //   userId: null, // webhook thì ko có user trực tiếp, để null
+        //   type: "payment",
+        //   title: "Thanh toán QR thành công",
+        //   message: `Đơn hàng #${parsed.data?.orderCode} đã thanh toán thành công, số tiền: ${parsed.data?.amount}đ, phương thức: QRCode`,
+        // });
+
+        console.log(`🔔 [SOCKET + DB] Thanh toán QR: ${parsed.data?.amount}đ - ĐH: ${parsed.data?.orderCode}`);
       }
 
       return res.status(200).json({ message: "Webhook received" });
