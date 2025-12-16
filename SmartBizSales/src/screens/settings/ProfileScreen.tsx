@@ -1,5 +1,5 @@
-// src/screens/settings/ProfileScreen.tsx
-import React, { useState, useEffect } from "react";
+// src/pages/user/ProfileScreen.tsx
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -13,148 +13,107 @@ import {
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
+  Modal,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
-import { fetch } from "expo/fetch";
-import { File } from "expo-file-system";
+import * as FileSystem from "expo-file-system";
+
 import { useAuth } from "../../context/AuthContext";
-import { sendPasswordOTP, changePassword } from "../../api/userApi";
+import {
+  updateProfile,
+  sendPasswordOTP,
+  changePassword,
+} from "../../api/userApi";
 import { UserPublic } from "@/type/user";
 
-// ================== CONFIG ==================
-const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL || "https://api.example.com";
-const UPDATE_PROFILE_URL = `${API_BASE_URL}/users/profile`;
-const IMAGE_FIELD_NAME = "image";
-
-// ================== TYPES ==================
-interface ProfileFormData {
+/**
+ * ================== Types ==================
+ */
+type ProfileFormData = {
   fullname: string;
   email: string;
   phone: string;
-}
+};
 
-interface PasswordFormData {
+type PasswordFormData = {
   otp: string;
   newPassword: string;
   confirmPassword: string;
-}
-
-type UpdateProfileResponse = {
-  user: any;
-  message?: string;
 };
 
-// ================== HELPERS ==================
-const getAuthToken = async (): Promise<string | null> => {
-  const t1 = await AsyncStorage.getItem("token");
-  if (t1) return t1;
-  const t2 = await AsyncStorage.getItem("accessToken");
-  if (t2) return t2;
-  return null;
+// File kiểu React Native để gửi multipart lên backend
+type RNImageFile = {
+  uri: string;
+  name: string;
+  type: string; // mime, ví dụ image/jpeg
+  sizeBytes: number;
 };
 
-const buildUserPublic = (raw: any): UserPublic => {
-  return {
-    id: raw._id || raw.id,
-    username: raw.username,
-    fullname: raw.fullname,
-    email: raw.email,
-    phone: raw.phone,
-    role: raw.role,
-    isVerified: raw.isVerified,
-    isDeleted: raw.isDeleted,
-    image: raw.image,
-    menu: raw.menu || [],
-  };
+const buildUserPublic = (raw: any): UserPublic => ({
+  id: raw._id || raw.id,
+  username: raw.username,
+  fullname: raw.fullname,
+  email: raw.email,
+  phone: raw.phone,
+  role: raw.role,
+  isVerified: raw.isVerified,
+  isDeleted: raw.isDeleted,
+  image: raw.image,
+  menu: raw.menu || [],
+});
+
+const formatTime = (sec: number): string => {
+  if (!sec || sec <= 0) return "00:00";
+  return `${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(sec % 60).padStart(2, "0")}`;
 };
 
-const safeReadJson = async (res: Response): Promise<any | null> => {
-  try {
-    return await res.json();
-  } catch {
-    return null;
-  }
+const normalizeError = (err: any, defaultMsg: string) => {
+  const msgFromBackend = err?.response?.data?.message;
+  const status = err?.response?.status;
+  if (status === 503)
+    return msgFromBackend || "Máy chủ đang bận. Vui lòng thử lại sau.";
+  if (status === 413)
+    return msgFromBackend || "File quá lớn. Vui lòng chọn ảnh nhỏ hơn.";
+  return msgFromBackend || err?.message || defaultMsg;
 };
 
-const updateProfileRequest = async (params: {
-  fullname: string;
-  email: string;
-  phone: string;
-  imageUri?: string | null;
-  removeImage?: boolean;
-}): Promise<UpdateProfileResponse> => {
-  const token = await getAuthToken();
+const bytesToKB = (b: number) => `${Math.round(b / 1024)} KB`;
+const bytesToMB = (b: number) => `${(b / 1024 / 1024).toFixed(2)} MB`;
 
-  if (params.removeImage) {
-    const res = await fetch(UPDATE_PROFILE_URL, {
-      method: "PATCH",
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        fullname: params.fullname,
-        email: params.email,
-        phone: params.phone,
-        removeImage: true,
-      }),
-    });
+const guessMime = (maybeMime?: string | null) =>
+  maybeMime ? maybeMime : "image/jpeg";
+const guessName = (maybeName?: string | null) =>
+  maybeName && maybeName.trim() ? maybeName : `avatar-${Date.now()}.jpg`;
 
-    const data = await safeReadJson(res);
-    if (!res.ok) throw new Error(data?.message || `HTTP ${res.status}`);
-    return data as UpdateProfileResponse;
-  }
-
-  if (params.imageUri) {
-    const formData = new FormData();
-    formData.append("fullname", params.fullname);
-    formData.append("email", params.email);
-    formData.append("phone", params.phone);
-
-    const file = new File(params.imageUri);
-    formData.append(IMAGE_FIELD_NAME, file as any);
-
-    const res = await fetch(UPDATE_PROFILE_URL, {
-      method: "PATCH",
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: formData as any,
-    });
-
-    const data = await safeReadJson(res);
-    if (!res.ok) throw new Error(data?.message || `HTTP ${res.status}`);
-    return data as UpdateProfileResponse;
-  }
-
-  const res = await fetch(UPDATE_PROFILE_URL, {
-    method: "PATCH",
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      fullname: params.fullname,
-      email: params.email,
-      phone: params.phone,
-    }),
-  });
-
-  const data = await safeReadJson(res);
-  if (!res.ok) throw new Error(data?.message || `HTTP ${res.status}`);
-  return data as UpdateProfileResponse;
-};
-
-// ================== MAIN COMPONENT ==================
 const ProfileScreen: React.FC = () => {
   const { user, setUser } = useAuth();
-  const [loading, setLoading] = useState<boolean>(true);
-  const [saving, setSaving] = useState<boolean>(false);
+
+  // Loading states
+  const [loading, setLoading] = useState(true);
+  const [savingInfo, setSavingInfo] = useState(false);
+  const [sendingOTP, setSendingOTP] = useState(false);
+  const [changingPass, setChangingPass] = useState(false);
+  const [compressing, setCompressing] = useState(false);
+
+  // Error states
+  const [infoError, setInfoError] = useState<string | null>(null);
+  const [passError, setPassError] = useState<string | null>(null);
+
+  // OTP states
+  const [otpSent, setOtpSent] = useState(false);
+  const [timer, setTimer] = useState(0);
+
+  // Image states
+  const [imagePreview, setImagePreview] = useState<string | null>(null); // local uri hoặc url từ backend
+  const [pickedImage, setPickedImage] = useState<RNImageFile | null>(null); // ảnh local (đã nén) để gửi backend
+
+  // Preview modal
+  const [previewVisible, setPreviewVisible] = useState(false);
 
   const [profileData, setProfileData] = useState<ProfileFormData>({
     fullname: "",
@@ -162,131 +121,161 @@ const ProfileScreen: React.FC = () => {
     phone: "",
   });
 
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [compressing, setCompressing] = useState<boolean>(false);
-
-  const [showPasswordForm, setShowPasswordForm] = useState<boolean>(false);
   const [passwordData, setPasswordData] = useState<PasswordFormData>({
     otp: "",
     newPassword: "",
     confirmPassword: "",
   });
-  const [sendingOTP, setSendingOTP] = useState<boolean>(false);
-  const [changingPassword, setChangingPassword] = useState<boolean>(false);
-  const [otpSent, setOtpSent] = useState<boolean>(false);
-  const [timer, setTimer] = useState<number>(0);
 
+  const otpExpireMinutes = useMemo(
+    () => Number(process.env.EXPO_PUBLIC_OTP_EXPIRE_MINUTES || 5),
+    []
+  );
+  const otpTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const roleLabel = useMemo(() => {
+    if (!user?.role) return "—";
+    if (user.role === "MANAGER") return "Quản lý";
+    return String(user.role);
+  }, [user?.role]);
+
+  // Load user
   useEffect(() => {
-    loadUserData();
-  }, [user]);
-
-  useEffect(() => {
-    if (timer <= 0) return;
-    const interval = setInterval(() => {
-      setTimer((prev) => Math.max(0, prev - 1));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [timer]);
-
-  const loadUserData = () => {
     if (user) {
       setProfileData({
         fullname: user.fullname || "",
         email: user.email || "",
         phone: user.phone || "",
       });
+
       setImagePreview(user.image || null);
-      setLoading(false);
+      setPickedImage(null);
     }
-  };
+    setLoading(false);
+  }, [user]);
 
-  const formatTime = (sec: number): string => {
-    if (!sec || sec <= 0) return "00:00";
-    return `${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(sec % 60).padStart(2, "0")}`;
-  };
-
-  const getFileSizeMB = async (uri: string): Promise<number> => {
-    const f = new File(uri);
-    const info = await f.info();
-    const sizeBytes = typeof info?.size === "number" ? info.size : f.size;
-
-    if (!info?.exists || !sizeBytes || sizeBytes <= 0) {
-      throw new Error("Không thể xác định kích thước ảnh");
+  // Timer countdown
+  useEffect(() => {
+    if (timer <= 0) {
+      otpTimerRef.current && clearInterval(otpTimerRef.current);
+      otpTimerRef.current = null;
+      return;
     }
-    return sizeBytes / (1024 * 1024);
-  };
 
+    otpTimerRef.current && clearInterval(otpTimerRef.current);
+    otpTimerRef.current = setInterval(
+      () => setTimer((t) => Math.max(0, t - 1)),
+      1000
+    );
+
+    return () => {
+      otpTimerRef.current && clearInterval(otpTimerRef.current);
+      otpTimerRef.current = null;
+    };
+  }, [timer]);
+
+  /**
+   * ================== Image helpers ==================
+   * API mới expo-image-manipulator:
+   * manipulate(uri) -> resize/rotate/... -> renderAsync() -> saveAsync()
+   */
   const compressImage = async (uri: string): Promise<string> => {
+    setCompressing(true);
     try {
-      console.log("🔄 Compressing image...");
-      setCompressing(true);
-
-      const manipResult = await ImageManipulator.manipulateAsync(
+      // resize để giảm dung lượng, và save về JPEG để tránh HEIC/AVIF
+      const result = await ImageManipulator.manipulateAsync(
         uri,
-        [{ resize: { width: 800 } }],
-        {
-          compress: 0.7,
-          format: ImageManipulator.SaveFormat.JPEG,
-          base64: false,
-        }
+        [{ resize: { width: 900, height: 900 } }],
+        { compress: 0.78, format: ImageManipulator.SaveFormat.JPEG }
       );
 
-      if (!manipResult.uri) throw new Error("Không thể xử lý ảnh");
-
-      const sizeInMB = await getFileSizeMB(manipResult.uri);
-      console.log(`✅ Compressed image size: ${sizeInMB.toFixed(2)}MB`);
-      if (sizeInMB > 5) {
-        throw new Error("Ảnh vẫn quá lớn sau khi nén. Vui lòng chọn ảnh khác");
-      }
-
-      return manipResult.uri;
-    } catch (error: any) {
-      console.error("❌ Image compression error:", error);
-      throw error;
+      if (!result?.uri) throw new Error("Không thể xử lý ảnh");
+      return result.uri;
     } finally {
       setCompressing(false);
     }
   };
 
-  // ========== IMAGE PICKER (NEW API) ==========
-  const handlePickImage = async () => {
-    // Request permission first (recommended by new docs)
-    const permissionResult =
-      await ImagePicker.requestMediaLibraryPermissionsAsync();
+  const getFileMeta = async (
+    uri: string,
+    fallbackName?: string | null,
+    fallbackMime?: string | null,
+    fallbackSize?: number | null
+  ): Promise<RNImageFile> => {
+    // Ưu tiên size từ ImagePicker nếu có (asset.fileSize),
+    // còn không thì lấy từ FileSystem.getInfoAsync.
+    let sizeBytes = typeof fallbackSize === "number" ? fallbackSize : 0;
 
-    if (!permissionResult.granted) {
-      Alert.alert(
-        "Quyền truy cập",
-        "Cần quyền truy cập thư viện ảnh để chọn ảnh đại diện"
-      );
-      return;
+    if (!sizeBytes) {
+      const info = await FileSystem.getInfoAsync(uri);
+      if (!info.exists)
+        throw new Error("File ảnh không tồn tại hoặc không đọc được.");
+      sizeBytes = typeof info.size === "number" ? info.size : 0;
     }
 
-    // Launch picker with NEW API syntax
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"], // ✅ NEW: array syntax instead of MediaTypeOptions.Images
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-      allowsMultipleSelection: false, // explicitly set to false
-    });
+    const name = guessName(fallbackName);
+    const type = guessMime(fallbackMime);
 
-    if (!result.canceled && result.assets[0]?.uri) {
-      try {
-        const compressedUri = await compressImage(result.assets[0].uri);
+    return { uri, name, type, sizeBytes };
+  };
 
-        setSelectedImage(compressedUri);
-        setImagePreview(compressedUri);
+  /**
+   * ================== Handlers ==================
+   */
+  const handlePickImage = async () => {
+    try {
+      setInfoError(null);
 
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
         Alert.alert(
-          "Thành công",
-          "Ảnh đã được chọn và nén. Nhấn 'Lưu thông tin' để cập nhật."
+          "Quyền truy cập",
+          "Cần quyền truy cập thư viện ảnh để chọn ảnh đại diện."
         );
-      } catch (error: any) {
-        console.error("❌ Image processing error:", error);
-        Alert.alert("Lỗi", error.message || "Không thể xử lý ảnh");
+        return;
       }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 1,
+        allowsMultipleSelection: false,
+      });
+
+      if (result.canceled) return;
+
+      const asset = result.assets?.[0];
+      if (!asset?.uri) return;
+
+      // 1) Nén/convert
+      const compressedUri = await compressImage(asset.uri);
+
+      // 2) Meta
+      const meta = await getFileMeta(
+        compressedUri,
+        asset.fileName ?? null,
+        asset.mimeType ?? "image/jpeg",
+        asset.fileSize ?? null
+      );
+
+      // 3) Chặn ảnh > 5MB
+      if (meta.sizeBytes > 5 * 1024 * 1024) {
+        throw new Error(
+          `Ảnh quá lớn (${bytesToMB(meta.sizeBytes)}). Vui lòng chọn ảnh khác (<= 5MB).`
+        );
+      }
+
+      // 4) Preview local trước
+      setPickedImage(meta);
+      setImagePreview(meta.uri);
+
+      Alert.alert(
+        "Đã chọn ảnh",
+        "Nhấn “Lưu thông tin” để cập nhật lên hệ thống."
+      );
+    } catch (err: any) {
+      Alert.alert("Lỗi", err?.message || "Không thể chọn/xử lý ảnh");
     }
   };
 
@@ -297,27 +286,36 @@ const ProfileScreen: React.FC = () => {
         text: "Xóa",
         style: "destructive",
         onPress: async () => {
+          setSavingInfo(true);
+          setInfoError(null);
           try {
-            console.log("🗑️ Removing image...");
-
-            const response = await updateProfileRequest({
+            const payload = {
               fullname: profileData.fullname,
               email: profileData.email,
               phone: profileData.phone,
+            };
+
+            const res: any = await updateProfile(payload as any, {
               removeImage: true,
             });
 
-            const updatedUser = buildUserPublic(response.user);
+            const updatedUser = buildUserPublic(res.user);
             setUser(updatedUser);
             await AsyncStorage.setItem("user", JSON.stringify(updatedUser));
 
             setImagePreview(null);
-            setSelectedImage(null);
+            setPickedImage(null);
 
-            Alert.alert("Thành công", "Đã xóa ảnh đại diện");
-          } catch (error: any) {
-            console.error("❌ Remove image error:", error);
-            Alert.alert("Lỗi", error?.message || "Không thể xóa ảnh đại diện");
+            Alert.alert("Thành công", "Đã xóa ảnh đại diện!");
+          } catch (err: any) {
+            const msg = normalizeError(
+              err,
+              "Không thể xóa ảnh đại diện, vui lòng thử lại."
+            );
+            setInfoError(msg);
+            Alert.alert("Lỗi", msg);
+          } finally {
+            setSavingInfo(false);
           }
         },
       },
@@ -325,118 +323,157 @@ const ProfileScreen: React.FC = () => {
   };
 
   const handleSaveProfile = async () => {
-    if (!profileData.fullname.trim()) {
-      Alert.alert("Lỗi", "Họ và tên không được để trống");
-      return;
-    }
+    setSavingInfo(true);
+    setInfoError(null);
 
-    setSaving(true);
     try {
-      console.log("📝 Updating profile...");
+      if (!profileData.fullname.trim()) {
+        Alert.alert("Lỗi", "Họ và tên không được để trống");
+        return;
+      }
 
-      const response = await updateProfileRequest({
-        fullname: profileData.fullname,
-        email: profileData.email,
-        phone: profileData.phone,
-        imageUri: selectedImage || null,
-      });
+      // Chỉ gửi field thay đổi
+      const payload: any = {};
+      if ((profileData.fullname || "") !== (user?.fullname || ""))
+        payload.fullname = profileData.fullname;
+      if ((profileData.email || "") !== (user?.email || ""))
+        payload.email = profileData.email;
+      if ((profileData.phone || "") !== (user?.phone || ""))
+        payload.phone = profileData.phone;
 
-      const updatedUser = buildUserPublic(response.user);
+      const hasAvatar = !!pickedImage;
+
+      if (!hasAvatar && Object.keys(payload).length === 0) {
+        Alert.alert("Thông báo", "Không có thông tin nào thay đổi");
+        return;
+      }
+
+      // Nếu có ảnh: gửi multipart lên backend (field avatar)
+      const options = hasAvatar
+        ? {
+            imageFile: {
+              uri: pickedImage!.uri,
+              name: pickedImage!.name,
+              type: pickedImage!.type,
+            },
+          }
+        : {};
+
+      const res: any = await updateProfile(payload, options as any);
+      const updatedUser = buildUserPublic(res.user);
+
       setUser(updatedUser);
       await AsyncStorage.setItem("user", JSON.stringify(updatedUser));
 
-      setSelectedImage(null);
+      // reset pick sau khi lưu
+      setPickedImage(null);
+
+      // UI ưu tiên ảnh backend trả về
       setImagePreview(updatedUser.image || null);
 
       Alert.alert("Thành công", "Cập nhật thông tin thành công");
-    } catch (error: any) {
-      console.error("❌ Save profile error:", error);
-      Alert.alert("Lỗi", error?.message || "Không thể cập nhật thông tin");
+    } catch (err: any) {
+      const msg = normalizeError(err, "Lỗi cập nhật thông tin cá nhân.");
+      setInfoError(msg);
+      Alert.alert("Lỗi cập nhật", msg);
     } finally {
-      setSaving(false);
+      setSavingInfo(false);
     }
   };
 
   const handleSendOTP = async () => {
     if (timer > 0) return;
 
-    if (!profileData.email) {
-      Alert.alert("Lỗi", "Vui lòng cập nhật email trước khi đổi mật khẩu");
-      return;
-    }
-
     setSendingOTP(true);
-    try {
-      console.log("📧 Sending OTP to:", profileData.email);
-      await sendPasswordOTP({ email: profileData.email });
+    setPassError(null);
 
+    try {
+      const email = profileData.email?.trim();
+      if (!email)
+        throw new Error(
+          "Cần email để gửi OTP, vui lòng cập nhật thông tin trước."
+        );
+
+      const res = await sendPasswordOTP({ email });
       setOtpSent(true);
-      setTimer(300);
-      Alert.alert("Thành công", "Mã OTP đã được gửi đến email của bạn");
-    } catch (error: any) {
-      console.error("❌ Send OTP error:", error);
+      setTimer(60 * otpExpireMinutes);
+
       Alert.alert(
-        "Lỗi",
-        error?.response?.data?.message || error?.message || "Không thể gửi OTP"
+        "Thành công",
+        res.message || "Mã OTP đã được gửi đến email của bạn"
       );
+    } catch (err: any) {
+      const msg = normalizeError(
+        err,
+        "Không thể gửi OTP, vui lòng thử lại sau."
+      );
+      setOtpSent(false);
+      setPassError(msg);
+      Alert.alert("OTP chưa được gửi", msg);
     } finally {
       setSendingOTP(false);
     }
   };
 
   const handleChangePassword = async () => {
-    if (!passwordData.otp.trim()) {
-      Alert.alert("Lỗi", "Vui lòng nhập mã OTP");
-      return;
-    }
+    setChangingPass(true);
+    setPassError(null);
 
-    if (passwordData.newPassword.length < 6) {
-      Alert.alert("Lỗi", "Mật khẩu mới phải ít nhất 6 ký tự");
-      return;
-    }
-
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      Alert.alert("Lỗi", "Mật khẩu xác nhận không khớp");
-      return;
-    }
-
-    setChangingPassword(true);
     try {
-      console.log("🔐 Changing password...");
+      if (!passwordData.otp.trim()) throw new Error("Vui lòng nhập mã OTP");
+      if (passwordData.newPassword.length < 6)
+        throw new Error("Mật khẩu mới phải ít nhất 6 ký tự");
+      if (passwordData.newPassword !== passwordData.confirmPassword)
+        throw new Error("Mật khẩu xác nhận không khớp");
 
       await changePassword({
         password: passwordData.newPassword,
         confirmPassword: passwordData.confirmPassword,
         otp: passwordData.otp,
-      });
+      } as any);
 
       setPasswordData({ otp: "", newPassword: "", confirmPassword: "" });
       setOtpSent(false);
-      setShowPasswordForm(false);
       setTimer(0);
 
       Alert.alert("Thành công", "Đổi mật khẩu thành công");
-    } catch (error: any) {
-      console.error("❌ Change password error:", error);
-      Alert.alert(
-        "Lỗi",
-        error?.response?.data?.message ||
-          error?.message ||
-          "Không thể đổi mật khẩu"
-      );
+    } catch (err: any) {
+      const msg = normalizeError(err, "Lỗi đổi mật khẩu, vui lòng thử lại.");
+      setPassError(msg);
+      Alert.alert("Lỗi đổi mật khẩu", msg);
     } finally {
-      setChangingPassword(false);
+      setChangingPass(false);
     }
   };
 
-  if (loading) {
+  /**
+   * ================== Render guards ==================
+   */
+  if (!user) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#6366f1" />
-        <Text style={styles.loadingText}>Đang tải hồ sơ...</Text>
-      </View>
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.center}>
+          <Ionicons name="alert-circle-outline" size={48} color="#ef4444" />
+          <Text style={styles.errorText}>
+            Chưa đăng nhập. Vui lòng đăng nhập để xem hồ sơ.
+          </Text>
+        </View>
+      </SafeAreaView>
     );
   }
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color="#6366f1" />
+          <Text style={styles.loadingText}>Đang tải hồ sơ...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const busy = savingInfo || compressing;
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -448,32 +485,63 @@ const ProfileScreen: React.FC = () => {
           style={styles.container}
           showsVerticalScrollIndicator={false}
         >
-          {/* Gradient Header */}
           <LinearGradient
             colors={["#6366f1", "#8b5cf6", "#d946ef"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.header}
           >
-            <View style={styles.headerTop}>
-              <View style={{ flex: 1 }}>
+            <View style={styles.headerTopRow}>
+              <View style={styles.headerTitleWrap}>
                 <Text style={styles.headerTitle}>Hồ sơ cá nhân</Text>
-                <View style={styles.headerSubRow}>
+                <Text style={styles.headerSubtitle}>
+                  Quản lý thông tin của bạn
+                </Text>
+              </View>
+
+              <View style={styles.headerBadges}>
+                <View style={styles.badge}>
                   <Ionicons
-                    name="person-circle-outline"
+                    name="briefcase-outline"
                     size={14}
-                    color="rgba(255,255,255,0.92)"
+                    color="#111827"
                   />
-                  <Text style={styles.headerSubtitle}>
-                    Quản lý thông tin của bạn
+                  <Text style={styles.badgeText}>{roleLabel}</Text>
+                </View>
+                <View
+                  style={[
+                    styles.badge,
+                    user.isVerified ? styles.badgeOk : styles.badgeWarn,
+                  ]}
+                >
+                  <Ionicons
+                    name={
+                      user.isVerified
+                        ? "checkmark-circle-outline"
+                        : "alert-circle-outline"
+                    }
+                    size={14}
+                    color={user.isVerified ? "#065f46" : "#9a3412"}
+                  />
+                  <Text
+                    style={[
+                      styles.badgeText,
+                      { color: user.isVerified ? "#065f46" : "#9a3412" },
+                    ]}
+                  >
+                    {user.isVerified ? "Đã xác thực" : "Chưa xác thực"}
                   </Text>
                 </View>
               </View>
             </View>
 
-            {/* Avatar in header */}
             <View style={styles.avatarSection}>
-              <View style={styles.avatarWrapper}>
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={() => imagePreview && setPreviewVisible(true)}
+                disabled={!imagePreview}
+                style={styles.avatarWrapper}
+              >
                 {imagePreview ? (
                   <Image source={{ uri: imagePreview }} style={styles.avatar} />
                 ) : (
@@ -485,7 +553,8 @@ const ProfileScreen: React.FC = () => {
                 <TouchableOpacity
                   style={styles.cameraBtn}
                   onPress={handlePickImage}
-                  disabled={compressing}
+                  disabled={busy}
+                  activeOpacity={0.9}
                 >
                   {compressing ? (
                     <ActivityIndicator size="small" color="#fff" />
@@ -493,51 +562,67 @@ const ProfileScreen: React.FC = () => {
                     <Ionicons name="camera" size={20} color="#fff" />
                   )}
                 </TouchableOpacity>
-              </View>
+              </TouchableOpacity>
 
               <Text style={styles.avatarHint}>
                 {compressing
-                  ? "Đang nén ảnh..."
-                  : "Nhấn để thay đổi ảnh (tối đa 5MB)"}
+                  ? "Đang tối ưu ảnh..."
+                  : pickedImage
+                    ? `Ảnh mới: ${pickedImage.name} • ${bytesToKB(pickedImage.sizeBytes)} (nhấn Lưu để cập nhật)`
+                    : "Nhấn camera để chọn ảnh (tối đa 5MB)"}
               </Text>
 
-              {imagePreview && !compressing && (
-                <TouchableOpacity
-                  onPress={handleRemoveImage}
-                  style={styles.removeBtn}
-                >
-                  <Ionicons name="trash-outline" size={14} color="#ef4444" />
-                  <Text style={styles.removeBtnText}>Xóa ảnh</Text>
-                </TouchableOpacity>
-              )}
+              <View style={styles.avatarActionsRow}>
+                {!!imagePreview && (
+                  <TouchableOpacity
+                    onPress={() => setPreviewVisible(true)}
+                    style={styles.secondaryPill}
+                    activeOpacity={0.9}
+                  >
+                    <Ionicons name="eye-outline" size={14} color="#111827" />
+                    <Text style={styles.secondaryPillText}>Xem</Text>
+                  </TouchableOpacity>
+                )}
+
+                {!!imagePreview && (
+                  <TouchableOpacity
+                    onPress={handleRemoveImage}
+                    style={[styles.dangerPill, busy && { opacity: 0.6 }]}
+                    disabled={busy}
+                    activeOpacity={0.9}
+                  >
+                    <Ionicons name="trash-outline" size={14} color="#ef4444" />
+                    <Text style={styles.dangerPillText}>Xóa ảnh</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
           </LinearGradient>
 
-          {/* Profile Form Card */}
-          <View style={styles.formCard}>
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionIcon}>
-                <Ionicons name="person-outline" size={20} color="#6366f1" />
-              </View>
-              <Text style={styles.sectionTitle}>Thông tin cá nhân</Text>
+          {!!infoError && (
+            <View style={styles.alertError}>
+              <Ionicons name="warning-outline" size={18} color="#b91c1c" />
+              <Text style={styles.alertErrorText}>{infoError}</Text>
             </View>
+          )}
+
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Thông tin cá nhân</Text>
 
             <Text style={styles.label}>Tên đăng nhập</Text>
             <View style={[styles.input, styles.inputDisabled]}>
               <Ionicons name="at-outline" size={18} color="#94a3b8" />
-              <Text style={styles.inputTextDisabled}>{user?.username}</Text>
+              <Text style={styles.inputTextDisabled}>{user.username}</Text>
             </View>
 
-            <Text style={styles.label}>
-              Họ và tên <Text style={styles.required}>*</Text>
-            </Text>
+            <Text style={styles.label}>Họ và tên</Text>
             <View style={styles.input}>
               <Ionicons name="person-outline" size={18} color="#64748b" />
               <TextInput
                 style={styles.inputText}
                 value={profileData.fullname}
-                onChangeText={(text) =>
-                  setProfileData({ ...profileData, fullname: text })
+                onChangeText={(t) =>
+                  setProfileData((p) => ({ ...p, fullname: t }))
                 }
                 placeholder="Nhập họ và tên"
                 placeholderTextColor="#94a3b8"
@@ -550,8 +635,8 @@ const ProfileScreen: React.FC = () => {
               <TextInput
                 style={styles.inputText}
                 value={profileData.email}
-                onChangeText={(text) =>
-                  setProfileData({ ...profileData, email: text })
+                onChangeText={(t) =>
+                  setProfileData((p) => ({ ...p, email: t }))
                 }
                 placeholder="Nhập email"
                 placeholderTextColor="#94a3b8"
@@ -566,8 +651,8 @@ const ProfileScreen: React.FC = () => {
               <TextInput
                 style={styles.inputText}
                 value={profileData.phone}
-                onChangeText={(text) =>
-                  setProfileData({ ...profileData, phone: text })
+                onChangeText={(t) =>
+                  setProfileData((p) => ({ ...p, phone: t }))
                 }
                 placeholder="Nhập số điện thoại"
                 placeholderTextColor="#94a3b8"
@@ -575,237 +660,183 @@ const ProfileScreen: React.FC = () => {
               />
             </View>
 
-            {/* Status Pills */}
-            <View style={styles.statusGrid}>
-              <View style={styles.statusPill}>
-                <View
-                  style={[styles.statusDot, { backgroundColor: "#3b82f6" }]}
-                />
-                <Text style={styles.statusText}>
-                  {user?.role === "MANAGER" ? "Quản lý" : "Nhân viên"}
-                </Text>
-              </View>
-
-              <View style={styles.statusPill}>
-                <View
-                  style={[
-                    styles.statusDot,
-                    {
-                      backgroundColor: user?.isVerified ? "#10b981" : "#f59e0b",
-                    },
-                  ]}
-                />
-                <Text style={styles.statusText}>
-                  {user?.isVerified ? "Đã xác thực" : "Chưa xác thực"}
-                </Text>
-              </View>
-
-              <View style={styles.statusPill}>
-                <View
-                  style={[
-                    styles.statusDot,
-                    {
-                      backgroundColor: user?.isDeleted ? "#ef4444" : "#10b981",
-                    },
-                  ]}
-                />
-                <Text style={styles.statusText}>
-                  {user?.isDeleted ? "Đã khóa" : "Hoạt động"}
-                </Text>
-              </View>
-            </View>
-
             <TouchableOpacity
-              style={[
-                styles.saveBtn,
-                (saving || compressing) && { opacity: 0.55 },
-              ]}
+              style={[styles.primaryBtn, busy && { opacity: 0.6 }]}
               onPress={handleSaveProfile}
-              disabled={saving || compressing}
+              disabled={busy}
+              activeOpacity={0.9}
             >
-              <LinearGradient
-                colors={["#10b981", "#059669"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.saveBtnGradient}
-              >
-                {saving ? (
-                  <>
-                    <ActivityIndicator color="#fff" />
-                    <Text style={styles.saveBtnText}>Đang lưu...</Text>
-                  </>
-                ) : (
-                  <>
-                    <Ionicons name="checkmark-circle" size={20} color="#fff" />
-                    <Text style={styles.saveBtnText}>Lưu thông tin</Text>
-                  </>
-                )}
-              </LinearGradient>
+              {savingInfo ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Ionicons name="save-outline" size={18} color="#fff" />
+              )}
+              <Text style={styles.primaryBtnText}>
+                {savingInfo ? "Đang lưu..." : "Lưu thông tin"}
+              </Text>
             </TouchableOpacity>
           </View>
 
-          {/* Password Card */}
-          <View style={styles.formCard}>
-            <View style={styles.sectionHeader}>
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Đổi mật khẩu</Text>
+
+            {!!passError && (
               <View
-                style={[styles.sectionIcon, { backgroundColor: "#fef2f2" }]}
+                style={[
+                  styles.alertError,
+                  { marginHorizontal: 0, marginTop: 0, marginBottom: 12 },
+                ]}
               >
-                <Ionicons
-                  name="lock-closed-outline"
-                  size={20}
-                  color="#ef4444"
-                />
+                <Ionicons name="warning-outline" size={18} color="#b91c1c" />
+                <Text style={styles.alertErrorText}>{passError}</Text>
               </View>
-              <Text style={styles.sectionTitle}>Đổi mật khẩu</Text>
-            </View>
+            )}
 
-            {!showPasswordForm ? (
-              <TouchableOpacity
-                style={styles.showPasswordBtn}
-                onPress={() => setShowPasswordForm(true)}
-              >
-                <Ionicons name="key-outline" size={18} color="#6366f1" />
-                <Text style={styles.showPasswordBtnText}>Đổi mật khẩu</Text>
-              </TouchableOpacity>
-            ) : (
+            <TouchableOpacity
+              style={[
+                styles.otpBtn,
+                (timer > 0 || sendingOTP || changingPass) && { opacity: 0.6 },
+              ]}
+              onPress={handleSendOTP}
+              disabled={timer > 0 || sendingOTP || changingPass}
+              activeOpacity={0.9}
+            >
+              {sendingOTP ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Ionicons name="mail-outline" size={18} color="#fff" />
+              )}
+              <Text style={styles.otpBtnText}>
+                {sendingOTP
+                  ? "Đang gửi..."
+                  : timer > 0
+                    ? `Chờ gửi lại (${formatTime(timer)})`
+                    : otpSent
+                      ? "Gửi OTP mới"
+                      : "Gửi OTP đến Email"}
+              </Text>
+            </TouchableOpacity>
+
+            {otpSent && (
               <>
+                <Text style={styles.label}>Mã OTP</Text>
+                <View style={styles.input}>
+                  <Ionicons
+                    name="shield-checkmark-outline"
+                    size={18}
+                    color="#64748b"
+                  />
+                  <TextInput
+                    style={styles.inputText}
+                    value={passwordData.otp}
+                    onChangeText={(t) =>
+                      setPasswordData((p) => ({ ...p, otp: t }))
+                    }
+                    placeholder="Nhập mã OTP"
+                    placeholderTextColor="#94a3b8"
+                    maxLength={6}
+                    keyboardType="number-pad"
+                  />
+                </View>
+
+                <Text style={styles.label}>Mật khẩu mới</Text>
+                <View style={styles.input}>
+                  <Ionicons
+                    name="lock-closed-outline"
+                    size={18}
+                    color="#64748b"
+                  />
+                  <TextInput
+                    style={styles.inputText}
+                    value={passwordData.newPassword}
+                    onChangeText={(t) =>
+                      setPasswordData((p) => ({ ...p, newPassword: t }))
+                    }
+                    placeholder="Mật khẩu mới (>= 6 ký tự)"
+                    placeholderTextColor="#94a3b8"
+                    secureTextEntry
+                  />
+                </View>
+
+                <Text style={styles.label}>Xác nhận mật khẩu</Text>
+                <View style={styles.input}>
+                  <Ionicons
+                    name="lock-closed-outline"
+                    size={18}
+                    color="#64748b"
+                  />
+                  <TextInput
+                    style={styles.inputText}
+                    value={passwordData.confirmPassword}
+                    onChangeText={(t) =>
+                      setPasswordData((p) => ({ ...p, confirmPassword: t }))
+                    }
+                    placeholder="Xác nhận mật khẩu"
+                    placeholderTextColor="#94a3b8"
+                    secureTextEntry
+                  />
+                </View>
+
                 <TouchableOpacity
-                  style={[
-                    styles.otpBtn,
-                    (timer > 0 || sendingOTP) && { opacity: 0.55 },
-                  ]}
-                  onPress={handleSendOTP}
-                  disabled={timer > 0 || sendingOTP}
+                  style={[styles.dangerBtn, changingPass && { opacity: 0.6 }]}
+                  onPress={handleChangePassword}
+                  disabled={changingPass}
+                  activeOpacity={0.9}
                 >
-                  {sendingOTP ? (
-                    <ActivityIndicator color="#fff" size="small" />
+                  {changingPass ? (
+                    <ActivityIndicator color="#fff" />
                   ) : (
-                    <>
-                      <Ionicons name="mail-outline" size={18} color="#fff" />
-                      <Text style={styles.otpBtnText}>
-                        {timer > 0
-                          ? `Gửi lại sau (${formatTime(timer)})`
-                          : "Gửi OTP đến Email"}
-                      </Text>
-                    </>
+                    <Ionicons
+                      name="checkmark-circle-outline"
+                      size={18}
+                      color="#fff"
+                    />
                   )}
+                  <Text style={styles.dangerBtnText}>
+                    {changingPass ? "Đang đổi..." : "Đổi mật khẩu"}
+                  </Text>
                 </TouchableOpacity>
-
-                {otpSent && (
-                  <>
-                    <Text style={styles.label}>Mã OTP</Text>
-                    <View style={styles.input}>
-                      <Ionicons
-                        name="shield-checkmark-outline"
-                        size={18}
-                        color="#64748b"
-                      />
-                      <TextInput
-                        style={styles.inputText}
-                        value={passwordData.otp}
-                        onChangeText={(text) =>
-                          setPasswordData({ ...passwordData, otp: text })
-                        }
-                        placeholder="Nhập mã OTP"
-                        placeholderTextColor="#94a3b8"
-                        maxLength={6}
-                        keyboardType="number-pad"
-                      />
-                    </View>
-
-                    <Text style={styles.label}>Mật khẩu mới</Text>
-                    <View style={styles.input}>
-                      <Ionicons
-                        name="lock-closed-outline"
-                        size={18}
-                        color="#64748b"
-                      />
-                      <TextInput
-                        style={styles.inputText}
-                        value={passwordData.newPassword}
-                        onChangeText={(text) =>
-                          setPasswordData({
-                            ...passwordData,
-                            newPassword: text,
-                          })
-                        }
-                        placeholder="Nhập mật khẩu mới (ít nhất 6 ký tự)"
-                        placeholderTextColor="#94a3b8"
-                        secureTextEntry
-                      />
-                    </View>
-
-                    <Text style={styles.label}>Xác nhận mật khẩu</Text>
-                    <View style={styles.input}>
-                      <Ionicons
-                        name="lock-closed-outline"
-                        size={18}
-                        color="#64748b"
-                      />
-                      <TextInput
-                        style={styles.inputText}
-                        value={passwordData.confirmPassword}
-                        onChangeText={(text) =>
-                          setPasswordData({
-                            ...passwordData,
-                            confirmPassword: text,
-                          })
-                        }
-                        placeholder="Xác nhận mật khẩu mới"
-                        placeholderTextColor="#94a3b8"
-                        secureTextEntry
-                      />
-                    </View>
-
-                    <View style={styles.passwordActions}>
-                      <TouchableOpacity
-                        style={styles.cancelBtn}
-                        onPress={() => {
-                          setShowPasswordForm(false);
-                          setOtpSent(false);
-                          setTimer(0);
-                          setPasswordData({
-                            otp: "",
-                            newPassword: "",
-                            confirmPassword: "",
-                          });
-                        }}
-                      >
-                        <Text style={styles.cancelBtnText}>Hủy</Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={[
-                          styles.changePasswordBtn,
-                          changingPassword && { opacity: 0.55 },
-                        ]}
-                        onPress={handleChangePassword}
-                        disabled={changingPassword}
-                      >
-                        {changingPassword ? (
-                          <ActivityIndicator color="#fff" size="small" />
-                        ) : (
-                          <>
-                            <Ionicons
-                              name="checkmark-circle"
-                              size={18}
-                              color="#fff"
-                            />
-                            <Text style={styles.changePasswordBtnText}>
-                              Đổi mật khẩu
-                            </Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
-                    </View>
-                  </>
-                )}
               </>
             )}
           </View>
 
-          <View style={{ height: 32 }} />
+          <View style={{ height: 28 }} />
         </ScrollView>
+
+        {/* Preview modal */}
+        <Modal
+          visible={previewVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setPreviewVisible(false)}
+        >
+          <View style={styles.previewOverlay}>
+            <TouchableOpacity
+              style={styles.previewClose}
+              onPress={() => setPreviewVisible(false)}
+              activeOpacity={0.9}
+            >
+              <Ionicons name="close" size={28} color="#fff" />
+            </TouchableOpacity>
+
+            <View style={styles.previewBox}>
+              {imagePreview ? (
+                <Image
+                  source={{ uri: imagePreview }}
+                  style={styles.previewImg}
+                  resizeMode="contain"
+                />
+              ) : (
+                <View style={styles.previewEmpty}>
+                  <Ionicons name="image-outline" size={42} color="#cbd5e1" />
+                  <Text style={styles.previewEmptyText}>
+                    Chưa có ảnh đại diện
+                  </Text>
+                </View>
+              )}
+            </View>
+          </View>
+        </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -813,15 +844,15 @@ const ProfileScreen: React.FC = () => {
 
 export default ProfileScreen;
 
-// ========== STYLES ==========
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#f8fafc" },
   container: { flex: 1, backgroundColor: "#f8fafc" },
+
   center: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#f8fafc",
+    padding: 24,
   },
   loadingText: {
     marginTop: 12,
@@ -829,53 +860,62 @@ const styles = StyleSheet.create({
     color: "#64748b",
     fontWeight: "700",
   },
+  errorText: {
+    marginTop: 10,
+    textAlign: "center",
+    color: "#991b1b",
+    fontWeight: "700",
+  },
 
   header: {
     paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 20,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-    shadowColor: "#0f172a",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.2,
-    shadowRadius: 18,
-    elevation: 12,
+    paddingTop: 16,
+    paddingBottom: 18,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
     backgroundColor: "#10b981",
   },
-  headerTop: {
+  headerTopRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 10,
-    marginBottom: 16,
+    justifyContent: "space-between",
+    gap: 12,
   },
-  headerTitle: { color: "#fff", fontSize: 24, fontWeight: "900" },
-  headerSubRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 6,
-  },
+  headerTitleWrap: { flex: 1 },
+  headerTitle: { color: "#fff", fontSize: 22, fontWeight: "900" },
   headerSubtitle: {
+    marginTop: 6,
     color: "rgba(255,255,255,0.92)",
     fontSize: 12,
     fontWeight: "700",
   },
 
-  avatarSection: { alignItems: "center", paddingVertical: 8 },
-  avatarWrapper: { position: "relative", marginBottom: 12 },
+  headerBadges: { alignItems: "flex-end", gap: 8 },
+  badge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.92)",
+  },
+  badgeOk: { backgroundColor: "rgba(236,253,245,0.95)" },
+  badgeWarn: { backgroundColor: "rgba(255,247,237,0.95)" },
+  badgeText: { fontSize: 12, fontWeight: "900", color: "#111827" },
+
+  avatarSection: { alignItems: "center", paddingTop: 14 },
+  avatarWrapper: { position: "relative" },
   avatar: {
     width: 120,
     height: 120,
     borderRadius: 60,
     borderWidth: 4,
     borderColor: "rgba(255,255,255,0.28)",
+    backgroundColor: "rgba(255,255,255,0.14)",
   },
-  avatarPlaceholder: {
-    backgroundColor: "rgba(255,255,255,0.16)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  avatarPlaceholder: { alignItems: "center", justifyContent: "center" },
+
   cameraBtn: {
     position: "absolute",
     bottom: 0,
@@ -888,61 +928,55 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 3,
     borderColor: "#fff",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 6,
   },
+
   avatarHint: {
+    marginTop: 10,
     fontSize: 12,
-    color: "rgba(255,255,255,0.9)",
-    marginBottom: 8,
-    fontWeight: "700",
+    color: "rgba(255,255,255,0.92)",
+    fontWeight: "800",
+    textAlign: "center",
   },
-  removeBtn: {
+
+  avatarActionsRow: { flexDirection: "row", gap: 10, marginTop: 10 },
+  secondaryPill: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingVertical: 7,
+    paddingVertical: 8,
     paddingHorizontal: 14,
     borderRadius: 999,
     backgroundColor: "rgba(255,255,255,0.92)",
   },
-  removeBtnText: { fontSize: 12, color: "#ef4444", fontWeight: "900" },
+  secondaryPillText: { fontSize: 12, color: "#111827", fontWeight: "900" },
+  dangerPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.92)",
+  },
+  dangerPillText: { fontSize: 12, color: "#ef4444", fontWeight: "900" },
 
-  formCard: {
+  card: {
     backgroundColor: "#fff",
     marginHorizontal: 16,
     marginTop: 16,
-    padding: 18,
-    borderRadius: 20,
-    shadowColor: "#0f172a",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 14,
-    elevation: 4,
+    padding: 16,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#eef2ff",
   },
-
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 18,
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#0f172a",
+    marginBottom: 12,
   },
-  sectionIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    backgroundColor: "#eff6ff",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  sectionTitle: { fontSize: 17, fontWeight: "900", color: "#0f172a" },
 
   label: { fontSize: 13, fontWeight: "900", color: "#334155", marginBottom: 8 },
-  required: { color: "#ef4444" },
-
   input: {
     flexDirection: "row",
     alignItems: "center",
@@ -952,74 +986,28 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    marginBottom: 16,
+    marginBottom: 14,
+    gap: 10,
   },
   inputDisabled: { backgroundColor: "#f1f5f9" },
-  inputText: {
-    flex: 1,
-    marginLeft: 10,
-    fontSize: 14,
-    color: "#0f172a",
-    fontWeight: "700",
-  },
+  inputText: { flex: 1, fontSize: 14, color: "#0f172a", fontWeight: "700" },
   inputTextDisabled: {
     flex: 1,
-    marginLeft: 10,
     fontSize: 14,
     color: "#94a3b8",
     fontWeight: "700",
   },
 
-  statusGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 18,
-  },
-  statusPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    backgroundColor: "#f8fafc",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-  },
-  statusDot: { width: 8, height: 8, borderRadius: 4 },
-  statusText: { fontSize: 12, fontWeight: "900", color: "#334155" },
-
-  saveBtn: {
-    borderRadius: 16,
-    overflow: "hidden",
-    shadowColor: "#10b981",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  saveBtnGradient: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 14,
-    gap: 8,
-  },
-  saveBtnText: { color: "#fff", fontSize: 15, fontWeight: "900" },
-
-  showPasswordBtn: {
+  primaryBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
+    backgroundColor: "#10b981",
     paddingVertical: 14,
     borderRadius: 14,
-    borderWidth: 2,
-    borderColor: "#6366f1",
-    backgroundColor: "#eff6ff",
   },
-  showPasswordBtnText: { fontSize: 14, fontWeight: "900", color: "#6366f1" },
+  primaryBtnText: { color: "#fff", fontSize: 14, fontWeight: "900" },
 
   otpBtn: {
     flexDirection: "row",
@@ -1029,30 +1017,62 @@ const styles = StyleSheet.create({
     backgroundColor: "#6366f1",
     paddingVertical: 14,
     borderRadius: 14,
-    marginBottom: 18,
+    marginBottom: 10,
   },
   otpBtnText: { color: "#fff", fontSize: 14, fontWeight: "900" },
 
-  passwordActions: { flexDirection: "row", gap: 10, marginTop: 4 },
-  cancelBtn: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#f8fafc",
-    alignItems: "center",
-  },
-  cancelBtnText: { fontSize: 14, fontWeight: "900", color: "#64748b" },
-  changePasswordBtn: {
-    flex: 1,
+  dangerBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
+    gap: 8,
     backgroundColor: "#ef4444",
     paddingVertical: 14,
     borderRadius: 14,
+    marginTop: 6,
   },
-  changePasswordBtnText: { color: "#fff", fontSize: 14, fontWeight: "900" },
+  dangerBtnText: { color: "#fff", fontSize: 14, fontWeight: "900" },
+
+  alertError: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#fef2f2",
+    borderWidth: 1,
+    borderColor: "#fecaca",
+    padding: 12,
+    borderRadius: 14,
+    marginHorizontal: 16,
+    marginTop: 12,
+  },
+  alertErrorText: { flex: 1, color: "#991b1b", fontWeight: "800" },
+
+  previewOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(2,6,23,0.92)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 16,
+  },
+  previewClose: {
+    position: "absolute",
+    top: 56,
+    right: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  previewBox: {
+    width: "100%",
+    height: "75%",
+    borderRadius: 18,
+    overflow: "hidden",
+    backgroundColor: "rgba(255,255,255,0.06)",
+  },
+  previewImg: { width: "100%", height: "100%" },
+  previewEmpty: { flex: 1, alignItems: "center", justifyContent: "center" },
+  previewEmptyText: { marginTop: 10, color: "#cbd5e1", fontWeight: "800" },
 });

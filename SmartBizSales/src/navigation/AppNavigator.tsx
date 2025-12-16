@@ -58,6 +58,7 @@ import SubscriptionScreen from "../screens/settings/SubscriptionScreen";
 import OrderReconciliationScreen from "../screens/orders/OrderReconciliationScreen";
 import EmployeesScreen from "../screens/employee/EmployeesScreen";
 import OrderListScreen from "../screens/orders/OrderListScreen";
+import PosShellScreen from "@/screens/pos/PosShellScreen";
 // ========== TYPES ==========
 export type RootDrawerParamList = {
   Dashboard: undefined;
@@ -773,8 +774,8 @@ const AppNavigator: FC = (): JSX.Element => {
       />
       <Drawer.Screen
         name="PosOrders"
-        component={withPermission(PosScreen, "orders:create")}
-        options={{ title: "POS" }}
+        component={withPermission(PosShellScreen, "orders:create")}
+        options={{ headerShown: false }}
       />
       <Drawer.Screen
         name="OrderList"

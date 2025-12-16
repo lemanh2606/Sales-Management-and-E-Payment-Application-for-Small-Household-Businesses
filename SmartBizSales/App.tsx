@@ -11,6 +11,7 @@ import {
 import FlashMessage from "react-native-flash-message";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
 import MemoryMonitor from "./src/components/MemoryMonitor";
+import MainNavigator from "@/navigation/MainNavigator";
 
 // Màn hình loading khi đang kiểm tra đăng nhập
 function LoadingScreen(): React.JSX.Element {
@@ -46,7 +47,8 @@ export default function App(): React.JSX.Element {
             setNavigationReady();
           }}
         >
-          <RootNavigator />
+          {/* <RootNavigator /> */}
+          <MainNavigator />
           <FlashMessage position="top" />
         </NavigationContainer>
         {/* {__DEV__ && <MemoryMonitor />} */}

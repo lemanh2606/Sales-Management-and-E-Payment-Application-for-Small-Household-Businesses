@@ -94,6 +94,7 @@ router.get("/refresh-token", refreshToken);
  *   + image base64 từ mobile (field "image")
  *   + các trường text: fullname, email, phone...
  */
+
 router.put(
   "/profile",
   verifyToken,

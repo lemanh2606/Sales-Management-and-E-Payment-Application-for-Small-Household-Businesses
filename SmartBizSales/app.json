@@ -13,7 +13,11 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "SmartBizSales needs microphone access to record audio for speech recognition.",
+        "NSSpeechRecognitionUsageDescription": "SmartBizSales needs speech recognition to convert your voice to text."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -22,15 +26,18 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.manh2606.SmartBizSales"
+      "package": "com.manh2606.SmartBizSales",
+      "permissions": ["android.permission.RECORD_AUDIO"]
     },
+    "scheme": "posapp",
     "plugins": [
       [
         "expo-document-picker",
         {
           "iCloudContainerEnvironment": "Production"
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "extra": {
       "eas": {

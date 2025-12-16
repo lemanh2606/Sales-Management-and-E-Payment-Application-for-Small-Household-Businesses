@@ -114,83 +114,60 @@ export const getProfile = async (): Promise<{ user: User }> => {
  * - Base64 image upload (React Native - gửi qua JSON, backend upload lên ImgBB)
  * - Remove image (image: null)
  */
+export type UpdateProfileData = {
+  fullname?: string;
+  email?: string;
+  phone?: string;
+  image?: string; // nếu backend cho phép lưu url
+  avatarPublicId?: string;
+};
+
+export type RNImageFile = {
+  uri: string;
+  name: string;
+  type: string; // ví dụ "image/jpeg"
+};
+
 export const updateProfile = async (
-  data: UpdateProfileDto,
-  options?: {
-    imageBase64?: string; // Base64 string with data:image prefix
-    removeImage?: boolean; // Set to true to remove image
+  data: UpdateProfileData,
+  options: { removeImage?: boolean; imageFile?: RNImageFile } = {}
+) => {
+  // Case 1: remove image
+  if (options.removeImage) {
+    const res = await apiClient.put("/users/profile", {
+      ...data,
+      removeImage: true,
+    });
+    return res.data;
   }
-): Promise<{ message: string; user: User }> => {
-  try {
-    console.log("📝 Updating profile...", {
-      hasData: !!data,
-      hasImageBase64: !!options?.imageBase64,
-      removeImage: !!options?.removeImage,
+
+  // Case 2: upload avatar file
+  if (options.imageFile) {
+    const formData = new FormData();
+
+    Object.keys(data || {}).forEach((key) => {
+      const k = key as keyof UpdateProfileData;
+      const v = data[k];
+      if (v !== undefined && v !== null && v !== "") {
+        formData.append(k, String(v));
+      }
     });
 
-    // ✅ Case 1: Upload base64 image (React Native)
-    if (options?.imageBase64) {
-      console.log("📤 Uploading base64 image to ImgBB via backend...");
+    // ⚠️ Field name phải đúng backend: web của bạn đang dùng "avatar"
+    formData.append("avatar", options.imageFile as any);
 
-      // Validate base64 format
-      if (!options.imageBase64.startsWith("data:image")) {
-        throw new Error("Invalid base64 image format. Must start with data:image");
-      }
+    const res = await apiClient.put("/users/profile", formData, {
+      timeout: 30000,
+      // ✅ khuyến nghị: KHÔNG set Content-Type ở RN để axios tự gắn boundary [web:1509]
+      // headers: { "Content-Type": "multipart/form-data" },
+    });
 
-      // Calculate size
-      const base64Size = (options.imageBase64.length * 0.75) / (1024 * 1024);
-      console.log(`📊 Base64 image size: ${base64Size.toFixed(2)}MB`);
-
-      if (base64Size > 5) {
-        throw new Error("Ảnh quá lớn. Vui lòng chọn ảnh nhỏ hơn 5MB");
-      }
-
-      const response = await apiClient.put<{ message: string; user: User }>(
-        "/users/profile",
-        {
-          ...data,
-          image: options.imageBase64, // Backend sẽ upload lên ImgBB
-        },
-        {
-          timeout: 30000,
-        }
-      );
-
-      console.log("✅ Profile updated with base64 image:", response.data);
-      return response.data;
-    }
-
-    // ✅ Case 2: Remove image
-    if (options?.removeImage) {
-      console.log("🗑️ Removing image...");
-
-      const response = await apiClient.put<{ message: string; user: User }>(
-        "/users/profile",
-        {
-          ...data,
-          image: null, // Backend sẽ xóa ảnh trên ImgBB
-        }
-      );
-
-      console.log("✅ Image removed:", response.data);
-      return response.data;
-    }
-
-    // ✅ Case 3: Update text fields only
-    console.log("📝 Updating text fields only...");
-
-    const response = await apiClient.put<{ message: string; user: User }>(
-      "/users/profile",
-      data
-    );
-
-    console.log("✅ Profile updated:", response.data);
-    return response.data;
-  } catch (error: any) {
-    console.error("❌ Update profile error:", error);
-    console.error("Error response:", error.response?.data);
-    throw error;
+    return res.data;
   }
+
+  // Case 3: text only
+  const res = await apiClient.put("/users/profile", data);
+  return res.data;
 };
 
 /**

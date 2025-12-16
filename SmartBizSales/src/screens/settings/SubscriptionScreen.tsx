@@ -1,272 +1,259 @@
-// src/screens/settings/SubscriptionScreen.tsx
-import React, { useState, useEffect, useCallback, useMemo, JSX } from "react";
+/**
+ * SubscriptionScreen.tsx
+ * Màn hình quản lý gói đăng ký (Mobile - React Native / Expo)
+ *
+ * Tính năng:
+ * - Xem trạng thái gói (Trial / Premium / Expired)
+ * - Hiển thị pending payment (PayOS): mở link, copy mã, refresh trạng thái
+ * - Xem lịch sử thanh toán (phân trang client-side)
+ * - Xem thống kê sử dụng (nếu API trả về)
+ * - Hủy tự động gia hạn (nếu có API)
+ */
+
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
   ActivityIndicator,
   Alert,
-  RefreshControl,
   Image,
-  Linking,
-  Dimensions,
   Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
-import * as Clipboard from "expo-clipboard";
+import { SafeAreaView } from "react-native-safe-area-context";
 import dayjs from "dayjs";
-import relativeTime from "dayjs/plugin/relativeTime";
-import "dayjs/locale/vi";
-import { useAuth } from "../../context/AuthContext";
+import * as Clipboard from "expo-clipboard";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import apiClient from "../../api/apiClient";
 
-dayjs.extend(relativeTime);
-dayjs.locale("vi");
+import subscriptionApi from "../../api/subscriptionApi";
+import type { RootStackParamList } from "../../navigation/RootNavigation";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+type SubscriptionStatus = "TRIAL" | "ACTIVE" | "EXPIRED" | "CANCELLED" | string;
 
-// ========== TYPES ==========
-interface PendingPayment {
+type PendingPayment = {
   order_code: string;
   amount: number;
-  plan_duration: number;
-  checkout_url: string;
-  qr_data_url: string;
-  created_at: string;
-}
+  plan_duration: number; // tháng
+  checkout_url?: string | null;
+  qr_data_url?: string | null;
+  created_at?: string | null;
+  status?: "PENDING" | "SUCCESS" | "FAILED" | string;
+};
 
-interface TrialInfo {
-  starts_at: string;
-  ends_at: string;
-}
+type TrialInfo = {
+  ends_at: string; // ISO
+};
 
-interface PremiumInfo {
-  plan_duration: number;
-  started_at: string;
-  expires_at: string;
-  amount_paid: number;
-}
+type PremiumInfo = {
+  plan_duration: number; // tháng
+  started_at: string; // ISO
+  expires_at: string; // ISO
+  auto_renew?: boolean;
+};
 
-interface Subscription {
-  _id: string;
-  userId: string;
-  storeId: string;
-  status: "TRIAL" | "ACTIVE" | "EXPIRED" | "CANCELLED";
-  is_premium: boolean;
-  days_remaining: number;
-  starts_at: string;
-  ends_at: string;
-  expires_at?: string;
-  trial_ends_at?: string;
-  trial?: TrialInfo;
-  premium?: PremiumInfo;
-  pending_payment?: PendingPayment;
-  createdAt: string;
-  updatedAt: string;
-}
+type SubscriptionData = {
+  status: SubscriptionStatus;
+  days_remaining?: number;
+  expires_at?: string | null;
 
-interface PaymentHistoryItem {
-  _id: string;
-  transaction_id: string;
+  trial?: TrialInfo | null;
+  trial_ends_at?: string | null;
+
+  premium?: PremiumInfo | null;
+
+  pending_payment?: PendingPayment | null;
+};
+
+type PaymentHistoryItem = {
+  plan_duration: number; // tháng
   amount: number;
-  plan_duration: number;
-  status: "SUCCESS" | "PENDING" | "FAILED";
-  paid_at: string;
-  created_at: string;
-}
+  paid_at?: string | null;
+  transaction_id?: string | null;
+  status?: "SUCCESS" | "PENDING" | "FAILED" | string;
+};
 
-interface UsageStats {
+type UsageStats = {
   total_orders: number;
   total_revenue: number;
   total_products: number;
-  total_customers?: number;
-}
-
-interface SubscriptionResponse {
-  success: boolean;
-  data: Subscription;
-}
-
-interface PaymentHistoryResponse {
-  success: boolean;
-  data: PaymentHistoryItem[];
-}
-
-interface UsageStatsResponse {
-  success: boolean;
-  data: UsageStats;
-}
-
-type SettingsStackParamList = {
-  Subscription: undefined;
-  SubscriptionPricing: undefined;
-  FileManager: undefined;
 };
 
-type NavigationProp = NativeStackNavigationProp<
-  SettingsStackParamList,
-  "Subscription"
->;
+type NavProp = NativeStackNavigationProp<RootStackParamList>;
 
-type StatusType = "TRIAL" | "ACTIVE" | "EXPIRED" | "CANCELLED";
+const COLORS = {
+  primary: "#10b981",
+  primaryDark: "#0f766e",
+  bg: "#f1f5f9",
+  card: "#ffffff",
+  text: "#0f172a",
+  sub: "#64748b",
+  border: "#e2e8f0",
+  danger: "#ef4444",
+  warn: "#f59e0b",
+  ok: "#16a34a",
+  info: "#2563eb",
+};
 
-interface StatusConfig {
-  color: string;
+const formatCurrency = (value: unknown) => {
+  const n = Number(value || 0);
+  return (Number.isFinite(n) ? n : 0).toLocaleString("vi-VN") + "đ";
+};
+
+const getProgressColor = (daysRemaining: number) => {
+  if (daysRemaining > 7) return COLORS.ok;
+  if (daysRemaining > 3) return COLORS.warn;
+  return COLORS.danger;
+};
+
+const getStatusMeta = (status: SubscriptionStatus) => {
+  switch (status) {
+    case "TRIAL":
+      return {
+        label: "Dùng thử",
+        tone: "info" as const,
+        color: COLORS.info,
+        icon: "gift-outline" as const,
+      };
+    case "ACTIVE":
+      return {
+        label: "Premium",
+        tone: "success" as const,
+        color: COLORS.ok,
+        icon: "sparkles-outline" as const,
+      };
+    case "CANCELLED":
+      return {
+        label: "Đã hủy",
+        tone: "warning" as const,
+        color: COLORS.warn,
+        icon: "time-outline" as const,
+      };
+    case "EXPIRED":
+    default:
+      return {
+        label: "Hết hạn",
+        tone: "danger" as const,
+        color: COLORS.danger,
+        icon: "alert-circle-outline" as const,
+      };
+  }
+};
+
+const Badge: React.FC<{
   text: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  bgColor: string;
-}
+  tone?: "success" | "danger" | "warning" | "info";
+}> = ({ text, tone = "info" }) => {
+  const bg =
+    tone === "success"
+      ? "#dcfce7"
+      : tone === "danger"
+        ? "#fee2e2"
+        : tone === "warning"
+          ? "#ffedd5"
+          : "#dbeafe";
+  const fg =
+    tone === "success"
+      ? "#166534"
+      : tone === "danger"
+        ? "#b91c1c"
+        : tone === "warning"
+          ? "#9a3412"
+          : "#1d4ed8";
 
-// ========== CONSTANTS ==========
-const STATUS_CONFIG: Record<StatusType, StatusConfig> = {
-  TRIAL: {
-    color: "#1890ff",
-    text: "Dùng thử",
-    icon: "gift",
-    bgColor: "#e6f4ff",
-  },
-  ACTIVE: {
-    color: "#52c41a",
-    text: "Premium",
-    icon: "checkmark-circle",
-    bgColor: "#f6ffed",
-  },
-  EXPIRED: {
-    color: "#ef4444",
-    text: "Hết hạn",
-    icon: "warning",
-    bgColor: "#fff1f0",
-  },
-  CANCELLED: {
-    color: "#8c8c8c",
-    text: "Đã hủy",
-    icon: "time",
-    bgColor: "#fafafa",
-  },
+  return (
+    <View
+      style={[styles.badge, { backgroundColor: bg, borderColor: fg + "33" }]}
+    >
+      <Text style={[styles.badgeText, { color: fg }]}>{text}</Text>
+    </View>
+  );
 };
 
-const BENEFITS: string[] = [
-  "Không giới hạn sản phẩm",
-  "Không giới hạn đơn hàng",
-  "Báo cáo & thống kê",
-  "Quản lý kho nâng cao",
-  "Hỗ trợ 24/7",
-];
+const Card: React.FC<{ children: React.ReactNode; style?: any }> = ({
+  children,
+  style,
+}) => <View style={[styles.card, style]}>{children}</View>;
 
-// ========== MAIN COMPONENT ==========
+const RowBetween: React.FC<{
+  left: React.ReactNode;
+  right: React.ReactNode;
+  style?: any;
+}> = ({ left, right, style }) => (
+  <View style={[styles.rowBetween, style]}>
+    <View style={{ flex: 1 }}>{left}</View>
+    <View style={{ alignItems: "flex-end" }}>{right}</View>
+  </View>
+);
+
+const Divider: React.FC = () => <View style={styles.hr} />;
+
 const SubscriptionScreen: React.FC = () => {
-  const navigation = useNavigation<NavigationProp>();
-  const { user } = useAuth();
+  const navigation = useNavigation<NavProp>();
 
-  // States
-  const [loading, setLoading] = useState<boolean>(true);
-  const [refreshing, setRefreshing] = useState<boolean>(false);
-  const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [subscription, setSubscription] = useState<SubscriptionData | null>(
+    null
+  );
   const [paymentHistory, setPaymentHistory] = useState<PaymentHistoryItem[]>(
     []
   );
   const [usageStats, setUsageStats] = useState<UsageStats | null>(null);
 
-  // ========== FETCH DATA ==========
-  const fetchData = useCallback(
-    async (isRefresh: boolean = false): Promise<void> => {
-      if (isRefresh) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
+  const [historyPage, setHistoryPage] = useState(1);
+  const HISTORY_PAGE_SIZE = 6;
 
-      try {
-        const [subRes, historyRes, usageRes]: any = await Promise.all([
-          apiClient
-            .get<SubscriptionResponse>("/subscriptions/current")
-            .catch(() => null),
-          apiClient
-            .get<PaymentHistoryResponse>("/subscriptions/payment-history")
-            .catch(() => ({ data: { data: [] } })),
-          apiClient
-            .get<UsageStatsResponse>("/subscriptions/usage-stats")
-            .catch(() => ({ data: { data: null } })),
-        ]);
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
 
-        console.log(
-          "📊 Raw subscription response:",
-          JSON.stringify(subRes?.data, null, 2)
-        );
-        console.log(
-          "📊 Raw usage stats response:",
-          JSON.stringify(usageRes?.data, null, 2)
-        );
+      const [subRes, historyRes, usageRes]: any = await Promise.all([
+        subscriptionApi.getCurrentSubscription().catch(() => ({ data: null })),
+        subscriptionApi.getPaymentHistory().catch(() => ({ data: [] })),
+        subscriptionApi.getUsageStats().catch(() => ({ data: null })),
+      ]);
 
-        const subscriptionData = subRes?.data?.data || subRes?.data || null;
-        const historyArray = historyRes?.data?.data || historyRes?.data || [];
-        const usageData = usageRes?.data?.data || usageRes?.data || null;
+      const sub: SubscriptionData | null = subRes?.data || null;
+      const historyArray: PaymentHistoryItem[] =
+        (historyRes?.data?.data as PaymentHistoryItem[]) ||
+        (historyRes?.data as PaymentHistoryItem[]) ||
+        [];
 
-        console.log(
-          "📊 Parsed subscription:",
-          JSON.stringify(subscriptionData, null, 2)
-        );
-        console.log(
-          "📊 Parsed usage stats:",
-          JSON.stringify(usageData, null, 2)
-        );
-
-        setSubscription(subscriptionData);
-        setPaymentHistory(Array.isArray(historyArray) ? historyArray : []);
-        setUsageStats(usageData);
-
-        console.log("✅ Loaded subscription:", subscriptionData?.status);
-        console.log(
-          "✅ Payment history items:",
-          Array.isArray(historyArray) ? historyArray.length : 0
-        );
-      } catch (err: any) {
-        console.error("❌ Lỗi load subscription:", err);
-        Alert.alert("Lỗi", "Không thể tải thông tin gói đăng ký");
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    },
-    []
-  );
+      setSubscription(sub);
+      setPaymentHistory(Array.isArray(historyArray) ? historyArray : []);
+      setUsageStats(usageRes?.data || null);
+      setHistoryPage(1);
+    } catch (e: any) {
+      Alert.alert("Lỗi", e?.message || "Không thể tải thông tin gói đăng ký");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    fetchData(false);
+    fetchData();
   }, [fetchData]);
 
-  // ========== COMPUTED VALUES ==========
-  const computedValues = useMemo(() => {
-    if (!subscription) {
-      return {
-        isTrial: false,
-        isPremium: false,
-        isExpired: false,
-        daysRemaining: 0,
-        totalDays: 0,
-        progressPercent: 0,
-        pendingPayment: null,
-      };
-    }
+  const computed = useMemo(() => {
+    const status = subscription?.status;
+    const isTrial = status === "TRIAL";
+    const isPremium = status === "ACTIVE";
+    const isExpired = status === "EXPIRED" || !status;
 
-    const isTrial = subscription.status === "TRIAL";
-    const isPremium = subscription.status === "ACTIVE";
-    const isExpired = subscription.status === "EXPIRED";
-
-    // ✅ Safe number handling with fallback
-    const daysRemaining = Number(subscription.days_remaining) || 0;
-    const planDuration = Number(subscription.premium?.plan_duration) || 1;
-    const totalDays = isTrial ? 14 : planDuration * 30;
+    const daysRemaining = Number(subscription?.days_remaining || 0);
+    const totalDays = isTrial
+      ? 14
+      : Math.max(1, Number(subscription?.premium?.plan_duration || 1)) * 30;
     const progressPercent =
       totalDays > 0 ? Math.round((daysRemaining / totalDays) * 100) : 0;
-    const pendingPayment = subscription.pending_payment || null;
+
+    const pendingPayment = subscription?.pending_payment || null;
 
     return {
+      status,
       isTrial,
       isPremium,
       isExpired,
@@ -277,961 +264,950 @@ const SubscriptionScreen: React.FC = () => {
     };
   }, [subscription]);
 
-  const {
-    isTrial,
-    isPremium,
-    isExpired,
-    daysRemaining,
-    totalDays,
-    progressPercent,
-    pendingPayment,
-  } = computedValues;
+  const paginatedHistory = useMemo(() => {
+    const total = paymentHistory.length;
+    const start = (historyPage - 1) * HISTORY_PAGE_SIZE;
+    const end = Math.min(start + HISTORY_PAGE_SIZE, total);
+    return {
+      total,
+      start,
+      end,
+      items: paymentHistory.slice(start, end),
+      canNext: end < total,
+      canPrev: historyPage > 1,
+    };
+  }, [paymentHistory, historyPage]);
 
-  // ========== FORMAT CURRENCY (SAFE) ==========
-  const formatCurrency = useCallback(
-    (value: number | undefined | null): string => {
-      // ✅ Handle undefined/null/NaN values
-      if (value === undefined || value === null || isNaN(Number(value))) {
-        return "0";
-      }
-      try {
-        return Number(value).toLocaleString("vi-VN");
-      } catch (error) {
-        console.error("Format currency error:", error, "value:", value);
-        return String(value || 0);
-      }
-    },
-    []
-  );
-
-  // ========== GET PROGRESS COLOR (SAFE) ==========
-  const getProgressColor = useCallback(
-    (days: number | undefined | null): string => {
-      const safeDays = Number(days) || 0;
-      if (safeDays > 7) return "#52c41a";
-      if (safeDays > 3) return "#faad14";
-      return "#ef4444";
-    },
-    []
-  );
-
-  // ========== HANDLE COPY ==========
-  const handleCopy = useCallback(
-    async (value: string, label: string = "thông tin"): Promise<void> => {
-      try {
-        await Clipboard.setStringAsync(value);
-        Alert.alert("Đã sao chép", `Đã sao chép ${label}`);
-      } catch (error) {
-        console.error("Copy error:", error);
-        Alert.alert("Lỗi", "Không thể sao chép");
-      }
-    },
-    []
-  );
-
-  // ========== HANDLE OPEN LINK ==========
-  const handleOpenLink = useCallback((url: string): void => {
-    if (!url) {
-      Alert.alert("Lỗi", "Không tìm thấy link thanh toán");
-      return;
-    }
-    Linking.openURL(url).catch((err) => {
-      console.error("Link opening error:", err);
-      Alert.alert("Lỗi", "Không thể mở link");
-    });
-  }, []);
-
-  // ========== HANDLE PAYMENT DONE ==========
-  const handlePaymentDone = useCallback(async (): Promise<void> => {
-    Alert.alert("Đang kiểm tra", "Đang kiểm tra trạng thái thanh toán...");
-    await fetchData(false);
-    Alert.alert("Thành công", "Đã cập nhật trạng thái subscription");
-  }, [fetchData]);
-
-  // ========== HANDLE UPGRADE ==========
-  const handleUpgrade = useCallback((): void => {
-    try {
-      navigation.navigate("SubscriptionPricing");
-    } catch (error) {
-      console.error("Navigation error:", error);
-      Alert.alert("Lỗi", "Không thể chuyển trang. Vui lòng thử lại.");
-    }
+  const onUpgrade = useCallback(() => {
+    navigation.navigate("SubscriptionPricing");
   }, [navigation]);
 
-  // ========== RENDER STATUS TAG ==========
-  const renderStatusTag = useCallback((status: StatusType): JSX.Element => {
-    const config = STATUS_CONFIG[status];
-    return (
-      <View style={[styles.statusTag, { backgroundColor: config.bgColor }]}>
-        <Ionicons name={config.icon} size={14} color={config.color} />
-        <Text style={[styles.statusTagText, { color: config.color }]}>
-          {config.text}
-        </Text>
-      </View>
-    );
-  }, []);
-
-  // ========== RENDER STAT CARD (SAFE) ==========
-  const renderStatCard = useCallback(
-    (
-      icon: keyof typeof Ionicons.glyphMap,
-      title: string,
-      value: string | number | undefined | null,
-      bgColor: string,
-      valueColor?: string
-    ): JSX.Element => {
-      // ✅ Safe display value handling
-      let displayValue: string;
-
-      if (value === undefined || value === null) {
-        displayValue = "N/A";
-      } else if (typeof value === "number") {
-        displayValue = isNaN(value) ? "N/A" : String(value);
-      } else {
-        displayValue = String(value);
-      }
-
-      return (
-        <View style={[styles.statCard, { backgroundColor: bgColor }]}>
-          <Ionicons
-            name={icon}
-            size={24}
-            color="#1890ff"
-            style={styles.statIcon}
-          />
-          <Text style={styles.statTitle}>{title}</Text>
-          <Text style={[styles.statValue, valueColor && { color: valueColor }]}>
-            {displayValue}
-          </Text>
-        </View>
-      );
+  const copyText = useCallback(
+    async (value?: string | null, label = "thông tin") => {
+      if (!value) return;
+      await Clipboard.setStringAsync(value);
+      Alert.alert("Đã sao chép", `Đã sao chép ${label}`);
     },
     []
   );
 
-  // ========== RENDER PAYMENT ITEM ==========
-  const renderPaymentItem = useCallback(
-    (payment: PaymentHistoryItem, index: number): JSX.Element => {
-      const isLast = index === paymentHistory.length - 1;
-      const statusColor =
-        payment.status === "SUCCESS"
-          ? "#52c41a"
-          : payment.status === "PENDING"
-            ? "#faad14"
-            : "#ef4444";
-      const statusBg =
-        payment.status === "SUCCESS"
-          ? "#f6ffed"
-          : payment.status === "PENDING"
-            ? "#fff7e6"
-            : "#fff1f0";
+  // MỞ LẠI LINK THANH TOÁN TRONG APP (PaymentWebView)
+  const openPendingInApp = useCallback(() => {
+    const url = computed.pendingPayment?.checkout_url;
+    if (!url) {
+      Alert.alert("Không có link", "Không tìm thấy link thanh toán.");
+      return;
+    }
+    navigation.navigate("PaymentWebView", { checkoutUrl: url });
+  }, [navigation, computed.pendingPayment]);
 
-      return (
-        <View key={payment._id} style={styles.historyItem}>
-          <View style={styles.historyItemLeft}>
-            <View
-              style={[styles.historyDot, { backgroundColor: statusColor }]}
-            />
-            {!isLast && <View style={styles.historyLine} />}
-          </View>
+  const confirmCancelAutoRenew = useCallback(() => {
+    Alert.alert(
+      "Hủy tự động gia hạn",
+      "Bạn có chắc muốn hủy tự động gia hạn? Gói sẽ hết hạn sau khi kết thúc chu kỳ.",
+      [
+        { text: "Giữ nguyên", style: "cancel" },
+        {
+          text: "Hủy gia hạn",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await subscriptionApi.cancelAutoRenew();
+              Alert.alert("Thành công", "Đã hủy tự động gia hạn.");
+              fetchData();
+            } catch (e: any) {
+              Alert.alert("Thất bại", e?.message || "Không thể hủy gia hạn.");
+            }
+          },
+        },
+      ]
+    );
+  }, [fetchData]);
 
-          <View style={styles.historyItemRight}>
-            <Text style={styles.historyItemTitle}>
-              Gói {payment.plan_duration || 0} tháng -{" "}
-              {formatCurrency(payment.amount)}đ
-            </Text>
-            <Text style={styles.historyItemDate}>
-              {payment.paid_at
-                ? dayjs(payment.paid_at).format("DD/MM/YYYY HH:mm")
-                : "Đang xử lý"}
-            </Text>
-            <Text style={styles.historyItemCode}>
-              Mã GD: {payment.transaction_id || "N/A"}
-            </Text>
-            {payment.status && (
-              <View
-                style={[styles.historyStatus, { backgroundColor: statusBg }]}
-              >
-                <Text
-                  style={[styles.historyStatusText, { color: statusColor }]}
-                >
-                  {payment.status}
-                </Text>
-              </View>
-            )}
-          </View>
-        </View>
-      );
-    },
-    [paymentHistory.length, formatCurrency]
-  );
-
-  // ========== RENDER ==========
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#1890ff" />
-        <Text style={styles.loadingText}>Đang tải...</Text>
-      </View>
+      <SafeAreaView style={styles.safe} edges={["left", "right"]}>
+        <View style={styles.loadingBox}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.muted}>Đang tải...</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
-  // No subscription
+  // Chưa có gói
   if (!subscription || !subscription.status) {
     return (
-      <View style={styles.container}>
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.emptyContentContainer}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.emptyCard}>
-            <Ionicons name="warning" size={64} color="#faad14" />
-            <Text style={styles.emptyTitle}>Chưa có gói dịch vụ</Text>
-            <Text style={styles.emptySubtitle}>
-              Nâng cấp lên Premium để sử dụng đầy đủ tính năng
-            </Text>
-            <TouchableOpacity
-              style={styles.upgradeButton}
-              onPress={handleUpgrade}
-            >
-              <LinearGradient
-                colors={["#1890ff", "#096dd9"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.upgradeButtonGradient}
-              >
-                <Ionicons name="trophy" size={20} color="#fff" />
-                <Text style={styles.upgradeButtonText}>
-                  Xem các gói Premium
-                </Text>
-              </LinearGradient>
-            </TouchableOpacity>
+      <SafeAreaView style={styles.safe} edges={["left", "right"]}>
+        <View style={styles.hero}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.heroTitle}>Gói đăng ký</Text>
+            <Text style={styles.heroSub}>Quản lý gói và thanh toán</Text>
           </View>
+          <Pressable style={styles.iconBtn} onPress={fetchData}>
+            <Ionicons name="refresh" size={18} color="#fff" />
+          </Pressable>
+        </View>
+
+        <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 24 }}>
+          <Card style={{ alignItems: "center" }}>
+            <Ionicons
+              name="alert-circle-outline"
+              size={48}
+              color={COLORS.warn}
+            />
+            <Text style={[styles.h2, { marginTop: 10 }]}>
+              Chưa có gói dịch vụ
+            </Text>
+            <Text style={[styles.p, { textAlign: "center" }]}>
+              Nâng cấp lên Premium để sử dụng đầy đủ tính năng.
+            </Text>
+
+            <Pressable
+              style={[styles.btn, styles.btnPrimary, { marginTop: 14 }]}
+              onPress={onUpgrade}
+            >
+              <Ionicons name="sparkles-outline" size={18} color="#fff" />
+              <Text style={styles.btnPrimaryText}>Xem gói Premium</Text>
+            </Pressable>
+          </Card>
         </ScrollView>
-      </View>
+      </SafeAreaView>
     );
   }
 
+  const meta = getStatusMeta(subscription.status);
+  const tone =
+    meta.tone === "success"
+      ? "success"
+      : meta.tone === "danger"
+        ? "danger"
+        : meta.tone === "warning"
+          ? "warning"
+          : "info";
+
   return (
-    <View style={styles.container}>
-      <ScrollView
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => fetchData(true)}
-            colors={["#1890ff"]}
-            tintColor="#1890ff"
-          />
-        }
-      >
-        {/* Header */}
-        <LinearGradient
-          colors={["#1890ff", "#096dd9"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.header}
-        >
-          <Ionicons name="trophy" size={40} color="#fff" />
-          <Text style={styles.headerTitle}>Gói đăng ký của bạn</Text>
-          <Text style={styles.headerSubtitle}>Quản lý gói và thanh toán</Text>
-        </LinearGradient>
+    <SafeAreaView style={styles.safe} edges={["left", "right"]}>
+      <View style={styles.hero}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.heroTitle}>Gói đăng ký</Text>
+          <Text style={styles.heroSub}>Quản lý gói và thanh toán</Text>
+        </View>
 
-        {/* Pending Payment Alert */}
-        {pendingPayment && (
-          <View style={styles.pendingCard}>
-            <View style={styles.pendingHeader}>
-              <View style={styles.pendingBadge}>
-                <Ionicons name="time" size={14} color="#faad14" />
-                <Text style={styles.pendingBadgeText}>Đang chờ thanh toán</Text>
-              </View>
-              <Text style={styles.pendingCode}>
-                Mã: {pendingPayment.order_code}
-              </Text>
-            </View>
+        <Pressable style={styles.iconBtn} onPress={fetchData}>
+          <Ionicons name="refresh" size={18} color="#fff" />
+        </Pressable>
+      </View>
 
-            <View style={styles.pendingInfo}>
-              <Text style={styles.pendingAmount}>
-                Số tiền:{" "}
-                <Text style={styles.pendingAmountValue}>
-                  {formatCurrency(pendingPayment.amount)}đ
-                </Text>
-              </Text>
-              <Text style={styles.pendingPlan}>
-                Gói {pendingPayment.plan_duration || 0} tháng
-              </Text>
-              {pendingPayment.created_at && (
-                <Text style={styles.pendingDate}>
-                  Tạo lúc{" "}
-                  {dayjs(pendingPayment.created_at).format("DD/MM/YYYY HH:mm")}
-                </Text>
-              )}
-            </View>
+      <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 28 }}>
+        {/* Pending payment */}
+        {computed.pendingPayment ? (
+          <Card style={{ borderColor: "#fed7aa" }}>
+            <RowBetween
+              left={
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 10,
+                  }}
+                >
+                  <View
+                    style={[
+                      styles.circleIcon,
+                      { backgroundColor: "#ffedd5", borderColor: "#fdba74" },
+                    ]}
+                  >
+                    <Ionicons
+                      name="time-outline"
+                      size={18}
+                      color={COLORS.warn}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.cardTitle}>Đang chờ thanh toán</Text>
+                    <Text style={styles.subText}>
+                      Mã GD: {computed.pendingPayment.order_code}
+                    </Text>
+                  </View>
+                </View>
+              }
+              right={<Badge text="PENDING" tone="warning" />}
+            />
 
-            {pendingPayment.qr_data_url && (
-              <View style={styles.qrContainer}>
+            <Divider />
+
+            <Text style={styles.p}>
+              Số tiền:{" "}
+              <Text style={styles.pStrong}>
+                {formatCurrency(computed.pendingPayment.amount)}
+              </Text>{" "}
+              • Gói{" "}
+              <Text style={styles.pStrong}>
+                {computed.pendingPayment.plan_duration}
+              </Text>{" "}
+              tháng
+            </Text>
+
+            {computed.pendingPayment.created_at ? (
+              <Text style={styles.subText}>
+                Tạo lúc{" "}
+                {dayjs(computed.pendingPayment.created_at).format(
+                  "DD/MM/YYYY HH:mm"
+                )}
+              </Text>
+            ) : null}
+
+            {computed.pendingPayment.qr_data_url ? (
+              <View style={{ alignItems: "center", marginTop: 12 }}>
                 <Image
-                  source={{ uri: pendingPayment.qr_data_url }}
+                  source={{ uri: computed.pendingPayment.qr_data_url }}
                   style={styles.qrImage}
                   resizeMode="contain"
                 />
-              </View>
-            )}
-
-            <View style={styles.pendingActions}>
-              <TouchableOpacity
-                style={styles.pendingActionBtn}
-                onPress={() => handleOpenLink(pendingPayment.checkout_url)}
-              >
-                <Ionicons name="link" size={18} color="#1890ff" />
-                <Text style={styles.pendingActionBtnText}>Mở link PayOS</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.pendingActionBtn}
-                onPress={() =>
-                  handleCopy(pendingPayment.order_code, "mã giao dịch")
-                }
-              >
-                <Ionicons name="copy" size={18} color="#1890ff" />
-                <Text style={styles.pendingActionBtnText}>Sao chép mã</Text>
-              </TouchableOpacity>
-            </View>
-
-            <TouchableOpacity
-              style={styles.pendingDoneBtn}
-              onPress={handlePaymentDone}
-            >
-              <Ionicons name="reload" size={18} color="#fff" />
-              <Text style={styles.pendingDoneBtnText}>Tôi đã thanh toán</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Current Subscription Card */}
-        <View style={styles.subscriptionCard}>
-          <View style={styles.subscriptionHeader}>
-            <View style={styles.subscriptionHeaderLeft}>
-              <Ionicons name="rocket" size={20} color="#1890ff" />
-              <Text style={styles.subscriptionHeaderTitle}>Gói hiện tại</Text>
-            </View>
-            {renderStatusTag(subscription.status)}
-          </View>
-
-          {/* Trial Info */}
-          {isTrial && subscription.trial && (
-            <View style={styles.planContent}>
-              <Text style={styles.planTitle}>🎁 Gói dùng thử miễn phí</Text>
-              <Text style={styles.planExpiry}>
-                Hết hạn:{" "}
-                {subscription.trial.ends_at
-                  ? dayjs(subscription.trial.ends_at).format("DD/MM/YYYY")
-                  : "N/A"}
-              </Text>
-
-              <View style={styles.progressContainer}>
-                <View style={styles.progressBar}>
-                  <View
-                    style={[
-                      styles.progressFill,
-                      {
-                        width: `${progressPercent}%`,
-                        backgroundColor: getProgressColor(daysRemaining),
-                      },
-                    ]}
-                  />
-                </View>
-                <Text
-                  style={[
-                    styles.progressText,
-                    { color: getProgressColor(daysRemaining) },
-                  ]}
-                >
-                  {daysRemaining} ngày còn lại
+                <Text style={[styles.subText, { marginTop: 8 }]}>
+                  Quét QR để thanh toán
                 </Text>
               </View>
+            ) : null}
+
+            <View
+              style={{
+                flexDirection: "row",
+                gap: 10,
+                marginTop: 12,
+                flexWrap: "wrap",
+              }}
+            >
+              <Pressable
+                style={[styles.btn, styles.btnPrimary, { flexGrow: 1 }]}
+                onPress={openPendingInApp}
+              >
+                <Ionicons name="link-outline" size={18} color="#fff" />
+                <Text style={styles.btnPrimaryText}>Mở trong app</Text>
+              </Pressable>
+
+              <Pressable
+                style={[styles.btn, styles.btnOutline, { flexGrow: 1 }]}
+                onPress={() =>
+                  copyText(computed.pendingPayment?.order_code, "mã giao dịch")
+                }
+              >
+                <Ionicons name="copy-outline" size={18} color={COLORS.text} />
+                <Text style={styles.btnOutlineText}>Sao chép mã</Text>
+              </Pressable>
+
+              <Pressable
+                style={[styles.btn, styles.btnOutline, { flexGrow: 1 }]}
+                onPress={fetchData}
+              >
+                <Ionicons name="reload-outline" size={18} color={COLORS.text} />
+                <Text style={styles.btnOutlineText}>Tôi đã thanh toán</Text>
+              </Pressable>
+            </View>
+          </Card>
+        ) : null}
+
+        {/* Current subscription */}
+        <Card>
+          <View style={styles.rowBetween}>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 10,
+                flex: 1,
+              }}
+            >
+              <View
+                style={[
+                  styles.circleIcon,
+                  { backgroundColor: "#ecfdf5", borderColor: "#86efac" },
+                ]}
+              >
+                <Ionicons name={meta.icon} size={18} color={meta.color} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.cardTitle}>Gói hiện tại</Text>
+                <Text style={styles.subText}>Trạng thái gói đăng ký</Text>
+              </View>
+            </View>
+            <Badge text={meta.label} tone={tone} />
+          </View>
+
+          <Divider />
+
+          {/* Trial */}
+          {computed.isTrial && subscription.trial?.ends_at ? (
+            <View style={{ gap: 10 }}>
+              <RowBetween
+                left={<Text style={styles.pStrong}>🎁 Dùng thử miễn phí</Text>}
+                right={
+                  <Text style={styles.subText}>
+                    Hết hạn:{" "}
+                    {dayjs(subscription.trial.ends_at).format("DD/MM/YYYY")}
+                  </Text>
+                }
+              />
+              <View style={styles.progressOuter}>
+                <View
+                  style={[
+                    styles.progressInner,
+                    {
+                      width: `${Math.max(0, Math.min(100, computed.progressPercent))}%`,
+                      backgroundColor: getProgressColor(computed.daysRemaining),
+                    },
+                  ]}
+                />
+              </View>
+              <Text style={styles.subText}>
+                {computed.daysRemaining} ngày còn lại
+              </Text>
 
               <View
                 style={[
-                  styles.planAlert,
+                  styles.noticeBox,
                   {
-                    backgroundColor: daysRemaining <= 3 ? "#fff1f0" : "#e6f4ff",
+                    backgroundColor:
+                      computed.daysRemaining <= 3 ? "#fff1f0" : "#e6f7ff",
+                    borderColor:
+                      computed.daysRemaining <= 3 ? "#ffccc7" : "#91d5ff",
                   },
                 ]}
               >
-                <Text style={styles.planAlertTitle}>
-                  {daysRemaining <= 3
+                <Text style={styles.pStrong}>
+                  {computed.daysRemaining <= 3
                     ? "⚠️ Gói dùng thử sắp hết hạn!"
                     : "ℹ️ Thông tin dùng thử"}
                 </Text>
-                <Text style={styles.planAlertText}>
-                  Bạn có thể sử dụng TẤT CẢ tính năng Premium trong thời gian
-                  dùng thử.
+                <Text style={[styles.p, { marginTop: 6 }]}>
+                  Có thể sử dụng tất cả tính năng Premium trong thời gian dùng
+                  thử.
                 </Text>
-                {daysRemaining <= 3 && (
-                  <Text style={styles.planAlertWarning}>
+                {computed.daysRemaining <= 3 ? (
+                  <Text
+                    style={[
+                      styles.p,
+                      { marginTop: 6, color: COLORS.danger, fontWeight: "800" },
+                    ]}
+                  >
                     Nâng cấp ngay để không bị gián đoạn dịch vụ!
                   </Text>
-                )}
+                ) : null}
               </View>
 
-              <TouchableOpacity
-                style={styles.upgradeButtonInline}
-                onPress={handleUpgrade}
+              <Pressable
+                style={[styles.btn, styles.btnPrimary]}
+                onPress={onUpgrade}
               >
-                <Ionicons name="trophy" size={18} color="#fff" />
-                <Text style={styles.upgradeButtonInlineText}>
-                  Nâng cấp Premium
-                </Text>
-              </TouchableOpacity>
+                <Ionicons name="sparkles-outline" size={18} color="#fff" />
+                <Text style={styles.btnPrimaryText}>Nâng cấp Premium</Text>
+              </Pressable>
             </View>
-          )}
+          ) : null}
 
-          {/* Premium Info */}
-          {isPremium && subscription.premium && (
-            <View style={styles.planContent}>
-              <View style={styles.statsGrid}>
-                {renderStatCard(
-                  "trophy",
-                  "Gói Premium",
-                  `${subscription.premium.plan_duration || 0} tháng`,
-                  "#f6ffed"
-                )}
-                {renderStatCard(
-                  "calendar",
-                  "Còn lại",
-                  `${daysRemaining} ngày`,
-                  "#fff7e6",
-                  getProgressColor(daysRemaining)
-                )}
-              </View>
-
-              <View style={styles.planDetails}>
-                <View style={styles.planDetailRow}>
-                  <Text style={styles.planDetailLabel}>Bắt đầu:</Text>
-                  <Text style={styles.planDetailValue}>
-                    {subscription.premium.started_at
-                      ? dayjs(subscription.premium.started_at).format(
-                          "DD/MM/YYYY"
-                        )
-                      : "N/A"}
-                  </Text>
-                </View>
-                <View style={styles.planDetailRow}>
-                  <Text style={styles.planDetailLabel}>Hết hạn:</Text>
-                  <Text style={[styles.planDetailValue, { color: "#ef4444" }]}>
-                    {subscription.premium.expires_at
-                      ? dayjs(subscription.premium.expires_at).format(
-                          "DD/MM/YYYY"
-                        )
-                      : "N/A"}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.progressContainer}>
-                <View style={styles.progressBar}>
-                  <View
-                    style={[
-                      styles.progressFill,
-                      {
-                        width: `${progressPercent}%`,
-                        backgroundColor: getProgressColor(daysRemaining),
-                      },
-                    ]}
-                  />
-                </View>
-                <Text style={styles.progressText}>{progressPercent}%</Text>
-              </View>
-
-              {daysRemaining <= 7 && (
+          {/* Premium */}
+          {computed.isPremium && subscription.premium ? (
+            <View style={{ gap: 10 }}>
+              <View style={styles.kpiRow}>
                 <View
-                  style={[styles.planAlert, { backgroundColor: "#fff1f0" }]}
+                  style={[
+                    styles.kpiCard,
+                    { backgroundColor: "#f6ffed", borderColor: "#b7eb8f" },
+                  ]}
                 >
-                  <Text style={styles.planAlertTitle}>
-                    ⚠️ Gói Premium sắp hết hạn!
+                  <Text style={styles.kpiLabel}>Gói Premium</Text>
+                  <Text style={styles.kpiValue}>
+                    {subscription.premium.plan_duration} tháng
                   </Text>
-                  <TouchableOpacity onPress={handleUpgrade}>
-                    <Text
-                      style={[
-                        styles.planAlertText,
-                        { color: "#1890ff", fontWeight: "700" },
-                      ]}
-                    >
-                      Gia hạn ngay →
-                    </Text>
-                  </TouchableOpacity>
                 </View>
-              )}
-
-              <TouchableOpacity
-                style={styles.upgradeButtonInline}
-                onPress={handleUpgrade}
-              >
-                <Ionicons name="reload" size={18} color="#fff" />
-                <Text style={styles.upgradeButtonInlineText}>Gia hạn gói</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* Expired Info */}
-          {isExpired && (
-            <View style={styles.planContent}>
-              <View style={styles.statsGrid}>
-                {renderStatCard(
-                  "time",
-                  "Đã hết hạn",
-                  subscription.expires_at
-                    ? `${dayjs().diff(dayjs(subscription.expires_at), "day")} ngày trước`
-                    : "N/A",
-                  "#fff1f0",
-                  "#ef4444"
-                )}
-                {renderStatCard(
-                  "trophy",
-                  "Gói trước đây",
-                  subscription.premium?.plan_duration
-                    ? `${subscription.premium.plan_duration} tháng`
-                    : subscription.trial_ends_at
-                      ? "Trial"
-                      : "N/A",
-                  "#fff7e6"
-                )}
+                <View
+                  style={[
+                    styles.kpiCard,
+                    { backgroundColor: "#fff7e6", borderColor: "#ffd591" },
+                  ]}
+                >
+                  <Text style={styles.kpiLabel}>Còn lại</Text>
+                  <Text
+                    style={[
+                      styles.kpiValue,
+                      { color: getProgressColor(computed.daysRemaining) },
+                    ]}
+                  >
+                    {computed.daysRemaining} ngày
+                  </Text>
+                </View>
               </View>
 
-              <View style={styles.planDetails}>
-                {subscription.premium?.started_at && (
-                  <View style={styles.planDetailRow}>
-                    <Text style={styles.planDetailLabel}>Bắt đầu:</Text>
-                    <Text style={styles.planDetailValue}>
-                      {dayjs(subscription.premium.started_at).format(
-                        "DD/MM/YYYY"
-                      )}
+              <RowBetween
+                left={<Text style={styles.p}>Bắt đầu</Text>}
+                right={
+                  <Text style={styles.pStrong}>
+                    {dayjs(subscription.premium.started_at).format(
+                      "DD/MM/YYYY"
+                    )}
+                  </Text>
+                }
+              />
+              <RowBetween
+                left={<Text style={styles.p}>Hết hạn</Text>}
+                right={
+                  <Text style={[styles.pStrong, { color: COLORS.danger }]}>
+                    {dayjs(subscription.premium.expires_at).format(
+                      "DD/MM/YYYY"
+                    )}
+                  </Text>
+                }
+              />
+
+              <View style={styles.progressOuter}>
+                <View
+                  style={[
+                    styles.progressInner,
+                    {
+                      width: `${Math.max(0, Math.min(100, computed.progressPercent))}%`,
+                      backgroundColor: getProgressColor(computed.daysRemaining),
+                    },
+                  ]}
+                />
+              </View>
+
+              <View
+                style={{
+                  flexDirection: "row",
+                  gap: 10,
+                  flexWrap: "wrap",
+                  marginTop: 6,
+                }}
+              >
+                <Pressable
+                  style={[styles.btn, styles.btnPrimary, { flexGrow: 1 }]}
+                  onPress={onUpgrade}
+                >
+                  <Ionicons name="reload-outline" size={18} color="#fff" />
+                  <Text style={styles.btnPrimaryText}>Gia hạn gói</Text>
+                </Pressable>
+
+                <Pressable
+                  style={[styles.btn, styles.btnOutline, { flexGrow: 1 }]}
+                  onPress={confirmCancelAutoRenew}
+                >
+                  <Ionicons
+                    name="close-circle-outline"
+                    size={18}
+                    color={COLORS.text}
+                  />
+                  <Text style={styles.btnOutlineText}>Hủy tự động gia hạn</Text>
+                </Pressable>
+              </View>
+
+              {computed.daysRemaining <= 7 ? (
+                <View
+                  style={[
+                    styles.noticeBox,
+                    { backgroundColor: "#fff1f0", borderColor: "#ffccc7" },
+                  ]}
+                >
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 8,
+                    }}
+                  >
+                    <Ionicons
+                      name="warning-outline"
+                      size={18}
+                      color={COLORS.danger}
+                    />
+                    <Text style={[styles.pStrong, { color: COLORS.danger }]}>
+                      Gói Premium sắp hết hạn
                     </Text>
                   </View>
-                )}
-                <View style={styles.planDetailRow}>
-                  <Text style={styles.planDetailLabel}>Đã hết hạn:</Text>
-                  <Text style={[styles.planDetailValue, { color: "#ef4444" }]}>
-                    {subscription.expires_at
-                      ? dayjs(subscription.expires_at).format("DD/MM/YYYY")
-                      : subscription.trial_ends_at
-                        ? dayjs(subscription.trial_ends_at).format("DD/MM/YYYY")
-                        : "N/A"}
+                  <Text style={[styles.p, { marginTop: 6 }]}>
+                    Gia hạn để không bị gián đoạn dịch vụ.
                   </Text>
                 </View>
-              </View>
+              ) : null}
+            </View>
+          ) : null}
 
-              <View style={styles.progressContainer}>
-                <View style={styles.progressBar}>
-                  <View
-                    style={[
-                      styles.progressFill,
-                      { width: "0%", backgroundColor: "#ef4444" },
-                    ]}
+          {/* Expired */}
+          {computed.isExpired ? (
+            <View style={{ gap: 10 }}>
+              <View
+                style={[
+                  styles.noticeBox,
+                  { backgroundColor: "#fff1f0", borderColor: "#ffccc7" },
+                ]}
+              >
+                <View
+                  style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+                >
+                  <Ionicons
+                    name="alert-circle-outline"
+                    size={18}
+                    color={COLORS.danger}
                   />
+                  <Text style={[styles.pStrong, { color: COLORS.danger }]}>
+                    Gói đăng ký đã hết hạn
+                  </Text>
                 </View>
-                <Text style={[styles.progressText, { color: "#ef4444" }]}>
-                  0%
-                </Text>
-              </View>
-
-              <View style={[styles.planAlert, { backgroundColor: "#fff1f0" }]}>
-                <Text style={[styles.planAlertTitle, { color: "#ef4444" }]}>
-                  ⚠️ Gói đăng ký đã hết hạn
-                </Text>
-                <Text style={styles.planAlertText}>
+                <Text style={[styles.p, { marginTop: 6 }]}>
                   Gia hạn ngay để tiếp tục sử dụng đầy đủ tính năng Premium.
                 </Text>
               </View>
 
-              <TouchableOpacity
-                style={[
-                  styles.upgradeButtonInline,
-                  { backgroundColor: "#ef4444" },
-                ]}
-                onPress={handleUpgrade}
+              <Pressable
+                style={[styles.btn, styles.btnDanger]}
+                onPress={onUpgrade}
               >
-                <Ionicons name="reload" size={18} color="#fff" />
-                <Text style={styles.upgradeButtonInlineText}>Gia hạn ngay</Text>
-              </TouchableOpacity>
+                <Ionicons name="reload-outline" size={18} color="#fff" />
+                <Text style={styles.btnPrimaryText}>Gia hạn ngay</Text>
+              </Pressable>
             </View>
-          )}
-        </View>
+          ) : null}
+        </Card>
 
-        {/* Payment History */}
-        <View style={styles.historyCard}>
-          <View style={styles.historyHeader}>
-            <Ionicons name="cash" size={20} color="#1890ff" />
-            <Text style={styles.historyHeaderTitle}>Lịch sử thanh toán</Text>
+        {/* Payment history */}
+        <Card>
+          <View style={styles.rowBetween}>
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
+            >
+              <View
+                style={[
+                  styles.circleIcon,
+                  { backgroundColor: "#eef2ff", borderColor: "#c7d2fe" },
+                ]}
+              >
+                <Ionicons name="card-outline" size={18} color={COLORS.info} />
+              </View>
+              <View>
+                <Text style={styles.cardTitle}>Lịch sử thanh toán</Text>
+                <Text style={styles.subText}>
+                  {paymentHistory.length} giao dịch
+                </Text>
+              </View>
+            </View>
+
+            <Pressable
+              style={styles.smallBtn}
+              onPress={() => setHistoryPage(1)}
+            >
+              <Text style={styles.smallBtnText}>Về đầu</Text>
+            </Pressable>
           </View>
 
-          {paymentHistory.length > 0 ? (
-            <View style={styles.historyList}>
-              {paymentHistory.map(renderPaymentItem)}
+          <Divider />
+
+          {paymentHistory.length ? (
+            <View style={{ gap: 10 }}>
+              {paginatedHistory.items.map((p, idx) => {
+                const s = p.status || "—";
+                const toneStatus =
+                  s === "SUCCESS"
+                    ? "success"
+                    : s === "PENDING"
+                      ? "warning"
+                      : s === "FAILED"
+                        ? "danger"
+                        : "info";
+
+                return (
+                  <View
+                    key={`${p.transaction_id || "tx"}:${idx}`}
+                    style={styles.historyRow}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.pStrong}>
+                        Gói {p.plan_duration} tháng • {formatCurrency(p.amount)}
+                      </Text>
+                      <Text style={styles.subText}>
+                        {p.paid_at
+                          ? dayjs(p.paid_at).format("DD/MM/YYYY HH:mm")
+                          : "Đang xử lý"}
+                      </Text>
+                      <Text style={styles.subText}>
+                        Mã GD: {p.transaction_id || "—"}
+                      </Text>
+                    </View>
+                    <View style={{ alignItems: "flex-end", gap: 8 }}>
+                      <Badge text={s} tone={toneStatus as any} />
+                      {p.transaction_id ? (
+                        <Pressable
+                          onPress={() =>
+                            copyText(p.transaction_id, "mã giao dịch")
+                          }
+                          style={styles.iconSquare}
+                        >
+                          <Ionicons
+                            name="copy-outline"
+                            size={16}
+                            color={COLORS.text}
+                          />
+                        </Pressable>
+                      ) : null}
+                    </View>
+                  </View>
+                );
+              })}
+
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <Pressable
+                  style={[
+                    styles.btn,
+                    styles.btnOutline,
+                    { flex: 1, opacity: paginatedHistory.canPrev ? 1 : 0.5 },
+                  ]}
+                  disabled={!paginatedHistory.canPrev}
+                  onPress={() => setHistoryPage((p) => Math.max(1, p - 1))}
+                >
+                  <Ionicons name="chevron-back" size={18} color={COLORS.text} />
+                  <Text style={styles.btnOutlineText}>Trước</Text>
+                </Pressable>
+
+                <View style={[styles.pagePill, { flex: 1 }]}>
+                  <Text style={styles.pagePillText}>
+                    {paginatedHistory.total
+                      ? `${paginatedHistory.start + 1}-${paginatedHistory.end}/${paginatedHistory.total}`
+                      : "0"}
+                  </Text>
+                </View>
+
+                <Pressable
+                  style={[
+                    styles.btn,
+                    styles.btnOutline,
+                    { flex: 1, opacity: paginatedHistory.canNext ? 1 : 0.5 },
+                  ]}
+                  disabled={!paginatedHistory.canNext}
+                  onPress={() => setHistoryPage((p) => p + 1)}
+                >
+                  <Text style={styles.btnOutlineText}>Sau</Text>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={18}
+                    color={COLORS.text}
+                  />
+                </Pressable>
+              </View>
             </View>
           ) : (
-            <View style={styles.historyEmpty}>
-              <Ionicons name="cash" size={48} color="#d1d5db" />
-              <Text style={styles.historyEmptyText}>
-                Chưa có lịch sử thanh toán
-              </Text>
+            <View style={styles.emptyBox}>
+              <MaterialCommunityIcons
+                name="cash-remove"
+                size={22}
+                color={COLORS.sub}
+              />
+              <Text style={styles.emptyText}>Chưa có lịch sử thanh toán</Text>
             </View>
           )}
-        </View>
+        </Card>
 
-        {/* Usage Stats & Benefits */}
-        <View style={styles.bottomSection}>
-          {usageStats && (
-            <View style={styles.usageCard}>
-              <View style={styles.usageHeader}>
-                <Ionicons name="cart" size={20} color="#1890ff" />
-                <Text style={styles.usageHeaderTitle}>Thống kê sử dụng</Text>
-              </View>
-
-              <View style={styles.usageGrid}>
-                {renderStatCard(
-                  "cart",
-                  "Tổng đơn hàng",
-                  usageStats.total_orders ?? 0,
-                  "#f0f5ff"
-                )}
-                {renderStatCard(
-                  "cash",
-                  "Doanh thu",
-                  `${formatCurrency(usageStats.total_revenue)}đ`,
-                  "#fff7e6"
-                )}
-                {renderStatCard(
-                  "cube",
-                  "Sản phẩm",
-                  usageStats.total_products ?? 0,
-                  "#f6ffed"
-                )}
-              </View>
-            </View>
-          )}
-
-          <View style={styles.benefitsCard}>
-            <Text style={styles.benefitsTitle}>Quyền lợi Premium</Text>
-            <View style={styles.benefitsList}>
-              {BENEFITS.map((benefit, index) => (
-                <View key={index} style={styles.benefitItem}>
-                  <Ionicons name="checkmark-circle" size={18} color="#52c41a" />
-                  <Text style={styles.benefitText}>{benefit}</Text>
+        {/* Usage stats */}
+        {usageStats ? (
+          <Card>
+            <View style={styles.rowBetween}>
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
+              >
+                <View
+                  style={[
+                    styles.circleIcon,
+                    { backgroundColor: "#f0f5ff", borderColor: "#adc6ff" },
+                  ]}
+                >
+                  <Ionicons
+                    name="stats-chart-outline"
+                    size={18}
+                    color={COLORS.info}
+                  />
                 </View>
-              ))}
+                <View>
+                  <Text style={styles.cardTitle}>Thống kê sử dụng</Text>
+                  <Text style={styles.subText}>Dữ liệu tổng quan</Text>
+                </View>
+              </View>
             </View>
-          </View>
-        </View>
 
-        <View style={styles.bottomSpacer} />
+            <Divider />
+
+            <View style={styles.kpiRow}>
+              <View
+                style={[
+                  styles.kpiCard,
+                  { backgroundColor: "#f0f5ff", borderColor: "#adc6ff" },
+                ]}
+              >
+                <Text style={styles.kpiLabel}>Tổng đơn hàng</Text>
+                <Text style={styles.kpiValue}>{usageStats.total_orders}</Text>
+              </View>
+              <View
+                style={[
+                  styles.kpiCard,
+                  { backgroundColor: "#fff7e6", borderColor: "#ffd591" },
+                ]}
+              >
+                <Text style={styles.kpiLabel}>Doanh thu</Text>
+                <Text style={styles.kpiValue}>
+                  {Number(usageStats.total_revenue || 0).toLocaleString(
+                    "vi-VN"
+                  )}
+                  đ
+                </Text>
+              </View>
+            </View>
+            <View style={{ marginTop: 10 }}>
+              <View
+                style={[
+                  styles.kpiCard,
+                  { backgroundColor: "#f6ffed", borderColor: "#b7eb8f" },
+                ]}
+              >
+                <Text style={styles.kpiLabel}>Sản phẩm</Text>
+                <Text style={styles.kpiValue}>{usageStats.total_products}</Text>
+              </View>
+            </View>
+          </Card>
+        ) : null}
+
+        {/* Premium benefits */}
+        <Card>
+          <Text style={styles.cardTitle}>Quyền lợi Premium</Text>
+          <Text style={[styles.subText, { marginTop: 2 }]}>
+            Tóm tắt những gì bạn nhận được
+          </Text>
+
+          <Divider />
+
+          {[
+            "Không giới hạn sản phẩm",
+            "Không giới hạn đơn hàng",
+            "Báo cáo & thống kê",
+            "Quản lý kho nâng cao",
+            "Hỗ trợ 24/7",
+          ].map((t) => (
+            <View key={t} style={styles.benefitRow}>
+              <Ionicons
+                name="checkmark-circle-outline"
+                size={18}
+                color={COLORS.ok}
+              />
+              <Text style={styles.p}>{t}</Text>
+            </View>
+          ))}
+        </Card>
+
+        <View style={{ height: 6 }} />
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 };
 
 export default SubscriptionScreen;
 
-// ========== STYLES ==========
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f8fafc" },
-  scrollView: { flex: 1 },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#f8fafc",
-  },
-  loadingText: { marginTop: 12, fontSize: 14, color: "#6b7280" },
-  emptyContentContainer: { flexGrow: 1, justifyContent: "center", padding: 24 },
-  emptyCard: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 40,
-    alignItems: "center",
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-  },
-  emptyTitle: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#111827",
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontSize: 15,
-    color: "#6b7280",
-    textAlign: "center",
-    marginBottom: 24,
-  },
-  upgradeButton: {
-    borderRadius: 12,
-    overflow: "hidden",
-    elevation: 4,
-    shadowColor: "#1890ff",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-  },
-  upgradeButtonGradient: {
+  safe: { flex: 1, backgroundColor: COLORS.bg },
+
+  hero: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 14,
+    borderBottomLeftRadius: 18,
+    borderBottomRightRadius: 18,
     flexDirection: "row",
     alignItems: "center",
+    gap: 12,
+  },
+  heroTitle: { color: "#fff", fontWeight: "900", fontSize: 17 },
+  heroSub: { marginTop: 2, color: "rgba(255,255,255,0.92)", fontWeight: "800" },
+
+  iconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)",
+    backgroundColor: "rgba(255,255,255,0.16)",
+    alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 24,
+  },
+
+  loadingBox: { flex: 1, alignItems: "center", justifyContent: "center" },
+  muted: { color: COLORS.sub, fontWeight: "700", marginTop: 8 },
+
+  card: {
+    backgroundColor: COLORS.card,
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#0f172a",
+        shadowOpacity: 0.08,
+        shadowRadius: 14,
+        shadowOffset: { width: 0, height: 8 },
+      },
+      android: { elevation: 2 },
+      default: {},
+    }),
+  },
+
+  rowBetween: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
     gap: 10,
   },
-  upgradeButtonText: { fontSize: 16, fontWeight: "700", color: "#fff" },
-  header: {
-    paddingTop: Platform.OS === "ios" ? 60 : 40,
-    paddingBottom: 32,
-    paddingHorizontal: 24,
-    alignItems: "center",
-  },
-  headerTitle: {
-    fontSize: 26,
-    fontWeight: "700",
-    color: "#fff",
-    marginTop: 12,
-    marginBottom: 4,
-  },
-  headerSubtitle: { fontSize: 14, color: "#fff", opacity: 0.9 },
-  pendingCard: {
-    backgroundColor: "#fff",
-    marginHorizontal: 16,
-    marginTop: -16,
-    marginBottom: 16,
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: "#fed7aa",
-    elevation: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-  },
-  pendingHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  pendingBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "#fff7ed",
+
+  cardTitle: { color: COLORS.text, fontWeight: "900", fontSize: 15 },
+  subText: { marginTop: 3, color: COLORS.sub, fontWeight: "700", fontSize: 12 },
+
+  h2: { color: COLORS.text, fontWeight: "900", fontSize: 16 },
+  p: { color: COLORS.text, fontWeight: "700", fontSize: 12, lineHeight: 18 },
+  pStrong: { color: COLORS.text, fontWeight: "900", fontSize: 12 },
+
+  hr: { height: 1, backgroundColor: COLORS.border, marginVertical: 12 },
+
+  badge: {
     paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
   },
-  pendingBadgeText: { fontSize: 12, fontWeight: "700", color: "#faad14" },
-  pendingCode: { fontSize: 13, color: "#6b7280" },
-  pendingInfo: { marginBottom: 16 },
-  pendingAmount: { fontSize: 14, color: "#374151", marginBottom: 4 },
-  pendingAmountValue: { fontSize: 16, fontWeight: "700", color: "#111827" },
-  pendingPlan: { fontSize: 14, color: "#6b7280", marginBottom: 4 },
-  pendingDate: { fontSize: 13, color: "#9ca3af" },
-  qrContainer: { alignItems: "center", marginVertical: 16 },
+  badgeText: { fontWeight: "900", fontSize: 12 },
+
+  circleIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  btn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+  },
+  btnPrimary: { backgroundColor: COLORS.primary },
+  btnDanger: { backgroundColor: COLORS.danger },
+  btnOutline: {
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  btnPrimaryText: { color: "#fff", fontWeight: "900" },
+  btnOutlineText: { color: COLORS.text, fontWeight: "900" },
+
   qrImage: {
-    width: Math.min(220, SCREEN_WIDTH - 112),
-    height: Math.min(220, SCREEN_WIDTH - 112),
+    width: 240,
+    height: 240,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-  },
-  pendingActions: { flexDirection: "row", gap: 8, marginBottom: 12 },
-  pendingActionBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: "#e6f4ff",
-    gap: 6,
-  },
-  pendingActionBtnText: { fontSize: 13, fontWeight: "600", color: "#1890ff" },
-  pendingDoneBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    borderRadius: 10,
-    backgroundColor: "#1890ff",
-    gap: 8,
-  },
-  pendingDoneBtnText: { fontSize: 14, fontWeight: "700", color: "#fff" },
-  subscriptionCard: {
+    borderColor: COLORS.border,
     backgroundColor: "#fff",
-    marginHorizontal: 16,
-    marginBottom: 16,
-    borderRadius: 16,
-    padding: 20,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
   },
-  subscriptionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 20,
+
+  noticeBox: {
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
   },
-  subscriptionHeaderLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  subscriptionHeaderTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#111827",
-  },
-  statusTag: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  statusTagText: { fontSize: 13, fontWeight: "700" },
-  planContent: { gap: 16 },
-  planTitle: { fontSize: 18, fontWeight: "700", color: "#111827" },
-  planExpiry: { fontSize: 14, color: "#6b7280" },
-  progressContainer: { gap: 8 },
-  progressBar: {
+
+  progressOuter: {
     height: 10,
-    backgroundColor: "#f3f4f6",
-    borderRadius: 5,
+    backgroundColor: "#e2e8f0",
+    borderRadius: 999,
     overflow: "hidden",
   },
-  progressFill: { height: "100%", borderRadius: 5 },
-  progressText: { fontSize: 13, fontWeight: "700", textAlign: "right" },
-  planAlert: { padding: 16, borderRadius: 12, gap: 8 },
-  planAlertTitle: { fontSize: 14, fontWeight: "700", color: "#111827" },
-  planAlertText: { fontSize: 13, color: "#6b7280", lineHeight: 18 },
-  planAlertWarning: { fontSize: 13, fontWeight: "700", color: "#ef4444" },
-  upgradeButtonInline: {
+  progressInner: {
+    height: 10,
+    borderRadius: 999,
+  },
+
+  kpiRow: { flexDirection: "row", gap: 10 },
+  kpiCard: {
+    flex: 1,
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+  },
+  kpiLabel: { color: COLORS.sub, fontWeight: "900", fontSize: 12 },
+  kpiValue: {
+    marginTop: 6,
+    color: COLORS.text,
+    fontWeight: "900",
+    fontSize: 16,
+  },
+
+  historyRow: {
     flexDirection: "row",
+    gap: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    padding: 12,
+  },
+
+  iconSquare: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f8fafc",
+  },
+
+  smallBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: "#f8fafc",
+  },
+  smallBtnText: { fontWeight: "900", color: COLORS.text, fontSize: 12 },
+
+  pagePill: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#bbf7d0",
+    backgroundColor: "#ecfdf5",
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 12,
-    borderRadius: 10,
-    backgroundColor: "#52c41a",
-    gap: 8,
   },
-  upgradeButtonInlineText: { fontSize: 14, fontWeight: "700", color: "#fff" },
-  statsGrid: { flexDirection: "row", gap: 12 },
-  statCard: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: "center",
-    gap: 8,
-  },
-  statIcon: { marginBottom: 4 },
-  statTitle: { fontSize: 12, color: "#6b7280", textAlign: "center" },
-  statValue: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#111827",
-    textAlign: "center",
-  },
-  planDetails: { gap: 12 },
-  planDetailRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  planDetailLabel: { fontSize: 14, color: "#6b7280" },
-  planDetailValue: { fontSize: 16, fontWeight: "700", color: "#111827" },
-  historyCard: {
-    backgroundColor: "#fff",
-    marginHorizontal: 16,
-    marginBottom: 16,
-    borderRadius: 16,
-    padding: 20,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-  },
-  historyHeader: {
+  pagePillText: { color: COLORS.primaryDark, fontWeight: "900" },
+
+  emptyBox: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    marginBottom: 20,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: "#f8fafc",
   },
-  historyHeaderTitle: { fontSize: 18, fontWeight: "700", color: "#111827" },
-  historyList: { gap: 16 },
-  historyItem: { flexDirection: "row", gap: 12 },
-  historyItemLeft: { alignItems: "center", paddingTop: 4 },
-  historyDot: { width: 10, height: 10, borderRadius: 5 },
-  historyLine: { flex: 1, width: 2, backgroundColor: "#e5e7eb", marginTop: 4 },
-  historyItemRight: { flex: 1, gap: 4 },
-  historyItemTitle: { fontSize: 14, fontWeight: "700", color: "#111827" },
-  historyItemDate: { fontSize: 13, color: "#6b7280" },
-  historyItemCode: { fontSize: 12, color: "#9ca3af" },
-  historyStatus: {
-    alignSelf: "flex-start",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    marginTop: 4,
-  },
-  historyStatusText: { fontSize: 12, fontWeight: "700" },
-  historyEmpty: { alignItems: "center", paddingVertical: 40 },
-  historyEmptyText: { fontSize: 14, color: "#9ca3af", marginTop: 12 },
-  bottomSection: { gap: 16, marginHorizontal: 16 },
-  usageCard: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 20,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-  },
-  usageHeader: {
+  emptyText: { color: COLORS.sub, fontWeight: "800" },
+
+  benefitRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    marginBottom: 16,
+    marginBottom: 10,
   },
-  usageHeaderTitle: { fontSize: 18, fontWeight: "700", color: "#111827" },
-  usageGrid: { gap: 12 },
-  benefitsCard: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 20,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-  },
-  benefitsTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#111827",
-    marginBottom: 16,
-  },
-  benefitsList: { gap: 12 },
-  benefitItem: { flexDirection: "row", alignItems: "center", gap: 10 },
-  benefitText: { fontSize: 14, color: "#374151" },
-  bottomSpacer: { height: 40 },
 });

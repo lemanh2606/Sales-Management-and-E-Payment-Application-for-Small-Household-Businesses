@@ -1632,6 +1632,9 @@ export default function TaxDeclarationScreen() {
                     display={Platform.OS === "ios" ? "spinner" : "default"}
                     onChange={onChangePicker}
                     locale="vi-VN"
+                    style={{ backgroundColor: "#fff" }}
+                    textColor="#000000"
+                    themeVariant="light"
                   />
 
                   {/* iOS spinner: thêm nút đóng để người dùng cuộn chọn xong rồi bấm Xong */}
