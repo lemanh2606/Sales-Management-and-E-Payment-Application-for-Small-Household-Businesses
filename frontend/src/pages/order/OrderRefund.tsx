@@ -191,8 +191,7 @@ const OrderRefund: React.FC = () => {
 
   // Helper: Format currency
   const formatCurrency = (value: MongoDecimal | number): string => {
-    const numValue =
-      typeof value === "object" && value.$numberDecimal ? parseFloat(value.$numberDecimal) : Number(value);
+    const numValue = typeof value === "object" && value.$numberDecimal ? parseFloat(value.$numberDecimal) : Number(value);
     return numValue.toLocaleString("vi-VN") + "₫";
   };
 
@@ -439,7 +438,7 @@ const OrderRefund: React.FC = () => {
         order.customer?.phone.includes(modalSearchText)
       : true;
 
-    const matchEmployee = modalSelectedEmployee ? order.employeeId._id === modalSelectedEmployee : true;
+    const matchEmployee = modalSelectedEmployee ? order.employeeId?._id === modalSelectedEmployee : true;
 
     return matchSearch && matchEmployee;
   });
@@ -510,15 +509,15 @@ const OrderRefund: React.FC = () => {
                 style={{ width: "100%" }}
                 placeholder={["Từ ngày", "Đến ngày"]}
                 format="DD/MM/YYYY"
-                onChange={(dates) => setDateRange(dates as [Dayjs | null, Dayjs | null])}
+                onChange={(dates) => {
+                  if (!dates) {
+                    setDateRange([null, null]);
+                  } else {
+                    setDateRange(dates as [Dayjs | null, Dayjs | null]);
+                  }
+                }}
               />
-              <Select
-                placeholder="Lọc theo nhân viên"
-                style={{ width: "100%" }}
-                value={selectedEmployee}
-                onChange={setSelectedEmployee}
-                allowClear
-              >
+              <Select placeholder="Lọc theo nhân viên" style={{ width: "100%" }} value={selectedEmployee} onChange={setSelectedEmployee} allowClear>
                 {employees.map((emp) => (
                   <Option key={emp._id} value={emp._id}>
                     {emp.fullName}
@@ -574,6 +573,7 @@ const OrderRefund: React.FC = () => {
                   dataIndex: "totalAmount",
                   key: "totalAmount",
                   align: "right",
+                  width: 100,
                   render: (value) => <Text strong>{formatCurrency(value)}</Text>,
                 },
                 {
@@ -582,20 +582,16 @@ const OrderRefund: React.FC = () => {
                   key: "status",
                   align: "center",
                   render: (status) => (
-                    <Tag color={status === "refunded" ? "red" : "orange"}>
-                      {status === "refunded" ? "Hoàn Toàn Bộ" : "Hoàn 1 Phần"}
-                    </Tag>
+                    <Tag color={status === "refunded" ? "red" : "orange"}>{status === "refunded" ? "Hoàn Toàn Bộ" : "Hoàn 1 Phần"}</Tag>
                   ),
                 },
                 {
                   title: "Ngày Hoàn",
                   dataIndex: "updatedAt",
                   key: "updatedAt",
-                  render: (date) => (
-                    <Text type="secondary" style={{ fontSize: 12 }}>
-                      {formatDate(date)}
-                    </Text>
-                  ),
+                  align: "center",
+                  width: 100,
+                  render: (date) => <Text style={{ fontSize: 12, color: "#2274efff", fontWeight: "bold" }}>{formatDate(date)}</Text>,
                 },
               ]}
             />
@@ -633,7 +629,7 @@ const OrderRefund: React.FC = () => {
                     <Descriptions.Item label="Nhân Viên">
                       <Space>
                         <UserOutlined />
-                        {refundDetail.order.employeeId.fullName}
+                        {refundDetail.order.employeeId?.fullName || "Trống"}
                       </Space>
                     </Descriptions.Item>
                     <Descriptions.Item label="Khách Hàng">
@@ -720,12 +716,10 @@ const OrderRefund: React.FC = () => {
                     <Descriptions.Item label="Nhân Viên Xử Lý">
                       <Space>
                         <UserOutlined />
-                        {refundDetail?.refundDetail?.refundedBy?.fullName || "chưa render kịp"}
+                        {refundDetail?.refundDetail?.refundedBy?.fullName || "Trống"}
                       </Space>
                     </Descriptions.Item>
-                    <Descriptions.Item label="Thời Gian">
-                      {formatDate(refundDetail?.refundDetail?.refundedAt)}
-                    </Descriptions.Item>
+                    <Descriptions.Item label="Thời Gian">{formatDate(refundDetail?.refundDetail?.refundedAt)}</Descriptions.Item>
                     <Descriptions.Item label="Tổng Tiền Hoàn" span={2}>
                       <Text strong style={{ color: "#ff4d4f", fontSize: 18 }}>
                         {formatCurrency(refundDetail?.refundDetail?.refundAmount)}
@@ -863,7 +857,7 @@ const OrderRefund: React.FC = () => {
               render: (_, record) => (
                 <Space>
                   <UserOutlined />
-                  {record.employeeId.fullName}
+                  {record.employeeId?.fullName || "Trống"}
                 </Space>
               ),
             },
@@ -879,9 +873,7 @@ const OrderRefund: React.FC = () => {
               dataIndex: "paymentMethod",
               key: "paymentMethod",
               align: "right",
-              render: (method) => (
-                <Tag color={method === "cash" ? "green" : "blue"}>{method === "cash" ? "Tiền Mặt" : "QRCode"}</Tag>
-              ),
+              render: (method) => <Tag color={method === "cash" ? "green" : "blue"}>{method === "cash" ? "Tiền Mặt" : "QRCode"}</Tag>,
             },
             {
               title: "Ngày Tạo",
@@ -943,31 +935,18 @@ const OrderRefund: React.FC = () => {
             </Card>
 
             <Form form={form} layout="vertical" onFinish={handleSubmitRefund}>
-              <Form.Item
-                name="employeeId"
-                label="Nhân Viên Xử Lý"
-                rules={[{ required: true, message: "Vui lòng chọn nhân viên!" }]}
-              >
+              <Form.Item name="employeeId" label="Nhân Viên Xử Lý" rules={[{ required: true, message: "Vui lòng chọn nhân viên!" }]}>
                 <Select placeholder="Chọn nhân viên xử lý hoàn trả">
                   {employees.map((emp) => (
                     <Option key={emp._id} value={emp._id}>
-                      <UserOutlined /> {emp.fullName}
+                      <UserOutlined /> {emp?.fullName || "Trống"}
                     </Option>
                   ))}
                 </Select>
               </Form.Item>
 
-              <Form.Item
-                name="refundReason"
-                label="Lý Do Hoàn Trả"
-                rules={[{ required: true, message: "Vui lòng nhập lý do!" }]}
-              >
-                <TextArea
-                  rows={3}
-                  placeholder="Mô tả rõ lý do khách hoàn trả hàng (nếu có)..."
-                  maxLength={500}
-                  showCount
-                />
+              <Form.Item name="refundReason" label="Lý Do Hoàn Trả" rules={[{ required: true, message: "Vui lòng nhập lý do!" }]}>
+                <TextArea rows={3} placeholder="Mô tả rõ lý do khách hoàn trả hàng (nếu có)..." maxLength={500} showCount />
               </Form.Item>
               {/* Upload ảnh hoặc video     */}
               <Form.Item label="Ảnh/Video minh chứng (tùy chọn)">

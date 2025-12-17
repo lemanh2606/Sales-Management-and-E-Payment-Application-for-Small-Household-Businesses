@@ -559,6 +559,11 @@ export default function DashboardPage() {
               <img
                 src={user?.image || "https://cdn-icons-png.flaticon.com/512/9131/9131529.png"}
                 alt="avatar"
+                onError={(e) => {
+                  const target = e.currentTarget;
+                  target.onerror = null; // tránh loop
+                  target.src = "https://cdn-icons-png.flaticon.com/512/9131/9131529.png";
+                }}
                 style={{
                   width: 40,
                   height: 40,
@@ -567,6 +572,7 @@ export default function DashboardPage() {
                   border: "2px solid #9a0505ff",
                 }}
               />
+
               <span
                 style={{
                   fontWeight: 500,
@@ -574,7 +580,7 @@ export default function DashboardPage() {
                   display: window.innerWidth < 768 ? "none" : "inline",
                 }}
               >
-                {user?.fullname || "Người dùng"}
+                {user?.fullname || user?.fullName || "Người dùng"}
               </span>
               <DownOutlined style={{ fontSize: 12, color: "#8c8c8c" }} />
             </div>
@@ -586,7 +592,7 @@ export default function DashboardPage() {
       <div className="dashboard-body" style={{ padding: "16px" }}>
         <div style={{ marginBottom: 16 }}>
           <Title level={3} style={{ fontSize: "clamp(18px, 5vw, 24px)" }}>
-            Xin chào, {user?.fullname || "Manager"} 👋
+            Xin chào, {user?.fullname || user?.fullName || "Manager"} 👋
           </Title>
           <Text type="secondary" style={{ fontSize: "clamp(12px, 3vw, 14px)" }}>
             Đang xem Dashboard của cửa hàng: <b>{currentStore?.name || storeId}</b>

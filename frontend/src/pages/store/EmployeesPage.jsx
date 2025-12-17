@@ -147,7 +147,7 @@ const PERMISSION_LABELS = {
   "purchase-returns:update": "Cập nhật phiếu trả hàng",
   "purchase-returns:delete": "Xóa phiếu trả hàng",
   "inventory:stock-check:create": "Tạo phiếu kiểm kho",
-  "inventory:stock-check:view": "Xem phiếu kiểm kho",
+  "inventory:stock-check:view": "Báo cáo tồn kho",
   "inventory:stock-check:detail": "Xem chi tiết kiểm kho",
   "inventory:stock-check:update": "Cập nhật phiếu kiểm kho",
   "inventory:stock-check:delete": "Xóa phiếu kiểm kho",
