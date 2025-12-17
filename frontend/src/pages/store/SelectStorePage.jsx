@@ -588,6 +588,7 @@ export default function SelectStorePage() {
                   popupMatchSelectWidth={isMobile ? true : 500}
                 >
                   <Input
+                    placeholder="Tìm kiếm theo tên cửa hàng, số điện thoại, địa chỉ, thẻ TAG,...."
                     size="large"
                     prefix={
                       <SearchOutlined

@@ -600,6 +600,7 @@ const createEmployee = async (req, res) => {
     const newUser = new User({
       username: usernameTrim,
       password_hash,
+      fullname: fullName,
       role: "STAFF", // Role STAFF cho nhân viên bán hàng
       email: userEmail, // 👈 Tweak: Null nếu empty, conditional required cho phép STAFF
       phone: userPhone,
