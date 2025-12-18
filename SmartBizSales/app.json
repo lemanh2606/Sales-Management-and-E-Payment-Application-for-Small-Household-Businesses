@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "SmartBizSales",
-    "slug": "SmartBizSales",
+    "name": "SmallBizSales",
+    "slug": "SmallBizSales",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -15,8 +15,8 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "SmartBizSales needs microphone access to record audio for speech recognition.",
-        "NSSpeechRecognitionUsageDescription": "SmartBizSales needs speech recognition to convert your voice to text."
+        "NSMicrophoneUsageDescription": "SmallBizSales needs microphone access to record audio for speech recognition.",
+        "NSSpeechRecognitionUsageDescription": "SmallBizSales needs speech recognition to convert your voice to text."
       }
     },
     "android": {
