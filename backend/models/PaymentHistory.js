@@ -9,13 +9,14 @@ const paymentHistorySchema = new mongoose.Schema(
     plan_duration: { type: Number, required: true, enum: [1, 3, 6] },
     amount: { type: Number, required: true, min: 0 },
     payment_method: { type: String, required: true, enum: ["PAYOS", "MANUAL", "BANK_TRANSFER"], default: "MANUAL" },
-    status: { type: String, required: true, enum: ["PENDING", "SUCCESS", "FAILED", "REFUNDED"], default: "SUCCESS" },
+    status: { type: String, required: true, enum: ["PENDING", "SUCCESS", "CANCELLED", "FAILED", "REFUNDED"], default: "SUCCESS" },
     paid_at: { type: Date, default: Date.now },
     notes: { type: String, trim: true },
   },
   { timestamps: true, collection: "payment_histories" }
 );
 
+paymentHistorySchema.index({ user_id: 1, createdAt: -1 }); // ← thêm để query nhanh
 paymentHistorySchema.index({ user_id: 1, paid_at: -1 });
 paymentHistorySchema.index({ transaction_id: 1 });
 

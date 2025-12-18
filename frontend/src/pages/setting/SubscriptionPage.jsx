@@ -1,6 +1,6 @@
 // pages/SubscriptionPage.jsx
 import React, { useState, useEffect } from "react";
-import { Card, Button, Typography, Space, Spin, message, Row, Col, Statistic, Progress, Timeline, Tag, Modal, Badge, Pagination } from "antd";
+import { Card, Button, Typography, Space, Spin, message, Row, Col, Statistic, Progress, Timeline, Tag, Modal, Badge, Pagination, Select } from "antd";
 import {
   CrownOutlined,
   RocketOutlined,
@@ -35,10 +35,17 @@ const SubscriptionPage = () => {
 
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(5); // mỗi trang 5 bản ghi
+  const [statusFilter, setStatusFilter] = useState(null); // Lọc theo trạng thái
+  const [durationFilter, setDurationFilter] = useState(null); // Lọc theo gói (1, 3, 6)
 
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Reset page khi filter thay đổi
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, durationFilter]);
 
   const fetchData = async () => {
     try {
@@ -55,7 +62,7 @@ const SubscriptionPage = () => {
       console.log("Subscription data:", subRes?.data);
       console.log("Payment history raw:", historyRes);
       const historyArray = historyRes?.data?.data || historyRes?.data || [];
-      console.log("Setting paymentHistory to array:", historyArray);
+      console.log("Setting sorted paymentHistory:", historyArray);
       setSubscription(subRes?.data || null);
       setPaymentHistory(historyArray);
       setUsageStats(usageRes?.data || null);
@@ -78,10 +85,26 @@ const SubscriptionPage = () => {
     if (!value) return;
     try {
       await navigator.clipboard.writeText(value);
-      message.success(`Đã sao chép ${label}`);
+      Swal.fire({
+        icon: "success",
+        title: "Sao chép thành công",
+        text: `Đã sao chép ${label}: ${value}`,
+        showCancelButton: true,
+        confirmButtonText: "OK",
+        timer: 2000, // tự đóng sau 2 giây
+        timerProgressBar: true, // hiển thị thanh tiến trình
+        cancelButtonText: "Hủy",
+      });
     } catch (error) {
       console.error("Không thể sao chép:", error);
-      message.error("Sao chép thất bại");
+      Swal.fire({
+        icon: "error",
+        title: "Sao chép thất bại",
+        text: `Không thể sao chép ${label}. Vui lòng thử lại.`,
+        timer: 2000, // tự đóng sau 2 giây
+        timerProgressBar: true, // hiển thị thanh tiến trình
+        confirmButtonText: "OK",
+      });
     }
   };
 
@@ -194,11 +217,23 @@ const SubscriptionPage = () => {
   const progressPercent = totalDays > 0 ? Math.round((daysRemaining / totalDays) * 100) : 0;
   const pendingPayment = subscription?.pending_payment;
 
-  // Logic phân trang cho lịch sử thanh toán để đỡ dài
-  const total = paymentHistory.length;
+  // Logic filter real-time cho lịch sử thanh toán
+  const filteredHistory = paymentHistory.filter((payment) => {
+    // Lọc theo trạng thái
+    if (statusFilter && payment.status !== statusFilter) {
+      return false;
+    }
+    // Lọc theo gói (1, 3, 6 tháng)
+    if (durationFilter && payment.plan_duration !== parseInt(durationFilter)) {
+      return false;
+    }
+    return true;
+  });
+
+  const total = filteredHistory.length;
   const startIndex = (currentPage - 1) * pageSize;
   const endIndex = Math.min(startIndex + pageSize, total);
-  const paginatedHistory = paymentHistory.slice(startIndex, endIndex);
+  const paginatedHistory = filteredHistory.slice(startIndex, endIndex);
 
   return (
     <Layout>
@@ -223,28 +258,25 @@ const SubscriptionPage = () => {
                 <Tag color="orange" icon={<ClockCircleOutlined />}>
                   Đang chờ thanh toán
                 </Tag>
-                <Text>Mã giao dịch: {pendingPayment.order_code}</Text>
+                <Text>
+                  Mã giao dịch của bạn là: <Tag color="blue">{pendingPayment.order_code}</Tag>
+                </Text>
               </Space>
               <Text>
-                Số tiền: <strong>{formatCurrency(pendingPayment.amount)}đ</strong> — Gói {pendingPayment.plan_duration} tháng
+                Số tiền: <strong>{formatCurrency(pendingPayment.amount)}đ</strong> — Gói dịch vụ: {pendingPayment.plan_duration} tháng
               </Text>
               {pendingPayment.created_at && (
-                <Text type="secondary">
-                  <FieldTimeOutlined /> Tạo lúc {dayjs(pendingPayment.created_at).format("DD/MM/YYYY HH:mm")}
+                <Text>
+                  <FieldTimeOutlined /> Được tạo lúc: {dayjs(pendingPayment.created_at).format("DD/MM/YYYY HH:mm")}
                 </Text>
               )}
-              {pendingPayment.qr_data_url && (
-                <div style={{ textAlign: "center", marginTop: 12 }}>
-                  <img
-                    src={pendingPayment.qr_data_url}
-                    alt="QR PayOS"
-                    style={{ maxWidth: "100%", width: 260, borderRadius: 12, border: "1px solid #f0f0f0" }}
-                  />
-                </div>
-              )}
+              {/* Không hiện mã QR tĩnh ở đây, như thế webhook sẽ lỗi và không CALL được */}
+              {/* Không hiện mã QR tĩnh ở đây, như thế webhook sẽ lỗi và không CALL được */}
+              {/* Không hiện mã QR tĩnh ở đây, như thế webhook sẽ lỗi và không CALL được */}
+              {/* Không hiện mã QR tĩnh ở đây, như thế webhook sẽ lỗi và không CALL được */}
               <Space wrap style={{ marginTop: 12 }}>
                 <Button type="primary" icon={<LinkOutlined />} onClick={() => handleOpenPendingLink(pendingPayment.checkout_url)}>
-                  Mở link PayOS
+                  Tiếp tục thanh toán
                 </Button>
                 <Button icon={<CopyOutlined />} onClick={() => handleCopyValue(pendingPayment.order_code, "mã giao dịch")}>
                   Sao chép mã giao dịch
@@ -268,6 +300,7 @@ const SubscriptionPage = () => {
                   {subscription?.status && getStatusTag(subscription.status)}
                 </Space>
               }
+              style={{ border: "1px solid #8c8c8c" }}
               extra={
                 <Space>
                   {isTrial && (
@@ -361,11 +394,11 @@ const SubscriptionPage = () => {
 
                   <Space direction="vertical" size={12} style={{ width: "100%" }}>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
-                      <Text>Bắt đầu:</Text>
+                      <Text>Bắt đầu lúc:</Text>
                       <Text strong>{dayjs(subscription.premium.started_at).format("DD/MM/YYYY")}</Text>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
-                      <Text>Hết hạn:</Text>
+                      <Text>Hết hạn lúc:</Text>
                       <Text strong style={{ color: "#ff4d4f" }}>
                         {dayjs(subscription.premium.expires_at).format("DD/MM/YYYY")}
                       </Text>
@@ -476,7 +509,37 @@ const SubscriptionPage = () => {
                   <span>Lịch sử thanh toán</span>
                 </Space>
               }
-              style={{ marginTop: 24 }}
+              extra={
+                <Space size="small">
+                  <Select
+                    placeholder="Lọc trạng thái"
+                    style={{ width: 170 }}
+                    value={statusFilter}
+                    onChange={setStatusFilter}
+                    allowClear
+                    options={[
+                      { label: "Thành công", value: "SUCCESS" },
+                      { label: "Đang chờ", value: "PENDING" },
+                      { label: "Đã hủy", value: "CANCELLED" },
+                      { label: "Thất bại", value: "FAILED" },
+                      { label: "Hoàn tiền", value: "REFUNDED" },
+                    ]}
+                  />
+                  <Select
+                    placeholder="Lọc theo gói"
+                    style={{ width: 150 }}
+                    value={durationFilter}
+                    onChange={setDurationFilter}
+                    allowClear
+                    options={[
+                      { label: "1 tháng", value: "1" },
+                      { label: "3 tháng", value: "3" },
+                      { label: "6 tháng", value: "6" },
+                    ]}
+                  />
+                </Space>
+              }
+              style={{ marginTop: 24, border: "1px solid #8c8c8c", padding: "10px 0px" }}
             >
               {paymentHistory.length > 0 ? (
                 <>
@@ -486,20 +549,48 @@ const SubscriptionPage = () => {
                       <Timeline.Item key={index} color="gray" dot={<CheckCircleOutlined />}>
                         <Space direction="vertical" size={4}>
                           <Text strong>
-                            Gói {payment.plan_duration} tháng - {formatCurrency(payment.amount)}đ
+                            Gói {payment.plan_duration} tháng - giá trị: {formatCurrency(payment.amount)}đ
                           </Text>
                           <Text type="secondary" style={{ fontSize: 13 }}>
-                            {payment.paid_at ? dayjs(payment.paid_at).format("DD/MM/YYYY HH:mm") : "Đang xử lý"}
+                            <FieldTimeOutlined />{" "}
+                            {payment.status === "SUCCESS"
+                              ? "Thanh toán lúc"
+                              : payment.status === "CANCELLED"
+                              ? "Hủy lúc"
+                              : payment.status === "FAILED"
+                              ? "Thất bại:"
+                              : "Cập nhật lúc"}{" "}
+                            {dayjs(payment.eventTime).format("DD/MM/YYYY HH:mm")}
                           </Text>
                           <Text type="secondary" style={{ fontSize: 12 }}>
-                            Mã GD: {payment.transaction_id}
+                            Mã giao dịch: <span style={{ color: "rgba(2, 90, 255, 1)" }}>{payment.transaction_id}</span>
                           </Text>
                           {payment.status && (
                             <Tag
-                              color={payment.status === "SUCCESS" ? "green" : payment.status === "PENDING" ? "orange" : "red"}
-                              style={{ width: "fit-content" }}
+                              color={
+                                payment.status === "SUCCESS"
+                                  ? "green"
+                                  : payment.status === "PENDING"
+                                  ? "orange"
+                                  : payment.status === "CANCELLED"
+                                  ? "volcano" // màu xám-đỏ đẹp cho hủy
+                                  : payment.status === "REFUNDED"
+                                  ? "purple"
+                                  : "red"
+                              }
+                              style={{ width: "fit-content", fontWeight: 500 }}
                             >
-                              {payment.status}
+                              {payment.status === "SUCCESS"
+                                ? "Thành công"
+                                : payment.status === "PENDING"
+                                ? "Đang chờ thanh toán"
+                                : payment.status === "CANCELLED"
+                                ? "Đã hủy"
+                                : payment.status === "FAILED"
+                                ? "Thất bại"
+                                : payment.status === "REFUNDED"
+                                ? "Đã hoàn tiền"
+                                : payment.status}
                             </Tag>
                           )}
                         </Space>
@@ -549,6 +640,7 @@ const SubscriptionPage = () => {
                     <span>Thống kê sử dụng</span>
                   </Space>
                 }
+                style={{ border: "1px solid #8c8c8c" }}
               >
                 <Space direction="vertical" size={16} style={{ width: "100%" }}>
                   <Card style={{ background: "#f0f5ff" }}>
@@ -565,7 +657,7 @@ const SubscriptionPage = () => {
             )}
 
             {/* Benefits */}
-            <Card title="Quyền lợi Premium" style={{ marginTop: 24 }}>
+            <Card title="Quyền lợi Premium" style={{ marginTop: 24, border: "1px solid #8c8c8c" }}>
               <Space direction="vertical" size={12}>
                 <Space>
                   <CheckCircleOutlined style={{ color: "#52c41a" }} />
