@@ -618,7 +618,7 @@ const OrderRefund: React.FC = () => {
             ) : (
               <div>
                 {/* Thông tin đơn hàng gốc */}
-                <Card type="inner" title={<Text strong>Thông Tin Đơn Hàng Gốc</Text>} style={{ marginBottom: 16 }}>
+                <Card type="inner" title={<Text strong>Thông Tin Đơn Hàng</Text>} style={{ marginBottom: 16 }}>
                   <Descriptions column={2} size="small">
                     <Descriptions.Item label="Mã Đơn">
                       <Text code copyable>
@@ -659,7 +659,7 @@ const OrderRefund: React.FC = () => {
                 </Card>
 
                 {/* Sản phẩm trong đơn gốc */}
-                <Card type="inner" title={<Text strong>Sản Phẩm Trong Đơn Gốc</Text>} style={{ marginBottom: 16 }}>
+                <Card type="inner" title={<Text strong>Sản Phẩm Trong Đơn Hàng Gốc</Text>} style={{ marginBottom: 16 }}>
                   <Table
                     dataSource={refundDetail.orderItems}
                     rowKey="_id"
@@ -726,7 +726,7 @@ const OrderRefund: React.FC = () => {
                       </Text>
                     </Descriptions.Item>
                     <Descriptions.Item label="Lý Do" span={2}>
-                      <Text type="secondary">{refundDetail?.refundDetail?.refundReason}</Text>
+                      <Text>{refundDetail?.refundDetail?.refundReason}</Text>
                     </Descriptions.Item>
                   </Descriptions>
 

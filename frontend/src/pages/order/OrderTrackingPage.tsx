@@ -421,9 +421,10 @@ const OrderTrackingPage: React.FC = () => {
                   type="inner"
                   title={
                     <Space>
-                      <Text strong>Thông Tin Đơn Hàng</Text>
-                      {getStatusConfig(orderDetail.order.status).icon}
-                      <Tag color={getStatusConfig(orderDetail.order.status).color}>{getStatusConfig(orderDetail.order.status).text}</Tag>
+                      <Text strong>Thông Tin Đơn Hàng:</Text>
+                      <Tag color={getStatusConfig(orderDetail.order.status).color}>
+                        {getStatusConfig(orderDetail.order.status).text} {getStatusConfig(orderDetail.order.status).icon}
+                      </Tag>
                     </Space>
                   }
                   style={{ marginBottom: 16 }}
@@ -438,7 +439,7 @@ const OrderTrackingPage: React.FC = () => {
                     <Descriptions.Item label="Nhân Viên">
                       <Space>
                         <UserOutlined />
-                        {orderDetail.order.employeeId?.fullName || "Chủ cửa hàng"}
+                        {orderDetail.order.employeeId?.fullName ? orderDetail.order.employeeId.fullName : <Tag color="gold">Chủ cửa hàng</Tag>}
                       </Space>
                     </Descriptions.Item>
                     <Descriptions.Item label="Khách Hàng">

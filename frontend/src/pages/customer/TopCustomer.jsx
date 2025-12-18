@@ -270,6 +270,23 @@ const TopCustomer = () => {
     }
   };
 
+  const getPeriodTypeLabel = () => {
+    switch (periodType) {
+      case "day":
+        return "Ngày:";
+      case "month":
+        return "Tháng:";
+      case "quarter":
+        return "Quý:";
+      case "year":
+        return "Năm:";
+      case "custom":
+        return "Tùy chỉnh:";
+      default:
+        return "";
+    }
+  };
+
   const columns = [
     {
       title: "STT",
@@ -590,7 +607,7 @@ const TopCustomer = () => {
               {/* Search */}
               <Col xs={24} sm={18}>
                 <Search
-                  placeholder="Tìm tên hoặc số điện thoại..."
+                  placeholder="Tìm kiếm theo tên Khách Hàng hoặc số điện thoại, ......"
                   allowClear
                   size="large"
                   onSearch={setSearchText}
@@ -625,9 +642,9 @@ const TopCustomer = () => {
             title={
               <Space>
                 <DollarOutlined style={{ color: "#d4380d" }} />
-                  <Text strong>
-                    Top {filtered.length} khách hàng thân thiết - <Tag color="blue">{getPeriodDisplayText()}</Tag>
-                  </Text>
+                <Text strong>
+                  Top {filtered.length} khách hàng thân thiết - {getPeriodTypeLabel()} <Tag color="blue">{getPeriodDisplayText()}</Tag>
+                </Text>
               </Space>
             }
           >
@@ -665,7 +682,7 @@ const TopCustomer = () => {
                           Không có dữ liệu khách hàng trong kỳ: <strong>{getPeriodDisplayText()}</strong>
                         </>
                       ) : (
-                        "Chưa có dữ liệu. Hãy chọn kỳ thống kê và nhấn 'Xem kết quả' để tải!"
+                        "Chưa có dữ liệu. Hãy chọn kỳ thống kê để xem kết quả!"
                       )}
                     </div>
                   ),

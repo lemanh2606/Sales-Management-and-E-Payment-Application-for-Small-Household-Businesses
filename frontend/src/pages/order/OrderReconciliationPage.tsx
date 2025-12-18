@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import dayjs, { Dayjs } from "dayjs";
+import type { ColumnsType } from "antd/es/table";
 import {
   Alert,
   Button,
@@ -256,12 +257,7 @@ const OrderReconciliationPage: React.FC = () => {
     return orders.filter((order) => {
       const matchesPayment = paymentFilter === "all" ? true : order.paymentMethod === paymentFilter;
 
-      const matchesPrint =
-        printFilter === "all"
-          ? true
-          : printFilter === "printed"
-          ? (order.printCount ?? 0) > 0
-          : (order.printCount ?? 0) === 0;
+      const matchesPrint = printFilter === "all" ? true : printFilter === "printed" ? (order.printCount ?? 0) > 0 : (order.printCount ?? 0) === 0;
 
       let matchesDate = true;
       if (dateRange[0] && dateRange[1]) {
@@ -322,8 +318,7 @@ const OrderReconciliationPage: React.FC = () => {
     accept: ".pdf",
     fileList,
     beforeUpload: (file) => {
-      const isPdf =
-        file.type === "application/pdf" || (file.name && file.name.toLowerCase().endsWith(".pdf"));
+      const isPdf = file.type === "application/pdf" || (file.name && file.name.toLowerCase().endsWith(".pdf"));
       if (!isPdf) {
         message.error("Chỉ chấp nhận file PDF");
         return Upload.LIST_IGNORE;
@@ -363,14 +358,16 @@ const OrderReconciliationPage: React.FC = () => {
     }
   };
 
-  const columns = [
+  const columns: ColumnsType<PaidOrder> = [
     {
       title: "Mã hóa đơn",
       dataIndex: "_id",
       key: "code",
       render: (value: string, record: PaidOrder) => (
         <Tooltip title={value}>
-          <Text code copyable={{ text: record._id }}>{value.slice(-8)}</Text>
+          <Text code copyable={{ text: record._id }}>
+            {value.slice(-8)}
+          </Text>
         </Tooltip>
       ),
     },
@@ -390,12 +387,14 @@ const OrderReconciliationPage: React.FC = () => {
       title: "Nhân viên",
       dataIndex: ["employeeId", "fullName"],
       key: "employee",
-      render: (value: string) => value || "—",
+      render: (value: string | null | undefined) => value ?? <Tag color="gold">Chủ bán hàng</Tag>,
     },
+
     {
       title: "Tổng tiền",
       dataIndex: "totalAmount",
       key: "total",
+      align: "right",
       render: (val: DecimalValue) => (
         <Text strong style={{ color: "#1677ff" }}>
           {formatCurrency(val)}
@@ -405,29 +404,29 @@ const OrderReconciliationPage: React.FC = () => {
     {
       title: "Thanh toán",
       dataIndex: "paymentMethod",
+      align: "center",
       key: "method",
       render: (method: PaidOrder["paymentMethod"]) => (
-        <Tag color={method === "cash" ? "green" : "blue"}>
-          {method === "cash" ? "Tiền mặt" : "QR Code"}
-        </Tag>
+        <Tag color={method === "cash" ? "green" : "blue"}>{method === "cash" ? "Tiền mặt" : "QR Code"}</Tag>
       ),
     },
     {
       title: "Số lần in",
       dataIndex: "printCount",
+      align: "center",
       key: "printCount",
-      render: (count?: number) => (
-        <Tag color={count && count > 0 ? "blue" : "default"}>{count ?? 0} lần</Tag>
-      ),
+      render: (count?: number) => <Tag color={count && count > 0 ? "blue" : "default"}>{count ?? 0} lần</Tag>,
     },
     {
       title: "Cập nhật",
       dataIndex: "updatedAt",
+      align: "center",
       key: "updatedAt",
       render: (value: string) => dayjs(value).format("DD/MM/YYYY HH:mm"),
     },
     {
       title: "Hành động",
+      align: "center",
       key: "actions",
       render: (_: unknown, record: PaidOrder) => (
         <Space>
@@ -453,13 +452,7 @@ const OrderReconciliationPage: React.FC = () => {
         <Button icon={<ReloadOutlined />} onClick={() => setValidationResult(null)}>
           Reset
         </Button>
-        <Button
-          type="primary"
-          icon={<FileSearchOutlined />}
-          loading={validating}
-          onClick={handleValidate}
-          disabled={fileList.length === 0}
-        >
+        <Button type="primary" icon={<FileSearchOutlined />} loading={validating} onClick={handleValidate} disabled={fileList.length === 0}>
           Đối soát ngay
         </Button>
       </div>
@@ -474,9 +467,7 @@ const OrderReconciliationPage: React.FC = () => {
             <Title level={3} style={{ marginBottom: 4 }}>
               Đối soát hóa đơn & đơn đặt hàng
             </Title>
-            <Text type="secondary">
-              Soát lại toàn bộ hóa đơn đã thanh toán (kể cả đã in) và đối chiếu file PDF tải lên.
-            </Text>
+            <Text type="secondary">Soát lại toàn bộ hóa đơn đã thanh toán (kể cả đã in) và đối chiếu file PDF tải lên.</Text>
           </div>
           <Button icon={<ReloadOutlined />} onClick={loadOrders} disabled={loading}>
             Làm mới
@@ -488,7 +479,7 @@ const OrderReconciliationPage: React.FC = () => {
           extra={<Tag color="gold">Bao gồm cả hóa đơn đã in – dùng phân trang để xem toàn bộ</Tag>}
           bodyStyle={{ paddingTop: 0 }}
         >
-          <Space direction="horizontal" style={{ width: "100%", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
+          <Space direction="horizontal" style={{ width: "100%", marginBottom: 16, flexWrap: "wrap", gap: 12, marginTop: 20 }}>
             <Input
               placeholder="Tìm mã đơn, tên khách, SĐT..."
               prefix={<SearchOutlined />}
@@ -504,11 +495,7 @@ const OrderReconciliationPage: React.FC = () => {
               format="DD/MM/YYYY"
               placeholder={["Từ ngày", "Đến ngày"]}
               value={dateRange[0] || dateRange[1] ? (dateRange as [Dayjs | null, Dayjs | null]) : undefined}
-              onChange={(dates) =>
-                setDateRange(
-                  dates ? (dates as [Dayjs | null, Dayjs | null]) : [null, null]
-                )
-              }
+              onChange={(dates) => setDateRange(dates ? (dates as [Dayjs | null, Dayjs | null]) : [null, null])}
               allowClear
             />
             <Select
@@ -541,66 +528,50 @@ const OrderReconciliationPage: React.FC = () => {
           ) : filteredOrders.length === 0 ? (
             <Empty description="Không còn hóa đơn cần đối soát" style={{ padding: "40px 0" }} />
           ) : (
-              <Table
-                rowKey="_id"
-                columns={columns}
-                dataSource={filteredOrders}
-                pagination={{
-                  current: safeCurrentPage,
-                  pageSize: tablePagination.pageSize,
-                  showSizeChanger: true,
-                  pageSizeOptions: [10, 20, 50, 100],
-                  total: totalFiltered,
-                  showTotal: (total: number, range: [number, number]) => (
-                    <div>
-                      Đang xem{" "}
-                      <span style={{ color: "#1890ff", fontWeight: 600 }}>
-                        {range[0]} – {range[1]}
-                      </span>{" "}
-                      trên tổng số{" "}
-                      <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> đơn hàng
-                    </div>
-                  ),
-                }}
-                scroll={{ x: true }}
-                onChange={(pagination) => handleTableChange(pagination as TablePaginationConfig)}
-              />
+            <Table
+              rowKey="_id"
+              columns={columns}
+              dataSource={filteredOrders}
+              pagination={{
+                current: safeCurrentPage,
+                pageSize: tablePagination.pageSize,
+                showSizeChanger: true,
+                pageSizeOptions: [10, 20, 50, 100],
+                total: totalFiltered,
+                showTotal: (total: number, range: [number, number]) => (
+                  <div>
+                    Đang xem{" "}
+                    <span style={{ color: "#1890ff", fontWeight: 600 }}>
+                      {range[0]} – {range[1]}
+                    </span>{" "}
+                    trên tổng số <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> đơn hàng
+                  </div>
+                ),
+              }}
+              scroll={{ x: true }}
+              onChange={(pagination) => handleTableChange(pagination as TablePaginationConfig)}
+            />
           )}
         </Card>
       </div>
 
-      <Modal
-        title="Đối soát hóa đơn PDF"
-        open={modalOpen}
-        onCancel={() => setModalOpen(false)}
-        footer={modalFooter}
-        width={720}
-        destroyOnClose
-      >
+      <Modal title="Đối soát hóa đơn PDF" open={modalOpen} onCancel={() => setModalOpen(false)} footer={modalFooter} width={720} destroyOnClose>
         {selectedOrder && (
           <Space direction="vertical" style={{ width: "100%" }} size="large">
             <Descriptions column={2} size="small" bordered>
               <Descriptions.Item label="Mã hóa đơn" span={2}>
                 <Text code>{selectedOrder._id}</Text>
               </Descriptions.Item>
-              <Descriptions.Item label="Khách hàng">
-                {selectedOrder.customer?.name || "Khách vãng lai"}
-              </Descriptions.Item>
-              <Descriptions.Item label="SĐT">
-                {selectedOrder.customer?.phone || "—"}
-              </Descriptions.Item>
+              <Descriptions.Item label="Khách hàng">{selectedOrder.customer?.name || "Khách vãng lai"}</Descriptions.Item>
+              <Descriptions.Item label="SĐT">{selectedOrder.customer?.phone || "—"}</Descriptions.Item>
               <Descriptions.Item label="Tổng tiền" span={2}>
                 {formatCurrency(selectedOrder.totalAmount)}
               </Descriptions.Item>
-              <Descriptions.Item label="Thanh toán">
-                {selectedOrder.paymentMethod === "cash" ? "Tiền mặt" : "QR Code"}
-              </Descriptions.Item>
-              <Descriptions.Item label="Cập nhật lần cuối">
-                {dayjs(selectedOrder.updatedAt).format("DD/MM/YYYY HH:mm")}
-              </Descriptions.Item>
+              <Descriptions.Item label="Thanh toán">{selectedOrder.paymentMethod === "cash" ? "Tiền mặt" : "QR Code"}</Descriptions.Item>
+              <Descriptions.Item label="Cập nhật lần cuối">{dayjs(selectedOrder.updatedAt).format("DD/MM/YYYY HH:mm")}</Descriptions.Item>
             </Descriptions>
 
-            <Card type="inner" title="Tải file PDF"> 
+            <Card type="inner" title="Tải file PDF">
               <Dragger {...uploadProps} style={{ padding: 16 }}>
                 <p className="ant-upload-drag-icon">
                   <UploadOutlined />

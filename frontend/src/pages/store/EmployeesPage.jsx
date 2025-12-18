@@ -19,8 +19,9 @@ import {
   Divider,
   Empty,
   Skeleton,
+  Tooltip,
 } from "antd";
-import { FileExcelOutlined } from "@ant-design/icons";
+import { FileExcelOutlined, CalendarOutlined } from "@ant-design/icons";
 import Swal from "sweetalert2";
 import axios from "axios";
 import dayjs from "dayjs";
@@ -203,13 +204,7 @@ const normalizePermissions = (list = []) =>
 // Permissions hidden from the staff permission assignment UI.
 // - Some are manager-only because the backend enforces `isManager` regardless of `user.menu`.
 // - Some are intentionally not assignable to staff (e.g. subscription management).
-const STAFF_PERMISSION_UI_HIDDEN_PREFIXES = [
-  "store:employee:",
-  "subscription:",
-  "tax:",
-  "purchase-orders:",
-  "purchase-returns:",
-];
+const STAFF_PERMISSION_UI_HIDDEN_PREFIXES = ["store:employee:", "subscription:", "tax:", "purchase-orders:", "purchase-returns:"];
 const STAFF_PERMISSION_UI_HIDDEN_EXACT = new Set([
   "store:create",
   "store:update",
@@ -231,8 +226,7 @@ const STAFF_PERMISSION_UI_HIDDEN_EXACT = new Set([
 ]);
 
 const isHiddenFromStaffPermissionUI = (permission = "") =>
-  STAFF_PERMISSION_UI_HIDDEN_EXACT.has(permission) ||
-  STAFF_PERMISSION_UI_HIDDEN_PREFIXES.some((prefix) => permission.startsWith(prefix));
+  STAFF_PERMISSION_UI_HIDDEN_EXACT.has(permission) || STAFF_PERMISSION_UI_HIDDEN_PREFIXES.some((prefix) => permission.startsWith(prefix));
 
 const filterStaffAssignablePermissions = (list = []) =>
   (Array.isArray(list) ? list : []).filter((permission) => !isHiddenFromStaffPermissionUI(permission));
@@ -331,9 +325,7 @@ export default function EmployeesPage() {
     try {
       const res = await getPermissionCatalog();
       const permissions = filterStaffAssignablePermissions(normalizePermissions(res.permissions || []));
-      const staffDefault = filterStaffAssignablePermissions(
-        normalizePermissions(res.staffDefault?.length ? res.staffDefault : permissions)
-      );
+      const staffDefault = filterStaffAssignablePermissions(normalizePermissions(res.staffDefault?.length ? res.staffDefault : permissions));
       setPermissionOptions(permissions);
       setDefaultStaffPermissions(staffDefault);
       return { permissions, staffDefault };
@@ -649,13 +641,13 @@ export default function EmployeesPage() {
 
   const getColumns = (isDeleted = false) => [
     {
-      title: "Tên",
+      title: "Tên nhân viên",
       dataIndex: "fullName",
       key: "fullName",
-      width: 230,
+      width: 200,
     },
-    { title: "Username", key: "username", width: 210, render: (_, record) => record.user_id?.username || "—" },
-    { title: "Email", key: "email", width: 250, render: (_, record) => record.user_id?.email || "—" },
+    { title: "Username", key: "username", width: 175, render: (_, record) => record.user_id?.username || "—" },
+    { title: "Email", key: "email", width: 210, render: (_, record) => record.user_id?.email || "—" },
     {
       title: "Số điện thoại",
       key: "phone",
@@ -687,7 +679,7 @@ export default function EmployeesPage() {
         );
       },
     },
-    { title: "Ca làm việc", dataIndex: "shift", key: "shift" },
+    { title: "Ca làm", dataIndex: "shift", key: "shift", width: 90, align: "center" },
     {
       title: "Lương",
       key: "salary",
@@ -695,16 +687,35 @@ export default function EmployeesPage() {
       sorter: (a, b) => (a.salary ?? 0) - (b.salary ?? 0),
     },
     {
-      title: "Hoa hồng (%)",
+      title: "Hoa hồng",
       key: "commission_rate",
-      render: (_, record) => Number(record.commission_rate ?? 0),
+      width: 70,
+      render: (_, record) => `${Number(record.commission_rate ?? 0)} %`,
       sorter: (a, b) => (a.commission_rate ?? 0) - (b.commission_rate ?? 0),
     },
     {
-      title: "Hành động",
+      title: "Ngày tuyển dụng",
+      dataIndex: "hired_date",
+      key: "hired_date",
+      align: "center",
+      width: 145,
+      render: (date) => (
+        <Space>
+          <CalendarOutlined style={{ color: "#722ed1" }} />
+          <Tooltip title={dayjs(date).format("DD/MM/YYYY HH:mm")}>
+            <Typography.Text>{dayjs(date).format("DD/MM/YYYY")}</Typography.Text>
+          </Tooltip>
+        </Space>
+      ),
+    },
+    {
+      title: "Thao tác",
       key: "action",
+      align: "center",
+      fixed: "right",
+      width: 90,
       render: (_, record) => (
-        <div className="flex space-x-2">
+        <div className="flex justify-center gap-2">
           <Button
             type="default"
             size="small"
@@ -739,7 +750,7 @@ export default function EmployeesPage() {
               </Button>
             </Popconfirm>
           ) : (
-            <Popconfirm title="Xóa mềm nhân viên này?" onConfirm={() => handleSoftDelete(record._id)} okText="Có" cancelText="Không">
+            <Popconfirm title="Xóa nhân viên này?" onConfirm={() => handleSoftDelete(record._id)} okText="Có" cancelText="Không">
               <Button
                 type="default"
                 size="small"
