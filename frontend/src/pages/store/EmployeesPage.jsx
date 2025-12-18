@@ -67,6 +67,7 @@ const PERMISSION_GROUP_ORDER = [
   "supplier",
   "tax",
   "reports",
+  "employees",
   "users",
   "settings",
   "notifications",
@@ -87,6 +88,7 @@ const PERMISSION_CATEGORY_LABELS = {
   inventory: "Kiểm kho & xử lý tồn",
   supplier: "Nhà cung cấp",
   tax: "Khai báo thuế",
+  employees: "Nhân sự",
   users: "Người dùng & quyền",
   settings: "Thiết lập",
   notifications: "Thông báo",
@@ -147,7 +149,7 @@ const PERMISSION_LABELS = {
   "purchase-returns:update": "Cập nhật phiếu trả hàng",
   "purchase-returns:delete": "Xóa phiếu trả hàng",
   "inventory:stock-check:create": "Tạo phiếu kiểm kho",
-  "inventory:stock-check:view": "Xem phiếu kiểm kho",
+  "inventory:stock-check:view": "Báo cáo tồn kho",
   "inventory:stock-check:detail": "Xem chi tiết kiểm kho",
   "inventory:stock-check:update": "Cập nhật phiếu kiểm kho",
   "inventory:stock-check:delete": "Xóa phiếu kiểm kho",
@@ -159,6 +161,7 @@ const PERMISSION_LABELS = {
   "supplier:view": "Xem nhà cung cấp",
   "supplier:update": "Cập nhật nhà cung cấp",
   "supplier:delete": "Xóa nhà cung cấp",
+  "supplier:restore": "Khôi phục nhà cung cấp",
   "tax:preview": "Xem trước tờ khai thuế",
   "tax:create": "Tạo tờ khai thuế",
   "tax:update": "Cập nhật tờ khai thuế",
@@ -166,6 +169,8 @@ const PERMISSION_LABELS = {
   "tax:delete": "Xóa tờ khai thuế",
   "tax:list": "Danh sách tờ khai thuế",
   "tax:export": "Xuất tờ khai thuế",
+  "employees:view": "Xem danh sách nhân sự",
+  "employees:assign": "Gán nhân sự vào cửa hàng",
   "users:view": "Xem hồ sơ cá nhân",
   "users:manage": "Quản trị người dùng",
   "users:role:update": "Đổi vai trò người dùng",
@@ -194,6 +199,43 @@ const normalizePermissions = (list = []) =>
         .filter(Boolean)
     )
   );
+
+// Permissions hidden from the staff permission assignment UI.
+// - Some are manager-only because the backend enforces `isManager` regardless of `user.menu`.
+// - Some are intentionally not assignable to staff (e.g. subscription management).
+const STAFF_PERMISSION_UI_HIDDEN_PREFIXES = [
+  "store:employee:",
+  "subscription:",
+  "tax:",
+  "purchase-orders:",
+  "purchase-returns:",
+];
+const STAFF_PERMISSION_UI_HIDDEN_EXACT = new Set([
+  "store:create",
+  "store:update",
+  "store:delete",
+  "store:staff:assign",
+  "settings:activity-log",
+  "settings:payment-method",
+  "tax:approve",
+  "tax:delete",
+  "products:low-stock",
+  "supplier:create",
+  "supplier:update",
+  "supplier:delete",
+  "employees:view",
+  "employees:assign",
+  "users:manage",
+  "users:role:update",
+  "users:menu:update",
+]);
+
+const isHiddenFromStaffPermissionUI = (permission = "") =>
+  STAFF_PERMISSION_UI_HIDDEN_EXACT.has(permission) ||
+  STAFF_PERMISSION_UI_HIDDEN_PREFIXES.some((prefix) => permission.startsWith(prefix));
+
+const filterStaffAssignablePermissions = (list = []) =>
+  (Array.isArray(list) ? list : []).filter((permission) => !isHiddenFromStaffPermissionUI(permission));
 
 const groupPermissions = (permissionList = []) => {
   const groups = {};
@@ -288,8 +330,10 @@ export default function EmployeesPage() {
     }
     try {
       const res = await getPermissionCatalog();
-      const permissions = normalizePermissions(res.permissions || []);
-      const staffDefault = normalizePermissions(res.staffDefault?.length ? res.staffDefault : permissions);
+      const permissions = filterStaffAssignablePermissions(normalizePermissions(res.permissions || []));
+      const staffDefault = filterStaffAssignablePermissions(
+        normalizePermissions(res.staffDefault?.length ? res.staffDefault : permissions)
+      );
       setPermissionOptions(permissions);
       setDefaultStaffPermissions(staffDefault);
       return { permissions, staffDefault };
@@ -464,7 +508,7 @@ export default function EmployeesPage() {
     if (!record?._id) return;
     if (selectedStaff && String(selectedStaff._id) === String(record._id) && permissionOptions.length) {
       const currentMenu = Array.isArray(record.user_id?.menu) ? record.user_id.menu : [];
-      setSelectedPermissions(normalizePermissions(currentMenu));
+      setSelectedPermissions(filterStaffAssignablePermissions(normalizePermissions(currentMenu)));
       return;
     }
     setSelectedStaff(record);
@@ -473,9 +517,9 @@ export default function EmployeesPage() {
       const catalog = await ensurePermissionCatalog();
       const catalogKeys = catalog?.permissions || [];
       const currentMenu = Array.isArray(record.user_id?.menu) ? record.user_id.menu : [];
-      const mergedCatalog = normalizePermissions([...(catalogKeys || []), ...currentMenu]);
+      const mergedCatalog = filterStaffAssignablePermissions(normalizePermissions([...(catalogKeys || []), ...currentMenu]));
       setPermissionOptions(mergedCatalog);
-      setSelectedPermissions(normalizePermissions(currentMenu));
+      setSelectedPermissions(filterStaffAssignablePermissions(normalizePermissions(currentMenu)));
     } catch (err) {
       console.error(err);
       Swal.fire({
@@ -526,7 +570,7 @@ export default function EmployeesPage() {
     }
 
     const userId = selectedStaff.user_id?._id || selectedStaff.user_id;
-    const sanitizedMenu = normalizePermissions(selectedPermissions);
+    const sanitizedMenu = filterStaffAssignablePermissions(normalizePermissions(selectedPermissions));
     setPermissionSaving(true);
     try {
       await updateUserById(userId, { menu: sanitizedMenu, storeId: currentStore._id });

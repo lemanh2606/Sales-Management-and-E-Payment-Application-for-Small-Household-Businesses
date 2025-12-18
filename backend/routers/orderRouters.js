@@ -51,7 +51,7 @@ router.get("/payments/vietqr_return", vietqrReturn);
 */
 router.get("/payments/vietqr_cancel", vietqrCancel);
 // top khách hàng thân thiết
-router.get("/top-customers", verifyToken, isManager, getTopFrequentCustomers);
+router.get("/top-customers", verifyToken, getTopFrequentCustomers);
 //tạo đơn trả hàng, gửi kèm items
 router.post(
   "/:orderId/refund",
@@ -89,9 +89,9 @@ router.post(
   verifyInvoicePdfAuto
 );
 //top sản phẩm bán chạy, có dùng limit
-router.get("/top-products", verifyToken, checkSubscriptionExpiry, isManager, checkStoreAccess, getTopSellingProducts);
+router.get("/top-products", verifyToken, checkSubscriptionExpiry,  checkStoreAccess, getTopSellingProducts);
 //xuất file
-router.get("/top-products/export", verifyToken, checkSubscriptionExpiry, isManager, exportTopSellingProducts);
+router.get("/top-products/export", verifyToken, checkSubscriptionExpiry, exportTopSellingProducts);
 //xuất file top khách hàng thân thiết
 router.get("/top-customers/export", verifyToken, checkStoreAccess, exportTopFrequentCustomers);
 //lấy danh sách mọi Order đã thanh toán thành công, có status là 'paid'
