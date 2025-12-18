@@ -350,7 +350,7 @@ const InventoryReportScreen: React.FC = () => {
     <View style={styles.container}>
       {/* HEADER */}
       <LinearGradient
-        colors={["#0ea5e9", "#6366f1", "#8b5cf6"]}
+        colors={["#10b981", "#10b981", "#10b981"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.header}

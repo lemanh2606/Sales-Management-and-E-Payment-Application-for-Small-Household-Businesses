@@ -186,7 +186,10 @@ const OrderRefund: React.FC = () => {
   const [modalSelectedEmployee, setModalSelectedEmployee] = useState<string | undefined>(undefined);
 
   //Biến phân trang
-  const [paginationOrderRefund, setpaginationOrderRefund] = useState({ current: 1, pageSize: 10 });
+  const [paginationOrderRefund, setpaginationOrderRefund] = useState({
+    current: 1,
+    pageSize: 10,
+  });
   const [paginationOrderRefundSelect, setpaginationOrderRefundSelect] = useState({ current: 1, pageSize: 10 });
 
   // Helper: Format currency
@@ -591,7 +594,17 @@ const OrderRefund: React.FC = () => {
                   key: "updatedAt",
                   align: "center",
                   width: 100,
-                  render: (date) => <Text style={{ fontSize: 12, color: "#2274efff", fontWeight: "bold" }}>{formatDate(date)}</Text>,
+                  render: (date) => (
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        color: "#2274efff",
+                        fontWeight: "bold",
+                      }}
+                    >
+                      {formatDate(date)}
+                    </Text>
+                  ),
                 },
               ]}
             />
@@ -939,7 +952,7 @@ const OrderRefund: React.FC = () => {
                 <Select placeholder="Chọn nhân viên xử lý hoàn trả">
                   {employees.map((emp) => (
                     <Option key={emp._id} value={emp._id}>
-                      <UserOutlined /> {emp?.fullName || "Trống"}
+                      <UserOutlined /> {emp?.fullName || "Chủ cửa hàng"}
                     </Option>
                   ))}
                 </Select>
@@ -1049,7 +1062,14 @@ const OrderRefund: React.FC = () => {
                 </Upload>
 
                 {/* Preview nhanh */}
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 8,
+                    flexWrap: "wrap",
+                    marginTop: 12,
+                  }}
+                >
                   {evidenceMedia.map((m, idx) =>
                     m.type === "image" ? (
                       <img
@@ -1138,7 +1158,12 @@ const OrderRefund: React.FC = () => {
                               style={{ margin: 0 }}
                               rules={[
                                 { required: true, message: "Nhập số lượng!" },
-                                { type: "number", min: 1, max: item.quantity, message: `Tối đa ${item.quantity}` },
+                                {
+                                  type: "number",
+                                  min: 1,
+                                  max: item.quantity,
+                                  message: `Tối đa ${item.quantity}`,
+                                },
                               ]}
                             >
                               <InputNumber min={1} max={item.quantity} placeholder="SL hoàn" style={{ width: 100 }} />

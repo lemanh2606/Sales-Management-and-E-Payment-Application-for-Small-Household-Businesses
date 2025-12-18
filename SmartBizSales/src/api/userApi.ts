@@ -157,9 +157,9 @@ export const updateProfile = async (
     formData.append("avatar", options.imageFile as any);
 
     const res = await apiClient.put("/users/profile", formData, {
-      timeout: 30000,
+      timeout: 120000,
       // ✅ khuyến nghị: KHÔNG set Content-Type ở RN để axios tự gắn boundary [web:1509]
-      // headers: { "Content-Type": "multipart/form-data" },
+      headers: { "Content-Type": "multipart/form-data" },
     });
 
     return res.data;

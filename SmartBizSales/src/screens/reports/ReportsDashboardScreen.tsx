@@ -366,7 +366,7 @@ const ReportsDashboardScreen: React.FC = () => {
       <View style={styles.container}>
         {/* Header gradient */}
         <LinearGradient
-          colors={["#0ea5e9", "#6366f1", "#7c3aed"]}
+          colors={["#10b981", "#10b981", "#10b981"]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.header}

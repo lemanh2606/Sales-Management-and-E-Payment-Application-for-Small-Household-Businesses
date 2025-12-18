@@ -1,30 +1,29 @@
 // src/navigation/AppNavigator.tsx
 import React, {
+  FC,
   JSX,
-  useState,
-  useRef,
   memo,
   useCallback,
-  FC,
   useMemo,
+  useRef,
+  useState,
 } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Alert,
   ActivityIndicator,
-  ScrollView,
-  Image,
+  Alert,
   Animated,
-  NativeSyntheticEvent,
+  Image,
   NativeScrollEvent,
+  NativeSyntheticEvent,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import {
   createDrawerNavigator,
   DrawerContentComponentProps,
-  DrawerNavigationOptions,
 } from "@react-navigation/drawer";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -59,6 +58,8 @@ import OrderReconciliationScreen from "../screens/orders/OrderReconciliationScre
 import EmployeesScreen from "../screens/employee/EmployeesScreen";
 import OrderListScreen from "../screens/orders/OrderListScreen";
 import PosShellScreen from "@/screens/pos/PosShellScreen";
+import DataExportScreen from "@/screens/settings/DataExportSceen";
+
 // ========== TYPES ==========
 export type RootDrawerParamList = {
   Dashboard: undefined;
@@ -123,6 +124,7 @@ const hasPermission = (
 ): boolean => {
   if (!required) return true;
   const reqs = Array.isArray(required) ? required : [required];
+
   return reqs.some((r) => {
     const [resource] = r.split(":");
     return menu.includes(r) || menu.includes(`${resource}:*`);
@@ -158,7 +160,7 @@ const PosScreen: FC = () => <PlaceholderScreen title="POS - Bán hàng" />;
 const EmployeeScheduleScreen: FC = () => (
   <PlaceholderScreen title="Lịch làm việc" />
 );
-const ExportDataScreen: FC = () => <PlaceholderScreen title="Xuất dữ liệu" />;
+const ExportDataScreen: FC = () => <DataExportScreen />;
 
 // ========== MENU TREE ==========
 const MENU_TREE: readonly MenuSection[] = [
@@ -383,11 +385,13 @@ const MenuItemComponent = memo<MenuItemComponentProps>(
             color={isActive ? "#10b981" : "#6b7280"}
           />
         </View>
+
         <Text
           style={[styles.menuItemText, isActive && styles.menuItemTextActive]}
         >
           {item.label}
         </Text>
+
         {isActive && <View style={styles.activeIndicator} />}
       </TouchableOpacity>
     );
@@ -400,11 +404,13 @@ MenuItemComponent.displayName = "MenuItem";
 const CustomDrawerContent = memo<DrawerContentComponentProps>(
   (props): JSX.Element => {
     const { logout, user } = useAuth();
+
     const [expandedSections, setExpandedSections] = useState<Set<string>>(
       new Set(["CỬA HÀNG"])
     );
     const [showScrollIndicator, setShowScrollIndicator] =
       useState<boolean>(false);
+
     const scrollViewRef = useRef<ScrollView>(null);
     const bounceAnim = useRef(new Animated.Value(0)).current;
 
@@ -425,14 +431,16 @@ const CustomDrawerContent = memo<DrawerContentComponentProps>(
             }),
           ])
         );
+
         animation.start();
+
         return () => {
           animation.stop();
           bounceAnim.setValue(0);
         };
-      } else {
-        bounceAnim.setValue(0);
       }
+
+      bounceAnim.setValue(0);
     }, [showScrollIndicator, bounceAnim]);
 
     const translateY = bounceAnim.interpolate({
@@ -463,11 +471,8 @@ const CustomDrawerContent = memo<DrawerContentComponentProps>(
     const toggleSection = useCallback((title: string): void => {
       setExpandedSections((prev) => {
         const newSet = new Set(prev);
-        if (newSet.has(title)) {
-          newSet.delete(title);
-        } else {
-          newSet.add(title);
-        }
+        if (newSet.has(title)) newSet.delete(title);
+        else newSet.add(title);
         return newSet;
       });
     }, []);
@@ -476,8 +481,10 @@ const CustomDrawerContent = memo<DrawerContentComponentProps>(
       (event: NativeSyntheticEvent<NativeScrollEvent>): void => {
         const { contentOffset, contentSize, layoutMeasurement } =
           event.nativeEvent;
+
         const isAtBottom =
           contentOffset.y + layoutMeasurement.height >= contentSize.height - 20;
+
         setShowScrollIndicator(
           !isAtBottom && contentSize.height > layoutMeasurement.height
         );
@@ -499,6 +506,7 @@ const CustomDrawerContent = memo<DrawerContentComponentProps>(
       () => user?.image,
       [user?.image]
     );
+
     const currentRoute: string = props.state.routes[props.state.index].name;
 
     // Memoize visible sections
@@ -509,6 +517,7 @@ const CustomDrawerContent = memo<DrawerContentComponentProps>(
             return false;
           return hasPermission(menu, item.permission);
         });
+
         return { section, visibleItems };
       }).filter(({ visibleItems }) => visibleItems.length > 0);
     }, [menu, user?.role]);
@@ -530,12 +539,15 @@ const CustomDrawerContent = memo<DrawerContentComponentProps>(
                 <Ionicons name="person" size={36} color="#fff" />
               </View>
             )}
+
             <View style={styles.onlineBadge} />
           </View>
+
           <View style={styles.headerTextContainer}>
             <Text style={styles.name} numberOfLines={1}>
               {nameLabel}
             </Text>
+
             <View style={styles.roleContainer}>
               <Ionicons name="shield-checkmark" size={12} color="#d1fae5" />
               <Text style={styles.role}>{roleLabel}</Text>
@@ -574,6 +586,7 @@ const CustomDrawerContent = memo<DrawerContentComponentProps>(
                       </View>
                       <Text style={styles.sectionTitle}>{section.title}</Text>
                     </View>
+
                     <Ionicons
                       name={isExpanded ? "chevron-down" : "chevron-forward"}
                       size={18}
@@ -604,6 +617,7 @@ const CustomDrawerContent = memo<DrawerContentComponentProps>(
                 </View>
               );
             })}
+
             <View style={styles.menuBottomSpacer} />
           </ScrollView>
 
@@ -643,6 +657,7 @@ const CustomDrawerContent = memo<DrawerContentComponentProps>(
               <Text style={styles.logoutText}>Đăng xuất</Text>
             </LinearGradient>
           </TouchableOpacity>
+
           <Text style={styles.copy}>© 2025 Smallbiz-Sales</Text>
         </View>
       </View>
@@ -661,7 +676,7 @@ const AppNavigator: FC = (): JSX.Element => {
     return (
       <View style={styles.loadingContainer}>
         <LinearGradient
-          colors={["#10b981", "#059669"]}
+          colors={["#10b981", "#10b981", "#10b981"]}
           style={styles.loadingCircle}
         >
           <ActivityIndicator size="large" color="#fff" />
@@ -701,10 +716,13 @@ const AppNavigator: FC = (): JSX.Element => {
       drawerActiveBackgroundColor: "transparent",
       drawerActiveTintColor: "transparent",
       drawerInactiveTintColor: "transparent",
+
       // 🚀 CRITICAL: Unmount screens when navigating away
       unmountOnBlur: true,
+
       // 🚀 CRITICAL: Freeze inactive screens
       freezeOnBlur: true,
+
       // 🚀 Cleanup on blur
       listeners: {
         blur: () => {
@@ -719,6 +737,7 @@ const AppNavigator: FC = (): JSX.Element => {
           }
         },
       },
+
       headerLeft: ({ tintColor }: { tintColor?: string }) => (
         <TouchableOpacity
           onPress={() => navigation.toggleDrawer()}
@@ -735,8 +754,8 @@ const AppNavigator: FC = (): JSX.Element => {
   return (
     <Drawer.Navigator
       initialRouteName="Dashboard"
-      drawerContent={(props: DrawerContentComponentProps) => (
-        <CustomDrawerContent {...props} />
+      drawerContent={(drawerProps: DrawerContentComponentProps) => (
+        <CustomDrawerContent {...drawerProps} />
       )}
       screenOptions={screenOptions}
       // 🚀 CRITICAL: Detach inactive screens to save memory
@@ -876,8 +895,8 @@ const AppNavigator: FC = (): JSX.Element => {
       />
       <Drawer.Screen
         name="ExportData"
-        component={withPermission(ExportDataScreen, "data:export")}
-        options={{ title: "Xuất DL" }}
+        component={withPermission(ExportDataScreen, "")}
+        options={{ title: "Xuất Dữ Liệu" }}
       />
       <Drawer.Screen
         name="FileManager"
@@ -896,6 +915,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f8fafc",
   },
+
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -909,9 +929,11 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 8,
   },
+
   avatarWrapper: {
     position: "relative",
   },
+
   avatarImage: {
     width: 60,
     height: 60,
@@ -919,6 +941,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "rgba(255,255,255,0.3)",
   },
+
   avatarPlaceholder: {
     width: 60,
     height: 60,
@@ -929,6 +952,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "rgba(255,255,255,0.3)",
   },
+
   onlineBadge: {
     position: "absolute",
     bottom: 2,
@@ -940,10 +964,12 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "#10b981",
   },
+
   headerTextContainer: {
     marginLeft: 14,
     flex: 1,
   },
+
   name: {
     color: "#ffffff",
     fontWeight: "800",
@@ -951,30 +977,37 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     letterSpacing: 0.3,
   },
+
   roleContainer: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
   },
+
   role: {
     color: "#d1fae5",
     fontSize: 12,
     fontWeight: "600",
   },
+
   menuContainer: {
     flex: 1,
     position: "relative",
   },
+
   menu: {
     flex: 1,
     paddingTop: 12,
   },
+
   menuContent: {
     paddingBottom: 20,
   },
+
   menuBottomSpacer: {
     height: 20,
   },
+
   scrollIndicator: {
     position: "absolute",
     bottom: 20,
@@ -990,13 +1023,16 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "#d1fae5",
   },
+
   scrollIndicatorInner: {
     alignItems: "center",
     justifyContent: "center",
   },
+
   sectionContainer: {
     marginBottom: 8,
   },
+
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1013,11 +1049,13 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 2,
   },
+
   sectionHeaderLeft: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
   },
+
   sectionIconCircle: {
     width: 28,
     height: 28,
@@ -1026,12 +1064,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+
   sectionTitle: {
     fontSize: 11,
     fontWeight: "800",
     color: "#374151",
     letterSpacing: 0.8,
   },
+
   menuItem: {
     flexDirection: "row",
     alignItems: "center",
@@ -1042,9 +1082,11 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     position: "relative",
   },
+
   menuItemLast: {
     marginBottom: 8,
   },
+
   menuItemActive: {
     backgroundColor: "#ecfdf5",
     borderLeftWidth: 3,
@@ -1055,6 +1097,7 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 3,
   },
+
   menuItemIconWrapper: {
     width: 32,
     height: 32,
@@ -1064,25 +1107,30 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: 12,
   },
+
   menuItemIconWrapperActive: {
     backgroundColor: "#d1fae5",
   },
+
   menuItemText: {
     fontSize: 14,
     fontWeight: "600",
     color: "#64748b",
     flex: 1,
   },
+
   menuItemTextActive: {
     color: "#059669",
     fontWeight: "700",
   },
+
   activeIndicator: {
     width: 6,
     height: 6,
     borderRadius: 3,
     backgroundColor: "#10b981",
   },
+
   bottom: {
     padding: 16,
     paddingBottom: 24,
@@ -1090,6 +1138,7 @@ const styles = StyleSheet.create({
     borderColor: "#e5e7eb",
     backgroundColor: "#ffffff",
   },
+
   logoutBtn: {
     borderRadius: 12,
     overflow: "hidden",
@@ -1099,6 +1148,7 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 6,
   },
+
   logoutGradient: {
     flexDirection: "row",
     alignItems: "center",
@@ -1106,23 +1156,27 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     gap: 8,
   },
+
   logoutText: {
     color: "#ffffff",
     fontWeight: "700",
     fontSize: 15,
   },
+
   copy: {
     marginTop: 12,
     fontSize: 11,
     color: "#9ca3af",
     textAlign: "center",
   },
+
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#f8fafc",
   },
+
   loadingCircle: {
     width: 80,
     height: 80,
@@ -1136,12 +1190,14 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 8,
   },
+
   loadingText: {
     marginTop: 12,
     fontSize: 14,
     color: "#64748b",
     fontWeight: "600",
   },
+
   placeholderContainer: {
     flex: 1,
     justifyContent: "center",
@@ -1149,6 +1205,7 @@ const styles = StyleSheet.create({
     padding: 32,
     backgroundColor: "#f8fafc",
   },
+
   placeholderIconCircle: {
     width: 96,
     height: 96,
@@ -1158,18 +1215,21 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 20,
   },
+
   placeholderTitle: {
     fontSize: 20,
     fontWeight: "700",
     color: "#111827",
     marginBottom: 8,
   },
+
   placeholderDesc: {
     fontSize: 14,
     color: "#6b7280",
     textAlign: "center",
     lineHeight: 22,
   },
+
   headerMenuBtn: {
     marginLeft: 15,
     padding: 8,

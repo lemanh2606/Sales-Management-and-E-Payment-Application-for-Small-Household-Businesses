@@ -716,11 +716,10 @@ const SupplierListScreen: React.FC = () => {
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
       {/* Header */}
-      <LinearGradient colors={["#667eea", "#764ba2"]} style={styles.header}>
+      <LinearGradient colors={["#10b981", "#667eea"]} style={styles.header}>
         <View style={styles.headerContent}>
           <View style={styles.headerTop}>
             <View>
-              <Text style={styles.headerTitle}>Nhà cung cấp</Text>
               <Text style={styles.headerSubtitle}>Quản lý theo cửa hàng</Text>
             </View>
 

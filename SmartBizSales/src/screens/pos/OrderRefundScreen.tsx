@@ -618,12 +618,6 @@ const OrderRefundScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.safe}>
       {/* Header */}
-      <View style={styles.pageHeader}>
-        <Text style={styles.pageTitle}>Hoàn hàng</Text>
-        <Text style={styles.pageSubTitle} numberOfLines={1}>
-          {storeName}
-        </Text>
-      </View>
 
       <ScrollView
         contentContainerStyle={{ padding: 12 }}

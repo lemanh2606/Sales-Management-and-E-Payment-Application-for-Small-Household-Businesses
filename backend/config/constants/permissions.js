@@ -110,6 +110,7 @@ const ALL_PERMISSIONS = [
   // file management
   "file:view",
   "supplier:restore",
+  "data:export",
 ];
 
 const STAFF_DEFAULT_MENU = [

@@ -1,27 +1,27 @@
 {
   "expo": {
-    "name": "SmartBizSales",
-    "slug": "SmartBizSales",
+    "name": "SmallBizSales",
+    "slug": "SmallBizSales",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/playstore.png",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "SmartBizSales needs microphone access to record audio for speech recognition.",
-        "NSSpeechRecognitionUsageDescription": "SmartBizSales needs speech recognition to convert your voice to text."
+        "NSMicrophoneUsageDescription": "SmallBizSales needs microphone access to record audio for speech recognition.",
+        "NSSpeechRecognitionUsageDescription": "SmallBizSales needs speech recognition to convert your voice to text."
       }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
@@ -37,7 +37,8 @@
           "iCloudContainerEnvironment": "Production"
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-font"
     ],
     "extra": {
       "eas": {
