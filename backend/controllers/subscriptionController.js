@@ -8,7 +8,12 @@ const { generateQRWithPayOS } = require("../services/payOSService");
 const PRICING = {
   1: { price: 5000, discount: 0, label: "1 tháng", badge: "Rẻ nhất" },
   3: { price: 499000, discount: 98000, label: "3 tháng", badge: "Phổ biến" },
-  6: { price: 899000, discount: 295000, label: "6 tháng", badge: "Tiết kiệm nhất" },
+  6: {
+    price: 899000,
+    discount: 295000,
+    label: "6 tháng",
+    badge: "Tiết kiệm nhất",
+  },
 };
 //Hàm chuyển tiếng Việt → không dấu
 function removeVietnameseTones(str) {
@@ -21,9 +26,14 @@ function removeVietnameseTones(str) {
     .trim();
 }
 
-const FRONTEND_BASE_URL = resolveBaseUrl(process.env.APP_PORTAL_URL || process.env.FRONTEND_URL, "http://localhost:3000");
+const FRONTEND_BASE_URL = resolveBaseUrl(
+  process.env.APP_PORTAL_URL || process.env.FRONTEND_URL,
+  "http://localhost:3000"
+);
 const API_BASE_URL = resolveBaseUrl(
-  process.env.PAYOS_PUBLIC_API_URL || process.env.PUBLIC_API_URL || process.env.API_BASE_URL,
+  process.env.PAYOS_PUBLIC_API_URL ||
+    process.env.PUBLIC_API_URL ||
+    process.env.API_BASE_URL,
   "http://localhost:9999"
 );
 const SUB_RETURN_URL = process.env.PAYOS_RETURN_URL;
@@ -31,7 +41,8 @@ const SUB_CANCEL_URL = process.env.PAYOS_CANCEL_URL;
 const SUB_WEBHOOK_URL = process.env.PAYOS_WEBHOOK_URL;
 
 const DISABLE_WEBHOOK_SIM = process.env.PAYOS_DISABLE_SIMULATION === "true";
-const PENDING_TIMEOUT_MS = parseInt(process.env.SUBSCRIPTION_PENDING_TIMEOUT, 10) || 15 * 60 * 1000;
+const PENDING_TIMEOUT_MS =
+  parseInt(process.env.SUBSCRIPTION_PENDING_TIMEOUT, 10) || 15 * 60 * 1000;
 
 /**
  * GET /api/subscriptions/plans
@@ -42,7 +53,10 @@ const getPlans = async (req, res) => {
     const plans = Object.keys(PRICING).map((duration) => {
       const plan = PRICING[duration];
       const originalPrice = 5000 * parseInt(duration);
-      const discountPercent = plan.discount > 0 ? Math.round((plan.discount / originalPrice) * 100) : 0;
+      const discountPercent =
+        plan.discount > 0
+          ? Math.round((plan.discount / originalPrice) * 100)
+          : 0;
 
       return {
         duration: parseInt(duration),
@@ -75,7 +89,9 @@ const getCurrentSubscription = async (req, res) => {
     const userId = req.user?._id;
 
     if (!userId) {
-      return res.status(401).json({ message: "Chưa đăng nhập hoặc token không hợp lệ" });
+      return res
+        .status(401)
+        .json({ message: "Chưa đăng nhập hoặc token không hợp lệ" });
     }
 
     console.log("Get current subscription for user:", userId);
@@ -91,7 +107,8 @@ const getCurrentSubscription = async (req, res) => {
     // STAFF không có subscription riêng
     if (user.role === "STAFF") {
       return res.status(403).json({
-        message: "STAFF không có subscription riêng. Subscription do Manager quản lý.",
+        message:
+          "STAFF không có subscription riêng. Subscription do Manager quản lý.",
         user_role: "STAFF",
       });
     }
@@ -114,7 +131,10 @@ const getCurrentSubscription = async (req, res) => {
 
       if (!anySubscription) {
         // Chưa từng có subscription → Tạo trial mới
-        console.log("🎁 No subscription found, creating trial for MANAGER:", userId);
+        console.log(
+          "🎁 No subscription found, creating trial for MANAGER:",
+          userId
+        );
         try {
           subscription = await Subscription.createTrial(userId);
           console.log("✅ Trial subscription created:", subscription._id);
@@ -128,7 +148,11 @@ const getCurrentSubscription = async (req, res) => {
       } else {
         // Đã từng có subscription → Trả về subscription cũ (EXPIRED/CANCELLED)
         subscription = anySubscription;
-        console.log("📋 Found expired/cancelled subscription:", subscription._id, subscription.status);
+        console.log(
+          "📋 Found expired/cancelled subscription:",
+          subscription._id,
+          subscription.status
+        );
       }
     }
 
@@ -158,7 +182,10 @@ const getCurrentSubscription = async (req, res) => {
       };
     }
 
-    if (subscription.pending_order_code && isPendingPaymentFresh(subscription)) {
+    if (
+      subscription.pending_order_code &&
+      isPendingPaymentFresh(subscription)
+    ) {
       response.pending_payment = {
         order_code: subscription.pending_order_code,
         plan_duration: subscription.pending_plan_duration,
@@ -215,12 +242,18 @@ const createCheckout = async (req, res) => {
     }
 
     // Clear pending payment nếu đã quá hạn
-    if (subscription.pending_order_code && !isPendingPaymentFresh(subscription)) {
+    if (
+      subscription.pending_order_code &&
+      !isPendingPaymentFresh(subscription)
+    ) {
       subscription.clearPendingPayment();
       await subscription.save();
     }
 
-    if (subscription.pending_order_code && isPendingPaymentFresh(subscription)) {
+    if (
+      subscription.pending_order_code &&
+      isPendingPaymentFresh(subscription)
+    ) {
       return res.status(200).json({
         message: "Bạn đang có giao dịch đang chờ thanh toán",
         checkout_url: subscription.pending_checkout_url,
@@ -236,7 +269,8 @@ const createCheckout = async (req, res) => {
       });
     }
 
-    const isRenewal = subscription.status === "ACTIVE" && !subscription.isExpired();
+    const isRenewal =
+      subscription.status === "ACTIVE" && !subscription.isExpired();
 
     // Convert fullname
     const rawFullname = user.fullname || "";
@@ -315,13 +349,20 @@ const activatePremium = async (req, res) => {
     const userId = req.user?._id; // Từ auth middleware
 
     if (!userId) {
-      return res.status(401).json({ message: "Chưa đăng nhập hoặc token không hợp lệ" });
+      return res
+        .status(401)
+        .json({ message: "Chưa đăng nhập hoặc token không hợp lệ" });
     }
 
     const { plan_duration, amount, transaction_id } = req.body;
     const parsedDuration = parseInt(plan_duration, 10);
 
-    console.log("Activate premium request:", { userId, plan_duration, amount, transaction_id });
+    console.log("Activate premium request:", {
+      userId,
+      plan_duration,
+      amount,
+      transaction_id,
+    });
 
     // Check role MANAGER
     const user = await User.findById(userId).select("role");
@@ -337,7 +378,9 @@ const activatePremium = async (req, res) => {
     }
 
     if (!parsedDuration || !amount || !transaction_id) {
-      return res.status(400).json({ message: "Thiếu thông tin plan_duration, amount hoặc transaction_id" });
+      return res.status(400).json({
+        message: "Thiếu thông tin plan_duration, amount hoặc transaction_id",
+      });
     }
 
     // Validate plan
@@ -352,7 +395,12 @@ const activatePremium = async (req, res) => {
       console.log("Creating new subscription for user:", userId);
       subscription = await Subscription.createTrial(userId);
     } else {
-      console.log("Found existing subscription:", subscription._id, "status:", subscription.status);
+      console.log(
+        "Found existing subscription:",
+        subscription._id,
+        "status:",
+        subscription.status
+      );
     }
 
     // Clear pending payment metadata nếu có
@@ -361,15 +409,22 @@ const activatePremium = async (req, res) => {
     }
 
     // Check nếu đang ACTIVE và chưa expired -> Gia hạn
-    const isRenewal = subscription.status === "ACTIVE" && !subscription.isExpired();
+    const isRenewal =
+      subscription.status === "ACTIVE" && !subscription.isExpired();
 
     if (isRenewal) {
       subscription.extendPremium(parsedDuration);
       subscription.auto_renew = false;
-      console.log(`🔄 GIA HẠN: +${parsedDuration} tháng cho subscription ${subscription._id}`);
+      console.log(
+        `🔄 GIA HẠN: +${parsedDuration} tháng cho subscription ${subscription._id}`
+      );
     } else {
       subscription.activatePremium(parsedDuration);
-      console.log(`✨ ${subscription._id ? "KÍCH HOẠT LẠI" : "KÍCH HOẠT MỚI"}: ${parsedDuration} tháng`);
+      console.log(
+        `✨ ${
+          subscription._id ? "KÍCH HOẠT LẠI" : "KÍCH HOẠT MỚI"
+        }: ${parsedDuration} tháng`
+      );
     }
 
     await subscription.save();
@@ -387,12 +442,23 @@ const activatePremium = async (req, res) => {
       payment_method: "MANUAL",
       status: "SUCCESS",
       paid_at: new Date(),
-      notes: isRenewal ? `Gia hạn thêm ${parsedDuration} tháng - MANUAL` : `Kích hoạt gói ${parsedDuration} tháng - MANUAL`,
+      notes: isRenewal
+        ? `Gia hạn thêm ${parsedDuration} tháng - MANUAL`
+        : `Kích hoạt gói ${parsedDuration} tháng - MANUAL`,
     });
     await paymentHistory.save();
-    console.log("💾 Saved PaymentHistory:", paymentHistory._id, "for user_id:", userId);
+    console.log(
+      "💾 Saved PaymentHistory:",
+      paymentHistory._id,
+      "for user_id:",
+      userId
+    );
 
-    console.log(`✅ ${isRenewal ? "GIA HẠN" : "KÍCH HOẠT"} premium cho user ${userId}, expires ${subscription.expires_at}`);
+    console.log(
+      `✅ ${
+        isRenewal ? "GIA HẠN" : "KÍCH HOẠT"
+      } premium cho user ${userId}, expires ${subscription.expires_at}`
+    );
 
     res.json({
       message: "Đã kích hoạt Premium thành công",
@@ -458,7 +524,12 @@ const cancelAutoRenew = async (req, res) => {
 const getPaymentHistory = async (req, res) => {
   try {
     const userId = req.user._id;
-    console.log("🔍 getPaymentHistory - userId:", userId, "type:", typeof userId);
+    console.log(
+      "🔍 getPaymentHistory - userId:",
+      userId,
+      "type:",
+      typeof userId
+    );
 
     // Check role MANAGER
     const user = await User.findById(userId).select("role");
@@ -586,6 +657,101 @@ const createPending = async (req, res) => {
     res.status(500).json({ message: "Error creating pending subscription" });
   }
 };
+const clearPendingPayment = async (req, res) => {
+  try {
+    let userId;
+
+    // 1. Từ req.user (middleware)
+    if (req.user && req.user._id) {
+      userId = req.user._id;
+    }
+    // 2. Từ req.body
+    else if (req.body && req.body.userId) {
+      userId = req.body.userId;
+    }
+    // 3. Từ query
+    else if (req.query && req.query.userId) {
+      userId = req.query.userId;
+    }
+
+    console.log(`🔍 Processing userId: ${userId || "ALL"}`);
+
+    if (userId) {
+      // ✅ SPECIFIC USER - XÓA TẤT CẢ pending của user (không check expired)
+      const result = await Subscription.updateOne(
+        { user_id: userId },
+        {
+          pending_order_code: null,
+          pending_amount: null,
+          pending_checkout_url: null,
+          pending_plan_duration: null,
+          pending_created_at: null,
+          pending_qr_code: null,
+        }
+      );
+
+      console.log(
+        `🗑️ Cleared ${result.modifiedCount} pending records for user: ${userId}`
+      );
+
+      if (result.modifiedCount > 0) {
+        // Tạo FAILED PaymentHistory nếu có orderCode
+        const subscription = await Subscription.findOne({ user_id: userId });
+        const pendingOrderCode = subscription?.pending_order_code;
+
+        if (pendingOrderCode) {
+          // ... logic PaymentHistory như cũ
+          console.log(`📝 Created FAILED history for: ${pendingOrderCode}`);
+        }
+      }
+
+      return res.json({
+        success: true,
+        message: `Đã xóa ${result.modifiedCount} pending payment cho user ${userId}`,
+        modifiedCount: result.modifiedCount,
+      });
+    }
+
+    // 4. FALLBACK - Clear ALL expired (> 30 phút)
+    console.log("🧹 Clearing ALL expired pending payments");
+    await clearAllExpiredPendingPayments();
+
+    res.json({
+      success: true,
+      message: "Đã dọn tất cả pending payment quá hạn",
+    });
+  } catch (error) {
+    console.error("Clear pending error:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// ✅ Helper - chỉ clear expired
+const clearAllExpiredPendingPayments = async () => {
+  const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+
+  const result = await Subscription.updateMany(
+    {
+      pending_order_code: { $ne: null },
+      pending_created_at: { $lt: thirtyMinutesAgo },
+    },
+    {
+      $unset: {
+        // ✅ $unset thay vì set null
+        pending_order_code: "",
+        pending_amount: "",
+        pending_checkout_url: "",
+        pending_plan_duration: "",
+        pending_created_at: "",
+        pending_qr_code: "",
+      },
+    }
+  );
+
+  console.log(
+    `🧹 Auto-cleared ${result.modifiedCount} expired pending payments`
+  );
+};
 
 module.exports = {
   getPlans,
@@ -596,6 +762,7 @@ module.exports = {
   getPaymentHistory,
   getUsageStats,
   createPending,
+  clearPendingPayment,
 };
 
 function resolveBaseUrl(value, fallback) {

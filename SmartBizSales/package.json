@@ -20,7 +20,7 @@
     "@types/react-redux": "^7.1.34",
     "axios": "^1.13.2",
     "dayjs": "^1.11.19",
-    "expo": "^54.0.29",
+    "expo": "~54.0.30",
     "expo-av": "~16.0.8",
     "expo-blob": "^0.1.6",
     "expo-build-properties": "~1.0.10",

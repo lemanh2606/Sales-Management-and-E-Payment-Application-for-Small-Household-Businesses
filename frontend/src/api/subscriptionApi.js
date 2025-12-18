@@ -59,6 +59,10 @@ const subscriptionApi = {
   getUsageStats: () => {
     return apiClient.get("/subscriptions/usage");
   },
+
+  clearPendingPayment: () => {
+    return apiClient.post("/subscriptions/clear-pending");
+  },
 };
 
 export default subscriptionApi;

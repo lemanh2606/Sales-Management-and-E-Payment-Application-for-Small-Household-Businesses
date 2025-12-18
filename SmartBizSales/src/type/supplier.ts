@@ -84,3 +84,12 @@ export type ExportSuppliersResponse = Blob;
 export interface GetSuppliersOptions {
     deleted?: boolean; // true: lấy đã xóa, false: lấy active, undefined: lấy tất cả (nếu backend hỗ trợ)
 }
+export interface GetSuppliersParams extends GetSuppliersOptions {
+    storeId?: string;
+    search?: string; // tìm theo tên, phone, email, address
+    status?: SupplierStatus;
+    page?: number;
+    limit?: number;
+    sortBy?: string; // ví dụ: "name", "createdAt"
+    sortOrder?: "asc" | "desc";
+}

@@ -437,8 +437,8 @@ const SubscriptionPage = () => {
                         {subscription?.expires_at
                           ? dayjs(subscription.expires_at).format("DD/MM/YYYY")
                           : subscription?.trial_ends_at
-                          ? dayjs(subscription.trial_ends_at).format("DD/MM/YYYY")
-                          : "N/A"}
+                            ? dayjs(subscription.trial_ends_at).format("DD/MM/YYYY")
+                            : "N/A"}
                       </Text>
                     </div>
                     <Progress percent={0} strokeColor="#ff4d4f" status="exception" style={{ marginTop: 12 }} />

@@ -1,6 +1,6 @@
 // src/types/product.ts
 import { ObjectId } from "mongodb";
-import { SupplierRef } from './supplier';
+import { Supplier } from './supplier';
 
 // --------------------- IMAGE ---------------------
 export interface ProductImage {
@@ -46,7 +46,7 @@ export interface Product {
 
     // populated refs
     store?: StoreRef;
-    supplier?: SupplierRef;
+    supplier?: Supplier;
     group?: ProductGroupRef;
 }
 

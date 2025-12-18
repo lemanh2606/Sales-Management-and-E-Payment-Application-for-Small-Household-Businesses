@@ -2,7 +2,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, Result, Button, Space, Typography, Spin, Progress } from "antd";
-import { CheckCircleOutlined, LoadingOutlined, HomeOutlined, CreditCardOutlined, ClockCircleOutlined } from "@ant-design/icons";
+import {
+  CheckCircleOutlined,
+  LoadingOutlined,
+  HomeOutlined,
+  CreditCardOutlined,
+  ClockCircleOutlined,
+} from "@ant-design/icons";
 import subscriptionApi from "../api/subscriptionApi";
 
 const { Text, Title } = Typography;
@@ -11,18 +17,39 @@ const SubscriptionSuccess = () => {
   const navigate = useNavigate();
   const [message, setMessage] = useState("Đang xác nhận thanh toán…");
   const [attempt, setAttempt] = useState(0);
-  const [status, setStatus] = useState<"loading" | "success" | "pending">("loading");
+  const [status, setStatus] = useState<"loading" | "success" | "pending">(
+    "loading"
+  );
 
   const params = new URLSearchParams(window.location.search);
   const orderCode = params.get("orderCode");
   const payosStatus = params.get("status");
 
-  useEffect(() => {
-    // if (!orderCode) {
-    //   navigate("/settings/subscription");
-    //   return;
-    // }
+  // ✅ Gửi message về RN app hoặc navigate web
+  const sendToRN = (data: any): boolean => {
+    if ((window as any).ReactNativeWebView?.postMessage) {
+      (window as any).ReactNativeWebView.postMessage(JSON.stringify(data));
+      return true;
+    }
+    return false;
+  };
 
+  const goBackToSubscription = () => {
+    if (sendToRN({ type: "NAVIGATE", screen: "Subscription" })) {
+      return; // RN app sẽ xử lý
+    }
+    // Fallback cho web browser
+    navigate("/settings/subscription");
+  };
+
+  const goToHome = () => {
+    if (sendToRN({ type: "NAVIGATE", screen: "Home" })) {
+      return;
+    }
+    navigate("/dashboard"); // Cần lấy storeId nếu có
+  };
+
+  useEffect(() => {
     const verify = async () => {
       try {
         const res = await subscriptionApi.getCurrentSubscription();
@@ -31,7 +58,7 @@ const SubscriptionSuccess = () => {
         if (sub && sub.status === "ACTIVE") {
           setMessage("Thanh toán thành công! Đang chuyển hướng...");
           setStatus("success");
-          setTimeout(() => navigate("/settings/subscription"), 2000);
+          setTimeout(() => goBackToSubscription(), 2000); // ✅ Dùng hàm mới
           return;
         }
 
@@ -40,7 +67,9 @@ const SubscriptionSuccess = () => {
           setAttempt((prev) => prev + 1);
           setMessage(`Đang xác nhận thanh toán... (${attempt + 1}/5)`);
         } else {
-          setMessage("Thanh toán thành công. Hệ thống đang cập nhật, vui lòng F5 sau 30 giây.");
+          setMessage(
+            "Thanh toán thành công. Hệ thống đang cập nhật, vui lòng F5 sau 30 giây."
+          );
           setStatus("pending");
         }
       } catch (err) {
@@ -56,11 +85,17 @@ const SubscriptionSuccess = () => {
 
     const t = setTimeout(verify, 1500);
     return () => clearTimeout(t);
-  }, [attempt, navigate, orderCode]);
+  }, [attempt, orderCode, goBackToSubscription]); // ✅ Thêm dependency mới
 
   const getResultIcon = () => {
     if (status === "loading") {
-      return <Spin indicator={<LoadingOutlined style={{ fontSize: 72, color: "#1890ff" }} spin />} />;
+      return (
+        <Spin
+          indicator={
+            <LoadingOutlined style={{ fontSize: 72, color: "#1890ff" }} spin />
+          }
+        />
+      );
     }
     if (status === "success") {
       return <CheckCircleOutlined style={{ fontSize: 72, color: "#52c41a" }} />;
@@ -79,6 +114,7 @@ const SubscriptionSuccess = () => {
     if (status === "success") return "Thanh toán thành công!";
     return "Đang xử lý giao dịch";
   };
+
   // hàm format trạng thái sang tiếng việt
   const formatPayOSStatus = (status: string | null) => {
     if (!status) return "";
@@ -96,6 +132,7 @@ const SubscriptionSuccess = () => {
         return status;
     }
   };
+
   //hàm đổi màu trạng thái tương ứng cho đẹp
   const getStatusColor = (status: string | null) => {
     if (!status) return "#595959"; // mặc định màu xám
@@ -168,9 +205,15 @@ const SubscriptionSuccess = () => {
                 }}
                 bodyStyle={{ padding: 20 }}
               >
-                <Space direction="vertical" size="small" style={{ width: "100%" }}>
+                <Space
+                  direction="vertical"
+                  size="small"
+                  style={{ width: "100%" }}
+                >
                   <Space>
-                    <CreditCardOutlined style={{ fontSize: 18, color: "#1890ff" }} />
+                    <CreditCardOutlined
+                      style={{ fontSize: 18, color: "#1890ff" }}
+                    />
                     <Text strong style={{ fontSize: 14 }}>
                       Mã đơn hàng:
                     </Text>
@@ -191,7 +234,9 @@ const SubscriptionSuccess = () => {
                   {payosStatus && (
                     <>
                       <Space style={{ marginTop: 16 }}>
-                        <CheckCircleOutlined style={{ fontSize: 18, color: "#52c41a" }} />
+                        <CheckCircleOutlined
+                          style={{ fontSize: 18, color: "#52c41a" }}
+                        />
                         <Text strong style={{ fontSize: 14 }}>
                           Trạng thái Thanh toán:
                         </Text>
@@ -224,9 +269,12 @@ const SubscriptionSuccess = () => {
                   bodyStyle={{ padding: 16 }}
                 >
                   <Space>
-                    <ClockCircleOutlined style={{ fontSize: 16, color: "#faad14" }} />
+                    <ClockCircleOutlined
+                      style={{ fontSize: 16, color: "#faad14" }}
+                    />
                     <Text style={{ fontSize: 13, color: "#ad8b00" }}>
-                      <strong>Lưu ý:</strong> Hệ thống đang xử lý, vui lòng đợi 5 giây và làm mới trang (F5).
+                      <strong>Lưu ý:</strong> Hệ thống đang xử lý, vui lòng đợi
+                      5 giây và làm mới trang (F5).
                     </Text>
                   </Space>
                 </Card>
@@ -239,7 +287,7 @@ const SubscriptionSuccess = () => {
                 type="primary"
                 size="large"
                 icon={<HomeOutlined />}
-                onClick={() => navigate("/settings/subscription")}
+                onClick={goBackToSubscription} // ✅ Dùng hàm mới
                 style={{
                   borderRadius: 8,
                   height: 48,
@@ -281,8 +329,11 @@ const SubscriptionSuccess = () => {
         >
           <Text type="secondary" style={{ fontSize: 12 }}>
             Nếu có bất kỳ vấn đề gì, vui lòng liên hệ{" "}
-            <a href="mailto:huyndhe176876@fpt.edu.vn" style={{ color: "#1890ff" }}>
-              huyndhe176876@fpt.edu.vn
+            <a
+              href="mailto:huyndhe176876@fpt.edu.vn"
+              style={{ color: "#1890ff" }}
+            >
+              support@smartretail.vn
             </a>
           </Text>
         </div>

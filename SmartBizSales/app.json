@@ -16,8 +16,10 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSMicrophoneUsageDescription": "SmallBizSales needs microphone access to record audio for speech recognition.",
-        "NSSpeechRecognitionUsageDescription": "SmallBizSales needs speech recognition to convert your voice to text."
-      }
+        "NSSpeechRecognitionUsageDescription": "SmallBizSales needs speech recognition to convert your voice to text.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "bundleIdentifier": "com.manh2606.SmartBizSales"
     },
     "android": {
       "adaptiveIcon": {
@@ -27,7 +29,9 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.manh2606.SmartBizSales",
-      "permissions": ["android.permission.RECORD_AUDIO"]
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "scheme": "posapp",
     "plugins": [
@@ -42,7 +46,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "6778f638-7c6c-403f-b63d-dbc1c51e945b"
+        "projectId": "15f3fd49-06ff-418c-94ca-195241d60db3"
       }
     }
   }
