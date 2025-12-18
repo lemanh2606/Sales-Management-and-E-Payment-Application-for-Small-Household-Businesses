@@ -1,5 +1,6 @@
 // controllers/subscriptionController.js
 const Subscription = require("../models/Subscription");
+const mongoose = require("mongoose");
 const User = require("../models/User");
 const PaymentHistory = require("../models/PaymentHistory");
 const { generateQRWithPayOS } = require("../services/payOSService");
@@ -41,7 +42,8 @@ const getPlans = async (req, res) => {
   try {
     const plans = Object.keys(PRICING).map((duration) => {
       const plan = PRICING[duration];
-      const originalPrice = 5000 * parseInt(duration);
+      // original_price = price (hiện tại) + discount
+      const originalPrice = plan.price + plan.discount;
       const discountPercent = plan.discount > 0 ? Math.round((plan.discount / originalPrice) * 100) : 0;
 
       return {
@@ -418,7 +420,7 @@ const cancelAutoRenew = async (req, res) => {
     const userId = req.user._id;
 
     // Check role MANAGER
-    const user = await User.findById(userId).select("role");
+    const user = await User.findById(userId).select("role fullname username");
     if (!user) {
       return res.status(404).json({ message: "Không tìm thấy user" });
     }
@@ -435,8 +437,57 @@ const cancelAutoRenew = async (req, res) => {
       return res.status(404).json({ message: "Không tìm thấy subscription" });
     }
 
+    const planDuration = subscription.premium?.plan_duration || 1;
+
     subscription.auto_renew = false;
     await subscription.save();
+
+    // ============================
+    // Gửi socket + tạo thông báo DB
+    // ============================
+    try {
+      const Store = require("../models/Store");
+      const Notification = require("../models/Notification");
+      const name = user.fullname || user.username || "Người dùng";
+
+      // Lấy danh sách store của user
+      const stores = await Store.find({ owner_id: userId }).select("_id");
+
+      console.log("🔔 Tạo thông báo hủy gói dịch vụ cho user:", userId);
+
+      if (stores.length === 0) {
+        console.warn("⚠ User không sở hữu store nào, bỏ qua tạo thông báo");
+      } else {
+        for (const store of stores) {
+          await Notification.create({
+            storeId: store._id,
+            userId: userId,
+            type: "service",
+            title: "Hủy tự động gia hạn",
+            message: `${name} đã hủy tự động gia hạn gói Premium ${planDuration} tháng. Gói sẽ hết hạn vào ${
+              subscription.premium?.expires_at
+                ? new Date(subscription.premium.expires_at).toLocaleDateString("vi-VN")
+                : "thời gian sắp tới"
+            }`,
+          });
+        }
+      }
+
+      // Emit socket notification
+      const io = req.app.get("io");
+      if (io) {
+        io.emit("subscription_cancel", {
+          userId: userId,
+          message: `${name} đã hủy tự động gia hạn gói Premium ${planDuration} tháng`,
+          planDuration,
+          expiresAt: subscription.premium?.expires_at,
+        });
+        console.log("✅ Emit socket subscription_cancel thành công");
+      }
+    } catch (notificationError) {
+      console.error("⚠ Lỗi tạo thông báo:", notificationError);
+      // Không return error, vẫn trả về success cho client
+    }
 
     res.json({
       message: "Đã tắt tự động gia hạn",
@@ -447,6 +498,111 @@ const cancelAutoRenew = async (req, res) => {
     });
   } catch (error) {
     console.error("Lỗi cancelAutoRenew:", error);
+    res.status(500).json({ message: "Lỗi server", error: error.message });
+  }
+};
+
+/**
+ * PUT /api/subscriptions/cancel-pending
+ * Hủy pending payment khi user nhấn "Hủy" trên trang PayOS
+ * Body: { order_code }
+ */
+const cancelPendingPayment = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { order_code } = req.body;
+
+    if (!order_code) {
+      return res.status(400).json({ message: "Thiếu order_code" });
+    }
+
+    console.log("🚫 cancelPendingPayment - userId:", userId, "order_code:", order_code);
+
+    // Tìm subscription với pending_order_code = order_code
+    const subscription = await Subscription.findOne({
+      user_id: userId,
+      pending_order_code: order_code,
+    });
+
+    if (!subscription) {
+      return res.status(404).json({ message: "Không tìm thấy đơn thanh toán pending" });
+    }
+
+    const planDuration = subscription.pending_plan_duration || 1;
+
+    // Clear tất cả pending fields
+    subscription.clearPendingPayment();
+    await subscription.save();
+
+    // Update PaymentHistory status thành CANCELLED
+    const paymentHistory = await PaymentHistory.findOne({
+      user_id: userId,
+      transaction_id: order_code,
+      status: "PENDING",
+    });
+
+    if (paymentHistory) {
+      paymentHistory.status = "CANCELLED";
+      paymentHistory.notes = `${paymentHistory.notes || ""} - Hủy bởi người dùng`;
+      await paymentHistory.save();
+      console.log("💾 Cập nhật PaymentHistory thành CANCELLED:", paymentHistory._id);
+    }
+
+    // ============================
+    // Gửi socket + tạo thông báo DB
+    // ============================
+    try {
+      const Store = require("../models/Store");
+      const Notification = require("../models/Notification");
+      const user = await User.findById(userId).select("fullname username");
+      const name = user?.fullname || user?.username || "Người dùng";
+
+      // Lấy danh sách store của user
+      const stores = await Store.find({ owner_id: userId }).select("_id");
+
+      console.log("🔔 Tạo thông báo hủy giao dịch PayOS cho user:", userId);
+
+      if (stores.length === 0) {
+        console.warn("⚠ User không sở hữu store nào, bỏ qua tạo thông báo");
+      } else {
+        for (const store of stores) {
+          await Notification.create({
+            storeId: store._id,
+            userId: userId,
+            type: "service",
+            title: "Hủy giao dịch thanh toán",
+            message: `${name} đã hủy giao dịch thanh toán gói Premium ${planDuration} tháng (Mã: ${order_code})`,
+          });
+        }
+      }
+
+      // Emit socket notification
+      const io = req.app.get("io");
+      if (io) {
+        io.emit("subscription_cancel", {
+          userId: userId,
+          message: `${name} đã hủy giao dịch thanh toán gói Premium ${planDuration} tháng`,
+          planDuration,
+          orderCode: order_code,
+        });
+        console.log("✅ Emit socket subscription_cancel thành công");
+      }
+    } catch (notificationError) {
+      console.error("⚠ Lỗi tạo thông báo:", notificationError);
+      // Không return error, vẫn trả về success cho client
+    }
+
+    console.log("✅ Hủy pending payment thành công cho user:", userId);
+
+    res.json({
+      message: "Đã hủy đơn thanh toán",
+      subscription: {
+        status: subscription.status,
+        pending_order_code: subscription.pending_order_code,
+      },
+    });
+  } catch (error) {
+    console.error("Lỗi cancelPendingPayment:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
@@ -473,15 +629,25 @@ const getPaymentHistory = async (req, res) => {
       });
     }
 
-    // Query từ PaymentHistory collection - Mongoose tự cast string sang ObjectId
-    const history = await PaymentHistory.find({ user_id: userId })
-      .sort({ paid_at: -1 }) // Sắp xếp mới nhất lên đầu
-      .lean();
-
-    // console.log("📊 Found payment history:", history.length, "records");
-    // if (history.length > 0) {
-    //   console.log("Sample record:", JSON.stringify(history[0], null, 2));
-    // }
+    const history = await PaymentHistory.aggregate([
+      {
+        $match: {
+          user_id: new mongoose.Types.ObjectId(userId),
+        },
+      },
+      {
+        $addFields: {
+          eventTime: {
+            $cond: [{ $eq: ["$status", "SUCCESS"] }, "$paid_at", "$updatedAt"],
+          },
+        },
+      },
+      {
+        $sort: {
+          eventTime: -1,
+        },
+      },
+    ]);
 
     // Chuyển đổi format cho frontend
     const formattedHistory = history.map((item) => ({
@@ -492,6 +658,8 @@ const getPaymentHistory = async (req, res) => {
       payment_method: item.payment_method,
       status: item.status,
       notes: item.notes,
+      // ✅ QUAN TRỌNG
+      eventTime: item.status === "SUCCESS" ? item.paid_at : item.updatedAt,
     }));
 
     res.json({ data: formattedHistory });
@@ -593,6 +761,7 @@ module.exports = {
   createCheckout,
   activatePremium,
   cancelAutoRenew,
+  cancelPendingPayment,
   getPaymentHistory,
   getUsageStats,
   createPending,

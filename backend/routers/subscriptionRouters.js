@@ -9,6 +9,7 @@ const {
   createCheckout,
   activatePremium,
   cancelAutoRenew,
+  cancelPendingPayment,
   getPaymentHistory,
   getUsageStats,
   createPending,
@@ -28,6 +29,8 @@ router.post("/checkout", verifyToken, requirePermission("subscription:manage"), 
 router.post("/activate", verifyToken, requirePermission("subscription:activate"), activatePremium);
 // POST /api/subscriptions/cancel – Hủy auto-renew (subscription:cancel)
 router.post("/cancel", verifyToken, requirePermission("subscription:cancel"), cancelAutoRenew);
+// PUT /api/subscriptions/cancel-pending – Hủy pending payment { order_code } (subscription:manage)
+router.put("/cancel-pending", verifyToken, requirePermission("subscription:manage"), cancelPendingPayment);
 // GET /api/subscriptions/history – Lịch sử thanh toán (subscription:history)
 router.get("/history", verifyToken, requirePermission("subscription:history"), getPaymentHistory);
 // GET /api/subscriptions/usage – Thống kê usage (subscription:view)

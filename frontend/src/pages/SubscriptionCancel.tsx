@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, Result, Button, Space, Typography, Progress } from "antd";
 import { CloseCircleOutlined, HomeOutlined, CreditCardOutlined, InfoCircleOutlined } from "@ant-design/icons";
+import axios from "axios";
+import Swal from "sweetalert2";
 
 const { Text, Title } = Typography;
 
@@ -20,10 +22,34 @@ const SubscriptionCancel = () => {
   const navigate = useNavigate();
   const params = new URLSearchParams(window.location.search);
   const orderCode = params.get("orderCode");
+  const token = localStorage.getItem("token");
+  const apiUrl = import.meta.env.VITE_API_URL;
 
-  //thời gian đếm ngược
+  //thời gian đếm ngược 30 giây
   const TOTAL_COUNTDOWN = 30;
   const [countdown, setCountdown] = useState(TOTAL_COUNTDOWN);
+
+  // 🆕 Gọi API hủy pending payment khi component mount
+  useEffect(() => {
+    if (orderCode && token) {
+      cancelPendingPayment();
+    }
+  }, [orderCode, token]);
+
+  // 🆕 Hàm gọi API hủy pending payment
+  const cancelPendingPayment = async () => {
+    try {
+      const response = await axios.put(
+        `${apiUrl}/subscriptions/cancel-pending`,
+        { order_code: orderCode },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      console.log("✅ Hủy pending payment thành công:", response.data);
+    } catch (error: any) {
+      console.error("❌ Lỗi hủy pending payment:", error.response?.data?.message || error.message);
+      // Không show error alert vì trang này chỉ để thông báo đã hủy
+    }
+  };
 
   useEffect(() => {
     const countdownInterval = setInterval(() => {
@@ -130,7 +156,7 @@ const SubscriptionCancel = () => {
                 </Space>
               </Card>
 
-              {/* 🔥 Countdown 100 giây */}
+              {/* 🔥 Countdown 30 giây */}
               <Card
                 style={{
                   marginTop: 16,
@@ -173,7 +199,7 @@ const SubscriptionCancel = () => {
                   fontWeight: 600,
                 }}
               >
-                Quay về
+                Quay lại
               </Button>
               <Button
                 size="large"
