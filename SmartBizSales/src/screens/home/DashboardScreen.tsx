@@ -544,7 +544,7 @@ export default function DashboardScreen() {
     return (
       <View style={styles.loadingContainer}>
         <LinearGradient
-          colors={["#667eea", "#764ba2"]}
+          colors={["#667eea", "#10b981"]}
           style={styles.loadingCircle}
         >
           <ActivityIndicator size="large" color="#fff" />
@@ -559,7 +559,7 @@ export default function DashboardScreen() {
   return (
     <View style={styles.root} onLayout={handleLayout}>
       {/* Header với gradient */}
-      <LinearGradient colors={["#667eea", "#764ba2"]} style={styles.header}>
+      <LinearGradient colors={["#10b981", "#667eea"]} style={styles.header}>
         <View style={styles.headerContent}>
           <View style={styles.headerTop}>
             <View style={styles.avatarContainer}>

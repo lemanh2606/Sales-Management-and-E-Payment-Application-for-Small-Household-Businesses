@@ -21,7 +21,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import dayjs from "dayjs";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import DateTimePicker, {
+  DateTimePickerAndroid,
+  DateTimePickerEvent,
+} from "@react-native-community/datetimepicker";
 import { File, Directory, Paths } from "expo-file-system";
 import { fetch as expoFetch } from "expo/fetch";
 import * as Sharing from "expo-sharing";
@@ -407,14 +410,17 @@ const TopCustomersScreen: React.FC = () => {
     closeFilter();
     setApplyTick((x) => x + 2); // ép chạy fetch sau khi apply
   };
+
   useEffect(() => {
     if (isReadyToFetch()) fetchTopCustomers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [applyTick]);
+
   // ---------- Date picker (inside modal) ----------
-  const getPickerInit = (): Date => {
+  const getPickerInit = (field: PickerField): Date => {
     const now = new Date();
-    switch (pickerField) {
+
+    switch (field) {
       case "day":
         return dPeriodKey ? dayjs(dPeriodKey, "YYYY-MM-DD").toDate() : now;
       case "month":
@@ -436,21 +442,42 @@ const TopCustomersScreen: React.FC = () => {
     }
   };
 
+  const applyPickedDate = (field: PickerField, picked: Date) => {
+    const d = dayjs(picked);
+
+    if (field === "day") setDPeriodKey(d.format("YYYY-MM-DD"));
+    if (field === "month") setDPeriodKey(d.format("YYYY-MM"));
+    if (field === "year") setDPeriodKey(d.format("YYYY"));
+    if (field === "customFrom") setDMonthFrom(d.format("YYYY-MM"));
+    if (field === "customTo") setDMonthTo(d.format("YYYY-MM"));
+    if (field === "quarterYear") setDQuarterYear(d.format("YYYY"));
+  };
+
   const openPicker = (field: PickerField) => {
+    const init = getPickerInit(field);
+
+    if (Platform.OS === "android") {
+      DateTimePickerAndroid.open({
+        value: init,
+        mode: "date",
+        minimumDate: new Date(2000, 0, 1),
+        maximumDate: new Date(2100, 11, 31),
+        onChange: (event: DateTimePickerEvent, date?: Date) => {
+          if (event.type !== "set" || !date) return; // dismiss/cancel
+          applyPickedDate(field, date); // ✅ áp dụng ngay trên Android
+        },
+      });
+      return;
+    }
+
+    // iOS: giữ UX hiện tại (spinner + nút Áp dụng)
     setPickerField(field);
-    setTempPickedDate(getPickerInit());
+    setTempPickedDate(init);
   };
 
   const confirmPicker = () => {
-    const d = dayjs(tempPickedDate);
-
-    if (pickerField === "day") setDPeriodKey(d.format("YYYY-MM-DD"));
-    if (pickerField === "month") setDPeriodKey(d.format("YYYY-MM"));
-    if (pickerField === "year") setDPeriodKey(d.format("YYYY"));
-    if (pickerField === "customFrom") setDMonthFrom(d.format("YYYY-MM"));
-    if (pickerField === "customTo") setDMonthTo(d.format("YYYY-MM"));
-    if (pickerField === "quarterYear") setDQuarterYear(d.format("YYYY"));
-
+    if (!pickerField) return;
+    applyPickedDate(pickerField, tempPickedDate);
     setPickerField(null);
   };
 
@@ -508,7 +535,9 @@ const TopCustomersScreen: React.FC = () => {
 
       const bytes = await res.bytes(); // Uint8Array
 
-      const fileName = `Top_Khach_Hang_${periodForFile()}_${dayjs().format("DD-MM-YYYY")}.${format}`;
+      const fileName = `Top_Khach_Hang_${periodForFile()}_${dayjs().format(
+        "DD-MM-YYYY"
+      )}.${format}`;
       const dir = new Directory(Paths.cache, "exports");
       dir.create({ idempotent: true });
 
@@ -600,6 +629,7 @@ const TopCustomersScreen: React.FC = () => {
                 {formatPhone(item.customerPhone)}
               </Text>
             </View>
+
             <View style={styles.actionRow}>
               <TouchableOpacity
                 style={[styles.actionBtn, { backgroundColor: "#16a34a" }]}
@@ -708,12 +738,7 @@ const TopCustomersScreen: React.FC = () => {
     <SafeAreaView style={styles.safe}>
       <View style={styles.container}>
         {/* Header */}
-        <LinearGradient
-          colors={["#6366f1", "#7c3aed"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.header}
-        >
+        <LinearGradient colors={["#10b981", "#6366f1"]} style={styles.header}>
           <View style={styles.headerRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.storeName} numberOfLines={1}>
@@ -989,6 +1014,7 @@ const TopCustomersScreen: React.FC = () => {
                         />
                         <Text style={styles.pickBtnText}>Từ tháng</Text>
                       </TouchableOpacity>
+
                       <TouchableOpacity
                         style={[
                           styles.pickBtn,
@@ -1084,9 +1110,9 @@ const TopCustomersScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* Date picker modal (confirm/cancel) */}
+          {/* Date picker modal (confirm/cancel) - iOS only */}
           <Modal
-            visible={!!pickerField}
+            visible={Platform.OS === "ios" && !!pickerField}
             transparent
             animationType="fade"
             onRequestClose={cancelPicker}
@@ -1109,7 +1135,6 @@ const TopCustomersScreen: React.FC = () => {
                   mode="date"
                   display={Platform.OS === "ios" ? "spinner" : "default"}
                   onChange={(_, date) => {
-                    // Android: picker đóng sau khi chọn; vẫn dùng nút "Áp dụng" bên dưới để confirm
                     if (!date) return;
                     setTempPickedDate(date);
                   }}
@@ -1504,6 +1529,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "#eef2f7",
   },
+
   // style gợi ý
   actionRow: { flexDirection: "row", gap: 8, marginTop: 10 },
   actionBtn: {

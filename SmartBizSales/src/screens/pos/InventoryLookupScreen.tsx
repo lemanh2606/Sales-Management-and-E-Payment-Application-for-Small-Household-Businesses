@@ -209,25 +209,12 @@ const InventoryLookupScreen: React.FC = () => {
   }
 
   if (!storeId) {
-    return (
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.center}>
-          <Text style={styles.title}>Tra cứu tồn kho</Text>
-          <Text style={styles.muted}>Chưa chọn cửa hàng</Text>
-        </View>
-      </SafeAreaView>
-    );
+    return <SafeAreaView style={styles.safe}></SafeAreaView>;
   }
 
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" />
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Tra cứu tồn kho</Text>
-        <Text style={styles.headerSub} numberOfLines={1}>
-          {storeName}
-        </Text>
-      </View>
 
       <ScrollView
         contentContainerStyle={{ padding: 12, paddingBottom: 24 }}

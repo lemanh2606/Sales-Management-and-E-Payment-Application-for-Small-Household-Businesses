@@ -28,21 +28,83 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import apiClient from "../../api/apiClient";
 
-/** =========================
+/** =========================================================
+ *  Design tokens (LIGHT / WHITE)
+ *  ========================================================= */
+const COLORS = {
+  bg: "#f5f7fb",
+  surface: "#ffffff",
+  card: "#ffffff",
+  card2: "#f8fafc",
+  stroke: "#e2e8f0",
+
+  text: "#0f172a",
+  textStrong: "#0b1220",
+  muted: "#64748b",
+  placeholder: "#94a3b8",
+
+  primary: "#2563eb",
+  primary2: "#1d4ed8",
+  good: "#16a34a",
+  warn: "#f59e0b",
+  danger: "#ef4444",
+
+  chip: "#f1f5f9",
+  chipActive: "#dbeafe",
+
+  white: "#ffffff",
+};
+
+const RADIUS = {
+  xs: 10,
+  sm: 12,
+  md: 16,
+  lg: 20,
+  xl: 24,
+};
+
+const SPACING = {
+  xs: 8,
+  sm: 10,
+  md: 12,
+  lg: 16,
+  xl: 20,
+};
+
+const SHADOW = Platform.select({
+  ios: {
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 10 },
+  },
+  android: { elevation: 2 },
+});
+
+/** =========================================================
  *  Small UI primitives
- *  ========================= */
+ *  ========================================================= */
+const Divider: React.FC<{ style?: any }> = ({ style }) => (
+  <View style={[{ height: 1, backgroundColor: COLORS.stroke }, style]} />
+);
+
 const Section: React.FC<{
   title: string;
+  subtitle?: string;
   right?: React.ReactNode;
   children?: React.ReactNode;
-}> = React.memo(({ title, right, children }) => {
+}> = React.memo(({ title, subtitle, right, children }) => {
   return (
     <View style={styles.sectionCard}>
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionHeaderTitle}>{title}</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.sectionTitle}>{title}</Text>
+          {!!subtitle && <Text style={styles.sectionSubtitle}>{subtitle}</Text>}
+        </View>
         {right}
       </View>
-      <View style={{ marginTop: 10 }}>{children}</View>
+
+      <View style={{ marginTop: SPACING.md }}>{children}</View>
     </View>
   );
 });
@@ -59,8 +121,9 @@ const Pill: React.FC<{
       style={({ pressed }) => [
         styles.pill,
         active && styles.pillActive,
-        pressed && { opacity: 0.92 },
+        pressed && { opacity: 0.92, transform: [{ scale: 0.99 }] },
       ]}
+      hitSlop={8}
     >
       <Text style={[styles.pillText, active && styles.pillTextActive]}>
         {label}
@@ -91,13 +154,14 @@ const IconTextButton: React.FC<{
         pressed && !disabled && { transform: [{ scale: 0.99 }], opacity: 0.96 },
         style,
       ]}
+      hitSlop={8}
     >
       <Text
         style={[
           styles.btnTextBase,
           type === "primary" && styles.btnTextPrimary,
           type === "outline" && styles.btnTextOutline,
-          type === "danger" && styles.btnTextPrimary,
+          type === "danger" && styles.btnTextDanger,
           type === "ghost" && styles.btnTextOutline,
         ]}
       >
@@ -108,13 +172,15 @@ const IconTextButton: React.FC<{
   );
 };
 
-const Divider: React.FC<{ style?: any }> = ({ style }) => (
-  <View style={[{ height: 1, backgroundColor: COLORS.border }, style]} />
+const Badge: React.FC<{ value: number | string }> = ({ value }) => (
+  <View style={styles.badge}>
+    <Text style={styles.badgeText}>{value}</Text>
+  </View>
 );
 
-/** =========================
+/** =========================================================
  *  Types
- *  ========================= */
+ *  ========================================================= */
 type PaymentMethod = "cash" | "qr";
 type SaleType = "NORMAL" | "AT_COST" | "VIP" | "CLEARANCE" | "FREE";
 
@@ -225,9 +291,9 @@ const SALE_TYPE_LABEL: Record<SaleType, string> = {
   FREE: "Miễn phí",
 };
 
-/** =========================
+/** =========================================================
  *  Helpers
- *  ========================= */
+ *  ========================================================= */
 function debounce<F extends (...args: any[]) => any>(func: F, wait: number) {
   let timeout: ReturnType<typeof setTimeout>;
   return (...args: Parameters<F>) => {
@@ -283,7 +349,6 @@ const matchScore = (nameOrSku: string, query: string) => {
   return hit > 0 ? 30 + hit * 10 : 0;
 };
 
-// đơn giá thực tế theo saleType + overridePrice
 const getItemUnitPrice = (item: CartItem): number => {
   if (item.overridePrice !== null && item.overridePrice !== undefined) {
     return Number(item.overridePrice) || 0;
@@ -342,9 +407,9 @@ const clampInt = (raw: string, min = 0, max = Number.MAX_SAFE_INTEGER) => {
   return Math.max(min, Math.min(max, n));
 };
 
-/** =========================
+/** =========================================================
  *  Screen
- *  ========================= */
+ *  ========================================================= */
 const OrderPOSHomeScreen: React.FC = () => {
   // ===== init =====
   const [loadingInit, setLoadingInit] = useState(true);
@@ -408,6 +473,7 @@ const OrderPOSHomeScreen: React.FC = () => {
       const defaultEmployeeId = currentUserEmployee?.isOwner
         ? null
         : currentUserEmployee?._id || null;
+
       const fresh = makeEmptyTab(tab.key, defaultEmployeeId);
       Object.assign(tab, fresh);
     });
@@ -620,13 +686,17 @@ const OrderPOSHomeScreen: React.FC = () => {
         } finally {
           setProductSearchLoading(false);
         }
-      }, 250),
+      }, 220),
     []
   );
 
   useEffect(() => {
     searchProductDebounced(searchProduct);
   }, [searchProduct, searchProductDebounced]);
+
+  // chặn blur khi đang bấm vào dropdown
+  const selectingCustomerRef = useRef(false);
+  const selectingProductRef = useRef(false);
 
   const addToCart = useCallback(
     (product: Product) => {
@@ -636,6 +706,7 @@ const OrderPOSHomeScreen: React.FC = () => {
         const existing = tab.cart.find(
           (item) => item.productId === product._id
         );
+
         if (existing) {
           const newQty = existing.quantity + 1;
           tab.cart = tab.cart.map((item) =>
@@ -713,10 +784,6 @@ const OrderPOSHomeScreen: React.FC = () => {
   const [newCustomerName, setNewCustomerName] = useState("");
   const [newCustomerPhone, setNewCustomerPhone] = useState("");
 
-  // chặn blur khi đang bấm vào dropdown
-  const selectingCustomerRef = useRef(false);
-  const selectingProductRef = useRef(false);
-
   const searchCustomerDebounced = useMemo(
     () =>
       debounce(async (phone: string) => {
@@ -744,7 +811,7 @@ const OrderPOSHomeScreen: React.FC = () => {
           setNewCustomerPhone(p);
           setNewCustomerModalOpen(true);
         }
-      }, 350),
+      }, 300),
     []
   );
 
@@ -794,6 +861,7 @@ const OrderPOSHomeScreen: React.FC = () => {
         { storeId, name, phone },
         { headers: authHeaders }
       );
+
       const created: Customer =
         res?.data?.customer || res?.data?.data?.customer || res?.data;
       if (!created?._id) throw new Error("create customer failed");
@@ -883,6 +951,7 @@ const OrderPOSHomeScreen: React.FC = () => {
       const res: any = await apiClient.post<OrderResponse>(`/orders`, payload, {
         headers: authHeaders,
       });
+
       const order = res?.data?.order;
       const orderId = order?._id;
       if (!orderId) throw new Error("Không lấy được orderId");
@@ -954,6 +1023,7 @@ const OrderPOSHomeScreen: React.FC = () => {
         { headers: authHeaders }
       );
       Alert.alert("Thành công", "Đã gửi lệnh in hoá đơn.");
+
       // reset sau khi in xong (giống logic web)
       setBillModalOpen(false);
       setQrModalOpen(false);
@@ -972,13 +1042,21 @@ const OrderPOSHomeScreen: React.FC = () => {
       .map((i, idx) => {
         const unit = getItemUnitPrice(i);
         const amount = unit * i.quantity;
+
         return `
           <tr>
-            <td style="padding:6px 0; border-bottom: 1px solid #eee;">${idx + 1}. ${i.name}<br/><span style="color:#666;font-size:11px;">SKU: ${
-              i.sku
-            } • ${i.unit || ""}</span></td>
-            <td style="padding:6px 0; border-bottom: 1px solid #eee; text-align:right;">${i.quantity}</td>
-            <td style="padding:6px 0; border-bottom: 1px solid #eee; text-align:right;">${formatPrice(unit)}</td>
+            <td style="padding:6px 0; border-bottom: 1px solid #eee;">
+              ${idx + 1}. ${i.name}<br/>
+              <span style="color:#666;font-size:11px;">
+                SKU: ${i.sku} • ${i.unit || ""}
+              </span>
+            </td>
+            <td style="padding:6px 0; border-bottom: 1px solid #eee; text-align:right;">${
+              i.quantity
+            }</td>
+            <td style="padding:6px 0; border-bottom: 1px solid #eee; text-align:right;">${formatPrice(
+              unit
+            )}</td>
             <td style="padding:6px 0; border-bottom: 1px solid #eee; text-align:right; font-weight:700;">${formatPrice(
               amount
             )}</td>
@@ -1072,7 +1150,7 @@ const OrderPOSHomeScreen: React.FC = () => {
           });
           return;
         }
-        // fallback share
+
         await Share.share({
           url: uri,
           message: "Hoá đơn PDF",
@@ -1141,6 +1219,7 @@ const OrderPOSHomeScreen: React.FC = () => {
     const tick = () => {
       const diff = Math.max(0, Math.floor((expiry - Date.now()) / 1000));
       setQrRemainingSec(diff);
+
       if (diff <= 0) {
         updateOrderTab((t) => {
           t.qrImageUrl = null;
@@ -1247,9 +1326,10 @@ const OrderPOSHomeScreen: React.FC = () => {
     if (!loyaltySetting) return null;
 
     return (
-      <View style={{ marginTop: 12 }}>
+      <View style={{ marginTop: SPACING.md }}>
         <View style={styles.rowBetween}>
           <Text style={styles.mutedInline}>Dùng điểm</Text>
+
           <Pressable
             disabled={!canUse}
             onPress={() =>
@@ -1281,7 +1361,7 @@ const OrderPOSHomeScreen: React.FC = () => {
         </Text>
 
         {currentTab.usedPointsEnabled ? (
-          <View style={{ marginTop: 8 }}>
+          <View style={{ marginTop: SPACING.sm }}>
             <Text style={styles.mutedInline}>Số điểm muốn dùng</Text>
             <TextInput
               value={String(currentTab.usedPoints || 0)}
@@ -1316,6 +1396,7 @@ const OrderPOSHomeScreen: React.FC = () => {
     ({ item }: { item: CartItem }) => {
       const unitPrice = getItemUnitPrice(item);
       const amount = unitPrice * item.quantity;
+
       const isCustom =
         (item.saleType && item.saleType !== "NORMAL") ||
         item.overridePrice !== null;
@@ -1323,9 +1404,7 @@ const OrderPOSHomeScreen: React.FC = () => {
       return (
         <View style={styles.cartItem}>
           <View style={styles.cartLeft}>
-            <View
-              style={{ flexDirection: "row", gap: 10, alignItems: "center" }}
-            >
+            <View style={styles.cartMainRow}>
               {item.image?.url ? (
                 <Image
                   source={{ uri: item.image.url }}
@@ -1350,31 +1429,25 @@ const OrderPOSHomeScreen: React.FC = () => {
 
                 <Text style={styles.cartMeta} numberOfLines={1}>
                   {formatPrice(unitPrice)} × {item.quantity} ={" "}
-                  <Text style={{ fontWeight: "900" }}>
+                  <Text style={{ fontWeight: "900", color: COLORS.textStrong }}>
                     {formatPrice(amount)}
                   </Text>
                 </Text>
 
-                <View
-                  style={{
-                    flexDirection: "row",
-                    gap: 8,
-                    marginTop: 8,
-                    flexWrap: "wrap",
-                  }}
-                >
+                <View style={styles.cartPillsRow}>
                   <View
                     style={[
-                      styles.chip,
-                      isCustom
-                        ? { backgroundColor: "#e0f2fe", borderColor: "#38bdf8" }
-                        : undefined,
+                      styles.tagChip,
+                      isCustom && {
+                        backgroundColor: "#e0f2fe",
+                        borderColor: "#bae6fd",
+                      },
                     ]}
                   >
                     <Text
                       style={[
-                        styles.chipText,
-                        isCustom ? { color: "#0284c7" } : undefined,
+                        styles.tagChipText,
+                        isCustom && { color: "#0284c7" },
                       ]}
                     >
                       {SALE_TYPE_LABEL[item.saleType || "NORMAL"]}
@@ -1385,8 +1458,9 @@ const OrderPOSHomeScreen: React.FC = () => {
                     onPress={() => openPriceModal(item)}
                     style={({ pressed }) => [
                       styles.linkBtn,
-                      pressed && { opacity: 0.75 },
+                      pressed && { opacity: 0.78 },
                     ]}
+                    hitSlop={8}
                   >
                     <Text style={styles.linkBtnText}>Tuỳ chỉnh</Text>
                   </Pressable>
@@ -1405,8 +1479,9 @@ const OrderPOSHomeScreen: React.FC = () => {
                 onPress={() =>
                   updateQuantity(item.productId, item.quantity - 1)
                 }
+                hitSlop={8}
               >
-                <Text style={styles.qtyBtnText}>-</Text>
+                <Text style={styles.qtyBtnText}>−</Text>
               </Pressable>
 
               <Text style={styles.qtyText}>{item.quantity}</Text>
@@ -1419,6 +1494,7 @@ const OrderPOSHomeScreen: React.FC = () => {
                 onPress={() =>
                   updateQuantity(item.productId, item.quantity + 1)
                 }
+                hitSlop={8}
               >
                 <Text style={styles.qtyBtnText}>+</Text>
               </Pressable>
@@ -1430,6 +1506,7 @@ const OrderPOSHomeScreen: React.FC = () => {
                 pressed && { opacity: 0.8 },
               ]}
               onPress={() => removeItem(item.productId)}
+              hitSlop={8}
             >
               <Text style={styles.removeBtnText}>Xoá</Text>
             </Pressable>
@@ -1437,17 +1514,17 @@ const OrderPOSHomeScreen: React.FC = () => {
         </View>
       );
     },
-    // Dependencies đầy đủ vì bên trong dùng các hàm/const bên ngoài
     [openPriceModal, removeItem, updateQuantity]
   );
+
   // ===== render loading =====
   if (loadingInit) {
     return (
       <SafeAreaView style={styles.safe}>
-        <StatusBar barStyle="light-content" />
+        <StatusBar barStyle="dark-content" backgroundColor={COLORS.surface} />
         <View style={styles.center}>
-          <ActivityIndicator size="large" />
-          <Text style={styles.muted}>Đang tải...</Text>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.mutedText}>Đang tải...</Text>
         </View>
       </SafeAreaView>
     );
@@ -1455,8 +1532,6 @@ const OrderPOSHomeScreen: React.FC = () => {
 
   // ===== bottom actions computed =====
   const canCreateOrder = currentTab.cart.length > 0 && !loading;
-  const canConfirmCash =
-    !!currentTab.pendingOrderId && currentTab.paymentMethod === "cash";
   const canContinueQr =
     !!currentTab.pendingOrderId && currentTab.paymentMethod === "qr";
   const canOpenBill = !!currentTab.pendingOrderId;
@@ -1464,26 +1539,20 @@ const OrderPOSHomeScreen: React.FC = () => {
   const primaryActionText =
     currentTab.paymentMethod === "qr" ? "Tạo QR" : "Tạo đơn";
 
-  // ===== cart item row =====
-
   return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.header} />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.surface} />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         {/* Header */}
         <View style={styles.header}>
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "flex-end",
-            }}
-          >
-            <View>
-              <Text style={styles.headerTitle}>{storeName}</Text>
+          <View style={styles.headerTopRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.headerTitle} numberOfLines={1}>
+                {storeName}
+              </Text>
               <Text style={styles.headerSub}>POS • Bán hàng</Text>
             </View>
 
@@ -1512,7 +1581,7 @@ const OrderPOSHomeScreen: React.FC = () => {
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            style={{ marginTop: 12 }}
+            style={{ marginTop: SPACING.sm }}
           >
             <View
               style={{ flexDirection: "row", gap: 10, alignItems: "center" }}
@@ -1540,6 +1609,7 @@ const OrderPOSHomeScreen: React.FC = () => {
                           styles.iconClose,
                           pressed && { opacity: 0.8 },
                         ]}
+                        hitSlop={8}
                       >
                         <Text style={styles.iconCloseText}>×</Text>
                       </Pressable>
@@ -1558,81 +1628,100 @@ const OrderPOSHomeScreen: React.FC = () => {
           </ScrollView>
 
           {/* Search product */}
-          <View style={styles.searchRow}>
-            <TextInput
-              value={searchProduct}
-              onChangeText={(t) => {
-                setSearchProduct(t);
-                setShowProductDropdown(true);
-              }}
-              onFocus={() => setShowProductDropdown(true)}
-              onBlur={() => {
-                setTimeout(() => {
-                  if (!selectingProductRef.current)
+          <View style={{ marginTop: SPACING.md }}>
+            <View style={styles.searchBox}>
+              <Text style={styles.searchIcon}>⌕</Text>
+              <TextInput
+                value={searchProduct}
+                onChangeText={(t) => {
+                  setSearchProduct(t);
+                  setShowProductDropdown(true);
+                }}
+                onFocus={() => setShowProductDropdown(true)}
+                onBlur={() => {
+                  setTimeout(() => {
+                    if (!selectingProductRef.current)
+                      setShowProductDropdown(false);
+                  }, 180);
+                }}
+                placeholder="Tìm sản phẩm (tên / SKU)..."
+                placeholderTextColor={COLORS.placeholder}
+                style={styles.searchInput}
+                returnKeyType="search"
+              />
+              {!!searchProduct && (
+                <Pressable
+                  onPress={() => {
+                    setSearchProduct("");
+                    setSearchedProducts([]);
                     setShowProductDropdown(false);
-                }, 180);
-              }}
-              placeholder="Tìm sản phẩm (tên/SKU)..."
-              placeholderTextColor={COLORS.placeholder}
-              style={styles.searchInput}
-              returnKeyType="search"
-            />
-          </View>
-
-          {showProductDropdown ? (
-            <View style={styles.dropdown}>
-              {productSearchLoading ? (
-                <View style={styles.dropdownLoadingRow}>
-                  <ActivityIndicator />
-                  <Text style={styles.hint}>Đang tìm...</Text>
-                </View>
-              ) : productSearchError ? (
-                <View style={{ padding: 14 }}>
-                  <Text
-                    style={[
-                      styles.hint,
-                      { color: COLORS.danger, fontWeight: "900" },
-                    ]}
-                  >
-                    {productSearchError}
-                  </Text>
-                </View>
-              ) : suggestedProducts.length === 0 ? (
-                <View style={{ padding: 14 }}>
-                  <Text style={styles.hint}>Không có kết quả.</Text>
-                </View>
-              ) : (
-                <ScrollView
-                  style={{ maxHeight: 260 }}
-                  keyboardShouldPersistTaps="always"
+                  }}
+                  hitSlop={10}
+                  style={({ pressed }) => [
+                    styles.searchClear,
+                    pressed && { opacity: 0.8 },
+                  ]}
                 >
-                  {suggestedProducts.map((p) => (
-                    <Pressable
-                      key={p._id}
-                      onPressIn={() => (selectingProductRef.current = true)}
-                      onPressOut={() => (selectingProductRef.current = false)}
-                      onPress={() => addToCart(p)}
-                      style={({ pressed }) => [
-                        styles.dropdownItem,
-                        pressed && { backgroundColor: "#f1f5ff" },
-                      ]}
-                    >
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.dropdownTitle} numberOfLines={1}>
-                          {p.name}
-                        </Text>
-                        <Text style={styles.hint} numberOfLines={1}>
-                          SKU: {p.sku} • {p.unit} • {formatPrice(p.price)} •
-                          Tồn: {p.stock_quantity}
-                        </Text>
-                      </View>
-                      <Text style={styles.addHint}>Thêm</Text>
-                    </Pressable>
-                  ))}
-                </ScrollView>
+                  <Text style={styles.searchClearText}>×</Text>
+                </Pressable>
               )}
             </View>
-          ) : null}
+
+            {showProductDropdown ? (
+              <View style={styles.dropdown}>
+                {productSearchLoading ? (
+                  <View style={styles.dropdownLoadingRow}>
+                    <ActivityIndicator color={COLORS.primary} />
+                    <Text style={styles.hint}>Đang tìm...</Text>
+                  </View>
+                ) : productSearchError ? (
+                  <View style={{ padding: 14 }}>
+                    <Text
+                      style={[
+                        styles.hint,
+                        { color: COLORS.danger, fontWeight: "900" },
+                      ]}
+                    >
+                      {productSearchError}
+                    </Text>
+                  </View>
+                ) : suggestedProducts.length === 0 ? (
+                  <View style={{ padding: 14 }}>
+                    <Text style={styles.hint}>Không có kết quả.</Text>
+                  </View>
+                ) : (
+                  <ScrollView
+                    style={{ maxHeight: 270 }}
+                    keyboardShouldPersistTaps="always"
+                  >
+                    {suggestedProducts.map((p) => (
+                      <Pressable
+                        key={p._id}
+                        onPressIn={() => (selectingProductRef.current = true)}
+                        onPressOut={() => (selectingProductRef.current = false)}
+                        onPress={() => addToCart(p)}
+                        style={({ pressed }) => [
+                          styles.dropdownItem,
+                          pressed && { backgroundColor: "#eff6ff" },
+                        ]}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.dropdownTitle} numberOfLines={1}>
+                            {p.name}
+                          </Text>
+                          <Text style={styles.hint} numberOfLines={1}>
+                            SKU: {p.sku} • {p.unit} • {formatPrice(p.price)} •
+                            Tồn: {p.stock_quantity}
+                          </Text>
+                        </View>
+                        <Text style={styles.addHint}>Thêm</Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                )}
+              </View>
+            ) : null}
+          </View>
         </View>
 
         {/* Body */}
@@ -1644,6 +1733,7 @@ const OrderPOSHomeScreen: React.FC = () => {
           {/* Employee */}
           <Section
             title="Nhân viên bán"
+            subtitle="Người thực hiện đơn hàng"
             right={
               <IconTextButton
                 type="outline"
@@ -1664,6 +1754,7 @@ const OrderPOSHomeScreen: React.FC = () => {
           {/* Customer */}
           <Section
             title="Khách hàng"
+            subtitle="Nhập số điện thoại để tìm / tạo khách"
             right={
               <IconTextButton
                 type="outline"
@@ -1707,7 +1798,7 @@ const OrderPOSHomeScreen: React.FC = () => {
                       onPress={() => selectCustomer(c)}
                       style={({ pressed }) => [
                         styles.dropdownItem,
-                        pressed && { backgroundColor: "#f1f5ff" },
+                        pressed && { backgroundColor: "#eff6ff" },
                       ]}
                     >
                       <View style={{ flex: 1 }}>
@@ -1724,7 +1815,7 @@ const OrderPOSHomeScreen: React.FC = () => {
               </View>
             ) : null}
 
-            <View style={{ marginTop: 8 }}>
+            <View style={{ marginTop: 10 }}>
               <Text style={styles.hint}>
                 Đang chọn:{" "}
                 {currentTab.customer
@@ -1739,45 +1830,45 @@ const OrderPOSHomeScreen: React.FC = () => {
           {/* Cart */}
           <Section
             title="Giỏ hàng"
-            right={
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{currentTab.cart.length}</Text>
-              </View>
-            }
+            subtitle="Sản phẩm đã chọn"
+            right={<Badge value={currentTab.cart.length} />}
           >
             {currentTab.cart.length === 0 ? (
-              <Text style={styles.muted}>Chưa có sản phẩm.</Text>
+              <Text style={styles.mutedText}>Chưa có sản phẩm.</Text>
             ) : (
               <FlatList
                 data={currentTab.cart}
                 keyExtractor={(i) => i.productId}
                 scrollEnabled={false}
                 renderItem={CartRow as any}
-                ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+                ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
               />
             )}
           </Section>
 
-          {/* Payment details (compact) */}
-          <Section title="Thanh toán">
+          {/* Payment */}
+          <Section
+            title="Thanh toán"
+            subtitle="Tổng kết đơn hàng & phương thức"
+          >
             <View style={styles.rowBetween}>
               <Text style={styles.mutedInline}>Tạm tính</Text>
               <Text style={styles.valueText}>{formatPrice(subtotal)}</Text>
             </View>
 
-            <View style={[styles.rowBetween, { marginTop: 8 }]}>
+            <View style={[styles.rowBetween, { marginTop: 10 }]}>
               <Text style={styles.mutedInline}>Giảm từ điểm</Text>
               <Text
                 style={[
                   styles.valueText,
-                  { color: discount > 0 ? COLORS.good : COLORS.text },
+                  { color: discount > 0 ? COLORS.good : COLORS.textStrong },
                 ]}
               >
                 - {formatPrice(discount)}
               </Text>
             </View>
 
-            <View style={[styles.rowBetween, { marginTop: 10 }]}>
+            <View style={[styles.rowBetween, { marginTop: 12 }]}>
               <Text style={styles.mutedInline}>VAT 10%</Text>
               <Pressable
                 onPress={() => updateOrderTab((t) => (t.isVAT = !t.isVAT))}
@@ -1795,7 +1886,7 @@ const OrderPOSHomeScreen: React.FC = () => {
             </View>
 
             {currentTab.isVAT ? (
-              <View style={[styles.rowBetween, { marginTop: 8 }]}>
+              <View style={[styles.rowBetween, { marginTop: 10 }]}>
                 <Text style={[styles.mutedInline, { color: COLORS.warn }]}>
                   Tiền VAT
                 </Text>
@@ -1805,14 +1896,15 @@ const OrderPOSHomeScreen: React.FC = () => {
               </View>
             ) : null}
 
-            <View style={[styles.totalBox, { marginTop: 12 }]}>
+            <View style={[styles.totalBox, { marginTop: 14 }]}>
               <Text style={styles.totalLabel}>Khách phải trả</Text>
               <Text style={styles.totalValue}>{formatPrice(totalAmount)}</Text>
             </View>
 
-            <Text style={[styles.mutedInline, { marginTop: 12 }]}>
+            <Text style={[styles.mutedInline, { marginTop: 14 }]}>
               Phương thức
             </Text>
+
             <View style={styles.pmRow}>
               <Pressable
                 onPress={() =>
@@ -1853,7 +1945,7 @@ const OrderPOSHomeScreen: React.FC = () => {
             </View>
 
             {currentTab.paymentMethod === "cash" ? (
-              <View style={{ marginTop: 12 }}>
+              <View style={{ marginTop: 14 }}>
                 <Text style={styles.mutedInline}>Tiền khách đưa</Text>
                 <TextInput
                   value={String(currentTab.cashReceived || 0)}
@@ -1871,8 +1963,7 @@ const OrderPOSHomeScreen: React.FC = () => {
                   style={[
                     styles.changeBox,
                     {
-                      borderColor:
-                        changeAmount >= 0 ? COLORS.good : COLORS.danger,
+                      borderColor: changeAmount >= 0 ? "#bbf7d0" : "#fecaca",
                       backgroundColor:
                         changeAmount >= 0 ? "#f0fdf4" : "#fff1f2",
                     },
@@ -1928,7 +2019,7 @@ const OrderPOSHomeScreen: React.FC = () => {
           </Section>
 
           {/* spacer for bottom bar */}
-          <View style={{ height: 96 }} />
+          <View style={{ height: 108 }} />
         </ScrollView>
 
         {/* Bottom Bar */}
@@ -2054,7 +2145,7 @@ const OrderPOSHomeScreen: React.FC = () => {
                   <Pressable
                     style={({ pressed }) => [
                       styles.dropdownItem,
-                      pressed && { backgroundColor: "#f1f5ff" },
+                      pressed && { backgroundColor: "#eff6ff" },
                     ]}
                     onPress={() => {
                       updateOrderTab((t) => (t.employeeId = null));
@@ -2076,7 +2167,7 @@ const OrderPOSHomeScreen: React.FC = () => {
                     key={e._id}
                     style={({ pressed }) => [
                       styles.dropdownItem,
-                      pressed && { backgroundColor: "#f1f5ff" },
+                      pressed && { backgroundColor: "#eff6ff" },
                     ]}
                     onPress={() => {
                       updateOrderTab((t) => (t.employeeId = e._id));
@@ -2116,7 +2207,9 @@ const OrderPOSHomeScreen: React.FC = () => {
             <View style={styles.modalCard}>
               <Text style={styles.modalTitle}>Thêm khách hàng</Text>
 
-              <Text style={styles.mutedInline}>Tên khách</Text>
+              <Text style={[styles.mutedInline, { marginTop: 10 }]}>
+                Tên khách
+              </Text>
               <TextInput
                 value={newCustomerName}
                 onChangeText={setNewCustomerName}
@@ -2202,7 +2295,6 @@ const OrderPOSHomeScreen: React.FC = () => {
                   onPress={closeQrModal}
                   style={{ flex: 1 }}
                 />
-
                 <IconTextButton
                   type="danger"
                   text="In hoá đơn"
@@ -2211,7 +2303,6 @@ const OrderPOSHomeScreen: React.FC = () => {
                       Alert.alert("Thiếu đơn hàng", "Chưa có orderId.");
                       return;
                     }
-                    // giống web: print-bill sẽ xác nhận thanh toán QR
                     await triggerPrintServer(currentTab.pendingOrderId);
                   }}
                   style={{ flex: 1 }}
@@ -2244,13 +2335,16 @@ const OrderPOSHomeScreen: React.FC = () => {
                     {currentTab.customer?.name || "Khách vãng lai"}
                   </Text>
                 </View>
+
                 <View style={styles.rowBetween}>
                   <Text style={styles.mutedInline}>SĐT</Text>
                   <Text style={styles.valueText}>
                     {currentTab.customer?.phone || "---"}
                   </Text>
                 </View>
+
                 <Divider />
+
                 <View style={styles.rowBetween}>
                   <Text style={styles.mutedInline}>Tổng thanh toán</Text>
                   <Text style={styles.totalValue}>
@@ -2260,9 +2354,8 @@ const OrderPOSHomeScreen: React.FC = () => {
               </View>
 
               <View style={{ marginTop: 12 }}>
-                <Text style={styles.sectionHeaderTitle}>
-                  Danh sách sản phẩm
-                </Text>
+                <Text style={styles.sectionTitleMini}>Danh sách sản phẩm</Text>
+
                 <ScrollView
                   style={{ maxHeight: 220, marginTop: 8 }}
                   keyboardShouldPersistTaps="always"
@@ -2273,10 +2366,12 @@ const OrderPOSHomeScreen: React.FC = () => {
                       style={{
                         paddingVertical: 10,
                         borderBottomWidth: 1,
-                        borderBottomColor: COLORS.border,
+                        borderBottomColor: COLORS.stroke,
                       }}
                     >
-                      <Text style={{ fontWeight: "900", color: COLORS.text }}>
+                      <Text
+                        style={{ fontWeight: "900", color: COLORS.textStrong }}
+                      >
                         {i.name}
                       </Text>
                       <Text style={styles.hint}>
@@ -2295,7 +2390,6 @@ const OrderPOSHomeScreen: React.FC = () => {
                   onPress={() => setBillModalOpen(false)}
                   style={{ flex: 1 }}
                 />
-
                 <IconTextButton
                   type="outline"
                   text="Xuất PDF"
@@ -2303,7 +2397,6 @@ const OrderPOSHomeScreen: React.FC = () => {
                   onPress={exportBillPdfToDevice}
                   style={{ flex: 1 }}
                 />
-
                 <IconTextButton
                   type="primary"
                   text="In"
@@ -2342,14 +2435,8 @@ const OrderPOSHomeScreen: React.FC = () => {
                   <Text style={[styles.mutedInline, { marginTop: 12 }]}>
                     Loại giá
                   </Text>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      flexWrap: "wrap",
-                      gap: 10,
-                      marginTop: 10,
-                    }}
-                  >
+
+                  <View style={styles.optionRow}>
                     {(
                       [
                         "NORMAL",
@@ -2361,6 +2448,7 @@ const OrderPOSHomeScreen: React.FC = () => {
                     ).map((st) => {
                       const active =
                         (priceEditModal.tempSaleType || "NORMAL") === st;
+
                       return (
                         <Pressable
                           key={st}
@@ -2465,25 +2553,9 @@ const OrderPOSHomeScreen: React.FC = () => {
 
 export default OrderPOSHomeScreen;
 
-/** =========================
- *  Theme
- *  ========================= */
-const COLORS = {
-  bg: "#f8fafc",
-  card: "#ffffff",
-  header: "#0f172a",
-  header2: "#111827",
-  text: "#0f172a",
-  muted: "#64748b",
-  placeholder: "#94a3b8",
-  border: "#e2e8f0",
-  primary: "#2563eb",
-  primary2: "#1d4ed8",
-  danger: "#ef4444",
-  warn: "#f59e0b",
-  good: "#16a34a",
-};
-
+/** =========================================================
+ *  Styles (LIGHT)
+ *  ========================================================= */
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
 
@@ -2493,64 +2565,112 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 24,
   },
-  muted: { color: COLORS.muted, marginTop: 8, fontWeight: "700" },
+  mutedText: { color: COLORS.muted, marginTop: 10, fontWeight: "800" },
 
-  header: { padding: 10, backgroundColor: "#10b981" },
-  headerTitle: { color: "#fff", fontSize: 18, fontWeight: "900" },
-  headerSub: {
-    color: "rgba(255,255,255,0.85)",
-    marginTop: 4,
-    fontWeight: "700",
+  header: {
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.lg,
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.stroke,
+    ...SHADOW,
   },
+  headerTopRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  headerTitle: { color: COLORS.textStrong, fontSize: 18, fontWeight: "900" },
+  headerSub: { color: COLORS.muted, marginTop: 4, fontWeight: "800" },
 
-  container: { padding: 16, paddingBottom: 18, gap: 12 },
+  container: { padding: SPACING.lg, paddingBottom: 18, gap: SPACING.md },
 
+  // Pills (tabs)
   pill: {
     paddingHorizontal: 12,
     paddingVertical: 9,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.10)",
+    backgroundColor: COLORS.chip,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.18)",
+    borderColor: COLORS.stroke,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
-  pillActive: { backgroundColor: "#fff", borderColor: "#fff" },
-  pillText: { color: "#fff", fontWeight: "900" },
-  pillTextActive: { color: COLORS.header, fontWeight: "900" },
+  pillActive: { backgroundColor: COLORS.chipActive, borderColor: "#93c5fd" },
+  pillText: { color: COLORS.text, fontWeight: "900" },
+  pillTextActive: { color: COLORS.primary2, fontWeight: "900" },
 
   iconClose: {
-    width: 26,
-    height: 26,
+    width: 28,
+    height: 28,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "#fee2e2",
+    borderWidth: 1,
+    borderColor: "#fecaca",
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.18)",
   },
-  iconCloseText: { color: "#fff", fontWeight: "900", marginTop: -2 },
+  iconCloseText: {
+    color: "#b91c1c",
+    fontWeight: "900",
+    marginTop: -2,
+    fontSize: 16,
+  },
 
-  searchRow: { marginTop: 12 },
+  // Search
+  searchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: RADIUS.lg,
+    backgroundColor: "#f1f5f9",
+    borderWidth: 1,
+    borderColor: COLORS.stroke,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  searchIcon: {
+    color: COLORS.muted,
+    fontSize: 16,
+    fontWeight: "900",
+    width: 18,
+    textAlign: "center",
+  },
   searchInput: {
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    flex: 1,
+    fontWeight: "900",
+    color: COLORS.textStrong,
+    paddingVertical: 0,
+  },
+  searchClear: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#e2e8f0",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    fontWeight: "800",
+    borderColor: "#cbd5e1",
+  },
+  searchClearText: {
     color: COLORS.text,
+    fontWeight: "900",
+    fontSize: 16,
+    marginTop: -2,
   },
 
+  // Dropdown
   dropdown: {
-    backgroundColor: COLORS.card,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: COLORS.border,
     marginTop: 10,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.stroke,
+    backgroundColor: COLORS.surface,
     overflow: "hidden",
+    ...SHADOW,
   },
   dropdownLoadingRow: {
     padding: 14,
@@ -2562,40 +2682,54 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9",
+    borderBottomColor: COLORS.stroke,
     flexDirection: "row",
     gap: 12,
     alignItems: "center",
   },
-  dropdownTitle: { fontWeight: "900", color: COLORS.text },
+  dropdownTitle: { fontWeight: "900", color: COLORS.textStrong },
   hint: { marginTop: 4, color: COLORS.muted, fontWeight: "700", fontSize: 12 },
   addHint: { fontWeight: "900", color: COLORS.primary },
 
+  // Section
   sectionCard: {
     backgroundColor: COLORS.card,
-    borderRadius: 16,
+    borderRadius: RADIUS.xl,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 14,
+    borderColor: COLORS.stroke,
+    padding: SPACING.lg,
+    ...SHADOW,
   },
   sectionHeader: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
+    gap: 10,
   },
-  sectionHeaderTitle: { fontSize: 14, fontWeight: "900", color: COLORS.text },
+  sectionTitle: { fontSize: 14, fontWeight: "900", color: COLORS.textStrong },
+  sectionTitleMini: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: COLORS.textStrong,
+  },
+  sectionSubtitle: {
+    marginTop: 4,
+    color: COLORS.muted,
+    fontWeight: "700",
+    fontSize: 12,
+  },
 
-  valueText: { fontWeight: "900", color: COLORS.text },
+  valueText: { fontWeight: "900", color: COLORS.textStrong },
 
   input: {
-    backgroundColor: "#fff",
-    borderRadius: 14,
+    backgroundColor: "#f8fafc",
+    borderRadius: RADIUS.lg,
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    fontWeight: "800",
-    color: COLORS.text,
+    borderColor: COLORS.stroke,
+    fontWeight: "900",
+    color: COLORS.textStrong,
     marginTop: 6,
   },
 
@@ -2603,39 +2737,41 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    gap: 10,
   },
-  mutedInline: { color: COLORS.muted, fontWeight: "800" },
+  mutedInline: { color: COLORS.muted, fontWeight: "900" },
 
   toggle: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
     borderRadius: 999,
-    backgroundColor: "#e2e8f0",
+    backgroundColor: "#f1f5f9",
     borderWidth: 1,
-    borderColor: "#cbd5e1",
+    borderColor: COLORS.stroke,
   },
-  toggleOn: { backgroundColor: COLORS.good, borderColor: "#15803d" },
+  toggleOn: { backgroundColor: "#dcfce7", borderColor: "#bbf7d0" },
   toggleText: { fontWeight: "900", color: COLORS.text, fontSize: 12 },
-  toggleTextOn: { color: "#fff" },
+  toggleTextOn: { color: "#166534" },
 
   badge: {
-    minWidth: 32,
+    minWidth: 34,
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: "#eff6ff",
+    backgroundColor: "#dbeafe",
     borderWidth: 1,
     borderColor: "#bfdbfe",
     alignItems: "center",
     justifyContent: "center",
   },
-  badgeText: { fontWeight: "900", color: COLORS.primary },
+  badgeText: { fontWeight: "900", color: "#1d4ed8" },
 
+  // Cart
   cartItem: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
+    backgroundColor: "#f8fafc",
+    borderRadius: RADIUS.xl,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: COLORS.stroke,
     padding: 12,
     flexDirection: "row",
     gap: 12,
@@ -2646,7 +2782,10 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     justifyContent: "space-between",
   },
-  cartName: { fontWeight: "900", color: COLORS.text, fontSize: 14 },
+
+  cartMainRow: { flexDirection: "row", gap: 10, alignItems: "center" },
+
+  cartName: { fontWeight: "900", color: COLORS.textStrong, fontSize: 14 },
   cartMeta: {
     marginTop: 4,
     color: COLORS.muted,
@@ -2657,62 +2796,71 @@ const styles = StyleSheet.create({
   productThumb: {
     width: 46,
     height: 46,
-    borderRadius: 10,
+    borderRadius: RADIUS.md,
     backgroundColor: "#e2e8f0",
   },
   productThumbFallback: {
     width: 46,
     height: 46,
-    borderRadius: 10,
+    borderRadius: RADIUS.md,
     backgroundColor: "#e2e8f0",
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
     alignItems: "center",
     justifyContent: "center",
   },
-  productThumbFallbackText: { fontWeight: "900", color: "#334155" },
+  productThumbFallbackText: { fontWeight: "900", color: COLORS.text },
 
-  chip: {
+  cartPillsRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 8,
+    flexWrap: "wrap",
+  },
+
+  tagChip: {
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: "#f1f5f9",
+    borderColor: COLORS.stroke,
+    backgroundColor: "#ffffff",
   },
-  chipText: { fontWeight: "900", color: "#334155", fontSize: 12 },
+  tagChipText: { fontWeight: "900", color: COLORS.muted, fontSize: 12 },
 
   linkBtn: {
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#c7d2fe",
-    backgroundColor: "#eef2ff",
+    borderColor: "#bfdbfe",
+    backgroundColor: "#dbeafe",
   },
-  linkBtnText: { fontWeight: "900", color: "#3730a3", fontSize: 12 },
+  linkBtnText: { fontWeight: "900", color: "#1d4ed8", fontSize: 12 },
 
   qtyRow: { flexDirection: "row", gap: 8, alignItems: "center" },
   qtyBtn: {
     width: 34,
     height: 34,
-    borderRadius: 12,
-    backgroundColor: "#f1f5f9",
+    borderRadius: RADIUS.md,
+    backgroundColor: "#ffffff",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#cbd5e1",
+    borderColor: COLORS.stroke,
   },
-  qtyBtnText: { fontWeight: "900", color: COLORS.text, fontSize: 16 },
+  qtyBtnText: { fontWeight: "900", color: COLORS.textStrong, fontSize: 16 },
   qtyText: {
     width: 30,
     textAlign: "center",
     fontWeight: "900",
-    color: COLORS.text,
+    color: COLORS.textStrong,
   },
 
   removeBtn: {
     paddingVertical: 8,
     paddingHorizontal: 10,
-    borderRadius: 12,
+    borderRadius: RADIUS.md,
     backgroundColor: "#fee2e2",
     borderWidth: 1,
     borderColor: "#fecaca",
@@ -2720,94 +2868,97 @@ const styles = StyleSheet.create({
   removeBtnText: { color: "#b91c1c", fontWeight: "900", fontSize: 12 },
 
   totalBox: {
-    borderRadius: 14,
+    borderRadius: RADIUS.xl,
     padding: 14,
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: "#bfdbfe",
     backgroundColor: "#eff6ff",
   },
-  totalLabel: { fontWeight: "900", color: COLORS.text, fontSize: 14 },
-  totalValue: { fontWeight: "900", color: COLORS.primary, fontSize: 18 },
+  totalLabel: { fontWeight: "900", color: COLORS.textStrong, fontSize: 13 },
+  totalValue: {
+    fontWeight: "900",
+    color: "#1d4ed8",
+    fontSize: 18,
+    marginTop: 2,
+  },
 
   changeBox: {
-    borderRadius: 14,
+    borderRadius: RADIUS.xl,
     padding: 14,
-    borderWidth: 2,
+    borderWidth: 1,
     marginTop: 10,
   },
 
-  pmRow: { flexDirection: "row", gap: 10, marginTop: 8 },
+  pmRow: { flexDirection: "row", gap: 10, marginTop: 10 },
   pmBtn: {
     flex: 1,
-    backgroundColor: "#f1f5f9",
-    borderRadius: 12,
+    backgroundColor: "#f8fafc",
+    borderRadius: RADIUS.lg,
     paddingVertical: 12,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: COLORS.stroke,
   },
-  pmBtnActive: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary2,
-  },
+  pmBtnActive: { backgroundColor: "#dbeafe", borderColor: "#bfdbfe" },
   pmBtnText: { fontWeight: "900", color: COLORS.text },
-  pmBtnTextActive: { color: "#fff" },
+  pmBtnTextActive: { color: "#1d4ed8" },
 
-  // buttons
+  // Buttons
   btnBase: {
     flexDirection: "row",
     gap: 8,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 14,
+    borderRadius: RADIUS.lg,
     paddingVertical: 12,
     paddingHorizontal: 14,
   },
   btnPrimary: {
     backgroundColor: COLORS.primary,
     borderWidth: 1,
-    borderColor: COLORS.primary2,
+    borderColor: "rgba(37,99,235,0.20)",
   },
   btnOutline: {
-    backgroundColor: "#fff",
+    backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: COLORS.primary,
+    borderColor: "#cbd5e1",
   },
   btnDanger: {
-    backgroundColor: "#f97316",
+    backgroundColor: "#fee2e2",
     borderWidth: 1,
-    borderColor: "#ea580c",
+    borderColor: "#fecaca",
   },
   btnGhost: {
-    backgroundColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "#f1f5f9",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.16)",
+    borderColor: "#e2e8f0",
   },
-
   btnTextBase: { fontWeight: "900" },
-  btnTextPrimary: { color: "#fff" },
-  btnTextOutline: { color: COLORS.primary },
+  btnTextPrimary: { color: COLORS.white },
+  btnTextOutline: { color: COLORS.textStrong },
+  btnTextDanger: { color: "#b91c1c" },
 
-  // bottom bar
+  // Bottom bar
   bottomBar: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
-    paddingHorizontal: 14,
+    paddingHorizontal: SPACING.lg,
     paddingTop: 10,
     paddingBottom: Platform.OS === "ios" ? 18 : 12,
-    backgroundColor: "#ffffff",
+    backgroundColor: COLORS.surface,
     borderTopWidth: 1,
-    borderTopColor: COLORS.border,
+    borderTopColor: COLORS.stroke,
     flexDirection: "row",
     gap: 12,
     alignItems: "flex-start",
+    ...SHADOW,
   },
   bottomBarLabel: { color: COLORS.muted, fontWeight: "900", fontSize: 12 },
   bottomBarTotal: {
-    color: COLORS.primary,
+    color: "#1d4ed8",
     fontWeight: "900",
     fontSize: 18,
     marginTop: 2,
@@ -2822,21 +2973,21 @@ const styles = StyleSheet.create({
   bottomChip: {
     paddingHorizontal: 12,
     paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: "#f1f5f9",
+    borderRadius: RADIUS.lg,
+    backgroundColor: "#f8fafc",
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: COLORS.stroke,
     minWidth: 72,
     alignItems: "center",
   },
-  bottomChipActive: { backgroundColor: "#eff6ff", borderColor: "#bfdbfe" },
+  bottomChipActive: { backgroundColor: "#dbeafe", borderColor: "#bfdbfe" },
   bottomChipText: { fontWeight: "900", color: COLORS.text },
-  bottomChipTextActive: { color: COLORS.primary },
+  bottomChipTextActive: { color: "#1d4ed8" },
 
-  // modal
+  // Modal
   modalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.55)",
+    backgroundColor: "rgba(15, 23, 42, 0.45)",
     alignItems: "center",
     justifyContent: "center",
     padding: 16,
@@ -2844,20 +2995,22 @@ const styles = StyleSheet.create({
   modalCard: {
     width: "100%",
     maxWidth: 520,
-    backgroundColor: "#fff",
-    borderRadius: 18,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.xl,
     padding: 16,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: COLORS.stroke,
+    ...SHADOW,
   },
-  modalTitle: { fontSize: 16, fontWeight: "900", color: COLORS.text },
+  modalTitle: { fontSize: 16, fontWeight: "900", color: COLORS.textStrong },
   modalSubtitle: { marginTop: 6, color: COLORS.muted, fontWeight: "800" },
+  modalRow: { flexDirection: "row", gap: 10, marginTop: 12 },
 
   qrBox: {
     marginTop: 12,
-    borderRadius: 14,
+    borderRadius: RADIUS.xl,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: COLORS.stroke,
     backgroundColor: "#f8fafc",
     padding: 12,
     alignItems: "center",
@@ -2865,10 +3018,8 @@ const styles = StyleSheet.create({
   },
   qrImage: { width: 280, height: 280 },
 
-  modalRow: { flexDirection: "row", gap: 10, marginTop: 12 },
-
   infoStrip: {
-    borderRadius: 12,
+    borderRadius: RADIUS.lg,
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderWidth: 1,
@@ -2877,15 +3028,16 @@ const styles = StyleSheet.create({
   },
   infoStripText: { fontWeight: "900", color: "#92400e" },
 
+  optionRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 10 },
   optionChip: {
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 999,
-    backgroundColor: "#f1f5f9",
+    backgroundColor: "#f8fafc",
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: COLORS.stroke,
   },
-  optionChipActive: { backgroundColor: "#eff6ff", borderColor: "#bfdbfe" },
+  optionChipActive: { backgroundColor: "#dbeafe", borderColor: "#bfdbfe" },
   optionChipText: { fontWeight: "900", color: COLORS.text, fontSize: 12 },
-  optionChipTextActive: { color: COLORS.primary },
+  optionChipTextActive: { color: "#1d4ed8" },
 });
