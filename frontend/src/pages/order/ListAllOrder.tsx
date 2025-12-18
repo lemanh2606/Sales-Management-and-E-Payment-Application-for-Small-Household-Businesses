@@ -448,7 +448,7 @@ const ListAllOrder: React.FC = () => {
                 style={{ width: "100%" }}
                 disabled={!periodKey && periodType !== "custom"}
               >
-                Xuất ra tệp Excel
+                Xuất ra Excel
               </Button>
             </Col>
           </Row>
@@ -504,7 +504,7 @@ const ListAllOrder: React.FC = () => {
                   dataIndex: ["employeeId", "fullName"],
                   key: "employee",
                   width: 120,
-                  render: (text) => <Text style={{ fontSize: 14 }}>{text}</Text>,
+                  render: (text) => (text ? <Text style={{ fontSize: 14 }}>{text}</Text> : <Tag color="gold">Chủ bán hàng</Tag>),
                 },
                 {
                   title: <span style={{ fontWeight: 600 }}>Phương thức</span>,

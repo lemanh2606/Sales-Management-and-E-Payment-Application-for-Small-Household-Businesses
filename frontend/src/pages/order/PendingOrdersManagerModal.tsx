@@ -32,6 +32,7 @@ interface PendingOrder {
   customer?: Customer;
   totalAmount: MongoDecimal;
   createdAt: string;
+  status: string;
   paymentMethod: string;
 }
 
@@ -202,7 +203,7 @@ const PendingOrdersManagerModal: React.FC<PendingOrdersManagerModalProps> = ({ v
       title: "Mã đơn",
       dataIndex: "_id",
       key: "_id",
-      width: 100,
+      width: 90,
       fixed: "left",
       render: (text) => (
         <Text code copyable style={{ fontSize: 12 }}>
@@ -250,7 +251,7 @@ const PendingOrdersManagerModal: React.FC<PendingOrdersManagerModalProps> = ({ v
       title: "Tổng tiền",
       dataIndex: "totalAmount",
       key: "totalAmount",
-      width: 130,
+      width: 110,
       align: "right",
       render: (value) => (
         <Text strong style={{ color: "#1890ff", fontSize: 14 }}>
@@ -259,17 +260,25 @@ const PendingOrdersManagerModal: React.FC<PendingOrdersManagerModalProps> = ({ v
       ),
     },
     {
+      title: "Trạng thái",
+      dataIndex: "status",
+      key: "status",
+      width: 130,
+      align: "center",
+      render: () => <Tag color="orange">Chưa thanh toán</Tag>,
+    },
+    {
       title: "Ngày tạo",
       dataIndex: "createdAt",
       key: "createdAt",
-      width: 150,
+      width: 130,
       align: "center",
-      render: (date) => <Text style={{ fontSize: 12, color: "#595959" }}>{formatDate(date)}</Text>,
+      render: (date) => <Text style={{ fontSize: 13, color: "#171616ff" }}>{formatDate(date)}</Text>,
     },
     {
       title: "Thao tác",
       key: "action",
-      width: 90,
+      width: 70,
       fixed: "right",
       align: "center",
       render: (_, record) => (
