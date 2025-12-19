@@ -1,6 +1,22 @@
 // src/pages/ProductGroupsPage.jsx
 import React, { useEffect, useState } from "react";
-import { Card, Button, Space, Empty, Spin, Row, Col, Typography, Tag, Modal, message, Statistic, Tooltip, Badge, Progress, notification } from "antd";
+import {
+  Card,
+  Button,
+  Space,
+  Empty,
+  Spin,
+  Row,
+  Col,
+  Typography,
+  Tag,
+  Modal,
+  Statistic,
+  Tooltip,
+  Badge,
+  Progress,
+  notification
+} from "antd";
 import {
   PlusOutlined,
   EditOutlined,
@@ -29,6 +45,9 @@ export default function ProductGroupsPage() {
   const [deleting, setDeleting] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState(null);
+
+  // ✅ DÙNG Modal.useModal() THAY VÌ Modal.confirm STATIC
+  const [deleteModal, deleteContextHolder] = Modal.useModal();
 
   const fetchGroups = async () => {
     if (!storeId) {
@@ -85,12 +104,13 @@ export default function ProductGroupsPage() {
     });
   };
 
-  const handleDelete = async (group) => {
+  // ✅ HANDLE DELETE DÙNG deleteModal.confirm()
+  const handleDelete = (group) => {
     const groupId = group._id;
     const groupName = group.name;
     const productCount = group.productCount || 0;
 
-    Modal.confirm({
+    deleteModal.confirm({
       title: (
         <Space>
           <ExclamationCircleOutlined style={{ color: "#faad14", fontSize: 24 }} />
@@ -133,7 +153,9 @@ export default function ProductGroupsPage() {
                   Đã xóa nhóm <Text strong>"{groupName}"</Text>
                 </div>
                 {productCount > 0 && (
-                  <div style={{ fontSize: 12, marginTop: 4, color: "#8c8c8c" }}>{productCount} sản phẩm đã được giải phóng khỏi nhóm</div>
+                  <div style={{ fontSize: 12, marginTop: 4, color: "#8c8c8c" }}>
+                    {productCount} sản phẩm đã được giải phóng khỏi nhóm
+                  </div>
                 )}
               </div>
             ),
@@ -154,7 +176,9 @@ export default function ProductGroupsPage() {
               <div>
                 <div>{err?.response?.data?.message || "Không thể xóa nhóm sản phẩm"}</div>
                 {err?.response?.data?.error && (
-                  <div style={{ fontSize: 12, marginTop: 4, color: "#8c8c8c" }}>Chi tiết: {err.response.data.error}</div>
+                  <div style={{ fontSize: 12, marginTop: 4, color: "#8c8c8c" }}>
+                    Chi tiết: {err.response.data.error}
+                  </div>
                 )}
               </div>
             ),
@@ -180,7 +204,9 @@ export default function ProductGroupsPage() {
     setModalOpen(false);
     notification.success({
       message: editingGroup ? "✅ Cập nhật thành công" : "✅ Tạo mới thành công",
-      description: editingGroup ? `Đã cập nhật nhóm "${editingGroup.name}"` : "Đã tạo nhóm sản phẩm mới",
+      description: editingGroup
+        ? `Đã cập nhật nhóm "${editingGroup.name}"`
+        : "Đã tạo nhóm sản phẩm mới",
       placement: "topRight",
       duration: 3,
     });
@@ -444,11 +470,9 @@ export default function ProductGroupsPage() {
                           {/* Ngày tạo */}
                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                             <CalendarOutlined style={{ color: "#8c8c8c", fontSize: 13 }} />
-
                             <Text type="primary" style={{ fontSize: 12 }}>
                               Ngày tạo:
                             </Text>
-
                             <Tag
                               style={{
                                 background: "#E6F4FF",
@@ -467,11 +491,9 @@ export default function ProductGroupsPage() {
                           {group._id && (
                             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                               <InfoCircleOutlined style={{ color: "#8c8c8c", fontSize: 13 }} />
-
                               <Text type="primary" style={{ fontSize: 11 }}>
                                 Mã nhóm:
                               </Text>
-
                               <Tag
                                 style={{
                                   background: "#E6F4FF",
@@ -527,7 +549,7 @@ export default function ProductGroupsPage() {
           </Row>
         )}
 
-        {/* Modal */}
+        {/* Modal Form */}
         <Modal
           open={modalOpen}
           onCancel={() => setModalOpen(false)}
@@ -538,8 +560,16 @@ export default function ProductGroupsPage() {
           }}
           destroyOnClose
         >
-          <ProductGroupForm storeId={storeId} group={editingGroup} onSuccess={handleFormSuccess} onCancel={() => setModalOpen(false)} />
+          <ProductGroupForm
+            storeId={storeId}
+            group={editingGroup}
+            onSuccess={handleFormSuccess}
+            onCancel={() => setModalOpen(false)}
+          />
         </Modal>
+
+        {/* ✅ DELETE MODAL CONTEXT HOLDER - QUAN TRỌNG NHẤT */}
+        {deleteContextHolder}
       </div>
 
       <style jsx global>{`

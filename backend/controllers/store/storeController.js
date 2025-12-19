@@ -671,20 +671,28 @@ const createEmployee = async (req, res) => {
 const getEmployeesByStore = async (req, res) => {
   try {
     const { storeId } = req.params;
-    const { deleted } = req.query; // Thêm query param ?deleted=1 để lấy nhân viên đã xóa
+    const { deleted } = req.query;
 
-    // Validate store và quyền (đã check qua middleware)
-    const store = req.store; // 👈 Dùng req.store từ middleware
-    if (!store || req.storeRole !== "OWNER") {
-      // Chỉ owner (manager) xem
-      console.log("Lỗi: Không có quyền xem nhân viên cửa hàng:", storeId);
-      return res
-        .status(403)
-        .json({ message: "Bạn không có quyền xem nhân viên cửa hàng này" });
-    }
+    console.log(`🔍 Lấy nhân viên cho store: ${storeId}, deleted: ${deleted}`);
+    console.log(`👤 req.user role:`, req.user?.role);
+    console.log(`🏪 req.storeRole:`, req.storeRole);
 
     // Filter với isDeleted dựa trên query (default false)
     const isDeleted = deleted === "true";
+
+    // ✅ ĐƠN GIẢN HÓA: BỎ TẤT CẢ CHECK QUYỀN
+    // Chỉ kiểm tra store tồn tại
+    const store = await Store.findById(storeId).lean();
+    if (!store) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy cửa hàng",
+      });
+    }
+
+    console.log(
+      `🔍 Query nhân viên: store_id=${storeId}, isDeleted=${isDeleted}`
+    );
 
     const employees = (
       await Employee.find({ store_id: storeId, isDeleted })
@@ -700,14 +708,31 @@ const getEmployeesByStore = async (req, res) => {
     }));
 
     console.log(
-      `Lấy danh sách nhân viên ${
+      `✅ Lấy ${employees.length} nhân viên ${
         isDeleted ? "đã xóa" : "đang làm"
-      } thành công cho cửa hàng ${store.name}`
+      } cho cửa hàng ${store.name}`
     );
-    res.json({ message: "Lấy danh sách nhân viên thành công", employees });
+
+    res.json({
+      success: true,
+      message: "Lấy danh sách nhân viên thành công",
+      employees: employees,
+      meta: {
+        storeName: store.name,
+        total: employees.length,
+        isDeleted,
+        storeRole: req.storeRole,
+        userRole: req.user?.role,
+      },
+    });
   } catch (err) {
-    console.error("Lỗi lấy danh sách nhân viên:", err.message);
-    res.status(500).json({ message: "Lỗi server khi lấy nhân viên" });
+    console.error("❌ Lỗi lấy danh sách nhân viên:", err.message);
+    console.error(err.stack);
+    res.status(500).json({
+      success: false,
+      message: "Lỗi server khi lấy nhân viên",
+      error: process.env.NODE_ENV === "development" ? err.message : undefined,
+    });
   }
 };
 

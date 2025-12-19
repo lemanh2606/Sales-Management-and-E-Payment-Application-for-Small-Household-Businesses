@@ -281,7 +281,7 @@ function App() {
 
         {/* ==================== Dashboard & Store ==================== */}
         <Route path="/dashboard/:storeId" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-        <Route path="/select-store" element={<ProtectedRoute><SelectStorePage /></ProtectedRoute>} />
+        <Route path="/select-store" element={<ProtectedRoute allowedPermissions="store:view"><SelectStorePage /></ProtectedRoute>} />
         <Route path="/update/store" element={<ProtectedRoute><InformationStore /></ProtectedRoute>} />
         <Route path="/stores/:storeId/employees" element={<ProtectedRoute><EmployeesPage /></ProtectedRoute>} />
 

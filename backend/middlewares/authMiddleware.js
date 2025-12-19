@@ -233,21 +233,17 @@ async function checkStoreAccess(req, res, next) {
   Trả 401 nếu user chưa xác thực, 403 nếu thiếu permission, 500 nếu lỗi server.
 */
 function requirePermission(permission, options = {}) {
-  const allowManager = options.allowManager !== false;
-
+  // options giữ lại để sau cần cấu hình gì thêm thì dùng, hiện tại không còn allowManager
   return (req, res, next) => {
     try {
       const user = req.user;
-      if (!user) return res.status(401).json({ message: "Not authenticated" });
-
-      // Cho phép Manager override
-      if (allowManager && user.role === "MANAGER") {
-        return next();
+      if (!user) {
+        return res.status(401).json({ message: "Not authenticated" });
       }
 
-      // Lấy menu từ user
+      // Lấy menu từ user (danh sách permission dạng string)
       const menu = Array.isArray(user.menu)
-        ? user.menu.map((p) => p.trim())
+        ? user.menu.map((p) => String(p).trim())
         : [];
 
       if (!menu.length) {
@@ -257,12 +253,14 @@ function requirePermission(permission, options = {}) {
       }
 
       const perm = String(permission).trim();
-
-      // Kiểm tra match chính xác
-      if (menu.includes(perm)) return next();
-
-      // Kiểm tra wildcard global: *, *:*, all, resource:*
       const [resource, action] = perm.split(":");
+
+      // 1. Match chính xác
+      if (menu.includes(perm)) {
+        return next();
+      }
+
+      // 2. Wildcard global: *, *:*, all, resource:*
       if (
         menu.includes(`${resource}:*`) ||
         menu.includes("*") ||
@@ -272,9 +270,10 @@ function requirePermission(permission, options = {}) {
         return next();
       }
 
-      // Kiểm tra store-scoped permissions nếu req.store có dữ liệu
+      // 3. Store-scoped permissions nếu req.store có dữ liệu
       if (req.store && req.store._id) {
         const sid = String(req.store._id);
+
         // store:<storeId>:permission hoặc store:<storeId>:resource:*
         if (
           menu.includes(`store:${sid}:${perm}`) ||
@@ -284,21 +283,23 @@ function requirePermission(permission, options = {}) {
         }
       }
 
-      // Kiểm tra wildcard scoped nếu permission dạng store:<id>:resource:action
+      // 4. Wildcard scoped nếu permission dạng store:<id>:resource:action
       if (perm.startsWith("store:")) {
         const parts = perm.split(":"); // ["store", "<id>", "resource", "action"]
         if (parts.length >= 3) {
           const sid = parts[1];
           const resName = parts[2];
+
           if (menu.includes(`store:${sid}:${resName}:*`)) {
             return next();
           }
         }
       }
 
+      // Nếu tới đây vẫn không match permission nào
       return res
         .status(403)
-        .json({ message: "Truy cập bị từ chối, chỉ Manager mới có quyền này" });
+        .json({ message: "Truy cập bị từ chối (không đủ quyền)" });
     } catch (err) {
       console.error("requirePermission error:", err);
       return res

@@ -193,12 +193,17 @@ const MENU_TREE: readonly MenuSection[] = [
         icon: "cube-outline",
         permission: "products:view",
       },
-      { key: "Suppliers", label: "Nhà cung cấp", icon: "business-outline" },
+      {
+        key: "Suppliers",
+        label: "Nhà cung cấp",
+        icon: "business-outline",
+        permission: "supplier:view",
+      },
       {
         key: "ProductGroups",
         label: "Nhóm hàng",
         icon: "grid-outline",
-        permission: "products:view",
+        permission: "product-groups:view",
       },
     ],
   },
@@ -783,12 +788,15 @@ const AppNavigator: FC = (): JSX.Element => {
       />
       <Drawer.Screen
         name="Suppliers"
-        component={withPermission(SupplierListScreen)}
+        component={withPermission(SupplierListScreen, "supplier:view")}
         options={{ title: "Nhà cung cấp" }}
       />
       <Drawer.Screen
         name="ProductGroups"
-        component={withPermission(ProductGroupListScreen, "products:view")}
+        component={withPermission(
+          ProductGroupListScreen,
+          "product-groups:view"
+        )}
         options={{ title: "Nhóm hàng" }}
       />
       <Drawer.Screen

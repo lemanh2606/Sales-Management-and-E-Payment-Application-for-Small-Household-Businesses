@@ -85,7 +85,6 @@ router.delete(
   "/:storeId",
   verifyToken,
   checkSubscriptionExpiry,
-  checkStoreAccess,
 
   requirePermission("store:delete"),
   storeController.deleteStore
@@ -96,7 +95,6 @@ router.put(
   "/:storeId/restore",
   verifyToken,
   checkSubscriptionExpiry,
-  checkStoreAccess,
 
   requirePermission("store:update"),
   storeController.restoreStore
@@ -120,7 +118,7 @@ router.get(
   "/:storeId/dashboard",
   verifyToken,
   checkSubscriptionExpiry,
-  checkStoreAccess,
+
   requirePermission("store:dashboard:view"),
   storeController.getStoreDashboard
 );
@@ -134,7 +132,7 @@ router.post(
   "/:storeId/assign-staff",
   verifyToken,
   checkSubscriptionExpiry,
-  checkStoreAccess,
+
   requirePermission("store:staff:assign"),
   storeController.assignStaffToStore
 );
@@ -148,7 +146,6 @@ router.post(
   "/:storeId/employees",
   verifyToken,
   checkSubscriptionExpiry,
-  checkStoreAccess,
   requirePermission("store:employee:create"),
   storeController.createEmployee
 );
@@ -168,7 +165,7 @@ router.get(
   "/:storeId/employees/export",
   verifyToken,
   checkSubscriptionExpiry,
-  checkStoreAccess,
+
   requirePermission("store:employee:view"),
   storeController.exportEmployeesToExcel
 );
@@ -178,7 +175,6 @@ router.get(
   "/:storeId/employees/:id",
   verifyToken,
   checkSubscriptionExpiry,
-  checkStoreAccess,
   requirePermission("store:employee:view"),
   storeController.getEmployeeById
 );
@@ -188,7 +184,6 @@ router.put(
   "/:storeId/employees/:id",
   verifyToken,
   checkSubscriptionExpiry,
-  checkStoreAccess,
 
   requirePermission("store:employee:update"),
   storeController.updateEmployee
@@ -199,7 +194,7 @@ router.delete(
   "/:storeId/employees/:id/soft",
   verifyToken,
   checkSubscriptionExpiry,
-  checkStoreAccess,
+
   requirePermission("store:employee:softDelete"),
   storeController.softDeleteEmployee
 );
@@ -209,7 +204,7 @@ router.put(
   "/:storeId/employees/:id/restore",
   verifyToken,
   checkSubscriptionExpiry,
-  checkStoreAccess,
+
   requirePermission("store:employee:restore"),
   storeController.restoreEmployee
 );

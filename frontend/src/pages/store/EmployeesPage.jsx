@@ -25,9 +25,9 @@ import { FileExcelOutlined, CalendarOutlined } from "@ant-design/icons";
 import Swal from "sweetalert2";
 import axios from "axios";
 import dayjs from "dayjs";
-import EmployeeForm from "../../components/store/EmployeeForm"; // Giữ nguyên form cũ của bạn
+import EmployeeForm from "../../components/store/EmployeeForm";
 import Layout from "../../components/Layout";
-import { getPermissionCatalog, updateUserById } from "../../api/userApi";
+import { updateUserById } from "../../api/userApi";
 
 const { Search } = Input;
 const apiUrl = import.meta.env.VITE_API_URL;
@@ -89,39 +89,51 @@ const PERMISSION_CATEGORY_LABELS = {
   inventory: "Kiểm kho & xử lý tồn",
   supplier: "Nhà cung cấp",
   tax: "Khai báo thuế",
-  employees: "Nhân sự",
+  employees: "Nhân sự toàn hệ thống",
   users: "Người dùng & quyền",
-  settings: "Thiết lập",
+  settings: "Thiết lập hệ thống",
   notifications: "Thông báo",
   subscription: "Gói dịch vụ",
   file: "Tệp & xuất liệu",
 };
 
+// === CHỈNH Ở ĐÂY ĐỂ ẨN/HIỆN QUYỀN TRÊN UI ===
 const PERMISSION_LABELS = {
-  "store:create": "Tạo cửa hàng",
-  "store:view": "Xem cửa hàng",
-  "store:update": "Cập nhật cửa hàng",
-  "store:delete": "Xóa cửa hàng",
+  // ========== STORE PERMISSIONS ==========
+  // "store:create": "Tạo cửa hàng",
+  // "store:view": "Xem cửa hàng",
+  // "store:update": "Cập nhật cửa hàng",
+  // "store:delete": "Xóa cửa hàng",
   "store:dashboard:view": "Xem bảng điều khiển",
-  "store:staff:assign": "Gán nhân viên vào cửa hàng",
-  "store:employee:create": "Tạo nhân viên",
+  // "store:staff:assign": "Gán nhân viên vào cửa hàng",
+  // "store:employee:create": "Tạo nhân viên",
   "store:employee:view": "Xem danh sách nhân viên",
-  "store:employee:update": "Chỉnh sửa nhân viên",
-  "store:employee:delete": "Xóa nhân viên",
-  "store:employee:softDelete": "Xóa mềm nhân viên",
-  "store:employee:restore": "Khôi phục nhân viên",
+  // "store:employee:update": "Chỉnh sửa nhân viên",
+  // "store:employee:delete": "Xóa nhân viên",
+  // "store:employee:softDelete": "Xóa mềm nhân viên",
+  // "store:employee:restore": "Khôi phục nhân viên",
+  // "store:employee:view_deleted": "Xem nhân viên đã xóa",
+
+  // ========== CUSTOMER PERMISSIONS ==========
   "customers:create": "Thêm khách hàng",
   "customers:search": "Tìm kiếm khách hàng",
   "customers:update": "Cập nhật khách hàng",
   "customers:delete": "Xóa khách hàng",
   "customers:top-customers": "Xem khách hàng thân thiết",
+  "customers:view": "Xem khách hàng",
+
+  // ========== LOYALTY PERMISSIONS ==========
   "loyalty:view": "Xem cấu hình tích điểm",
   "loyalty:manage": "Quản lý chương trình tích điểm",
+
+  // ========== ORDER PERMISSIONS ==========
   "orders:create": "Tạo đơn hàng",
   "orders:pay": "Thanh toán đơn hàng",
   "orders:print": "In hóa đơn",
   "orders:view": "Xem đơn hàng",
   "orders:refund": "Hoàn tiền đơn hàng",
+
+  // ========== REPORT PERMISSIONS ==========
   "reports:top-products": "Báo cáo sản phẩm bán chạy",
   "reports:revenue:view": "Xem báo cáo doanh thu",
   "reports:revenue:employee": "Doanh thu theo nhân viên",
@@ -129,26 +141,39 @@ const PERMISSION_LABELS = {
   "reports:financial:view": "Xem báo cáo tài chính",
   "reports:financial:export": "Xuất báo cáo tài chính",
   "reports:financial:list": "Danh sách báo cáo tài chính",
-  "products:create": "Tạo sản phẩm",
-  "products:view": "Xem sản phẩm",
-  "products:update": "Cập nhật sản phẩm",
-  "products:price": "Chỉnh sửa giá bán",
-  "products:delete": "Xóa sản phẩm",
-  "products:image:delete": "Xóa hình ảnh sản phẩm",
+  "reports:export": "Xuất dữ liệu báo cáo",
+  "reports:activity-log:view": "Xem nhật ký hoạt động",
+  "reports:endofday:view": "Xem báo cáo cuối ngày",
+
+  // ========== PRODUCT PERMISSIONS ==========
+  // "products:create": "Tạo sản phẩm",
+  // "products:view": "Xem sản phẩm",
+  // "products:update": "Cập nhật sản phẩm",
+  // "products:price": "Chỉnh sửa giá bán",
+  // "products:delete": "Xóa sản phẩm",
+  // "products:image:delete": "Xóa hình ảnh sản phẩm",
   "products:search": "Tìm kiếm sản phẩm",
-  "products:low-stock": "Xem cảnh báo tồn kho thấp",
-  "product-groups:create": "Tạo nhóm sản phẩm",
-  "product-groups:view": "Xem nhóm sản phẩm",
-  "product-groups:update": "Cập nhật nhóm sản phẩm",
-  "product-groups:delete": "Xóa nhóm sản phẩm",
+  // "products:low-stock": "Xem cảnh báo tồn kho thấp",
+
+  // ========== PRODUCT GROUP PERMISSIONS ==========
+  // "product-groups:create": "Tạo nhóm sản phẩm",
+  // "product-groups:view": "Xem nhóm sản phẩm",
+  // "product-groups:update": "Cập nhật nhóm sản phẩm",
+  // "product-groups:delete": "Xóa nhóm sản phẩm",
+
+  // ========== PURCHASE ORDER PERMISSIONS ==========
   "purchase-orders:create": "Tạo đơn nhập hàng",
   "purchase-orders:view": "Xem đơn nhập hàng",
   "purchase-orders:update": "Cập nhật đơn nhập hàng",
   "purchase-orders:delete": "Xóa đơn nhập hàng",
+
+  // ========== PURCHASE RETURN PERMISSIONS ==========
   "purchase-returns:create": "Tạo phiếu trả hàng",
   "purchase-returns:view": "Xem phiếu trả hàng",
   "purchase-returns:update": "Cập nhật phiếu trả hàng",
   "purchase-returns:delete": "Xóa phiếu trả hàng",
+
+  // ========== INVENTORY PERMISSIONS ==========
   "inventory:stock-check:create": "Tạo phiếu kiểm kho",
   "inventory:stock-check:view": "Báo cáo tồn kho",
   "inventory:stock-check:detail": "Xem chi tiết kiểm kho",
@@ -158,37 +183,73 @@ const PERMISSION_LABELS = {
   "inventory:disposal:view": "Xem phiếu xử lý hàng hỏng",
   "inventory:disposal:update": "Cập nhật phiếu xử lý",
   "inventory:disposal:delete": "Xóa phiếu xử lý",
-  "supplier:create": "Thêm nhà cung cấp",
-  "supplier:view": "Xem nhà cung cấp",
-  "supplier:update": "Cập nhật nhà cung cấp",
-  "supplier:delete": "Xóa nhà cung cấp",
-  "supplier:restore": "Khôi phục nhà cung cấp",
-  "tax:preview": "Xem trước tờ khai thuế",
-  "tax:create": "Tạo tờ khai thuế",
-  "tax:update": "Cập nhật tờ khai thuế",
-  "tax:clone": "Nhân bản tờ khai thuế",
-  "tax:delete": "Xóa tờ khai thuế",
-  "tax:list": "Danh sách tờ khai thuế",
-  "tax:export": "Xuất tờ khai thuế",
-  "employees:view": "Xem danh sách nhân sự",
-  "employees:assign": "Gán nhân sự vào cửa hàng",
+
+  // ========== SUPPLIER PERMISSIONS ==========
+  // "supplier:create": "Thêm nhà cung cấp",
+  // "supplier:view": "Xem nhà cung cấp",
+  // "supplier:update": "Cập nhật nhà cung cấp",
+  // "supplier:delete": "Xóa nhà cung cấp",
+  // "supplier:restore": "Khôi phục nhà cung cấp",
+  // "supplier:export": "Xuất danh sách nhà cung cấp",
+
+  // ========== TAX PERMISSIONS ==========
+  // "tax:preview": "Xem trước tờ khai thuế",
+  // "tax:create": "Tạo tờ khai thuế",
+  // "tax:update": "Cập nhật tờ khai thuế",
+  // "tax:clone": "Nhân bản tờ khai thuế",
+  // "tax:delete": "Xóa tờ khai thuế",
+  // "tax:list": "Danh sách tờ khai thuế",
+  // "tax:export": "Xuất tờ khai thuế",
+  // "tax:view": "Xem thuế",
+
+  // ========== EMPLOYEE (GLOBAL) PERMISSIONS ==========
+  // "employees:view": "Xem danh sách nhân sự",
+  // "employees:assign": "Gán nhân sự vào cửa hàng",
+  // "employees:manage": "Quản lý nhân sự toàn hệ thống",
+
+  // ========== USER PERMISSIONS ==========
   "users:view": "Xem hồ sơ cá nhân",
   "users:manage": "Quản trị người dùng",
   "users:role:update": "Đổi vai trò người dùng",
   "users:menu:update": "Cập nhật quyền menu",
   "users:update": "Cập nhật thông tin người dùng",
-  "reports:export": "Xuất dữ liệu báo cáo",
-  "reports:activity-log:view": "Xem nhật ký hoạt động",
-  "reports:endofday:view": "Xem báo cáo cuối ngày",
+  "users:create": "Tạo người dùng",
+  "users:delete": "Xóa người dùng",
+
+  // ========== SETTINGS PERMISSIONS ==========
   "settings:activity-log": "Thiết lập nhật ký hoạt động",
   "settings:payment-method": "Quản lý phương thức thanh toán",
+  "settings:view": "Xem thiết lập",
+  "settings:update": "Cập nhật thiết lập",
+
+  // ========== NOTIFICATION PERMISSIONS ==========
   "notifications:view": "Xem thông báo",
-  "subscription:view": "Xem gói dịch vụ",
-  "subscription:manage": "Quản lý gói dịch vụ",
-  "subscription:activate": "Kích hoạt gói",
-  "subscription:cancel": "Hủy gói",
-  "subscription:history": "Lịch sử thanh toán gói",
+  "notifications:manage": "Quản lý thông báo",
+
+  // ========== SUBSCRIPTION PERMISSIONS ==========
+  // "subscription:view": "Xem gói dịch vụ",
+  // "subscription:manage": "Quản lý gói dịch vụ",
+  // "subscription:activate": "Kích hoạt gói",
+  // "subscription:cancel": "Hủy gói",
+  // "subscription:history": "Lịch sử thanh toán gói",
+
+  // ========== FILE PERMISSIONS ==========
   "file:view": "Xem & tải tệp",
+  "file:upload": "Tải lên tệp",
+  "file:delete": "Xóa tệp",
+
+  // ========== WILDCARDS (có label nhưng mặc định ẩn khỏi UI) ==========
+  "*": "Toàn quyền hệ thống",
+  "*:*": "Toàn quyền hệ thống",
+  "all": "Toàn quyền hệ thống",
+  "store:*": "Toàn quyền cửa hàng",
+  "products:*": "Toàn quyền sản phẩm",
+  "orders:*": "Toàn quyền đơn hàng",
+  "customers:*": "Toàn quyền khách hàng",
+  "reports:*": "Toàn quyền báo cáo",
+  "inventory:*": "Toàn quyền kho",
+  "tax:*": "Toàn quyền thuế",
+  "users:*": "Toàn quyền người dùng",
 };
 
 const normalizePermissions = (list = []) =>
@@ -201,39 +262,16 @@ const normalizePermissions = (list = []) =>
     )
   );
 
-// Permissions hidden from the staff permission assignment UI.
-// - Some are manager-only because the backend enforces `isManager` regardless of `user.menu`.
-// - Some are intentionally not assignable to staff (e.g. subscription management).
-const STAFF_PERMISSION_UI_HIDDEN_PREFIXES = ["store:employee:", "subscription:", "tax:", "purchase-orders:", "purchase-returns:"];
-const STAFF_PERMISSION_UI_HIDDEN_EXACT = new Set([
-  "store:create",
-  "store:update",
-  "store:delete",
-  "store:staff:assign",
-  "settings:activity-log",
-  "settings:payment-method",
-  "tax:approve",
-  "tax:delete",
-  "products:low-stock",
-  "supplier:create",
-  "supplier:update",
-  "supplier:delete",
-  "employees:view",
-  "employees:assign",
-  "users:manage",
-  "users:role:update",
-  "users:menu:update",
-  "product-groups:create",
-  "product-groups:view",
-  "product-groups:update",
-  "product-groups:delete",
-]);
-
-const isHiddenFromStaffPermissionUI = (permission = "") =>
-  STAFF_PERMISSION_UI_HIDDEN_EXACT.has(permission) || STAFF_PERMISSION_UI_HIDDEN_PREFIXES.some((prefix) => permission.startsWith(prefix));
-
-const filterStaffAssignablePermissions = (list = []) =>
-  (Array.isArray(list) ? list : []).filter((permission) => !isHiddenFromStaffPermissionUI(permission));
+// Lấy danh sách key hiển thị trên UI từ PERMISSION_LABELS
+// (ẩn wildcard và module:* nếu không muốn user thấy)
+const getVisiblePermissionKeys = () =>
+  Object.keys(PERMISSION_LABELS).filter(
+    (key) =>
+      key !== "*" &&
+      key !== "*:*" &&
+      key !== "all" &&
+      !key.endsWith(":*") // nếu muốn cho chọn module:* thì bỏ điều kiện này
+  );
 
 const groupPermissions = (permissionList = []) => {
   const groups = {};
@@ -243,7 +281,9 @@ const groupPermissions = (permissionList = []) => {
     if (!groups[categoryKey]) {
       groups[categoryKey] = {
         key: categoryKey,
-        label: PERMISSION_CATEGORY_LABELS[categoryKey] || humanizePermission(categoryKey),
+        label:
+          PERMISSION_CATEGORY_LABELS[categoryKey] ||
+          humanizePermission(categoryKey),
         items: [],
       };
     }
@@ -256,7 +296,9 @@ const groupPermissions = (permissionList = []) => {
   return Object.values(groups)
     .map((group) => ({
       ...group,
-      items: group.items.sort((a, b) => a.label.localeCompare(b.label, "vi", { sensitivity: "base" })),
+      items: group.items.sort((a, b) =>
+        a.label.localeCompare(b.label, "vi", { sensitivity: "base" })
+      ),
     }))
     .sort((a, b) => {
       const orderA = PERMISSION_GROUP_ORDER.indexOf(a.key);
@@ -278,39 +320,75 @@ export default function EmployeesPage() {
   const [loading, setLoading] = useState(false);
   const [tabKey, setTabKey] = useState("active");
   const [searchText, setSearchText] = useState("");
-  const [loadedTabs, setLoadedTabs] = useState({ active: false, deleted: false });
+  const [loadedTabs, setLoadedTabs] = useState({
+    active: false,
+    deleted: false,
+  });
+
+  // Phân quyền
   const [permissionPanelLoading, setPermissionPanelLoading] = useState(false);
   const [permissionSaving, setPermissionSaving] = useState(false);
   const [selectedStaff, setSelectedStaff] = useState(null);
+  // Dùng mảng string rỗng là đủ, không cần any
   const [selectedPermissions, setSelectedPermissions] = useState([]);
   const [permissionOptions, setPermissionOptions] = useState([]);
   const [defaultStaffPermissions, setDefaultStaffPermissions] = useState([]);
 
-  const token = localStorage.getItem("token"); // Token cho auth
+
+  const token = localStorage.getItem("token");
   const headers = { Authorization: `Bearer ${token}` };
-  const groupedPermissionOptions = useMemo(() => groupPermissions(permissionOptions), [permissionOptions]);
-  const selectedPermissionSet = useMemo(() => new Set(selectedPermissions), [selectedPermissions]);
+
+  // Khởi tạo catalog quyền từ PERMISSION_LABELS (ẩn/hiện theo comment)
+  const ensurePermissionCatalog = () => {
+    if (permissionOptions.length) {
+      return {
+        permissions: permissionOptions,
+        staffDefault: defaultStaffPermissions,
+      };
+    }
+    const visibleKeys = getVisiblePermissionKeys();
+    setPermissionOptions(visibleKeys);
+    setDefaultStaffPermissions(visibleKeys);
+    return { permissions: visibleKeys, staffDefault: visibleKeys };
+  };
+
+  const groupedPermissionOptions = useMemo(
+    () => groupPermissions(permissionOptions),
+    [permissionOptions]
+  );
+  const selectedPermissionSet = useMemo(
+    () => new Set(selectedPermissions),
+    [selectedPermissions]
+  );
 
   const loadEmployees = async (deleted = false, forceReload = false) => {
-    // 👉 nếu không force reload thì giữ cơ chế cũ
     if (!forceReload && loadedTabs[deleted ? "deleted" : "active"]) return;
 
     setLoading(true);
     try {
-      const res = await axios.get(`${API_BASE}/stores/${currentStore._id}/employees?deleted=${deleted}`, { headers });
-      const list = res.data.employees || [];
+      const res = await axios.get(
+        `${API_BASE}/stores/${currentStore._id}/employees?deleted=${deleted}`,
+        { headers }
+      );
+      const list = res.data.employees || res.data.data || [];
       if (deleted) {
         setDeletedEmployees(list);
         setFilteredDeleted(list);
       } else {
         setActiveEmployees(list);
-        setFilteredActive(searchText ? filterEmployees(list, searchText) : list);
+        setFilteredActive(
+          searchText ? filterEmployees(list, searchText) : list
+        );
       }
-      setLoadedTabs((prev) => ({ ...prev, [deleted ? "deleted" : "active"]: true }));
+      setLoadedTabs((prev) => ({
+        ...prev,
+        [deleted ? "deleted" : "active"]: true,
+      }));
     } catch (err) {
       Swal.fire({
         title: "❌ Lỗi!",
-        text: `Không thể tải danh sách nhân viên ${deleted ? "đã xóa" : "đang làm"}!`,
+        text: `Không thể tải danh sách nhân viên ${deleted ? "đã xóa" : "đang làm"
+          }!`,
         icon: "error",
         confirmButtonText: "OK",
         confirmButtonColor: "#ff4d4f",
@@ -322,32 +400,9 @@ export default function EmployeesPage() {
     }
   };
 
-  const ensurePermissionCatalog = async () => {
-    if (permissionOptions.length) {
-      return { permissions: permissionOptions, staffDefault: defaultStaffPermissions };
-    }
-    try {
-      const res = await getPermissionCatalog();
-      const permissions = filterStaffAssignablePermissions(normalizePermissions(res.permissions || []));
-      const staffDefault = filterStaffAssignablePermissions(normalizePermissions(res.staffDefault?.length ? res.staffDefault : permissions));
-      setPermissionOptions(permissions);
-      setDefaultStaffPermissions(staffDefault);
-      return { permissions, staffDefault };
-    } catch (err) {
-      Swal.fire({
-        title: "❌ Lỗi!",
-        text: "Không thể tải danh sách quyền. Vui lòng thử lại.",
-        icon: "error",
-        confirmButtonText: "OK",
-        confirmButtonColor: "#ff4d4f",
-      });
-      throw err;
-    }
-  };
-
   useEffect(() => {
     if (currentStore._id) {
-      loadEmployees(false); // Load active đầu tiên
+      loadEmployees(false);
     } else {
       Swal.fire({
         title: "❌ Lỗi!",
@@ -362,13 +417,13 @@ export default function EmployeesPage() {
 
   const handleTabChange = (key) => {
     setTabKey(key);
-    setSearchText(""); // Reset search khi đổi tab
+    setSearchText("");
     if (key === "deleted") {
-      loadEmployees(true); // Load deleted khi click tab
+      loadEmployees(true);
     }
     if (key === "permissions") {
       loadEmployees(false, false);
-      ensurePermissionCatalog().catch(() => { });
+      ensurePermissionCatalog();
     }
   };
 
@@ -398,7 +453,11 @@ export default function EmployeesPage() {
     setLoading(true);
     try {
       if (mode === "create") {
-        await axios.post(`${API_BASE}/stores/${currentStore._id}/employees`, payload, { headers });
+        await axios.post(
+          `${API_BASE}/stores/${currentStore._id}/employees`,
+          payload,
+          { headers }
+        );
         Swal.fire({
           title: "🎉 Thành công!",
           text: `Tạo nhân viên thành công`,
@@ -407,9 +466,13 @@ export default function EmployeesPage() {
           confirmButtonText: "OK",
           confirmButtonColor: "#52c41a",
         });
-        await loadEmployees(false, true); // Reload active
+        await loadEmployees(false, true);
       } else {
-        await axios.put(`${API_BASE}/stores/${currentStore._id}/employees/${current._id}`, payload, { headers });
+        await axios.put(
+          `${API_BASE}/stores/${currentStore._id}/employees/${current._id}`,
+          payload,
+          { headers }
+        );
         Swal.fire({
           title: "🎉 Thành công!",
           text: `Cập nhật nhân viên thành công`,
@@ -418,7 +481,7 @@ export default function EmployeesPage() {
           confirmButtonText: "OK",
           confirmButtonColor: "#52c41a",
         });
-        await loadEmployees(tabKey === "active" ? false : true, true); // Reload tab hiện tại
+        await loadEmployees(tabKey === "active" ? false : true, true);
       }
       await loadEmployees();
       setOpen(false);
@@ -440,7 +503,10 @@ export default function EmployeesPage() {
   const handleSoftDelete = async (id) => {
     setLoading(true);
     try {
-      await axios.delete(`${API_BASE}/stores/${currentStore._id}/employees/${id}/soft`, { headers });
+      await axios.delete(
+        `${API_BASE}/stores/${currentStore._id}/employees/${id}/soft`,
+        { headers }
+      );
       Swal.fire({
         title: "🎉 Thành công!",
         text: `Xoá nhân viên thành công`,
@@ -449,8 +515,8 @@ export default function EmployeesPage() {
         confirmButtonText: "OK",
         confirmButtonColor: "#52c41a",
       });
-      await loadEmployees(false, true); // reload lại tab active
-      if (loadedTabs.deleted) await loadEmployees(true, true); // reload deleted nếu đã mở
+      await loadEmployees(false, true);
+      if (loadedTabs.deleted) await loadEmployees(true, true);
     } catch (err) {
       Swal.fire({
         title: "❌ Lỗi!",
@@ -468,7 +534,11 @@ export default function EmployeesPage() {
   const handleRestore = async (id) => {
     setLoading(true);
     try {
-      await axios.put(`${API_BASE}/stores/${currentStore._id}/employees/${id}/restore`, {}, { headers });
+      await axios.put(
+        `${API_BASE}/stores/${currentStore._id}/employees/${id}/restore`,
+        {},
+        { headers }
+      );
       Swal.fire({
         title: "🎉 Thành công!",
         text: `Khôi phục nhân viên thành công `,
@@ -477,8 +547,8 @@ export default function EmployeesPage() {
         confirmButtonText: "OK",
         confirmButtonColor: "#52c41a",
       });
-      await loadEmployees(true, true); // 👉 reload deleted
-      if (loadedTabs.active) await loadEmployees(false, true); // reload active
+      await loadEmployees(true, true);
+      if (loadedTabs.active) await loadEmployees(false, true);
     } catch (err) {
       Swal.fire({
         title: "❌ Lỗi!",
@@ -495,27 +565,54 @@ export default function EmployeesPage() {
 
   const syncUpdatedMenus = (userId, newMenu) => {
     const updater = (list) =>
-      list.map((emp) => (String(emp.user_id?._id || emp.user_id) === String(userId) ? { ...emp, user_id: { ...emp.user_id, menu: newMenu } } : emp));
+      list.map((emp) =>
+        String(emp.user_id?._id || emp.user_id) === String(userId)
+          ? { ...emp, user_id: { ...emp.user_id, menu: newMenu } }
+          : emp
+      );
     setActiveEmployees((prev) => updater(prev));
     setFilteredActive((prev) => updater(prev));
   };
 
   const handleSelectStaff = async (record) => {
     if (!record?._id) return;
-    if (selectedStaff && String(selectedStaff._id) === String(record._id) && permissionOptions.length) {
-      const currentMenu = Array.isArray(record.user_id?.menu) ? record.user_id.menu : [];
-      setSelectedPermissions(filterStaffAssignablePermissions(normalizePermissions(currentMenu)));
+
+    if (
+      selectedStaff &&
+      String(selectedStaff._id) === String(record._id) &&
+      permissionOptions.length
+    ) {
+      const currentMenu = Array.isArray(record.user_id?.menu)
+        ? record.user_id.menu
+        : [];
+      setSelectedPermissions(
+        normalizePermissions(currentMenu).filter((p) =>
+          permissionOptions.includes(p)
+        )
+      );
       return;
     }
+
     setSelectedStaff(record);
     setPermissionPanelLoading(true);
     try {
-      const catalog = await ensurePermissionCatalog();
+      const catalog = ensurePermissionCatalog();
       const catalogKeys = catalog?.permissions || [];
-      const currentMenu = Array.isArray(record.user_id?.menu) ? record.user_id.menu : [];
-      const mergedCatalog = filterStaffAssignablePermissions(normalizePermissions([...(catalogKeys || []), ...currentMenu]));
+      const currentMenu = Array.isArray(record.user_id?.menu)
+        ? record.user_id.menu
+        : [];
+
+      const mergedCatalog = normalizePermissions([
+        ...catalogKeys,
+        ...currentMenu.filter((p) => PERMISSION_LABELS[p]),
+      ]);
+
       setPermissionOptions(mergedCatalog);
-      setSelectedPermissions(filterStaffAssignablePermissions(normalizePermissions(currentMenu)));
+      setSelectedPermissions(
+        normalizePermissions(currentMenu).filter((p) =>
+          mergedCatalog.includes(p)
+        )
+      );
     } catch (err) {
       console.error(err);
       Swal.fire({
@@ -541,7 +638,9 @@ export default function EmployeesPage() {
   };
 
   const handleToggleGroup = (groupKey, checked) => {
-    const group = groupedPermissionOptions.find((item) => item.key === groupKey);
+    const group = groupedPermissionOptions.find(
+      (item) => item.key === groupKey
+    );
     if (!group) return;
     const groupKeys = group.items.map((item) => item.key);
     setSelectedPermissions((prev) => {
@@ -566,15 +665,24 @@ export default function EmployeesPage() {
     }
 
     const userId = selectedStaff.user_id?._id || selectedStaff.user_id;
-    const sanitizedMenu = filterStaffAssignablePermissions(normalizePermissions(selectedPermissions));
+    const sanitizedMenu = normalizePermissions(selectedPermissions).filter(
+      (p) => PERMISSION_LABELS[p]
+    );
+
     setPermissionSaving(true);
     try {
-      await updateUserById(userId, { menu: sanitizedMenu, storeId: currentStore._id });
+      await updateUserById(userId, {
+        menu: sanitizedMenu,
+        storeId: currentStore._id,
+      });
       syncUpdatedMenus(userId, sanitizedMenu);
       setSelectedStaff((prev) => {
         if (!prev) return prev;
         if (String(prev._id) !== String(selectedStaff._id)) return prev;
-        return { ...prev, user_id: { ...prev.user_id, menu: [...sanitizedMenu] } };
+        return {
+          ...prev,
+          user_id: { ...prev.user_id, menu: [...sanitizedMenu] },
+        };
       });
       Swal.fire({
         title: "🎉 Thành công!",
@@ -630,7 +738,9 @@ export default function EmployeesPage() {
       const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = downloadUrl;
-      link.download = `Danh_Sach_Nhan_Vien_${currentStore.name}_${dayjs().format("DD-MM-YYYY")}.xlsx`;
+      link.download = `Danh_Sach_Nhan_Vien_${currentStore.name}_${dayjs().format(
+        "DD-MM-YYYY"
+      )}.xlsx`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -650,32 +760,52 @@ export default function EmployeesPage() {
       key: "fullName",
       width: 200,
     },
-    { title: "Username", key: "username", width: 175, render: (_, record) => record.user_id?.username || "—" },
-    { title: "Email", key: "email", width: 210, render: (_, record) => record.user_id?.email || "—" },
+    {
+      title: "Username",
+      key: "username",
+      width: 175,
+      render: (_, record) => record.user_id?.username || "—",
+    },
+    {
+      title: "Email",
+      key: "email",
+      width: 210,
+      render: (_, record) => record.user_id?.email || "—",
+    },
     {
       title: "Số điện thoại",
       key: "phone",
       width: 140,
       render: (_, record) => {
         const phone = record.user_id?.phone || "";
-
-        // Hàm format số kiểu 4-3-3
         const formatPhone = (num) => {
-          const cleaned = num.replace(/\D/g, ""); // bỏ ký tự lạ
+          const cleaned = num.replace(/\D/g, "");
           if (cleaned.length === 10) {
-            return `${cleaned.slice(0, 4)} ${cleaned.slice(4, 7)} ${cleaned.slice(7)}`;
+            return `${cleaned.slice(0, 4)} ${cleaned.slice(
+              4,
+              7
+            )} ${cleaned.slice(7)}`;
           }
-          return num; // fallback nếu không đủ 10 số
+          return num;
         };
-
         return (
           <Space>
             {phone ? (
-              <Typography.Text code style={{ fontSize: "15px", fontWeight: 600, letterSpacing: "0.5px" }}>
+              <Typography.Text
+                code
+                style={{
+                  fontSize: "15px",
+                  fontWeight: 600,
+                  letterSpacing: "0.5px",
+                }}
+              >
                 {formatPhone(phone)}
               </Typography.Text>
             ) : (
-              <Typography.Text type="secondary" style={{ fontSize: "15px" }}>
+              <Typography.Text
+                type="secondary"
+                style={{ fontSize: "15px" }}
+              >
                 —
               </Typography.Text>
             )}
@@ -683,11 +813,21 @@ export default function EmployeesPage() {
         );
       },
     },
-    { title: "Ca làm", dataIndex: "shift", key: "shift", width: 90, align: "center" },
+    {
+      title: "Ca làm",
+      dataIndex: "shift",
+      key: "shift",
+      width: 90,
+      align: "center",
+    },
     {
       title: "Lương",
       key: "salary",
-      render: (_, record) => Number(record.salary ?? 0).toLocaleString("vi-VN", { style: "currency", currency: "VND" }),
+      render: (_, record) =>
+        Number(record.salary ?? 0).toLocaleString("vi-VN", {
+          style: "currency",
+          currency: "VND",
+        }),
       sorter: (a, b) => (a.salary ?? 0) - (b.salary ?? 0),
     },
     {
@@ -695,7 +835,8 @@ export default function EmployeesPage() {
       key: "commission_rate",
       width: 70,
       render: (_, record) => `${Number(record.commission_rate ?? 0)} %`,
-      sorter: (a, b) => (a.commission_rate ?? 0) - (b.commission_rate ?? 0),
+      sorter: (a, b) =>
+        (a.commission_rate ?? 0) - (b.commission_rate ?? 0),
     },
     {
       title: "Ngày tuyển dụng",
@@ -707,7 +848,9 @@ export default function EmployeesPage() {
         <Space>
           <CalendarOutlined style={{ color: "#722ed1" }} />
           <Tooltip title={dayjs(date).format("DD/MM/YYYY HH:mm")}>
-            <Typography.Text>{dayjs(date).format("DD/MM/YYYY")}</Typography.Text>
+            <Typography.Text>
+              {dayjs(date).format("DD/MM/YYYY")}
+            </Typography.Text>
           </Tooltip>
         </Space>
       ),
@@ -730,14 +873,23 @@ export default function EmployeesPage() {
               fontWeight: 500,
               borderRadius: 6,
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#e6f4ff")}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+            onMouseEnter={(e) =>
+              (e.currentTarget.style.backgroundColor = "#e6f4ff")
+            }
+            onMouseLeave={(e) =>
+              (e.currentTarget.style.backgroundColor = "transparent")
+            }
           >
             Sửa
           </Button>
 
           {isDeleted ? (
-            <Popconfirm title="Khôi phục nhân viên này?" onConfirm={() => handleRestore(record._id)} okText="Có" cancelText="Không">
+            <Popconfirm
+              title="Khôi phục nhân viên này?"
+              onConfirm={() => handleRestore(record._id)}
+              okText="Có"
+              cancelText="Không"
+            >
               <Button
                 type="default"
                 size="small"
@@ -747,14 +899,23 @@ export default function EmployeesPage() {
                   fontWeight: 500,
                   borderRadius: 6,
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f6ffed")}
-                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.backgroundColor = "#f6ffed")
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.backgroundColor = "transparent")
+                }
               >
                 Khôi phục
               </Button>
             </Popconfirm>
           ) : (
-            <Popconfirm title="Xóa nhân viên này?" onConfirm={() => handleSoftDelete(record._id)} okText="Có" cancelText="Không">
+            <Popconfirm
+              title="Xóa nhân viên này?"
+              onConfirm={() => handleSoftDelete(record._id)}
+              okText="Có"
+              cancelText="Không"
+            >
               <Button
                 type="default"
                 size="small"
@@ -764,8 +925,12 @@ export default function EmployeesPage() {
                   fontWeight: 500,
                   borderRadius: 6,
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#fff1f0")}
-                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.backgroundColor = "#fff1f0")
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.backgroundColor = "transparent")
+                }
               >
                 Xóa
               </Button>
@@ -796,7 +961,11 @@ export default function EmployeesPage() {
       title: "Tên nhân viên",
       dataIndex: "fullName",
       key: "permissionFullName",
-      render: (_, record) => record.fullName || record.user_id?.username || record.user_id?.email || "—",
+      render: (_, record) =>
+        record.fullName ||
+        record.user_id?.username ||
+        record.user_id?.email ||
+        "—",
     },
     {
       title: "Email",
@@ -808,7 +977,10 @@ export default function EmployeesPage() {
 
   return (
     <Layout>
-      <div className="p-6 bg-white rounded-lg" style={{ border: "1px solid #8c8c8c" }}>
+      <div
+        className="p-6 bg-white rounded-lg"
+        style={{ border: "1px solid #8c8c8c" }}
+      >
         {/* HEADER */}
         <div
           style={{
@@ -818,7 +990,6 @@ export default function EmployeesPage() {
             marginBottom: 16,
           }}
         >
-          {/* BÊN TRÁI: TÊN CỬA HÀNG + MÔ TẢ */}
           <div>
             <Typography.Title
               level={2}
@@ -839,11 +1010,11 @@ export default function EmployeesPage() {
                 marginTop: 6,
               }}
             >
-              Quản lý danh sách nhân viên, trạng thái làm việc và phân quyền hệ thống
+              Quản lý danh sách nhân viên, trạng thái làm việc và phân quyền hệ
+              thống
             </Typography.Text>
           </div>
 
-          {/* BÊN PHẢI: BUTTONS */}
           <Space size="middle">
             <Button
               icon={<FileExcelOutlined />}
@@ -872,10 +1043,10 @@ export default function EmployeesPage() {
           </Space>
         </div>
 
-        {/* ĐƯỜNG NGĂN */}
-        <div style={{ borderBottom: "2px solid #e8e8e8", margin: "16px 0" }} />
+        <div
+          style={{ borderBottom: "2px solid #e8e8e8", margin: "16px 0" }}
+        />
 
-        {/* MÔ TẢ NHẸ */}
         <Alert
           message="Quản lý nhân viên đang làm việc, nhân viên đã xóa và phân quyền truy cập hệ thống."
           type="info"
@@ -919,17 +1090,36 @@ export default function EmployeesPage() {
                     showTotal: (total, range) => (
                       <div>
                         Đang xem{" "}
-                        <span style={{ color: "#1890ff", fontWeight: 600 }}>
+                        <span
+                          style={{
+                            color: "#1890ff",
+                            fontWeight: 600,
+                          }}
+                        >
                           {range[0]} – {range[1]}
                         </span>{" "}
-                        trên tổng số <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> nhân viên
+                        trên tổng số{" "}
+                        <span
+                          style={{
+                            color: "#d4380d",
+                            fontWeight: 600,
+                          }}
+                        >
+                          {total}
+                        </span>{" "}
+                        nhân viên
                       </div>
                     ),
                   }}
                   loading={loading && tabKey === "active"}
                   scroll={{ x: "max-content" }}
                   locale={{ emptyText: "Chưa có nhân viên đang làm việc" }}
-                  onChange={(pag) => setPaginationActive({ current: pag.current, pageSize: pag.pageSize })}
+                  onChange={(pag) =>
+                    setPaginationActive({
+                      current: pag.current,
+                      pageSize: pag.pageSize,
+                    })
+                  }
                 />
               ),
             },
@@ -951,17 +1141,36 @@ export default function EmployeesPage() {
                     showTotal: (total, range) => (
                       <div>
                         Đang xem{" "}
-                        <span style={{ color: "#1890ff", fontWeight: 600 }}>
+                        <span
+                          style={{
+                            color: "#1890ff",
+                            fontWeight: 600,
+                          }}
+                        >
                           {range[0]} – {range[1]}
                         </span>{" "}
-                        trên tổng số <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> nhân viên
+                        trên tổng số{" "}
+                        <span
+                          style={{
+                            color: "#d4380d",
+                            fontWeight: 600,
+                          }}
+                        >
+                          {total}
+                        </span>{" "}
+                        nhân viên
                       </div>
                     ),
                   }}
                   loading={loading && tabKey === "deleted"}
                   scroll={{ x: "max-content" }}
                   locale={{ emptyText: "Chưa có nhân viên bị xóa" }}
-                  onChange={(pag) => setPaginationDeleted({ current: pag.current, pageSize: pag.pageSize })}
+                  onChange={(pag) =>
+                    setPaginationDeleted({
+                      current: pag.current,
+                      pageSize: pag.pageSize,
+                    })
+                  }
                 />
               ),
             },
@@ -980,7 +1189,11 @@ export default function EmployeesPage() {
                     <Col xs={24} lg={10}>
                       <Card
                         title="Danh sách nhân viên"
-                        extra={<Typography.Text type="secondary">{filteredActive.length} nhân viên</Typography.Text>}
+                        extra={
+                          <Typography.Text type="secondary">
+                            {filteredActive.length} nhân viên
+                          </Typography.Text>
+                        }
                         bodyStyle={{ padding: 0 }}
                       >
                         <Table
@@ -998,22 +1211,46 @@ export default function EmployeesPage() {
                             showTotal: (total, range) => (
                               <div>
                                 Đang xem{" "}
-                                <span style={{ color: "#1890ff", fontWeight: 600 }}>
+                                <span
+                                  style={{
+                                    color: "#1890ff",
+                                    fontWeight: 600,
+                                  }}
+                                >
                                   {range[0]} – {range[1]}
                                 </span>{" "}
-                                trên tổng số <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> nhân viên
+                                trên tổng số{" "}
+                                <span
+                                  style={{
+                                    color: "#d4380d",
+                                    fontWeight: 600,
+                                  }}
+                                >
+                                  {total}
+                                </span>{" "}
+                                nhân viên
                               </div>
                             ),
                           }}
                           loading={loading && tabKey === "permissions"}
                           scroll={{ x: "max-content" }}
                           size="small"
-                          onChange={(pag) => setPermissionPagination({ current: pag.current, pageSize: pag.pageSize })}
+                          onChange={(pag) =>
+                            setPermissionPagination({
+                              current: pag.current,
+                              pageSize: pag.pageSize,
+                            })
+                          }
                           onRow={(record) => ({
                             onClick: () => handleSelectStaff(record),
                             style: {
                               cursor: "pointer",
-                              backgroundColor: selectedStaff && String(selectedStaff._id) === String(record._id) ? "#f0f5ff" : "transparent",
+                              backgroundColor:
+                                selectedStaff &&
+                                  String(selectedStaff._id) ===
+                                  String(record._id)
+                                  ? "#f0f5ff"
+                                  : "transparent",
                             },
                           })}
                         />
@@ -1023,12 +1260,21 @@ export default function EmployeesPage() {
                       <Card
                         title={
                           selectedStaff
-                            ? `Quyền của ${selectedStaff.fullName || selectedStaff.user_id?.username || "nhân viên"}`
+                            ? `Quyền của ${selectedStaff.fullName ||
+                            selectedStaff.user_id?.username ||
+                            "nhân viên"
+                            }`
                             : "Chọn nhân viên để phân quyền"
                         }
                         extra={
                           selectedStaff ? (
-                            <Button type="link" danger size="small" onClick={handleResetPermissionSelection} disabled={permissionSaving}>
+                            <Button
+                              type="link"
+                              danger
+                              size="small"
+                              onClick={handleResetPermissionSelection}
+                              disabled={permissionSaving}
+                            >
                               Bỏ chọn
                             </Button>
                           ) : null
@@ -1040,24 +1286,45 @@ export default function EmployeesPage() {
                           <Empty description="Chọn một nhân viên ở bảng bên trái" />
                         ) : (
                           <>
-                            <Space direction="vertical" style={{ width: "100%" }} size="middle">
+                            <Space
+                              direction="vertical"
+                              style={{ width: "100%" }}
+                              size="middle"
+                            >
                               <Typography.Text>
-                                Đã chọn {selectedPermissions.length}/{permissionOptions.length} quyền.
+                                Đã chọn {selectedPermissions.length}/
+                                {permissionOptions.length} quyền.
                               </Typography.Text>
                               <Space wrap>
                                 <Button
-                                  onClick={() => setSelectedPermissions([...defaultStaffPermissions])}
-                                  disabled={!defaultStaffPermissions.length || permissionSaving}
+                                  onClick={() =>
+                                    setSelectedPermissions([
+                                      ...defaultStaffPermissions,
+                                    ])
+                                  }
+                                  disabled={
+                                    !defaultStaffPermissions.length ||
+                                    permissionSaving
+                                  }
                                 >
                                   Dùng quyền mặc định
                                 </Button>
                                 <Button
-                                  onClick={() => setSelectedPermissions([...permissionOptions])}
-                                  disabled={!permissionOptions.length || permissionSaving}
+                                  onClick={() =>
+                                    setSelectedPermissions([
+                                      ...permissionOptions,
+                                    ])
+                                  }
+                                  disabled={
+                                    !permissionOptions.length || permissionSaving
+                                  }
                                 >
                                   Chọn tất cả
                                 </Button>
-                                <Button onClick={() => setSelectedPermissions([])} disabled={permissionSaving}>
+                                <Button
+                                  onClick={() => setSelectedPermissions([])}
+                                  disabled={permissionSaving}
+                                >
                                   Bỏ hết
                                 </Button>
                               </Space>
@@ -1065,16 +1332,32 @@ export default function EmployeesPage() {
                             <Divider />
                             {groupedPermissionOptions.length ? (
                               groupedPermissionOptions.map((group) => {
-                                const checkedCount = group.items.filter((item) => selectedPermissionSet.has(item.key)).length;
-                                const isChecked = checkedCount === group.items.length && group.items.length > 0;
-                                const isIndeterminate = checkedCount > 0 && checkedCount < group.items.length;
+                                const checkedCount = group.items.filter((item) =>
+                                  selectedPermissionSet.has(item.key)
+                                ).length;
+                                const isChecked =
+                                  checkedCount === group.items.length &&
+                                  group.items.length > 0;
+                                const isIndeterminate =
+                                  checkedCount > 0 &&
+                                  checkedCount < group.items.length;
                                 return (
-                                  <Card key={group.key} size="small" className="mb-3" bodyStyle={{ padding: 12 }}>
+                                  <Card
+                                    key={group.key}
+                                    size="small"
+                                    className="mb-3"
+                                    bodyStyle={{ padding: 12 }}
+                                  >
                                     <div className="flex justify-between items-center">
                                       <Checkbox
                                         checked={isChecked}
                                         indeterminate={isIndeterminate}
-                                        onChange={(e) => handleToggleGroup(group.key, e.target.checked)}
+                                        onChange={(e) =>
+                                          handleToggleGroup(
+                                            group.key,
+                                            e.target.checked
+                                          )
+                                        }
                                         disabled={permissionSaving}
                                       >
                                         {group.label}
@@ -1083,13 +1366,22 @@ export default function EmployeesPage() {
                                         {checkedCount}/{group.items.length}
                                       </Typography.Text>
                                     </div>
-                                    <Divider style={{ margin: "12px 0" }} />
+                                    <Divider
+                                      style={{ margin: "12px 0" }}
+                                    />
                                     <Row gutter={[12, 8]}>
                                       {group.items.map((item) => (
                                         <Col span={12} key={item.key}>
                                           <Checkbox
-                                            checked={selectedPermissionSet.has(item.key)}
-                                            onChange={(e) => handleTogglePermission(item.key, e.target.checked)}
+                                            checked={selectedPermissionSet.has(
+                                              item.key
+                                            )}
+                                            onChange={(e) =>
+                                              handleTogglePermission(
+                                                item.key,
+                                                e.target.checked
+                                              )
+                                            }
                                             disabled={permissionSaving}
                                           >
                                             {item.label}
@@ -1104,10 +1396,17 @@ export default function EmployeesPage() {
                               <Empty description="Không có quyền khả dụng" />
                             )}
                             <div className="flex justify-end gap-3 mt-4">
-                              <Button onClick={handleResetPermissionSelection} disabled={permissionSaving}>
+                              <Button
+                                onClick={handleResetPermissionSelection}
+                                disabled={permissionSaving}
+                              >
                                 Hủy
                               </Button>
-                              <Button type="primary" onClick={handlePermissionSave} loading={permissionSaving}>
+                              <Button
+                                type="primary"
+                                onClick={handlePermissionSave}
+                                loading={permissionSaving}
+                              >
                                 Lưu phân quyền
                               </Button>
                             </div>
@@ -1130,7 +1429,12 @@ export default function EmployeesPage() {
           destroyOnHidden
           width={600}
         >
-          <EmployeeForm mode={mode} initialValues={current} onSubmit={handleSubmit} loading={loading} />
+          <EmployeeForm
+            mode={mode}
+            initialValues={current}
+            onSubmit={handleSubmit}
+            loading={loading}
+          />
         </Modal>
       </div>
     </Layout>

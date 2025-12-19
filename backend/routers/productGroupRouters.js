@@ -6,6 +6,7 @@ const productGroupController = require("../controllers/productGroup/productGroup
 const {
   verifyToken,
   requirePermission,
+  checkStoreAccess,
 } = require("../middlewares/authMiddleware");
 const upload = require("../middlewares/upload");
 
@@ -95,7 +96,7 @@ router.get(
 router.put(
   "/:groupId",
   verifyToken,
-  // checkStoreAccess,
+  checkStoreAccess,
   requirePermission("product-groups:update"),
   productGroupController.updateProductGroup
 );

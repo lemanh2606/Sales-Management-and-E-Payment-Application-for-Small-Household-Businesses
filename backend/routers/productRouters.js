@@ -129,7 +129,7 @@ router.post(
   "/store/:storeId",
   verifyToken,
   checkSubscriptionExpiry,
-  checkStoreAccess,
+  // checkStoreAccess,
   uploadProductImage.single("image"),
   handleMulterError,
   requirePermission("products:create"),
@@ -145,7 +145,7 @@ router.get(
   "/store/:storeId",
   verifyToken,
   checkSubscriptionExpiry,
-  checkStoreAccess,
+  // checkStoreAccess,
   requirePermission("products:view"),
   getProductsByStore
 );
@@ -160,7 +160,7 @@ router.put(
   "/:productId/price",
   verifyToken,
   checkSubscriptionExpiry,
-  checkStoreAccess,
+  // checkStoreAccess,
   requirePermission("products:price"),
   updateProductPrice
 );
@@ -174,7 +174,7 @@ router.put(
   "/:productId",
   verifyToken,
   checkSubscriptionExpiry,
-  checkStoreAccess,
+  // checkStoreAccess,
   uploadProductImage.single("image"),
   handleMulterError,
   requirePermission("products:update"),
@@ -190,7 +190,7 @@ router.delete(
   "/:productId/image",
   verifyToken,
   checkSubscriptionExpiry,
-  checkStoreAccess,
+  // checkStoreAccess,
   requirePermission("products:image:delete"),
   deleteProductImage
 );
