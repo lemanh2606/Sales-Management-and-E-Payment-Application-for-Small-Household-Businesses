@@ -6,7 +6,6 @@ const mongoose = require("mongoose");
 const {
   verifyToken,
   requirePermission,
-  isManager,
 } = require("../middlewares/authMiddleware");
 
 const {
@@ -165,7 +164,7 @@ router.post(
   verifyToken,
   validateObjectId,
   taxStoreAccess,
-  isManager,
+
   requirePermission("tax:approve"),
   approveRejectDeclaration
 );
@@ -201,7 +200,7 @@ router.delete(
   verifyToken,
   validateObjectId,
   taxStoreAccess,
-  isManager,
+
   requirePermission("tax:delete"),
   deleteTaxDeclaration
 );

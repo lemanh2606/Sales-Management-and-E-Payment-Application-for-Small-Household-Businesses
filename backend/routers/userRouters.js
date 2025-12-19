@@ -24,8 +24,6 @@ const {
 
 const {
   verifyToken,
-  isManager,
-  isStaff,
   checkStoreAccess,
   requirePermission,
 } = require("../middlewares/authMiddleware");
@@ -112,14 +110,9 @@ router.post("/logout", verifyToken, logout);
 
 // ==================== MANAGER ROUTES ====================
 
-router.post("/staff/soft-delete", verifyToken, isManager, softDeleteUser);
-router.post("/staff/restore", verifyToken, isManager, restoreUser);
-router.get(
-  "/permissions/catalog",
-  verifyToken,
-  isManager,
-  getPermissionCatalog
-);
+router.post("/staff/soft-delete", verifyToken, softDeleteUser);
+router.post("/staff/restore", verifyToken, restoreUser);
+router.get("/permissions/catalog", verifyToken, getPermissionCatalog);
 
 // ==================== ADMIN / MANAGER UPDATE USER ====================
 
@@ -133,7 +126,7 @@ router.put(
 
 // ==================== DEMO/TEST ROUTES ====================
 
-router.get("/manager-dashboard", verifyToken, isManager, (req, res) => {
+router.get("/manager-dashboard", verifyToken, (req, res) => {
   res.json({
     message: `Welcome Manager ${
       req.user.username || req.user.id || req.user._id
@@ -143,7 +136,7 @@ router.get("/manager-dashboard", verifyToken, isManager, (req, res) => {
   });
 });
 
-router.get("/staff-dashboard", verifyToken, isStaff, (req, res) => {
+router.get("/staff-dashboard", verifyToken, (req, res) => {
   res.json({
     message: `Welcome Staff ${
       req.user.username || req.user.id || req.user._id

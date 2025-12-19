@@ -3,11 +3,13 @@ const express = require("express");
 const router = express.Router();
 const {
   verifyToken,
-  isManager,
+
   checkStoreAccess,
   requirePermission,
 } = require("../middlewares/authMiddleware");
-const { checkSubscriptionExpiry } = require("../middlewares/subscriptionMiddleware");
+const {
+  checkSubscriptionExpiry,
+} = require("../middlewares/subscriptionMiddleware");
 const { uploadProductImage } = require("../utils/cloudinary");
 const {
   createProduct,
@@ -99,7 +101,7 @@ router.get(
   - Lấy danh sách sản phẩm tồn thấp để cảnh báo
   - Hiện tại giới hạn cho Manager (isManager). Nếu muốn granular, thay bằng requirePermission("products:low-stock")
 */
-router.get("/low-stock", verifyToken, isManager, getLowStockProducts);
+router.get("/low-stock", verifyToken, getLowStockProducts);
 
 /*
   ROUTE: POST /api/products/store/:storeId/import

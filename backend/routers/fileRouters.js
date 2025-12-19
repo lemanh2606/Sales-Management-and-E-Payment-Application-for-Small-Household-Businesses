@@ -3,8 +3,17 @@ const express = require("express");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
-const { uploadFile, getFilesByStore, getFileById, deleteFile } = require("../controllers/fileController");
-const { verifyToken, isManager, checkStoreAccess, requirePermission } = require("../middlewares/authMiddleware");
+const {
+  uploadFile,
+  getFilesByStore,
+  getFileById,
+  deleteFile,
+} = require("../controllers/fileController");
+const {
+  verifyToken,
+  checkStoreAccess,
+  requirePermission,
+} = require("../middlewares/authMiddleware");
 
 const router = express.Router();
 // đảm bảo thư mục uploads tồn tại chỉ để đọc tạm
@@ -30,7 +39,9 @@ router.post(
   (req, res, next) => {
     upload.single("file")(req, res, function (err) {
       if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
-        return res.status(400).json({ message: "File quá lớn! Giới hạn tối đa là 20MB." });
+        return res
+          .status(400)
+          .json({ message: "File quá lớn! Giới hạn tối đa là 20MB." });
       } else if (err) {
         return res.status(400).json({ message: err.message });
       }
@@ -40,8 +51,26 @@ router.post(
   uploadFile
 );
 
-router.get("/store/:storeId", verifyToken, checkStoreAccess, requirePermission("file:view"), getFilesByStore);
-router.get("/:id", verifyToken, checkStoreAccess, requirePermission("file:view"), getFileById);
-router.delete("/:id", verifyToken, checkStoreAccess, requirePermission("file:view"), deleteFile);
+router.get(
+  "/store/:storeId",
+  verifyToken,
+  checkStoreAccess,
+  requirePermission("file:view"),
+  getFilesByStore
+);
+router.get(
+  "/:id",
+  verifyToken,
+  checkStoreAccess,
+  requirePermission("file:view"),
+  getFileById
+);
+router.delete(
+  "/:id",
+  verifyToken,
+  checkStoreAccess,
+  requirePermission("file:view"),
+  deleteFile
+);
 
 module.exports = router;

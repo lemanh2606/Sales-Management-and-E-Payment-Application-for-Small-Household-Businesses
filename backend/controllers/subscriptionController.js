@@ -657,101 +657,213 @@ const createPending = async (req, res) => {
     res.status(500).json({ message: "Error creating pending subscription" });
   }
 };
+// controllers/subscriptionController.js
+// Assumptions:
+// - PaymentHistory.transaction_id có unique index
+// - PaymentHistory.status enum có 'FAILED' (vì bạn chưa có 'CANCELLED')
+// - Subscription có các field: pending_order_code, pending_amount, pending_checkout_url, pending_plan_duration, pending_created_at, pending_qr_code
+
 const clearPendingPayment = async (req, res) => {
   try {
     let userId;
 
-    // 1. Từ req.user (middleware)
-    if (req.user && req.user._id) {
-      userId = req.user._id;
-    }
-    // 2. Từ req.body
-    else if (req.body && req.body.userId) {
-      userId = req.body.userId;
-    }
-    // 3. Từ query
-    else if (req.query && req.query.userId) {
-      userId = req.query.userId;
-    }
+    // 1) From req.user
+    if (req.user && req.user._id) userId = req.user._id;
+    // 2) From body
+    else if (req.body && req.body.userId) userId = req.body.userId;
+    // 3) From query
+    else if (req.query && req.query.userId) userId = req.query.userId;
 
     console.log(`🔍 Processing userId: ${userId || "ALL"}`);
 
+    // =============== CASE 1: clear theo user ===============
     if (userId) {
-      // ✅ SPECIFIC USER - XÓA TẤT CẢ pending của user (không check expired)
+      // 0) Lấy subscription TRƯỚC khi clear để còn pending_order_code
+      const subscription = await Subscription.findOne({
+        user_id: userId,
+      }).lean();
+      if (!subscription) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Subscription not found" });
+      }
+
+      const pendingOrderCode = subscription?.pending_order_code;
+      const pendingAmount = subscription?.pending_amount ?? 0;
+      const pendingPlanDuration = subscription?.pending_plan_duration ?? null;
+      const pendingCreatedAt = subscription?.pending_created_at ?? new Date();
+
+      // 1) Nếu có pending order => update PaymentHistory status = FAILED (idempotent, không duplicate)
+      if (pendingOrderCode) {
+        await PaymentHistory.updateOne(
+          // filter theo unique transaction_id
+          { transaction_id: String(pendingOrderCode) },
+          {
+            // luôn update thành FAILED (bạn có thể map FAILED -> "Đã hủy" ở UI)
+            $set: {
+              status: "FAILED",
+              updatedAt: new Date(),
+              notes: `Giao dịch bị hủy - PayOS (${pendingOrderCode})`,
+            },
+            // chỉ set khi insert lần đầu
+            $setOnInsert: {
+              user_id: userId,
+              subscription_id: subscription._id,
+              transaction_id: String(pendingOrderCode),
+              amount: pendingAmount,
+              plan_duration: pendingPlanDuration,
+              payment_method: "PAYOS",
+              createdAt: pendingCreatedAt,
+              paid_at: null,
+            },
+          },
+          { upsert: true }
+        );
+      }
+
+      // 2) Clear pending_* (sau khi đã ghi history)
       const result = await Subscription.updateOne(
         { user_id: userId },
         {
-          pending_order_code: null,
-          pending_amount: null,
-          pending_checkout_url: null,
-          pending_plan_duration: null,
-          pending_created_at: null,
-          pending_qr_code: null,
+          $set: {
+            pending_order_code: null,
+            pending_amount: null,
+            pending_checkout_url: null,
+            pending_plan_duration: null,
+            pending_created_at: null,
+            pending_qr_code: null,
+          },
         }
       );
 
       console.log(
-        `🗑️ Cleared ${result.modifiedCount} pending records for user: ${userId}`
+        `🗑️ Cleared pending for user: ${userId}. matched=${result.matchedCount}, modified=${result.modifiedCount}`
       );
-
-      if (result.modifiedCount > 0) {
-        // Tạo FAILED PaymentHistory nếu có orderCode
-        const subscription = await Subscription.findOne({ user_id: userId });
-        const pendingOrderCode = subscription?.pending_order_code;
-
-        if (pendingOrderCode) {
-          // ... logic PaymentHistory như cũ
-          console.log(`📝 Created FAILED history for: ${pendingOrderCode}`);
-        }
-      }
 
       return res.json({
         success: true,
-        message: `Đã xóa ${result.modifiedCount} pending payment cho user ${userId}`,
+        message: `Đã clear pending payment cho user ${userId}${
+          pendingOrderCode
+            ? ` + cập nhật PaymentHistory(${pendingOrderCode})=FAILED`
+            : ""
+        }`,
+        matchedCount: result.matchedCount,
         modifiedCount: result.modifiedCount,
+        pendingOrderCode: pendingOrderCode || null,
       });
     }
 
-    // 4. FALLBACK - Clear ALL expired (> 30 phút)
+    // =============== CASE 2: clear ALL expired (> 30 phút) ===============
     console.log("🧹 Clearing ALL expired pending payments");
-    await clearAllExpiredPendingPayments();
+    const cleared = await clearAllExpiredPendingPayments();
 
-    res.json({
+    return res.json({
       success: true,
-      message: "Đã dọn tất cả pending payment quá hạn",
+      message:
+        "Đã dọn tất cả pending payment quá hạn + cập nhật PaymentHistory",
+      ...cleared,
     });
   } catch (error) {
     console.error("Clear pending error:", error);
-    res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: error.message });
   }
 };
 
-// ✅ Helper - chỉ clear expired
-const clearAllExpiredPendingPayments = async () => {
-  const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+// const clearPendingPayment = async (req, res) => {
+//   try {
+//     let userId;
 
-  const result = await Subscription.updateMany(
-    {
-      pending_order_code: { $ne: null },
-      pending_created_at: { $lt: thirtyMinutesAgo },
-    },
-    {
-      $unset: {
-        // ✅ $unset thay vì set null
-        pending_order_code: "",
-        pending_amount: "",
-        pending_checkout_url: "",
-        pending_plan_duration: "",
-        pending_created_at: "",
-        pending_qr_code: "",
-      },
-    }
-  );
+//     // 1. Từ req.user (middleware)
+//     if (req.user && req.user._id) {
+//       userId = req.user._id;
+//     }
+//     // 2. Từ req.body
+//     else if (req.body && req.body.userId) {
+//       userId = req.body.userId;
+//     }
+//     // 3. Từ query
+//     else if (req.query && req.query.userId) {
+//       userId = req.query.userId;
+//     }
 
-  console.log(
-    `🧹 Auto-cleared ${result.modifiedCount} expired pending payments`
-  );
-};
+//     console.log(`🔍 Processing userId: ${userId || "ALL"}`);
+
+//     if (userId) {
+//       // ✅ SPECIFIC USER - XÓA TẤT CẢ pending của user (không check expired)
+//       const result = await Subscription.updateOne(
+//         { user_id: userId },
+//         {
+//           pending_order_code: null,
+//           pending_amount: null,
+//           pending_checkout_url: null,
+//           pending_plan_duration: null,
+//           pending_created_at: null,
+//           pending_qr_code: null,
+//         }
+//       );
+
+//       console.log(
+//         `🗑️ Cleared ${result.modifiedCount} pending records for user: ${userId}`
+//       );
+
+//       if (result.modifiedCount > 0) {
+//         // Tạo FAILED PaymentHistory nếu có orderCode
+//         const subscription = await Subscription.findOne({ user_id: userId });
+//         const pendingOrderCode = subscription?.pending_order_code;
+
+//         if (pendingOrderCode) {
+//           // ... logic PaymentHistory như cũ
+//           console.log(`📝 Created FAILED history for: ${pendingOrderCode}`);
+//         }
+//       }
+
+//       return res.json({
+//         success: true,
+//         message: `Đã xóa ${result.modifiedCount} pending payment cho user ${userId}`,
+//         modifiedCount: result.modifiedCount,
+//       });
+//     }
+
+//     // 4. FALLBACK - Clear ALL expired (> 30 phút)
+//     console.log("🧹 Clearing ALL expired pending payments");
+//     await clearAllExpiredPendingPayments();
+
+//     res.json({
+//       success: true,
+//       message: "Đã dọn tất cả pending payment quá hạn",
+//     });
+//   } catch (error) {
+//     console.error("Clear pending error:", error);
+//     res.status(500).json({ error: error.message });
+//   }
+// };
+
+// // ✅ Helper - chỉ clear expired
+// const clearAllExpiredPendingPayments = async () => {
+//   const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+
+//   const result = await Subscription.updateMany(
+//     {
+//       pending_order_code: { $ne: null },
+//       pending_created_at: { $lt: thirtyMinutesAgo },
+//     },
+//     {
+//       $unset: {
+//         // ✅ $unset thay vì set null
+//         pending_order_code: "",
+//         pending_amount: "",
+//         pending_checkout_url: "",
+//         pending_plan_duration: "",
+//         pending_created_at: "",
+//         pending_qr_code: "",
+//       },
+//     }
+//   );
+
+//   console.log(
+//     `🧹 Auto-cleared ${result.modifiedCount} expired pending payments`
+//   );
+// };
 
 module.exports = {
   getPlans,

@@ -134,6 +134,10 @@ const STAFF_DEFAULT_MENU = [
   "reports:revenue:view",
   "notifications:view",
   "file:view",
+  "product-groups:create",
+  "product-groups:view",
+  "product-groups:update",
+  "product-groups:delete",
 ];
 
 module.exports = {

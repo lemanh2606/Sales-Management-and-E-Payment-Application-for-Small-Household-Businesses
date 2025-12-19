@@ -128,9 +128,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             if (newToken) {
               await AsyncStorage.setItem(TOKEN_KEY, newToken);
               setToken(newToken);
-              apiClient.defaults.headers.common[
-                "Authorization"
-              ] = `Bearer ${newToken}`;
+              apiClient.defaults.headers.common["Authorization"] =
+                `Bearer ${newToken}`;
 
               if (originalRequest.headers) {
                 originalRequest.headers["Authorization"] = `Bearer ${newToken}`;

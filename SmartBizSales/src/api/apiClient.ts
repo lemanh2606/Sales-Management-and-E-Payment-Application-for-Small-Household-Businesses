@@ -14,7 +14,7 @@ function getDevHost(): string {
     if (hostUri) return hostUri.split(":")[0];
 
     // Legacy Expo CLI
-    const debuggerHost = Constants.manifest?.debuggerHost;
+    const debuggerHost = (Constants.manifest as any)?.debuggerHost;
     if (debuggerHost) return debuggerHost.split(":")[0];
 
     // Fallback localhost (chỉ chạy trên dev machine)

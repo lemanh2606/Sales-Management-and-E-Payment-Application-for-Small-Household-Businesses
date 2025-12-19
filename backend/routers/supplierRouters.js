@@ -15,7 +15,7 @@ const {
 const {
   verifyToken,
   checkStoreAccess,
-  isManager,
+
   requirePermission,
 } = require("../middlewares/authMiddleware");
 
@@ -24,7 +24,7 @@ router.post(
   "/stores/:storeId",
   verifyToken,
   checkStoreAccess,
-  isManager,
+
   requirePermission("supplier:create"),
   createSupplier
 );
@@ -68,7 +68,7 @@ router.get(
 router.put(
   "/:supplierId",
   verifyToken,
-  isManager,
+
   requirePermission("supplier:update"),
   updateSupplier
 );
@@ -77,7 +77,7 @@ router.put(
 router.delete(
   "/:supplierId",
   verifyToken,
-  isManager,
+
   requirePermission("supplier:delete"),
   deleteSupplier
 );

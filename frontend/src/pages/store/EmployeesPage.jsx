@@ -223,6 +223,10 @@ const STAFF_PERMISSION_UI_HIDDEN_EXACT = new Set([
   "users:manage",
   "users:role:update",
   "users:menu:update",
+  "product-groups:create",
+  "product-groups:view",
+  "product-groups:update",
+  "product-groups:delete",
 ]);
 
 const isHiddenFromStaffPermissionUI = (permission = "") =>
@@ -364,7 +368,7 @@ export default function EmployeesPage() {
     }
     if (key === "permissions") {
       loadEmployees(false, false);
-      ensurePermissionCatalog().catch(() => {});
+      ensurePermissionCatalog().catch(() => { });
     }
   };
 

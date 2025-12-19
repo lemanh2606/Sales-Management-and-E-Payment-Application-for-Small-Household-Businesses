@@ -9,7 +9,7 @@ const {
 
 const {
   verifyToken,
-  isManager,
+
   checkStoreAccess,
   requirePermission,
 } = require("../middlewares/authMiddleware");

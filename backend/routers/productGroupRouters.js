@@ -5,7 +5,6 @@ const router = express.Router();
 const productGroupController = require("../controllers/productGroup/productGroupController");
 const {
   verifyToken,
-  checkStoreAccess,
   requirePermission,
 } = require("../middlewares/authMiddleware");
 const upload = require("../middlewares/upload");
@@ -29,7 +28,11 @@ const upload = require("../middlewares/upload");
   GET /api/product-groups/template/download
   - Tải template import Excel/CSV
 */
-router.get("/template/download", verifyToken, productGroupController.downloadProductGroupTemplate);
+router.get(
+  "/template/download",
+  verifyToken,
+  productGroupController.downloadProductGroupTemplate
+);
 
 /*
   POST /api/product-groups/store/:storeId/import
@@ -38,7 +41,7 @@ router.get("/template/download", verifyToken, productGroupController.downloadPro
 router.post(
   "/store/:storeId/import",
   verifyToken,
-  checkStoreAccess,
+  // checkStoreAccess,
   upload.single("file"),
   requirePermission("product-groups:create"),
   productGroupController.importProductGroups
@@ -52,7 +55,7 @@ router.post(
 router.post(
   "/store/:storeId",
   verifyToken,
-  checkStoreAccess,
+  // checkStoreAccess,
   requirePermission("product-groups:create"),
   productGroupController.createProductGroup
 );
@@ -65,7 +68,7 @@ router.post(
 router.get(
   "/store/:storeId",
   verifyToken,
-  checkStoreAccess,
+  // checkStoreAccess,
   requirePermission("product-groups:view"),
   productGroupController.getProductGroupsByStore
 );
@@ -79,7 +82,7 @@ router.get(
 router.get(
   "/:groupId",
   verifyToken,
-  checkStoreAccess,
+  // checkStoreAccess,
   requirePermission("product-groups:view"),
   productGroupController.getProductGroupById
 );
@@ -92,7 +95,7 @@ router.get(
 router.put(
   "/:groupId",
   verifyToken,
-  checkStoreAccess,
+  // checkStoreAccess,
   requirePermission("product-groups:update"),
   productGroupController.updateProductGroup
 );
@@ -105,7 +108,7 @@ router.put(
 router.delete(
   "/:groupId",
   verifyToken,
-  checkStoreAccess,
+  // checkStoreAccess,
   requirePermission("product-groups:delete"),
   productGroupController.deleteProductGroup
 );

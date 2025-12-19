@@ -1,7 +1,11 @@
 //backend/router/inventoryReportRouters.js
 const express = require("express");
 const router = express.Router();
-const { verifyToken, isManager, checkStoreAccess, requirePermission } = require("../middlewares/authMiddleware");
+const {
+  verifyToken,
+  checkStoreAccess,
+  requirePermission,
+} = require("../middlewares/authMiddleware");
 const { getInventoryReport } = require("../controllers/inventoryReport");
 
 //server: http://localhost:9999
@@ -23,7 +27,7 @@ const { getInventoryReport } = require("../controllers/inventoryReport");
 router.get(
   "/",
   verifyToken,
-  isManager,
+
   checkStoreAccess,
   requirePermission("inventory:stock-check:view"),
   getInventoryReport
