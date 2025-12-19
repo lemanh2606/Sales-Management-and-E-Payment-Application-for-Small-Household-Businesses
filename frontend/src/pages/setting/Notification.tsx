@@ -206,7 +206,12 @@ const Notification: React.FC = () => {
 
     if (result.isConfirmed) {
       try {
-        await axios.delete(`${apiUrl}/notifications/${id}`, { headers });
+        await axios.delete(`${apiUrl}/notifications/${id}`, {
+          headers,
+          params: {
+            storeId: storeId,
+          },
+        });
         Swal.fire({
           icon: "success",
           title: "Đã xóa thông báo",
@@ -262,7 +267,16 @@ const Notification: React.FC = () => {
 
     if (result.isConfirmed) {
       try {
-        await Promise.all(selectedRowKeys.map((id) => axios.delete(`${apiUrl}/notifications/${id}`, { headers })));
+        await Promise.all(
+          selectedRowKeys.map((id) =>
+            axios.delete(`${apiUrl}/notifications/${id}`, {
+              headers,
+              params: {
+                storeId: storeId,
+              },
+            })
+          )
+        );
         Swal.fire({
           icon: "success",
           title: `Đã xóa ${selectedRowKeys.length} thông báo`,

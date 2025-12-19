@@ -1,15 +1,7 @@
 //backend/routers/notificationRouters.js
 const express = require("express");
-const {
-  listNotifications,
-  markNotificationRead,
-  markAllRead,
-  deleteNotification,
-} = require("../controllers/notificationController");
-const {
-  verifyToken,
-  checkStoreAccess,
-} = require("../middlewares/authMiddleware");
+const { listNotifications, markNotificationRead, markAllRead, deleteNotification } = require("../controllers/notificationController");
+const { verifyToken, checkStoreAccess } = require("../middlewares/authMiddleware");
 const router = express.Router();
 
 /**
