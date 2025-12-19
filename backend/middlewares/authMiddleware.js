@@ -84,11 +84,45 @@ async function verifyToken(req, res, next) {
 }
 
 /*
-  checkStoreAccess
+  isManager
+  - Middleware đơn giản kiểm tra role của req.user có phải "MANAGER" hay không.
+  - Nếu đúng thì next(), ngược lại trả 403.
+  - Trả 500 nếu có lỗi bất ngờ.
+*/
+function isManager(req, res, next) {
+  try {
+    if (req.user && req.user.role === "MANAGER") return next();
+    return res.status(403).json({ message: "Chỉ Manager mới có quyền này" });
+  } catch (err) {
+    console.error("isManager error:", err);
+    return res.status(500).json({ message: "Lỗi server" });
+  }
+}
+
+/*
+  isStaff
+  - Middleware kiểm tra role của req.user có phải "STAFF" hay không.
+  - Nếu đúng thì next(), ngược lại trả 403.
+  - Trả 500 nếu có lỗi bất ngờ.
+*/
+function isStaff(req, res, next) {
+  try {
+    if (req.user && req.user.role === "STAFF") return next();
+    return res.status(403).json({ message: "Chỉ Staff mới có quyền này" });
+  } catch (err) {
+    console.error("isStaff error:", err);
+    return res.status(500).json({ message: "Lỗi server" });
+  }
+}
+
+/*
+  checkStoreAccess (Multi-Tenant)
+  Mục tiêu:
   - Xác định cửa hàng (storeId) từ nhiều nguồn: query (shopId/storeId), params, hoặc body.
   - Nếu không truyền storeId thì fallback sang req.user.current_store (nếu user đã load).
   - Kiểm tra store tồn tại.
-  - Kiểm tra user có quyền với store này thông qua store_roles.
+  - Nếu req.user.role === "MANAGER": chỉ cho phép truy cập nếu user là owner của store (so sánh store.owner_id với userId).
+  - Nếu req.user.role === "STAFF": kiểm tra user.store_roles để xác định user có quyền với store đó hay không.
   - Nếu hợp lệ, gán req.store (object store) và req.storeRole (OWNER/STAFF) để dùng tiếp.
   - Trả 400/401/403/404/500 tương ứng với các lỗi liên quan.
 */
@@ -135,24 +169,48 @@ async function checkStoreAccess(req, res, next) {
       });
     }
 
-    // Kiểm tra user có quyền với store này không thông qua store_roles
-    // store_roles là mảng các object dạng { store: ObjectId, role: "OWNER"/"STAFF" }
-    const roleMapping =
-      (userData.store_roles || []).find(
-        (r) => String(r.store) === String(store._id)
-      ) || null;
+    // PHÂN QUYỀN THEO ROLE
 
-    if (roleMapping) {
-      // Nếu có mapping thì cho phép và gán req.storeRole theo mapping
-      req.store = store;
-      req.storeRole = roleMapping.role; // có thể là OWNER hoặc STAFF
-      return next();
+    // CASE: MANAGER -> chỉ được truy cập nếu là owner của store
+    if (req.user.role === "MANAGER") {
+      if (String(store.owner_id) === String(userId)) {
+        req.store = store;
+        req.storeRole = "OWNER";
+        return next();
+      } else {
+        // Nếu manager không phải owner thì không cho phép
+        console.log("MANAGER TRUY CẬP STORE KHÔNG PHẢI OWNER");
+        return res.status(403).json({
+          message: "Manager không sở hữu cửa hàng này",
+        });
+      }
     }
 
-    // Nếu không có mapping cho store này thì deny
-    console.log("User không có quyền với cửa hàng này");
+    // CASE: STAFF -> kiểm tra mapping store_roles trong userData
+    if (req.user.role === "STAFF") {
+      // store_roles là mảng các object dạng { store: ObjectId, role: "OWNER"/"STAFF" }
+      const roleMapping =
+        (userData.store_roles || []).find(
+          (r) => String(r.store) === String(store._id)
+        ) || null;
+
+      if (roleMapping) {
+        // Nếu có mapping thì cho phép và gán req.storeRole theo mapping
+        console.log("STAFF ĐƯỢC GÁN STORE → ALLOW");
+        req.store = store;
+        req.storeRole = roleMapping.role; // có thể là OWNER hoặc STAFF theo schema bạn dùng
+        return next();
+      }
+      // Nếu không có mapping cho store này thì deny
+      console.log("STAFF TRUY CẬP STORE KHÔNG ĐƯỢC GÁN");
+      return res.status(403).json({
+        message: "Nhân viên không có quyền tại cửa hàng này",
+      });
+    }
+
+    // Nếu role không phải MANAGER hoặc STAFF thì không có quyền truy cập store
     return res.status(403).json({
-      message: "Bạn không có quyền truy cập cửa hàng này",
+      message: "Role không hợp lệ để truy cập cửa hàng",
     });
   } catch (err) {
     // Lỗi không lường trước trong quá trình kiểm tra store access
@@ -170,14 +228,22 @@ async function checkStoreAccess(req, res, next) {
       * Global wildcard, ví dụ "orders:*"
       * Scoped to store, ví dụ "store:<storeId>:orders:view" hoặc "store:<storeId>:orders:*"
       * Toàn quyền: "*" hoặc "*:*" hoặc "all"
+  - Nếu options.allowManager không bị set thành false thì role MANAGER sẽ override và luôn được cho phép.
   - Nếu req.store tồn tại thì middleware cũng sẽ kiểm tra các permission scoped theo store.
   Trả 401 nếu user chưa xác thực, 403 nếu thiếu permission, 500 nếu lỗi server.
 */
 function requirePermission(permission, options = {}) {
+  const allowManager = options.allowManager !== false;
+
   return (req, res, next) => {
     try {
       const user = req.user;
-      if (!user) return res.status(401).json({ message: "Chưa xác thực" });
+      if (!user) return res.status(401).json({ message: "Not authenticated" });
+
+      // Cho phép Manager override
+      if (allowManager && user.role === "MANAGER") {
+        return next();
+      }
 
       // Lấy menu từ user
       const menu = Array.isArray(user.menu)
@@ -187,7 +253,7 @@ function requirePermission(permission, options = {}) {
       if (!menu.length) {
         return res
           .status(403)
-          .json({ message: "Truy cập bị từ chối (không có quyền)" });
+          .json({ message: "Access denied (no permissions)" });
       }
 
       const perm = String(permission).trim();
@@ -195,14 +261,14 @@ function requirePermission(permission, options = {}) {
       // Kiểm tra match chính xác
       if (menu.includes(perm)) return next();
 
-      // Kiểm tra wildcard global: *, *:*, all
-      if (menu.includes("*") || menu.includes("*:*") || menu.includes("all")) {
-        return next();
-      }
-
-      // Kiểm tra resource wildcard: resource:*
+      // Kiểm tra wildcard global: *, *:*, all, resource:*
       const [resource, action] = perm.split(":");
-      if (resource && action && menu.includes(`${resource}:*`)) {
+      if (
+        menu.includes(`${resource}:*`) ||
+        menu.includes("*") ||
+        menu.includes("*:*") ||
+        menu.includes("all")
+      ) {
         return next();
       }
 
@@ -212,7 +278,7 @@ function requirePermission(permission, options = {}) {
         // store:<storeId>:permission hoặc store:<storeId>:resource:*
         if (
           menu.includes(`store:${sid}:${perm}`) ||
-          (resource && menu.includes(`store:${sid}:${resource}:*`))
+          menu.includes(`store:${sid}:${resource}:*`)
         ) {
           return next();
         }
@@ -232,12 +298,12 @@ function requirePermission(permission, options = {}) {
 
       return res
         .status(403)
-        .json({ message: "Truy cập bị từ chối (thiếu quyền)" });
+        .json({ message: "Truy cập bị từ chối, chỉ Manager mới có quyền này" });
     } catch (err) {
       console.error("requirePermission error:", err);
       return res
         .status(500)
-        .json({ message: "Lỗi server trong requirePermission" });
+        .json({ message: "Server error in requirePermission" });
     }
   };
 }

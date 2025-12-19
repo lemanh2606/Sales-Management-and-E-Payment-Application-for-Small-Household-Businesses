@@ -10,7 +10,6 @@ const {
 const {
   verifyToken,
 
-  checkStoreAccess,
   requirePermission,
 } = require("../middlewares/authMiddleware");
 
@@ -63,7 +62,7 @@ function allowOwnerOrPermission(permission, options = {}) {
 router.post(
   "/config/:storeId",
   verifyToken,
-  checkStoreAccess,
+
   allowOwnerOrPermission("loyalty:manage"),
   setupLoyaltyConfig
 );
@@ -82,7 +81,6 @@ router.post(
 router.get(
   "/config/:storeId",
   verifyToken,
-  checkStoreAccess,
   requirePermission("loyalty:view"),
   getLoyaltyConfig
 );
