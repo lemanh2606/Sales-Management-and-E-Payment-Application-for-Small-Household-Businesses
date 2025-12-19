@@ -145,6 +145,7 @@ router.post(
 router.post(
   "/:storeId/employees",
   verifyToken,
+  checkStoreAccess,
   checkSubscriptionExpiry,
   requirePermission("store:employee:create"),
   storeController.createEmployee

@@ -964,13 +964,15 @@ const updateProfile = async (req, res) => {
       if (employee) {
         let employeeChanged = false;
 
+        // ⚠️ Lưu ý: Employee model dùng fullName (camelCase), User model dùng fullname (camelCase)
         if (fullname && changedFields.includes("fullname")) {
-          employee.fullname = fullname.trim();
+          employee.fullName = fullname.trim(); // 🔴 FIX: fullName thay vì fullname
           employeeChanged = true;
         }
 
-        if (phone && changedFields.includes("phone")) {
-          employee.phone = phone.trim();
+        // 🔴 FIX: phone có thể là empty string "" nên dùng changedFields để kiểm tra thay vì `if (phone &&...)`
+        if (changedFields.includes("phone")) {
+          employee.phone = phone?.trim() || "";
           employeeChanged = true;
         }
 
@@ -981,7 +983,7 @@ const updateProfile = async (req, res) => {
 
         if (employeeChanged) {
           await employee.save();
-          console.log("✅ Employee data synced");
+          console.log("✅ Employee data synced with fullName:", employee.fullName);
         }
       }
     }
