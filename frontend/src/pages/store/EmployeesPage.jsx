@@ -153,6 +153,7 @@ const PERMISSION_LABELS = {
   // "products:delete": "Xóa sản phẩm",
   // "products:image:delete": "Xóa hình ảnh sản phẩm",
   "products:search": "Tìm kiếm sản phẩm",
+  "products:get": "Lấy sản phẩm",
   // "products:low-stock": "Xem cảnh báo tồn kho thấp",
 
   // ========== PRODUCT GROUP PERMISSIONS ==========
@@ -239,16 +240,16 @@ const PERMISSION_LABELS = {
   "file:delete": "Xóa tệp",
 
   // ========== WILDCARDS (có label nhưng mặc định ẩn khỏi UI) ==========
-  "*": "Toàn quyền hệ thống",
-  "*:*": "Toàn quyền hệ thống",
-  "all": "Toàn quyền hệ thống",
-  "store:*": "Toàn quyền cửa hàng",
-  "products:*": "Toàn quyền sản phẩm",
+  // "*": "Toàn quyền hệ thống",
+  // "*:*": "Toàn quyền hệ thống",
+  // "all": "Toàn quyền hệ thống",
+  // "store:*": "Toàn quyền cửa hàng",
+  // "products:*": "Toàn quyền sản phẩm",
   "orders:*": "Toàn quyền đơn hàng",
   "customers:*": "Toàn quyền khách hàng",
   "reports:*": "Toàn quyền báo cáo",
   "inventory:*": "Toàn quyền kho",
-  "tax:*": "Toàn quyền thuế",
+  // "tax:*": "Toàn quyền thuế",
   "users:*": "Toàn quyền người dùng",
 };
 

@@ -53,6 +53,7 @@ const ALL_PERMISSIONS = [
   "products:search",
   "products:low-stock",
   "products:export",
+  "products:get", // 👈 THÊM: lấy sản phẩm (dùng cho API nội bộ)
 
   // ========== PRODUCT GROUPS ==========
   "product-groups:create",

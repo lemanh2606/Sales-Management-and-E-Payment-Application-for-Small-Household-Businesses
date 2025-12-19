@@ -146,7 +146,7 @@ router.get(
   verifyToken,
   checkSubscriptionExpiry,
   // checkStoreAccess,
-  requirePermission("products:view"),
+  requirePermission("products:get"),
   getProductsByStore
 );
 

@@ -449,7 +449,7 @@ const OrderRefund: React.FC = () => {
       : true;
 
     const matchEmployee = selectedEmployee
-      ? order.employeeId._id === selectedEmployee
+      ? String(order.employeeId?._id || "N/A") === String(selectedEmployee)
       : true;
 
     // Filter by date range

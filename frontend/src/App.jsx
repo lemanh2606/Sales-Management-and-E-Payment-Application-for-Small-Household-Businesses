@@ -287,7 +287,7 @@ function App() {
 
         {/* ==================== Products & Suppliers ==================== */}
         <Route path="/suppliers" element={<ProtectedRoute allowedPermissions="supplier:view"><SupplierListPage /></ProtectedRoute>} />
-        <Route path="/products" element={<ProtectedRoute allowedPermissions="products:view"><ProductListPage /></ProtectedRoute>} />
+        <Route path="/products" element={<ProtectedRoute allowedPermissions="products:get"><ProductListPage /></ProtectedRoute>} />
         <Route path="/product-groups" element={<ProtectedRoute allowedPermissions="products:view"><ProductGroupsPage /></ProtectedRoute>} />
 
         {/* ==================== Customers ==================== */}
