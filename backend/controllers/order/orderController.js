@@ -174,27 +174,38 @@ const createOrder = async (req, res) => {
         }
       }
       // Update thêm chức năng chủ cửa hàng cũng chính là 1 người bán hàng
-      let finalEmployeeId = clientEmployeeId;
-      // === FALLBACK THÔNG MINH CHO TRƯỜNG HỢP CHỦ BÁN ===
-      if (!finalEmployeeId) {
-        const currentUserId = req.user._id; // từ verifyToken middleware
+      const currentUserId = req.user._id; // từ verifyToken middleware
+      const currentUserRole = req.user.role; // Role từ token
 
-        // Tìm xem user này có Employee record không (dành cho STAFF)
+      let finalEmployeeId = null;
+
+      // 🔴 FIX: Nếu STAFF đang tạo Order → LUÔN lấy Employee ID từ DB
+      // (Không dùng clientEmployeeId từ FE vì nó có thể sai)
+      if (currentUserRole === "STAFF") {
         const employee = await Employee.findOne({
           user_id: currentUserId,
           store_id: storeId,
           isDeleted: false,
         }).lean();
 
-        if (employee) {
-          finalEmployeeId = employee._id;
-        } else {
-          // Nếu không có → nghĩa là CHỦ CỬA HÀNG đang bán
-          // Ta vẫn lưu null vào employeeId (giữ nguyên schema)
-          // Nhưng thêm một field mới để báo cáo dễ phân biệt (không bắt buộc, nhưng hay)
-          // Hoặc đơn giản: để null = chủ bán
-          finalEmployeeId = null;
+        if (!employee) {
+          throw new Error(
+            "STAFF không có Employee record. Vui lòng liên hệ quản lý để kiểm tra."
+          );
         }
+
+        // ✅ Lưu Employee._id (chứ không phải User._id)
+        finalEmployeeId = employee._id;
+        console.log(
+          `STAFF ${currentUserId} tạo order → employeeId = ${finalEmployeeId}`
+        );
+      } else {
+        // MANAGER/OWNER → có thể chọn employee khác (hoặc null để bán)
+        // Nếu FE gửi clientEmployeeId → dùng, nếu không → null
+        finalEmployeeId = clientEmployeeId || null;
+        console.log(
+          `MANAGER tạo order → employeeId = ${finalEmployeeId || "null (chủ bán)"}`
+        );
       }
 
       // Tạo Order pending (status default pending)
