@@ -184,7 +184,7 @@ router.put(
   "/:storeId/employees/:id",
   verifyToken,
   checkSubscriptionExpiry,
-
+  checkStoreAccess,
   requirePermission("store:employee:update"),
   storeController.updateEmployee
 );
@@ -194,7 +194,7 @@ router.delete(
   "/:storeId/employees/:id/soft",
   verifyToken,
   checkSubscriptionExpiry,
-
+  checkStoreAccess,
   requirePermission("store:employee:softDelete"),
   storeController.softDeleteEmployee
 );
@@ -204,7 +204,7 @@ router.put(
   "/:storeId/employees/:id/restore",
   verifyToken,
   checkSubscriptionExpiry,
-
+  checkStoreAccess,
   requirePermission("store:employee:restore"),
   storeController.restoreEmployee
 );
