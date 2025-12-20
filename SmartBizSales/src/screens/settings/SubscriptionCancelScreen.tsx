@@ -60,7 +60,7 @@ const SubscriptionSuccessScreen: React.FC = () => {
         const sub = (res as any)?.data?.data || (res as any)?.data;
 
         if (!cancelled && sub && sub.status === "ACTIVE") {
-          setMessage("Thanh toán thành công! Đang chuyển hướng...");
+          setMessage("Hủy thanh toán Đang chuyển hướng...");
           setUiStatus("success");
           setTimeout(() => goSubscription(), 900);
           return;
@@ -69,7 +69,7 @@ const SubscriptionSuccessScreen: React.FC = () => {
         if (!cancelled) {
           if (attempt < 4) {
             setAttempt((prev) => prev + 1);
-            setMessage(`Đang xác nhận thanh toán... (${attempt + 1}/5)`);
+            setMessage(`Đang Hủy... (${attempt + 1}/5)`);
           } else {
             setMessage(
               "Hệ thống đang cập nhật. Nếu chưa được kích hoạt, bạn có thể quay lại trang thanh toán để thử lại."
@@ -81,7 +81,7 @@ const SubscriptionSuccessScreen: React.FC = () => {
         if (!cancelled) {
           if (attempt < 5) {
             setAttempt((prev) => prev + 1);
-            setMessage(`Đang xác nhận thanh toán... (${attempt + 1}/5)`);
+            setMessage(`Đang Hủy.. (${attempt + 1}/5)`);
           } else {
             setMessage(
               "Không thể xác nhận giao dịch. Bạn có thể quay lại trang thanh toán để thử lại."
@@ -104,7 +104,7 @@ const SubscriptionSuccessScreen: React.FC = () => {
       <View style={styles.card}>
         <Text style={styles.icon}>{uiStatus === "success" ? "✔" : "⏳"}</Text>
         <Text style={styles.title}>
-          {uiStatus === "success" ? "Thanh toán thành công" : "Đang xử lý"}
+          {uiStatus === "success" ? "Hủy thành công" : "Đang xử lý"}
         </Text>
         <Text style={styles.sub}>{message}</Text>
 

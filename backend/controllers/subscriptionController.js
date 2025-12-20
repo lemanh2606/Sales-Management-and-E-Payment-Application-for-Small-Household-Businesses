@@ -1,4 +1,5 @@
 // controllers/subscriptionController.js
+const mongoose = require("mongoose");
 const Subscription = require("../models/Subscription");
 const User = require("../models/User");
 const PaymentHistory = require("../models/PaymentHistory");
@@ -52,7 +53,7 @@ const getPlans = async (req, res) => {
   try {
     const plans = Object.keys(PRICING).map((duration) => {
       const plan = PRICING[duration];
-      const originalPrice = 5000 * parseInt(duration);
+      const originalPrice = plan.price + plan.discount;
       const discountPercent =
         plan.discount > 0
           ? Math.round((plan.discount / originalPrice) * 100)
@@ -544,15 +545,35 @@ const getPaymentHistory = async (req, res) => {
       });
     }
 
-    // Query từ PaymentHistory collection - Mongoose tự cast string sang ObjectId
-    const history = await PaymentHistory.find({ user_id: userId })
-      .sort({ paid_at: -1 }) // Sắp xếp mới nhất lên đầu
-      .lean();
+    // // Query từ PaymentHistory collection - Mongoose tự cast string sang ObjectId
+    // const history = await PaymentHistory.find({ user_id: userId })
+    //   .sort({ paid_at: -1 }) // Sắp xếp mới nhất lên đầu
+    //   .lean();
 
-    // console.log("📊 Found payment history:", history.length, "records");
-    // if (history.length > 0) {
-    //   console.log("Sample record:", JSON.stringify(history[0], null, 2));
-    // }
+    // // console.log("📊 Found payment history:", history.length, "records");
+    // // if (history.length > 0) {
+    // //   console.log("Sample record:", JSON.stringify(history[0], null, 2));
+    // // }
+
+    const history = await PaymentHistory.aggregate([
+      {
+        $match: {
+          user_id: new mongoose.Types.ObjectId(userId),
+        },
+      },
+      {
+        $addFields: {
+          eventTime: {
+            $cond: [{ $eq: ["$status", "SUCCESS"] }, "$paid_at", "$updatedAt"],
+          },
+        },
+      },
+      {
+        $sort: {
+          eventTime: -1,
+        },
+      },
+    ]);
 
     // Chuyển đổi format cho frontend
     const formattedHistory = history.map((item) => ({
@@ -563,6 +584,8 @@ const getPaymentHistory = async (req, res) => {
       payment_method: item.payment_method,
       status: item.status,
       notes: item.notes,
+      // ✅ QUAN TRỌNG
+      eventTime: item.status === "SUCCESS" ? item.paid_at : item.updatedAt,
     }));
 
     res.json({ data: formattedHistory });

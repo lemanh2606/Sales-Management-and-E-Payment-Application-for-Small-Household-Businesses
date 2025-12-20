@@ -34,7 +34,7 @@ const paymentHistorySchema = new mongoose.Schema(
   },
   { timestamps: true, collection: "payment_histories" }
 );
-
+paymentHistorySchema.index({ user_id: 1, createdAt: -1 });
 paymentHistorySchema.index({ user_id: 1, paid_at: -1 });
 paymentHistorySchema.index({ transaction_id: 1 });
 
