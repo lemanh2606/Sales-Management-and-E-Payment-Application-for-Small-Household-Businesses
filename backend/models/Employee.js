@@ -7,7 +7,7 @@ const employeeSchema = new mongoose.Schema(
     phone: { type: String, default: "", maxlength: 15, trim: true },
     salary: { type: mongoose.Schema.Types.Decimal128, default: 0, required: true }, // Lương cơ bản
     shift: { type: String, maxlength: 50 }, // Ca làm việc (sáng/chiều/tối)
-    commission_rate: { type: mongoose.Schema.Types.Decimal128 }, // Tỷ lệ hoa hồng (%)
+    commission_rate: { type: mongoose.Schema.Types.Decimal128, default: 0 }, // Tỷ lệ hoa hồng (%)
     hired_date: { type: Date, default: Date.now }, // Ngày tuyển dụng
     user_id: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true }, // Nối với User (auth/login)
     store_id: { type: mongoose.Schema.Types.ObjectId, ref: "Store", required: true }, // Liên kết store (nhân viên chỉ 1 store)
