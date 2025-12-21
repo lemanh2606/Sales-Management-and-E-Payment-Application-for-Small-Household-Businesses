@@ -12,7 +12,7 @@ export default function EmployeeForm({ mode, initialValues = {}, onSubmit, loadi
       username: initialValues?.user_id?.username ?? "",
       email: initialValues?.user_id?.email ?? "",
       phone: initialValues?.user_id?.phone ?? "",
-      salary: initialValues?.salary ?? "",
+      salary: initialValues?.salary ?? 0,
       commission_rate: initialValues?.commission_rate ?? 0,
       shift: initialValues?.shift ?? "Sáng",
     });
