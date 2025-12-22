@@ -1945,27 +1945,36 @@ const exportTopSellingProducts = async (req, res) => {
 // 3) /api/orders/order-refund/:orderId, ( để xem chi tiết 1 order đã hoàn trả thành công)
 
 const getListPaidOrders = async (req, res) => {
-  const { storeId } = req.query;
+  const { storeId, status } = req.query;
   try {
-    const orders = await Order.find({ status: "paid", storeId })
+    // 🔴 FIX: Hỗ trợ tham số status để lấy cả paid và partially_refunded
+    // Nếu không có status → mặc định lấy "paid"
+    // Nếu status="paid,partially_refunded" → lấy cả 2
+    let statusFilter = "paid";
+    if (status) {
+      const statusArray = status.split(",").map((s) => s.trim());
+      statusFilter = { $in: statusArray };
+    }
+
+    const orders = await Order.find({ status: statusFilter, storeId })
       .populate("storeId", "name")
       .populate("employeeId", "fullName")
       .populate("customer", "name phone")
       .select(
-        "storeId employeeId customer totalAmount paymentMethod createdAt updatedAt"
+        "storeId employeeId customer totalAmount paymentMethod status createdAt updatedAt"
       )
       .sort({ createdAt: -1 })
       .lean();
 
     res.json({
-      message: "Lấy danh sách hóa đơn đã thanh toán thành công",
+      message: "Lấy danh sách hóa đơn để hoàn trả thành công",
       orders,
     });
   } catch (err) {
-    console.error("Lỗi khi lấy danh sách hóa đơn đã thanh toán:", err.message);
+    console.error("Lỗi khi lấy danh sách hóa đơn để hoàn trả:", err.message);
     res
       .status(500)
-      .json({ message: "Lỗi server khi lấy danh sách hóa đơn đã thanh toán" });
+      .json({ message: "Lỗi server khi lấy danh sách hóa đơn để hoàn trả" });
   }
 };
 

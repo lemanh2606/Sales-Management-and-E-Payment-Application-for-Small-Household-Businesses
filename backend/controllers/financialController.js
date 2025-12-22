@@ -58,15 +58,56 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
   let totalVAT = toNumber(vat[0]?.totalVAT);
 
   // 3️⃣ Chi phí nhập hàng (COGS)
-  const purchases = await PurchaseOrder.aggregate([
-    { $match: { store_id: objectStoreId, status: "đã nhập hàng", purchase_order_date: { $gte: start, $lte: end } } },
-    { $group: { _id: null, total: { $sum: "$total_amount" } } },
+  //Hiện tại đang để tạm bằng cách tính giá vốn hàng đã bán, lấy từ orderItem ra. Thực chất ❌ KHÔNG ĐƯỢC LẤY: COGS = tổng stock_quantity × cost_price
+  //Nguyên tắc kế toán tối thiểu: COGS = Tổng (số lượng đã bán × giá vốn tại thời điểm bán món hàng đó).
+  //Code mục 3️⃣ này chỉ làm giả định rằng cost price mặc định cả đời
+  // COGS = Σ(OrderItem.quantity × Product.cost_price)
+  //(giả định cost_price không đổi theo thời gian)
+  const cogsAgg = await mongoose.model("OrderItem").aggregate([
+    // join Order
+    {
+      $lookup: {
+        from: "orders",
+        localField: "orderId",
+        foreignField: "_id",
+        as: "order",
+      },
+    },
+    { $unwind: "$order" },
+
+    // lọc đơn hợp lệ trong kỳ
+    {
+      $match: {
+        "order.storeId": objectStoreId,
+        "order.status": { $in: ["paid", "partially_refunded"] },
+        "order.printDate": { $gte: start, $lte: end },
+      },
+    },
+
+    // join Product
+    {
+      $lookup: {
+        from: "products",
+        localField: "productId",
+        foreignField: "_id",
+        as: "product",
+      },
+    },
+    { $unwind: "$product" },
+
+    // tính COGS
+    {
+      $group: {
+        _id: null,
+        totalCOGS: {
+          $sum: {
+            $multiply: ["$quantity", { $toDecimal: "$product.cost_price" }],
+          },
+        },
+      },
+    },
   ]);
-  const returns = await PurchaseReturn.aggregate([
-    { $match: { store_id: objectStoreId, status: "đã trả hàng", return_date: { $gte: start, $lte: end } } },
-    { $group: { _id: null, total: { $sum: "$total_amount" } } },
-  ]);
-  let totalCOGS = toNumber(purchases[0]?.total) - toNumber(returns[0]?.total);
+  let totalCOGS = toNumber(cogsAgg[0]?.totalCOGS);
 
   // 4️⃣ Lợi nhuận gộp
   let grossProfit = totalRevenue - totalCOGS;
