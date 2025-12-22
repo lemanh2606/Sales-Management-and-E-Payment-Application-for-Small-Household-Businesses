@@ -2,30 +2,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import Layout from "../components/Layout";
-import {
-  Table,
-  Space,
-  Card,
-  Typography,
-  Progress,
-  Collapse,
-  Dropdown,
-  Tooltip,
-  Button,
-  Spin,
-  Alert,
-  Input,
-  Menu,
-  Badge,
-} from "antd";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  ResponsiveContainer,
-} from "recharts";
+import { Table, Space, Card, Typography, Progress, Collapse, Dropdown, Tooltip, Button, Spin, Alert, Input, Menu, Badge, Popover } from "antd";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
 import { Tooltip as RechartsTooltip } from "recharts";
 import {
   EllipsisOutlined,
@@ -102,6 +80,8 @@ interface TopProduct {
 interface RevenueSummary {
   totalRevenue: number | { $numberDecimal?: string };
   countOrders: number;
+  completedOrders?: number;
+  partialRefundOrders?: number;
   dailyRevenue?: Array<{
     day: string;
     revenue: number;
@@ -138,9 +118,7 @@ export default function DashboardPage() {
   const [loadingTopProducts, setLoadingTopProducts] = useState(false);
   const [errorTopProducts, setErrorTopProducts] = useState<string | null>(null);
 
-  const [revenueSummary, setRevenueSummary] = useState<RevenueSummary | null>(
-    null
-  );
+  const [revenueSummary, setRevenueSummary] = useState<RevenueSummary | null>(null);
   const [loadingRevenue, setLoadingRevenue] = useState(false);
   const [errorRevenue, setErrorRevenue] = useState<string | null>(null);
 
@@ -153,24 +131,21 @@ export default function DashboardPage() {
       {
         key: "setup-store",
         title: "Thiết lập cửa hàng",
-        description:
-          "Cập nhật thông tin cửa hàng để giúp khách hàng và hệ thống SmartRetail liên hệ nhanh chóng hơn.",
+        description: "Cập nhật thông tin cửa hàng để giúp khách hàng và hệ thống SmartRetail liên hệ nhanh chóng hơn.",
         completed: false,
         actions: [{ label: "Thiết lập cửa hàng", link: "/update/store" }],
       },
       {
         key: "add-product",
         title: "Thêm sản phẩm đầu tiên",
-        description:
-          "Bạn kinh doanh sản phẩm gì? Hãy tạo nhóm sản phẩm, sau đó thêm sản phẩm đầu tiên để bắt đầu quản lý.",
+        description: "Bạn kinh doanh sản phẩm gì? Hãy tạo nhóm sản phẩm, sau đó thêm sản phẩm đầu tiên để bắt đầu quản lý.",
         completed: false,
         actions: [{ label: "Tạo nhóm hàng hoá", link: "/product-groups" }],
       },
       {
         key: "connect-channel",
         title: "Kết nối kênh bán hàng",
-        description:
-          "Kênh POS - Bán tại cửa hàng. Bán và vận hành cửa hàng chuyên nghiệp.",
+        description: "Kênh POS - Bán tại cửa hàng. Bán và vận hành cửa hàng chuyên nghiệp.",
         completed: false,
         actions: [
           {
@@ -183,8 +158,7 @@ export default function DashboardPage() {
       {
         key: "manage-orders",
         title: "Quản lý đơn hàng tập trung",
-        description:
-          "Các đơn hàng trên nhiều kênh bán khác nhau sẽ được quản lý tại một nơi duy nhất.",
+        description: "Các đơn hàng trên nhiều kênh bán khác nhau sẽ được quản lý tại một nơi duy nhất.",
         completed: false,
         actions: [{ label: "Danh sách đơn hàng", link: "/orders/list" }],
       },
@@ -196,12 +170,9 @@ export default function DashboardPage() {
       if (!storeId) return;
       try {
         const token = localStorage.getItem("token");
-        const res = await axios.get(
-          `${apiUrl}/notifications?storeId=${storeId}&read=false&limit=1`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
+        const res = await axios.get(`${apiUrl}/notifications?storeId=${storeId}&read=false&limit=1`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         setUnreadCount(res.data.meta.total || 0);
       } catch (err) {
         console.error("Lỗi tải số thông báo chưa đọc:", err);
@@ -222,10 +193,7 @@ export default function DashboardPage() {
     });
 
     return () => {
-      window.removeEventListener(
-        "notifications:updated",
-        handleNotificationUpdate
-      );
+      window.removeEventListener("notifications:updated", handleNotificationUpdate);
       socket.off("payment_success");
     };
   }, [storeId]);
@@ -251,9 +219,7 @@ export default function DashboardPage() {
       setTopProducts(res.data.data || []);
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {
-        setErrorTopProducts(
-          err.response?.data?.message || "Lỗi tải top sản phẩm"
-        );
+        setErrorTopProducts(err.response?.data?.message || "Lỗi tải top sản phẩm");
       } else {
         setErrorTopProducts("Lỗi tải top sản phẩm");
       }
@@ -283,11 +249,10 @@ export default function DashboardPage() {
 
       const data = res.data.revenue || {};
 
-      const totalRevenue =
-        typeof data.totalRevenue === "object"
-          ? Number(data.totalRevenue.$numberDecimal || 0)
-          : data.totalRevenue;
+      const totalRevenue = typeof data.totalRevenue === "object" ? Number(data.totalRevenue.$numberDecimal || 0) : data.totalRevenue;
       const countOrders = data.countOrders || 0;
+      const completedOrders = data.completedOrders || 0; // ✅ THÊM KHAI BÁO
+      const partialRefundOrders = data.partialRefundOrders || 0; // ✅ THÊM KHAI BÁO
 
       const [year, month] = periodKey.split("-").map(Number);
       const daysInMonth = dayjs(`${year}-${month}`).daysInMonth();
@@ -303,6 +268,8 @@ export default function DashboardPage() {
       setRevenueSummary({
         totalRevenue,
         countOrders,
+        completedOrders, // ✅ THÊM VÀO ĐỂ HIỆN
+        partialRefundOrders, // ✅ THÊM VÀO ĐỂ HIỆN
         dailyRevenue: fakeDaily,
       });
     } catch (err: unknown) {
@@ -344,15 +311,7 @@ export default function DashboardPage() {
         headers: { Authorization: `Bearer ${token}` },
       })
       .then((res) => {
-        const {
-          total,
-          pending,
-          refunded,
-          paid,
-          totalSoldItems,
-          totalRefundedItems,
-          netSoldItems,
-        } = res.data;
+        const { total, pending, refunded, paid, totalSoldItems, totalRefundedItems, netSoldItems } = res.data;
         setOrderStats({
           total,
           pending,
@@ -394,9 +353,7 @@ export default function DashboardPage() {
         setFinancials(res.data.data);
       } catch (err: unknown) {
         if (axios.isAxiosError(err)) {
-          setErrorFinancials(
-            err.response?.data?.message || "Lỗi tải báo cáo tài chính"
-          );
+          setErrorFinancials(err.response?.data?.message || "Lỗi tải báo cáo tài chính");
         } else {
           setErrorFinancials("Lỗi tải báo cáo tài chính");
         }
@@ -408,10 +365,7 @@ export default function DashboardPage() {
     fetchFinancials();
   }, [storeId]);
 
-  const avgOrderValue =
-    orderStats.paid > 0 && financials
-      ? financials.totalRevenue / orderStats.paid
-      : 0;
+  const avgOrderValue = orderStats.paid > 0 && financials ? financials.totalRevenue / orderStats.paid : 0;
 
   const items = [
     {
@@ -452,8 +406,7 @@ export default function DashboardPage() {
       align: "right",
       render: (v: TopProduct["totalSales"]) => {
         if (!v) return "₫0";
-        const num =
-          typeof v === "object" ? v.$numberDecimal || v.toString() : v;
+        const num = typeof v === "object" ? v.$numberDecimal || v.toString() : v;
         return new Intl.NumberFormat("vi-VN", {
           style: "currency",
           currency: "VND",
@@ -496,37 +449,24 @@ export default function DashboardPage() {
             overlay={
               <Menu style={{ width: "100%", maxWidth: 300, padding: "16px" }}>
                 <Menu.Item key="help" icon={<QuestionCircleOutlined />}>
-                  <Link
-                    to="/help"
-                    style={{ color: "inherit", textDecoration: "none" }}
-                  >
+                  <Link to="/help" style={{ color: "inherit", textDecoration: "none" }}>
                     Trung tâm trợ giúp
                   </Link>
                 </Menu.Item>
                 <Menu.Item key="devices" icon={<LaptopOutlined />}>
-                  <Link
-                    to="/devices"
-                    style={{ color: "inherit", textDecoration: "none" }}
-                  >
+                  <Link to="/devices" style={{ color: "inherit", textDecoration: "none" }}>
                     Thiết bị bán hàng
                   </Link>
                 </Menu.Item>
                 <Menu.Item key="feedback" icon={<MessageOutlined />}>
-                  <Link
-                    to="/feedback"
-                    style={{ color: "inherit", textDecoration: "none" }}
-                  >
+                  <Link to="/feedback" style={{ color: "inherit", textDecoration: "none" }}>
                     Đóng góp ý kiến
                   </Link>
                 </Menu.Item>
                 <Menu.Item key="newbie" icon={<BulbOutlined />}>
-                  Dành cho khách hàng mới: cùng SmartRetail làm quen phần mềm
-                  qua các bước đơn giản
+                  Dành cho khách hàng mới: cùng SmartRetail làm quen phần mềm qua các bước đơn giản
                   <div style={{ marginTop: 8 }}>
-                    <Link
-                      to="/product-groups"
-                      style={{ fontSize: 14, color: "#1890ff" }}
-                    >
+                    <Link to="/product-groups" style={{ fontSize: 14, color: "#1890ff" }}>
                       Tạo nhóm hàng hoá
                     </Link>
                   </div>
@@ -546,9 +486,7 @@ export default function DashboardPage() {
                     gap: 8,
                   }}
                 >
-                  <div
-                    style={{ display: "flex", alignItems: "center", gap: 8 }}
-                  >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <PhoneOutlined style={{ color: "#52c41a", fontSize: 16 }} />
                     <span style={{ fontWeight: 500 }}>1900 8386</span>
                   </div>
@@ -560,15 +498,10 @@ export default function DashboardPage() {
                       textDecoration: "none",
                       transition: "all 0.2s",
                     }}
-                    onMouseEnter={(e) =>
-                      (e.currentTarget.style.textDecoration = "underline")
-                    }
-                    onMouseLeave={(e) =>
-                      (e.currentTarget.style.textDecoration = "none")
-                    }
+                    onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
+                    onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
                   >
-                    <CustomerServiceOutlined style={{ marginRight: 4 }} /> Gửi
-                    hỗ trợ
+                    <CustomerServiceOutlined style={{ marginRight: 4 }} /> Gửi hỗ trợ
                   </Link>
                 </div>
               </Menu>
@@ -576,23 +509,14 @@ export default function DashboardPage() {
             trigger={["click"]}
             placement="bottomRight"
           >
-            <QuestionCircleOutlined
-              style={{ fontSize: 20, color: "#8c8c8c", cursor: "pointer" }}
-            />
+            <QuestionCircleOutlined style={{ fontSize: 20, color: "#8c8c8c", cursor: "pointer" }} />
           </Dropdown>
 
           {/* Icon chuông - Dropdown riêng */}
           <Badge count={unreadCount} overflowCount={99}>
-            <BellOutlined
-              style={{ fontSize: 20, color: "#474646", cursor: "pointer" }}
-              onClick={() => setPanelVisible(true)}
-            />
+            <BellOutlined style={{ fontSize: 20, color: "#474646", cursor: "pointer" }} onClick={() => setPanelVisible(true)} />
           </Badge>
-          <NotificationPanel
-            storeId={storeId}
-            visible={panelVisible}
-            onClose={() => setPanelVisible(false)}
-          />
+          <NotificationPanel storeId={storeId} visible={panelVisible} onClose={() => setPanelVisible(false)} />
 
           {/* Phần avata và dropdown - RESPONSIVE */}
           <Dropdown
@@ -601,35 +525,23 @@ export default function DashboardPage() {
             overlay={
               <Menu style={{ width: 220 }}>
                 <Menu.Item key="profile" icon={<UserOutlined />}>
-                  <Link
-                    to="/settings/profile"
-                    style={{ color: "inherit", textDecoration: "none" }}
-                  >
+                  <Link to="/settings/profile" style={{ color: "inherit", textDecoration: "none" }}>
                     Tài khoản của bạn
                   </Link>
                 </Menu.Item>
                 <Menu.Item key="package" icon={<CreditCardOutlined />}>
-                  <Link
-                    to="/settings/subscription"
-                    style={{ color: "inherit", textDecoration: "none" }}
-                  >
+                  <Link to="/settings/subscription" style={{ color: "inherit", textDecoration: "none" }}>
                     Thông tin gói dịch vụ
                   </Link>
                 </Menu.Item>
                 <Menu.Divider />
                 <Menu.Item key="terms" icon={<FileTextOutlined />}>
-                  <Link
-                    to="/terms"
-                    style={{ color: "inherit", textDecoration: "none" }}
-                  >
+                  <Link to="/terms" style={{ color: "inherit", textDecoration: "none" }}>
                     Điều khoản dịch vụ
                   </Link>
                 </Menu.Item>
                 <Menu.Item key="privacy" icon={<LockOutlined />}>
-                  <Link
-                    to="/privacy"
-                    style={{ color: "inherit", textDecoration: "none" }}
-                  >
+                  <Link to="/privacy" style={{ color: "inherit", textDecoration: "none" }}>
                     Chính sách bảo mật
                   </Link>
                 </Menu.Item>
@@ -647,24 +559,16 @@ export default function DashboardPage() {
                 transition: "background 0.2s",
                 backgroundColor: "#f5f5f5",
               }}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.background = "#ecebebff")
-              }
-              onMouseLeave={(e) =>
-                (e.currentTarget.style.background = "transparent")
-              }
+              onMouseEnter={(e) => (e.currentTarget.style.background = "#ecebebff")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
             >
               <img
-                src={
-                  user?.image ||
-                  "https://cdn-icons-png.flaticon.com/512/9131/9131529.png"
-                }
+                src={user?.image || "https://cdn-icons-png.flaticon.com/512/9131/9131529.png"}
                 alt="avatar"
                 onError={(e) => {
                   const target = e.currentTarget;
                   target.onerror = null; // tránh loop
-                  target.src =
-                    "https://cdn-icons-png.flaticon.com/512/9131/9131529.png";
+                  target.src = "https://cdn-icons-png.flaticon.com/512/9131/9131529.png";
                 }}
                 style={{
                   width: 40,
@@ -697,8 +601,7 @@ export default function DashboardPage() {
             Xin chào, {user?.fullname || user?.fullName || "Manager"} 👋
           </Title>
           <Text type="secondary" style={{ fontSize: "clamp(12px, 3vw, 14px)" }}>
-            Đang xem Dashboard của cửa hàng:{" "}
-            <b>{currentStore?.name || storeId}</b>
+            Đang xem Dashboard của cửa hàng: <b>{currentStore?.name || storeId}</b>
           </Text>
         </div>
 
@@ -718,8 +621,7 @@ export default function DashboardPage() {
                   }}
                 >
                   <Text strong style={{ fontSize: "clamp(13px, 3vw, 15px)" }}>
-                    Cùng SmartRetail làm quen các bước xây dựng và vận hành cửa
-                    hàng nhé
+                    Cùng SmartRetail làm quen các bước xây dựng và vận hành cửa hàng nhé
                   </Text>
                   <Tooltip title="Thao tác với thông báo">
                     <Dropdown menu={{ items }} trigger={["click"]}>
@@ -734,47 +636,25 @@ export default function DashboardPage() {
                   <Text strong style={{ fontSize: "clamp(12px, 3vw, 14px)" }}>
                     Đã hoàn thành {completedSteps} trên {steps.length} bước
                   </Text>
-                  <Progress
-                    percent={(completedSteps / steps.length) * 100}
-                    size="small"
-                    style={{ margin: "12px 0 20px" }}
-                  />
+                  <Progress percent={(completedSteps / steps.length) * 100} size="small" style={{ margin: "12px 0 20px" }} />
 
                   <Collapse>
                     {steps.map((step) => (
                       <Collapse.Panel
                         key={step.key}
-                        header={
-                          <span style={{ fontSize: "clamp(13px, 3vw, 14px)" }}>
-                            {step.title}
-                          </span>
-                        }
+                        header={<span style={{ fontSize: "clamp(13px, 3vw, 14px)" }}>{step.title}</span>}
                         extra={
-                          <Tooltip
-                            title={
-                              step.completed
-                                ? "Nhấn để bỏ đánh dấu"
-                                : "Nhấn để đánh dấu đã hoàn thành"
-                            }
-                          >
+                          <Tooltip title={step.completed ? "Nhấn để bỏ đánh dấu" : "Nhấn để đánh dấu đã hoàn thành"}>
                             <div
-                              className={`onboarding-tag ${
-                                !step.completed
-                                  ? "pulse-animation-dashboard"
-                                  : ""
-                              }`}
+                              className={`onboarding-tag ${!step.completed ? "pulse-animation-dashboard" : ""}`}
                               style={{
                                 display: "inline-flex",
                                 alignItems: "center",
                                 gap: 4,
                                 padding: "2px 8px",
                                 borderRadius: 4,
-                                background: step.completed
-                                  ? "#f6ffed"
-                                  : "#fff7e6",
-                                border: `1px solid ${
-                                  step.completed ? "#b7eb8f" : "#ffd591"
-                                }`,
+                                background: step.completed ? "#f6ffed" : "#fff7e6",
+                                border: `1px solid ${step.completed ? "#b7eb8f" : "#ffd591"}`,
                                 color: step.completed ? "#52c41a" : "#fa8c16",
                                 cursor: "pointer",
                                 userSelect: "none",
@@ -783,39 +663,25 @@ export default function DashboardPage() {
                               }}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setSteps((prev) =>
-                                  prev.map((s) =>
-                                    s.key === step.key
-                                      ? { ...s, completed: !s.completed }
-                                      : s
-                                  )
-                                );
+                                setSteps((prev) => prev.map((s) => (s.key === step.key ? { ...s, completed: !s.completed } : s)));
                               }}
                               onMouseEnter={(e) => {
-                                e.currentTarget.style.background =
-                                  step.completed ? "#d4edda" : "#ffe7ba";
-                                e.currentTarget.style.transform =
-                                  "translateY(-1px)";
+                                e.currentTarget.style.background = step.completed ? "#d4edda" : "#ffe7ba";
+                                e.currentTarget.style.transform = "translateY(-1px)";
                               }}
                               onMouseLeave={(e) => {
-                                e.currentTarget.style.background =
-                                  step.completed ? "#f6ffed" : "#fff7e6";
-                                e.currentTarget.style.transform =
-                                  "translateY(0)";
+                                e.currentTarget.style.background = step.completed ? "#f6ffed" : "#fff7e6";
+                                e.currentTarget.style.transform = "translateY(0)";
                               }}
                             >
                               {step.completed ? (
                                 <>
                                   <CheckCircleFilled style={{ fontSize: 14 }} />
-                                  <span style={{ fontWeight: 500 }}>
-                                    Hoàn thành
-                                  </span>
+                                  <span style={{ fontWeight: 500 }}>Hoàn thành</span>
                                 </>
                               ) : (
                                 <>
-                                  <EditOutlined
-                                    style={{ fontSize: 13, opacity: 0.7 }}
-                                  />
+                                  <EditOutlined style={{ fontSize: 13, opacity: 0.7 }} />
                                   <span>Chưa xong</span>
                                 </>
                               )}
@@ -823,9 +689,7 @@ export default function DashboardPage() {
                           </Tooltip>
                         }
                       >
-                        <p style={{ fontSize: "clamp(12px, 3vw, 14px)" }}>
-                          {step.description}
-                        </p>
+                        <p style={{ fontSize: "clamp(12px, 3vw, 14px)" }}>{step.description}</p>
                         {step.actions?.map((act) => (
                           <Button
                             key={act.label}
@@ -867,10 +731,7 @@ export default function DashboardPage() {
                 <Text strong style={{ fontSize: "clamp(13px, 3vw, 15px)" }}>
                   Kết quả kinh doanh tháng {dayjs().format("MM/YYYY")}
                 </Text>
-                <Link
-                  to="/reports/dashboard"
-                  style={{ fontSize: "clamp(12px, 3vw, 14px)" }}
-                >
+                <Link to="/reports/dashboard" style={{ fontSize: "clamp(12px, 3vw, 14px)" }}>
                   Xem chi tiết
                 </Link>
               </Space>
@@ -881,10 +742,7 @@ export default function DashboardPage() {
               {/* Dòng 1 */}
               <div className="p-4 bg-purple-50 rounded-lg flex items-center justify-between col-span-1 sm:col-span-1 lg:col-span-4">
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <Text
-                    type="secondary"
-                    style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}
-                  >
+                  <Text type="secondary" style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
                     Doanh thu
                   </Text>
                   <Title
@@ -924,10 +782,7 @@ export default function DashboardPage() {
 
               <div className="p-4 bg-purple-50 rounded-lg flex items-center justify-between col-span-1 sm:col-span-1 lg:col-span-4">
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <Text
-                    type="secondary"
-                    style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}
-                  >
+                  <Text type="secondary" style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
                     Giá trị trung bình / đơn
                   </Text>
                   <Title
@@ -960,10 +815,7 @@ export default function DashboardPage() {
 
               <div className="p-4 bg-orange-50 rounded-lg flex items-center justify-between col-span-1 sm:col-span-1 lg:col-span-4">
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <Text
-                    type="secondary"
-                    style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}
-                  >
+                  <Text type="secondary" style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
                     Tổng đơn
                   </Text>
                   <Title
@@ -993,10 +845,7 @@ export default function DashboardPage() {
               {/* Dòng 2 */}
               <div className="p-4 bg-purple-50 rounded-lg flex items-center justify-between col-span-1 sm:col-span-1 lg:col-span-3">
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <Text
-                    type="secondary"
-                    style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}
-                  >
+                  <Text type="secondary" style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
                     Số lượng hàng thực bán
                   </Text>
                   <Title
@@ -1012,15 +861,9 @@ export default function DashboardPage() {
                 </div>
                 <Tooltip
                   title={`Tổng số sản phẩm trên các đơn hàng, sau khi đã trừ đi các đơn bị hoàn trả.
-                    • Tổng bán: ${orderStats.totalSoldItems.toLocaleString(
-                      "vi-VN"
-                    )}
-                    • Hoàn: ${orderStats.totalRefundedItems.toLocaleString(
-                      "vi-VN"
-                    )}
-                    • Thực bán: ${orderStats.netSoldItems.toLocaleString(
-                      "vi-VN"
-                    )}
+                    • Tổng bán: ${orderStats.totalSoldItems.toLocaleString("vi-VN")}
+                    • Hoàn: ${orderStats.totalRefundedItems.toLocaleString("vi-VN")}
+                    • Thực bán: ${orderStats.netSoldItems.toLocaleString("vi-VN")}
                   `}
                 >
                   <InfoCircleOutlined
@@ -1037,20 +880,14 @@ export default function DashboardPage() {
 
               <div className="p-4 bg-green-50 rounded-lg flex items-center justify-between col-span-1 sm:col-span-1 lg:col-span-4">
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <Text
-                    type="secondary"
-                    style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}
-                  >
+                  <Text type="secondary" style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
                     Tiền lãi thực
                   </Text>
                   <Title
                     level={4}
                     style={{
                       margin: 0,
-                      color:
-                        (financials?.netProfit ?? 0) >= 0
-                          ? "#389e0d"
-                          : "#f5222d",
+                      color: (financials?.netProfit ?? 0) >= 0 ? "#389e0d" : "#f5222d",
                       fontSize: "clamp(16px, 4vw, 20px)",
                       wordBreak: "break-word",
                     }}
@@ -1083,10 +920,7 @@ export default function DashboardPage() {
 
               <div className="p-4 bg-red-50 rounded-lg flex items-center justify-between col-span-1 sm:col-span-1 lg:col-span-3">
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <Text
-                    type="secondary"
-                    style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}
-                  >
+                  <Text type="secondary" style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
                     Chưa thanh toán
                   </Text>
                   <Title
@@ -1115,10 +949,7 @@ export default function DashboardPage() {
 
               <div className="p-4 bg-gray-100 rounded-lg flex items-center justify-between col-span-1 sm:col-span-1 lg:col-span-2">
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <Text
-                    type="secondary"
-                    style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}
-                  >
+                  <Text type="secondary" style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
                     Đơn bị hoàn trả
                   </Text>
                   <Title
@@ -1164,10 +995,7 @@ export default function DashboardPage() {
                 <Text strong style={{ fontSize: "clamp(13px, 3vw, 15px)" }}>
                   Biểu đồ doanh thu tháng {dayjs().format("MM/YYYY")}
                 </Text>
-                <Link
-                  to="/reports/revenue"
-                  style={{ fontSize: "clamp(12px, 3vw, 14px)" }}
-                >
+                <Link to="/reports/revenue" style={{ fontSize: "clamp(12px, 3vw, 14px)" }}>
                   Xem chi tiết
                 </Link>
               </Space>
@@ -1191,19 +1019,14 @@ export default function DashboardPage() {
               <div>
                 {revenueSummary.dailyRevenue?.length ? (
                   <ResponsiveContainer width="100%" height={220} minWidth={280}>
-                    <LineChart
-                      data={revenueSummary.dailyRevenue}
-                      margin={{ top: 5, right: 10, left: 0, bottom: 0 }}
-                    >
+                    <LineChart data={revenueSummary.dailyRevenue} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f5f5f5" />
                       <XAxis dataKey="day" tick={{ fontSize: 11 }} />
                       <YAxis
                         tick={{ fontSize: 11 }}
                         tickFormatter={(v) => {
-                          if (v >= 1_000_000_000)
-                            return `${(v / 1_000_000_000).toFixed(1)}T`;
-                          if (v >= 1_000_000)
-                            return `${(v / 1_000_000).toFixed(1)}M`;
+                          if (v >= 1_000_000_000) return `${(v / 1_000_000_000).toFixed(1)}T`;
+                          if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
                           if (v >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
                           return v;
                         }}
@@ -1234,24 +1057,14 @@ export default function DashboardPage() {
                     </LineChart>
                   </ResponsiveContainer>
                 ) : (
-                  <Text
-                    type="secondary"
-                    style={{ fontSize: "clamp(12px, 3vw, 14px)" }}
-                  >
+                  <Text type="secondary" style={{ fontSize: "clamp(12px, 3vw, 14px)" }}>
                     (Không có dữ liệu theo ngày)
                   </Text>
                 )}
 
-                <Space
-                  direction="vertical"
-                  size="small"
-                  style={{ marginTop: 16, width: "100%" }}
-                >
+                <Space direction="vertical" size="small" style={{ marginTop: 16, width: "100%" }}>
                   <div>
-                    <Text
-                      type="secondary"
-                      style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}
-                    >
+                    <Text type="secondary" style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
                       Tổng doanh thu tháng {dayjs().format("MM/YYYY")}
                     </Text>
                     <Title
@@ -1269,28 +1082,35 @@ export default function DashboardPage() {
                         minimumFractionDigits: 0,
                       }).format(
                         typeof revenueSummary.totalRevenue === "object"
-                          ? Number(
-                              revenueSummary.totalRevenue.$numberDecimal || 0
-                            )
+                          ? Number(revenueSummary.totalRevenue.$numberDecimal || 0)
                           : revenueSummary.totalRevenue
                       )}
                     </Title>
                   </div>
                   <div>
-                    <Text
-                      type="secondary"
-                      style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}
-                    >
+                    <Text type="secondary" style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
                       Số đơn hàng: <b>{revenueSummary.countOrders}</b>
+                      <Popover
+                        title="Chi tiết đơn hàng"
+                        content={
+                          <div style={{ fontSize: 12 }}>
+                            <div>
+                              ✅ Đã hoàn thành: <b>{revenueSummary.completedOrders ?? "—"}</b>
+                            </div>
+                            <div>
+                              ↩️ Hoàn 1 phần: <b>{revenueSummary.partialRefundOrders ?? "—"}</b>
+                            </div>
+                          </div>
+                        }
+                      >
+                        <InfoCircleOutlined style={{ marginLeft: 6, color: "#1677ff", cursor: "pointer" }} />
+                      </Popover>
                     </Text>
                   </div>
                 </Space>
               </div>
             ) : (
-              <Text
-                type="secondary"
-                style={{ fontSize: "clamp(12px, 3vw, 14px)" }}
-              >
+              <Text type="secondary" style={{ fontSize: "clamp(12px, 3vw, 14px)" }}>
                 Không có dữ liệu
               </Text>
             )}
@@ -1313,10 +1133,7 @@ export default function DashboardPage() {
                 <Text strong style={{ fontSize: "clamp(13px, 3vw, 15px)" }}>
                   Top 5 sản phẩm bán chạy tháng {dayjs().format("MM/YYYY")}
                 </Text>
-                <Link
-                  to="/reports/top-products"
-                  style={{ fontSize: "clamp(12px, 3vw, 14px)" }}
-                >
+                <Link to="/reports/top-products" style={{ fontSize: "clamp(12px, 3vw, 14px)" }}>
                   Xem chi tiết
                 </Link>
               </Space>
@@ -1338,20 +1155,10 @@ export default function DashboardPage() {
               <Alert type="error" message={errorTopProducts} />
             ) : topProducts.length > 0 ? (
               <div style={{ overflowX: "auto" }}>
-                <Table
-                  columns={columnsTopProducts}
-                  dataSource={topProducts}
-                  rowKey="_id"
-                  pagination={false}
-                  size="small"
-                  scroll={{ x: 600 }}
-                />
+                <Table columns={columnsTopProducts} dataSource={topProducts} rowKey="_id" pagination={false} size="small" scroll={{ x: 600 }} />
               </div>
             ) : (
-              <Text
-                type="secondary"
-                style={{ fontSize: "clamp(12px, 3vw, 14px)" }}
-              >
+              <Text type="secondary" style={{ fontSize: "clamp(12px, 3vw, 14px)" }}>
                 Chưa có dữ liệu sản phẩm bán chạy
               </Text>
             )}

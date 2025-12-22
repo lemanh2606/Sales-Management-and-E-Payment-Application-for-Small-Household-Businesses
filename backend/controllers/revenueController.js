@@ -27,11 +27,21 @@ async function calcRevenueByPeriod({ storeId, periodType, periodKey, type = "tot
         $group: {
           _id: null,
           totalRevenue: {
-            $sum: {
-              $toDecimal: "$totalAmount",
-            },
+            $sum: { $toDecimal: "$totalAmount" },
           },
           countOrders: { $sum: 1 },
+          //đếm đơn đã hoàn thành
+          completedOrders: {
+            $sum: {
+              $cond: [{ $eq: ["$status", "paid"] }, 1, 0],
+            },
+          },
+          //đếm đơn hoàn 1 nữa vì vẫn có doanh thu
+          partialRefundOrders: {
+            $sum: {
+              $cond: [{ $eq: ["$status", "partially_refunded"] }, 1, 0],
+            },
+          },
         },
       },
       {
@@ -39,6 +49,8 @@ async function calcRevenueByPeriod({ storeId, periodType, periodKey, type = "tot
           _id: 0,
           totalRevenue: { $toDouble: "$totalRevenue" },
           countOrders: 1,
+          completedOrders: 1,
+          partialRefundOrders: 1,
         },
       },
     ];
@@ -52,6 +64,9 @@ async function calcRevenueByPeriod({ storeId, periodType, periodKey, type = "tot
         periodKey,
         totalRevenue: row.totalRevenue,
         countOrders: row.countOrders,
+        // ✅ THÊM 2 FIELD NÀY
+        completedOrders: row.completedOrders || 0,
+        partialRefundOrders: row.partialRefundOrders || 0,
       },
     ];
   }
