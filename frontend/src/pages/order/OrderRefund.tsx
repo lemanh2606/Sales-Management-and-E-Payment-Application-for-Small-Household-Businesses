@@ -92,6 +92,7 @@ interface PaidOrder {
   customer?: Customer;
   totalAmount: MongoDecimal;
   paymentMethod: string;
+  status: "paid" | "partially_refunded"; // ← Thêm dòng này
   createdAt: string;
   updatedAt: string;
 }
@@ -163,19 +164,13 @@ const OrderRefund: React.FC = () => {
 
   // Các State
   const [searchText, setSearchText] = useState("");
-  const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null]>([
-    null,
-    null,
-  ]);
-  const [selectedEmployee, setSelectedEmployee] = useState<string | undefined>(
-    undefined
-  );
+  const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null]>([null, null]);
+  const [selectedEmployee, setSelectedEmployee] = useState<string | undefined>(undefined);
   const [refundOrders, setRefundOrders] = useState<RefundOrder[]>([]);
   const [paidOrders, setPaidOrders] = useState<PaidOrder[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
-  const [refundDetail, setRefundDetail] =
-    useState<OrderRefundDetailResponse | null>(null);
+  const [refundDetail, setRefundDetail] = useState<OrderRefundDetailResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [paidLoading, setPaidLoading] = useState(false);
@@ -185,32 +180,24 @@ const OrderRefund: React.FC = () => {
   // Các Modal states
   const [paidOrdersModalOpen, setPaidOrdersModalOpen] = useState(false);
   const [refundModalOpen, setRefundModalOpen] = useState(false);
-  const [selectedPaidOrder, setSelectedPaidOrder] = useState<PaidOrder | null>(
-    null
-  );
-  const [selectedPaidOrderItems, setSelectedPaidOrderItems] = useState<
-    OrderItem[]
-  >([]);
+  const [selectedPaidOrder, setSelectedPaidOrder] = useState<PaidOrder | null>(null);
+  const [selectedPaidOrderItems, setSelectedPaidOrderItems] = useState<OrderItem[]>([]);
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [modalSearchText, setModalSearchText] = useState("");
-  const [modalSelectedEmployee, setModalSelectedEmployee] = useState<
-    string | undefined
-  >(undefined);
+  const [modalSelectedEmployee, setModalSelectedEmployee] = useState<string | undefined>(undefined);
+  const [modalSelectedStatus, setModalSelectedStatus] = useState<string | undefined>(undefined);
+  const [modalSelectedPaymentMethod, setModalSelectedPaymentMethod] = useState<string | undefined>(undefined);
 
   //Biến phân trang
   const [paginationOrderRefund, setpaginationOrderRefund] = useState({
     current: 1,
     pageSize: 10,
   });
-  const [paginationOrderRefundSelect, setpaginationOrderRefundSelect] =
-    useState({ current: 1, pageSize: 10 });
+  const [paginationOrderRefundSelect, setpaginationOrderRefundSelect] = useState({ current: 1, pageSize: 10 });
 
   // Helper: Format currency
   const formatCurrency = (value: MongoDecimal | number): string => {
-    const numValue =
-      typeof value === "object" && value.$numberDecimal
-        ? parseFloat(value.$numberDecimal)
-        : Number(value);
+    const numValue = typeof value === "object" && value.$numberDecimal ? parseFloat(value.$numberDecimal) : Number(value);
     return numValue.toLocaleString("vi-VN") + "₫";
   };
 
@@ -239,12 +226,16 @@ const OrderRefund: React.FC = () => {
     }
   };
 
-  // Load paid orders (danh sách đơn đã thanh toán - để tạo hoàn trả)
+  // Load paid orders (danh sách đơn đã thanh toán + hoàn 1 phần - để tạo hoàn trả)
   const loadPaidOrders = async () => {
     setPaidLoading(true);
     try {
+      // 🔴 FIX: Gọi API với status=paid,partially_refunded để lấy cả đơn chưa hoàn và đơn hoàn 1 phần
       const res = await axios.get(`${API_BASE}/orders/list-paid`, {
-        params: { storeId },
+        params: {
+          storeId,
+          status: "paid,partially_refunded", // Lấy cả đơn paid + partially_refunded
+        },
         headers,
       });
       setPaidOrders(res.data.orders);
@@ -252,8 +243,7 @@ const OrderRefund: React.FC = () => {
       Swal.fire({
         icon: "error",
         title: "Lỗi",
-        text:
-          err.response?.data?.message || "Lỗi tải danh sách đơn đã thanh toán",
+        text: err.response?.data?.message || "Lỗi tải danh sách đơn để hoàn trả",
       });
     } finally {
       setPaidLoading(false);
@@ -282,13 +272,10 @@ const OrderRefund: React.FC = () => {
     setDetailLoading(true);
     setSelectedOrderId(orderId);
     try {
-      const res = await axios.get(
-        `${API_BASE}/orders/order-refund/${orderId}`,
-        {
-          params: { storeId },
-          headers,
-        }
-      );
+      const res = await axios.get(`${API_BASE}/orders/order-refund/${orderId}`, {
+        params: { storeId },
+        headers,
+      });
       setRefundDetail(res.data);
     } catch (err: any) {
       Swal.fire({
@@ -305,13 +292,10 @@ const OrderRefund: React.FC = () => {
   // Load order items khi chọn đơn paid để hoàn trả
   const loadPaidOrderItems = async (orderId: string) => {
     try {
-      const res = await axios.get(
-        `${API_BASE}/orders/order-refund/${orderId}`,
-        {
-          params: { storeId },
-          headers,
-        }
-      );
+      const res = await axios.get(`${API_BASE}/orders/order-refund/${orderId}`, {
+        params: { storeId },
+        headers,
+      });
       setSelectedPaidOrderItems(res.data.orderItems || []);
     } catch (err: any) {
       Swal.fire({
@@ -365,17 +349,13 @@ const OrderRefund: React.FC = () => {
     });
 
     try {
-      const response = await axios.post(
-        `${API_BASE}/orders/${selectedPaidOrder!._id}/refund`,
-        formData,
-        {
-          params: { storeId },
-          headers: {
-            ...headers,
-            "Content-Type": "multipart/form-data",
-          },
-        }
-      );
+      const response = await axios.post(`${API_BASE}/orders/${selectedPaidOrder!._id}/refund`, formData, {
+        params: { storeId },
+        headers: {
+          ...headers,
+          "Content-Type": "multipart/form-data",
+        },
+      });
       Swal.fire({
         icon: "success",
         title: "Thành công",
@@ -448,16 +428,13 @@ const OrderRefund: React.FC = () => {
         order.customer?.phone.includes(searchText)
       : true;
 
-    const matchEmployee = selectedEmployee
-      ? String(order.employeeId?._id || "N/A") === String(selectedEmployee)
-      : true;
+    const matchEmployee = selectedEmployee ? String(order.employeeId?._id || "N/A") === String(selectedEmployee) : true;
 
     // Filter by date range
     let matchDate = true;
     if (dateRange[0] && dateRange[1]) {
       const orderDate = dayjs(order.updatedAt);
-      matchDate =
-        orderDate.isAfter(dateRange[0]) && orderDate.isBefore(dateRange[1]);
+      matchDate = orderDate.isAfter(dateRange[0]) && orderDate.isBefore(dateRange[1]);
     }
 
     return matchSearch && matchEmployee && matchDate;
@@ -467,17 +444,17 @@ const OrderRefund: React.FC = () => {
   const filteredPaidOrders = paidOrders.filter((order) => {
     const matchSearch = modalSearchText
       ? order._id.toLowerCase().includes(modalSearchText.toLowerCase()) ||
-        order.customer?.name
-          .toLowerCase()
-          .includes(modalSearchText.toLowerCase()) ||
+        order.customer?.name.toLowerCase().includes(modalSearchText.toLowerCase()) ||
         order.customer?.phone.includes(modalSearchText)
       : true;
 
-    const matchEmployee = modalSelectedEmployee
-      ? order.employeeId?._id === modalSelectedEmployee
-      : true;
+    const matchEmployee = modalSelectedEmployee ? order.employeeId?._id === modalSelectedEmployee : true;
 
-    return matchSearch && matchEmployee;
+    const matchStatus = modalSelectedStatus ? order.status === modalSelectedStatus : true;
+
+    const matchPayment = modalSelectedPaymentMethod ? order.paymentMethod === modalSelectedPaymentMethod : true;
+
+    return matchSearch && matchEmployee && matchStatus && matchPayment;
   });
 
   //Tính toán và hiển thị thông tin range Phân trang
@@ -491,9 +468,7 @@ const OrderRefund: React.FC = () => {
         <span style={{ color: "#1890ff", fontWeight: 600 }}>
           {range[0]} – {range[1]}
         </span>{" "}
-        trên tổng số{" "}
-        <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> sản
-        phẩm
+        trên tổng số <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> sản phẩm
       </div>
     ),
   };
@@ -537,10 +512,7 @@ const OrderRefund: React.FC = () => {
             style={{ borderRadius: 12 }}
           >
             {/* Bộ lọc */}
-            <Space
-              direction="vertical"
-              style={{ width: "100%", marginBottom: 16 }}
-            >
+            <Space direction="vertical" style={{ width: "100%", marginBottom: 16 }}>
               <Input
                 placeholder="Tìm mã đơn hàng, tên khách, SĐT..."
                 prefix={<SearchOutlined />}
@@ -559,13 +531,7 @@ const OrderRefund: React.FC = () => {
                   }
                 }}
               />
-              <Select
-                placeholder="Lọc theo nhân viên"
-                style={{ width: "100%" }}
-                value={selectedEmployee}
-                onChange={setSelectedEmployee}
-                allowClear
-              >
+              <Select placeholder="Lọc theo nhân viên" style={{ width: "100%" }} value={selectedEmployee} onChange={setSelectedEmployee} allowClear>
                 {employees.map((emp) => (
                   <Option key={emp._id} value={emp._id}>
                     {emp.fullName}
@@ -583,14 +549,11 @@ const OrderRefund: React.FC = () => {
                 ...paginationConfig,
                 current: paginationOrderRefund.current,
                 pageSize: paginationOrderRefund.pageSize,
-                onChange: (page, pageSize) =>
-                  setpaginationOrderRefund({ current: page, pageSize }),
+                onChange: (page, pageSize) => setpaginationOrderRefund({ current: page, pageSize }),
               }}
               size="small"
               scroll={{ y: 500 }}
-              rowClassName={(record) =>
-                record._id === selectedOrderId ? "ant-table-row-selected" : ""
-              }
+              rowClassName={(record) => (record._id === selectedOrderId ? "ant-table-row-selected" : "")}
               onRow={(record) => ({
                 onClick: () => loadRefundDetail(record._id),
                 style: { cursor: "pointer" },
@@ -625,9 +588,7 @@ const OrderRefund: React.FC = () => {
                   key: "totalAmount",
                   align: "right",
                   width: 100,
-                  render: (value) => (
-                    <Text strong>{formatCurrency(value)}</Text>
-                  ),
+                  render: (value) => <Text strong>{formatCurrency(value)}</Text>,
                 },
                 {
                   title: "Trạng Thái",
@@ -635,9 +596,7 @@ const OrderRefund: React.FC = () => {
                   key: "status",
                   align: "center",
                   render: (status) => (
-                    <Tag color={status === "refunded" ? "red" : "orange"}>
-                      {status === "refunded" ? "Hoàn Toàn Bộ" : "Hoàn 1 Phần"}
-                    </Tag>
+                    <Tag color={status === "refunded" ? "red" : "orange"}>{status === "refunded" ? "Hoàn Toàn Bộ" : "Hoàn 1 Phần"}</Tag>
                   ),
                 },
                 {
@@ -683,20 +642,14 @@ const OrderRefund: React.FC = () => {
             ) : (
               <div>
                 {/* Thông tin đơn hàng gốc */}
-                <Card
-                  type="inner"
-                  title={<Text strong>Thông Tin Đơn Hàng</Text>}
-                  style={{ marginBottom: 16 }}
-                >
+                <Card type="inner" title={<Text strong>Thông Tin Đơn Hàng</Text>} style={{ marginBottom: 16 }}>
                   <Descriptions column={2} size="small">
                     <Descriptions.Item label="Mã Đơn">
                       <Text code copyable>
                         {refundDetail.order._id}
                       </Text>
                     </Descriptions.Item>
-                    <Descriptions.Item label="Cửa Hàng">
-                      {refundDetail.order.storeId.name}
-                    </Descriptions.Item>
+                    <Descriptions.Item label="Cửa Hàng">{refundDetail.order.storeId.name}</Descriptions.Item>
                     <Descriptions.Item label="Nhân Viên">
                       <Space>
                         <UserOutlined />
@@ -707,9 +660,7 @@ const OrderRefund: React.FC = () => {
                       {refundDetail.order.customer ? (
                         <Space direction="vertical" size={0}>
                           <Text strong>{refundDetail.order.customer.name}</Text>
-                          <Text type="secondary">
-                            {refundDetail.order.customer.phone}
-                          </Text>
+                          <Text type="secondary">{refundDetail.order.customer.phone}</Text>
                         </Space>
                       ) : (
                         "Trống!"
@@ -721,16 +672,8 @@ const OrderRefund: React.FC = () => {
                       </Text>
                     </Descriptions.Item>
                     <Descriptions.Item label="Trạng Thái">
-                      <Tag
-                        color={
-                          refundDetail.order.status === "refunded"
-                            ? "red"
-                            : "orange"
-                        }
-                      >
-                        {refundDetail.order.status === "refunded"
-                          ? "Hoàn Toàn Bộ"
-                          : "Hoàn 1 Phần"}
+                      <Tag color={refundDetail.order.status === "refunded" ? "red" : "orange"}>
+                        {refundDetail.order.status === "refunded" ? "Hoàn Toàn Bộ" : "Hoàn 1 Phần"}
                       </Tag>
                     </Descriptions.Item>
                     <Descriptions.Item label="Ngày Tạo" span={2}>
@@ -740,11 +683,7 @@ const OrderRefund: React.FC = () => {
                 </Card>
 
                 {/* Sản phẩm trong đơn gốc */}
-                <Card
-                  type="inner"
-                  title={<Text strong>Sản Phẩm Trong Đơn Hàng Gốc</Text>}
-                  style={{ marginBottom: 16 }}
-                >
+                <Card type="inner" title={<Text strong>Sản Phẩm Trong Đơn Hàng Gốc</Text>} style={{ marginBottom: 16 }}>
                   <Table
                     dataSource={refundDetail.orderItems}
                     rowKey="_id"
@@ -755,16 +694,12 @@ const OrderRefund: React.FC = () => {
                         title: "Mã SKU",
                         key: "sku",
                         width: 150,
-                        render: (_, record) => (
-                          <Text code>{record.productId.sku}</Text>
-                        ),
+                        render: (_, record) => <Text code>{record.productId.sku}</Text>,
                       },
                       {
                         title: "Sản Phẩm",
                         key: "name",
-                        render: (_, record) => (
-                          <Text strong>{record.productId.name}</Text>
-                        ),
+                        render: (_, record) => <Text strong>{record.productId.name}</Text>,
                       },
                       {
                         title: "Số lượng",
@@ -785,9 +720,7 @@ const OrderRefund: React.FC = () => {
                         dataIndex: "subtotal",
                         key: "subtotal",
                         align: "right",
-                        render: (value) => (
-                          <Text strong>{formatCurrency(value)}</Text>
-                        ),
+                        render: (value) => <Text strong>{formatCurrency(value)}</Text>,
                       },
                     ]}
                   />
@@ -803,26 +736,17 @@ const OrderRefund: React.FC = () => {
                   }
                   style={{ borderColor: "#ffccc7" }}
                 >
-                  <Descriptions
-                    column={2}
-                    size="small"
-                    style={{ marginBottom: 16 }}
-                  >
+                  <Descriptions column={2} size="small" style={{ marginBottom: 16 }}>
                     <Descriptions.Item label="Nhân Viên Xử Lý">
                       <Space>
                         <UserOutlined />
-                        {refundDetail?.refundDetail?.refundedBy?.fullName ||
-                          "Trống"}
+                        {refundDetail?.refundDetail?.refundedBy?.fullName || "Trống"}
                       </Space>
                     </Descriptions.Item>
-                    <Descriptions.Item label="Thời Gian">
-                      {formatDate(refundDetail?.refundDetail?.refundedAt)}
-                    </Descriptions.Item>
+                    <Descriptions.Item label="Thời Gian">{formatDate(refundDetail?.refundDetail?.refundedAt)}</Descriptions.Item>
                     <Descriptions.Item label="Tổng Tiền Hoàn" span={2}>
                       <Text strong style={{ color: "#ff4d4f", fontSize: 18 }}>
-                        {formatCurrency(
-                          refundDetail?.refundDetail?.refundAmount
-                        )}
+                        {formatCurrency(refundDetail?.refundDetail?.refundAmount)}
                       </Text>
                     </Descriptions.Item>
                     <Descriptions.Item label="Lý Do" span={2}>
@@ -844,16 +768,12 @@ const OrderRefund: React.FC = () => {
                         title: "Mã SKU",
                         key: "sku",
                         width: 150,
-                        render: (_, record) => (
-                          <Text code>{record.productId.sku}</Text>
-                        ),
+                        render: (_, record) => <Text code>{record.productId.sku}</Text>,
                       },
                       {
                         title: "Sản Phẩm",
                         key: "name",
-                        render: (_, record) => (
-                          <Text strong>{record.productId.name}</Text>
-                        ),
+                        render: (_, record) => <Text strong>{record.productId.name}</Text>,
                       },
                       {
                         title: "Số lượng Hoàn",
@@ -899,7 +819,7 @@ const OrderRefund: React.FC = () => {
           setModalSelectedEmployee(undefined);
         }}
         footer={null}
-        width={1100}
+        width={1200}
       >
         {/* Thêm bộ lọc trong Modal */}
         <Space direction="vertical" style={{ width: "100%", marginBottom: 16 }}>
@@ -911,19 +831,58 @@ const OrderRefund: React.FC = () => {
             allowClear
             style={{ width: "100%" }}
           />
-          <Select
-            placeholder="Lọc theo nhân viên bán hàng"
-            style={{ width: "100%" }}
-            value={modalSelectedEmployee}
-            onChange={setModalSelectedEmployee}
-            allowClear
-          >
-            {employees.map((emp) => (
-              <Option key={emp._id} value={emp._id}>
-                <UserOutlined /> {emp.fullName}
-              </Option>
-            ))}
-          </Select>
+          {/* 3 bộ lọc chia đều 3 cột */}
+          <Row gutter={12}>
+            <Col span={8}>
+              <Select
+                placeholder="Lọc theo nhân viên bán hàng"
+                style={{ width: "100%" }}
+                value={modalSelectedEmployee}
+                onChange={setModalSelectedEmployee}
+                allowClear
+              >
+                {employees.map((emp) => (
+                  <Option key={emp._id} value={emp._id}>
+                    <UserOutlined /> {emp.fullName}
+                  </Option>
+                ))}
+              </Select>
+            </Col>
+
+            <Col span={8}>
+              <Select
+                placeholder="Lọc theo trạng thái"
+                style={{ width: "100%" }}
+                value={modalSelectedStatus}
+                onChange={setModalSelectedStatus}
+                allowClear
+              >
+                <Option value="paid">
+                  <Tag color="green">Đã Thanh Toán</Tag>
+                </Option>
+                <Option value="partially_refunded">
+                  <Tag color="orange">Hoàn 1 Phần</Tag>
+                </Option>
+              </Select>
+            </Col>
+
+            <Col span={8}>
+              <Select
+                placeholder="Lọc theo phương thức"
+                style={{ width: "100%" }}
+                value={modalSelectedPaymentMethod}
+                onChange={setModalSelectedPaymentMethod}
+                allowClear
+              >
+                <Option value="cash">
+                  <Tag color="green">Tiền Mặt</Tag>
+                </Option>
+                <Option value="qr">
+                  <Tag color="blue">QRCode</Tag>
+                </Option>
+              </Select>
+            </Col>
+          </Row>
         </Space>
 
         <Table
@@ -934,8 +893,7 @@ const OrderRefund: React.FC = () => {
             ...paginationConfig,
             current: paginationOrderRefundSelect.current,
             pageSize: paginationOrderRefundSelect.pageSize,
-            onChange: (page, pageSize) =>
-              setpaginationOrderRefundSelect({ current: page, pageSize }),
+            onChange: (page, pageSize) => setpaginationOrderRefundSelect({ current: page, pageSize }),
           }}
           columns={[
             {
@@ -959,12 +917,14 @@ const OrderRefund: React.FC = () => {
             {
               title: "Nhân viên bán hàng",
               key: "employee",
-              render: (_, record) => (
-                <Space>
-                  <UserOutlined />
-                  {record.employeeId?.fullName || "Trống"}
-                </Space>
-              ),
+              render: (_, record) => <Space>{record.employeeId?.fullName || "Trống"}</Space>,
+            },
+            {
+              title: "Phương thức",
+              dataIndex: "paymentMethod",
+              key: "paymentMethod",
+              align: "center",
+              render: (method) => <Tag color={method === "cash" ? "green" : "blue"}>{method === "cash" ? "Tiền Mặt" : "QRCode"}</Tag>,
             },
             {
               title: "Tổng Tiền",
@@ -973,38 +933,28 @@ const OrderRefund: React.FC = () => {
               align: "right",
               render: (value) => <Text strong>{formatCurrency(value)}</Text>,
             },
+            // === CỘT MỚI: TRẠNG THÁI (thêm vào đây) ===
             {
-              title: "PT Thanh Toán",
-              dataIndex: "paymentMethod",
-              key: "paymentMethod",
-              align: "right",
-              render: (method) => (
-                <Tag color={method === "cash" ? "green" : "blue"}>
-                  {method === "cash" ? "Tiền Mặt" : "QRCode"}
-                </Tag>
-              ),
+              title: "Trạng Thái",
+              dataIndex: "status",
+              key: "status",
+              align: "center",
+              render: (status) => <Tag color={status === "paid" ? "green" : "orange"}>{status === "paid" ? "Đã Thanh Toán" : "Hoàn 1 Phần"}</Tag>,
             },
             {
               title: "Ngày Tạo",
               dataIndex: "createdAt",
               key: "createdAt",
-              align: "right",
-              render: (date) => (
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  {formatDate(date)}
-                </Text>
-              ),
+              align: "center",
+              width: 105,
+              render: (date) => <Text style={{ fontSize: 12 }}>{formatDate(date)}</Text>,
             },
             {
-              title: "Hành Động",
+              title: "Thao tác",
               key: "action",
               align: "center",
               render: (_, record) => (
-                <Button
-                  type="primary"
-                  danger
-                  onClick={() => handleOpenRefundModal(record)}
-                >
+                <Button type="primary" danger onClick={() => handleOpenRefundModal(record)}>
                   Trả Hàng
                 </Button>
               ),
@@ -1032,10 +982,7 @@ const OrderRefund: React.FC = () => {
       >
         {selectedPaidOrder && (
           <>
-            <Card
-              type="inner"
-              style={{ marginBottom: 16, background: "#f5f5f5" }}
-            >
+            <Card type="inner" style={{ marginBottom: 16, background: "#f5f5f5" }}>
               <Descriptions column={2} size="small">
                 <Descriptions.Item label="Mã Đơn">
                   <Text code>{selectedPaidOrder._id}</Text>
@@ -1045,23 +992,13 @@ const OrderRefund: React.FC = () => {
                     {formatCurrency(selectedPaidOrder.totalAmount)}
                   </Text>
                 </Descriptions.Item>
-                <Descriptions.Item label="Khách Hàng">
-                  {selectedPaidOrder.customer?.name || "Trống!"}
-                </Descriptions.Item>
-                <Descriptions.Item label="SĐT">
-                  {selectedPaidOrder.customer?.phone || "Trống!"}
-                </Descriptions.Item>
+                <Descriptions.Item label="Khách Hàng">{selectedPaidOrder.customer?.name || "Trống!"}</Descriptions.Item>
+                <Descriptions.Item label="SĐT">{selectedPaidOrder.customer?.phone || "Trống!"}</Descriptions.Item>
               </Descriptions>
             </Card>
 
             <Form form={form} layout="vertical" onFinish={handleSubmitRefund}>
-              <Form.Item
-                name="employeeId"
-                label="Nhân Viên Xử Lý"
-                rules={[
-                  { required: true, message: "Vui lòng chọn nhân viên!" },
-                ]}
-              >
+              <Form.Item name="employeeId" label="Nhân Viên Xử Lý" rules={[{ required: true, message: "Vui lòng chọn nhân viên!" }]}>
                 <Select placeholder="Chọn nhân viên xử lý hoàn trả">
                   {employees.map((emp) => (
                     <Option key={emp._id} value={emp._id}>
@@ -1071,17 +1008,8 @@ const OrderRefund: React.FC = () => {
                 </Select>
               </Form.Item>
 
-              <Form.Item
-                name="refundReason"
-                label="Lý Do Hoàn Trả"
-                rules={[{ required: true, message: "Vui lòng nhập lý do!" }]}
-              >
-                <TextArea
-                  rows={3}
-                  placeholder="Mô tả rõ lý do khách hoàn trả hàng (nếu có)..."
-                  maxLength={500}
-                  showCount
-                />
+              <Form.Item name="refundReason" label="Lý Do Hoàn Trả" rules={[{ required: true, message: "Vui lòng nhập lý do!" }]}>
+                <TextArea rows={3} placeholder="Mô tả rõ lý do khách hoàn trả hàng (nếu có)..." maxLength={500} showCount />
               </Form.Item>
               {/* Upload ảnh hoặc video     */}
               <Form.Item label="Ảnh/Video minh chứng (tùy chọn)">
@@ -1111,31 +1039,15 @@ const OrderRefund: React.FC = () => {
                     }
 
                     // Kiểm tra định dạng ảnh
-                    const validImageFormats = [
-                      "jpg",
-                      "jpeg",
-                      "png",
-                      "gif",
-                      "webp",
-                      "avif",
-                    ];
-                    const validVideoFormats = [
-                      "mp4",
-                      "mov",
-                      "avi",
-                      "mkv",
-                      "webm",
-                    ];
-                    const fileExt =
-                      file.name.split(".").pop()?.toLowerCase() || "";
+                    const validImageFormats = ["jpg", "jpeg", "png", "gif", "webp", "avif"];
+                    const validVideoFormats = ["mp4", "mov", "avi", "mkv", "webm"];
+                    const fileExt = file.name.split(".").pop()?.toLowerCase() || "";
 
                     if (isImage && !validImageFormats.includes(fileExt)) {
                       Swal.fire({
                         icon: "error",
                         title: "Lỗi định dạng",
-                        text: `Định dạng ảnh không hợp lệ! Chỉ chấp nhận: ${validImageFormats.join(
-                          ", "
-                        )}`,
+                        text: `Định dạng ảnh không hợp lệ! Chỉ chấp nhận: ${validImageFormats.join(", ")}`,
                       });
                       return Upload.LIST_IGNORE;
                     }
@@ -1144,9 +1056,7 @@ const OrderRefund: React.FC = () => {
                       Swal.fire({
                         icon: "error",
                         title: "Lỗi định dạng",
-                        text: `Định dạng video không hợp lệ! Chỉ chấp nhận: ${validVideoFormats.join(
-                          ", "
-                        )}`,
+                        text: `Định dạng video không hợp lệ! Chỉ chấp nhận: ${validVideoFormats.join(", ")}`,
                       });
                       return Upload.LIST_IGNORE;
                     }
@@ -1183,14 +1093,10 @@ const OrderRefund: React.FC = () => {
                     const index = parseInt(file.uid);
 
                     // Xóa khỏi evidenceMedia
-                    setEvidenceMedia((prev) =>
-                      prev.filter((_, i) => i !== index)
-                    );
+                    setEvidenceMedia((prev) => prev.filter((_, i) => i !== index));
 
                     // Xóa khỏi uploadedFiles
-                    setUploadedFiles((prev) =>
-                      prev.filter((_, i) => i !== index)
-                    );
+                    setUploadedFiles((prev) => prev.filter((_, i) => i !== index));
                   }}
                   showUploadList={{
                     showRemoveIcon: true,
@@ -1246,20 +1152,14 @@ const OrderRefund: React.FC = () => {
                 </div>
 
                 {evidenceMedia.length > 0 && (
-                  <Text
-                    type="secondary"
-                    style={{ fontSize: 12, display: "block", marginTop: 8 }}
-                  >
+                  <Text type="secondary" style={{ fontSize: 12, display: "block", marginTop: 8 }}>
                     Đã chọn {evidenceMedia.length}/5 file
                   </Text>
                 )}
               </Form.Item>
               {/* Hết upload ảnh/video */}
               <Form.Item label="Chọn Sản Phẩm Hoàn Trả" required>
-                <Text
-                  type="secondary"
-                  style={{ display: "block", marginBottom: 8 }}
-                >
+                <Text type="secondary" style={{ display: "block", marginBottom: 8 }}>
                   Chọn sản phẩm và nhập số lượng cần hoàn
                 </Text>
 
@@ -1274,43 +1174,27 @@ const OrderRefund: React.FC = () => {
                   }}
                 >
                   {selectedPaidOrderItems.map((item) => (
-                    <Card
-                      key={item._id}
-                      size="small"
-                      style={{ marginBottom: 8 }}
-                      bodyStyle={{ padding: 12 }}
-                    >
+                    <Card key={item._id} size="small" style={{ marginBottom: 8 }} bodyStyle={{ padding: 12 }}>
                       <Row align="middle" gutter={16}>
                         <Col flex="auto">
                           <Space direction="vertical" size={0}>
                             <Text strong>{item.productId.name}</Text>
                             <Text type="secondary" style={{ fontSize: 12 }}>
-                              Mã SKU: {item.productId.sku} | Đơn giá:{" "}
-                              {formatCurrency(item.priceAtTime)}
+                              Mã SKU: {item.productId.sku} | Đơn giá: {formatCurrency(item.priceAtTime)}
                             </Text>
                             <Text type="secondary" style={{ fontSize: 12 }}>
-                              Số lượng đã mua:{" "}
-                              <Tag color="blue">{item.quantity}</Tag>
+                              Số lượng đã mua: <Tag color="blue">{item.quantity}</Tag>
                             </Text>
                           </Space>
                         </Col>
                         <Col>
                           <Checkbox
-                            checked={selectedProducts.includes(
-                              item.productId._id
-                            )}
+                            checked={selectedProducts.includes(item.productId._id)}
                             onChange={(e) => {
                               if (e.target.checked) {
-                                setSelectedProducts([
-                                  ...selectedProducts,
-                                  item.productId._id,
-                                ]);
+                                setSelectedProducts([...selectedProducts, item.productId._id]);
                               } else {
-                                setSelectedProducts(
-                                  selectedProducts.filter(
-                                    (id) => id !== item.productId._id
-                                  )
-                                );
+                                setSelectedProducts(selectedProducts.filter((id) => id !== item.productId._id));
                               }
                             }}
                           >
@@ -1332,12 +1216,7 @@ const OrderRefund: React.FC = () => {
                                 },
                               ]}
                             >
-                              <InputNumber
-                                min={1}
-                                max={item.quantity}
-                                placeholder="SL hoàn"
-                                style={{ width: 100 }}
-                              />
+                              <InputNumber min={1} max={item.quantity} placeholder="SL hoàn" style={{ width: 100 }} />
                             </Form.Item>
                           </Col>
                         )}
@@ -1356,13 +1235,7 @@ const OrderRefund: React.FC = () => {
                     type="primary"
                     danger
                     htmlType="submit"
-                    icon={
-                      loading ? (
-                        <LoadingOutlined spin />
-                      ) : (
-                        <CheckCircleOutlined />
-                      )
-                    }
+                    icon={loading ? <LoadingOutlined spin /> : <CheckCircleOutlined />}
                     disabled={selectedProducts.length === 0 || loading}
                   >
                     {loading ? "Đang xử lý..." : "Xác Nhận Hoàn Trả"}
