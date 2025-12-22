@@ -8,6 +8,8 @@ const {
 } = require("../middlewares/subscriptionMiddleware");
 const storeController = require("../controllers/store/storeController");
 
+// GET /api/stores/:storeId/inventory-vouchers
+
 const { verifyToken, checkStoreAccess, requirePermission } = auth;
 
 /*

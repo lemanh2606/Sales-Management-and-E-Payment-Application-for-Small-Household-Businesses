@@ -10,7 +10,12 @@ require("dayjs/locale/vi");
 dayjs.locale("vi");
 
 // ========== HÀM TÍNH DOANH THU – CÓ CẢ HOÀN 1 NỬA partially_refunded ==========
-async function calcRevenueByPeriod({ storeId, periodType, periodKey, type = "total" }) {
+async function calcRevenueByPeriod({
+  storeId,
+  periodType,
+  periodKey,
+  type = "total",
+}) {
   const { start, end } = periodToRange(periodType, periodKey);
 
   // Chỉ lấy các đơn ĐÃ THANH TOÁN (toàn bộ hoặc 1 phần)
@@ -117,7 +122,12 @@ const getRevenueByPeriod = async (req, res) => {
       return res.status(400).json({ message: "Thiếu periodType hoặc storeId" });
     }
 
-    const data = await calcRevenueByPeriod({ storeId, periodType, periodKey, type: "total" });
+    const data = await calcRevenueByPeriod({
+      storeId,
+      periodType,
+      periodKey,
+      type: "total",
+    });
     const revenue = data[0] || { totalRevenue: 0, countOrders: 0 };
     res.json({ message: "Báo cáo doanh thu thành công", revenue });
   } catch (err) {
@@ -135,11 +145,18 @@ const getRevenueByEmployee = async (req, res) => {
       return res.status(400).json({ message: "Thiếu periodType hoặc storeId" });
     }
 
-    const data = await calcRevenueByPeriod({ storeId, periodType, periodKey, type: "employee" });
+    const data = await calcRevenueByPeriod({
+      storeId,
+      periodType,
+      periodKey,
+      type: "employee",
+    });
     res.json({ message: "Báo cáo doanh thu theo nhân viên thành công", data });
   } catch (err) {
     console.error("Lỗi báo cáo doanh thu theo nhân viên:", err.message);
-    res.status(500).json({ message: "Lỗi server khi báo cáo doanh thu theo nhân viên" });
+    res
+      .status(500)
+      .json({ message: "Lỗi server khi báo cáo doanh thu theo nhân viên" });
   }
 };
 
@@ -214,8 +231,13 @@ const exportRevenue = async (req, res) => {
 
     const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
 
-    const fileName = `Bao_Cao_Doanh_Thu_${periodKey || "hien_tai"}_${dayjs().format("DD-MM-YYYY")}.xlsx`;
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    const fileName = `Bao_Cao_Doanh_Thu_${
+      periodKey || "hien_tai"
+    }_${dayjs().format("DD-MM-YYYY")}.xlsx`;
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
     res.send(buffer);
   } catch (err) {
@@ -224,4 +246,9 @@ const exportRevenue = async (req, res) => {
   }
 };
 
-module.exports = { calcRevenueByPeriod, getRevenueByPeriod, getRevenueByEmployee, exportRevenue };
+module.exports = {
+  calcRevenueByPeriod,
+  getRevenueByPeriod,
+  getRevenueByEmployee,
+  exportRevenue,
+};

@@ -13,12 +13,24 @@ const Customer = require("../../models/Customer");
 const LoyaltySetting = require("../../models/LoyaltySetting");
 const Notification = require("../../models/Notification");
 const StorePaymentConfig = require("../../models/StorePaymentConfig");
+const InventoryVoucher = require("../../models/InventoryVoucher");
+
 const { periodToRange } = require("../../utils/period");
 const { v2: cloudinary } = require("cloudinary");
 const XLSX = require("xlsx");
 const dayjs = require("dayjs");
 const fs = require("fs");
 const path = require("path");
+
+// helper tạo mã phiếu XK đơn giản (ít bảng, tránh counter)
+const genXKCode = (orderId) => {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  const short = String(orderId).slice(-6);
+  return `XK-${y}${m}${d}-${short}`;
+};
 
 const createOrder = async (req, res) => {
   try {
@@ -42,33 +54,34 @@ const createOrder = async (req, res) => {
       null;
 
     if (!storeId) {
-      console.log("Lỗi: Thiếu storeId khi tạo đơn hàng");
       return res.status(400).json({ message: "Thiếu storeId để tạo đơn hàng" });
     }
 
     if (!items || items.length === 0) {
-      console.log("Lỗi: Không có sản phẩm trong hóa đơn");
       return res
         .status(400)
         .json({ message: "Hóa đơn phải có ít nhất 1 sản phẩm" });
     }
 
-    // Validate sản phẩm + tính total (ko trừ stock ở đây, chờ in bill)
     let total = 0;
     const validatedItems = [];
+
     const session = await mongoose.startSession();
     session.startTransaction();
-    let qrData = null; // Define qrData = null ngoài if, safe ternary res.json
+
+    let qrData = null;
+    let defaultBank = null;
+
     try {
       for (let item of items) {
         const prod = await Product.findById(item.productId).session(session);
+
         if (
           !prod ||
           prod.store_id.toString() !== storeId.toString() ||
           prod.stock_quantity < item.quantity ||
           prod.status !== "Đang kinh doanh"
         ) {
-          // Kiểm tra stock đủ trước, nhưng ko trừ - chỉ warn nếu thiếu
           throw new Error(
             `Sản phẩm ${
               prod?.name || "không tồn tại"
@@ -76,15 +89,13 @@ const createOrder = async (req, res) => {
           );
         }
 
-        // --- TÍNH GIÁ DỰA THEO saleType, bổ sung để làm báo cáo chuẩn ---
         let priceAtTime;
         switch (item.saleType) {
           case "AT_COST":
           case "CLEARANCE":
-            priceAtTime = prod.cost_price; // bán bằng giá vốn
+            priceAtTime = prod.cost_price;
             break;
           case "VIP":
-            // FE có thể gửi customPrice, nếu không thì lấy price gốc
             priceAtTime = item.customPrice ?? prod.price;
             break;
           case "FREE":
@@ -94,33 +105,38 @@ const createOrder = async (req, res) => {
           default:
             priceAtTime = prod.price;
         }
-        // Chuyển đổi sang Decimal128 => float
+
         const priceNum = parseFloat(priceAtTime);
         const subtotal = (priceNum * item.quantity).toFixed(2);
 
         total += parseFloat(subtotal);
-        // Lưu vào validatedItems
+
+        // lưu snapshot để tạo phiếu xuất kho ngay sau đó
         validatedItems.push({
           ...item,
           priceAtTime: priceNum.toString(),
           subtotal: subtotal.toString(),
+
+          // snapshot kho
+          sku_snapshot: prod.sku || "",
+          name_snapshot: prod.name || "",
+          unit_snapshot: prod.unit || "",
+          cost_price_snapshot: prod.cost_price, // Decimal128 (theo schema DB)
         });
       }
 
-      // Tính VAT nếu cần (bonus: lưu sẵn cho báo cáo)
+      // VAT
       let vatAmountStr = "0";
-      let beforeTaxStr = total.toFixed(2); // Default trước thuế = total nếu ko VAT
+      let beforeTaxStr = total.toFixed(2);
       if (isVATInvoice) {
-        // Tính bằng Number rồi format 2 chữ số
-        const totalNum = Number(parseFloat(total).toFixed(2)); // đảm bảo là number với 2 chữ số
-        const vatNum = Number((totalNum * 0.1).toFixed(2)); // VAT 10%
-        const beforeTaxNum = Number((totalNum - vatNum).toFixed(2)); // Giá chưa thuế
-        // Lưu chuỗi (hoặc dùng Decimal128.fromString nếu muốn)
+        const totalNum = Number(parseFloat(total).toFixed(2));
+        const vatNum = Number((totalNum * 0.1).toFixed(2));
+        const beforeTaxNum = Number((totalNum - vatNum).toFixed(2));
         vatAmountStr = vatNum.toString();
         beforeTaxStr = beforeTaxNum.toString();
       }
 
-      // Xử lý customer: Tìm hoặc tạo mới nếu phone ko trùng (tránh duplicate)
+      // customer find/create...
       let customer;
       if (customerInfo && customerInfo.phone) {
         const normalizedPhone = customerInfo.phone.trim();
@@ -129,19 +145,17 @@ const createOrder = async (req, res) => {
           storeId,
           isDeleted: { $ne: true },
         }).session(session);
+
         if (!customer) {
-          // Tạo mới nếu ko tồn tại
           customer = new Customer({
             name: customerInfo.name
               ? customerInfo.name.trim()
               : normalizedPhone,
             phone: normalizedPhone,
-            storeId: storeId, // 👈 Fix: Truyền storeId vào Customer để ref store (required validation pass)
+            storeId: storeId,
           });
           await customer.save({ session });
-          console.log("Tạo khách hàng mới:", customer.phone);
         } else {
-          // Update name nếu khác
           const incomingName = customerInfo.name
             ? customerInfo.name.trim()
             : null;
@@ -151,36 +165,29 @@ const createOrder = async (req, res) => {
           }
         }
       } else {
-        // Không có thông tin khách, để null (khách vãng lai)
         customer = null;
       }
 
-      // Lấy loyalty config store (cho discount usedPoints)
+      // loyalty...
       const loyalty = await LoyaltySetting.findOne({ storeId }).session(
         session
       );
       let discount = 0;
       if (usedPoints && loyalty && loyalty.isActive) {
-        // Áp dụng giảm giá nếu active, usedPoints <= loyaltyPoints customer
-        const maxUsed = Math.min(usedPoints, customer.loyaltyPoints || 0);
+        const maxUsed = Math.min(usedPoints, customer?.loyaltyPoints || 0);
         discount = maxUsed * loyalty.vndPerPoint;
-        if (discount > 0) {
-          customer.loyaltyPoints -= maxUsed; // Trừ điểm dùng
+        if (discount > 0 && customer) {
+          customer.loyaltyPoints -= maxUsed;
           await customer.save({ session });
-          total -= discount; // Subtract discount từ total
-          console.log(
-            `Giảm giá ${discount} từ ${maxUsed} điểm cho khách ${customer.phone}`
-          );
+          total -= discount;
         }
       }
-      // Update thêm chức năng chủ cửa hàng cũng chính là 1 người bán hàng
-      const currentUserId = req.user._id; // từ verifyToken middleware
-      const currentUserRole = req.user.role; // Role từ token
+
+      // employee mapping (giữ logic của bạn)
+      const currentUserId = req.user._id;
+      const currentUserRole = req.user.role;
 
       let finalEmployeeId = null;
-
-      // 🔴 FIX: Nếu STAFF đang tạo Order → LUÔN lấy Employee ID từ DB
-      // (Không dùng clientEmployeeId từ FE vì nó có thể sai)
       if (currentUserRole === "STAFF") {
         const employee = await Employee.findOne({
           user_id: currentUserId,
@@ -193,38 +200,29 @@ const createOrder = async (req, res) => {
             "STAFF không có Employee record. Vui lòng liên hệ quản lý để kiểm tra."
           );
         }
-
-        // ✅ Lưu Employee._id (chứ không phải User._id)
         finalEmployeeId = employee._id;
-        console.log(
-          `STAFF ${currentUserId} tạo order → employeeId = ${finalEmployeeId}`
-        );
       } else {
-        // MANAGER/OWNER → có thể chọn employee khác (hoặc null để bán)
-        // Nếu FE gửi clientEmployeeId → dùng, nếu không → null
         finalEmployeeId = clientEmployeeId || null;
-        console.log(
-          `MANAGER tạo order → employeeId = ${finalEmployeeId || "null (chủ bán)"}`
-        );
       }
 
-      // Tạo Order pending (status default pending)
+      // 1) Tạo Order pending
       const newOrder = new Order({
         storeId,
-        employeeId: finalEmployeeId, // có thể là Employee._id hoặc null (chủ bán)
-        customer: customer ? customer._id : null, // Ref customer thay customerInfo
+        employeeId: finalEmployeeId,
+        customer: customer ? customer._id : null,
         totalAmount: total.toFixed(2).toString(),
         paymentMethod,
         isVATInvoice,
         vatInfo,
         vatAmount: vatAmountStr,
         beforeTaxAmount: beforeTaxStr,
-        usedPoints: req.body.usedPoints || 0, // ← thêm dòng này
+        usedPoints: req.body.usedPoints || 0,
+        status: "pending",
       });
 
       await newOrder.save({ session });
 
-      // Lưu OrderItems
+      // 2) Lưu OrderItems
       for (let validatedItem of validatedItems) {
         const newItem = new OrderItem({
           orderId: newOrder._id,
@@ -233,30 +231,69 @@ const createOrder = async (req, res) => {
         await newItem.save({ session });
       }
 
-      // let paymentRef = null;
-      let defaultBank = null;
+      // 3) Tạo phiếu xuất kho (DRAFT) đồng thời
+      const voucherCode = genXKCode(newOrder._id);
+
+      const voucherItems = validatedItems.map((it) => {
+        const unitCostDec =
+          it.cost_price_snapshot &&
+          typeof it.cost_price_snapshot?.toString === "function"
+            ? mongoose.Types.Decimal128.fromString(
+                it.cost_price_snapshot.toString()
+              )
+            : mongoose.Types.Decimal128.fromString("0");
+
+        return {
+          product_id: it.productId,
+          sku_snapshot: it.sku_snapshot || "",
+          name_snapshot: it.name_snapshot || "",
+          unit_snapshot: it.unit_snapshot || "",
+
+          qty_document: Number(it.quantity || 0),
+          qty_actual: Number(it.quantity || 0),
+
+          unit_cost: unitCostDec,
+          note: `Xuất theo đơn ${newOrder._id}`,
+        };
+      });
+
+      const stockVoucher = new InventoryVoucher({
+        store_id: storeId,
+        type: "OUT",
+        voucher_code: voucherCode,
+        voucher_date: new Date(),
+        status: "DRAFT", // vì order đang pending, chưa trừ tồn
+        reason: "Xuất bán hàng",
+        ref_type: "ORDER",
+        ref_id: newOrder._id,
+        created_by: req.user?._id || null,
+        items: voucherItems,
+      });
+
+      await stockVoucher.save({ session });
+
+      // 4) Link ngược vào Order (nếu bạn đã thêm field vào schema)
+      newOrder.inventory_voucher_id = stockVoucher._id;
+      await newOrder.save({ session });
+
+      // 5) QR (giữ logic cũ của bạn)
       if (paymentMethod === "qr") {
-        // === BƯỚC 1: LẤY NGÂN HÀNG MẶC ĐỊNH CỦA CHỦ CỬA HÀNG ===
         const paymentConfig = await StorePaymentConfig.findOne({
           store: storeId,
         });
         if (!paymentConfig || paymentConfig.banks.length === 0) {
           throw new Error(
-            "Chủ cửa hàng chưa liên kết tài khoản ngân hàng nào. Vui lòng vào Cài đặt → Thiết lập cổng thanh toán → Liên kết với ngân hàng ."
+            "Chủ cửa hàng chưa liên kết tài khoản ngân hàng nào."
           );
         }
 
-        defaultBank = paymentConfig.banks.find((b) => b.isDefault); // <- thêm || paymentConfig.banks[0] để lấy bank đầu danh sách nhưng chắc thôi
+        defaultBank = paymentConfig.banks.find((b) => b.isDefault);
         if (!defaultBank) {
-          throw new Error(
-            "Không tìm thấy ngân hàng mặc định. Bạn vui lòng chọn ít nhất 1 ngân hàng ĐÃ KẾT NỐI làm mặc định."
-          );
+          throw new Error("Không tìm thấy ngân hàng mặc định.");
         }
 
-        // === BƯỚC 2: TẠO QR BẰNG VIETQR.IO (TIỀN VỀ ĐÚNG VÍ ÔNG CHỦ) ===
-        const amount = Math.round(total); // VietQR yêu cầu số nguyên
+        const amount = Math.round(total);
         const description = `Thanh toan hoa don ${newOrder._id}`;
-
         const template = defaultBank.qrTemplate || "compact2";
         const vietQrUrl = `https://img.vietqr.io/image/${
           defaultBank.bankCode
@@ -266,85 +303,63 @@ const createOrder = async (req, res) => {
           description
         )}&accountName=${encodeURIComponent(defaultBank.accountName)}`;
 
-        // === BƯỚC 3: LƯU QR VÀO ORDER ===
         newOrder.paymentMethod = "qr";
         newOrder.qrImageUrl = vietQrUrl;
-        newOrder.qrExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 phút
-        newOrder.status = "pending"; // chờ khách quét
+        newOrder.qrExpiry = new Date(Date.now() + 15 * 60 * 1000);
+        newOrder.status = "pending";
         await newOrder.save({ session });
 
-        console.log(
-          `Tạo QR VietQR thành công cho cửa hàng ${storeId}, ngân hàng: ${defaultBank.bankName} - ${defaultBank.accountNumber}`
-        );
-
-        // === TRẢ VỀ CHO FE ===
-        qrData = {
-          qrDataURL: vietQrUrl,
-          paymentLinkUrl: null,
-          txnRef: null,
-        };
-      } else {
-        // Cash: Pending, chờ in bill để paid + trừ stock
-        console.log(
-          `Tạo hóa đơn cash pending thành công cho ${newOrder._id}, chờ in bill`
-        );
+        qrData = { qrDataURL: vietQrUrl, paymentLinkUrl: null, txnRef: null };
       }
 
-      await session.commitTransaction(); // Commit tất cả
+      await session.commitTransaction();
       session.endSession();
 
-      // Inner try res.json sau commit, catch local format error ko abort
-      try {
-        // Sắp xếp lại format object để _id lên đầu dễ đọc
-        const orderObj = newOrder.toObject();
-        const orderedOrder = {
-          _id: orderObj._id,
-          ...orderObj,
-          items: validatedItems,
-        };
-        // log nhật ký hoạt động
-        await logActivity({
-          user: req.user,
-          store: { _id: storeId },
-          action: "create",
-          entity: "Order",
-          entityId: newOrder._id,
-          entityName: `Đơn hàng #${newOrder._id}`,
-          req,
-          description: `Tạo đơn hàng mới (phương thức ${
-            paymentMethod === "qr" ? "QRCode" : "tiền mặt"
-          }) cho khách ${
-            customerInfo?.name || customerInfo?.phone || "khách vãng lai"
-          }`,
-        });
+      // log activity (giữ logic cũ), response thêm voucher info
+      const orderObj = newOrder.toObject();
+      const orderedOrder = {
+        _id: orderObj._id,
+        ...orderObj,
+        items: validatedItems,
+      };
 
-        res.status(201).json({
-          message: "Tạo hóa đơn thành công (pending)",
-          order: orderedOrder,
-          qrRef: null, // không còn PayOS nữa
-          qrDataURL: qrData?.qrDataURL || null, // giờ là VietQR
-          paymentLinkUrl: qrData?.paymentLinkUrl || null,
-          qrExpiry: paymentMethod === "qr" ? newOrder.qrExpiry : null,
-          bankInfo: {
-            bankName: defaultBank?.bankName || null,
-            accountNumber: defaultBank?.accountNumber || null,
-          },
-        });
-      } catch (format_err) {
-        console.log("Lỗi format response order:", format_err.message); // Log tiếng Việt format error
-        res
-          .status(500)
-          .json({ message: "Lỗi format response: " + format_err.message }); // Return local ko abort
-      }
+      await logActivity({
+        user: req.user,
+        store: { _id: storeId },
+        action: "create",
+        entity: "Order",
+        entityId: newOrder._id,
+        entityName: `Đơn hàng #${newOrder._id}`,
+        req,
+        description: `Tạo đơn hàng mới (${
+          paymentMethod === "qr" ? "QRCode" : "tiền mặt"
+        })`,
+      });
+
+      return res.status(201).json({
+        message:
+          "Tạo hóa đơn thành công (pending) + tạo phiếu xuất kho (DRAFT)",
+        order: orderedOrder,
+        inventoryVoucher: {
+          _id: stockVoucher._id,
+          voucher_code: stockVoucher.voucher_code,
+          status: stockVoucher.status,
+        },
+        qrDataURL: qrData?.qrDataURL || null,
+        paymentLinkUrl: qrData?.paymentLinkUrl || null,
+        qrExpiry: paymentMethod === "qr" ? newOrder.qrExpiry : null,
+        bankInfo: {
+          bankName: defaultBank?.bankName || null,
+          accountNumber: defaultBank?.accountNumber || null,
+        },
+      });
     } catch (inner_err) {
-      await session.abortTransaction(); // Abort chỉ inner error (validate/save)
+      await session.abortTransaction();
       session.endSession();
-      console.error("Lỗi inner createOrder:", inner_err.message); // Log tiếng Việt inner error
-      res.status(500).json({ message: inner_err.message });
+      return res.status(500).json({ message: inner_err.message });
     }
   } catch (err) {
-    console.error("Lỗi tạo hóa đơn:", err.message); // Log tiếng Việt outer error
-    res
+    return res
       .status(500)
       .json({ message: "Lỗi server khi tạo hóa đơn: " + err.message });
   }

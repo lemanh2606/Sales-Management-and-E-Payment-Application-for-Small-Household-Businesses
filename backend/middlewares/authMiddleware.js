@@ -308,9 +308,21 @@ function requirePermission(permission, options = {}) {
     }
   };
 }
+const requireRole =
+  (...roles) =>
+  (req, res, next) => {
+    const userRole = req.user?.role; // bạn chỉnh lại theo payload token (vd: req.user.userType)
+    if (!userRole || !roles.includes(userRole)) {
+      return res
+        .status(403)
+        .json({ message: "Không đủ quyền (role) để thực hiện thao tác này" });
+    }
+    next();
+  };
 
 module.exports = {
   verifyToken,
   checkStoreAccess,
   requirePermission,
+  requireRole,
 };

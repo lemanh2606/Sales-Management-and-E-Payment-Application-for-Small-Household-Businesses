@@ -34,7 +34,7 @@ import InformationStore from "./pages/store/InformationStore";
 import ProductListPage from "./pages/product/ProductListPage";
 import ProductGroupsPage from "./pages/productGroup/ProductGroupsPage";
 import SupplierListPage from "./pages/supplier/SupplierListPage";
-
+import InventoryVoucherPage from "./pages/inventory/inventoryVoucherPage"
 // Customer
 import CustomerListPage from "./pages/customer/CustomerListPage";
 import TopCustomer from "./pages/customer/TopCustomer";
@@ -289,6 +289,7 @@ function App() {
         <Route path="/suppliers" element={<ProtectedRoute allowedPermissions="supplier:view"><SupplierListPage /></ProtectedRoute>} />
         <Route path="/products" element={<ProtectedRoute allowedPermissions="products:get"><ProductListPage /></ProtectedRoute>} />
         <Route path="/product-groups" element={<ProtectedRoute allowedPermissions="products:view"><ProductGroupsPage /></ProtectedRoute>} />
+        <Route path="/inventory-vouchers" element={<ProtectedRoute allowedPermissions="inventory:voucher:view"><InventoryVoucherPage /></ProtectedRoute>} />
 
         {/* ==================== Customers ==================== */}
         <Route path="/customers-list" element={<ProtectedRoute allowedPermissions="customers:search"><CustomerListPage /></ProtectedRoute>} />

@@ -163,6 +163,7 @@ app.use("/api/subscriptions", subscriptionRouters);
 app.use("/api/notifications", notificationRouters);
 app.use("/api/inventory-reports", inventoryReportRouters);
 app.use("/api/export", exportRouters);
+app.use("/api/stores", require("./routers/inventoryVoucherRouters"));
 
 // --- PHẦN ROOT MẶC ĐỊNH CỦA BACKEND ---
 app.get("/", (req, res) => {

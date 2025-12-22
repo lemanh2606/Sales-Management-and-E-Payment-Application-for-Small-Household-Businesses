@@ -115,6 +115,11 @@ export default function Sidebar({ onCollapsedChange }) {
         icon: <AppstoreOutlined style={{ fontSize: 18 }} />,
         children: [
           {
+            key: "/inventory-vouchers",
+            label: <span style={{ fontSize: 13.5 }}>Phiếu nhập/xuất kho</span>,
+            permission: "inventory:voucher:view",
+          },
+          {
             key: "/products",
             label: <span style={{ fontSize: 13.5 }}>Danh sách hàng hóa</span>,
             permission: "products:view",

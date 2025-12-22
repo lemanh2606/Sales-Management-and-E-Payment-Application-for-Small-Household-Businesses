@@ -84,6 +84,15 @@ const ALL_PERMISSIONS = [
   "inventory:disposal:update",
   "inventory:disposal:delete",
 
+  "inventory:voucher:create",
+  "inventory:voucher:view",
+  "inventory:voucher:update",
+  "inventory:voucher:delete",
+  "inventory:voucher:approve",
+  "inventory:voucher:post",
+  "inventory:voucher:cancel",
+  "inventory:voucher:reverse",
+
   // ========== SUPPLIERS ==========
   "supplier:create",
   "supplier:view",

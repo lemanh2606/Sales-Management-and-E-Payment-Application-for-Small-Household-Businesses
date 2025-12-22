@@ -3,11 +3,15 @@ const mongoose = require("mongoose");
 
 const supplierSchema = new mongoose.Schema(
   {
-    name: { type: String, required: true, maxlength: 150 },
+    name: { type: String, required: true, maxlength: 150 }, // Tên NCC
     phone: { type: String, maxlength: 20 },
     email: { type: String, maxlength: 100 },
     address: { type: String, maxlength: 500 },
-    taxcode: { type: String, maxlength: 50 },
+    taxcode: { type: String, maxlength: 50 }, // Mã số thuế
+    contact_person: { type: String, maxlength: 150 }, // Người liên hệ chính
+    bank_name: { type: String, maxlength: 150 }, // Ngân hàng
+    bank_account_no: { type: String, maxlength: 50 }, // Số TK
+    bank_account_name: { type: String, maxlength: 150 }, // Chủ TK
     notes: { type: String, maxlength: 1000 },
     status: {
       type: String,
