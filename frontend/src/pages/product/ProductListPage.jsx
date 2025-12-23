@@ -1,5 +1,5 @@
 // src/pages/product/ProductListPage.jsx
-import React, { useEffect, useState, useMemo, useRef } from "react";
+import React, { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import {
   Table,
   Button,
@@ -40,6 +40,7 @@ import {
   MenuOutlined,
   FileExcelOutlined,
   DownloadOutlined,
+  EnvironmentOutlined, // ✅ icon thay cho "warehouse"
 } from "@ant-design/icons";
 import Layout from "../../components/Layout";
 import ProductForm from "../../components/product/ProductForm";
@@ -52,8 +53,8 @@ const apiUrl = import.meta.env.VITE_API_URL;
 export default function ProductListPage() {
   const [api, contextHolder] = notification.useNotification();
 
-  const storeObj = JSON.parse(localStorage.getItem("currentStore")) || {};
-  const storeId = storeObj._id || null;
+  const storeObj = JSON.parse(localStorage.getItem("currentStore") || "null") || {};
+  const storeId = storeObj._id || storeObj.id || null;
   const token = localStorage.getItem("token");
 
   const [allProducts, setAllProducts] = useState([]);
@@ -68,9 +69,11 @@ export default function ProductListPage() {
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [isMobile, setIsMobile] = useState(typeof window !== "undefined" ? window.innerWidth < 768 : false);
 
+  // ✅ thêm warehouse
   const allColumns = [
     { key: "name", label: "Tên sản phẩm", default: true },
     { key: "sku", label: "SKU", default: true },
+    { key: "warehouse", label: "Kho hàng", default: true }, // ✅ NEW
     { key: "price", label: "Giá bán", default: true },
     { key: "stock_quantity", label: "Tồn kho", default: true },
     { key: "status", label: "Trạng thái", default: true },
@@ -117,14 +120,10 @@ export default function ProductListPage() {
     try {
       setDownloadingTemplate(true);
       const response = await fetch(`${apiUrl}/products/template/download?format=excel`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
-      if (!response.ok) {
-        throw new Error(`Không thể tải template (mã ${response.status})`);
-      }
+      if (!response.ok) throw new Error(`Không thể tải template (mã ${response.status})`);
 
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -199,11 +198,10 @@ export default function ProductListPage() {
   };
 
   useEffect(() => {
-    if (storeId) {
-      fetchProducts();
-    }
+    if (storeId) fetchProducts();
   }, [storeId]);
 
+  // ✅ SEARCH: thêm warehouse
   useEffect(() => {
     if (!searchValue.trim()) {
       setFilteredProducts(allProducts);
@@ -217,20 +215,19 @@ export default function ProductListPage() {
       const sku = (product.sku || "").toLowerCase();
       const supplierName = (product.supplier?.name || "").toLowerCase();
       const groupName = (product.group?.name || "").toLowerCase();
+      const warehouseName = (product.warehouse?.name || product.warehouse || "").toString().toLowerCase(); // ✅
 
-      return name.includes(searchLower) || sku.includes(searchLower) || supplierName.includes(searchLower) || groupName.includes(searchLower);
+      return (
+        name.includes(searchLower) ||
+        sku.includes(searchLower) ||
+        supplierName.includes(searchLower) ||
+        groupName.includes(searchLower) ||
+        warehouseName.includes(searchLower)
+      );
     });
 
     setFilteredProducts(filtered);
     setCurrentPage(1);
-    // if (searchValue.trim()) {
-    //   api.info({
-    //     message: `🔍 Kết quả tìm kiếm`,
-    //     description: `Tìm thấy ${filtered.length} sản phẩm phù hợp với từ khóa "${searchValue}"`,
-    //     placement: "topRight",
-    //     duration: 2,
-    //   });
-    // }
   }, [searchValue, allProducts]);
 
   const searchOptions = useMemo(() => {
@@ -285,13 +282,6 @@ export default function ProductListPage() {
   const toggleColumn = (checkedValues) => {
     setVisibleColumns(checkedValues);
     localStorage.setItem("productVisibleColumns", JSON.stringify(checkedValues));
-
-    // api.success({
-    //   message: "✅ Cập nhật cột thành công",
-    //   description: `Hiện tại hiển thị ${checkedValues.length} cột`,
-    //   placement: "bottomRight",
-    //   duration: 2,
-    // });
   };
 
   const resetImportState = () => {
@@ -299,9 +289,7 @@ export default function ProductListPage() {
     setPreviewRows([]);
     setPreviewError("");
     setPreviewLoading(false);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handleExcelButtonClick = () => {
@@ -314,7 +302,6 @@ export default function ProductListPage() {
       });
       return;
     }
-
     resetImportState();
     setImportModalOpen(true);
   };
@@ -365,7 +352,6 @@ export default function ProductListPage() {
   const openCreateModal = () => {
     setModalProduct(null);
     setIsModalOpen(true);
-
     api.info({
       message: "📝 Thêm sản phẩm mới",
       description: "Vui lòng điền đầy đủ thông tin sản phẩm",
@@ -377,7 +363,6 @@ export default function ProductListPage() {
   const openEditModal = (product) => {
     setModalProduct(product);
     setIsModalOpen(true);
-
     api.info({
       message: `✏️ Chỉnh sửa sản phẩm`,
       description: `Đang chỉnh sửa: ${product.name}`,
@@ -405,13 +390,15 @@ export default function ProductListPage() {
     });
   };
 
-  const totalValue = filteredProducts.reduce((sum, p) => sum + (p.price * p.stock_quantity || 0), 0);
+  const totalValue = filteredProducts.reduce((sum, p) => sum + ((p.price || 0) * (p.stock_quantity || 0)), 0);
   const totalStock = filteredProducts.reduce((sum, p) => sum + (p.stock_quantity || 0), 0);
   const activeProducts = filteredProducts.filter((p) => p.status === "Đang kinh doanh").length;
 
   useEffect(() => {
     if (allProducts.length > 0) {
-      const lowStockProducts = allProducts.filter((p) => p.stock_quantity > 0 && p.min_stock && p.stock_quantity <= p.min_stock);
+      const lowStockProducts = allProducts.filter(
+        (p) => (p.stock_quantity || 0) > 0 && p.min_stock && (p.stock_quantity || 0) <= p.min_stock
+      );
 
       if (lowStockProducts.length > 0) {
         api.warning({
@@ -423,7 +410,7 @@ export default function ProductListPage() {
               </p>
               <ul style={{ paddingLeft: 20, marginBottom: 0 }}>
                 {lowStockProducts.slice(0, 3).map((p) => (
-                  <li key={p._id}>
+                  <li key={p._id || p.id}>
                     {p.name}: <strong>{p.stock_quantity}</strong> (min: {p.min_stock})
                   </li>
                 ))}
@@ -438,8 +425,9 @@ export default function ProductListPage() {
     }
   }, [allProducts]);
 
-  const getTableColumns = () => {
-    const columnConfigs = {
+  // ✅ COLUMN CONFIGS (thêm warehouse)
+  const columnConfigs = useMemo(() => {
+    return {
       name: {
         title: (
           <Space>
@@ -468,6 +456,30 @@ export default function ProductListPage() {
           </Tag>
         ),
       },
+
+      // ✅ NEW: warehouse
+      warehouse: {
+        title: (
+          <Space>
+            <EnvironmentOutlined style={{ color: "#faad14" }} />
+            <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Kho hàng</span>
+          </Space>
+        ),
+        dataIndex: "warehouse",
+        key: "warehouse",
+        width: isMobile ? 120 : 170,
+        ellipsis: true,
+        render: (value) => {
+          // hỗ trợ warehouse là object {name}, hoặc string
+          const name = typeof value === "string" ? value : value?.name;
+          return (
+            <Tag color="blue" style={{ fontSize: "clamp(10px, 2vw, 12px)" }}>
+              {name || "-"}
+            </Tag>
+          );
+        },
+      },
+
       price: {
         title: (
           <Space>
@@ -481,7 +493,7 @@ export default function ProductListPage() {
         align: "right",
         render: (value) => (
           <Text strong style={{ color: "#52c41a", fontSize: "clamp(11px, 2.5vw, 13px)" }}>
-            {value ? `${value.toLocaleString()}₫` : "-"}
+            {value ? Number(value).toLocaleString() : "-"}
           </Text>
         ),
       },
@@ -497,15 +509,18 @@ export default function ProductListPage() {
         width: isMobile ? 90 : 120,
         align: "center",
         render: (value, record) => {
-          const isLowStock = record.min_stock && value <= record.min_stock && value > 0;
+          const qty = Number(value || 0);
+          const min = Number(record?.min_stock || 0);
+          const isLowStock = min > 0 && qty > 0 && qty <= min;
+
           return (
-            <Tooltip title={isLowStock ? "Tồn kho thấp!" : ""}>
+            <Tooltip title={qty === 0 ? "Hết hàng!" : isLowStock ? "Tồn kho thấp!" : ""}>
               <Badge
-                count={value || 0}
+                count={qty}
                 overflowCount={999999}
                 showZero
                 style={{
-                  backgroundColor: value > 10 ? "#52c41a" : value > 0 ? "#faad14" : "#f5222d",
+                  backgroundColor: qty >= 10 ? "#52c41a" : qty === 0 ? "#faad14" : "#f5222d",
                   fontSize: "clamp(10px, 2vw, 12px)",
                 }}
               />
@@ -536,23 +551,7 @@ export default function ProductListPage() {
         key: "cost_price",
         width: isMobile ? 110 : 130,
         align: "center",
-        render: (value) =>
-          value ? (
-            <Tag
-              color="#a1ec44d2" // xanh lá nhạt trong suốt
-              style={{
-                borderRadius: 6,
-                padding: "2px 8px",
-                border: "1px solid #56AB2F55",
-                color: "black",
-                fontSize: "clamp(11px, 2.5vw, 13px)",
-              }}
-            >
-              {value.toLocaleString()}₫
-            </Tag>
-          ) : (
-            "-"
-          ),
+        render: (value) => (value ? <Tag color="lime">{Number(value).toLocaleString()}</Tag> : "-"),
       },
       supplier: {
         title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Nhà cung cấp</span>,
@@ -568,35 +567,31 @@ export default function ProductListPage() {
         key: "group",
         width: isMobile ? 120 : 150,
         ellipsis: true,
-        render: (value) => (
-          <Tag color="purple" style={{ fontSize: "clamp(10px, 2vw, 12px)" }}>
-            {value?.name || "-"}
-          </Tag>
-        ),
+        render: (value) => <Tag color="purple">{value?.name || "-"}</Tag>,
       },
       unit: {
         title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Đơn vị</span>,
         dataIndex: "unit",
-        align: "center",
         key: "unit",
         width: 100,
+        align: "center",
         render: (value) => <span style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>{value || "-"}</span>,
       },
       min_stock: {
         title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Tồn tối thiểu</span>,
         dataIndex: "min_stock",
         key: "min_stock",
-        width: 100,
+        width: 110,
         align: "center",
-        render: (value) => <span style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>{value || 0}</span>,
+        render: (value) => <span style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>{Number(value || 0)}</span>,
       },
       max_stock: {
         title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Tồn tối đa</span>,
         dataIndex: "max_stock",
         key: "max_stock",
-        width: 100,
+        width: 110,
         align: "center",
-        render: (value) => <span style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>{value || 0}</span>,
+        render: (value) => <span style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>{Number(value || 0)}</span>,
       },
       image: {
         title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Ảnh</span>,
@@ -608,16 +603,14 @@ export default function ProductListPage() {
           value?.url ? (
             <Image
               src={value.url}
-              alt={record.name}
+              alt={record?.name}
               width={isMobile ? 40 : 50}
               height={isMobile ? 40 : 50}
-              style={{ objectFit: "cover", borderRadius: "8px" }}
+              style={{ objectFit: "cover", borderRadius: 8 }}
               preview={{ mask: <EyeOutlined /> }}
             />
           ) : (
-            <Text type="secondary" style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
-              -
-            </Text>
+            "-"
           ),
       },
       createdAt: {
@@ -626,7 +619,7 @@ export default function ProductListPage() {
         key: "createdAt",
         width: 120,
         align: "center",
-        render: (value) => <span style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>{value ? new Date(value).toLocaleDateString("vi-VN") : "-"}</span>,
+        render: (value) => (value ? new Date(value).toLocaleDateString("vi-VN") : "-"),
       },
       updatedAt: {
         title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Cập nhật</span>,
@@ -634,41 +627,39 @@ export default function ProductListPage() {
         key: "updatedAt",
         width: 120,
         align: "center",
-        render: (value) => <span style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>{value ? new Date(value).toLocaleDateString("vi-VN") : "-"}</span>,
+        render: (value) => (value ? new Date(value).toLocaleDateString("vi-VN") : "-"),
       },
     };
+  }, [isMobile]);
 
-    // Thứ tự cố định mong muốn cho các cột chính, từ trái qua phải
-    const leftFixedOrder = ["name", "sku", "price", "stock_quantity"];
-    // các cột luôn phải nằm ngay trước cột hành động
-    const rightFixed = ["status"];
-    // Xây danh sách các cột "middle":
-    // Đây là những cột được chọn hiển thị (visibleColumns),nhưng KHÔNG nằm trong nhóm cố định bên trái (leftFixedOrder)
-    // và KHÔNG phải cột "status" (rightFixed). Những cột này sẽ được chèn vào giữa "tồn kho" và "trạng thái".
-    const middleColumnsKeys = allColumns
-      .map((c) => c.key) // Giữ thứ tự chuẩn theo allColumns để tránh việc các cột bị lộn xộn
+  // ✅ sắp xếp: name, sku, warehouse, price, stock_quantity ... status ... action
+  const leftFixedOrder = ["name", "sku", "warehouse", "price", "stock_quantity"];
+  const rightFixed = ["status"];
+
+  const middleColumnsKeys = useMemo(() => {
+    return allColumns
+      .map((c) => c.key)
       .filter(
         (key) =>
-          visibleColumns.includes(key) && // Chỉ lấy các cột mà người dùng đang bật
-          !leftFixedOrder.includes(key) && // Loại bỏ các cột cố định bên trái
-          !rightFixed.includes(key) // Loại bỏ cột trạng thái (sẽ thêm sau)
+          visibleColumns.includes(key) &&
+          !leftFixedOrder.includes(key) &&
+          !rightFixed.includes(key)
       );
+  }, [visibleColumns]);
 
-    // Xây cấu trúc mảng columns theo thứ tự mong muốn:
-    // 1. Nhóm cố định bên trái (nếu đang được bật)
-    // 2. Các cột middle người dùng chọn thêm
-    // 3. Cột trạng thái (nếu bật)
-    // 4. Cuối cùng sẽ push thêm cột Thao tác ở dưới (ngoài đoạn này)
-    const columns = [
-      // Thêm các cột cố định bên trái (nếu người dùng bật)
-      ...leftFixedOrder.filter((k) => visibleColumns.includes(k)).map((k) => columnConfigs[k]),
-      // Thêm các cột middle (các cột chọn thêm)
-      ...middleColumnsKeys.map((k) => columnConfigs[k]),
-      // Thêm cột trạng thái (nếu có bật)
-      ...(visibleColumns.includes("status") ? [columnConfigs["status"]] : []),
-    ].filter(Boolean); // Lọc bỏ giá trị null/undefined để tránh lỗ
+  const getTableColumns = useCallback(() => {
+    const cols = [
+      ...leftFixedOrder
+        .filter((k) => visibleColumns.includes(k))
+        .map((k) => columnConfigs[k])
+        .filter(Boolean),
 
-    columns.push({
+      ...middleColumnsKeys.map((k) => columnConfigs[k]).filter(Boolean),
+
+      ...(visibleColumns.includes("status") ? [columnConfigs.status] : []),
+    ].filter(Boolean);
+
+    cols.push({
       title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Thao tác</span>,
       key: "action",
       width: isMobile ? 80 : 120,
@@ -690,27 +681,24 @@ export default function ProductListPage() {
       ),
     });
 
-    return columns;
-  };
+    return cols;
+  }, [visibleColumns, columnConfigs, middleColumnsKeys, isMobile]);
 
   const columnSelectorContent = (
-    <Card
-      style={{ width: "100%", border: "1px solid #8c8c8c", maxHeight: isMobile ? "70vh" : 400, overflowY: "auto" }}
-      styles={{ body: { padding: 16 } }}
-    >
-      <Text strong style={{ fontSize: "clamp(13px, 3vw, 14px)" }}>
-        Chọn cột hiển thị
-      </Text>
-      <Divider style={{ margin: "8px 0" }} />
-      <Checkbox.Group value={visibleColumns} onChange={toggleColumn} style={{ width: "100%" }}>
-        <Space direction="vertical" style={{ width: "100%" }} size={8}>
-          {allColumns.map((col) => (
-            <Checkbox key={col.key} value={col.key} style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>
-              {col.label}
-            </Checkbox>
-          ))}
-        </Space>
-      </Checkbox.Group>
+    <Card style={{ width: "100%", border: "1px solid #8c8c8c", maxHeight: isMobile ? "70vh" : 400, overflowY: "auto" }}>
+      <div style={{ padding: 16 }}>
+        <Text strong style={{ fontSize: "clamp(13px, 3vw, 14px)" }}>Chọn cột hiển thị</Text>
+        <Divider style={{ margin: "8px 0" }} />
+        <Checkbox.Group value={visibleColumns} onChange={toggleColumn} style={{ width: "100%" }}>
+          <Space direction="vertical" style={{ width: "100%" }} size={8}>
+            {allColumns.map((col) => (
+              <Checkbox key={col.key} value={col.key} style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>
+                {col.label}
+              </Checkbox>
+            ))}
+          </Space>
+        </Checkbox.Group>
+      </div>
     </Card>
   );
 
@@ -726,7 +714,7 @@ export default function ProductListPage() {
       dataIndex: key,
       key,
       ellipsis: true,
-      render: (text) => <span style={{ fontSize: "clamp(10px, 2vw, 12px)" }}>{text}</span>,
+      render: (text) => <span style={{ fontSize: "clamp(10px, 2vw, 12px)" }}>{String(text ?? "")}</span>,
     }));
   }, [previewRows]);
 
@@ -742,85 +730,23 @@ export default function ProductListPage() {
 
     try {
       setIsImporting(true);
-      const response = await importProductsByExcel(storeId, importFile);
+      await importProductsByExcel(storeId, importFile);
+      await fetchProducts(false);
 
-      const resultData = response?.results || {};
-      const hasResultPayload = Array.isArray(resultData?.success) || Array.isArray(resultData?.failed);
-      const successRows = resultData.success || [];
-      const failedRows = resultData.failed || [];
-      const totalRows = resultData.total ?? successRows.length + failedRows.length;
+      api.success({
+        message: "✅ Nhập sản phẩm thành công",
+        description: "Danh sách sản phẩm đã cập nhật",
+        placement: "topRight",
+        duration: 3,
+      });
 
-      if (!hasResultPayload) {
-        await fetchProducts(false);
-        api.success({
-          message: response?.message || "🎉 Nhập sản phẩm thành công",
-          description: "Danh sách sản phẩm đã được cập nhật",
-          placement: "topRight",
-          duration: 4,
-        });
-        setImportModalOpen(false);
-        resetImportState();
-        return;
-      }
-
-      if (successRows.length > 0) {
-        await fetchProducts(false);
-      }
-
-      if (failedRows.length > 0) {
-        api.warning({
-          message: response?.message || "Import hoàn tất với cảnh báo",
-          description: (
-            <div>
-              <p>
-                Thành công {successRows.length}/{totalRows}. Có {failedRows.length} dòng lỗi đầu tiên:
-              </p>
-              <ul style={{ paddingLeft: 18, margin: 0 }}>
-                {failedRows.slice(0, 3).map((item) => (
-                  <li key={item.row} style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
-                    Dòng {item.row}: {item.error}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ),
-          placement: "topRight",
-          duration: 6,
-        });
-      } else {
-        api.success({
-          message: response?.message || "🎉 Nhập sản phẩm thành công",
-          description: `Đã thêm ${successRows.length} sản phẩm vào hệ thống`,
-          placement: "topRight",
-          duration: 4,
-        });
-      }
-
-      if (successRows.length > 0) {
-        setImportModalOpen(false);
-        resetImportState();
-      }
+      setImportModalOpen(false);
+      resetImportState();
     } catch (error) {
       console.error("Import products error:", error);
-      const serverData = error?.response?.data;
-      const failedRows = serverData?.results?.failed || [];
-
       api.error({
-        message: serverData?.message || "❌ Nhập sản phẩm thất bại",
-        description: failedRows.length ? (
-          <div>
-            <p>{`Thất bại ${failedRows.length}/${serverData?.results?.total ?? failedRows.length}.`}</p>
-            <ul style={{ paddingLeft: 18, margin: 0 }}>
-              {failedRows.slice(0, 3).map((item) => (
-                <li key={item.row} style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
-                  Dòng {item.row}: {item.error}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : (
-          serverData?.error || error?.message || "Vui lòng kiểm tra file và thử lại"
-        ),
+        message: "❌ Nhập sản phẩm thất bại",
+        description: error?.response?.data?.message || error?.message || "Vui lòng kiểm tra file và thử lại",
         placement: "topRight",
         duration: 6,
       });
@@ -831,11 +757,12 @@ export default function ProductListPage() {
 
   const handleExportExcel = async () => {
     if (!storeId) {
-      return api.warning({
+      api.warning({
         message: "⚠️ Chưa chọn cửa hàng",
         description: "Vui lòng chọn cửa hàng trước khi xuất Excel",
         placement: "topRight",
       });
+      return;
     }
 
     try {
@@ -851,19 +778,12 @@ export default function ProductListPage() {
       const blob = new Blob([response.data], {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       });
-
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
       link.download = `products_${storeId}.xlsx`;
       link.click();
       window.URL.revokeObjectURL(url);
-
-      // api.success({
-      //   message: "🎉 Xuất Excel thành công",
-      //   description: "File đã được tải xuống",
-      //   placement: "topRight",
-      // });
     } catch (error) {
       console.error("Export Excel error:", error);
       api.error({
@@ -896,26 +816,13 @@ export default function ProductListPage() {
     <Layout>
       {contextHolder}
 
-      <div
-        style={{
-          padding: isMobile ? 1 : 0,
-          minHeight: "100vh",
-        }}
-      >
-        <Card
-          style={{
-            borderRadius: 16,
-            border: "1px solid #8c8c8c",
-            marginBottom: isMobile ? 10 : 15,
-          }}
-        >
+      <div style={{ padding: isMobile ? 1 : 0, minHeight: "100vh" }}>
+        <Card style={{ borderRadius: 16, border: "1px solid #8c8c8c", marginBottom: isMobile ? 10 : 15 }}>
           <div style={{ marginBottom: isMobile ? 10 : 20 }}>
             <Title
               level={2}
               style={{
                 margin: 0,
-                background: "#ffffff",
-                WebkitBackgroundClip: "text",
                 fontSize: "clamp(20px, 6vw, 32px)",
                 fontWeight: 700,
                 marginBottom: isMobile ? 4 : 8,
@@ -934,43 +841,24 @@ export default function ProductListPage() {
           <Row gutter={[isMobile ? 8 : 16, isMobile ? 8 : 16]} style={{ marginBottom: isMobile ? 16 : 24 }}>
             <Col xs={12} sm={12} md={6}>
               <Tooltip title="Tổng số sản phẩm trong cửa hàng hiện tại">
-                <Card
-                  style={{
-                    background: "#2C5364",
-                    border: "none",
-                    borderRadius: 12,
-                    cursor: "pointer",
-                  }}
-                  styles={{ body: { padding: isMobile ? 12 : 20 } }}
-                >
+                <Card style={{ background: "#2C5364", border: "none", borderRadius: 12 }} styles={{ body: { padding: isMobile ? 12 : 20 } }}>
                   <Statistic
                     title={
                       <span style={{ color: "#fff", fontSize: "clamp(10px, 2.5vw, 14px)", fontWeight: 500 }}>
-                        Tổng sản phẩm <InfoCircleOutlined style={{ color: "#2196F3", fontSize: 15 }} />{" "}
+                        Tổng sản phẩm <InfoCircleOutlined style={{ color: "#2196F3", fontSize: 15 }} />
                       </span>
                     }
                     value={filteredProducts.length}
                     prefix={<AppstoreOutlined style={{ fontSize: "clamp(14px, 4vw, 20px)" }} />}
-                    valueStyle={{
-                      color: "#fff",
-                      fontWeight: "bold",
-                      fontSize: "clamp(16px, 5vw, 24px)",
-                    }}
+                    valueStyle={{ color: "#fff", fontWeight: "bold", fontSize: "clamp(16px, 5vw, 24px)" }}
                   />
                 </Card>
               </Tooltip>
             </Col>
+
             <Col xs={12} sm={12} md={6}>
               <Tooltip title="Số lượng mặt hàng đang được kinh doanh">
-                <Card
-                  style={{
-                    background: "#2C5364",
-                    border: "none",
-                    borderRadius: 12,
-                    cursor: "pointer",
-                  }}
-                  styles={{ body: { padding: isMobile ? 12 : 20 } }}
-                >
+                <Card style={{ background: "#2C5364", border: "none", borderRadius: 12 }} styles={{ body: { padding: isMobile ? 12 : 20 } }}>
                   <Statistic
                     title={
                       <span style={{ color: "#fff", fontSize: "clamp(10px, 2.5vw, 14px)", fontWeight: 500 }}>
@@ -979,68 +867,42 @@ export default function ProductListPage() {
                     }
                     value={activeProducts}
                     prefix={<CheckCircleOutlined style={{ fontSize: "clamp(14px, 4vw, 20px)" }} />}
-                    valueStyle={{
-                      color: "#fff",
-                      fontWeight: "bold",
-                      fontSize: "clamp(16px, 5vw, 24px)",
-                    }}
+                    valueStyle={{ color: "#fff", fontWeight: "bold", fontSize: "clamp(16px, 5vw, 24px)" }}
                   />
                 </Card>
               </Tooltip>
             </Col>
+
             <Col xs={12} sm={12} md={6}>
               <Tooltip title="Số lượng tồn kho hiện tại của tất cả sản phẩm">
-                <Card
-                  style={{
-                    background: "#2C5364",
-                    border: "none",
-                    borderRadius: 12,
-                    cursor: "pointer",
-                  }}
-                  styles={{ body: { padding: isMobile ? 12 : 20 } }}
-                >
+                <Card style={{ background: "#2C5364", border: "none", borderRadius: 12 }} styles={{ body: { padding: isMobile ? 12 : 20 } }}>
                   <Statistic
                     title={
                       <span style={{ color: "#fff", fontSize: "clamp(10px, 2.5vw, 14px)", fontWeight: 500 }}>
-                        Tồn kho <InfoCircleOutlined style={{ color: "#2196F3", fontSize: 15 }} />{" "}
+                        Tồn kho <InfoCircleOutlined style={{ color: "#2196F3", fontSize: 15 }} />
                       </span>
                     }
                     value={totalStock}
                     prefix={<StockOutlined style={{ fontSize: "clamp(14px, 4vw, 20px)" }} />}
-                    valueStyle={{
-                      color: "#fff",
-                      fontWeight: "bold",
-                      fontSize: "clamp(16px, 5vw, 24px)",
-                    }}
+                    valueStyle={{ color: "#fff", fontWeight: "bold", fontSize: "clamp(16px, 5vw, 24px)" }}
                   />
                 </Card>
               </Tooltip>
             </Col>
+
             <Col xs={12} sm={12} md={6}>
               <Tooltip title="Công thức tính: 'Tồn kho' x 'Giá bán'">
-                <Card
-                  style={{
-                    background: "#2C5364",
-                    border: "none",
-                    borderRadius: 12,
-                    cursor: "pointer",
-                  }}
-                  styles={{ body: { padding: isMobile ? 12 : 20 } }}
-                >
+                <Card style={{ background: "#2C5364", border: "none", borderRadius: 12 }} styles={{ body: { padding: isMobile ? 12 : 20 } }}>
                   <Statistic
                     title={
                       <span style={{ color: "#fff", fontSize: "clamp(10px, 2.5vw, 14px)", fontWeight: 500 }}>
-                        Giá trị <InfoCircleOutlined style={{ color: "#2196F3", fontSize: 15 }} />{" "}
+                        Giá trị <InfoCircleOutlined style={{ color: "#2196F3", fontSize: 15 }} />
                       </span>
                     }
                     value={totalValue}
                     prefix={<DollarOutlined style={{ fontSize: "clamp(14px, 4vw, 20px)" }} />}
                     suffix="₫"
-                    valueStyle={{
-                      color: "#fff",
-                      fontWeight: "bold",
-                      fontSize: "clamp(12px, 4vw, 18px)",
-                    }}
+                    valueStyle={{ color: "#fff", fontWeight: "bold", fontSize: "clamp(12px, 4vw, 18px)" }}
                   />
                 </Card>
               </Tooltip>
@@ -1049,15 +911,9 @@ export default function ProductListPage() {
 
           {!isMobile && <Divider />}
 
-          {/* Thanh tìm kiếm và 4 nút hành động chính */}
           <Space
             direction={isMobile ? "vertical" : "horizontal"}
-            style={{
-              marginBottom: isMobile ? 16 : 24,
-              width: "100%",
-              justifyContent: "space-between",
-              flexWrap: "wrap",
-            }}
+            style={{ marginBottom: isMobile ? 16 : 24, width: "100%", justifyContent: "space-between", flexWrap: "wrap" }}
             size={isMobile ? 12 : 16}
           >
             <AutoComplete
@@ -1066,37 +922,21 @@ export default function ProductListPage() {
               onChange={(value) => setSearchValue(value)}
               onSelect={(value) => setSearchValue(value)}
               style={{ width: isMobile ? "100%" : 400, minWidth: isMobile ? "auto" : 300 }}
-              size={isMobile ? "middle" : "large"}
-              placeholder={isMobile ? "Tìm kiếm..." : "Tìm kiếm sản phẩm theo tên, SKU..."}
-              allowClear
-              onClear={() => setSearchValue("")}
             >
               <Input
                 prefix={<SearchOutlined style={{ color: "#1890ff" }} />}
-                suffix={
-                  searchValue && (
-                    <Text type="secondary" style={{ fontSize: "clamp(10px, 2vw, 12px)" }}>
-                      {filteredProducts.length} kết quả
-                    </Text>
-                  )
-                }
+                placeholder={isMobile ? "Tìm kiếm..." : "Tìm kiếm sản phẩm theo tên, SKU, nhà cung cấp, nhóm, kho..."}
+                allowClear
+                onClear={() => setSearchValue("")}
               />
             </AutoComplete>
 
             <Space size={isMobile ? 8 : 12} wrap style={{ width: isMobile ? "100%" : "auto" }}>
               <Button size={isMobile ? "middle" : "large"} icon={<ReloadOutlined />} onClick={handleRefresh}>
-                {!isMobile && "Làm mới"}
+                {!isMobile ? "Làm mới" : null}
               </Button>
 
-              <Button
-                size={isMobile ? "middle" : "large"}
-                icon={<FileExcelOutlined />}
-                onClick={handleExportExcel}
-                style={{
-                  borderColor: "#52c41a",
-                  color: "#52c41a",
-                }}
-              >
+              <Button size={isMobile ? "middle" : "large"} icon={<FileExcelOutlined />} onClick={handleExportExcel} style={{ borderColor: "#52c41a", color: "#52c41a" }}>
                 {!isMobile ? "Xuất Excel" : "Xuất"}
               </Button>
 
@@ -1117,7 +957,7 @@ export default function ProductListPage() {
               )}
 
               <Button size={isMobile ? "middle" : "large"} icon={<FileExcelOutlined />} loading={isImporting} onClick={handleExcelButtonClick}>
-                Tải lên Sản phẩm
+                Tải lên
               </Button>
 
               <Button
@@ -1125,51 +965,35 @@ export default function ProductListPage() {
                 size={isMobile ? "middle" : "large"}
                 icon={<PlusOutlined />}
                 onClick={openCreateModal}
-                style={{
-                  background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                  border: "none",
-                  boxShadow: "0 4px 12px rgba(102, 126, 234, 0.4)",
-                }}
+                style={{ background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)", border: "none" }}
               >
                 {isMobile ? "Thêm" : "Thêm sản phẩm"}
               </Button>
             </Space>
           </Space>
-          {/* Hết thanh tìm kiếm và 4 nút */}
 
           <div style={{ overflowX: "auto" }}>
             <Table
               columns={getTableColumns()}
               dataSource={filteredProducts}
-              rowKey="_id"
+              rowKey={(r) => r._id || r.id}
               loading={loading}
               pagination={{
                 current: currentPage,
                 pageSize: itemsPerPage,
                 total: filteredProducts.length,
                 showSizeChanger: !isMobile,
+                pageSizeOptions: ["5", "10", "20", "50", "100"],
                 showTotal: (total, range) => (
-                  <div
-                    style={{
-                      fontSize: isMobile ? 12 : 14,
-                      textAlign: isMobile ? "center" : "left",
-                      padding: isMobile ? "0 8px" : 0,
-                    }}
-                  >
-                    Đang xem{" "}
-                    <span style={{ color: "#1890ff", fontWeight: 600 }}>
-                      {range[0]} – {range[1]}
-                    </span>{" "}
-                    trên tổng số <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> sản phẩm
+                  <div style={{ fontSize: isMobile ? 12 : 14, textAlign: isMobile ? "center" : "left" }}>
+                    Đang xem <span style={{ color: "#1890ff", fontWeight: 600 }}>{range[0]}-{range[1]}</span> trên tổng{" "}
+                    <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> sản phẩm
                   </div>
                 ),
-                pageSizeOptions: ["5", "10", "20", "50", "100"],
-                style: { marginTop: 16 },
               }}
               onChange={handleTableChange}
               scroll={{ x: "max-content" }}
               size={isMobile ? "small" : "middle"}
-              rowClassName={(_, index) => (index % 2 === 0 ? "table-row-light" : "table-row-dark")}
               locale={{
                 emptyText: (
                   <div style={{ padding: isMobile ? "24px 0" : "48px 0" }}>
@@ -1205,13 +1029,7 @@ export default function ProductListPage() {
           onCancel={closeModal}
           footer={null}
           width={isMobile ? "100%" : 900}
-          styles={{
-            body: {
-              maxHeight: isMobile ? "calc(100vh - 100px)" : "calc(100vh - 200px)",
-              overflowY: "auto",
-              padding: isMobile ? 16 : 24,
-            },
-          }}
+          styles={{ body: { maxHeight: isMobile ? "calc(100vh - 100px)" : "calc(100vh - 200px)", overflowY: "auto", padding: isMobile ? 16 : 24 } }}
         >
           <ProductForm storeId={storeId} product={modalProduct} onSuccess={onFormSuccess} onCancel={closeModal} />
         </Modal>
@@ -1230,167 +1048,52 @@ export default function ProductListPage() {
           onOk={handleConfirmImport}
           confirmLoading={isImporting}
           okButtonProps={{ disabled: !importFile || !!previewError || previewLoading }}
-          styles={{
-            body: {
-              padding: isMobile ? 12 : 24,
-            },
-          }}
+          styles={{ body: { padding: isMobile ? 12 : 24 } }}
         >
           <input type="file" accept=".xlsx,.xls,.csv" ref={fileInputRef} style={{ display: "none" }} onChange={handleExcelFileChange} />
 
           <Space direction="vertical" style={{ width: "100%" }} size={16}>
             <Text style={{ fontSize: "clamp(12px, 3vw, 14px)" }}>
-              Sử dụng template chuẩn để đảm bảo dữ liệu hợp lệ.
-              <Button
-                type="link"
-                icon={<DownloadOutlined />}
-                onClick={handleDownloadTemplate}
-                loading={downloadingTemplate}
-                style={{ marginLeft: 8, padding: 0, fontSize: "clamp(12px, 3vw, 14px)" }}
-              >
+              Sử dụng template chuẩn để đảm bảo dữ liệu hợp lệ.{" "}
+              <Button type="link" icon={<DownloadOutlined />} onClick={handleDownloadTemplate} loading={downloadingTemplate} style={{ padding: 0 }}>
                 Tải template
               </Button>
             </Text>
 
-            <Button
-              icon={<FileExcelOutlined />}
-              onClick={() => fileInputRef.current?.click()}
-              loading={previewLoading}
-              size={isMobile ? "middle" : "large"}
-              style={{ fontSize: "clamp(12px, 3vw, 14px)" }}
-            >
+            <Button icon={<FileExcelOutlined />} onClick={() => fileInputRef.current?.click()} loading={previewLoading} size={isMobile ? "middle" : "large"}>
               Chọn file Excel / CSV
             </Button>
-            <Text type="secondary" style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
-              Hỗ trợ .xlsx, .xls, .csv. File nên nhỏ hơn 20MB.
-            </Text>
 
-            {previewError && (
-              <Alert
-                type="error"
-                message={previewError}
-                showIcon
-                closable
-                onClose={() => setPreviewError("")}
-                style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}
-              />
-            )}
+            {previewError && <Alert type="error" message={previewError} showIcon closable onClose={() => setPreviewError("")} />}
 
-            {previewRows.length > 0 && (
+            {previewRows.length > 0 ? (
               <Card size="small" styles={{ body: { padding: 0 } }}>
                 <div style={{ padding: 12, display: "flex", justifyContent: "space-between", flexWrap: "wrap" }}>
-                  <Text strong style={{ fontSize: "clamp(12px, 3vw, 14px)" }}>
-                    Preview ({previewRows.length} dòng đầu tiên)
-                  </Text>
-                  <Text type="secondary" style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
-                    Tổng cột: {previewColumns.length}
-                  </Text>
+                  <Text strong>Preview {previewRows.length} dòng đầu tiên</Text>
+                  <Text type="secondary">Tổng cột: {previewColumns.length}</Text>
                 </div>
                 <div style={{ overflowX: "auto" }}>
-                  <Table
-                    columns={previewColumns}
-                    dataSource={previewRows}
-                    rowKey={(_, idx) => idx}
-                    size="small"
-                    pagination={false}
-                    scroll={{ x: true, y: isMobile ? 200 : 240 }}
-                  />
+                  <Table columns={previewColumns} dataSource={previewRows} rowKey={(_, idx) => idx} size="small" pagination={false} scroll={{ x: true, y: isMobile ? 200 : 240 }} />
                 </div>
               </Card>
-            )}
-
-            {!previewRows.length && !previewError && (
-              <Alert
-                type="info"
-                message="Chưa có file nào được chọn"
-                description="Chọn file Excel/CSV theo template để xem trước dữ liệu trước khi import."
-                showIcon
-                style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}
-              />
+            ) : (
+              !previewError && <Alert type="info" message="Chưa có file nào được chọn" description="Chọn file Excel/CSV theo template để xem trước dữ liệu trước khi import." showIcon />
             )}
           </Space>
         </Modal>
-      </div>
 
-      <style jsx>{`
-        :global(.table-row-light) {
-          background-color: #ffffff;
-        }
-        :global(.table-row-dark) {
-          background-color: #fafafa;
-        }
-        :global(.table-row-light:hover),
-        :global(.table-row-dark:hover) {
-          background-color: #e6f7ff !important;
-        }
-
-        :global(.ant-table) :global(.ant-table-content)::-webkit-scrollbar {
-          height: ${isMobile ? "8px" : "14px"};
-        }
-        :global(.ant-table) :global(.ant-table-content)::-webkit-scrollbar-track {
-          background: #f5f5f5;
-          border-radius: 10px;
-        }
-        :global(.ant-table) :global(.ant-table-content)::-webkit-scrollbar-thumb {
-          background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-          border-radius: 10px;
-          border: ${isMobile ? "2px" : "3px"} solid #f5f5f5;
-        }
-
-        /* Mobile specific styles */
-        @media (max-width: 768px) {
-          :global(.ant-space-item) {
-            width: 100%;
-          }
-
-          :global(.ant-card-body) {
-            padding: 12px !important;
-          }
-
-          :global(.ant-statistic-title) {
-            margin-bottom: 4px !important;
-          }
-
-          :global(.ant-table-pagination) {
-            margin: 12px 0 !important;
-          }
-
-          :global(.ant-pagination-item),
-          :global(.ant-pagination-prev),
-          :global(.ant-pagination-next) {
-            min-width: 28px !important;
-            height: 28px !important;
-            line-height: 26px !important;
-            font-size: 12px !important;
-          }
-        }
-      `}</style>
-
-      <style jsx global>{`
-        .ant-notification-notice {
-          border-radius: 12px !important;
-        }
-
-        @media (max-width: 768px) {
-          .ant-notification {
-            margin-right: 12px !important;
-            width: calc(100vw - 24px) !important;
-          }
-
+        <style jsx global>{`
           .ant-notification-notice {
-            padding: 12px 16px !important;
+            border-radius: 12px !important;
           }
-
-          .ant-notification-notice-message {
-            font-size: 13px !important;
-            margin-bottom: 4px !important;
+          @media (max-width: 768px) {
+            .ant-notification {
+              margin-right: 12px !important;
+              width: calc(100vw - 24px) !important;
+            }
           }
-
-          .ant-notification-notice-description {
-            font-size: 12px !important;
-          }
-        }
-      `}</style>
+        `}</style>
+      </div>
     </Layout>
   );
 }

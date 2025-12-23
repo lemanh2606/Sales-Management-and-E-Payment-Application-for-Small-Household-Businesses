@@ -1,4 +1,3 @@
-// src/components/product/ProductForm.jsx
 import React, { useState, useEffect, useMemo } from "react";
 import {
   Form,
@@ -28,6 +27,7 @@ import {
 import ImgCrop from "antd-img-crop";
 import { getSuppliers } from "../../api/supplierApi";
 import { getProductGroupsByStore } from "../../api/productGroupApi";
+import { getWarehouses } from "../../api/warehouseApi";
 import { createProduct, updateProduct } from "../../api/productApi";
 import Swal from "sweetalert2";
 
@@ -37,8 +37,11 @@ const { Panel } = Collapse;
 export default function ProductForm({ storeId, product = null, onSuccess, onCancel }) {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
+
   const [suppliers, setSuppliers] = useState([]);
   const [groups, setGroups] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
+
   const [fileList, setFileList] = useState([]);
 
   // Helper: chuẩn hoá id về string (hỗ trợ object populate hoặc string)
@@ -49,20 +52,23 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
     return undefined;
   };
 
-  // Load suppliers & groups
+  // Load suppliers & groups & warehouses
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [suppliersData, groupsData] = await Promise.all([
+        const [suppliersData, groupsData, warehousesData] = await Promise.all([
           getSuppliers(storeId),
           getProductGroupsByStore(storeId),
+          getWarehouses(storeId),
         ]);
+
         setSuppliers(suppliersData?.suppliers || []);
         setGroups(groupsData?.productGroups || []);
+        setWarehouses(warehousesData?.warehouses || []);
       } catch (err) {
         Swal.fire({
           title: "❌ Lỗi!",
-          text: "không thể tải dữ liệu",
+          text: "Không thể tải dữ liệu",
           icon: "error",
           confirmButtonText: "OK",
           confirmButtonColor: "#ff4d4f",
@@ -70,10 +76,11 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
         });
       }
     };
+
     if (storeId) fetchData();
   }, [storeId]);
 
-  // Options: đảm bảo có option của product hiện tại (phòng khi supplier/group bị xóa khỏi list)
+  // ✅ SUPPLIER OPTIONS
   const supplierOptions = useMemo(() => {
     const base = (suppliers || []).map((s) => ({ value: s._id, label: s.name }));
     const currentId = toId(product?.supplier_id || product?.supplier || product?.supplierid);
@@ -81,16 +88,14 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
     if (product && currentId) {
       const exists = base.some((o) => String(o.value) === String(currentId));
       if (!exists) {
-        const label =
-          product?.supplier_id?.name ||
-          product?.supplier?.name ||
-          "Nhà cung cấp hiện tại";
+        const label = product?.supplier_id?.name || product?.supplier?.name || "Nhà cung cấp hiện tại";
         base.unshift({ value: currentId, label });
       }
     }
     return base;
   }, [suppliers, product]);
 
+  // ✅ GROUP OPTIONS
   const groupOptions = useMemo(() => {
     const base = (groups || []).map((g) => ({ value: g._id, label: g.name }));
     const currentId = toId(product?.group_id || product?.group || product?.groupid);
@@ -98,15 +103,41 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
     if (product && currentId) {
       const exists = base.some((o) => String(o.value) === String(currentId));
       if (!exists) {
-        const label =
-          product?.group_id?.name ||
-          product?.group?.name ||
-          "Nhóm sản phẩm hiện tại";
+        const label = product?.group_id?.name || product?.group?.name || "Nhóm sản phẩm hiện tại";
         base.unshift({ value: currentId, label });
       }
     }
     return base;
   }, [groups, product]);
+
+  // ✅ WAREHOUSE OPTIONS - SỬA ĐÚNG FIELD
+  const warehouseOptions = useMemo(() => {
+    const base = (warehouses || []).map((w) => ({ value: w._id, label: w.name }));
+
+    // ✅ Đọc đúng field từ backend (ưu tiên schema + alias)
+    const currentId = toId(
+      product?.default_warehouse_id ||
+      product?.warehouse_id ||
+      product?.default_warehouse?._id ||
+      product?.warehouse?._id ||
+      product?.warehouseId
+    );
+
+    if (product && currentId) {
+      const exists = base.some((o) => String(o.value) === String(currentId));
+      if (!exists) {
+        const label =
+          product?.default_warehouse?.name ||
+          product?.default_warehouse_id?.name ||
+          product?.warehouse?.name ||
+          product?.default_warehouse_name ||
+          product?.warehouse_name ||
+          "Kho hiện tại";
+        base.unshift({ value: currentId, label });
+      }
+    }
+    return base;
+  }, [warehouses, product]);
 
   // Load product data if editing
   useEffect(() => {
@@ -126,9 +157,16 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
 
       setFileList(defaultImage);
 
-      // Lấy đúng supplier_id / group_id (ưu tiên field *_id)
+      // ✅ Lấy đúng id cho các select
       const supplierValue = toId(product?.supplier_id || product?.supplier || product?.supplierid);
       const groupValue = toId(product?.group_id || product?.group || product?.groupid);
+      const warehouseValue = toId(
+        product?.default_warehouse_id ||
+        product?.warehouse_id ||
+        product?.default_warehouse?._id ||
+        product?.warehouse?._id ||
+        product?.warehouseId
+      );
 
       form.setFieldsValue({
         name: product.name || "",
@@ -141,9 +179,10 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
         unit: product.unit || undefined,
         status: product.status || "Đang kinh doanh",
 
-        // QUAN TRỌNG: dùng undefined thay vì "" để Select hiển thị đúng [web:270]
+        // ✅ SỬA: dùng đúng field schema
         supplier_id: supplierValue || undefined,
         group_id: groupValue || undefined,
+        default_warehouse_id: warehouseValue || undefined, // ✅ ĐÚNG
 
         image: defaultImage,
         description: product.description || "",
@@ -311,6 +350,26 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
               </Form.Item>
             </Col>
 
+            {/* ✅ KHO - SỬA NAME + FILL ĐÚNG */}
+            <Col xs={24} md={12}>
+              <Form.Item
+                name="default_warehouse_id"
+                label={<span style={{ fontWeight: 600 }}>Kho mặc định</span>}
+                rules={[{ required: true, message: "Vui lòng chọn kho!" }]}
+              >
+                <Select
+                  placeholder="-- Chọn kho mặc định --"
+                  style={{ borderRadius: "8px" }}
+                  showSearch
+                  optionFilterProp="label"
+                  filterOption={(input, option) =>
+                    (option?.label ?? "").toLowerCase().includes(input.toLowerCase())
+                  }
+                  options={warehouseOptions}
+                />
+              </Form.Item>
+            </Col>
+
             <Col xs={24} md={12}>
               <Form.Item
                 name="supplier_id"
@@ -386,11 +445,7 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
               </Col>
 
               <Col xs={24} md={12}>
-                <Form.Item
-                  name="status"
-                  label={<span style={{ fontWeight: 600 }}>Trạng thái</span>}
-                  initialValue="Đang kinh doanh"
-                >
+                <Form.Item name="status" label={<span style={{ fontWeight: 600 }}>Trạng thái</span>}>
                   <Select
                     style={{ borderRadius: "8px" }}
                     options={[

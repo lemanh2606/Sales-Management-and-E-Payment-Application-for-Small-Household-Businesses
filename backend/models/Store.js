@@ -34,6 +34,24 @@ const storeSchema = new mongoose.Schema(
       open: { type: String, default: "" }, // "08:00"
       close: { type: String, default: "" }, // "22:00"
     },
+    // Thêm 2 field này vào Store schema:
+    default_warehouse_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Warehouse",
+      default: null,
+    },
+
+    default_warehouse_name: {
+      type: String,
+      trim: true,
+      default: "Kho mặc định",
+    },
+
+    default_warehouse_location: {
+      type: String,
+      trim: true,
+      default: "",
+    },
   },
   {
     timestamps: true, // Tự động thêm createdAt và updatedAt

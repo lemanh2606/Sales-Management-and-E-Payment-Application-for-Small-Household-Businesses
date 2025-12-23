@@ -52,6 +52,8 @@ import {
 
 // NEW: lấy NCC giống SupplierListPage
 import { getSuppliers } from "../../api/supplierApi";
+import { getWarehouses } from "../../api/warehouseApi";
+
 import { useAuth } from "../../context/AuthContext";
 
 const { Title, Text } = Typography;
@@ -191,6 +193,10 @@ const S = {
 export default function InventoryVoucherPage() {
     const [api, notificationContextHolder] = notification.useNotification();
     const [modal, modalContextHolder] = Modal.useModal();
+    // Warehouses
+    const [warehouses, setWarehouses] = useState([]);
+    const [loadingWarehouses, setLoadingWarehouses] = useState(false);
+
 
     const { token } = useAuth();
 
@@ -318,12 +324,37 @@ export default function InventoryVoucherPage() {
             setLoading(false);
         }
     };
+    const fetchWarehouses = async () => {
+        if (!storeId) return;
+        try {
+            setLoadingWarehouses(true);
+            const res = await getWarehouses(storeId, {
+                page: 1,
+                limit: 10000,
+                deleted: false,
+                status: "active", // nếu backend có filter này; nếu không thì bỏ
+            });
+
+            const list = Array.isArray(res?.warehouses) ? res.warehouses : [];
+            setWarehouses(list);
+        } catch (err) {
+            api.error({
+                message: "Lỗi tải kho",
+                description: err?.response?.data?.message || err?.message || "Không thể tải danh sách kho.",
+                placement: "topRight",
+            });
+        } finally {
+            setLoadingWarehouses(false);
+        }
+    };
 
     useEffect(() => {
         if (!storeId) return;
         fetchProducts();
         fetchSuppliers(); // NEW
+        fetchWarehouses(); // NEW
         fetchVouchers({ page: 1 });
+
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [storeId, token]);
 
@@ -377,6 +408,45 @@ export default function InventoryVoucherPage() {
             receiver_phone: form.getFieldValue("receiver_phone") || userPhone || "",
         });
     };
+    const warehouseOptions = useMemo(() => {
+        return warehouses.map((w) => {
+            const id = getId(w) || w?._id || w?.id; // tuỳ object trả về
+            const code = w?.code || "";
+            const name = w?.name || "Kho";
+            const label = code ? `${name} (${code})` : name;
+
+            const address =
+                w?.address ||
+                [w?.ward, w?.district, w?.city].filter(Boolean).join(", ");
+
+            return {
+                value: String(id),
+                label,
+                searchText: `${name} ${code} ${address}`.toLowerCase(),
+                meta: { id: String(id), name, code, address },
+            };
+        });
+    }, [warehouses]);
+    const filterWarehouseOption = (input, option) => {
+        const s = String(input || "").trim().toLowerCase();
+        if (!s) return true;
+        return String(option?.searchText || "").includes(s);
+    };
+    const setWarehouseToForm = (warehouseId) => {
+        const w = warehouses.find((x) => String(getId(x) || x?._id || x?.id) === String(warehouseId));
+        if (!w) return;
+
+        // Lưu đúng theo logic backend bạn đang dùng cho voucher (warehouse_id, warehouse_name)
+        // và giữ backward compatible với 2 field text cũ.
+        form.setFieldsValue({
+            warehouse_id: String(getId(w) || w?._id || w?.id),
+            warehouse_name: w?.name || "",
+            warehousename: w?.name || "",
+
+            // optional: auto-fill vị trí/khu vực bằng địa chỉ kho (nếu bạn muốn)
+            warehouselocation: w?.address || "",
+        });
+    };
 
     const openCreateModal = () => {
         setEditingVoucher(null);
@@ -401,8 +471,11 @@ export default function InventoryVoucherPage() {
 
             // nâng cao
             attached_docs: 0,
-            warehouse_name: "",
-            warehouse_location: "",
+            warehouse_id: defaultWhId,
+            warehouse_name: defaultWh?.name || "",
+            warehousename: defaultWh?.name || "",
+
+            warehouselocation: defaultWh?.address || "",
             ref_no: "",
             ref_date: null,
 
@@ -440,7 +513,9 @@ export default function InventoryVoucherPage() {
                 deliverer_phone: v.deliverer_phone || "",
                 receiver_phone: v.receiver_phone || "",
 
+                warehouse_id: v.warehouse_id || null,
                 warehouse_name: v.warehouse_name || "",
+                warehousename: v.warehouse_name || "",
                 warehouse_location: v.warehouse_location || "",
                 ref_no: v.ref_no || "",
                 ref_date: v.ref_date ? dayjs(v.ref_date) : null,
@@ -1270,9 +1345,58 @@ export default function InventoryVoucherPage() {
                                         children: (
                                             <Row gutter={S.rowGutter}>
                                                 <Col xs={24} md={6}>
-                                                    <Form.Item name="warehouse_name" label="Kho" style={{ marginBottom: 10 }}>
+                                                    {/* <Form.Item name="warehouse_name" label="Kho" style={{ marginBottom: 10 }}>
                                                         <Input placeholder="VD: Kho chính" />
-                                                    </Form.Item>
+                                                    </Form.Item> */}
+                                                    <Col xs={24} md={12} style={{ minWidth: 0 }}>
+                                                        <Form.Item name="warehouse_id" label="Chọn kho" style={{ marginBottom: 10 }}>
+                                                            <Select
+                                                                showSearch
+                                                                allowClear
+                                                                placeholder="Chọn kho (mặc định lấy theo cửa hàng)"
+                                                                options={warehouseOptions}
+                                                                loading={loadingWarehouses}
+                                                                filterOption={filterWarehouseOption}
+                                                                onChange={(val) => {
+                                                                    if (!val) {
+                                                                        form.setFieldsValue({
+                                                                            warehouse_id: null,
+                                                                            warehouse_name: "",
+                                                                            warehousename: "",
+                                                                        });
+                                                                        return;
+                                                                    }
+                                                                    setWarehouseToForm(val);
+                                                                }}
+                                                                dropdownRender={(menu) => (
+                                                                    <div>
+                                                                        <div style={{ padding: 8, borderBottom: "1px solid #f1f5f9" }}>
+                                                                            <Space size={8} wrap>
+                                                                                <Text type="secondary" style={{ fontSize: 12 }}>
+                                                                                    Không thấy kho?
+                                                                                </Text>
+                                                                                <Button size="small" onClick={fetchWarehouses} loading={loadingWarehouses}>
+                                                                                    Tải lại
+                                                                                </Button>
+                                                                            </Space>
+                                                                        </div>
+                                                                        {menu}
+                                                                    </div>
+                                                                )}
+                                                            />
+                                                        </Form.Item>
+
+                                                        {/* Giữ hidden để backend nhận warehouse_name nếu cần */}
+                                                        <Form.Item name="warehouse_name" hidden>
+                                                            <Input />
+                                                        </Form.Item>
+
+                                                        {/* Backward compatible với UI/Drawer cũ đang hiển thị warehousename */}
+                                                        <Form.Item name="warehousename" hidden>
+                                                            <Input />
+                                                        </Form.Item>
+                                                    </Col>
+
                                                 </Col>
 
                                                 <Col xs={24} md={6}>

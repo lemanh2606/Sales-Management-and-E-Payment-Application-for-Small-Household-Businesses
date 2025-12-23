@@ -93,6 +93,13 @@ const ALL_PERMISSIONS = [
   "inventory:voucher:cancel",
   "inventory:voucher:reverse",
 
+  "warehouses:view",
+  "warehouses:create",
+  "warehouses:update",
+  "warehouses:delete",
+  "warehouses:restore",
+  "warehouses:set-default",
+
   // ========== SUPPLIERS ==========
   "supplier:create",
   "supplier:view",

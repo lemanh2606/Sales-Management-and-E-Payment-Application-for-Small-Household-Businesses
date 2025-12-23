@@ -137,7 +137,9 @@ const fileRouters = require("./routers/fileRouters");
 const subscriptionRouters = require("./routers/subscriptionRouters");
 const notificationRouters = require("./routers/notificationRouters");
 const inventoryReportRouters = require("./routers/inventoryReportRouters");
+// const warehouseRouters = require("./routers/warehouseRouters");
 const exportRouters = require("./routers/exportRouters");
+const warehouseRouters = require("./routers/warehouseRouters");
 
 // --- FULL CÁC API ĐÃ MOUNT ROUTERS ---
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
@@ -164,7 +166,8 @@ app.use("/api/notifications", notificationRouters);
 app.use("/api/inventory-reports", inventoryReportRouters);
 app.use("/api/export", exportRouters);
 app.use("/api/stores", require("./routers/inventoryVoucherRouters"));
-
+app.use("/api/stores", warehouseRouters);
+// app.use("/api/stores", warehouseRouters);
 // --- PHẦN ROOT MẶC ĐỊNH CỦA BACKEND ---
 app.get("/", (req, res) => {
   res.send(

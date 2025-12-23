@@ -20,6 +20,14 @@ const InventoryVoucherItemSchema = new Schema(
     name_snapshot: { type: String, default: "" },
     unit_snapshot: { type: String, default: "" },
 
+    // ===== Thông tin kho ở level item (nếu mỗi dòng có thể ở kho khác) =====
+    warehouse_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Warehouse",
+      default: null,
+    },
+    warehouse_name: { type: String, trim: true, default: "" },
+
     // thêm phục vụ quản lý lô/hạn dùng (tuỳ chọn)
     batch_no: { type: String, default: "" },
     expiry_date: { type: Date, default: null },
@@ -64,9 +72,24 @@ const InventoryVoucherSchema = new Schema(
     // địa điểm lập chứng từ (hay có trên mẫu chứng từ)
     document_place: { type: String, default: "" },
 
-    // ====== kho (nhập/xuất tại kho...) ======
-    warehouse_name: { type: String, default: "" },
-    warehouse_location: { type: String, default: "" },
+    // Trong InventoryVoucher schema, thay phần warehouse:
+    warehouse_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Warehouse",
+      default: null,
+    },
+
+    warehouse_name: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+
+    warehouse_location: {
+      type: String,
+      trim: true,
+      default: "",
+    },
 
     status: {
       type: String,

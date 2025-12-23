@@ -114,6 +114,7 @@ export default function Sidebar({ onCollapsedChange }) {
         label: "Quản lý kho",
         icon: <AppstoreOutlined style={{ fontSize: 18 }} />,
         children: [
+          { key: "/warehouses", label: <span style={{ fontSize: 13.5 }}>Kho hàng</span>, permission: "warehouses:view" },
           {
             key: "/inventory-vouchers",
             label: <span style={{ fontSize: 13.5 }}>Phiếu nhập/xuất kho</span>,

@@ -967,6 +967,7 @@ const postInventoryVoucher = async (req, res) => {
 
     const storeId = toObjectId(req.params.storeId);
     const voucherId = toObjectId(req.params.voucherId);
+
     if (!storeId || !voucherId) {
       await session.abortTransaction();
       session.endSession();
@@ -975,27 +976,39 @@ const postInventoryVoucher = async (req, res) => {
         .json({ message: "storeId hoặc voucherId không hợp lệ" });
     }
 
+    // ===== Load voucher (fallback nhiều field store) =====
     const doc = await InventoryVoucher.findOne({
       _id: voucherId,
-      store_id: storeId,
+      $or: [{ storeid: storeId }, { storeId: storeId }, { store_id: storeId }],
     }).session(session);
+
     if (!doc) {
       await session.abortTransaction();
       session.endSession();
-      return res.status(404).json({ message: "Không tìm thấy phiếu kho" });
+      return res.status(404).json({
+        message: "Không tìm thấy phiếu kho",
+        debug: {
+          storeId: String(storeId),
+          voucherId: String(voucherId),
+        },
+      });
     }
 
-    if (doc.status === "POSTED") {
+    const st = String(doc.status || "")
+      .trim()
+      .toUpperCase();
+    if (st === "POSTED") {
       await session.abortTransaction();
       session.endSession();
       return res.status(400).json({ message: "Phiếu đã POSTED trước đó" });
     }
-    if (doc.status === "CANCELLED") {
+    if (st === "CANCELLED") {
       await session.abortTransaction();
       session.endSession();
       return res.status(400).json({ message: "Phiếu đã bị hủy" });
     }
-    if (!doc.items || doc.items.length === 0) {
+
+    if (!Array.isArray(doc.items) || doc.items.length === 0) {
       await session.abortTransaction();
       session.endSession();
       return res
@@ -1003,6 +1016,17 @@ const postInventoryVoucher = async (req, res) => {
         .json({ message: "Phiếu không có items để ghi sổ" });
     }
 
+    // ===== FIX CHÍNH: BẮT BUỘC KHO KHI POST =====
+    if (!doc.warehouse_name || !String(doc.warehouse_name).trim()) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({
+        message:
+          "Thiếu kho (warehouse_name). Vui lòng nhập kho trước khi ghi sổ.",
+      });
+    }
+
+    // ===== Business rules khác =====
     try {
       enforcePostedBusinessRules(doc);
     } catch (e) {
@@ -1011,23 +1035,52 @@ const postInventoryVoucher = async (req, res) => {
       return res.status(e.status || 400).json({ message: e.message });
     }
 
-    const productMap = await loadProductsForItems(storeId, doc.items, session);
-    const firstProduct = productMap.values().next().value;
-    const stockField = detectStockField(firstProduct);
+    // ===== Normalize product id =====
+    const itemProductIds = doc.items
+      .map((it) => it?.productid || it?.product_id)
+      .filter(Boolean);
 
-    if (doc.type === "OUT") {
+    if (!itemProductIds.length) {
+      await session.abortTransaction();
+      session.endSession();
+      return res
+        .status(400)
+        .json({ message: "Items không có productid hợp lệ" });
+    }
+
+    // ===== Load products =====
+    const products = await Product.find({
+      _id: { $in: itemProductIds },
+      storeid: storeId,
+      isDeleted: false,
+    }).session(session);
+
+    const productMap = new Map(products.map((p) => [String(p._id), p]));
+
+    // ===== Nếu OUT: check tồn kho =====
+    if (String(doc.type || "").toUpperCase() === "OUT") {
       for (const it of doc.items) {
-        const p = productMap.get(String(it.product_id));
+        const pid = it?.productid || it?.product_id;
+        const p = productMap.get(String(pid));
+
         if (!p) {
           await session.abortTransaction();
           session.endSession();
           return res.status(404).json({
-            message: `Không tìm thấy sản phẩm ${it.product_id} trong cửa hàng hoặc sản phẩm đã bị xóa`,
+            message: `Không tìm thấy sản phẩm ${pid} trong cửa hàng hoặc đã bị xóa`,
           });
         }
 
-        const currentQty = getStockNumber(p);
-        const outQty = Number(it.qty_actual || 0);
+        const currentQty = Number(p.stockquantity || 0);
+        const outQty = Number(it.qtyactual ?? it.qty_actual ?? 0);
+
+        if (!Number.isFinite(outQty) || outQty <= 0) {
+          await session.abortTransaction();
+          session.endSession();
+          return res.status(400).json({
+            message: `Số lượng xuất không hợp lệ cho sản phẩm ${p.name} (SKU: ${p.sku})`,
+          });
+        }
 
         if (currentQty < outQty) {
           await session.abortTransaction();
@@ -1039,22 +1092,28 @@ const postInventoryVoucher = async (req, res) => {
       }
     }
 
+    // ===== bulkWrite cập nhật tồn =====
     const ops = doc.items.map((it) => {
-      const qty = Number(it.qty_actual || 0);
-      const delta = doc.type === "IN" ? qty : -qty;
+      const pid = it?.productid || it?.product_id;
+      const qty = Number(it.qtyactual ?? it.qty_actual ?? 0);
+      const delta = String(doc.type || "").toUpperCase() === "IN" ? qty : -qty;
+
       return {
         updateOne: {
-          filter: { _id: it.product_id, store_id: storeId, isDeleted: false },
-          update: { $inc: { [stockField]: delta } },
+          filter: { _id: pid, storeid: storeId, isDeleted: false },
+          update: { $inc: { stockquantity: delta } },
         },
       };
     });
 
-    if (ops.length) await Product.bulkWrite(ops, { session });
+    if (ops.length) {
+      await Product.bulkWrite(ops, { session });
+    }
 
+    // ===== Update voucher =====
     doc.status = "POSTED";
-    doc.posted_by = userId;
-    doc.posted_at = new Date();
+    doc.postedby = userId;
+    doc.postedat = new Date();
     await doc.save({ session });
 
     await logActivity?.({
@@ -1063,9 +1122,9 @@ const postInventoryVoucher = async (req, res) => {
       action: "post",
       entity: "InventoryVoucher",
       entityId: doc._id,
-      entityName: `Phiếu kho ${doc.voucher_code}`,
+      entityName: `Phiếu kho ${doc.vouchercode || doc.voucher_code || doc._id}`,
       req,
-      description: `Ghi sổ phiếu kho ${doc.voucher_code} (${doc.type})`,
+      description: `Ghi sổ phiếu kho ${doc.vouchercode || ""} (${doc.type})`,
     });
 
     await session.commitTransaction();
@@ -1081,9 +1140,10 @@ const postInventoryVoucher = async (req, res) => {
     } catch (_) {}
 
     const status = error.status || 500;
-    return res
-      .status(status)
-      .json({ message: error.message || "Lỗi server", error: error.message });
+    return res.status(status).json({
+      message: error.message || "Lỗi server",
+      error: error.message,
+    });
   }
 };
 
