@@ -1,13 +1,8 @@
 const express = require("express");
 const router = express.Router();
-
 const auth = require("../middlewares/authMiddleware");
-const {
-  checkSubscriptionExpiry,
-} = require("../middlewares/subscriptionMiddleware");
-
+const { checkSubscriptionExpiry } = require("../middlewares/subscriptionMiddleware");
 const inventoryVoucherController = require("../controllers/inventoryVoucherController");
-
 const { verifyToken, checkStoreAccess, requirePermission } = auth;
 
 /*

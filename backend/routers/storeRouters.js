@@ -3,9 +3,7 @@ const express = require("express");
 const router = express.Router();
 
 const auth = require("../middlewares/authMiddleware");
-const {
-  checkSubscriptionExpiry,
-} = require("../middlewares/subscriptionMiddleware");
+const { checkSubscriptionExpiry } = require("../middlewares/subscriptionMiddleware");
 const storeController = require("../controllers/store/storeController");
 
 // GET /api/stores/:storeId/inventory-vouchers
@@ -36,94 +34,35 @@ const { verifyToken, checkStoreAccess, requirePermission } = auth;
 //
 
 // Đảm bảo người dùng có store hiện hành (manager tự động vào store đầu tiên nếu có)
-router.post(
-  "/ensure-store",
-  verifyToken,
-  checkSubscriptionExpiry,
-  requirePermission("store:dashboard:view"),
-  storeController.ensureStore
-);
+router.post("/ensure-store", verifyToken, checkSubscriptionExpiry, requirePermission("store:dashboard:view"), storeController.ensureStore);
 
 // Tạo cửa hàng mới (chỉ Manager)
-router.post(
-  "/",
-  verifyToken,
-  checkSubscriptionExpiry,
-  requirePermission("store:create"),
-  storeController.createStore
-);
+router.post("/", verifyToken, checkSubscriptionExpiry, requirePermission("store:create"), storeController.createStore);
 
 // Lấy danh sách cửa hàng mà Manager sở hữu, Cho phép Manager xem danh sách cửa hàng ngay cả khi gói hết hạn
-router.get(
-  "/",
-  verifyToken,
-  requirePermission("store:view"),
-  storeController.getStoresByManager
-);
+router.get("/", verifyToken, requirePermission("store:view"), storeController.getStoresByManager);
 
 // Lấy chi tiết cửa hàng cụ thể
-router.get(
-  "/:storeId",
-  verifyToken,
-  checkSubscriptionExpiry,
-  checkStoreAccess,
-  requirePermission("store:view"),
-  storeController.getStoreById
-);
+router.get("/:storeId", verifyToken, checkSubscriptionExpiry, checkStoreAccess, requirePermission("store:view"), storeController.getStoreById);
 
 // Cập nhật thông tin cửa hàng
-router.put(
-  "/:storeId",
-  verifyToken,
-  checkSubscriptionExpiry,
-  checkStoreAccess,
-
-  requirePermission("store:update"),
-  storeController.updateStore
-);
+router.put("/:storeId", verifyToken, checkSubscriptionExpiry, checkStoreAccess, requirePermission("store:update"), storeController.updateStore);
 
 // Xóa cửa hàng (soft delete)
-router.delete(
-  "/:storeId",
-  verifyToken,
-  checkSubscriptionExpiry,
-
-  requirePermission("store:delete"),
-  storeController.deleteStore
-);
+router.delete("/:storeId", verifyToken, checkSubscriptionExpiry, requirePermission("store:delete"), storeController.deleteStore);
 
 // Khôi phục cửa hàng (restore soft delete)
-router.put(
-  "/:storeId/restore",
-  verifyToken,
-  checkSubscriptionExpiry,
-
-  requirePermission("store:update"),
-  storeController.restoreStore
-);
+router.put("/:storeId/restore", verifyToken, checkSubscriptionExpiry, requirePermission("store:update"), storeController.restoreStore);
 
 //
 // ===================== DASHBOARD & SELECT STORE =====================
 //
 
 // Chọn store hiện hành
-router.post(
-  "/select/:storeId",
-  verifyToken,
-  // Cho phép chọn cửa hàng kể cả khi Manager hết hạn
-  requirePermission("store:view"),
-  storeController.selectStore
-);
+router.post("/select/:storeId", verifyToken, requirePermission("store:view"), storeController.selectStore);
 
 // Dashboard cửa hàng (Manager / Staff trong store)
-router.get(
-  "/:storeId/dashboard",
-  verifyToken,
-  checkSubscriptionExpiry,
-
-  requirePermission("store:dashboard:view"),
-  storeController.getStoreDashboard
-);
+router.get("/:storeId/dashboard", verifyToken, checkSubscriptionExpiry, requirePermission("store:dashboard:view"), storeController.getStoreDashboard);
 
 //
 // ===================== STAFF ASSIGNMENT =====================
@@ -134,7 +73,6 @@ router.post(
   "/:storeId/assign-staff",
   verifyToken,
   checkSubscriptionExpiry,
-
   requirePermission("store:staff:assign"),
   storeController.assignStaffToStore
 );
@@ -168,7 +106,6 @@ router.get(
   "/:storeId/employees/export",
   verifyToken,
   checkSubscriptionExpiry,
-
   requirePermission("store:employee:view"),
   storeController.exportEmployeesToExcel
 );

@@ -19,28 +19,16 @@ const productSchema = new mongoose.Schema(
     },
 
     // ===== Cửa hàng & kho =====
-    store_id: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Store",
-      required: true,
-    },
+    store_id: { type: mongoose.Schema.Types.ObjectId, ref: "Store", required: true },
 
     /**
      * Kho mặc định của sản phẩm (khi tạo phiếu nhập auto chọn)
      * Có thể null => dùng default_warehouse_id của Store
      */
-    default_warehouse_id: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Warehouse",
-      default: null,
-    },
+    default_warehouse_id: { type: mongoose.Schema.Types.ObjectId, ref: "Warehouse", default: null },
 
     // Snapshot tên kho mặc định tại thời điểm gán (phòng sau này đổi tên kho)
-    default_warehouse_name: {
-      type: String,
-      trim: true,
-      default: "",
-    },
+    default_warehouse_name: { type: String, trim: true, default: "" },
 
     // ===== Liên kết NCC & nhóm =====
     supplier_id: { type: mongoose.Schema.Types.ObjectId, ref: "Supplier" },
@@ -50,7 +38,6 @@ const productSchema = new mongoose.Schema(
       url: { type: String, default: null },
       public_id: { type: String, default: null },
     },
-
     lowStockAlerted: { type: Boolean, default: false },
     isDeleted: { type: Boolean, default: false },
   },
@@ -61,10 +48,7 @@ const productSchema = new mongoose.Schema(
 
 // Pre-save hook reset lowStockAlerted nếu stock > min_stock khi update
 productSchema.pre("save", function (next) {
-  if (
-    this.isModified("stock_quantity") &&
-    this.stock_quantity > this.min_stock
-  ) {
+  if (this.isModified("stock_quantity") && this.stock_quantity > this.min_stock) {
     this.lowStockAlerted = false; // Reset cảnh báo nếu stock tăng > min_stock
   }
   // Đảm bảo isDeleted được set khi save document cũ
@@ -84,15 +68,31 @@ productSchema.pre(/^find/, function (next) {
 });
 
 // Index compound để đảm bảo SKU unique trong phạm vi cửa hàng
-productSchema.index(
-  { store_id: 1, sku: 1 },
-  { unique: true, name: "store_sku_unique" }
-);
+productSchema.index({ store_id: 1, sku: 1 }, { unique: true, name: "store_sku_unique" });
+// Query sản phẩm theo store + soft delete
+productSchema.index({ store_id: 1, isDeleted: 1 });
+// Lọc theo nhóm sản phẩm trong store
+productSchema.index({ store_id: 1, group_id: 1, isDeleted: 1 });
+// Lọc theo nhà cung cấp trong store
+productSchema.index({ store_id: 1, supplier_id: 1, isDeleted: 1 });
+// Default warehouse của sản phẩm
+productSchema.index({ default_warehouse_id: 1 });
+// Trạng thái kinh doanh trong store
+productSchema.index({ store_id: 1, status: 1, isDeleted: 1 });
+// Tìm kiếm theo tên (non-text, prefix / sort)
+productSchema.index({ store_id: 1, name: 1 });
+// Thường dùng cho sort mới nhất trong store
+productSchema.index({ store_id: 1, createdAt: -1 });
 productSchema.index({
   stock_quantity: 1,
   min_stock: 1,
   status: 1,
   lowStockAlerted: 1,
+});
+productSchema.index({
+  name: "text",
+  description: "text",
+  sku: "text",
 });
 
 module.exports = mongoose.model("Product", productSchema);

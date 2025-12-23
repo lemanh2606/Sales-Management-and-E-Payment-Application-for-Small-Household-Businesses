@@ -7,7 +7,13 @@ dotenv.config();
 
 // Các quyền mới cần thêm
 const NEW_REPORT_PERMISSIONS = [
-  "orders:delete",
+  // "warehouses:view",
+  // "warehouses:create",
+  // "warehouses:update",
+  // "warehouses:delete",
+  // "warehouses:restore",
+  // "warehouses:set-default",
+  "inventory:voucher:view",
   //thêm nếu có cái mới hoặc nghĩ ra cái mới
 ];
 
@@ -28,9 +34,7 @@ async function updateManagerPermissions() {
       const currentMenu = user.menu || [];
 
       // Gộp menu cũ + mới, loại trùng
-      const updatedMenu = Array.from(
-        new Set([...currentMenu, ...NEW_REPORT_PERMISSIONS])
-      );
+      const updatedMenu = Array.from(new Set([...currentMenu, ...NEW_REPORT_PERMISSIONS]));
 
       if (updatedMenu.length !== currentMenu.length) {
         user.menu = updatedMenu;
