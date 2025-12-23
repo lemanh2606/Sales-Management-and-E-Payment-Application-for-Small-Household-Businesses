@@ -1,13 +1,7 @@
 // routes/warehouseRoutes.js
 const express = require("express");
 const router = express.Router();
-
-const {
-  verifyToken,
-  checkStoreAccess,
-  requirePermission,
-} = require("../middlewares/authMiddleware");
-
+const { verifyToken, checkStoreAccess, requirePermission } = require("../middlewares/authMiddleware");
 const {
   getWarehouses,
   getWarehouseById,
@@ -25,58 +19,22 @@ const {
 // Prefix dự kiến: /api/stores/:storeId/warehouses...
 
 // Lấy danh sách kho theo store
-router.get(
-  "/:storeId/warehouses",
-  verifyToken,
-  checkStoreAccess,
-  requirePermission("warehouses:view"),
-  getWarehouses
-);
+router.get("/:storeId/warehouses", verifyToken, checkStoreAccess, requirePermission("warehouses:view"), getWarehouses);
 
 // Lấy chi tiết 1 kho
-router.get(
-  "/:storeId/warehouses/:warehouseId",
-  verifyToken,
-  checkStoreAccess,
-  requirePermission("warehouses:view"),
-  getWarehouseById
-);
+router.get("/:storeId/warehouses/:warehouseId", verifyToken, checkStoreAccess, requirePermission("warehouses:view"), getWarehouseById);
 
 // Tạo kho mới
-router.post(
-  "/:storeId/warehouses",
-  verifyToken,
-  checkStoreAccess,
-  requirePermission("warehouses:create"),
-  createWarehouse
-);
+router.post("/:storeId/warehouses", verifyToken, checkStoreAccess, requirePermission("warehouses:create"), createWarehouse);
 
 // Cập nhật kho
-router.put(
-  "/:storeId/warehouses/:warehouseId",
-  verifyToken,
-  checkStoreAccess,
-  requirePermission("warehouses:update"),
-  updateWarehouse
-);
+router.put("/:storeId/warehouses/:warehouseId", verifyToken, checkStoreAccess, requirePermission("warehouses:update"), updateWarehouse);
 
 // Xóa mềm kho
-router.delete(
-  "/:storeId/warehouses/:warehouseId",
-  verifyToken,
-  checkStoreAccess,
-  requirePermission("warehouses:delete"),
-  deleteWarehouse
-);
+router.delete("/:storeId/warehouses/:warehouseId", verifyToken, checkStoreAccess, requirePermission("warehouses:delete"), deleteWarehouse);
 
 // Khôi phục kho đã xóa
-router.patch(
-  "/:storeId/warehouses/:warehouseId/restore",
-  verifyToken,
-  checkStoreAccess,
-  requirePermission("warehouses:update"),
-  restoreWarehouse
-);
+router.patch("/:storeId/warehouses/:warehouseId/restore", verifyToken, checkStoreAccess, requirePermission("warehouses:update"), restoreWarehouse);
 
 // Đặt kho mặc định
 router.patch(
