@@ -471,7 +471,7 @@ export default function InventoryVoucherPage() {
 
             // nâng cao
             attached_docs: 0,
-            warehouse_id: defaultWhId,
+            warehouse_id: defaultWh?.id || null,
             warehouse_name: defaultWh?.name || "",
             warehousename: defaultWh?.name || "",
 
@@ -589,7 +589,7 @@ export default function InventoryVoucherPage() {
                 receiver_name: values.receiver_name || "",
                 deliverer_phone: values.deliverer_phone || "",
                 receiver_phone: values.receiver_phone || "",
-
+                warehouse_id: values.warehouse_id || null,
                 warehouse_name: values.warehouse_name || "",
                 warehouse_location: values.warehouse_location || "",
                 ref_no: values.ref_no || "",
@@ -1341,7 +1341,7 @@ export default function InventoryVoucherPage() {
                                 items={[
                                     {
                                         key: "adv",
-                                        label: "Thông tin nâng cao (không bắt buộc)",
+                                        label: "Thông tin nâng cao ",
                                         children: (
                                             <Row gutter={S.rowGutter}>
                                                 <Col xs={24} md={6}>
@@ -1400,19 +1400,19 @@ export default function InventoryVoucherPage() {
                                                 </Col>
 
                                                 <Col xs={24} md={6}>
-                                                    <Form.Item name="warehouse_location" label="Vị trí kho" style={{ marginBottom: 10 }}>
+                                                    <Form.Item name="warehouse_location" rules={[{ required: true }]} label="Vị trí kho" style={{ marginBottom: 10 }}>
                                                         <Input placeholder="VD: Kệ A - Tầng 2 - Ô 05" />
                                                     </Form.Item>
                                                 </Col>
 
                                                 <Col xs={24} md={6}>
-                                                    <Form.Item name="ref_no" label="Số CT gốc" style={{ marginBottom: 10 }}>
+                                                    <Form.Item name="ref_no" label="Số CT gốc" rules={[{ required: true }]} style={{ marginBottom: 10 }}>
                                                         <Input placeholder="VD: HĐ 000123" />
                                                     </Form.Item>
                                                 </Col>
 
                                                 <Col xs={24} md={6}>
-                                                    <Form.Item name="ref_date" label="Ngày CT gốc" style={{ marginBottom: 0 }}>
+                                                    <Form.Item name="ref_date" label="Ngày CT gốc" rules={[{ required: true }]} style={{ marginBottom: 0 }}>
                                                         <DatePicker style={{ width: "100%" }} format="DD/MM/YYYY" />
                                                     </Form.Item>
                                                 </Col>

@@ -66,11 +66,6 @@ const SidebarPOS: React.FC = () => {
       label: "Tra cứu đơn hàng",
     },
     {
-      key: "reconcile",
-      icon: <SafetyCertificateOutlined />,
-      label: "Đối soát hóa đơn",
-    },
-    {
       key: "endofdayreport",
       icon: <BarChartOutlined />,
       label: "Báo cáo cuối ngày",

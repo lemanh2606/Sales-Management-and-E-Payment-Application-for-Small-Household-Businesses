@@ -3,6 +3,7 @@ const InventoryVoucher = require("../models/InventoryVoucher");
 const Product = require("../models/Product");
 const User = require("../models/User");
 const Supplier = require("../models/Supplier");
+const Warehouse = require("../models/Warehouse");
 const { logActivity } = require("../utils/logActivity");
 
 // ================= helpers =================
@@ -366,178 +367,158 @@ const createInventoryVoucher = async (req, res) => {
 
   try {
     const userId = req.user?.id || req.user?._id;
-    await ensureUser(userId, session);
 
-    const storeId = toObjectId(req.params.storeId);
-    if (!storeId) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(400).json({ message: "storeId không hợp lệ" });
+    // ===== VALIDATE storeId =====
+    if (!mongoose.isValidObjectId(req.params.storeId)) {
+      throw new Error("storeId không hợp lệ");
+    }
+    const storeId = new mongoose.Types.ObjectId(req.params.storeId);
+
+    // ===== VALIDATE BODY =====
+    if (
+      !req.body ||
+      !Array.isArray(req.body.items) ||
+      req.body.items.length === 0
+    ) {
+      throw new Error("Phiếu kho phải có items");
     }
 
-    if (!req.body || Object.keys(req.body).length === 0) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(400).json({ message: "Dữ liệu request body trống" });
-    }
+    const header = req.body;
+    const rawItems = req.body.items;
 
-    const header = sanitizeHeader(req.body);
-    const rawItems = sanitizeItems(req.body.items);
-
-    if (!header.type || !["IN", "OUT"].includes(header.type)) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(400).json({ message: "type phải là IN hoặc OUT" });
-    }
-
-    try {
-      validateItemsOrThrow(rawItems);
-    } catch (e) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(e.status || 400).json({ message: e.message });
-    }
-
-    // Validate supplier header nếu có
-    let supplierNameSnapshot = "";
-    try {
-      const sup = await validateSupplierOrThrow(
-        storeId,
-        header.supplier_id,
-        session
-      );
-      supplierNameSnapshot = sup.name || "";
-    } catch (e) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(e.status || 400).json({ message: e.message });
-    }
-
-    const productMap = await loadProductsForItems(storeId, rawItems, session);
-
-    for (const it of rawItems) {
-      const p = productMap.get(String(it.product_id));
-      if (!p) {
-        await session.abortTransaction();
-        session.endSession();
-        return res.status(404).json({
-          message: `Không tìm thấy sản phẩm ${it.product_id} trong cửa hàng hoặc sản phẩm đã bị xóa`,
-        });
+    // ===== RESOLVE WAREHOUSE =====
+    let warehouse = null;
+    if (header.warehouse_id) {
+      if (!mongoose.isValidObjectId(header.warehouse_id)) {
+        throw new Error("warehouse_id không hợp lệ");
       }
 
-      it.sku_snapshot = it.sku_snapshot || p.sku || "";
-      it.name_snapshot = it.name_snapshot || p.name || "";
-      it.unit_snapshot = it.unit_snapshot || p.unit || "";
+      warehouse = await Warehouse.findOne({
+        _id: new mongoose.Types.ObjectId(header.warehouse_id),
+        store_id: storeId,
+        isDeleted: false,
+      }).lean();
 
-      // nếu item chưa có supplier, fallback supplier từ header
-      if (!it.supplier_id && header.supplier_id) {
-        it.supplier_id = header.supplier_id;
-        it.supplier_name_snapshot = supplierNameSnapshot;
-      }
-
-      if (it.unit_cost === undefined) {
-        it.unit_cost = toDecimal128(pickCostNumber(p));
+      if (!warehouse) {
+        throw new Error("Kho không tồn tại hoặc không thuộc cửa hàng");
       }
     }
 
-    const voucherCode = header.voucher_code || buildVoucherCode(header.type);
+    // ===== RESOLVE SUPPLIER (HEADER) =====
+    let supplier = null;
+    if (header.supplier_id) {
+      if (!mongoose.isValidObjectId(header.supplier_id)) {
+        throw new Error("supplier_id không hợp lệ");
+      }
 
-    const doc = new InventoryVoucher({
+      supplier = await Supplier.findOne({
+        _id: new mongoose.Types.ObjectId(header.supplier_id),
+        store_id: storeId,
+        isDeleted: false,
+      }).lean();
+
+      if (!supplier) {
+        throw new Error("Nhà cung cấp không tồn tại");
+      }
+    }
+
+    // ===== LOAD PRODUCTS =====
+    const productIds = rawItems.map((i) => {
+      if (!mongoose.isValidObjectId(i.product_id)) {
+        throw new Error("product_id không hợp lệ");
+      }
+      return new mongoose.Types.ObjectId(i.product_id);
+    });
+
+    const products = await Product.find({
+      _id: { $in: productIds },
       store_id: storeId,
+      isDeleted: false,
+    }).lean();
 
-      type: header.type,
-      voucher_code: voucherCode,
-      voucher_date: header.voucher_date || new Date(),
+    const productMap = new Map(products.map((p) => [String(p._id), p]));
+
+    // ===== BUILD ITEMS =====
+    const items = rawItems.map((it) => {
+      const p = productMap.get(String(it.product_id));
+      if (!p) throw new Error(`Sản phẩm ${it.product_id} không tồn tại`);
+
+      return {
+        product_id: p._id,
+
+        supplier_id: it.supplier_id
+          ? new mongoose.Types.ObjectId(it.supplier_id)
+          : supplier?._id || null,
+
+        supplier_name_snapshot:
+          it.supplier_name_snapshot || supplier?.name || "",
+
+        sku_snapshot: p.sku || "",
+        name_snapshot: p.name || "",
+        unit_snapshot: p.unit || "",
+
+        warehouse_id: warehouse?._id || null,
+        warehouse_name: warehouse?.name || "",
+
+        qty_document: Number(it.qty_document || it.qty_actual || 0),
+        qty_actual: Number(it.qty_actual),
+
+        unit_cost: it.unit_cost,
+        note: it.note || "",
+      };
+    });
+
+    // ===== CREATE VOUCHER =====
+    const voucher = new InventoryVoucher({
+      store_id: storeId,
+      type: header.type || "IN",
       status: "DRAFT",
 
+      voucher_code: header.voucher_code || `NK-${Date.now()}`,
+      voucher_date: header.voucher_date
+        ? new Date(header.voucher_date)
+        : new Date(),
       document_place: header.document_place || "",
 
-      warehouse_name: header.warehouse_name || "",
-      warehouse_location: header.warehouse_location || "",
+      warehouse_id: warehouse?._id || null,
+      warehouse_name: warehouse?.name || "",
+      warehouse_location: warehouse?.full_address || "",
 
-      ref_type: header.ref_type || "",
-      ref_id: header.ref_id || null,
+      supplier_id: supplier?._id || null,
+      supplier_name_snapshot: supplier?.name || "",
+
+      partner_name: supplier?.name || "",
+      partner_phone: supplier?.phone || "",
+      partner_address: supplier?.address || "",
+
+      deliverer_name: header.deliverer_name || supplier?.contact_person || "",
+      receiver_name:
+        header.receiver_name || req.user?.fullname || req.user?.username || "",
+
+      ref_type: header.ref_type || "PRODUCT_IMPORT",
       ref_no: header.ref_no || "",
-      ref_date: header.ref_date || null,
-
-      reason: header.reason || "",
-      deliverer_name: header.deliverer_name || "",
-      receiver_name: header.receiver_name || "",
-      attached_docs: header.attached_docs || 0,
-
-      partner_name: header.partner_name || "",
-      partner_phone: header.partner_phone || "",
-      partner_address: header.partner_address || "",
-
-      debit_account: header.debit_account || "",
-      credit_account: header.credit_account || "",
-      currency: header.currency || "VND",
-      exchange_rate: header.exchange_rate || 1,
+      ref_date: header.ref_date ? new Date(header.ref_date) : null,
 
       created_by: userId,
-
-      supplier_id: header.supplier_id || null,
-      supplier_name_snapshot: supplierNameSnapshot,
-
-      warehouse_keeper_id: header.warehouse_keeper_id || null,
-      accountant_id: header.accountant_id || null,
-
-      items: rawItems.map((it) => ({
-        product_id: it.product_id,
-
-        supplier_id: it.supplier_id || null,
-        supplier_name_snapshot: it.supplier_name_snapshot || "",
-
-        sku_snapshot: it.sku_snapshot,
-        name_snapshot: it.name_snapshot,
-        unit_snapshot: it.unit_snapshot,
-
-        batch_no: it.batch_no || "",
-        expiry_date: it.expiry_date || null,
-
-        qty_document: it.qty_document,
-        qty_actual: it.qty_actual,
-        unit_cost: it.unit_cost,
-        note: it.note,
-      })),
+      items,
     });
 
-    await doc.save({ session });
-
-    await logActivity?.({
-      user: req.user,
-      store: { _id: storeId },
-      action: "create",
-      entity: "InventoryVoucher",
-      entityId: doc._id,
-      entityName: `Phiếu kho ${doc.voucher_code}`,
-      req,
-      description: `Tạo phiếu kho ${doc.voucher_code} (${doc.type})`,
-    });
+    await voucher.save({ session });
 
     await session.commitTransaction();
     session.endSession();
 
-    return res
-      .status(201)
-      .json({ message: "Tạo phiếu kho thành công", voucher: doc });
+    return res.status(201).json({
+      message: "Tạo phiếu kho thành công",
+      voucher,
+    });
   } catch (error) {
-    try {
-      await session.abortTransaction();
-      session.endSession();
-    } catch (_) {}
+    await session.abortTransaction();
+    session.endSession();
 
-    // duplicate key voucher_code
-    if (error?.code === 11000) {
-      return res
-        .status(409)
-        .json({ message: "Số phiếu đã tồn tại", error: error.message });
-    }
-
-    const status = error.status || 500;
-    return res
-      .status(status)
-      .json({ message: error.message || "Lỗi server", error: error.message });
+    return res.status(400).json({
+      message: error.message || "Lỗi tạo phiếu kho",
+    });
   }
 };
 

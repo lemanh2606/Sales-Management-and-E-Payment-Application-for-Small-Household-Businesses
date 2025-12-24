@@ -1371,17 +1371,17 @@ const importProducts = async (req, res) => {
       return res.status(400).json({ message: "Vui lòng tải lên file" });
     }
 
-    const user = await User.findById(userId);
+    const user = await User.findById(userId).lean();
     if (!user)
       return res.status(404).json({ message: "Người dùng không tồn tại" });
 
-    const store = await Store.findById(storeId);
+    const store = await Store.findById(storeId).lean();
     if (!store)
       return res.status(404).json({ message: "Cửa hàng không tồn tại" });
 
     // ===== CHECK QUYỀN =====
-    const storeOwnerId = store.owner_id?.toString() || null;
-    if (storeOwnerId !== userId?.toString()) {
+    const storeOwnerId = store.owner_id?.toString();
+    if (storeOwnerId !== userId.toString()) {
       if (user.role === "STAFF") {
         const employee = await Employee.findOne({
           user_id: userId,
@@ -1397,9 +1397,7 @@ const importProducts = async (req, res) => {
 
     const data = await parseExcelToJSON(req.file.buffer);
     if (!Array.isArray(data) || data.length === 0) {
-      return res
-        .status(400)
-        .json({ message: "File không chứa dữ liệu hợp lệ" });
+      return res.status(400).json({ message: "File không có dữ liệu hợp lệ" });
     }
 
     const results = {
@@ -1408,8 +1406,7 @@ const importProducts = async (req, res) => {
       total: data.length,
       debug: {
         processedRows: 0,
-        suppliersCreated: 0,
-        groupsCreated: 0,
+        suppliersUsed: 0,
         productsCreated: 0,
         productsUpdated: 0,
         vouchersCreated: 0,
@@ -1417,20 +1414,18 @@ const importProducts = async (req, res) => {
     };
 
     // ===== KHO MẶC ĐỊNH =====
-    const finalDefaultWarehouseId = store.default_warehouse_id || null;
-    const finalDefaultWarehouseName =
-      store.default_warehouse_name || "Kho mặc định cửa hàng";
+    const warehouseId = store.default_warehouse_id || null;
+    const warehouseName = store.default_warehouse_name || "Kho mặc định";
 
-    // ===== CACHE DỮ LIỆU =====
+    // ===== CACHE =====
     const suppliers = await Supplier.find({
       store_id: storeId,
       isDeleted: false,
     }).lean();
 
-    const productGroups = await ProductGroup.find({
-      storeId,
-      isDeleted: false,
-    }).lean();
+    const supplierMap = new Map(
+      suppliers.map((s) => [s.name.toLowerCase(), s])
+    );
 
     const existingProducts = await Product.find({
       store_id: storeId,
@@ -1440,145 +1435,71 @@ const importProducts = async (req, res) => {
       .lean();
 
     const existingSKUs = new Set(existingProducts.map((p) => p.sku));
-    const usedSKUsInThisImport = new Set();
 
-    const lastProductGlobal = await Product.findOne({ isDeleted: false })
-      .sort({ sku: -1 })
-      .select("sku")
-      .lean();
+    let skuCounter =
+      (
+        await Product.findOne({ isDeleted: false })
+          .sort({ sku: -1 })
+          .select("sku")
+          .lean()
+      )?.sku?.replace(/\D/g, "") || 0;
 
-    let globalSkuCounter = lastProductGlobal?.sku
-      ? parseInt(lastProductGlobal.sku.replace(/\D/g, ""), 10)
-      : 0;
-
-    const supplierMap = new Map(
-      suppliers.map((s) => [s.name.toLowerCase(), s._id])
-    );
-    const groupMap = new Map(
-      productGroups.map((g) => [g.name.toLowerCase(), g._id])
-    );
-
-    // ===== HELPER SKU =====
-    const generateUniqueSKU = async () => {
+    const generateSKU = async () => {
       while (true) {
-        globalSkuCounter++;
-        const sku = `SP${globalSkuCounter.toString().padStart(6, "0")}`;
-        if (!existingSKUs.has(sku) && !usedSKUsInThisImport.has(sku)) {
-          usedSKUsInThisImport.add(sku);
+        skuCounter++;
+        const sku = `SP${String(skuCounter).padStart(6, "0")}`;
+        if (!existingSKUs.has(sku)) {
+          existingSKUs.add(sku);
           return sku;
         }
       }
     };
 
-    // ===== HELPER PHIẾU NHẬP (KHÔNG TẠO SESSION) =====
-    const createInventoryVoucherAndIncStock = async (
-      product,
-      openingQty,
-      costNum,
-      session,
-      isNew
-    ) => {
-      if (openingQty <= 0) return null;
-
-      const now = new Date();
-      const voucherCode = `NK-${now.getTime()}-${product.sku}`;
-
-      const voucher = new InventoryVoucher({
-        store_id: storeId,
-        type: "IN",
-        status: "POSTED",
-        voucher_code: voucherCode,
-        voucher_date: now,
-        reason: isNew
-          ? "Tồn đầu kỳ khi import sản phẩm mới"
-          : "Nhập thêm tồn khi import",
-        warehouse_id: finalDefaultWarehouseId,
-        warehouse_name: finalDefaultWarehouseName,
-        ref_type: isNew ? "PRODUCT_IMPORT_CREATE" : "PRODUCT_IMPORT_UPDATE",
-        ref_id: product._id,
-        created_by: userId,
-        posted_by: userId,
-        posted_at: now,
-        items: [
-          {
-            product_id: product._id,
-            sku_snapshot: product.sku,
-            name_snapshot: product.name,
-            qty_document: openingQty,
-            qty_actual: openingQty,
-            unit_cost: mongoose.Types.Decimal128.fromString(String(costNum)),
-          },
-        ],
-      });
-
-      await voucher.save({ session });
-
-      await Product.updateOne(
-        { _id: product._id },
-        { $inc: { stock_quantity: openingQty } },
-        { session }
-      );
-
-      results.debug.vouchersCreated++;
-      return voucher;
-    };
-
-    // ================== IMPORT LOOP ==================
+    // ================= IMPORT LOOP =================
     for (let i = 0; i < data.length; i++) {
       const session = await mongoose.startSession();
       session.startTransaction();
       results.debug.processedRows++;
 
-      const row = sanitizeData(data[i]);
-      const rowNumber = i + 2;
-
       try {
-        const price = Number(row["Giá bán"]);
-        const cost = Number(row["Giá vốn"]);
+        const row = sanitizeData(data[i]);
+        const rowNumber = i + 2;
+
+        const price = Number(row["Giá bán"] || 0);
+        const cost = Number(row["Giá vốn"] || 0);
         const openingQty = Number(row["Tồn kho"] || 0);
 
         let sku = row["Mã SKU"]?.trim();
-        if (!sku) sku = await generateUniqueSKU();
+        if (!sku) sku = await generateSKU();
 
-        if (usedSKUsInThisImport.has(sku)) {
-          throw new Error(`SKU ${sku} trùng trong file`);
-        }
-        usedSKUsInThisImport.add(sku);
+        const supplierName = row["Nhà cung cấp"]?.trim();
+        const supplier =
+          supplierName && supplierMap.get(supplierName.toLowerCase());
 
-        const supplierId = row["Nhà cung cấp"]
-          ? supplierMap.get(row["Nhà cung cấp"].toLowerCase()) || null
-          : null;
+        const supplierId = supplier?._id || null;
 
-        const groupId = row["Nhóm sản phẩm"]
-          ? groupMap.get(row["Nhóm sản phẩm"].toLowerCase()) || null
-          : null;
-
-        const existingProduct = await Product.findOne({
+        let product = await Product.findOne({
           sku,
           store_id: storeId,
           isDeleted: false,
         }).session(session);
 
-        let product;
         let isNew = false;
 
-        if (existingProduct) {
+        if (product) {
           await Product.updateOne(
-            { _id: existingProduct._id },
+            { _id: product._id },
             {
               $set: {
                 name: row["Tên sản phẩm"],
                 price,
                 cost_price: cost,
                 supplier_id: supplierId,
-                group_id: groupId,
               },
             },
             { session }
           );
-          product = await Product.findById(existingProduct._id).session(
-            session
-          );
+          product = await Product.findById(product._id).session(session);
           results.debug.productsUpdated++;
         } else {
           product = new Product({
@@ -1589,46 +1510,108 @@ const importProducts = async (req, res) => {
             stock_quantity: 0,
             store_id: storeId,
             supplier_id: supplierId,
-            group_id: groupId,
+            default_warehouse_id: warehouseId,
+            default_warehouse_name: warehouseName,
             createdBy: userId,
-            default_warehouse_id: finalDefaultWarehouseId,
-            default_warehouse_name: finalDefaultWarehouseName,
           });
           await product.save({ session });
           results.debug.productsCreated++;
           isNew = true;
         }
 
-        const voucher = await createInventoryVoucherAndIncStock(
-          product,
-          openingQty,
-          cost,
-          session,
-          isNew
-        );
+        // ===== TẠO PHIẾU NHẬP KHO =====
+        if (openingQty > 0) {
+          const now = new Date();
+
+          const voucher = new InventoryVoucher({
+            store_id: storeId,
+            type: "IN",
+            status: "POSTED",
+
+            voucher_code: `NK-${now.getTime()}-${sku}`,
+            voucher_date: now,
+
+            reason: isNew
+              ? "Nhập tồn đầu kỳ khi import sản phẩm"
+              : "Nhập bổ sung tồn kho khi import",
+
+            warehouse_id: warehouseId,
+            warehouse_name: warehouseName,
+
+            // ===== NGHIỆP VỤ ĐẦY ĐỦ =====
+            supplier_id: supplierId,
+            supplier_name_snapshot: supplier?.name || "",
+
+            partner_name: supplier?.name || "Nhập file Excel",
+            partner_phone: supplier?.phone || "",
+            partner_address: supplier?.address || "",
+
+            deliverer_name: supplier?.contact_person || "Nhà cung cấp",
+            receiver_name: user.fullname || user.username,
+
+            ref_type: isNew ? "PRODUCT_IMPORT_CREATE" : "PRODUCT_IMPORT_UPDATE",
+            ref_no: row["Số chứng từ"] || "",
+            ref_date: row["Ngày chứng từ"]
+              ? new Date(row["Ngày chứng từ"])
+              : null,
+
+            created_by: userId,
+            posted_by: userId,
+            posted_at: now,
+
+            items: [
+              {
+                product_id: product._id,
+                supplier_id: supplierId,
+                supplier_name_snapshot: supplier?.name || "",
+
+                sku_snapshot: product.sku,
+                name_snapshot: product.name,
+                unit_snapshot: product.unit || "",
+
+                warehouse_id: warehouseId,
+                warehouse_name: warehouseName,
+
+                qty_document: openingQty,
+                qty_actual: openingQty,
+
+                unit_cost: mongoose.Types.Decimal128.fromString(String(cost)),
+                note: "Nhập tồn khi import Excel",
+              },
+            ],
+          });
+
+          await voucher.save({ session });
+
+          await Product.updateOne(
+            { _id: product._id },
+            { $inc: { stock_quantity: openingQty } },
+            { session }
+          );
+
+          results.debug.vouchersCreated++;
+        }
 
         await session.commitTransaction();
         session.endSession();
 
         results.success.push({
-          rowrow: rowNumber,
+          row: rowNumber,
           sku,
           product: product.name,
-          voucher: voucher?.voucher_code || null,
         });
       } catch (err) {
         await session.abortTransaction();
         session.endSession();
         results.failed.push({
-          row: rowNumber,
+          row: i + 2,
           error: err.message,
         });
       }
     }
 
-    return res.status(results.success.length ? 200 : 400).json({
-      message:
-        results.success.length === 0 ? "Import thất bại" : "Import hoàn tất",
+    return res.status(200).json({
+      message: "Import hoàn tất",
       results,
     });
   } catch (error) {
