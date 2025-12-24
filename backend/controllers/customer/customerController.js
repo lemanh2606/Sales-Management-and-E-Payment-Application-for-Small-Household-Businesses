@@ -1,4 +1,5 @@
 // controllers/customerController.js
+const mongoose = require("mongoose");
 const Customer = require("../../models/Customer");
 const Order = require("../../models/Order"); // Để check Order ref trước xóa mềm
 const User = require("../../models/User");
@@ -23,6 +24,16 @@ function resolveStoreId(req) {
     null;
 
   return candidate ? candidate.toString() : null;
+}
+
+function normalizePhone(phone) {
+  return typeof phone === "string" ? phone.trim() : "";
+}
+
+function isValidPhone(phone) {
+  // Optional leading '+' followed by 9–15 digits.
+  // Keeps parity with store phone validation rule used elsewhere.
+  return /^\+?\d{9,15}$/.test(phone);
 }
 
 // POST /api/customers - Tạo mới khách hàng
@@ -50,12 +61,20 @@ const createCustomer = async (req, res) => {
       return res.status(400).json({ message: "Thiếu storeId (không xác định cửa hàng hiện hành)" });
     }
 
-    const trimmedPhone = phone.trim();
+    const storeIdStr = storeId.toString();
+    if (!mongoose.Types.ObjectId.isValid(storeIdStr)) {
+      return res.status(400).json({ message: "storeId không hợp lệ" });
+    }
+
+    const trimmedPhone = normalizePhone(phone);
+    if (!isValidPhone(trimmedPhone)) {
+      return res.status(400).json({ message: "Số điện thoại không hợp lệ (chỉ cho phép 9-15 chữ số, có thể có + ở đầu)" });
+    }
 
     // Kiểm tra số điện thoại đã tồn tại (không tính bản ghi đã xóa mềm) trong cùng store
     const existing = await Customer.findOne({
       phone: trimmedPhone,
-      storeId: storeId,
+      storeId: storeIdStr,
       isDeleted: { $ne: true },
     });
     if (existing) {
@@ -68,7 +87,7 @@ const createCustomer = async (req, res) => {
       phone: trimmedPhone,
       address: address.trim(),
       note: note.trim(),
-      storeId: storeId,
+      storeId: storeIdStr,
       isDeleted: false,
       createdBy: req.user ? req.user._id || req.user.id : undefined,
     });
@@ -77,21 +96,24 @@ const createCustomer = async (req, res) => {
     // Log hoạt động tạo khách hàng
     await logActivity({
       user: req.user,
-      store: { _id: storeId },
+      store: { _id: storeIdStr },
       action: "create",
       entity: "Customer",
       entityId: newCustomer._id,
       entityName: newCustomer.name,
       req,
-      description: `Tạo mới khách hàng ${newCustomer.name} (${newCustomer.phone}) tại cửa hàng ${storeId}`,
+      description: `Tạo mới khách hàng ${newCustomer.name} (${newCustomer.phone}) tại cửa hàng ${storeIdStr}`,
     });
 
     const created = await Customer.findById(newCustomer._id).lean();
 
-    console.log(`Tạo mới khách hàng thành công: ${created.name} (${created.phone}), storeId=${storeId}`);
+    console.log(`Tạo mới khách hàng thành công: ${created.name} (${created.phone}), storeId=${storeIdStr}`);
     return res.status(201).json({ message: "Tạo khách hàng thành công", customer: created });
   } catch (err) {
     console.error("Lỗi khi tạo khách hàng:", err);
+    if (err && (err.code === 11000 || err.code === 11001)) {
+      return res.status(400).json({ message: "Số điện thoại đã tồn tại trong cửa hàng này" });
+    }
     return res.status(500).json({ message: "Lỗi server khi tạo khách hàng" });
   }
 };
@@ -168,10 +190,21 @@ const updateCustomer = async (req, res) => {
       return res.status(404).json({ message: "Khách hàng không tồn tại" });
     }
 
-    // Validate unique phone nếu thay đổi
-    if (phone && phone.trim() !== customer.phone) {
+    const trimmedPhone = phone !== undefined ? normalizePhone(phone) : "";
+
+    // Validate phone format + unique phone nếu thay đổi
+    if (phone !== undefined) {
+      if (!trimmedPhone) {
+        return res.status(400).json({ message: "Thiếu số điện thoại" });
+      }
+      if (!isValidPhone(trimmedPhone)) {
+        return res.status(400).json({ message: "Số điện thoại không hợp lệ (chỉ cho phép 9-15 chữ số, có thể có + ở đầu)" });
+      }
+    }
+
+    if (phone !== undefined && trimmedPhone !== customer.phone) {
       const existing = await Customer.findOne({
-        phone: phone.trim(),
+        phone: trimmedPhone,
         _id: { $ne: id },
         storeId: customer.storeId,
         isDeleted: { $ne: true },
@@ -183,7 +216,7 @@ const updateCustomer = async (req, res) => {
 
     // Update fields
     if (name) customer.name = name.trim();
-    if (phone) customer.phone = phone.trim();
+    if (phone !== undefined) customer.phone = trimmedPhone;
     if (address !== undefined) customer.address = (address || "").trim();
     if (note !== undefined) customer.note = (note || "").trim();
 

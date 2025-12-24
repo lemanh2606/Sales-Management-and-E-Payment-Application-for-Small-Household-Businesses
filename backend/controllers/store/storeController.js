@@ -58,6 +58,131 @@ const buildValidationErrorResponse = (errors) => {
   };
 };
 
+// Helper function để validate Store data
+const validateStoreData = (data, { isCreate } = { isCreate: false }) => {
+  const errors = [];
+
+  const isNonEmptyString = (v) => typeof v === "string" && v.trim().length > 0;
+  const isStringOrEmpty = (v) => v === undefined || v === null || typeof v === "string";
+  const isValidObjectId = (v) => mongoose.Types.ObjectId.isValid(String(v));
+
+  // name
+  if (isCreate) {
+    if (!isNonEmptyString(data.name)) {
+      errors.push({ field: "name", message: "Tên cửa hàng bắt buộc" });
+    }
+  } else if (data.name !== undefined && !isNonEmptyString(data.name)) {
+    errors.push({ field: "name", message: "Tên cửa hàng không được để trống" });
+  }
+
+  // address/description/imageUrl (optional strings)
+  if (!isStringOrEmpty(data.address)) {
+    errors.push({ field: "address", message: "Địa chỉ phải là chuỗi" });
+  }
+  if (!isStringOrEmpty(data.description)) {
+    errors.push({ field: "description", message: "Mô tả phải là chuỗi" });
+  }
+  if (!isStringOrEmpty(data.imageUrl)) {
+    errors.push({ field: "imageUrl", message: "imageUrl phải là chuỗi" });
+  }
+
+  // phone (optional) – allow leading +, 9–15 digits
+  if (data.phone !== undefined && data.phone !== null && String(data.phone).trim() !== "") {
+    const phone = String(data.phone).replace(/\s/g, "");
+    const phoneRegex = /^\+?[0-9]{9,15}$/;
+    if (!phoneRegex.test(phone)) {
+      errors.push({
+        field: "phone",
+        message: "Số điện thoại chỉ được chứa chữ số (có thể có dấu + ở đầu), độ dài 9-15 số",
+      });
+    }
+  }
+
+  // tags (optional array<string>)
+  if (data.tags !== undefined) {
+    if (!Array.isArray(data.tags)) {
+      errors.push({ field: "tags", message: "tags phải là mảng" });
+    } else {
+      const cleaned = data.tags
+        .map((t) => String(t).trim())
+        .filter((t) => t.length > 0);
+      const tooLong = cleaned.find((t) => t.length > 50);
+      if (tooLong) {
+        errors.push({ field: "tags", message: "Mỗi tag tối đa 50 ký tự" });
+      }
+      if (cleaned.length > 30) {
+        errors.push({ field: "tags", message: "Tối đa 30 tags" });
+      }
+    }
+  }
+
+  // staff_ids (optional array<ObjectId>)
+  if (data.staff_ids !== undefined) {
+    if (!Array.isArray(data.staff_ids)) {
+      errors.push({ field: "staff_ids", message: "staff_ids phải là mảng" });
+    } else {
+      const invalid = data.staff_ids.find((id) => !isValidObjectId(id));
+      if (invalid) {
+        errors.push({ field: "staff_ids", message: "staff_ids chứa ObjectId không hợp lệ" });
+      }
+    }
+  }
+
+  // location (optional {lat,lng} with number|null)
+  if (data.location !== undefined) {
+    const loc = data.location;
+    if (loc === null || typeof loc !== "object" || Array.isArray(loc)) {
+      errors.push({ field: "location", message: "location phải là object" });
+    } else {
+      if (loc.lat !== undefined && loc.lat !== null && typeof loc.lat !== "number") {
+        errors.push({ field: "location.lat", message: "lat phải là số hoặc null" });
+      }
+      if (loc.lng !== undefined && loc.lng !== null && typeof loc.lng !== "number") {
+        errors.push({ field: "location.lng", message: "lng phải là số hoặc null" });
+      }
+      if (typeof loc.lat === "number" && (loc.lat < -90 || loc.lat > 90)) {
+        errors.push({ field: "location.lat", message: "lat phải nằm trong [-90, 90]" });
+      }
+      if (typeof loc.lng === "number" && (loc.lng < -180 || loc.lng > 180)) {
+        errors.push({ field: "location.lng", message: "lng phải nằm trong [-180, 180]" });
+      }
+    }
+  }
+
+  // openingHours (optional {open,close} as HH:mm or empty)
+  if (data.openingHours !== undefined) {
+    const oh = data.openingHours;
+    if (oh === null || typeof oh !== "object" || Array.isArray(oh)) {
+      errors.push({ field: "openingHours", message: "openingHours phải là object" });
+    } else {
+      const hhmm = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+      if (
+        oh.open !== undefined &&
+        oh.open !== null &&
+        String(oh.open).trim() !== "" &&
+        !hhmm.test(String(oh.open))
+      ) {
+        errors.push({ field: "openingHours.open", message: "Giờ mở cửa phải theo định dạng HH:mm" });
+      }
+      if (
+        oh.close !== undefined &&
+        oh.close !== null &&
+        String(oh.close).trim() !== "" &&
+        !hhmm.test(String(oh.close))
+      ) {
+        errors.push({ field: "openingHours.close", message: "Giờ đóng cửa phải theo định dạng HH:mm" });
+      }
+    }
+  }
+
+  // isDefault (optional boolean)
+  if (data.isDefault !== undefined && typeof data.isDefault !== "boolean") {
+    errors.push({ field: "isDefault", message: "isDefault phải là boolean" });
+  }
+
+  return errors;
+};
+
 /**
  * Tạo store mới (MANAGER)
  * Body: { name, address, phone }
@@ -76,19 +201,56 @@ const createStore = async (req, res) => {
       return res.status(403).json({ message: "Chỉ Manager mới được tạo cửa hàng" });
     }
 
-    if (!name || !name.trim()) return res.status(400).json({ message: "Tên cửa hàng bắt buộc" });
+    const validationErrors = validateStoreData(
+      { name, address, phone, description, imageUrl, tags, staff_ids, location, openingHours, isDefault },
+      { isCreate: true }
+    );
+    if (validationErrors.length) {
+      return res.status(400).json(buildValidationErrorResponse(validationErrors));
+    }
+
+    const escapeRegex = (input) => String(input).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const normalizedName = String(name).trim();
+    const normalizedAddress = String(address || "")
+      .trim()
+      .replace(/\s+/g, " ");
+
+    // Check name uniqueness per owner (ignore deleted stores)
+    const existingSameName = await Store.findOne({
+      owner_id: userId,
+      deleted: false,
+      name: { $regex: new RegExp(`^${escapeRegex(normalizedName)}$`, "i") },
+    })
+      .select("_id")
+      .lean();
+
+    if (existingSameName) {
+      return res.status(400).json(
+        buildValidationErrorResponse([
+          { field: "name", message: "Tên cửa hàng đã tồn tại trong các cửa hàng của bạn" },
+        ])
+      );
+    }
+
+    const normalizedTags = Array.isArray(tags)
+      ? Array.from(new Set(tags.map((t) => String(t).trim()).filter((t) => t.length > 0)))
+      : [];
+
+    const normalizedStaffIds = Array.isArray(staff_ids)
+      ? Array.from(new Set(staff_ids.map((id) => String(id))))
+      : [];
 
     const newStore = new Store({
-      name: name.trim(),
-      address: (address || "").trim(),
+      name: normalizedName,
+      address: normalizedAddress,
       phone: (phone || "").trim(),
       description: (description || "").trim(),
       imageUrl: imageUrl || "",
-      tags: Array.isArray(tags) ? tags.map((t) => String(t).trim()) : [],
-      staff_ids: Array.isArray(staff_ids) ? staff_ids : [],
-      location: location || {},
-      openingHours: openingHours || {},
-      isDefault: !!isDefault,
+      tags: normalizedTags,
+      staff_ids: normalizedStaffIds,
+      location: location || { lat: null, lng: null },
+      openingHours: openingHours || { open: "", close: "" },
+      isDefault: isDefault === true,
       owner_id: userId,
       deleted: false,
     });
@@ -171,20 +333,72 @@ const updateStore = async (req, res) => {
     const { name, address, phone, description, imageUrl, tags, staff_ids, location, openingHours, isDefault } = req.body;
     const userId = req.user.id || req.user._id;
 
+    const validationErrors = validateStoreData(
+      { name, address, phone, description, imageUrl, tags, staff_ids, location, openingHours, isDefault },
+      { isCreate: false }
+    );
+    if (validationErrors.length) {
+      return res.status(400).json(buildValidationErrorResponse(validationErrors));
+    }
+
     const store = await Store.findById(storeId);
     if (!store || store.deleted) return res.status(404).json({ message: "Không tìm thấy cửa hàng" });
     if (!store.owner_id.equals(userId)) return res.status(403).json({ message: "Chỉ owner mới được chỉnh sửa" });
 
+    const escapeRegex = (input) => String(input).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    // If changing name, ensure uniqueness per owner (ignore deleted stores)
+    if (name !== undefined) {
+      const normalizedName = String(name).trim();
+
+      if (normalizedName.length === 0) {
+        return res.status(400).json(
+          buildValidationErrorResponse([{ field: "name", message: "Tên cửa hàng không được để trống" }])
+        );
+      }
+
+      const existingSameName = await Store.findOne({
+        owner_id: userId,
+        deleted: false,
+        _id: { $ne: store._id },
+        name: { $regex: new RegExp(`^${escapeRegex(normalizedName)}$`, "i") },
+      })
+        .select("_id")
+        .lean();
+
+      if (existingSameName) {
+        return res.status(400).json(
+          buildValidationErrorResponse([
+            { field: "name", message: "Tên cửa hàng đã tồn tại trong các cửa hàng của bạn" },
+          ])
+        );
+      }
+    }
+
+    // NOTE: Do not check duplicate addresses here. Name uniqueness per owner is enforced above.
+
     if (name !== undefined) store.name = String(name).trim();
-    if (address !== undefined) store.address = String(address).trim();
+    if (address !== undefined) {
+      store.address = String(address || "")
+        .trim()
+        .replace(/\s+/g, " ");
+    }
     if (phone !== undefined) store.phone = String(phone).trim();
     if (description !== undefined) store.description = String(description).trim();
     if (imageUrl !== undefined) store.imageUrl = imageUrl;
-    if (tags !== undefined) store.tags = Array.isArray(tags) ? tags.map((t) => String(t).trim()) : [];
-    if (staff_ids !== undefined) store.staff_ids = Array.isArray(staff_ids) ? staff_ids : [];
+    if (tags !== undefined) {
+      store.tags = Array.isArray(tags)
+        ? Array.from(new Set(tags.map((t) => String(t).trim()).filter((t) => t.length > 0)))
+        : [];
+    }
+    if (staff_ids !== undefined) {
+      store.staff_ids = Array.isArray(staff_ids)
+        ? Array.from(new Set(staff_ids.map((id) => String(id))))
+        : [];
+    }
     if (location !== undefined) store.location = location;
     if (openingHours !== undefined) store.openingHours = openingHours;
-    if (isDefault !== undefined) store.isDefault = !!isDefault;
+    if (isDefault !== undefined) store.isDefault = isDefault === true;
 
     await store.save();
 
