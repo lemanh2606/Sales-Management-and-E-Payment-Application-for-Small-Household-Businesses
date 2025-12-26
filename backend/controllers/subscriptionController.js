@@ -724,7 +724,7 @@ const clearPendingPayment = async (req, res) => {
           {
             // luôn update thành FAILED (bạn có thể map FAILED -> "Đã hủy" ở UI)
             $set: {
-              status: "FAILED",
+              status: "CANCELLED",
               updatedAt: new Date(),
               notes: `Giao dịch bị hủy - PayOS (${pendingOrderCode})`,
             },

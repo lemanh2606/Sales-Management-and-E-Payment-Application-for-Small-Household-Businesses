@@ -31,6 +31,267 @@ const genXKCode = () => {
 // ============= CREATE ORDER - Tạo đơn hàng mới =============
 // POST /api/orders - Tạo đơn hàng mới (paid + xuất kho POSTED)
 
+// const createOrder = async (req, res) => {
+//   const session = await mongoose.startSession();
+//   session.startTransaction();
+
+//   try {
+//     const {
+//       employeeId: clientEmployeeId,
+//       storeId: bodyStoreId,
+//       customerInfo,
+//       items,
+//       paymentMethod,
+//       isVATInvoice,
+//       vatInfo,
+//       usedPoints,
+//       warehouseId,
+//     } = req.body;
+
+//     const userId = req.user?.id || req.user?._id;
+
+//     // 1. VALIDATE STORE
+//     const storeId =
+//       bodyStoreId ||
+//       req.store?._id?.toString() ||
+//       req.store?.id ||
+//       req.user?.current_store?.toString() ||
+//       null;
+
+//     if (!storeId) throw new Error("Thiếu thông tin Store ID (Cửa hàng)");
+
+//     // 2. VALIDATE PAYMENT METHOD
+//     const validMethods = ["cash", "qr"];
+//     if (!paymentMethod || !validMethods.includes(paymentMethod)) {
+//       throw new Error(
+//         `Phương thức thanh toán '${paymentMethod}' không hợp lệ. Chỉ chấp nhận: cash, qr`
+//       );
+//     }
+
+//     if (!Array.isArray(items) || items.length === 0)
+//       throw new Error("Hóa đơn chưa có sản phẩm");
+
+//     // 3. XỬ LÝ KHO (Ưu tiên kho FE gửi -> Kho mặc định)
+//     let explicitWarehouse = null;
+//     if (warehouseId && mongoose.isValidObjectId(warehouseId)) {
+//       explicitWarehouse = await Warehouse.findOne({
+//         _id: warehouseId,
+//         store_id: storeId,
+//       }).lean();
+//     }
+
+//     // Fallback: Lấy kho đầu tiên còn hoạt động
+//     if (!explicitWarehouse) {
+//       explicitWarehouse = await Warehouse.findOne({
+//         store_id: storeId,
+//         isDeleted: false,
+//       }).lean();
+//     }
+
+//     // Fallback cuối cùng để tránh lỗi null access
+//     if (!explicitWarehouse) {
+//       explicitWarehouse = { _id: null, name: "" };
+//     }
+
+//     let total = 0;
+//     const validatedOrderItems = [];
+//     const voucherItems = [];
+
+//     // 4. LOOP ITEMS & TRỪ KHO
+//     for (const item of items) {
+//       const quantity = Number(item.quantity);
+//       if (!quantity || quantity <= 0)
+//         throw new Error(`Số lượng sản phẩm không hợp lệ: ${item.quantity}`);
+
+//       // Lock sản phẩm
+//       const prod = await Product.findOne({
+//         _id: item.productId,
+//         store_id: storeId,
+//         isDeleted: { $ne: true },
+//         status: "Đang kinh doanh",
+//       }).session(session);
+
+//       if (!prod) throw new Error(`Sản phẩm ID ${item.productId} không tồn tại`);
+
+//       // CHECK TỒN KHO
+//       const stockQty = Number(prod.stock_quantity || 0);
+//       if (stockQty < quantity) {
+//         throw new Error(
+//           `Sản phẩm "${prod.name}" không đủ tồn kho (Còn: ${stockQty}, Cần: ${quantity})`
+//         );
+//       }
+
+//       // === TRỪ TỒN KHO NGAY LẬP TỨC ===
+//       prod.stock_quantity = stockQty - quantity;
+//       await prod.save({ session });
+
+//       // TÍNH GIÁ
+//       let priceAtTime = Number(prod.price);
+//       if (item.saleType === "AT_COST") priceAtTime = Number(prod.cost_price);
+//       else if (item.saleType === "FREE") priceAtTime = 0;
+//       else if (item.saleType === "VIP" && item.customPrice)
+//         priceAtTime = Number(item.customPrice);
+
+//       const subtotal = priceAtTime * quantity;
+//       total += subtotal;
+
+//       // Xác định kho cho item này
+//       const itemWhId =
+//         explicitWarehouse._id || prod.default_warehouse_id || null;
+//       const itemWhName =
+//         explicitWarehouse.name || prod.default_warehouse_name || "";
+
+//       // Data cho OrderItem
+//       validatedOrderItems.push({
+//         productId: prod._id,
+//         quantity,
+//         priceAtTime: priceAtTime.toFixed(2),
+//         subtotal: subtotal.toFixed(2),
+//         sku_snapshot: prod.sku || "",
+//         name_snapshot: prod.name || "",
+//         unit_snapshot: prod.unit || "",
+//         cost_price_snapshot: prod.cost_price,
+//         warehouse_id: itemWhId,
+//         warehouse_name: itemWhName,
+//       });
+
+//       // Data cho Voucher (dùng giá vốn unit_cost)
+//       voucherItems.push({
+//         product_id: prod._id,
+//         sku_snapshot: prod.sku || "",
+//         name_snapshot: prod.name || "",
+//         unit_snapshot: prod.unit || "",
+//         qty_document: quantity,
+//         qty_actual: quantity,
+//         unit_cost: prod.cost_price || 0,
+//         warehouse_id: itemWhId,
+//         warehouse_name: itemWhName,
+//         note: "Bán hàng",
+//       });
+//     }
+
+//     // 5. VAT & TOTAL
+//     const totalString = total.toFixed(2);
+//     let vatAmountStr = "0";
+//     let beforeTaxStr = totalString;
+
+//     if (isVATInvoice) {
+//       const vat = total * 0.1;
+//       vatAmountStr = vat.toFixed(2);
+//       beforeTaxStr = (total - vat).toFixed(2);
+//     }
+
+//     // 6. CUSTOMER & EMPLOYEE
+//     let customer = null;
+//     let receiverName = "Khách lẻ";
+//     if (customerInfo?.phone) {
+//       const phone = customerInfo.phone.trim();
+//       customer = await Customer.findOne({ phone, storeId }).session(session);
+//       if (!customer) {
+//         customer = await new Customer({
+//           name: customerInfo.name || phone,
+//           phone,
+//           storeId,
+//         }).save({ session });
+//       }
+//       receiverName = customer.name;
+//     }
+
+//     let finalEmployeeId = null;
+//     let delivererName = "Admin";
+
+//     if (req.user?.role === "STAFF") {
+//       const emp = await Employee.findOne({
+//         user_id: req.user._id,
+//         store_id: storeId,
+//       }).lean();
+
+//       // Cho phép null nếu staff chưa map employee (tuỳ nghiệp vụ), ở đây throw error cho chặt
+//       if (!emp)
+//         throw new Error(
+//           "Tài khoản nhân viên chưa được liên kết hồ sơ Employee"
+//         );
+
+//       finalEmployeeId = emp._id;
+//       delivererName = emp.fullName;
+//     } else {
+//       finalEmployeeId = clientEmployeeId || null;
+//       delivererName = req.user?.fullname || "Quản trị viên";
+//     }
+
+//     // 7. SAVE ORDER
+//     const order = await new Order({
+//       storeId,
+//       employeeId: finalEmployeeId,
+//       customer: customer?._id || null,
+//       totalAmount: totalString,
+//       paymentMethod,
+//       isVATInvoice: !!isVATInvoice,
+//       vatInfo,
+//       vatAmount: vatAmountStr,
+//       beforeTaxAmount: beforeTaxStr,
+//       usedPoints: usedPoints || 0,
+//       status: "pending", // Mặc định PAID vì đã trừ kho và hoàn tất
+//     }).save({ session });
+
+//     // 8. SAVE ORDER ITEMS
+//     for (const it of validatedOrderItems) {
+//       await new OrderItem({ orderId: order._id, ...it }).save({ session });
+//     }
+
+//     // 9. SAVE INVENTORY VOUCHER (POSTED - ĐÃ GHI SỔ)
+//     const voucher = await new InventoryVoucher({
+//       store_id: storeId,
+//       type: "OUT",
+//       status: "POSTED", // Đã ghi sổ
+//       voucher_code: genXKCode(),
+//       voucher_date: new Date(),
+//       document_place: "Tại quầy",
+//       reason: "Xuất bán hàng",
+//       note: `Đơn hàng: ${order._id}`,
+
+//       ref_type: "ORDER",
+//       ref_id: order._id,
+//       ref_no: order._id.toString(),
+//       ref_date: order.createdAt,
+
+//       // Header Info (Lấy từ item đầu hoặc kho xác định)
+//       warehouse_id: explicitWarehouse._id,
+//       warehouse_name: explicitWarehouse.name,
+
+//       deliverer_name: delivererName,
+//       receiver_name: receiverName,
+//       partner_name: customer?.name || "Khách lẻ",
+//       partner_phone: customer?.phone || "",
+
+//       created_by: userId,
+//       items: voucherItems,
+//     }).save({ session });
+
+//     // Link lại
+//     order.inventory_voucher_id = voucher._id;
+//     await order.save({ session });
+
+//     await session.commitTransaction();
+//     session.endSession();
+
+//     return res.status(201).json({
+//       message: "Tạo đơn hàng và xuất kho thành công",
+//       order,
+//       inventoryVoucher: {
+//         _id: voucher._id,
+//         voucher_code: voucher.voucher_code,
+//         status: voucher.status,
+//       },
+//     });
+//   } catch (err) {
+//     await session.abortTransaction();
+//     session.endSession();
+//     console.error("Create Order Error:", err);
+//     return res.status(400).json({ message: err.message, details: err.errors });
+//   }
+// };
+
 const createOrder = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -50,7 +311,7 @@ const createOrder = async (req, res) => {
 
     const userId = req.user?.id || req.user?._id;
 
-    // 1. VALIDATE STORE
+    // ================= 1. STORE =================
     const storeId =
       bodyStoreId ||
       req.store?._id?.toString() ||
@@ -58,237 +319,231 @@ const createOrder = async (req, res) => {
       req.user?.current_store?.toString() ||
       null;
 
-    if (!storeId) throw new Error("Thiếu thông tin Store ID (Cửa hàng)");
+    if (!storeId) throw new Error("Thiếu Store ID");
 
-    // 2. VALIDATE PAYMENT METHOD
-    const validMethods = ["cash", "qr"];
-    if (!paymentMethod || !validMethods.includes(paymentMethod)) {
-      throw new Error(
-        `Phương thức thanh toán '${paymentMethod}' không hợp lệ. Chỉ chấp nhận: cash, qr`
-      );
+    if (!["cash", "qr"].includes(paymentMethod)) {
+      throw new Error("Phương thức thanh toán chỉ hỗ trợ cash | qr");
     }
 
-    if (!Array.isArray(items) || items.length === 0)
+    if (!Array.isArray(items) || items.length === 0) {
       throw new Error("Hóa đơn chưa có sản phẩm");
+    }
 
-    // 3. XỬ LÝ KHO (Ưu tiên kho FE gửi -> Kho mặc định)
-    let explicitWarehouse = null;
+    // ================= 2. WAREHOUSE =================
+    let warehouse = null;
     if (warehouseId && mongoose.isValidObjectId(warehouseId)) {
-      explicitWarehouse = await Warehouse.findOne({
+      warehouse = await Warehouse.findOne({
         _id: warehouseId,
         store_id: storeId,
       }).lean();
     }
 
-    // Fallback: Lấy kho đầu tiên còn hoạt động
-    if (!explicitWarehouse) {
-      explicitWarehouse = await Warehouse.findOne({
+    if (!warehouse) {
+      warehouse = await Warehouse.findOne({
         store_id: storeId,
         isDeleted: false,
       }).lean();
     }
 
-    // Fallback cuối cùng để tránh lỗi null access
-    if (!explicitWarehouse) {
-      explicitWarehouse = { _id: null, name: "" };
+    if (!warehouse) {
+      warehouse = { _id: null, name: "" };
     }
 
+    // ================= 3. ITEMS + STOCK =================
     let total = 0;
-    const validatedOrderItems = [];
+    const orderItems = [];
     const voucherItems = [];
 
-    // 4. LOOP ITEMS & TRỪ KHO
     for (const item of items) {
-      const quantity = Number(item.quantity);
-      if (!quantity || quantity <= 0)
-        throw new Error(`Số lượng sản phẩm không hợp lệ: ${item.quantity}`);
+      const qty = Number(item.quantity);
+      if (!qty || qty <= 0) throw new Error("Số lượng không hợp lệ");
 
-      // Lock sản phẩm
       const prod = await Product.findOne({
         _id: item.productId,
         store_id: storeId,
-        isDeleted: { $ne: true },
         status: "Đang kinh doanh",
+        isDeleted: { $ne: true },
       }).session(session);
 
-      if (!prod) throw new Error(`Sản phẩm ID ${item.productId} không tồn tại`);
+      if (!prod) throw new Error("Sản phẩm không tồn tại");
 
-      // CHECK TỒN KHO
-      const stockQty = Number(prod.stock_quantity || 0);
-      if (stockQty < quantity) {
-        throw new Error(
-          `Sản phẩm "${prod.name}" không đủ tồn kho (Còn: ${stockQty}, Cần: ${quantity})`
-        );
+      if (prod.stock_quantity < qty) {
+        throw new Error(`Không đủ tồn kho: ${prod.name}`);
       }
 
-      // === TRỪ TỒN KHO NGAY LẬP TỨC ===
-      prod.stock_quantity = stockQty - quantity;
+      // TRỪ KHO NGAY
+      prod.stock_quantity -= qty;
       await prod.save({ session });
 
-      // TÍNH GIÁ
-      let priceAtTime = Number(prod.price);
-      if (item.saleType === "AT_COST") priceAtTime = Number(prod.cost_price);
-      else if (item.saleType === "FREE") priceAtTime = 0;
-      else if (item.saleType === "VIP" && item.customPrice)
-        priceAtTime = Number(item.customPrice);
+      // PRICE
+      let price = Number(prod.price);
+      if (item.saleType === "AT_COST") price = Number(prod.cost_price);
+      if (item.saleType === "FREE") price = 0;
+      if (item.saleType === "VIP" && item.customPrice)
+        price = Number(item.customPrice);
 
-      const subtotal = priceAtTime * quantity;
+      const subtotal = price * qty;
       total += subtotal;
 
-      // Xác định kho cho item này
-      const itemWhId =
-        explicitWarehouse._id || prod.default_warehouse_id || null;
-      const itemWhName =
-        explicitWarehouse.name || prod.default_warehouse_name || "";
-
-      // Data cho OrderItem
-      validatedOrderItems.push({
+      orderItems.push({
         productId: prod._id,
-        quantity,
-        priceAtTime: priceAtTime.toFixed(2),
+        quantity: qty,
+        priceAtTime: price.toFixed(2),
         subtotal: subtotal.toFixed(2),
-        sku_snapshot: prod.sku || "",
-        name_snapshot: prod.name || "",
-        unit_snapshot: prod.unit || "",
+        name_snapshot: prod.name,
+        sku_snapshot: prod.sku,
+        unit_snapshot: prod.unit,
         cost_price_snapshot: prod.cost_price,
-        warehouse_id: itemWhId,
-        warehouse_name: itemWhName,
+        warehouse_id: warehouse._id,
+        warehouse_name: warehouse.name,
       });
 
-      // Data cho Voucher (dùng giá vốn unit_cost)
       voucherItems.push({
         product_id: prod._id,
-        sku_snapshot: prod.sku || "",
-        name_snapshot: prod.name || "",
-        unit_snapshot: prod.unit || "",
-        qty_document: quantity,
-        qty_actual: quantity,
-        unit_cost: prod.cost_price || 0,
-        warehouse_id: itemWhId,
-        warehouse_name: itemWhName,
+        name_snapshot: prod.name,
+        sku_snapshot: prod.sku,
+        unit_snapshot: prod.unit,
+        qty_document: qty,
+        qty_actual: qty,
+        unit_cost: prod.cost_price,
+        warehouse_id: warehouse._id,
+        warehouse_name: warehouse.name,
         note: "Bán hàng",
       });
     }
 
-    // 5. VAT & TOTAL
-    const totalString = total.toFixed(2);
-    let vatAmountStr = "0";
-    let beforeTaxStr = totalString;
+    // ================= 4. VAT =================
+    let vatAmount = "0";
+    let beforeTax = total.toFixed(2);
 
     if (isVATInvoice) {
       const vat = total * 0.1;
-      vatAmountStr = vat.toFixed(2);
-      beforeTaxStr = (total - vat).toFixed(2);
+      vatAmount = vat.toFixed(2);
+      beforeTax = (total - vat).toFixed(2);
     }
 
-    // 6. CUSTOMER & EMPLOYEE
+    // ================= 5. CUSTOMER =================
     let customer = null;
-    let receiverName = "Khách lẻ";
     if (customerInfo?.phone) {
-      const phone = customerInfo.phone.trim();
-      customer = await Customer.findOne({ phone, storeId }).session(session);
+      customer = await Customer.findOne({
+        phone: customerInfo.phone.trim(),
+        storeId,
+      }).session(session);
+
       if (!customer) {
         customer = await new Customer({
-          name: customerInfo.name || phone,
-          phone,
+          name: customerInfo.name || customerInfo.phone,
+          phone: customerInfo.phone,
           storeId,
         }).save({ session });
       }
-      receiverName = customer.name;
     }
 
+    // ================= 6. EMPLOYEE =================
     let finalEmployeeId = null;
-    let delivererName = "Admin";
-
     if (req.user?.role === "STAFF") {
       const emp = await Employee.findOne({
         user_id: req.user._id,
         store_id: storeId,
-      }).lean();
-
-      // Cho phép null nếu staff chưa map employee (tuỳ nghiệp vụ), ở đây throw error cho chặt
-      if (!emp)
-        throw new Error(
-          "Tài khoản nhân viên chưa được liên kết hồ sơ Employee"
-        );
-
+      });
+      if (!emp) throw new Error("Staff chưa map Employee");
       finalEmployeeId = emp._id;
-      delivererName = emp.fullName;
     } else {
       finalEmployeeId = clientEmployeeId || null;
-      delivererName = req.user?.fullname || "Quản trị viên";
     }
 
-    // 7. SAVE ORDER
+    // ================= 7. CREATE ORDER =================
     const order = await new Order({
       storeId,
       employeeId: finalEmployeeId,
       customer: customer?._id || null,
-      totalAmount: totalString,
+      totalAmount: total.toFixed(2),
       paymentMethod,
-      isVATInvoice: !!isVATInvoice,
+      isVATInvoice,
       vatInfo,
-      vatAmount: vatAmountStr,
-      beforeTaxAmount: beforeTaxStr,
+      vatAmount,
+      beforeTaxAmount: beforeTax,
       usedPoints: usedPoints || 0,
-      status: "paid", // Mặc định PAID vì đã trừ kho và hoàn tất
+      status: "pending",
     }).save({ session });
 
-    // 8. SAVE ORDER ITEMS
-    for (const it of validatedOrderItems) {
+    for (const it of orderItems) {
       await new OrderItem({ orderId: order._id, ...it }).save({ session });
     }
 
-    // 9. SAVE INVENTORY VOUCHER (POSTED - ĐÃ GHI SỔ)
+    // ================= 8. INVENTORY VOUCHER =================
     const voucher = await new InventoryVoucher({
       store_id: storeId,
       type: "OUT",
-      status: "POSTED", // Đã ghi sổ
+      status: "POSTED",
       voucher_code: genXKCode(),
       voucher_date: new Date(),
-      document_place: "Tại quầy",
       reason: "Xuất bán hàng",
-      note: `Đơn hàng: ${order._id}`,
-
       ref_type: "ORDER",
       ref_id: order._id,
-      ref_no: order._id.toString(),
-      ref_date: order.createdAt,
-
-      // Header Info (Lấy từ item đầu hoặc kho xác định)
-      warehouse_id: explicitWarehouse._id,
-      warehouse_name: explicitWarehouse.name,
-
-      deliverer_name: delivererName,
-      receiver_name: receiverName,
-      partner_name: customer?.name || "Khách lẻ",
-      partner_phone: customer?.phone || "",
-
+      warehouse_id: warehouse._id,
+      warehouse_name: warehouse.name,
       created_by: userId,
       items: voucherItems,
     }).save({ session });
 
-    // Link lại
     order.inventory_voucher_id = voucher._id;
+
+    // ================= 9. QR PAYMENT =================
+    let qrData = null;
+    let bankInfo = null;
+
+    if (paymentMethod === "qr") {
+      const paymentConfig = await StorePaymentConfig.findOne({
+        store: storeId,
+      }).session(session);
+
+      if (!paymentConfig || !paymentConfig.banks.length) {
+        throw new Error("Chưa cấu hình ngân hàng QR");
+      }
+
+      const bank = paymentConfig.banks.find((b) => b.isDefault);
+      if (!bank) throw new Error("Chưa có ngân hàng mặc định");
+
+      const amount = Math.round(total);
+      const desc = `Thanh toan don ${order._id}`;
+
+      const qrUrl = `https://img.vietqr.io/image/${bank.bankCode}-${
+        bank.accountNumber
+      }-compact2.png?amount=${amount}&addInfo=${encodeURIComponent(
+        desc
+      )}&accountName=${encodeURIComponent(bank.accountName)}`;
+
+      order.qrImageUrl = qrUrl;
+      order.qrExpiry = new Date(Date.now() + 15 * 60 * 1000);
+
+      qrData = qrUrl;
+      bankInfo = {
+        bankName: bank.bankName,
+        accountNumber: bank.accountNumber,
+      };
+    }
+
     await order.save({ session });
 
     await session.commitTransaction();
     session.endSession();
 
     return res.status(201).json({
-      message: "Tạo đơn hàng và xuất kho thành công",
+      message: "Tạo đơn hàng thành công",
       order,
+      qrDataURL: qrData,
+      bankInfo,
       inventoryVoucher: {
         _id: voucher._id,
         voucher_code: voucher.voucher_code,
-        status: voucher.status,
       },
     });
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
-    console.error("Create Order Error:", err);
-    return res.status(400).json({ message: err.message, details: err.errors });
+    console.error("CreateOrder Error:", err);
+    return res.status(400).json({ message: err.message });
   }
 };
 
@@ -2176,33 +2431,120 @@ const getOrderStats = async (req, res) => {
     res.status(500).json({ message: "Lỗi server khi lấy thống kê đơn hàng" });
   }
 };
+const genNKCode = () => {
+  const now = new Date();
+  const pad = (n) => n.toString().padStart(2, "0");
 
-// Xóa đơn hàng đang pending
+  return `NK-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(
+    now.getDate()
+  )}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+};
+
+// Hủy đơn pending + hoàn kho + tạo phiếu nhập (IN)
 const deletePendingOrder = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
     const { id } = req.params;
-    // Tìm đơn
-    const order = await Order.findById(id);
+    const userId = req.user?.id || req.user?._id;
+
+    // 1. LẤY ĐƠN
+    const order = await Order.findById(id).session(session);
     if (!order) {
-      return res.status(404).json({
-        message: "Không tìm thấy đơn hàng",
-      });
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({ message: "Không tìm thấy đơn hàng" });
     }
-    // Chỉ cho xoá đơn pending
+
+    // 2. CHỈ HỦY PENDING
     if (order.status !== "pending") {
-      return res.status(400).json({
-        message: "Chỉ có thể xoá đơn hàng ở trạng thái pending",
+      await session.abortTransaction();
+      session.endSession();
+      return res
+        .status(400)
+        .json({ message: "Chỉ có thể hủy đơn ở trạng thái pending" });
+    }
+
+    // 3. LẤY ITEM
+    const orderItems = await OrderItem.find({
+      orderId: order._id,
+    }).session(session);
+
+    if (!orderItems.length) {
+      throw new Error("Không tìm thấy sản phẩm trong đơn");
+    }
+
+    // 4. HOÀN KHO + PREPARE VOUCHER ITEM
+    const voucherItems = [];
+
+    for (const it of orderItems) {
+      const prod = await Product.findById(it.productId).session(session);
+      if (!prod) continue;
+
+      prod.stock_quantity =
+        Number(prod.stock_quantity || 0) + Number(it.quantity || 0);
+
+      await prod.save({ session });
+
+      voucherItems.push({
+        product_id: prod._id,
+        sku_snapshot: it.sku_snapshot || prod.sku || "",
+        name_snapshot: it.name_snapshot || prod.name || "",
+        unit_snapshot: it.unit_snapshot || prod.unit || "",
+        qty_document: it.quantity,
+        qty_actual: it.quantity,
+        unit_cost: it.cost_price_snapshot || prod.cost_price || 0,
+        warehouse_id: it.warehouse_id || null,
+        warehouse_name: it.warehouse_name || "",
+        note: "Hoàn kho do hủy đơn hàng",
       });
     }
-    // Xoá
-    await Order.findByIdAndDelete(id);
+
+    // 5. TẠO PHIẾU NHẬP (IN) – KHÔNG PHỤ THUỘC PHIẾU CŨ
+    const reverseVoucher = await new InventoryVoucher({
+      store_id: order.storeId,
+      type: "IN",
+      status: "POSTED",
+      voucher_code: genNKCode(),
+      voucher_date: new Date(),
+
+      document_place: "Tại quầy",
+      reason: "Hoàn kho do hủy đơn hàng",
+      note: `Hủy đơn hàng #${order._id}`,
+
+      ref_type: "ORDER_CANCEL",
+      ref_id: order._id,
+      ref_no: order._id.toString(),
+      ref_date: new Date(),
+
+      created_by: userId,
+      items: voucherItems,
+    }).save({ session });
+
+    // 6. UPDATE ORDER (KHÔNG DELETE)
+    order.status = "cancelled";
+    order.cancelledAt = new Date();
+    order.reverse_inventory_voucher_id = reverseVoucher._id;
+    await order.save({ session });
+
+    await session.commitTransaction();
+    session.endSession();
+
     return res.json({
-      message: "Xoá đơn pending thành công",
+      message: "Hủy đơn pending & hoàn kho thành công",
+      orderId: order._id,
+      reverseVoucher: {
+        _id: reverseVoucher._id,
+        voucher_code: reverseVoucher.voucher_code,
+      },
     });
   } catch (err) {
-    console.error("Lỗi xoá đơn pending:", err.message);
+    await session.abortTransaction();
+    session.endSession();
+    console.error("Hủy đơn pending lỗi:", err);
     return res.status(500).json({
-      message: "Lỗi server khi xoá đơn hàng",
+      message: err.message || "Lỗi server khi hủy đơn hàng",
     });
   }
 };

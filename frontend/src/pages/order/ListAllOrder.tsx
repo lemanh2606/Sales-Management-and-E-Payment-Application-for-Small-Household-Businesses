@@ -1,6 +1,27 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { Card, Input, Table, Tag, Space, DatePicker, Select, Typography, Spin, Empty, Button, Row, Col } from "antd";
-import { SearchOutlined, FileTextOutlined, ClockCircleOutlined, CheckCircleOutlined, RollbackOutlined, FileExcelOutlined } from "@ant-design/icons";
+import {
+  Card,
+  Input,
+  Table,
+  Tag,
+  Space,
+  DatePicker,
+  Select,
+  Typography,
+  Spin,
+  Empty,
+  Button,
+  Row,
+  Col,
+} from "antd";
+import {
+  SearchOutlined,
+  FileTextOutlined,
+  ClockCircleOutlined,
+  CheckCircleOutlined,
+  RollbackOutlined,
+  FileExcelOutlined,
+} from "@ant-design/icons";
 import axios from "axios";
 import dayjs, { Dayjs } from "dayjs";
 import Swal from "sweetalert2";
@@ -40,7 +61,7 @@ interface Order {
   employeeId: Employee;
   customer?: Customer;
   totalAmount: MongoDecimal;
-  status: "pending" | "paid" | "refunded" | "partially_refunded";
+  status: "pending" | "paid" | "refunded" | "partially_refunded" | "cancelled";
   createdAt: string;
   paymentMethod: string;
   isVATInvoice: boolean;
@@ -64,8 +85,12 @@ const ListAllOrder: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchText, setSearchText] = useState("");
-  const [selectedStatus, setSelectedStatus] = useState<string | undefined>(undefined);
-  const [paymentFilter, setPaymentFilter] = useState<string | undefined>(undefined);
+  const [selectedStatus, setSelectedStatus] = useState<string | undefined>(
+    undefined
+  );
+  const [paymentFilter, setPaymentFilter] = useState<string | undefined>(
+    undefined
+  );
   const [pagination, setPagination] = useState({ current: 1, pageSize: 10 });
   const [pendingModalVisible, setPendingModalVisible] = useState(false);
 
@@ -76,16 +101,38 @@ const ListAllOrder: React.FC = () => {
   const [monthTo, setMonthTo] = useState<string>("");
 
   // Format currency
-  const formatCurrency = (value: MongoDecimal): string => parseFloat(value.$numberDecimal).toLocaleString("vi-VN") + "₫";
+  const formatCurrency = (value: MongoDecimal): string =>
+    parseFloat(value.$numberDecimal).toLocaleString("vi-VN") + "₫";
 
-  const formatDate = (date: string): string => new Date(date).toLocaleString("vi-VN");
+  const formatDate = (date: string): string =>
+    new Date(date).toLocaleString("vi-VN");
 
   const getStatusConfig = (status: string) => {
-    const configs: Record<string, { color: string; icon: React.ReactNode; text: string }> = {
-      pending: { color: "orange", icon: <ClockCircleOutlined />, text: "Chờ Thanh Toán" },
-      paid: { color: "green", icon: <CheckCircleOutlined />, text: "Đã Thanh Toán" },
-      refunded: { color: "red", icon: <RollbackOutlined />, text: "Hoàn Toàn Bộ" },
-      partially_refunded: { color: "volcano", icon: <RollbackOutlined />, text: "Hoàn 1 Phần" },
+    const configs: Record<
+      string,
+      { color: string; icon: React.ReactNode; text: string }
+    > = {
+      pending: {
+        color: "orange",
+        icon: <ClockCircleOutlined />,
+        text: "Chờ Thanh Toán",
+      },
+      paid: {
+        color: "green",
+        icon: <CheckCircleOutlined />,
+        text: "Đã Thanh Toán",
+      },
+      refunded: {
+        color: "red",
+        icon: <RollbackOutlined />,
+        text: "Hoàn Toàn Bộ",
+      },
+      partially_refunded: {
+        color: "volcano",
+        icon: <RollbackOutlined />,
+        text: "Hoàn 1 Phần",
+      },
+      cancelled: { color: "gray", icon: <RollbackOutlined />, text: "Đã Hủy" },
     };
     return configs[status] || configs.pending;
   };
@@ -109,10 +156,13 @@ const ListAllOrder: React.FC = () => {
         params.monthTo = monthTo;
       }
 
-      const res = await axios.get<OrderListResponse>(`${apiUrl}/orders/list-all`, {
-        params,
-        headers,
-      });
+      const res = await axios.get<OrderListResponse>(
+        `${apiUrl}/orders/list-all`,
+        {
+          params,
+          headers,
+        }
+      );
       setOrders(res.data.orders);
     } catch (err: any) {
       Swal.fire({
@@ -174,12 +224,16 @@ const ListAllOrder: React.FC = () => {
   const filteredOrders = orders.filter((order) => {
     const matchSearch = searchText
       ? order._id.toLowerCase().includes(searchText.toLowerCase()) ||
-        order.customer?.name?.toLowerCase().includes(searchText.toLowerCase()) ||
+        order.customer?.name
+          ?.toLowerCase()
+          .includes(searchText.toLowerCase()) ||
         order.customer?.phone?.includes(searchText)
       : true;
 
     const matchStatus = selectedStatus ? order.status === selectedStatus : true;
-    const matchPayment = paymentFilter ? order.paymentMethod === paymentFilter : true;
+    const matchPayment = paymentFilter
+      ? order.paymentMethod === paymentFilter
+      : true;
 
     return matchSearch && matchStatus && matchPayment;
   });
@@ -192,7 +246,11 @@ const ListAllOrder: React.FC = () => {
     }
 
     if (!isReadyToLoad()) {
-      Swal.fire("Cảnh báo", "Vui lòng chọn đủ thông tin kỳ trước khi xuất Excel", "warning");
+      Swal.fire(
+        "Cảnh báo",
+        "Vui lòng chọn đủ thông tin kỳ trước khi xuất Excel",
+        "warning"
+      );
       return;
     }
 
@@ -211,7 +269,9 @@ const ListAllOrder: React.FC = () => {
         responseType: "blob",
       });
 
-      const blob = new Blob([res.data], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const blob = new Blob([res.data], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
       const link = document.createElement("a");
       link.href = window.URL.createObjectURL(blob);
       link.download = `Danh_Sach_Don_Hang_${dayjs().format("DD-MM-YYYY")}.xlsx`;
@@ -236,10 +296,13 @@ const ListAllOrder: React.FC = () => {
         <span style={{ color: "#1890ff", fontWeight: 600 }}>
           {range[0]} – {range[1]}
         </span>{" "}
-        trên tổng số <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> đơn hàng
+        trên tổng số{" "}
+        <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> đơn
+        hàng
       </div>
     ),
-    onChange: (page: number, pageSize: number) => setPagination({ current: page, pageSize }),
+    onChange: (page: number, pageSize: number) =>
+      setPagination({ current: page, pageSize }),
   };
 
   return (
@@ -247,11 +310,22 @@ const ListAllOrder: React.FC = () => {
       <div style={{ minHeight: "100vh" }}>
         <Card style={{ borderRadius: 12, border: "1px solid #8c8c8c" }}>
           {/* HEADER + FILTER ROW 1 */}
-          <Row gutter={[10, 12]} align="bottom" style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "2px solid #e8e8e8" }}>
+          <Row
+            gutter={[10, 12]}
+            align="bottom"
+            style={{
+              marginBottom: 16,
+              paddingBottom: 16,
+              borderBottom: "2px solid #e8e8e8",
+            }}
+          >
             {/* Tên cửa hàng + Mô tả */}
             <Col xs={24} sm={24} md={8} lg={6}>
               <div>
-                <Title level={2} style={{ margin: 0, color: "#1890ff", marginBottom: 4 }}>
+                <Title
+                  level={2}
+                  style={{ margin: 0, color: "#1890ff", marginBottom: 4 }}
+                >
                   {currentStore.name || "Đang tải..."}
                 </Title>
                 <Text style={{ color: "#595959", fontSize: "14px" }}>
@@ -262,11 +336,25 @@ const ListAllOrder: React.FC = () => {
 
             {/* Loại kỳ */}
             <Col xs={12} sm={8} md={4} lg={3}>
-              <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-                <Text strong style={{ marginBottom: 8, minHeight: 22, fontSize: 13 }}>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  height: "100%",
+                }}
+              >
+                <Text
+                  strong
+                  style={{ marginBottom: 8, minHeight: 22, fontSize: 13 }}
+                >
                   Loại kỳ
                 </Text>
-                <Select value={periodType} onChange={setPeriodType} style={{ width: "100%" }} size="middle">
+                <Select
+                  value={periodType}
+                  onChange={setPeriodType}
+                  style={{ width: "100%" }}
+                  size="middle"
+                >
                   <Option value="day">Ngày</Option>
                   <Option value="month">Tháng</Option>
                   <Option value="quarter">Quý</Option>
@@ -279,8 +367,17 @@ const ListAllOrder: React.FC = () => {
             {/* Chọn thời gian - khi không phải custom */}
             {periodType !== "custom" && (
               <Col xs={12} sm={8} md={6} lg={4}>
-                <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-                  <Text strong style={{ marginBottom: 8, minHeight: 22, fontSize: 13 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    height: "100%",
+                  }}
+                >
+                  <Text
+                    strong
+                    style={{ marginBottom: 8, minHeight: 22, fontSize: 13 }}
+                  >
                     {periodType === "day" && "Ngày"}
                     {periodType === "month" && "Tháng"}
                     {periodType === "quarter" && "Quý"}
@@ -294,7 +391,9 @@ const ListAllOrder: React.FC = () => {
                       style={{ width: "100%" }}
                       size="middle"
                       placeholder="Chọn"
-                      onChange={(date) => setPeriodKey(date ? date.format("YYYY-MM-DD") : "")}
+                      onChange={(date) =>
+                        setPeriodKey(date ? date.format("YYYY-MM-DD") : "")
+                      }
                     />
                   )}
 
@@ -305,16 +404,31 @@ const ListAllOrder: React.FC = () => {
                       style={{ width: "100%" }}
                       size="middle"
                       placeholder="Chọn"
-                      onChange={(date) => setPeriodKey(date ? date.format("YYYY-MM") : "")}
+                      onChange={(date) =>
+                        setPeriodKey(date ? date.format("YYYY-MM") : "")
+                      }
                     />
                   )}
 
                   {periodType === "quarter" && (
-                    <Select style={{ width: "100%" }} size="middle" placeholder="Chọn" onChange={(v) => setPeriodKey(v)}>
-                      <Option value={`${dayjs().year()}-Q1`}>Q1/{dayjs().year()}</Option>
-                      <Option value={`${dayjs().year()}-Q2`}>Q2/{dayjs().year()}</Option>
-                      <Option value={`${dayjs().year()}-Q3`}>Q3/{dayjs().year()}</Option>
-                      <Option value={`${dayjs().year()}-Q4`}>Q4/{dayjs().year()}</Option>
+                    <Select
+                      style={{ width: "100%" }}
+                      size="middle"
+                      placeholder="Chọn"
+                      onChange={(v) => setPeriodKey(v)}
+                    >
+                      <Option value={`${dayjs().year()}-Q1`}>
+                        Q1/{dayjs().year()}
+                      </Option>
+                      <Option value={`${dayjs().year()}-Q2`}>
+                        Q2/{dayjs().year()}
+                      </Option>
+                      <Option value={`${dayjs().year()}-Q3`}>
+                        Q3/{dayjs().year()}
+                      </Option>
+                      <Option value={`${dayjs().year()}-Q4`}>
+                        Q4/{dayjs().year()}
+                      </Option>
                     </Select>
                   )}
 
@@ -324,7 +438,9 @@ const ListAllOrder: React.FC = () => {
                       style={{ width: "100%" }}
                       size="middle"
                       placeholder="Chọn"
-                      onChange={(date) => setPeriodKey(date ? date.format("YYYY") : "")}
+                      onChange={(date) =>
+                        setPeriodKey(date ? date.format("YYYY") : "")
+                      }
                     />
                   )}
                 </div>
@@ -334,8 +450,17 @@ const ListAllOrder: React.FC = () => {
             {/* Custom - Từ tháng */}
             {periodType === "custom" && (
               <Col xs={12} sm={8} md={5} lg={4}>
-                <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-                  <Text strong style={{ marginBottom: 8, minHeight: 22, fontSize: 13 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    height: "100%",
+                  }}
+                >
+                  <Text
+                    strong
+                    style={{ marginBottom: 8, minHeight: 22, fontSize: 13 }}
+                  >
                     Từ
                   </Text>
                   <DatePicker
@@ -353,8 +478,17 @@ const ListAllOrder: React.FC = () => {
             {/* Custom - Đến tháng */}
             {periodType === "custom" && (
               <Col xs={12} sm={8} md={5} lg={4}>
-                <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-                  <Text strong style={{ marginBottom: 8, minHeight: 22, fontSize: 13 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    height: "100%",
+                  }}
+                >
+                  <Text
+                    strong
+                    style={{ marginBottom: 8, minHeight: 22, fontSize: 13 }}
+                  >
                     Đến
                   </Text>
                   <DatePicker
@@ -371,38 +505,88 @@ const ListAllOrder: React.FC = () => {
 
             {/* Trạng thái */}
             <Col xs={12} sm={8} md={4} lg={4}>
-              <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-                <Text strong style={{ marginBottom: 8, minHeight: 22, fontSize: 13, textAlign: "center" }}>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  height: "100%",
+                }}
+              >
+                <Text
+                  strong
+                  style={{
+                    marginBottom: 8,
+                    minHeight: 22,
+                    fontSize: 13,
+                    textAlign: "center",
+                  }}
+                >
                   Trạng thái
                 </Text>
-                <Select placeholder="Tất cả" value={selectedStatus} onChange={setSelectedStatus} allowClear size="middle" style={{ width: "100%" }}>
-                  {["pending", "paid", "refunded", "partially_refunded"].map((status) => {
-                    const cfg = getStatusConfig(status);
-                    return (
-                      <Option key={status} value={status}>
-                        <Tag color={cfg.color} icon={cfg.icon}>
-                          {cfg.text}
-                        </Tag>
-                      </Option>
-                    );
-                  })}
+                <Select
+                  placeholder="Tất cả"
+                  value={selectedStatus}
+                  onChange={setSelectedStatus}
+                  allowClear
+                  size="middle"
+                  style={{ width: "100%" }}
+                >
+                  {["pending", "paid", "refunded", "partially_refunded"].map(
+                    (status) => {
+                      const cfg = getStatusConfig(status);
+                      return (
+                        <Option key={status} value={status}>
+                          <Tag color={cfg.color} icon={cfg.icon}>
+                            {cfg.text}
+                          </Tag>
+                        </Option>
+                      );
+                    }
+                  )}
                 </Select>
               </div>
             </Col>
 
             {/* Phương thức */}
             <Col xs={12} sm={8} md={4} lg={3}>
-              <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-                <Text strong style={{ marginBottom: 8, minHeight: 22, fontSize: 13, textAlign: "center" }}>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  height: "100%",
+                }}
+              >
+                <Text
+                  strong
+                  style={{
+                    marginBottom: 8,
+                    minHeight: 22,
+                    fontSize: 13,
+                    textAlign: "center",
+                  }}
+                >
                   Phương thức
                 </Text>
-                <Select placeholder="Tất cả" value={paymentFilter} onChange={setPaymentFilter} allowClear size="middle" style={{ width: "100%" }}>
+                <Select
+                  placeholder="Tất cả"
+                  value={paymentFilter}
+                  onChange={setPaymentFilter}
+                  allowClear
+                  size="middle"
+                  style={{ width: "100%" }}
+                >
                   {["cash", "qr"].map((method) => {
-                    const map: Record<string, { label: string; color: string }> = {
+                    const map: Record<
+                      string,
+                      { label: string; color: string }
+                    > = {
                       cash: { label: "Tiền mặt", color: "green" },
                       qr: { label: "Chuyển khoản", color: "blue" },
                     };
-                    const item = map[method] || { label: method, color: "default" };
+                    const item = map[method] || {
+                      label: method,
+                      color: "default",
+                    };
                     return (
                       <Option key={method} value={method}>
                         <Tag color={item.color}>{item.label}</Tag>
@@ -461,7 +645,9 @@ const ListAllOrder: React.FC = () => {
           ) : filteredOrders.length === 0 ? (
             <Empty
               description={
-                !periodKey && periodType !== "custom" ? "Vui lòng chọn kỳ để xem danh sách đơn hàng" : "Không có đơn hàng nào trong kỳ này"
+                !periodKey && periodType !== "custom"
+                  ? "Vui lòng chọn kỳ để xem danh sách đơn hàng"
+                  : "Không có đơn hàng nào trong kỳ này"
               }
             />
           ) : (
@@ -504,7 +690,12 @@ const ListAllOrder: React.FC = () => {
                   dataIndex: ["employeeId", "fullName"],
                   key: "employee",
                   width: 120,
-                  render: (text) => (text ? <Text style={{ fontSize: 14 }}>{text}</Text> : <Tag color="gold">Chủ bán hàng</Tag>),
+                  render: (text) =>
+                    text ? (
+                      <Text style={{ fontSize: 14 }}>{text}</Text>
+                    ) : (
+                      <Tag color="gold">Chủ bán hàng</Tag>
+                    ),
                 },
                 {
                   title: <span style={{ fontWeight: 600 }}>Phương thức</span>,
@@ -513,11 +704,17 @@ const ListAllOrder: React.FC = () => {
                   align: "center",
                   width: 80,
                   render: (method: string) => {
-                    const map: Record<string, { label: string; color: string }> = {
+                    const map: Record<
+                      string,
+                      { label: string; color: string }
+                    > = {
                       cash: { label: "Tiền mặt", color: "green" },
                       qr: { label: "Chuyển khoản", color: "blue" },
                     };
-                    const item = map[method] || { label: method, color: "default" };
+                    const item = map[method] || {
+                      label: method,
+                      color: "default",
+                    };
                     return <Tag color={item.color}>{item.label}</Tag>;
                   },
                 },
@@ -527,7 +724,8 @@ const ListAllOrder: React.FC = () => {
                   key: "isVATInvoice",
                   align: "center",
                   width: 50,
-                  render: (val) => (val ? <Tag color="blue">Có</Tag> : <Tag>Không</Tag>),
+                  render: (val) =>
+                    val ? <Tag color="blue">Có</Tag> : <Tag>Không</Tag>,
                 },
                 {
                   title: <span style={{ fontWeight: 600 }}>In HĐ</span>,
@@ -535,7 +733,17 @@ const ListAllOrder: React.FC = () => {
                   key: "printCount",
                   align: "center",
                   width: 50,
-                  render: (count) => <Text style={{ fontSize: 14, fontWeight: 600, color: "#52c41a" }}>{count} lần</Text>,
+                  render: (count) => (
+                    <Text
+                      style={{
+                        fontSize: 14,
+                        fontWeight: 600,
+                        color: "#52c41a",
+                      }}
+                    >
+                      {count} lần
+                    </Text>
+                  ),
                 },
                 {
                   title: <span style={{ fontWeight: 600 }}>Tổng Tiền</span>,
@@ -571,7 +779,11 @@ const ListAllOrder: React.FC = () => {
                   align: "center",
                   width: 100,
                   fixed: "right",
-                  render: (date) => <Text style={{ fontSize: 13, color: "#595959" }}>{formatDate(date)}</Text>,
+                  render: (date) => (
+                    <Text style={{ fontSize: 13, color: "#595959" }}>
+                      {formatDate(date)}
+                    </Text>
+                  ),
                 },
               ]}
             />

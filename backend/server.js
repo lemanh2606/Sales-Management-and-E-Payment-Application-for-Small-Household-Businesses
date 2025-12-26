@@ -15,7 +15,7 @@ const notFoundHandler = require("./middlewares/notFoundHandler");
 // Swagger
 const swaggerUi = require("swagger-ui-express");
 const YAML = require("yamljs");
-const swaggerDocument = YAML.load(path.join(__dirname, "swagger.yaml")); // 👈 nhớ tạo file swagger.yaml
+// const swaggerDocument = YAML.load(path.join(__dirname, "swagger.json")); // 👈 nhớ tạo file swagger.yaml
 // --- LOAD MODELS ---
 [
   "Product",
@@ -199,7 +199,7 @@ app.get("/api", (req, res) => {
 });
 
 // --- PHẦN CỦA SWAGGER UI ---
-app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+// app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 // --- PHẦN BÁO LỖI CỦA ERROR HANDLERS ---
 app.use(notFoundHandler);

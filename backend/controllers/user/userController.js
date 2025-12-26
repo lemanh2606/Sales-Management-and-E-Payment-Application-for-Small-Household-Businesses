@@ -104,36 +104,50 @@ const registerManager = async (req, res) => {
   try {
     const { username, email, password, fullname } = req.body;
 
-    // Validate input cơ bản
-    if (!username || !email || !password || fullname === undefined) {
-      return res
-        .status(400)
-        .json({ message: "Thiếu username, email hoặc password" });
+    // ===== VALIDATE INPUT (CHUẨN TEST CASE) =====
+    if (
+      !username?.trim() ||
+      !email?.trim() ||
+      !password?.trim() ||
+      !fullname?.trim()
+    ) {
+      return res.status(400).json({
+        message: "Thiếu username, email, fullname hoặc password",
+      });
     }
+
     if (password.length < 6) {
-      return res.status(400).json({ message: "Password phải ít nhất 6 ký tự" });
+      return res.status(400).json({
+        message: "Password phải ít nhất 6 ký tự",
+      });
     }
 
-    // Kiểm tra unique username/email
-    const existingUser = await User.findOne({ $or: [{ username }, { email }] });
+    // ===== CHECK UNIQUE USERNAME / EMAIL =====
+    const existingUser = await User.findOne({
+      $or: [
+        { username: username.trim() },
+        { email: email.toLowerCase().trim() },
+      ],
+    });
+
     if (existingUser) {
-      return res
-        .status(400)
-        .json({ message: "Username hoặc email đã tồn tại" });
+      return res.status(400).json({
+        message: "Email hoặc username đã tồn tại",
+      });
     }
 
-    // Hash password
+    // ===== HASH PASSWORD =====
     const password_hash = await hashString(password);
 
-    // Sinh OTP và hash
+    // ===== OTP =====
     const otp = generateOTP();
     const otp_hash = await hashString(otp);
     const otp_expires = new Date(Date.now() + OTP_EXPIRE_MINUTES * 60 * 1000);
 
-    // Tạo user MANAGER với menu đầy đủ
+    // ===== CREATE USER =====
     const newUser = new User({
       username: username.trim(),
-      fullname: fullname?.trim() || "",
+      fullname: fullname.trim(),
       password_hash,
       role: "MANAGER",
       email: email.toLowerCase().trim(),
@@ -146,23 +160,24 @@ const registerManager = async (req, res) => {
 
     await newUser.save();
 
-    // Tạo Trial 14 ngày
+    // ===== CREATE TRIAL =====
     try {
       await Subscription.createTrial(newUser._id);
-      console.log(`✅ Đã tạo Trial 14 ngày cho user mới ${newUser.username}`);
     } catch (trialErr) {
-      console.error("⚠️ Không thể tạo trial subscription:", trialErr.message);
+      console.error("⚠️ Trial error:", trialErr.message);
     }
 
-    // Gửi email OTP
+    // ===== SEND OTP EMAIL =====
     await sendVerificationEmail(email, username, otp);
 
-    res
-      .status(201)
-      .json({ message: "Đăng ký thành công, kiểm tra email để xác minh OTP" });
+    return res.status(201).json({
+      message: "Đăng ký thành công, kiểm tra email để xác minh OTP",
+    });
   } catch (err) {
     console.error("Lỗi đăng ký:", err.message);
-    res.status(500).json({ message: "Lỗi server khi đăng ký" });
+    return res.status(500).json({
+      message: "Lỗi server khi đăng ký",
+    });
   }
 };
 
@@ -983,7 +998,10 @@ const updateProfile = async (req, res) => {
 
         if (employeeChanged) {
           await employee.save();
-          console.log("✅ Employee data synced with fullName:", employee.fullName);
+          console.log(
+            "✅ Employee data synced with fullName:",
+            employee.fullName
+          );
         }
       }
     }

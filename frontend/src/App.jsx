@@ -44,7 +44,6 @@ import TopCustomer from "./pages/customer/TopCustomer";
 // Reports
 import ReportDashboard from "./pages/report/ReportDashboard";
 import RevenueReport from "./pages/report/RevenueReport";
-import TaxDeclaration from "./pages/report/TaxDeclaration";
 import TopProductsReport from "./pages/report/TopProductsReport";
 import InventoryReport from "./pages/report/InventoryReport";
 
@@ -70,7 +69,6 @@ import LoyaltySetting from "./pages/loyalty/LoyaltySetting";
 // Orders
 import SidebarPOS from "./pages/order/SidebarPOS";
 import ListAllOrder from "./pages/order/ListAllOrder";
-import OrderReconciliationPage from "./pages/order/OrderReconciliationPage";
 
 /** Utility: Đọc biến user từ localStorage */
 function getStoredUser() {
@@ -304,7 +302,6 @@ function App() {
         {/* ==================== Reports ==================== */}
         <Route path="/reports/dashboard" element={<ProtectedRoute allowedPermissions="reports:financial:view"><ReportDashboard /></ProtectedRoute>} />
         <Route path="/reports/revenue" element={<ProtectedRoute allowedPermissions="reports:revenue:view"><RevenueReport /></ProtectedRoute>} />
-        <Route path="/reports/tax" element={<ProtectedRoute allowedPermissions="tax:preview"><TaxDeclaration /></ProtectedRoute>} />
         <Route path="/reports/top-products" element={<ProtectedRoute allowedPermissions="reports:top-products"><TopProductsReport /></ProtectedRoute>} />
         <Route path="/reports/inventory-reports" element={<ProtectedRoute allowedPermissions="inventory:stock-check:view"><InventoryReport /></ProtectedRoute>} />
 
@@ -327,7 +324,6 @@ function App() {
         {/* ==================== Orders ==================== */}
         <Route path="/orders/pos" element={<ProtectedRoute allowedPermissions="orders:create"><SidebarPOS /></ProtectedRoute>} />
         <Route path="/orders/list" element={<ProtectedRoute allowedPermissions="orders:view"><ListAllOrder /></ProtectedRoute>} />
-        <Route path="/orders/reconciliation" element={<ProtectedRoute allowedRoles={["MANAGER"]}><OrderReconciliationPage /></ProtectedRoute>} />
 
         {/* ==================== Error Pages ==================== */}
         <Route path="/unauthorized" element={<Unauthorized />} />

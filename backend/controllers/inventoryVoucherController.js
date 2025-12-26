@@ -957,10 +957,10 @@ const postInventoryVoucher = async (req, res) => {
         .json({ message: "storeId hoặc voucherId không hợp lệ" });
     }
 
-    // ===== Load voucher (fallback nhiều field store) =====
+    // ===== Load voucher =====
     const doc = await InventoryVoucher.findOne({
       _id: voucherId,
-      $or: [{ storeid: storeId }, { storeId: storeId }, { store_id: storeId }],
+      store_id: storeId, // ✅ FIX: dùng đúng field schema
     }).session(session);
 
     if (!doc) {
@@ -997,7 +997,7 @@ const postInventoryVoucher = async (req, res) => {
         .json({ message: "Phiếu không có items để ghi sổ" });
     }
 
-    // ===== FIX CHÍNH: BẮT BUỘC KHO KHI POST =====
+    // ===== BẮT BUỘC CÓ KHO =====
     if (!doc.warehouse_name || !String(doc.warehouse_name).trim()) {
       await session.abortTransaction();
       session.endSession();
@@ -1007,7 +1007,7 @@ const postInventoryVoucher = async (req, res) => {
       });
     }
 
-    // ===== Business rules khác =====
+    // ===== Business rules =====
     try {
       enforcePostedBusinessRules(doc);
     } catch (e) {
@@ -1016,9 +1016,9 @@ const postInventoryVoucher = async (req, res) => {
       return res.status(e.status || 400).json({ message: e.message });
     }
 
-    // ===== Normalize product id =====
+    // ===== Normalize product ids =====
     const itemProductIds = doc.items
-      .map((it) => it?.productid || it?.product_id)
+      .map((it) => it?.product_id)
       .filter(Boolean);
 
     if (!itemProductIds.length) {
@@ -1026,13 +1026,13 @@ const postInventoryVoucher = async (req, res) => {
       session.endSession();
       return res
         .status(400)
-        .json({ message: "Items không có productid hợp lệ" });
+        .json({ message: "Items không có product_id hợp lệ" });
     }
 
     // ===== Load products =====
     const products = await Product.find({
       _id: { $in: itemProductIds },
-      storeid: storeId,
+      store_id: storeId, // ✅ FIX
       isDeleted: false,
     }).session(session);
 
@@ -1041,25 +1041,25 @@ const postInventoryVoucher = async (req, res) => {
     // ===== Nếu OUT: check tồn kho =====
     if (String(doc.type || "").toUpperCase() === "OUT") {
       for (const it of doc.items) {
-        const pid = it?.productid || it?.product_id;
+        const pid = it.product_id;
         const p = productMap.get(String(pid));
 
         if (!p) {
           await session.abortTransaction();
           session.endSession();
           return res.status(404).json({
-            message: `Không tìm thấy sản phẩm ${pid} trong cửa hàng hoặc đã bị xóa`,
+            message: `Không tìm thấy sản phẩm ${pid} trong cửa hàng`,
           });
         }
 
-        const currentQty = Number(p.stockquantity || 0);
-        const outQty = Number(it.qtyactual ?? it.qty_actual ?? 0);
+        const currentQty = Number(p.stock_quantity || 0); // ✅ FIX
+        const outQty = Number(it.qty_actual || 0);
 
         if (!Number.isFinite(outQty) || outQty <= 0) {
           await session.abortTransaction();
           session.endSession();
           return res.status(400).json({
-            message: `Số lượng xuất không hợp lệ cho sản phẩm ${p.name} (SKU: ${p.sku})`,
+            message: `Số lượng xuất không hợp lệ cho sản phẩm ${p.name}`,
           });
         }
 
@@ -1067,22 +1067,27 @@ const postInventoryVoucher = async (req, res) => {
           await session.abortTransaction();
           session.endSession();
           return res.status(400).json({
-            message: `Không đủ tồn kho cho sản phẩm ${p.name} (SKU: ${p.sku}). Tồn: ${currentQty}, xuất: ${outQty}`,
+            message: `Không đủ tồn kho cho sản phẩm ${p.name}. Tồn: ${currentQty}, xuất: ${outQty}`,
           });
         }
       }
     }
 
-    // ===== bulkWrite cập nhật tồn =====
+    // ===== bulkWrite cập nhật tồn kho =====
     const ops = doc.items.map((it) => {
-      const pid = it?.productid || it?.product_id;
-      const qty = Number(it.qtyactual ?? it.qty_actual ?? 0);
-      const delta = String(doc.type || "").toUpperCase() === "IN" ? qty : -qty;
+      const qty = Number(it.qty_actual || 0);
+      const delta = String(doc.type).toUpperCase() === "IN" ? qty : -qty;
 
       return {
         updateOne: {
-          filter: { _id: pid, storeid: storeId, isDeleted: false },
-          update: { $inc: { stockquantity: delta } },
+          filter: {
+            _id: it.product_id,
+            store_id: storeId, // ✅ FIX
+            isDeleted: false,
+          },
+          update: {
+            $inc: { stock_quantity: delta }, // ✅ FIX QUAN TRỌNG
+          },
         },
       };
     });
@@ -1093,8 +1098,8 @@ const postInventoryVoucher = async (req, res) => {
 
     // ===== Update voucher =====
     doc.status = "POSTED";
-    doc.postedby = userId;
-    doc.postedat = new Date();
+    doc.posted_by = userId; // ✅ FIX đúng field schema
+    doc.posted_at = new Date();
     await doc.save({ session });
 
     await logActivity?.({
@@ -1103,27 +1108,26 @@ const postInventoryVoucher = async (req, res) => {
       action: "post",
       entity: "InventoryVoucher",
       entityId: doc._id,
-      entityName: `Phiếu kho ${doc.vouchercode || doc.voucher_code || doc._id}`,
+      entityName: `Phiếu kho ${doc.voucher_code || doc._id}`,
       req,
-      description: `Ghi sổ phiếu kho ${doc.vouchercode || ""} (${doc.type})`,
+      description: `Ghi sổ phiếu kho ${doc.voucher_code} (${doc.type})`,
     });
 
     await session.commitTransaction();
     session.endSession();
 
-    return res
-      .status(200)
-      .json({ message: "POST phiếu kho thành công", voucher: doc });
+    return res.status(200).json({
+      message: "POST phiếu kho thành công",
+      voucher: doc,
+    });
   } catch (error) {
     try {
       await session.abortTransaction();
       session.endSession();
     } catch (_) {}
 
-    const status = error.status || 500;
-    return res.status(status).json({
+    return res.status(error.status || 500).json({
       message: error.message || "Lỗi server",
-      error: error.message,
     });
   }
 };

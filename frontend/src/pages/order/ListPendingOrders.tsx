@@ -56,7 +56,7 @@ interface Order {
   employeeId: Employee;
   customer?: Customer;
   totalAmount: MongoDecimal;
-  status: "pending" | "paid" | "refunded" | "partially_refunded";
+  status: "pending" | "paid" | "refunded" | "partially_refunded" | "cancelled";
   createdAt: string;
 }
 

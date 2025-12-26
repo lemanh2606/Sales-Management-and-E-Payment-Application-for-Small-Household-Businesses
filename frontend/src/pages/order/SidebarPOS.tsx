@@ -17,7 +17,6 @@ import OrderRefund from "./OrderRefund";
 import OrderTrackingPage from "./OrderTrackingPage";
 import InventoryLookup from "./InventoryLookup";
 import EndOfDayReport from "./EndOfDayReport";
-import OrderPOSReconcileTab from "./OrderPOSReconcileTab";
 
 type PageType =
   | "pos"
@@ -83,8 +82,6 @@ const SidebarPOS: React.FC = () => {
         return <OrderTrackingPage />;
       case "inventory":
         return <InventoryLookup />;
-      case "reconcile":
-        return <OrderPOSReconcileTab />;
       case "endofdayreport":
         return <EndOfDayReport />;
       default:

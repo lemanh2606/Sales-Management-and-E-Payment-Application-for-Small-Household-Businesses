@@ -152,11 +152,6 @@ export default function Sidebar({ onCollapsedChange }) {
             label: <span style={{ fontSize: 13.5 }}> Danh sách đơn hàng</span>,
             permission: "orders:view",
           },
-          // {
-          //   key: "/orders/reconciliation",
-          //   label: <span style={{ fontSize: 13.5 }}>Đối soát hóa đơn</span>,
-          //   permission: "orders:view",
-          // },
         ],
       },
       {
@@ -186,11 +181,6 @@ export default function Sidebar({ onCollapsedChange }) {
             label: <span style={{ fontSize: 13.5 }}>Danh sách nhân viên</span>,
             permission: "employees:view",
           },
-          // {
-          //   key: `/stores/${storeId}/employees/schedule`,
-          //   label: <span style={{ fontSize: 13.5 }}>Lịch làm việc</span>,
-          //   permission: "employees:assign",
-          // },
         ],
       },
       {
@@ -225,11 +215,6 @@ export default function Sidebar({ onCollapsedChange }) {
             label: <span style={{ fontSize: 13.5 }}>Báo cáo tồn kho</span>,
             permission: "inventory:stock-check:view",
           },
-          // {
-          //   key: "/reports/tax",
-          //   label: <span style={{ fontSize: 13.5 }}>Kê khai thuế</span>,
-          //   permission: "tax:preview",
-          // },
           {
             key: "/reports/top-products",
             label: <span style={{ fontSize: 13.5 }}>Top sản phẩm bán chạy</span>,

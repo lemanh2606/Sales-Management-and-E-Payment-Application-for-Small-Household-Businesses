@@ -29,7 +29,7 @@ const orderSchema = new mongoose.Schema(
     qrExpiry: { type: Date, default: null }, // Hết hạn QR 15p (Date.now() + 15*60*1000, chỉ cho qr method, FE countdown)
     status: {
       type: String,
-      enum: ["pending", "paid", "refunded", "partially_refunded"],
+      enum: ["pending", "paid", "refunded", "partially_refunded", "cancelled"],
       default: "pending",
     }, // Trạng thái
     refundId: {
