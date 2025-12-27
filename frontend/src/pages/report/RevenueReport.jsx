@@ -61,6 +61,28 @@ const RevenueReport = () => {
     }).format(num);
   };
 
+  const getExporterNameForFile = () => {
+    try {
+      const user = JSON.parse(localStorage.getItem("user") || "{}") || {};
+      const raw = user.fullname || user.fullName || user.username || user.email || "NguoiDung";
+      return String(raw)
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[\\/:*?\"<>|]/g, "-")
+        .trim()
+        .replace(/\s+/g, "_");
+    } catch {
+      return "NguoiDung";
+    }
+  };
+
+  const getReportNameForFile = () => {
+    if (reportType === REPORT_TYPES.MONTHLY_SUMMARY) return "Bao_cao_tong_hop_theo_thang";
+    if (reportType === REPORT_TYPES.DAILY_PRODUCTS) return "Bao_cao_ban_hang_theo_ngay";
+    if (reportType === REPORT_TYPES.YEARLY_PRODUCTGROUP_PRODUCTS) return "Bao_cao_doanh_thu_hang_nam";
+    return "Bao_cao_doanh_thu_chi_tiet";
+  };
+
   const toNumber = (value) => {
     if (value === null || value === undefined) return 0;
     if (typeof value === "object") {
@@ -205,21 +227,25 @@ const RevenueReport = () => {
       let url = "";
       let fileName = "";
 
+      const exportDate = dayjs().format("DD-MM-YYYY");
+      const exporterName = getExporterNameForFile();
+      const reportName = getReportNameForFile();
+
       if (reportType === REPORT_TYPES.MONTHLY_SUMMARY) {
         const year = selectedYear.year();
         const params = new URLSearchParams({ storeId: currentStore._id, year: String(year), format: "xlsx" });
         url = `${apiUrl}/revenues/export-monthly-summary?${params.toString()}`;
-        fileName = `Bao_Cao_Tong_Hop_Theo_Thang_${year}_${dayjs().format("DD-MM-YYYY")}.xlsx`;
+        fileName = `${reportName}_${exportDate}_${exporterName}.xlsx`;
       } else if (reportType === REPORT_TYPES.DAILY_PRODUCTS) {
         const date = selectedDate.format("YYYY-MM-DD");
         const params = new URLSearchParams({ storeId: currentStore._id, date, format: "xlsx" });
         url = `${apiUrl}/revenues/export-daily-products?${params.toString()}`;
-        fileName = `Bao_Cao_Ban_Hang_Theo_Ngay_${date}_${dayjs().format("DD-MM-YYYY")}.xlsx`;
+        fileName = `${reportName}_${exportDate}_${exporterName}.xlsx`;
       } else if (reportType === REPORT_TYPES.YEARLY_PRODUCTGROUP_PRODUCTS) {
         const year = selectedYear.year();
         const params = new URLSearchParams({ storeId: currentStore._id, year: String(year), format: "xlsx" });
         url = `${apiUrl}/revenues/export-yearly-productgroup-products?${params.toString()}`;
-        fileName = `Bao_Cao_Doanh_Thu_Hang_Nam_${year}_${dayjs().format("DD-MM-YYYY")}.xlsx`;
+        fileName = `${reportName}_${exportDate}_${exporterName}.xlsx`;
       } else {
         // Báo cáo chi tiết kiểu cũ
         if (!periodKey) {
@@ -228,7 +254,8 @@ const RevenueReport = () => {
         }
         const params = new URLSearchParams({ storeId: currentStore._id, periodType, periodKey, format: "xlsx" });
         url = `${apiUrl}/revenues/export?${params.toString()}`;
-        fileName = `Bao_Cao_Doanh_Thu_${periodKey.replace(/-/g, "_")}_${dayjs().format("DD-MM-YYYY")}.xlsx`;
+        // Kì xuất chỉ có nếu là báo cáo chi tiết
+        fileName = `${reportName}_${exportDate}_${exporterName}_${String(periodKey).replace(/[\\/:*?\"<>|]/g, "-")}.xlsx`;
       }
 
       const res = await axios.get(url, {
@@ -310,7 +337,7 @@ const RevenueReport = () => {
       render: (v) => <span style={{ fontSize: 16 }}>{v ? dayjs(v).format("DD/MM/YYYY") : "—"}</span>,
     },
     {
-      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Tổng doanh thu</span>,
+      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Tổng doanh thu (VNĐ)</span>,
       dataIndex: "totalRevenue",
       key: "totalRevenue",
       align: "right",
@@ -359,7 +386,7 @@ const RevenueReport = () => {
       render: (t) => <span style={{ fontSize: 16, fontWeight: 600 }}>{t}</span>,
     },
     {
-      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Tổng doanh thu</span>,
+      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Tổng doanh thu (VNĐ)</span>,
       dataIndex: "totalRevenue",
       key: "totalRevenue",
       align: "right",
@@ -383,7 +410,7 @@ const RevenueReport = () => {
       render: (v, r) => <span style={{ fontSize: 16 }}>{r?.isTotal ? "—" : v ?? 0}</span>,
     },
     {
-      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Doanh thu trung bình / ngày</span>,
+      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Doanh thu trung bình / ngày (VNĐ)</span>,
       dataIndex: "avgRevenuePerDay",
       key: "avgRevenuePerDay",
       align: "right",
@@ -391,7 +418,7 @@ const RevenueReport = () => {
       render: (v, r) => <span style={{ fontSize: 16 }}>{r?.isTotal ? "—" : formatVND(v)}</span>,
     },
     {
-      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>So với tháng trước (+/−)</span>,
+      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>So với tháng trước (+/−) (VNĐ)</span>,
       dataIndex: "diffVsPrevMonth",
       key: "diffVsPrevMonth",
       align: "right",
@@ -430,7 +457,7 @@ const RevenueReport = () => {
     { title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Tên sản phẩm</span>, dataIndex: "productName", key: "productName", width: 240 },
     { title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Mô tả</span>, dataIndex: "productDescription", key: "productDescription", width: 320 },
     {
-      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Đơn giá</span>,
+      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Đơn giá (VNĐ)</span>,
       dataIndex: "unitPrice",
       key: "unitPrice",
       align: "right",
@@ -439,7 +466,7 @@ const RevenueReport = () => {
     },
     { title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Số lượng</span>, dataIndex: "quantity", key: "quantity", align: "right", width: 110 },
     {
-      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Tổng</span>,
+      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Tổng (VNĐ)</span>,
       dataIndex: "grossTotal",
       key: "grossTotal",
       align: "right",
@@ -447,15 +474,7 @@ const RevenueReport = () => {
       render: (v) => <span style={{ fontSize: 16 }}>{formatVND(v)}</span>,
     },
     {
-      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Giảm giá</span>,
-      dataIndex: "discountPercent",
-      key: "discountPercent",
-      align: "right",
-      width: 120,
-      render: (v) => <span style={{ fontSize: 16 }}>{Number(v || 0).toFixed(2)}%</span>,
-    },
-    {
-      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Tổng giảm</span>,
+      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Tổng giảm (VNĐ)</span>,
       dataIndex: "discountAmount",
       key: "discountAmount",
       align: "right",
@@ -463,7 +482,7 @@ const RevenueReport = () => {
       render: (v) => <span style={{ fontSize: 16 }}>{formatVND(v)}</span>,
     },
     {
-      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Thực thu</span>,
+      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Thực thu (VNĐ)</span>,
       dataIndex: "netTotal",
       key: "netTotal",
       align: "right",
