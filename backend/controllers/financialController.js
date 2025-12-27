@@ -4,6 +4,8 @@ const Order = require("../models/Order");
 const OrderItem = mongoose.model("OrderItem");
 const OrderRefund = mongoose.model("OrderRefund");
 const Product = require("../models/Product");
+const InventoryVoucher = require("../models/InventoryVoucher");
+// ❌ DEPRECATED - Không còn sử dụng trong tính toán tài chính:
 const PurchaseOrder = require("../models/PurchaseOrder");
 const PurchaseReturn = require("../models/PurchaseReturn");
 const StockCheck = require("../models/StockCheck");
@@ -71,51 +73,27 @@ const calcFinancialSummary = async ({
   ]);
   let totalVAT = toNumber(vat[0]?.totalVAT);
 
-  // 3️⃣ Chi phí nhập hàng (COGS)
-  //Hiện tại đang để tạm bằng cách tính giá vốn hàng đã bán, lấy từ orderItem ra. Thực chất ❌ KHÔNG ĐƯỢC LẤY: COGS = tổng stock_quantity × cost_price
-  //Nguyên tắc kế toán tối thiểu: COGS = Tổng (số lượng đã bán × giá vốn tại thời điểm bán món hàng đó).
-  //Code mục 3️⃣ này chỉ làm giả định rằng cost price mặc định cả đời
-  // COGS = Σ(OrderItem.quantity × Product.cost_price)
-  //(giả định cost_price không đổi theo thời gian)
-  const cogsAgg = await mongoose.model("OrderItem").aggregate([
-    // join Order
-    {
-      $lookup: {
-        from: "orders",
-        localField: "orderId",
-        foreignField: "_id",
-        as: "order",
-      },
-    },
-    { $unwind: "$order" },
-
-    // lọc đơn hợp lệ trong kỳ
+  // 3️⃣ Chi phí nhập hàng (COGS - Cost Of Goods Sold)
+  // ✅ CHUẨN: Lấy từ InventoryVoucher loại OUT (xuất) với status POSTED
+  // COGS = Σ(Số lượng xuất × Giá vốn tại thời điểm xuất)
+  // Nguyên tắc: Chỉ tính phần hàng đã xuất trong kỳ báo cáo
+  const cogsAgg = await InventoryVoucher.aggregate([
     {
       $match: {
-        "order.storeId": objectStoreId,
-        "order.status": { $in: ["paid", "partially_refunded"] },
-        "order.printDate": { $gte: start, $lte: end },
+        store_id: objectStoreId,
+        type: "OUT", // Chỉ lấy phiếu xuất
+        status: "POSTED", // Chỉ tính những phiếu đã ghi sổ
+        voucher_date: { $gte: start, $lte: end }, // Trong kỳ báo cáo
       },
     },
-
-    // join Product
-    {
-      $lookup: {
-        from: "products",
-        localField: "productId",
-        foreignField: "_id",
-        as: "product",
-      },
-    },
-    { $unwind: "$product" },
-
-    // tính COGS
+    { $unwind: "$items" }, // Mở rộng items array
     {
       $group: {
         _id: null,
         totalCOGS: {
+          // Tính: Số lượng xuất × Giá vốn (unit_cost từ phiếu xuất)
           $sum: {
-            $multiply: ["$quantity", { $toDecimal: "$product.cost_price" }],
+            $multiply: ["$items.qty_actual", { $toDecimal: "$items.unit_cost" }],
           },
         },
       },
@@ -175,60 +153,53 @@ const calcFinancialSummary = async ({
     (sum, val) => sum + (val || 0),
     0
   );
-  //Tổng chi phí vận hành trước khi cộng thêm phần điều chỉnh và hủy hàng
+  //Tổng chi phí vận hành trước khi cộng thêm phần điều chỉnh và hao hụt hàng
   let operatingCost = totalSalary + totalCommission + totalExtraExpense;
 
-  // 9️⃣ Điều chỉnh tồn kho
-  const adj = await StockCheck.aggregate([
+  // 9️⃣ Hao hụt kho - Từ InventoryVoucher loại OUT (không phải bán hàng)
+  // Bao gồm: Hủy hàng, Thất thoát, Sai sót cân, Quà tặng, v.v.
+  // Công thức: Σ(Số lượng xuất × Giá vốn) cho tất cả OUT vouchers POSTED trong kỳ, trừ phần bán hàng
+  // (Ghi chú: InventoryVoucher OUT xuất phát từ các nguồn: bán hàng Order hoặc các lý do khác)
+  // Vì vậy chúng ta sẽ tính tất cả OUT và trừ đi COGS (bán hàng), phần còn lại là hao hụt
+  const inventoryLossAgg = await InventoryVoucher.aggregate([
     {
       $match: {
         store_id: objectStoreId,
-        status: "Đã cân bằng",
-        check_date: { $gte: start, $lte: end },
+        type: "OUT", // Chỉ lấy phiếu xuất
+        status: "POSTED", // Chỉ tính những phiếu đã ghi sổ
+        voucher_date: { $gte: start, $lte: end }, // Trong kỳ báo cáo
       },
     },
     { $unwind: "$items" },
     {
       $group: {
         _id: null,
-        total: {
+        totalOutValue: {
           $sum: {
-            $multiply: [
-              { $subtract: ["$items.actual_quantity", "$items.book_quantity"] },
-              "$items.cost_price",
-            ],
+            $multiply: ["$items.qty_actual", { $toDecimal: "$items.unit_cost" }],
           },
         },
       },
     },
   ]);
-  let stockAdjustmentValue = toNumber(adj[0]?.total);
 
-  // 🔟 Hàng hóa hủy
-  const disp = await StockDisposal.aggregate([
-    {
-      $match: {
-        store_id: objectStoreId,
-        status: "hoàn thành",
-        disposal_date: { $gte: start, $lte: end },
-      },
-    },
-    { $unwind: "$items" },
-    {
-      $group: {
-        _id: null,
-        total: {
-          $sum: { $multiply: ["$items.quantity", "$items.unit_cost_price"] },
-        },
-      },
-    },
-  ]);
-  let stockDisposalCost = toNumber(disp[0]?.total);
+  let totalOutValue = toNumber(inventoryLossAgg[0]?.totalOutValue);
+  // Hao hụt kho = Tổng OUT - COGS (bán hàng)
+  // Nếu OUT > COGS thì có hao hụt, nếu bằng thì không hao hụt
+  let inventoryLoss = totalOutValue - totalCOGS;
 
   //Cập nhật operatingCost cuối cùng
-  operatingCost += stockDisposalCost;
-  if (stockAdjustmentValue < 0) operatingCost += Math.abs(stockAdjustmentValue);
-  if (stockAdjustmentValue > 0) grossProfit += stockAdjustmentValue;
+  if (inventoryLoss > 0) {
+    // Nếu có hao hụt, thêm vào chi phí vận hành
+    operatingCost += inventoryLoss;
+  }
+  // Nếu inventoryLoss < 0 (OUT < COGS, hiếm xảy ra), bỏ qua
+
+  // ❌ DEPRECATED - Không còn sử dụng:
+  // const adj = await StockCheck.aggregate([...]) → StockCheck không dùng
+  // const disp = await StockDisposal.aggregate([...]) → StockDisposal không dùng
+  let stockAdjustmentValue = 0; // Giữ lại để FE không bị break
+  let stockDisposalCost = 0; // Giữ lại để FE không bị break
 
   // 6️⃣ Lợi nhuận ròng
   const netProfit = grossProfit - operatingCost - totalVAT;
@@ -388,15 +359,18 @@ const calcFinancialSummary = async ({
   return {
     totalRevenue, //doanh thu
     totalVAT, //thuế GTGT
-    totalCOGS, //Chi phí nhập hàng
+    totalCOGS, //Chi phí nhập hàng (bán hàng)
     grossProfit, //lợi nhuận gộp
     operatingCost, //chi phí vận hành
     netProfit, //lợi nhuận ròng
     stockValue, //giá trị tồn kho
     stockValueAtSalePrice, //giá trị tồn kho theo giá bán
-    stockAdjustmentValue, //điều chỉnh tồn kho
-    stockDisposalCost, //hàng hóa hủy
+    inventoryLoss, //hao hụt kho (Tổng OUT - COGS)
+    totalOutValue, //tổng giá trị xuất kho (OUT)
     groupStats: formattedGroupStats, //thống kê nhóm hàng hóa
+    // ❌ DEPRECATED (để FE không break):
+    stockAdjustmentValue, //[DEPRECATED] điều chỉnh tồn kho - không dùng
+    stockDisposalCost, //[DEPRECATED] hàng hóa hủy - không dùng
   };
 };
 

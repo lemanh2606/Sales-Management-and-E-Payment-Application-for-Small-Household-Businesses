@@ -337,7 +337,7 @@ const RevenueReport = () => {
       render: (v) => <span style={{ fontSize: 16 }}>{v ? dayjs(v).format("DD/MM/YYYY") : "—"}</span>,
     },
     {
-      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Tổng doanh thu (VNĐ)</span>,
+      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Tổng doanh thu</span>,
       dataIndex: "totalRevenue",
       key: "totalRevenue",
       align: "right",
@@ -368,7 +368,7 @@ const RevenueReport = () => {
       render: (v) => <span style={{ fontSize: 16 }}>{v ?? 0}</span>,
     },
     {
-      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>TB / hóa đơn</span>,
+      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Giá trị TB/đơn</span>,
       dataIndex: "avgOrderValue",
       key: "avgOrderValue",
       align: "right",
@@ -386,7 +386,7 @@ const RevenueReport = () => {
       render: (t) => <span style={{ fontSize: 16, fontWeight: 600 }}>{t}</span>,
     },
     {
-      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Tổng doanh thu (VNĐ)</span>,
+      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Tổng doanh thu</span>,
       dataIndex: "totalRevenue",
       key: "totalRevenue",
       align: "right",
@@ -410,7 +410,7 @@ const RevenueReport = () => {
       render: (v, r) => <span style={{ fontSize: 16 }}>{r?.isTotal ? "—" : v ?? 0}</span>,
     },
     {
-      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Doanh thu trung bình / ngày (VNĐ)</span>,
+      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Doanh thu trung bình / ngày</span>,
       dataIndex: "avgRevenuePerDay",
       key: "avgRevenuePerDay",
       align: "right",
@@ -418,7 +418,7 @@ const RevenueReport = () => {
       render: (v, r) => <span style={{ fontSize: 16 }}>{r?.isTotal ? "—" : formatVND(v)}</span>,
     },
     {
-      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>So với tháng trước (+/−) (VNĐ)</span>,
+      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>So với tháng trước (+/−)</span>,
       dataIndex: "diffVsPrevMonth",
       key: "diffVsPrevMonth",
       align: "right",
@@ -455,18 +455,29 @@ const RevenueReport = () => {
   const dailyProductColumns = [
     { title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Mã hàng</span>, dataIndex: "sku", key: "sku", width: 140 },
     { title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Tên sản phẩm</span>, dataIndex: "productName", key: "productName", width: 240 },
-    { title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Mô tả</span>, dataIndex: "productDescription", key: "productDescription", width: 320 },
     {
-      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Đơn giá (VNĐ)</span>,
+      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Mô tả</span>,
+      dataIndex: "productDescription",
+      key: "productDescription",
+      width: 320,
+    },
+    {
+      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Đơn giá</span>,
       dataIndex: "unitPrice",
       key: "unitPrice",
       align: "right",
       width: 140,
       render: (v) => <span style={{ fontSize: 16 }}>{formatVND(v)}</span>,
     },
-    { title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Số lượng</span>, dataIndex: "quantity", key: "quantity", align: "right", width: 110 },
     {
-      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Tổng (VNĐ)</span>,
+      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Số lượng</span>,
+      dataIndex: "quantity",
+      key: "quantity",
+      align: "right",
+      width: 110,
+    },
+    {
+      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Tổng</span>,
       dataIndex: "grossTotal",
       key: "grossTotal",
       align: "right",
@@ -474,7 +485,7 @@ const RevenueReport = () => {
       render: (v) => <span style={{ fontSize: 16 }}>{formatVND(v)}</span>,
     },
     {
-      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Tổng giảm (VNĐ)</span>,
+      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Tổng giảm</span>,
       dataIndex: "discountAmount",
       key: "discountAmount",
       align: "right",
@@ -482,7 +493,7 @@ const RevenueReport = () => {
       render: (v) => <span style={{ fontSize: 16 }}>{formatVND(v)}</span>,
     },
     {
-      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Thực thu (VNĐ)</span>,
+      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Thực thu</span>,
       dataIndex: "netTotal",
       key: "netTotal",
       align: "right",
@@ -549,14 +560,14 @@ const RevenueReport = () => {
       title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Loại kỳ</span>,
       dataIndex: "periodType",
       key: "periodType",
-      width: 110,
+      width: 90,
       render: (t) => <span style={{ fontSize: 16 }}>{t || periodType}</span>,
     },
     {
       title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Mã kỳ</span>,
       dataIndex: "periodKey",
       key: "periodKey",
-      width: 130,
+      width: 85,
       render: (t) => <span style={{ fontSize: 16 }}>{t || periodKey}</span>,
     },
     {
@@ -588,11 +599,11 @@ const RevenueReport = () => {
       render: (text) => <span style={{ fontSize: "16px", color: "#595959", fontWeight: "bold" }}>{formatPhone(text)}</span>,
     },
     {
-      title: <span style={{ whiteSpace: "nowrap", fontSize: "16px", fontWeight: 600 }}>Số hoá đơn</span>,
+      title: <span style={{ whiteSpace: "nowrap", fontSize: "16px", fontWeight: 600 }}>Số đơn</span>,
       dataIndex: "countOrders",
       key: "orders",
       align: "center",
-      width: 150,
+      width: 50,
       sorter: (a, b) => a.countOrders - b.countOrders,
       render: (value) => <span style={{ fontSize: "16px", color: "#52c41a", fontWeight: 600 }}>{value}</span>,
     },
@@ -601,14 +612,15 @@ const RevenueReport = () => {
       dataIndex: "totalRevenue",
       key: "revenue",
       align: "right",
+      width: 130,
       sorter: (a, b) => toNumber(a.totalRevenue) - toNumber(b.totalRevenue),
       render: (value) => <span style={{ fontSize: "16px", color: "#1890ff", fontWeight: 600 }}>{formatVND(value)}</span>,
     },
     {
-      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>TB / hóa đơn</span>,
+      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Giá trị TB/đơn</span>,
       key: "avgOrderValue",
       align: "right",
-      width: 170,
+      width: 160,
       sorter: (a, b) => {
         const avga = a.countOrders ? toNumber(a.totalRevenue) / a.countOrders : 0;
         const avgb = b.countOrders ? toNumber(b.totalRevenue) / b.countOrders : 0;
@@ -620,10 +632,10 @@ const RevenueReport = () => {
       },
     },
     {
-      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>% tổng</span>,
+      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>%Tổng</span>,
       key: "sharePct",
       align: "right",
-      width: 120,
+      width: 110,
       sorter: (a, b) => {
         const pa = totalRevenueNum > 0 ? (toNumber(a.totalRevenue) / totalRevenueNum) * 100 : 0;
         const pb = totalRevenueNum > 0 ? (toNumber(b.totalRevenue) / totalRevenueNum) * 100 : 0;
@@ -682,30 +694,26 @@ const RevenueReport = () => {
 
               {/* Loại kỳ */}
               {reportType === REPORT_TYPES.DETAILED_OLD && (
-              <Col xs={24} sm={12} md={8} lg={5}>
-                <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-                  <Text strong style={{ marginBottom: 8, minHeight: 22 }}>
-                    Loại kỳ báo cáo
-                  </Text>
-                  <Select value={periodType} onChange={setPeriodType} style={{ width: "100%" }} size="middle">
-                    <Option value="day">Theo ngày</Option>
-                    <Option value="month">Theo tháng</Option>
-                    <Option value="quarter">Theo quý</Option>
-                    <Option value="year">Theo năm</Option>
-                  </Select>
-                </div>
-              </Col>
+                <Col xs={24} sm={12} md={8} lg={5}>
+                  <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+                    <Text strong style={{ marginBottom: 8, minHeight: 22 }}>
+                      Loại kỳ báo cáo
+                    </Text>
+                    <Select value={periodType} onChange={setPeriodType} style={{ width: "100%" }} size="middle">
+                      <Option value="day">Theo ngày</Option>
+                      <Option value="month">Theo tháng</Option>
+                      <Option value="quarter">Theo quý</Option>
+                      <Option value="year">Theo năm</Option>
+                    </Select>
+                  </div>
+                </Col>
               )}
 
               {/* Chọn kỳ */}
               <Col xs={24} sm={12} md={8} lg={6}>
                 <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
                   <Text strong style={{ marginBottom: 8, minHeight: 22 }}>
-                    {reportType === REPORT_TYPES.DETAILED_OLD
-                      ? "Chọn kỳ"
-                      : reportType === REPORT_TYPES.DAILY_PRODUCTS
-                      ? "Chọn ngày"
-                      : "Chọn năm"}
+                    {reportType === REPORT_TYPES.DETAILED_OLD ? "Chọn kỳ" : reportType === REPORT_TYPES.DAILY_PRODUCTS ? "Chọn ngày" : "Chọn năm"}
                   </Text>
                   {reportType === REPORT_TYPES.DETAILED_OLD ? (
                     <DatePicker
@@ -775,11 +783,7 @@ const RevenueReport = () => {
               {/* Nút xuất file */}
               <Col xs={24} sm={12} md={8} lg={4}>
                 <div style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "flex-end" }}>
-                  <Button
-                    type="primary"
-                    icon={<FileExcelOutlined />}
-                    onClick={handleExportExcel}
-                  >
+                  <Button type="primary" icon={<FileExcelOutlined />} onClick={handleExportExcel}>
                     Xuất Excel
                   </Button>
                 </div>

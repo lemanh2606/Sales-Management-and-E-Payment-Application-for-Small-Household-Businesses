@@ -1155,6 +1155,144 @@ export default function DashboardPage() {
           </Card>
         </div>
 
+        {/* Biểu đồ doanh thu tổng quan - RESPONSIVE */}
+        <div style={{ marginBottom: 24 }}>
+          <Card
+            title={
+              <Space
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  width: "100%",
+                  flexWrap: "wrap",
+                  gap: 8,
+                }}
+              >
+                <Text strong style={{ fontSize: "clamp(13px, 3vw, 15px)" }}>
+                  Biểu đồ doanh thu tháng {dayjs().format("MM/YYYY")}
+                </Text>
+                <Link to="/reports/revenue" style={{ fontSize: "clamp(12px, 3vw, 14px)" }}>
+                  Xem chi tiết
+                </Link>
+              </Space>
+            }
+            style={{ border: "1px solid #8c8c8c", borderRadius: 12 }}
+          >
+            {loadingRevenue ? (
+              <div
+                style={{
+                  height: 200,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Spin tip="Đang tải..." />
+              </div>
+            ) : errorRevenue ? (
+              <Alert type="error" message={errorRevenue} />
+            ) : revenueSummary ? (
+              <div>
+                {revenueSummary.dailyRevenue?.length ? (
+                  <ResponsiveContainer width="100%" height={220} minWidth={280}>
+                    <LineChart data={revenueSummary.dailyRevenue} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f5f5f5" />
+                      <XAxis dataKey="day" tick={{ fontSize: 11 }} />
+                      <YAxis
+                        tick={{ fontSize: 11 }}
+                        tickFormatter={(v) => {
+                          if (v >= 1_000_000_000) return `${(v / 1_000_000_000).toFixed(1)}T`;
+                          if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+                          if (v >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
+                          return v;
+                        }}
+                      />
+                      <RechartsTooltip
+                        formatter={(value: number) =>
+                          new Intl.NumberFormat("vi-VN", {
+                            style: "currency",
+                            currency: "VND",
+                            minimumFractionDigits: 0,
+                          }).format(value)
+                        }
+                        contentStyle={{
+                          fontSize: 12,
+                          borderRadius: 8,
+                          border: "none",
+                          boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+                        }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="revenue"
+                        stroke="#1890ff"
+                        strokeWidth={2.5}
+                        dot={{ fill: "#1890ff", r: 4 }}
+                        activeDot={{ r: 6 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <Text type="secondary" style={{ fontSize: "clamp(12px, 3vw, 14px)" }}>
+                    (Không có dữ liệu theo ngày)
+                  </Text>
+                )}
+
+                <Space direction="vertical" size="small" style={{ marginTop: 16, width: "100%" }}>
+                  <div>
+                    <Text type="secondary" style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
+                      Tổng doanh thu tháng {dayjs().format("MM/YYYY")}
+                    </Text>
+                    <Title
+                      level={4}
+                      style={{
+                        margin: 0,
+                        color: "#1890ff",
+                        fontSize: "clamp(16px, 4vw, 20px)",
+                        wordBreak: "break-word",
+                      }}
+                    >
+                      {new Intl.NumberFormat("vi-VN", {
+                        style: "currency",
+                        currency: "VND",
+                        minimumFractionDigits: 0,
+                      }).format(
+                        typeof revenueSummary.totalRevenue === "object"
+                          ? Number(revenueSummary.totalRevenue.$numberDecimal || 0)
+                          : revenueSummary.totalRevenue
+                      )}
+                    </Title>
+                  </div>
+                  <div>
+                    <Text type="secondary" style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
+                      Số đơn hàng: <b>{revenueSummary.countOrders}</b>
+                      <Popover
+                        title="Chi tiết đơn hàng"
+                        content={
+                          <div style={{ fontSize: 12 }}>
+                            <div>
+                              ✅ Đã hoàn thành: <b>{revenueSummary.completedOrders ?? "—"}</b>
+                            </div>
+                            <div>
+                              ↩️ Hoàn 1 phần: <b>{revenueSummary.partialRefundOrders ?? "—"}</b>
+                            </div>
+                          </div>
+                        }
+                      >
+                        <InfoCircleOutlined style={{ marginLeft: 6, color: "#1677ff", cursor: "pointer" }} />
+                      </Popover>
+                    </Text>
+                  </div>
+                </Space>
+              </div>
+            ) : (
+              <Text type="secondary" style={{ fontSize: "clamp(12px, 3vw, 14px)" }}>
+                Không có dữ liệu
+              </Text>
+            )}
+          </Card>
+        </div>
+
         {/* Top sản phẩm bán chạy - RESPONSIVE TABLE */}
         <div style={{ marginBottom: 24 }}>
           <Card

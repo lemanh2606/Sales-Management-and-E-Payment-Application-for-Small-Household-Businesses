@@ -333,90 +333,99 @@ const ReportDashboard = () => {
             <>
               {/* CHỈ SỐ */}
               <Row gutter={[16, 16]}>
+                {/* Doanh thu */}
                 <Col flex="1 1 20%">
-                  <Card style={{ border: "1px solid #8c8c8c" }}>
-                    <Statistic
-                      title={
-                        <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <span style={{ color: "black" }}>Doanh thu</span>
-                          <AntTooltip title="Doanh thu là tổng số tiền thu được từ việc bán hàng (chưa trừ chi phí).">
-                            <InfoCircleOutlined style={{ color: "#178fff", cursor: "pointer" }} />
-                          </AntTooltip>
-                        </span>
-                      }
-                      value={data.totalRevenue}
-                      formatter={formatVND}
-                      valueStyle={{ color: COLORS.revenue }}
-                    />
-                  </Card>
+                  <AntTooltip title="Doanh thu là tổng số tiền thu được từ việc bán hàng (chưa trừ chi phí).">
+                    <Card style={{ border: "1px solid #8c8c8c", cursor: "pointer" }}>
+                      <Statistic
+                        title={
+                          <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ color: "black" }}>Doanh thu</span>
+                            <InfoCircleOutlined style={{ color: "#178fff" }} />
+                          </span>
+                        }
+                        value={data.totalRevenue}
+                        formatter={formatVND}
+                        valueStyle={{ color: COLORS.revenue }}
+                      />
+                    </Card>
+                  </AntTooltip>
                 </Col>
+
+                {/* Lợi nhuận gộp */}
                 <Col flex="1 1 20%">
-                  <Card style={{ border: "1px solid #8c8c8c" }}>
-                    <Statistic
-                      title={
-                        <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <span style={{ color: "black" }}>Lợi nhuận gộp</span>
-                          <AntTooltip title="Lợi nhuận gộp = Doanh thu − Chi phí nhập hàng(COGS).">
-                            <InfoCircleOutlined style={{ color: "#178fff", cursor: "pointer" }} />
-                          </AntTooltip>
-                        </span>
-                      }
-                      value={data.grossProfit}
-                      formatter={formatVND}
-                      valueStyle={{ color: COLORS.grossProfit }}
-                    />
-                  </Card>
+                  <AntTooltip title="Lợi nhuận gộp = Doanh thu − Chi phí nhập hàng (COGS).">
+                    <Card style={{ border: "1px solid #8c8c8c", cursor: "pointer" }}>
+                      <Statistic
+                        title={
+                          <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ color: "black" }}>Lợi nhuận gộp</span>
+                            <InfoCircleOutlined style={{ color: "#178fff" }} />
+                          </span>
+                        }
+                        value={data.grossProfit}
+                        formatter={formatVND}
+                        valueStyle={{ color: COLORS.grossProfit }}
+                      />
+                    </Card>
+                  </AntTooltip>
                 </Col>
+
+                {/* Chi phí vận hành (giữ nguyên như cũ) */}
                 <Col flex="1 1 20%">
-                  <Card style={{ border: "1px solid #8c8c8c" }}>
-                    <Statistic
-                      title={
-                        <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <span style={{ color: "black" }}>Chi phí vận hành</span>
-                          <AntTooltip title="Chi phí vận hành bao gồm = lương nhân viên + chi phí duy trì hoạt động bên ngoài được nhập ở ô Chi phí ngoài bên trên.">
-                            <InfoCircleOutlined style={{ color: "#178fff", cursor: "pointer" }} />
-                          </AntTooltip>
-                        </span>
-                      }
-                      value={data.operatingCost}
-                      formatter={formatVND}
-                      valueStyle={{ color: COLORS.operatingCost }}
-                    />
-                  </Card>
+                  <AntTooltip title="Chi phí vận hành bao gồm = lương và hoa hồng nhân viên + chi phí duy trì hoạt động bên ngoài được nhập ở ô 'Chi phí ngoài' bên trên.">
+                    <Card style={{ border: "1px solid #8c8c8c", cursor: "pointer" }}>
+                      <Statistic
+                        title={
+                          <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ color: "black" }}>Chi phí vận hành</span>
+                            <InfoCircleOutlined style={{ color: "#178fff" }} />
+                          </span>
+                        }
+                        value={data.operatingCost}
+                        formatter={formatVND}
+                        valueStyle={{ color: COLORS.operatingCost }}
+                      />
+                    </Card>
+                  </AntTooltip>
                 </Col>
+
+                {/* VAT */}
                 <Col flex="1 1 20%">
-                  <Card style={{ border: "1px solid #8c8c8c" }}>
-                    <Statistic
-                      title={
-                        <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <span style={{ color: "black" }}>VAT</span>
-                          <AntTooltip title="Tổng số tiền thuế giá trị gia tăng (VAT) đã thu từ các đơn hàng trong kỳ báo cáo.">
-                            <InfoCircleOutlined style={{ color: "#178fff", cursor: "pointer" }} />
-                          </AntTooltip>
-                        </span>
-                      }
-                      value={data.totalVAT}
-                      formatter={formatVND}
-                      valueStyle={{ color: "#fa8c16" }}
-                    />
-                  </Card>
+                  <AntTooltip title="Tổng số tiền thuế giá trị gia tăng (VAT) đã thu từ các đơn hàng trong kỳ báo cáo.">
+                    <Card style={{ border: "1px solid #8c8c8c", cursor: "pointer" }}>
+                      <Statistic
+                        title={
+                          <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ color: "black" }}>VAT</span>
+                            <InfoCircleOutlined style={{ color: "#178fff" }} />
+                          </span>
+                        }
+                        value={data.totalVAT}
+                        formatter={formatVND}
+                        valueStyle={{ color: "#fa8c16" }}
+                      />
+                    </Card>
+                  </AntTooltip>
                 </Col>
+
+                {/* Lợi nhuận ròng */}
                 <Col flex="1 1 20%">
-                  <Card style={{ border: "1px solid #8c8c8c" }}>
-                    <Statistic
-                      title={
-                        <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <span style={{ color: "black" }}>Lợi nhuận ròng</span>
-                          <AntTooltip title="Lợi nhuận ròng = Lợi nhuận gộp − Chi phí vận hành - Thuế VAT. Đây là số tiền thật sự bạn kiếm được.">
-                            <InfoCircleOutlined style={{ color: "#178fff", cursor: "pointer" }} />
-                          </AntTooltip>
-                        </span>
-                      }
-                      value={data.netProfit}
-                      formatter={formatVND}
-                      valueStyle={{ color: data.netProfit > 0 ? COLORS.netProfit : "#f5222d" }}
-                    />
-                  </Card>
+                  <AntTooltip title="Lợi nhuận ròng = Lợi nhuận gộp − Chi phí vận hành − Thuế VAT. Đây là số tiền thật sự bạn kiếm được.">
+                    <Card style={{ border: "1px solid #8c8c8c", cursor: "pointer" }}>
+                      <Statistic
+                        title={
+                          <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ color: "black" }}>Lợi nhuận ròng</span>
+                            <InfoCircleOutlined style={{ color: "#178fff" }} />
+                          </span>
+                        }
+                        value={data.netProfit}
+                        formatter={formatVND}
+                        valueStyle={{ color: data.netProfit > 0 ? COLORS.netProfit : "#f5222d" }}
+                      />
+                    </Card>
+                  </AntTooltip>
                 </Col>
               </Row>
 
@@ -763,21 +772,28 @@ const ReportDashboard = () => {
                   >
                     <Space direction="vertical" style={{ width: "100%", fontSize: 15 }}>
                       <div>
-                        <strong>VAT:</strong> {formatVND(data.totalVAT)}
-                      </div>
-                      <div>
                         <strong>Chi phí nhập hàng (COGS):</strong> {formatVND(data.totalCOGS)}
                       </div>
                       <div>
-                        <strong>Điều chỉnh tồn kho:</strong> {formatVND(data.stockAdjustmentValue)}
+                        <Popover content="Tổng giá trị tất cả phiếu xuất (OUT) trong kỳ - bao gồm bán hàng + hao hụt">
+                          <strong style={{ cursor: "help" }}>
+                            Tổng xuất kho <InfoCircleOutlined style={{ fontSize: 14, marginLeft: 4 }} />{" "}
+                          </strong>
+                        </Popover>
+                        : {formatVND(data.totalOutValue)}
                       </div>
                       <div>
-                        <strong>Chi phí hàng hóa hủy:</strong> {formatVND(data.stockDisposalCost)}
+                        <Popover content="Hao hụt kho = Tổng xuất - COGS (bán hàng). Bao gồm: Hủy hàng, Thất thoát, Sai sót cân, v.v.">
+                          <strong style={{ cursor: "help", color: data.inventoryLoss > 0 ? "#ff4d4f" : "#52c41a" }}>
+                            Hao hụt kho <InfoCircleOutlined style={{ fontSize: 14, marginLeft: 4 }} />{" "}
+                          </strong>
+                        </Popover>
+                        : <strong style={{ color: data.inventoryLoss > 0 ? "#ff4d4f" : "#52c41a" }}>{formatVND(data.inventoryLoss)}</strong>
                       </div>
 
                       <Divider style={{ margin: "5px 0" }} />
 
-                      {/* Lãi tiềm năng — dạng dòng bình thường */}
+                      {/* Lãi tiềm năng từ tồn kho */}
                       <div>
                         <Popover content="Nếu bán hết hàng tồn kho theo giá bán hiện tại">
                           <strong style={{ cursor: "help", color: "#52c41a" }}>

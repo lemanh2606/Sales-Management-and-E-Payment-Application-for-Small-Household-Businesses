@@ -1,4 +1,4 @@
-// controllers/warehouseController.js
+// backend/controllers/warehouseController.js
 const Warehouse = require("../models/Warehouse");
 const Store = require("../models/Store");
 const logActivity = require("../utils/logActivity"); // ✅ giống loyaltyController

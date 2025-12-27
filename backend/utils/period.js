@@ -13,9 +13,17 @@ function periodToRange(periodType, periodKey, monthFrom, monthTo) {
     start = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0)); // Ngày đầu tháng UTC
     end = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999)); // Ngày cuối tháng UTC + ms 999 inclusive
   } else if (periodType === "quarter") {
-    const [yearStr, quarterStr] = periodKey.split("-Q"); // Parse "2025-Q4" → yearStr "2025", quarterStr "4"
-    const year = Number(yearStr);
-    const q = Number(quarterStr);
+    // periodKey có thể là "Q1" hoặc "2025-Q1"
+    let year, q;
+    if (periodKey.includes("-")) {
+      const [yearStr, quarterStr] = periodKey.split("-Q"); // Parse "2025-Q4" → yearStr "2025", quarterStr "4"
+      year = Number(yearStr);
+      q = Number(quarterStr);
+    } else {
+      // periodKey là "Q1", Q2, etc - use current year
+      year = new Date().getUTCFullYear();
+      q = Number(periodKey.replace("Q", ""));
+    }
 
     const startMonth = (q - 1) * 3; // Q1 = 0, Q2 = 3, Q3 = 6, Q4 = 9
     start = new Date(Date.UTC(year, startMonth, 1, 0, 0, 0)); // Ngày đầu quý UTC

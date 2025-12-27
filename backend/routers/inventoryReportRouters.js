@@ -6,7 +6,7 @@ const {
   checkStoreAccess,
   requirePermission,
 } = require("../middlewares/authMiddleware");
-const { getInventoryReport } = require("../controllers/inventoryReport");
+const { getInventoryReport, getInventoryVarianceReport } = require("../controllers/inventoryReportController");
 
 //server: http://localhost:9999
 // # Tháng 10/2025
@@ -24,13 +24,23 @@ const { getInventoryReport } = require("../controllers/inventoryReport");
 // # Realtime (không kỳ)
 // GET http://localhost:9999/api/inventory-reports?storeId=68f8f19a4d723cad0bda9fa5
 
+// Báo cáo tồn kho hiện tại
 router.get(
   "/",
   verifyToken,
-
   checkStoreAccess,
   requirePermission("inventory:stock-check:view"),
   getInventoryReport
+);
+
+// Báo cáo biến thiên tồn kho
+// GET /api/inventory-reports/variance?storeId=...&fromDate=2025-01-01&toDate=2025-12-31
+router.get(
+  "/variance",
+  verifyToken,
+  checkStoreAccess,
+  requirePermission("inventory:stock-check:view"),
+  getInventoryVarianceReport
 );
 
 module.exports = router;

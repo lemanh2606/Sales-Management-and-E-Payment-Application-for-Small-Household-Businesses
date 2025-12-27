@@ -233,7 +233,7 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
         icon: "success",
         timer: 2000,
         timerProgressBar: true,
-        showConfirmButton: false,
+        showConfirmButton: true,
       });
 
       onSuccess?.();
