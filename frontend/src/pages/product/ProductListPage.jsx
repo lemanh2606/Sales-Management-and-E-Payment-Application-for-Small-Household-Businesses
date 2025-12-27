@@ -474,7 +474,7 @@ export default function ProductListPage() {
           const name = typeof value === "string" ? value : value?.name;
           return (
             <Tag color="blue" style={{ fontSize: "clamp(10px, 2vw, 12px)" }}>
-              {name || "-"}
+              {name || "Trống"}
             </Tag>
           );
         },
