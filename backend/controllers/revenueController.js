@@ -46,13 +46,7 @@ function safeFilePart(value) {
 }
 
 function getExporterNameForFile(req) {
-  return safeFilePart(
-    req?.user?.fullname ||
-      req?.user?.fullName ||
-      req?.user?.name ||
-      req?.user?.username ||
-      req?.user?.email
-  );
+  return safeFilePart(req?.user?.fullname || req?.user?.fullName || req?.user?.name || req?.user?.username || req?.user?.email);
 }
 
 function buildExportFileName({ reportName, req, periodKey }) {
@@ -68,12 +62,7 @@ function buildExportFileName({ reportName, req, periodKey }) {
 }
 
 // ========== HÀM TÍNH DOANH THU – CÓ CẢ HOÀN 1 NỬA partially_refunded ==========
-async function calcRevenueByPeriod({
-  storeId,
-  periodType,
-  periodKey,
-  type = "total",
-}) {
+async function calcRevenueByPeriod({ storeId, periodType, periodKey, type = "total" }) {
   // Chuyển periodType + periodKey (vd: month + 2025-12) thành khoảng ngày [start, end]
   const { start, end } = periodToRange(periodType, periodKey);
 
@@ -116,11 +105,7 @@ async function calcRevenueByPeriod({
           completedOrders: 1,
           partialRefundOrders: 1,
           avgOrderValue: {
-            $cond: [
-              { $gt: ["$countOrders", 0] },
-              { $toDouble: { $divide: ["$totalRevenue", "$countOrders"] } },
-              0,
-            ],
+            $cond: [{ $gt: ["$countOrders", 0] }, { $toDouble: { $divide: ["$totalRevenue", "$countOrders"] } }, 0],
           },
         },
       },
@@ -128,6 +113,34 @@ async function calcRevenueByPeriod({
 
     const result = await Order.aggregate(pipeline);
     const row = result[0] || { totalRevenue: 0, countOrders: 0 };
+    const dailyPipeline = [
+      { $match: baseMatch },
+      {
+        $group: {
+          _id: {
+            day: {
+              $dateToString: {
+                format: "%Y-%m-%d",
+                date: "$createdAt",
+                timezone: "Asia/Ho_Chi_Minh",
+              },
+            },
+          },
+          revenue: { $sum: { $toDecimal: "$totalAmount" } },
+          countOrders: { $sum: 1 },
+        },
+      },
+      { $sort: { "_id.day": 1 } },
+      {
+        $project: {
+          _id: 0,
+          day: "$_id.day",
+          revenue: { $toDouble: "$revenue" },
+          countOrders: 1,
+        },
+      },
+    ];
+    const dailyRevenue = await Order.aggregate(dailyPipeline);
 
     return [
       {
@@ -141,6 +154,8 @@ async function calcRevenueByPeriod({
         completedOrders: row.completedOrders || 0,
         partialRefundOrders: row.partialRefundOrders || 0,
         avgOrderValue: row.avgOrderValue || 0,
+        // ✅ THÊM MỚI – FE xài chart
+        dailyRevenue,
       },
     ];
   }
@@ -165,11 +180,7 @@ async function calcRevenueByPeriod({
         $addFields: {
           totalRevenueDouble: { $toDouble: "$totalRevenue" },
           avgOrderValue: {
-            $cond: [
-              { $gt: ["$countOrders", 0] },
-              { $toDouble: { $divide: ["$totalRevenue", "$countOrders"] } },
-              0,
-            ],
+            $cond: [{ $gt: ["$countOrders", 0] }, { $toDouble: { $divide: ["$totalRevenue", "$countOrders"] } }, 0],
           },
         },
       },
@@ -243,9 +254,7 @@ const getRevenueByEmployee = async (req, res) => {
     res.json({ message: "Báo cáo doanh thu theo nhân viên thành công", data });
   } catch (err) {
     console.error("Lỗi báo cáo doanh thu theo nhân viên:", err.message);
-    res
-      .status(500)
-      .json({ message: "Lỗi server khi báo cáo doanh thu theo nhân viên" });
+    res.status(500).json({ message: "Lỗi server khi báo cáo doanh thu theo nhân viên" });
   }
 };
 
@@ -317,14 +326,10 @@ const exportRevenue = async (req, res) => {
         "Doanh thu (VNĐ)": Number(item.totalRevenueNumber ?? item.totalRevenueDouble ?? item.totalRevenue),
         "Số hóa đơn": item.countOrders,
         "TB / hóa đơn (VNĐ)": Number(item.avgOrderValue || 0),
-        "% tổng doanh thu": totalRevenueForShare > 0
-          ? Number(
-              (
-                (Number(item.totalRevenueNumber ?? item.totalRevenueDouble ?? item.totalRevenue) || 0) /
-                totalRevenueForShare
-              ) * 100
-            ).toFixed(2)
-          : "0.00",
+        "% tổng doanh thu":
+          totalRevenueForShare > 0
+            ? Number(((Number(item.totalRevenueNumber ?? item.totalRevenueDouble ?? item.totalRevenue) || 0) / totalRevenueForShare) * 100).toFixed(2)
+            : "0.00",
       }));
 
       const ws2 = XLSX.utils.json_to_sheet(empSheetData);
@@ -367,10 +372,7 @@ const exportRevenue = async (req, res) => {
       req,
       periodKey: periodKey || "hien_tai",
     });
-    res.setHeader(
-      "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    );
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
     res.send(buffer);
   } catch (err) {
@@ -511,7 +513,7 @@ const exportRevenueSummaryByYear = async (req, res) => {
     // Map theo đúng cột của template
     const sheetData = rows.map((r) => ({
       "Thời gian": r.time,
-      "Năm": r.year,
+      Năm: r.year,
       "Số mặt hàng bán ra": r.itemsSold,
       "Doanh thu (VNĐ)": r.revenue,
     }));
@@ -522,10 +524,7 @@ const exportRevenueSummaryByYear = async (req, res) => {
 
     const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
     const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu_Tong_Hop", req });
-    res.setHeader(
-      "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    );
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
     return res.send(buffer);
   } catch (err) {
@@ -686,26 +685,14 @@ const exportDailyProductSales = async (req, res) => {
     }));
 
     const ws = XLSX.utils.json_to_sheet(sheetData);
-    ws["!cols"] = [
-      { wch: 14 },
-      { wch: 26 },
-      { wch: 34 },
-      { wch: 12 },
-      { wch: 10 },
-      { wch: 14 },
-      { wch: 14 },
-      { wch: 14 },
-    ];
+    ws["!cols"] = [{ wch: 14 }, { wch: 26 }, { wch: 34 }, { wch: 12 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
 
     // Tên sheet Excel bị giới hạn 31 ký tự; dùng tên ngắn để tránh lỗi khi export.
     XLSX.utils.book_append_sheet(wb, ws, "Bán hàng hằng ngày");
 
     const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
     const fileName = buildExportFileName({ reportName: "Bao_Cao_Ban_Hang_Hang_Ngay", req });
-    res.setHeader(
-      "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    );
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
     return res.send(buffer);
   } catch (err) {
@@ -772,7 +759,7 @@ const getYearlyCategoryCompare = async (req, res) => {
       {
         $addFields: {
           groupName: {
-            $ifNull: [{ $arrayElemAt: ["$group.name", 0] }, "(Chưa phân nhóm)"]
+            $ifNull: [{ $arrayElemAt: ["$group.name", 0] }, "(Chưa phân nhóm)"],
           },
           orderYear: { $year: "$order.createdAt" },
           netLine: { $toDouble: "$subtotal" },
@@ -890,10 +877,7 @@ const exportYearlyCategoryCompare = async (req, res) => {
 
     const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
     const fileName = buildExportFileName({ reportName: "So_Sanh_Doanh_So_Hang_Nam", req });
-    res.setHeader(
-      "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    );
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
     return res.send(buffer);
   } catch (err) {
@@ -1047,7 +1031,7 @@ const exportMonthlyRevenueByDay = async (req, res) => {
 
     const wb = XLSX.utils.book_new();
     const sheetData = rows.map((r) => ({
-      "Ngày": r.date,
+      Ngày: r.date,
       "Số đơn": r.orderCount,
       "Số mặt hàng bán ra": r.itemsSold,
       "Doanh thu (VNĐ)": r.revenue,
@@ -1058,10 +1042,7 @@ const exportMonthlyRevenueByDay = async (req, res) => {
 
     const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
     const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu_Theo_Thang", req });
-    res.setHeader(
-      "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    );
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
     return res.send(buffer);
   } catch (err) {
@@ -1325,7 +1306,7 @@ const exportMonthlyRevenueSummary = async (req, res) => {
         return res.status(404).json({ message: "Không có dữ liệu để xuất" });
       }
       const sheetData = rows.map((r) => ({
-        "Tháng": r.monthLabel,
+        Tháng: r.monthLabel,
         "Tổng doanh thu (VNĐ)": safeNumber(r.totalRevenue),
         "Tổng số đơn": safeNumber(r.orderCount),
         "Tổng số sản phẩm bán": safeNumber(r.itemsSold),
@@ -1336,7 +1317,7 @@ const exportMonthlyRevenueSummary = async (req, res) => {
       const totalRevenue = sheetData.reduce((sum, r) => sum + safeNumber(r["Tổng doanh thu (VNĐ)"]), 0);
 
       sheetData.push({
-        "Tháng": "Tổng cộng",
+        Tháng: "Tổng cộng",
         "Tổng doanh thu (VNĐ)": totalRevenue,
         "Tổng số đơn": "",
         "Tổng số sản phẩm bán": "",
@@ -1353,7 +1334,7 @@ const exportMonthlyRevenueSummary = async (req, res) => {
       }
       const sheetData = [
         {
-          "Tháng": row.monthLabel,
+          Tháng: row.monthLabel,
           "Tổng doanh thu (VNĐ)": safeNumber(row.totalRevenue),
           "Tổng số đơn": safeNumber(row.orderCount),
           "Tổng số sản phẩm bán": safeNumber(row.itemsSold),
@@ -1833,7 +1814,7 @@ const getQuarterlyRevenueByCategory = async (req, res) => {
     });
 
     // sort theo tổng actual desc
-    data.sort((a, b) => (b.month1.actual + b.month2.actual + b.month3.actual) - (a.month1.actual + a.month2.actual + a.month3.actual));
+    data.sort((a, b) => b.month1.actual + b.month2.actual + b.month3.actual - (a.month1.actual + a.month2.actual + a.month3.actual));
 
     return res.json({ message: "Báo cáo doanh thu theo quý (theo danh mục)", quarter, months, data });
   } catch (err) {
@@ -1893,10 +1874,7 @@ const exportQuarterlyRevenueByCategory = async (req, res) => {
 
     const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
     const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu_Theo_Quy", req });
-    res.setHeader(
-      "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    );
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
     return res.send(buffer);
   } catch (err) {
@@ -2015,7 +1993,7 @@ const exportYearlyTopProducts = async (req, res) => {
 
     const wb = XLSX.utils.book_new();
     const sheetData = rows.map((r, idx) => ({
-      "STT": idx + 1,
+      STT: idx + 1,
       "Mã hàng": r.sku,
       "Tên sản phẩm": r.name,
       "Số lượng bán": safeNumber(r.itemsSold),
@@ -2028,10 +2006,7 @@ const exportYearlyTopProducts = async (req, res) => {
 
     const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
     const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu_Theo_Nam", req });
-    res.setHeader(
-      "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    );
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
     return res.send(buffer);
   } catch (err) {
