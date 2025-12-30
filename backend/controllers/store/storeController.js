@@ -36,16 +36,26 @@ const validateEmployeeData = (data, isCreate = false) => {
     }
   }
 
-  // Lương cơ bản: không âm (bạn nói đã có, nhưng để chắc chắn)
-  const salary = parseFloat(data.salary);
-  if (isNaN(salary) || salary < 0) {
-    errors.push({ field: "salary", message: "Lương cơ bản không được bỏ trống, phải lớn hơnn 0" });
+  // ✅ Lương cơ bản: nếu có nhập thì phải không âm, không nhập thì OK (default 0)
+  if (data.salary !== undefined && data.salary !== null && data.salary !== "") {
+    const salary = parseFloat(data.salary);
+    if (isNaN(salary) || salary < 0) {
+      errors.push({
+        field: "salary",
+        message: "Lương cơ bản phải là số không âm",
+      });
+    }
   }
 
-  // Hoa hồng (%): không âm, mặc định 0
-  const commission = parseFloat(data.commission_rate || 0);
-  if (isNaN(commission) || commission < 0) {
-    errors.push({ field: "commission_rate", message: "Tỷ lệ hoa hồng phải là số không âm" });
+  // ✅ Hoa hồng (%): nếu có nhập thì phải không âm, không nhập thì OK (default 0)
+  if (data.commission_rate !== undefined && data.commission_rate !== null && data.commission_rate !== "") {
+    const commission = parseFloat(data.commission_rate);
+    if (isNaN(commission) || commission < 0) {
+      errors.push({
+        field: "commission_rate",
+        message: "Tỷ lệ hoa hồng phải là số không âm",
+      });
+    }
   }
 
   return errors;
@@ -103,9 +113,7 @@ const validateStoreData = (data, { isCreate } = { isCreate: false }) => {
     if (!Array.isArray(data.tags)) {
       errors.push({ field: "tags", message: "tags phải là mảng" });
     } else {
-      const cleaned = data.tags
-        .map((t) => String(t).trim())
-        .filter((t) => t.length > 0);
+      const cleaned = data.tags.map((t) => String(t).trim()).filter((t) => t.length > 0);
       const tooLong = cleaned.find((t) => t.length > 50);
       if (tooLong) {
         errors.push({ field: "tags", message: "Mỗi tag tối đa 50 ký tự" });
@@ -156,20 +164,10 @@ const validateStoreData = (data, { isCreate } = { isCreate: false }) => {
       errors.push({ field: "openingHours", message: "openingHours phải là object" });
     } else {
       const hhmm = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
-      if (
-        oh.open !== undefined &&
-        oh.open !== null &&
-        String(oh.open).trim() !== "" &&
-        !hhmm.test(String(oh.open))
-      ) {
+      if (oh.open !== undefined && oh.open !== null && String(oh.open).trim() !== "" && !hhmm.test(String(oh.open))) {
         errors.push({ field: "openingHours.open", message: "Giờ mở cửa phải theo định dạng HH:mm" });
       }
-      if (
-        oh.close !== undefined &&
-        oh.close !== null &&
-        String(oh.close).trim() !== "" &&
-        !hhmm.test(String(oh.close))
-      ) {
+      if (oh.close !== undefined && oh.close !== null && String(oh.close).trim() !== "" && !hhmm.test(String(oh.close))) {
         errors.push({ field: "openingHours.close", message: "Giờ đóng cửa phải theo định dạng HH:mm" });
       }
     }
@@ -225,20 +223,12 @@ const createStore = async (req, res) => {
       .lean();
 
     if (existingSameName) {
-      return res.status(400).json(
-        buildValidationErrorResponse([
-          { field: "name", message: "Tên cửa hàng đã tồn tại trong các cửa hàng của bạn" },
-        ])
-      );
+      return res.status(400).json(buildValidationErrorResponse([{ field: "name", message: "Tên cửa hàng đã tồn tại trong các cửa hàng của bạn" }]));
     }
 
-    const normalizedTags = Array.isArray(tags)
-      ? Array.from(new Set(tags.map((t) => String(t).trim()).filter((t) => t.length > 0)))
-      : [];
+    const normalizedTags = Array.isArray(tags) ? Array.from(new Set(tags.map((t) => String(t).trim()).filter((t) => t.length > 0))) : [];
 
-    const normalizedStaffIds = Array.isArray(staff_ids)
-      ? Array.from(new Set(staff_ids.map((id) => String(id))))
-      : [];
+    const normalizedStaffIds = Array.isArray(staff_ids) ? Array.from(new Set(staff_ids.map((id) => String(id)))) : [];
 
     const newStore = new Store({
       name: normalizedName,
@@ -352,9 +342,7 @@ const updateStore = async (req, res) => {
       const normalizedName = String(name).trim();
 
       if (normalizedName.length === 0) {
-        return res.status(400).json(
-          buildValidationErrorResponse([{ field: "name", message: "Tên cửa hàng không được để trống" }])
-        );
+        return res.status(400).json(buildValidationErrorResponse([{ field: "name", message: "Tên cửa hàng không được để trống" }]));
       }
 
       const existingSameName = await Store.findOne({
@@ -367,11 +355,7 @@ const updateStore = async (req, res) => {
         .lean();
 
       if (existingSameName) {
-        return res.status(400).json(
-          buildValidationErrorResponse([
-            { field: "name", message: "Tên cửa hàng đã tồn tại trong các cửa hàng của bạn" },
-          ])
-        );
+        return res.status(400).json(buildValidationErrorResponse([{ field: "name", message: "Tên cửa hàng đã tồn tại trong các cửa hàng của bạn" }]));
       }
     }
 
@@ -387,14 +371,10 @@ const updateStore = async (req, res) => {
     if (description !== undefined) store.description = String(description).trim();
     if (imageUrl !== undefined) store.imageUrl = imageUrl;
     if (tags !== undefined) {
-      store.tags = Array.isArray(tags)
-        ? Array.from(new Set(tags.map((t) => String(t).trim()).filter((t) => t.length > 0)))
-        : [];
+      store.tags = Array.isArray(tags) ? Array.from(new Set(tags.map((t) => String(t).trim()).filter((t) => t.length > 0))) : [];
     }
     if (staff_ids !== undefined) {
-      store.staff_ids = Array.isArray(staff_ids)
-        ? Array.from(new Set(staff_ids.map((id) => String(id))))
-        : [];
+      store.staff_ids = Array.isArray(staff_ids) ? Array.from(new Set(staff_ids.map((id) => String(id)))) : [];
     }
     if (location !== undefined) store.location = location;
     if (openingHours !== undefined) store.openingHours = openingHours;
@@ -989,11 +969,18 @@ const updateEmployee = async (req, res) => {
 
     // Update Employee fields
     if (fullName) employee.fullName = fullName;
-    if (salary) employee.salary = salary.toString();
+    // ✅ Cho phép update salary = 0
+    if (salary !== undefined && salary !== null) {
+      employee.salary = salary.toString();
+    }
     if (shift !== undefined) employee.shift = shift;
-    if (commission_rate !== undefined) employee.commission_rate = commission_rate ? commission_rate.toString() : null;
+    // ✅ Tương tự commission_rate
+    if (commission_rate !== undefined && commission_rate !== null) {
+      employee.commission_rate = commission_rate.toString();
+    }
     if (phone !== undefined) employee.phone = phone.trim();
 
+    //gọi để lưu vào MongoDB
     await employee.save();
 
     // Update User fields (email, phone)

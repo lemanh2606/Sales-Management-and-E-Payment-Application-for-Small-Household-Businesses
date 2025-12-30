@@ -1,25 +1,6 @@
 // src/pages/reports/InventoryReport.tsx
 import React, { useState, useEffect } from "react";
-import {
-  Card,
-  Row,
-  Col,
-  Button,
-  Table,
-  Tag,
-  Space,
-  Statistic,
-  Input,
-  Empty,
-  Spin,
-  Typography,
-  Tooltip,
-  Alert,
-  DatePicker,
-  Tabs,
-  Select,
-  InputNumber,
-} from "antd";
+import { Card, Row, Col, Button, Table, Tag, Space, Statistic, Input, Empty, Spin, Typography, Tooltip, Alert, DatePicker, Tabs, Select } from "antd";
 import {
   FileExcelOutlined,
   ReloadOutlined,
@@ -130,7 +111,7 @@ const InventoryReport: React.FC = () => {
   const [varianceData, setVarianceData] = useState<VarianceData | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchText, setSearchText] = useState("");
-  
+
   // Period selector states
   const [periodType, setPeriodType] = useState<string | null>(null);
   const [periodKey, setPeriodKey] = useState<string | null>(null);
@@ -142,6 +123,24 @@ const InventoryReport: React.FC = () => {
     const numValue = typeof value === "object" && value.$numberDecimal ? parseFloat(value.$numberDecimal) : Number(value);
     return numValue.toLocaleString("vi-VN") + "₫";
   };
+
+  // ✅ Helper: Check nếu sẵn sàng load variance report (có đủ điều kiện chọn)
+  const isReadyToLoad = (): boolean => {
+    if (!periodType) return false; // Chưa chọn loại kỳ
+    if (periodType === "custom") {
+      // Custom: cần có đầy đủ date range
+      return dateRange !== null && dateRange[0] !== undefined && dateRange[1] !== undefined;
+    }
+    // Month/Quarter/Year: cần có periodKey
+    return periodKey !== null && periodKey !== "";
+  };
+
+  // ✅ Reset variance data nếu không sẵn sàng load
+  useEffect(() => {
+    if (!isReadyToLoad()) {
+      setVarianceData(null); // Clear data khi người dùng allowClear
+    }
+  }, [periodType, periodKey, dateRange]);
 
   // Fetch realtime inventory - gọi ngay khi vào trang
   const fetchRealtimeReport = async () => {
@@ -656,10 +655,10 @@ const InventoryReport: React.FC = () => {
                     }}
                     allowClear
                     options={[
-                      { label: "Quý I (01-03)", value: "Q1" },
-                      { label: "Quý II (04-06)", value: "Q2" },
-                      { label: "Quý III (07-09)", value: "Q3" },
-                      { label: "Quý IV (10-12)", value: "Q4" },
+                      { label: "Quý 1", value: "Q1" },
+                      { label: "Quý 2", value: "Q2" },
+                      { label: "Quý 3", value: "Q3" },
+                      { label: "Quý 4", value: "Q4" },
                     ]}
                   />
                 </>
@@ -668,19 +667,19 @@ const InventoryReport: React.FC = () => {
               {periodType === "year" && (
                 <>
                   <Text strong>Chọn năm:</Text>
-                  <InputNumber
-                    style={{ width: 120 }}
-                    placeholder="Năm"
-                    min={2000}
-                    max={2100}
-                    value={periodKey ? parseInt(periodKey, 10) : null}
-                    onChange={(val) => {
-                      if (val) {
-                        const yearKey = val.toString();
+                  <DatePicker
+                    picker="year"
+                    placeholder="Chọn năm"
+                    value={periodKey ? dayjs(periodKey, "YYYY") : null}
+                    onChange={(date) => {
+                      if (date) {
+                        const yearKey = date.format("YYYY");
                         setPeriodKey(yearKey);
                         fetchVarianceReport("year", yearKey);
                       }
                     }}
+                    allowClear
+                    style={{ width: 160 }}
                   />
                 </>
               )}
@@ -819,7 +818,8 @@ const InventoryReport: React.FC = () => {
                                 <span style={{ color: "#1890ff", fontWeight: 600, fontSize: 15 }}>
                                   {range[0]} – {range[1]}
                                 </span>{" "}
-                                trên tổng số <span style={{ color: "#d4380d", fontWeight: 600, fontSize: 15 }}>{total.toLocaleString("vi-VN")}</span> sản phẩm
+                                trên tổng số <span style={{ color: "#d4380d", fontWeight: 600, fontSize: 15 }}>{total.toLocaleString("vi-VN")}</span>{" "}
+                                sản phẩm
                               </div>
                             ),
                           }}
@@ -862,7 +862,13 @@ const InventoryReport: React.FC = () => {
               label: "📈 Biến thiên tồn kho",
               children: (
                 <>
-                  {loading ? (
+                  {!isReadyToLoad() ? (
+                    // 🎯 Chưa chọn đủ điều kiện - yêu cầu người dùng chọn
+                    <Empty 
+                      description="Vui lòng chọn loại kỳ báo cáo và kỳ cần xem" 
+                      style={{ marginTop: 80 }}
+                    />
+                  ) : loading ? (
                     <Card style={{ textAlign: "center", padding: 80 }}>
                       <Spin size="large" tip="Đang tải báo cáo biến thiên..." />
                     </Card>
@@ -916,15 +922,46 @@ const InventoryReport: React.FC = () => {
 
                       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
                         <Col xs={24} sm={12}>
-                          <Card bordered={false} style={{ borderRadius: 12, border: "1px solid #8c8c8c", background: "#fafafa" }}>
-                            <Statistic
-                              title="Tổng COGS (Chi phí bán hàng)"
-                              value={varianceData.summary.totalCOGS}
-                              prefix={<DollarOutlined />}
-                              formatter={(v) => formatCurrency(v as number)}
-                              valueStyle={{ color: "#ff7a45", fontSize: 20 }}
-                            />
-                          </Card>
+                          <Tooltip
+                            overlayStyle={{ maxWidth: 320 }}
+                            title={
+                              <div>
+                                <div>
+                                  <strong>Tổng COGS (Cost of Goods Sold)</strong> là tổng chi phí giá vốn của hàng hóa đã bán trong kỳ báo cáo.
+                                </div>
+                                <div style={{ marginTop: 6 }}>
+                                  Chỉ bao gồm chi phí trực tiếp như nguyên vật liệu, hàng nhập kho;
+                                  <strong> không bao gồm</strong> chi phí vận hành, nhân sự hay thuê mặt bằng.
+                                </div>
+                              </div>
+                            }
+                          >
+                            {/* ✅ span block để Tooltip không phá layout */}
+                            <span style={{ display: "block" }}>
+                              <Card
+                                bordered={false}
+                                style={{
+                                  borderRadius: 12,
+                                  border: "1px solid #8c8c8c",
+                                  background: "#fafafa",
+                                  cursor: "pointer",
+                                }}
+                              >
+                                <Statistic
+                                  title={
+                                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                                      Tổng COGS (Chi phí bán hàng)
+                                      <InfoCircleOutlined style={{ color: "#1890ff" }} />
+                                    </span>
+                                  }
+                                  value={varianceData.summary.totalCOGS}
+                                  prefix={<DollarOutlined />}
+                                  formatter={(v) => formatCurrency(v as number)}
+                                  valueStyle={{ color: "#ff7a45", fontSize: 20 }}
+                                />
+                              </Card>
+                            </span>
+                          </Tooltip>
                         </Col>
                       </Row>
 
@@ -961,7 +998,8 @@ const InventoryReport: React.FC = () => {
                                 <span style={{ color: "#1890ff", fontWeight: 600, fontSize: 15 }}>
                                   {range[0]} – {range[1]}
                                 </span>{" "}
-                                trên tổng số <span style={{ color: "#d4380d", fontWeight: 600, fontSize: 15 }}>{total.toLocaleString("vi-VN")}</span> sản phẩm
+                                trên tổng số <span style={{ color: "#d4380d", fontWeight: 600, fontSize: 15 }}>{total.toLocaleString("vi-VN")}</span>{" "}
+                                sản phẩm
                               </div>
                             ),
                           }}

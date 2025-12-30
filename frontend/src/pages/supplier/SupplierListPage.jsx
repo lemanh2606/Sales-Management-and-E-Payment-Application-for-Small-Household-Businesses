@@ -36,18 +36,18 @@ import {
   UndoOutlined,
   InfoCircleOutlined,
   CalendarOutlined,
-  IdcardOutlined,     // NEW: MST
-  BankOutlined,       // NEW: Ngân hàng  
-  UserOutlined,       // NEW: Người liên hệ
+  IdcardOutlined, // NEW: MST
+  BankOutlined, // NEW: Ngân hàng
+  UserOutlined, // NEW: Người liên hệ
 } from "@ant-design/icons";
 import Layout from "../../components/Layout";
 import SupplierFormModal from "../../components/supplier/SupplierFormModal";
 import SupplierDetailModal from "../../components/supplier/SupplierDetailModal";
 import {
-  getSuppliers,  // ✅ CHUYỂN SANG API MỚI
+  getSuppliers, // ✅ CHUYỂN SANG API MỚI
   deleteSupplier,
-  exportSuppliers,// ✅ Đồng bộ tên
-  restoreSupplier
+  exportSuppliers, // ✅ Đồng bộ tên
+  restoreSupplier,
 } from "../../api/supplierApi";
 import { useAuth } from "../../context/AuthContext";
 
@@ -59,8 +59,7 @@ const { Option } = Select;
 const normalizeMongoId = (idLike) => {
   if (!idLike) return null;
   if (typeof idLike === "object" && idLike.$oid) return String(idLike.$oid);
-  if (typeof idLike === "object" && typeof idLike.toString === "function")
-    return String(idLike.toString());
+  if (typeof idLike === "object" && typeof idLike.toString === "function") return String(idLike.toString());
   if (typeof idLike === "string") return idLike;
   return String(idLike);
 };
@@ -84,13 +83,13 @@ const normalizeSupplier = (s) => {
 
 const fmtDateTime = (v) => {
   const raw = normalizeMongoDate(v);
-  if (!raw) return "-";
+  if (!raw) return "Trống";
   const d = new Date(raw);
-  if (Number.isNaN(d.getTime())) return "-";
+  if (Number.isNaN(d.getTime())) return "Trống";
   return d.toLocaleString("vi-VN");
 };
 
-const formatTaxcode = (taxcode) => taxcode ? `MST: ${taxcode}` : "-";
+const formatTaxcode = (taxcode) => (taxcode ? `${taxcode}` : "Trống");
 
 export default function SupplierListPage() {
   const [api, contextHolder] = notification.useNotification();
@@ -125,78 +124,84 @@ export default function SupplierListPage() {
   }, []);
 
   // Fetch active suppliers (NEW: hỗ trợ filter + search + pagination)
-  const fetchActiveSuppliers = useCallback(async (showNoti = false) => {
-    if (!storeId || !token) return;
+  const fetchActiveSuppliers = useCallback(
+    async (showNoti = false) => {
+      if (!storeId || !token) return;
 
-    try {
-      setLoading(true);
-      const params = {
-        deleted: false,
-        status: statusFilter === "all" ? undefined : statusFilter,
-        q: searchTerm.trim() || undefined,
-        page: paginationActive.current,
-        limit: paginationActive.pageSize,
-      };
-      const res = await getSuppliers(storeId, params);
-      const list = Array.isArray(res?.suppliers) ? res.suppliers : [];
-      setActiveSuppliers(list.map(normalizeSupplier));
+      try {
+        setLoading(true);
+        const params = {
+          deleted: false,
+          status: statusFilter === "all" ? undefined : statusFilter,
+          q: searchTerm.trim() || undefined,
+          page: paginationActive.current,
+          limit: paginationActive.pageSize,
+        };
+        const res = await getSuppliers(storeId, params);
+        const list = Array.isArray(res?.suppliers) ? res.suppliers : [];
+        setActiveSuppliers(list.map(normalizeSupplier));
 
-      if (showNoti) {
-        api.success({
-          message: "🎉 Tải dữ liệu thành công",
-          description: `Đã tải ${list.length} nhà cung cấp`,
+        if (showNoti) {
+          api.success({
+            message: "🎉 Tải dữ liệu thành công",
+            description: `Đã tải ${list.length} nhà cung cấp`,
+            placement: "topRight",
+            duration: 3,
+          });
+        }
+      } catch (e) {
+        console.error("Fetch active suppliers error:", e);
+        api.error({
+          message: "❌ Lỗi tải dữ liệu",
+          description: e?.response?.data?.message || "Không thể tải danh sách nhà cung cấp.",
           placement: "topRight",
-          duration: 3,
+          duration: 5,
         });
+      } finally {
+        setLoading(false);
       }
-    } catch (e) {
-      console.error("Fetch active suppliers error:", e);
-      api.error({
-        message: "❌ Lỗi tải dữ liệu",
-        description: e?.response?.data?.message || "Không thể tải danh sách nhà cung cấp.",
-        placement: "topRight",
-        duration: 5,
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [storeId, token, api, statusFilter, searchTerm, paginationActive]);
+    },
+    [storeId, token, api, statusFilter, searchTerm, paginationActive]
+  );
 
   // Fetch deleted suppliers
-  const fetchDeletedSuppliers = useCallback(async (showNoti = false) => {
-    if (!storeId || !token) return;
+  const fetchDeletedSuppliers = useCallback(
+    async (showNoti = false) => {
+      if (!storeId || !token) return;
 
-    try {
-      setLoading(true);
-      const params = {
-        deleted: true,
-        page: paginationDeleted.current,
-        limit: paginationDeleted.pageSize,
-      };
-      const res = await getSuppliers(storeId, params);
-      const list = Array.isArray(res?.suppliers) ? res.suppliers : [];
-      setDeletedSuppliers(list.map(normalizeSupplier));
+      try {
+        setLoading(true);
+        const params = {
+          deleted: true,
+          page: paginationDeleted.current,
+          limit: paginationDeleted.pageSize,
+        };
+        const res = await getSuppliers(storeId, params);
+        const list = Array.isArray(res?.suppliers) ? res.suppliers : [];
+        setDeletedSuppliers(list.map(normalizeSupplier));
 
-      if (showNoti) {
-        api.success({
-          message: "🎉 Tải dữ liệu thành công",
-          description: `Đã tải ${list.length} nhà cung cấp đã xóa`,
+        if (showNoti) {
+          api.success({
+            message: "🎉 Tải dữ liệu thành công",
+            description: `Đã tải ${list.length} nhà cung cấp đã xóa`,
+            placement: "topRight",
+            duration: 3,
+          });
+        }
+      } catch (e) {
+        console.error("Fetch deleted suppliers error:", e);
+        api.error({
+          message: "❌ Lỗi tải dữ liệu",
+          description: "Không thể tải danh sách nhà cung cấp đã xóa.",
           placement: "topRight",
-          duration: 3,
+          duration: 5,
         });
+      } finally {
+        setLoading(false);
       }
-    } catch (e) {
-      console.error("Fetch deleted suppliers error:", e);
-      api.error({
-        message: "❌ Lỗi tải dữ liệu",
-        description: "Không thể tải danh sách nhà cung cấp đã xóa.",
-        placement: "topRight",
-        duration: 5,
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [storeId, token, api, paginationDeleted]);
+    },
+    [storeId, token, api, paginationDeleted]
+  );
 
   // Auto fetch on mount + dependencies
   useEffect(() => {
@@ -211,9 +216,9 @@ export default function SupplierListPage() {
   // Reset pagination on filter change
   useEffect(() => {
     if (tabKey === "active") {
-      setPaginationActive(p => ({ ...p, current: 1 }));
+      setPaginationActive((p) => ({ ...p, current: 1 }));
     } else {
-      setPaginationDeleted(p => ({ ...p, current: 1 }));
+      setPaginationDeleted((p) => ({ ...p, current: 1 }));
     }
   }, [tabKey, searchTerm, statusFilter]);
 
@@ -235,13 +240,13 @@ export default function SupplierListPage() {
         s.bank_account_name || "",
         s.notes || "",
       ];
-      return fields.some(field => field.toLowerCase().includes(term));
+      return fields.some((field) => field.toLowerCase().includes(term));
     });
   }, [currentData, searchTerm]);
 
   const totalActive = activeSuppliers.length;
   const totalDeleted = deletedSuppliers.length;
-  const activeStatusCount = activeSuppliers.filter(s => s.status === "đang hoạt động").length;
+  const activeStatusCount = activeSuppliers.filter((s) => s.status === "đang hoạt động").length;
   const inactiveStatusCount = activeSuppliers.length - activeStatusCount;
 
   // Actions
@@ -365,7 +370,7 @@ export default function SupplierListPage() {
       title: (
         <Space>
           <TeamOutlined style={{ color: "#1890ff" }} />
-          <span>Tên NCC</span>
+          <span>Tên nhà cung cấp</span>
         </Space>
       ),
       dataIndex: "name",
@@ -374,7 +379,7 @@ export default function SupplierListPage() {
       ellipsis: true,
       render: (text) => (
         <Text strong style={{ color: "#1890ff" }}>
-          {text || "-"}
+          {text || "Trống"}
         </Text>
       ),
     },
@@ -404,23 +409,28 @@ export default function SupplierListPage() {
       key: "contact_person",
       width: isMobile ? 100 : 130,
       ellipsis: true,
-      render: (text) => text ? (
-        <Tooltip title={text}>
-          <Text ellipsis style={{ maxWidth: 120 }}>{text}</Text>
-        </Tooltip>
-      ) : <Text type="secondary">trống</Text>,
+      render: (text) =>
+        text ? (
+          <Tooltip title={text}>
+            <Text ellipsis style={{ maxWidth: 120 }}>
+              {text}
+            </Text>
+          </Tooltip>
+        ) : (
+          <Text type="secondary">trống</Text>
+        ),
     },
     {
       title: (
         <Space>
           <PhoneOutlined style={{ color: "#52c41a" }} />
-          <span>SĐT</span>
+          <span>Điện thoại</span>
         </Space>
       ),
       dataIndex: "phone",
       key: "phone",
       width: 110,
-      render: (text) => <Tag color="green">{text || "-"}</Tag>,
+      render: (text) => <Tag color="green">{text || "Trống"}</Tag>,
     },
     {
       title: (
@@ -433,13 +443,16 @@ export default function SupplierListPage() {
       key: "email",
       width: isMobile ? 140 : 180,
       ellipsis: true,
-      render: (text) => text ? (
-        <Tooltip title={text}>
-          <Text type="secondary" ellipsis style={{ maxWidth: 160, cursor: "pointer" }}>
-            {text}
-          </Text>
-        </Tooltip>
-      ) : <Text type="secondary">trống</Text>,
+      render: (text) =>
+        text ? (
+          <Tooltip title={text}>
+            <Text type="secondary" ellipsis style={{ maxWidth: 160, cursor: "pointer" }}>
+              {text}
+            </Text>
+          </Tooltip>
+        ) : (
+          <Text type="secondary">trống</Text>
+        ),
     },
     // NEW: Cột Ngân hàng (gọn)
     {
@@ -450,7 +463,7 @@ export default function SupplierListPage() {
         </Space>
       ),
       key: "bank_info",
-      width: isMobile ? 120 : 160,
+      width: isMobile ? 120 : 130,
       ellipsis: true,
       render: (_, record) => {
         const bankInfo = [];
@@ -468,7 +481,9 @@ export default function SupplierListPage() {
               )}
             </Space>
           </Tooltip>
-        ) : <Text type="secondary">trống</Text>;
+        ) : (
+          <Text type="secondary">trống</Text>
+        );
       },
     },
     {
@@ -482,13 +497,16 @@ export default function SupplierListPage() {
       key: "address",
       width: isMobile ? 100 : 160,
       ellipsis: true,
-      render: (text) => text ? (
-        <Tooltip title={text}>
-          <Text ellipsis style={{ maxWidth: 140, cursor: "pointer" }}>
-            {text}
-          </Text>
-        </Tooltip>
-      ) : <Text>trống</Text>,
+      render: (text) =>
+        text ? (
+          <Tooltip title={text}>
+            <Text ellipsis style={{ maxWidth: 140, cursor: "pointer" }}>
+              {text}
+            </Text>
+          </Tooltip>
+        ) : (
+          <Text>trống</Text>
+        ),
     },
     {
       title: "Trạng thái",
@@ -521,7 +539,7 @@ export default function SupplierListPage() {
     {
       title: "Hành động",
       key: "action",
-      width: showRestore ? 200 : 120,
+      width: showRestore ? 100 : 120,
       align: "center",
       fixed: "right",
       render: (_, record) => {
@@ -529,12 +547,7 @@ export default function SupplierListPage() {
         return (
           <Space size="small">
             <Tooltip title="Chi tiết">
-              <Button
-                type="primary"
-                icon={<EyeOutlined />}
-                size="small"
-                onClick={() => openDetail(supplierId)}
-              />
+              <Button type="primary" icon={<EyeOutlined />} size="small" onClick={() => openDetail(supplierId)} />
             </Tooltip>
             {!showRestore && (
               <Tooltip title="Sửa">
@@ -555,11 +568,7 @@ export default function SupplierListPage() {
                 cancelText="Hủy"
               >
                 <Tooltip title="Khôi phục">
-                  <Button
-                    icon={<UndoOutlined />}
-                    size="small"
-                    style={{ color: "#52c41a", borderColor: "#52c41a" }}
-                  />
+                  <Button icon={<UndoOutlined />} size="small" style={{ color: "#52c41a", borderColor: "#52c41a" }} />
                 </Tooltip>
               </Popconfirm>
             ) : (
@@ -589,12 +598,7 @@ export default function SupplierListPage() {
         <div style={{ padding: 24 }}>
           <Card style={{ margin: 24, borderRadius: 16 }}>
             <Title level={2}>Danh sách nhà cung cấp</Title>
-            <Alert
-              message="⚠️ Không tìm thấy cửa hàng hiện hành"
-              type="warning"
-              showIcon
-              style={{ marginTop: 16 }}
-            />
+            <Alert message="⚠️ Không tìm thấy cửa hàng hiện hành" type="warning" showIcon style={{ marginTop: 16 }} />
           </Card>
         </div>
       </Layout>
@@ -607,7 +611,7 @@ export default function SupplierListPage() {
   return (
     <Layout>
       {contextHolder}
-      <div style={{ padding: isMobile ? 12 : 24, background: "#ffffff", minHeight: "100vh" }}>
+      <div style={{ border: "1px solid #8c8c8c", borderRadius: 12 }}>
         <Card style={{ borderRadius: 12 }}>
           {/* Header */}
           <div style={{ marginBottom: 24 }}>
@@ -624,18 +628,20 @@ export default function SupplierListPage() {
             >
               🏢 Quản lý Nhà cung cấp
             </Title>
-            <Text type="secondary">
-              Quản lý NCC đầy đủ (MST, ngân hàng, liên hệ) theo cửa hàng
-            </Text>
+            <Text type="secondary">Quản lý NCC đầy đủ (MST, ngân hàng, liên hệ) theo cửa hàng</Text>
           </div>
 
           {/* Statistics */}
           <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
             <Col xs={24} sm={12} md={6}>
               <Tooltip title="Tổng NCC trong cửa hàng">
-                <Card style={{ background: "#2C5364", border: "none", borderRadius: 12 }}>
+                <Card style={{ background: "#2C5364", border: "none", borderRadius: 12, cursor: "pointer" }}>
                   <Statistic
-                    title={<span style={{ color: "#fff" }}>Tổng NCC <InfoCircleOutlined style={{ color: "#1890ff" }} /></span>}
+                    title={
+                      <span style={{ color: "#fff" }}>
+                        Tổng NCC <InfoCircleOutlined style={{ color: "#1890ff" }} />
+                      </span>
+                    }
                     value={totalActive + totalDeleted}
                     prefix={<TeamOutlined />}
                     valueStyle={{ color: "#fff", fontWeight: "bold" }}
@@ -644,7 +650,7 @@ export default function SupplierListPage() {
               </Tooltip>
             </Col>
             <Col xs={24} sm={12} md={6}>
-              <Card style={{ background: "#52c41a", border: "none", borderRadius: 12 }}>
+              <Card style={{ background: "#52c41a", border: "none", borderRadius: 12, cursor: "pointer" }}>
                 <Statistic
                   title={<span style={{ color: "#fff" }}>Đang hoạt động</span>}
                   value={totalActive}
@@ -654,7 +660,7 @@ export default function SupplierListPage() {
               </Card>
             </Col>
             <Col xs={24} sm={12} md={6}>
-              <Card style={{ background: "#f5222d", border: "none", borderRadius: 12 }}>
+              <Card style={{ background: "#f5222d", border: "none", borderRadius: 12, cursor: "pointer" }}>
                 <Statistic
                   title={<span style={{ color: "#fff" }}>Đã xóa</span>}
                   value={totalDeleted}
@@ -664,7 +670,7 @@ export default function SupplierListPage() {
               </Card>
             </Col>
             <Col xs={24} sm={12} md={6}>
-              <Card style={{ background: "#1890ff", border: "none", borderRadius: 12 }}>
+              <Card style={{ background: "#1890ff", border: "none", borderRadius: 12, cursor: "pointer" }}>
                 <Statistic
                   title={<span style={{ color: "#fff" }}>Trạng thái hoạt động</span>}
                   value={`${activeStatusCount}/${inactiveStatusCount}`}
@@ -690,14 +696,7 @@ export default function SupplierListPage() {
             <Col xs={24} md={16}>
               <Space style={{ width: "100%", justifyContent: "flex-end", flexWrap: "wrap", gap: 8 }}>
                 {tabKey === "active" && (
-                  <Select
-                    value={statusFilter}
-                    onChange={setStatusFilter}
-                    style={{ width: 160 }}
-                    size="large"
-                    allowClear
-                    placeholder="Trạng thái"
-                  >
+                  <Select value={statusFilter} onChange={setStatusFilter} style={{ width: 160 }} size="large" allowClear placeholder="Trạng thái">
                     <Option value="all">Tất cả</Option>
                     <Option value="đang hoạt động">Đang hoạt động</Option>
                     <Option value="ngừng hoạt động">Ngừng hoạt động</Option>
@@ -744,7 +743,7 @@ export default function SupplierListPage() {
             items={[
               {
                 key: "active",
-                label: `Hoạt động (${totalActive})`,
+                label: `Đang hoạt động (${totalActive})`,
                 children: (
                   <Table
                     columns={getColumns(false)}
@@ -766,7 +765,7 @@ export default function SupplierListPage() {
                     onChange={(pag) => handleTableChange(pag, "active")}
                     scroll={{ x: isMobile ? 1200 : "max-content" }}
                     size={isMobile ? "small" : "middle"}
-                    rowClassName={(_, index) => index % 2 === 0 ? "table-row-light" : "table-row-dark"}
+                    rowClassName={(_, index) => (index % 2 === 0 ? "table-row-light" : "table-row-dark")}
                   />
                 ),
               },
@@ -794,7 +793,7 @@ export default function SupplierListPage() {
                     onChange={(pag) => handleTableChange(pag, "deleted")}
                     scroll={{ x: isMobile ? 1200 : "max-content" }}
                     size={isMobile ? "small" : "middle"}
-                    rowClassName={(_, index) => index % 2 === 0 ? "table-row-light" : "table-row-dark"}
+                    rowClassName={(_, index) => (index % 2 === 0 ? "table-row-light" : "table-row-dark")}
                   />
                 ),
               },
@@ -809,16 +808,16 @@ export default function SupplierListPage() {
             supplierId={editSupplierId}
             onSuccess={onFormSuccess}
           />
-          <SupplierDetailModal
-            open={detailModalOpen}
-            onOpenChange={setDetailModalOpen}
-            supplierId={detailSupplierId}
-          />
+          <SupplierDetailModal open={detailModalOpen} onOpenChange={setDetailModalOpen} supplierId={detailSupplierId} />
         </Card>
 
         <style jsx>{`
-          :global(.table-row-light) { background-color: #fafbfc; }
-          :global(.table-row-dark) { background-color: #ffffff; }
+          :global(.table-row-light) {
+            background-color: #fafbfc;
+          }
+          :global(.table-row-dark) {
+            background-color: #ffffff;
+          }
           :global(.table-row-light:hover, .table-row-dark:hover) {
             background-color: #e6f7ff !important;
           }

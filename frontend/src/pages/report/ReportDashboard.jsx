@@ -25,6 +25,7 @@ import axios from "axios";
 import dayjs from "dayjs";
 import localizedFormat from "dayjs/plugin/localizedFormat";
 import quarterOfYear from "dayjs/plugin/quarterOfYear";
+import Swal from "sweetalert2";
 import Layout from "../../components/Layout";
 import "dayjs/locale/vi"; // ✅ LOCALE VI
 
@@ -73,18 +74,21 @@ const ReportDashboard = () => {
   const [error, setError] = useState(null);
   const [data, setData] = useState(null);
   const currentStore = JSON.parse(localStorage.getItem("currentStore") || "{}"); // Lấy từ localStorage
-
-  // Filter - không có ngày tháng cụ thể để tránh lỗi
-  const [periodType, setPeriodType] = useState("");
-  const [periodKey, setPeriodKey] = useState("");
-  const [extraExpenses, setExtraExpenses] = useState([]);
-  const [newExpense, setNewExpense] = useState("");
-  const [pickerValue, setPickerValue] = useState(null);
   const [groupPagination, setGroupPagination] = useState({
     current: 1,
     pageSize: 10,
     total: 0,
   });
+
+  // Filter - không có ngày tháng cụ thể để tránh lỗi
+  const [periodType, setPeriodType] = useState("");
+  const [periodKey, setPeriodKey] = useState("");
+  const [pickerValue, setPickerValue] = useState(null);
+
+  // 🆕 Chi phí ngoài lệ: theo từng kỳ báo cáo (storeId + periodType + periodKey)
+  const [extraExpensesByPeriod, setExtraExpensesByPeriod] = useState({}); // { [periodId]: number[] }
+  const [unsavedByPeriod, setUnsavedByPeriod] = useState({}); // { [periodId]: boolean }
+  const [newExpense, setNewExpense] = useState("");
 
   // Format tiền tệ việt nam (VND)
   const formatVND = (value) => {
@@ -94,6 +98,201 @@ const ReportDashboard = () => {
       currency: "VND",
       minimumFractionDigits: 0,
     }).format(value);
+  };
+
+  // ====== HELPERS ======
+  // periodId: store-based để tránh đổi store bị dính chi phí
+  const getPeriodId = (storeId, type, key) => `${storeId || "no-store"}|${type || "no-type"}|${key || "no-key"}`;
+
+  const currentPeriodId = getPeriodId(currentStore?._id, periodType, periodKey);
+
+  const getCurrentExpenses = () => extraExpensesByPeriod[currentPeriodId] || [];
+  const getCurrentTotalExpense = () => getCurrentExpenses().reduce((a, b) => a + (Number(b) || 0), 0);
+  const isCurrentUnsaved = () => !!unsavedByPeriod[currentPeriodId];
+
+  const setCurrentExpenses = (expenses) => {
+    setExtraExpensesByPeriod((prev) => ({ ...prev, [currentPeriodId]: expenses }));
+  };
+
+  const setCurrentUnsaved = (val) => {
+    setUnsavedByPeriod((prev) => ({ ...prev, [currentPeriodId]: !!val }));
+  };
+
+  // Chuẩn hoá periodKey theo type (đảm bảo quarter có năm)
+  const buildPeriodKey = (type, dateObj) => {
+    if (!dateObj) return "";
+    if (type === "month") return dateObj.format("YYYY-MM");
+    if (type === "quarter") {
+      const q = Math.floor(dateObj.month() / 3) + 1;
+      return `${dateObj.year()}-Q${q}`; // ✅ có năm
+    }
+    if (type === "year") return dateObj.year().toString();
+    return "";
+  };
+
+  // Parse quarterKey "2025-Q4" -> {year:2025, quarter:4}
+  const parseQuarterKey = (qKey) => {
+    const m = String(qKey).match(/^(\d{4})-Q([1-4])$/);
+    if (!m) return null;
+    return { year: Number(m[1]), quarter: Number(m[2]) };
+  };
+
+  // Allocate quarter expense -> 3 months in the same year-quarter
+  const allocateQuarterToMonths = ({ storeId, quarterPeriodKey, totalExpense }) => {
+    const parsed = parseQuarterKey(quarterPeriodKey);
+    if (!parsed) return;
+
+    const { year, quarter } = parsed;
+    const startMonth = (quarter - 1) * 3 + 1; // 1,4,7,10
+
+    // chia đều nhưng giữ đúng tổng
+    const m1 = Math.floor(totalExpense / 3);
+    const m2 = Math.floor(totalExpense / 3);
+    const m3 = totalExpense - m1 - m2;
+
+    setExtraExpensesByPeriod((prev) => {
+      const next = { ...prev };
+      const makeMonthId = (month) => getPeriodId(storeId, "month", `${year}-${String(month).padStart(2, "0")}`);
+
+      next[makeMonthId(startMonth)] = m1 > 0 ? [m1] : [];
+      next[makeMonthId(startMonth + 1)] = m2 > 0 ? [m2] : [];
+      next[makeMonthId(startMonth + 2)] = m3 > 0 ? [m3] : [];
+      return next;
+    });
+
+    setUnsavedByPeriod((prev) => {
+      const next = { ...prev };
+      const makeMonthId = (month) => getPeriodId(storeId, "month", `${year}-${String(month).padStart(2, "0")}`);
+      next[makeMonthId(startMonth)] = true;
+      next[makeMonthId(startMonth + 1)] = true;
+      next[makeMonthId(startMonth + 2)] = true;
+      return next;
+    });
+  };
+
+  // ⚠️ Handle đổi PeriodType
+  // ====== CORE: CHANGE PERIOD TYPE / KEY WITH CONFIRM ======
+  const commitChangePeriodType = (newType) => {
+    setPeriodType(newType);
+    setPeriodKey("");
+    setPickerValue(null);
+    setData(null);
+  };
+
+  const handlePeriodTypeChange = (newType) => {
+    if (newType === periodType) return;
+
+    const totalCost = getCurrentTotalExpense();
+    if (isCurrentUnsaved() && totalCost > 0) {
+
+      // quarter -> month special flow
+      if (periodType === "quarter" && newType === "month") {
+        Swal.fire({
+          title: "Chuyển từ Quý sang Tháng",
+          html: `
+            <div style="text-align: center; font-size: 14px;">
+              <p>Chi phí chưa lưu của quý hiện tại:</p>
+              <p style="font-size: 18px; font-weight: bold; color: #722ed1; margin: 12px 0;">
+                ${totalCost.toLocaleString("vi-VN")} VND
+              </p>
+              <p style="margin-top: 12px;">Bạn muốn phân bổ xuống 3 tháng trong quý không?</p>
+            </div>
+          `,
+          icon: "question",
+          confirmButtonText: "Phân bổ",
+          cancelButtonText: "Bỏ qua",
+          showCancelButton: true,
+          confirmButtonColor: "#52c41a",
+          cancelButtonColor: "#d9534f",
+        }).then((result) => {
+          if (result.isConfirmed) {
+            // phân bổ dựa trên quarter periodKey hiện tại (vd 2025-Q4)
+            allocateQuarterToMonths({ storeId: currentStore?._id, quarterPeriodKey: periodKey, totalExpense: totalCost });
+            // bỏ dirty của quý hiện tại vì đã chuyển thành dữ liệu tháng
+            setCurrentUnsaved(false);
+            commitChangePeriodType(newType);
+          } else {
+            // bỏ thay đổi quý (dirty) và chuyển type
+            setCurrentUnsaved(false);
+            commitChangePeriodType(newType);
+          }
+        });
+        return;
+      }
+
+      // other type change: warn discard
+      Swal.fire({
+        title: "⚠️ Chi phí chưa lưu",
+        html: `
+          <div style="text-align: center; font-size: 14px;">
+            <p>Kỳ hiện tại có chi phí chưa lưu:</p>
+            <p style="font-size: 18px; font-weight: bold; color: #ff7a45; margin: 12px 0;">
+              ${totalCost.toLocaleString("vi-VN")} VND
+            </p>
+            <p style="margin-top: 12px; color: #ff4d4f;">Nếu tiếp tục đổi loại kỳ, thay đổi sẽ bị bỏ.</p>
+          </div>
+        `,
+        icon: "warning",
+        confirmButtonText: "Tiếp tục",
+        cancelButtonText: "Hủy",
+        showCancelButton: true,
+        confirmButtonColor: "#ff7a45",
+        cancelButtonColor: "#1890ff",
+      }).then((result) => {
+        if (result.isConfirmed) {
+          setCurrentUnsaved(false);
+          commitChangePeriodType(newType);
+        }
+      });
+      return;
+    }
+
+    commitChangePeriodType(newType);
+  };
+
+  // ⚠️ Handle đổi PeriodKey (trong cùng loại)
+  const commitChangePeriodKey = (newKey, dateObj) => {
+    setPeriodKey(newKey);
+    setPickerValue(dateObj);
+    setData(null);
+  };
+
+  const handlePeriodKeyChange = (dateObj) => {
+    if (!dateObj) return;
+
+    const newKey = buildPeriodKey(periodType, dateObj);
+    if (!newKey || newKey === periodKey) return;
+
+    const totalCost = getCurrentTotalExpense();
+    if (isCurrentUnsaved() && totalCost > 0) {
+
+      Swal.fire({
+        title: "⚠️ Chi phí chưa lưu",
+        html: `
+          <div style="text-align: center; font-size: 14px;">
+            <p>Kỳ hiện tại có chi phí chưa lưu:</p>
+            <p style="font-size: 18px; font-weight: bold; color: #ff7a45; margin: 12px 0;">
+              ${totalCost.toLocaleString("vi-VN")} VND
+            </p>
+            <p style="margin-top: 12px; color: #ff4d4f;">Nếu chuyển sang kỳ khác, thay đổi sẽ bị bỏ.</p>
+          </div>
+        `,
+        icon: "warning",
+        confirmButtonText: "Tiếp tục",
+        cancelButtonText: "Quay lại",
+        showCancelButton: true,
+        confirmButtonColor: "#ff7a45",
+        cancelButtonColor: "#1890ff",
+      }).then((result) => {
+        if (result.isConfirmed) {
+          setCurrentUnsaved(false);
+          commitChangePeriodKey(newKey, dateObj);
+        }
+      });
+      return;
+    }
+
+    commitChangePeriodKey(newKey, dateObj);
   };
 
   // Biểu đồ
@@ -108,10 +307,9 @@ const ReportDashboard = () => {
     ];
   };
 
-  // GỌI API
+  // ====== API ======
   const fetchFinancial = async () => {
     if (!currentStore?._id) {
-      console.warn("Không có currentStore");
       setError("Vui lòng chọn cửa hàng trước.");
       return;
     }
@@ -119,6 +317,7 @@ const ReportDashboard = () => {
       setData(null);
       return;
     }
+
     setLoading(true);
     setError(null);
 
@@ -132,38 +331,48 @@ const ReportDashboard = () => {
         periodKey,
       });
 
-      if (extraExpenses.length > 0) {
-        params.append("extraExpense", extraExpenses.join(","));
-      }
+      const expenses = getCurrentExpenses();
+      if (expenses.length > 0) params.append("extraExpense", expenses.join(","));
+
       const url = `${apiUrl}/financials?${params.toString()}`;
+      const res = await axios.get(url, { headers: { Authorization: `Bearer ${token}` }, timeout: 10000 });
 
-      const res = await axios.get(url, {
-        headers: { Authorization: `Bearer ${token}` },
-        timeout: 10000,
-      });
-
-      console.log("API OK:", res.data);
       setData(res.data.data);
     } catch (err) {
       const msg = err.response?.data?.message || err.message;
-      console.error("Lỗi API:", err);
       setError(`Lỗi: ${msg}`);
     } finally {
       setLoading(false);
     }
   };
 
+  // Gọi lại khi filter đổi hoặc khi chi phí của kỳ hiện tại đổi
+  useEffect(() => {
+    fetchFinancial();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periodType, periodKey, currentPeriodId, extraExpensesByPeriod[currentPeriodId]?.length]);
+
+  // "Save" theo cách A: chỉ đánh dấu đã lưu tạm (không ghi DB)
+  const saveExpenses = () => {
+    setCurrentUnsaved(false);
+    Swal.fire({
+      icon: "success",
+      title: "Đã lưu tạm chi phí",
+      text: `Chi phí kỳ này: ${getCurrentTotalExpense().toLocaleString("vi-VN")} VND`,
+      timer: 1200,
+      showConfirmButton: false,
+    });
+    fetchFinancial();
+  };
+
   // TỰ ĐỘNG GỌI KHI THAY ĐỔI FILTER
   useEffect(() => {
     fetchFinancial();
-  }, [periodType, periodKey, extraExpenses.length]);
+  }, [periodType, periodKey, extraExpensesByPeriod]);
 
   // XỬ LÝ THAY ĐỔI TYPE
   const handleTypeChange = (value) => {
-    setPeriodType(value);
-    setPeriodKey(""); // Reset key
-    setPickerValue(null);
-    setData(null); // Reset data
+    handlePeriodTypeChange(value);
   };
 
   // XỬ LÝ KỲ (KEY)
@@ -174,27 +383,39 @@ const ReportDashboard = () => {
       key = date.format("YYYY-MM");
     } else if (periodType === "quarter") {
       const q = Math.floor(date.month() / 3) + 1;
-      key = `${date.year()}-Q${q}`;
+      key = `Q${q}`;
     } else if (periodType === "year") {
       key = date.year().toString();
     }
-    setPeriodKey(key);
+    handlePeriodKeyChange(key);
     setPickerValue(date);
   };
 
   // CHI PHÍ NGOÀI LỀ (tự nhập thêm nếu cần)
+  // ====== ACTIONS: ADD/REMOVE/SAVE ======
   const addExtraExpense = () => {
-    if (newExpense && !isNaN(newExpense)) {
-      const val = Number(newExpense);
-      setExtraExpenses([...extraExpenses, val]);
-      setNewExpense("");
-    }
+    if (newExpense === "" || newExpense === null || newExpense === undefined) return;
+    const val = Number(newExpense);
+    if (Number.isNaN(val) || val < 0) return;
+
+    const next = [...getCurrentExpenses(), val];
+    setCurrentExpenses(next);
+    setNewExpense("");
+    // Chỉ đánh dấu unsaved nếu tổng > 0
+    const total = next.reduce((a, b) => a + (Number(b) || 0), 0);
+    if (total > 0) setCurrentUnsaved(true);
   };
 
-  const removeExpense = (i) => {
-    const removed = extraExpenses[i];
-    setExtraExpenses(extraExpenses.filter((_, idx) => idx !== i));
-    console.log("Xóa chi phí:", removed);
+  const removeExpense = (index) => {
+    const next = getCurrentExpenses().filter((_, i) => i !== index);
+    setCurrentExpenses(next);
+    // Nếu xóa hết hoặc tổng = 0 → reset unsaved
+    const total = next.reduce((a, b) => a + (Number(b) || 0), 0);
+    if (total > 0) {
+      setCurrentUnsaved(true);
+    } else {
+      setCurrentUnsaved(false);
+    }
   };
 
   return (
@@ -215,7 +436,7 @@ const ReportDashboard = () => {
 
               <Col span={5}>
                 <label>Kỳ báo cáo:</label>
-                <Select style={{ width: "100%", marginTop: 8 }} value={periodType} onChange={handleTypeChange}>
+                <Select style={{ width: "100%", marginTop: 8 }} value={periodType} onChange={handlePeriodTypeChange}>
                   <Select.Option value="">Chưa chọn</Select.Option>
                   <Select.Option value="month">Theo tháng</Select.Option>
                   <Select.Option value="quarter">Theo quý</Select.Option>
@@ -228,9 +449,9 @@ const ReportDashboard = () => {
                 {periodType && (
                   <DatePicker
                     style={{ width: "100%", marginTop: 8 }}
-                    picker={periodType}
+                    picker={periodType === "month" ? "month" : periodType === "year" ? "year" : "quarter"}
                     value={pickerValue}
-                    onChange={handlePeriodChange}
+                    onChange={handlePeriodKeyChange}
                     // CUSTOM FORMAT CHO QUÝ: "Q4/2025"
                     format={(value) => {
                       if (periodType === "quarter") {
@@ -295,9 +516,25 @@ const ReportDashboard = () => {
                   <Button type="primary" onClick={addExtraExpense} disabled={!newExpense || isNaN(newExpense)}>
                     Thêm
                   </Button>
+
+                  {/* 🆕 Nút Lưu chi phí */}
+                  <Button
+                    type={isCurrentUnsaved() && getCurrentExpenses().length > 0 ? "primary" : "default"}
+                    danger={isCurrentUnsaved() && getCurrentExpenses().length > 0}
+                    onClick={saveExpenses}
+                    disabled={!isCurrentUnsaved() || getCurrentExpenses().length === 0}
+                  >
+                    {isCurrentUnsaved() && getCurrentExpenses().length > 0 ? "Lưu chi phí" : "Đã lưu"}
+                  </Button>
                 </Space>
+
+                {/* 🆕 Alert cảnh báo chưa lưu - chỉ hiện khi có chi phí thực tế */}
+                {isCurrentUnsaved() && getCurrentExpenses().length > 0 && (
+                  <Alert type="warning" showIcon message={`Có ${getCurrentExpenses().length} chi phí chưa lưu cho kỳ này`} />
+                )}
+
                 <div style={{ marginTop: 8 }}>
-                  {extraExpenses.map((exp, i) => (
+                  {getCurrentExpenses().map((exp, i) => (
                     <span
                       key={i}
                       style={{
@@ -371,9 +608,9 @@ const ReportDashboard = () => {
                   </AntTooltip>
                 </Col>
 
-                {/* Chi phí vận hành (giữ nguyên như cũ) */}
+                {/* Chi phí vận hành - chỉ tính chi phí ngoài (UPDATED Dec 2025) */}
                 <Col flex="1 1 20%">
-                  <AntTooltip title="Chi phí vận hành bao gồm = lương và hoa hồng nhân viên + chi phí duy trì hoạt động bên ngoài được nhập ở ô 'Chi phí ngoài' bên trên.">
+                  <AntTooltip title="Chi phí vận hành = Chi phí ngoài lệ được nhập tay ở ô 'Chi phí ngoài' bên trên. (Nếu có)">
                     <Card style={{ border: "1px solid #8c8c8c", cursor: "pointer" }}>
                       <Statistic
                         title={
@@ -763,8 +1000,7 @@ const ReportDashboard = () => {
               {/* 2 THẺ CARD CHI TIẾT Ở CUỐI */}
               <Row gutter={[16, 16]}>
                 {/* CỘT TRÁI */}
-                {/* CỘT TRÁI */}
-                <Col span={12}>
+                <Col span={24}>
                   <Card
                     title="Chi tiết tài chính"
                     style={{ border: "1px solid #8c8c8c", height: "100%" }}
@@ -807,7 +1043,7 @@ const ReportDashboard = () => {
                 </Col>
 
                 {/* CỘT PHẢI: HIỆU SUẤT */}
-                <Col span={12}>
+                {/* <Col span={12}>
                   <Card
                     title="Hiệu suất kinh doanh"
                     style={{ border: "1px solid #8c8c8c", height: "100%" }}
@@ -862,7 +1098,7 @@ const ReportDashboard = () => {
                       <Divider style={{ margin: "5px 0" }} />
 
                       {/* Lợi nhuận ròng — hiển thị như dòng bình thường */}
-                      <div>
+                      {/* <div>
                         <Popover content="Lợi nhuận ròng = Lợi nhuận gộp - Chi phí vận hành - Thuế">
                           <strong style={{ cursor: "help", fontSize: 16, color: "#ff1038ff" }}>
                             Lợi nhuận ròng cuối cùng <InfoCircleOutlined />{" "}
@@ -880,7 +1116,7 @@ const ReportDashboard = () => {
                       </div>
                     </Space>
                   </Card>
-                </Col>
+                </Col> */}
               </Row>
               {/* ======= Hết ====== */}
             </>
