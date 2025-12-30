@@ -324,7 +324,7 @@ const PendingOrdersManagerModal: React.FC<PendingOrdersManagerModalProps> = ({ v
       {/* Alert Warning */}
       <Alert
         message="Lưu ý quan trọng"
-        description="Chức năng này chỉ dùng để xoá các đơn hàng có trạng thái 'Chưa thanh toán', thường là của khách vãng lai không quay lại. Hành động xoá sẽ **không thể hoàn tác**. Vui lòng **kiểm tra kỹ thông tin đơn hàng**, tránh xoá nhầm các đơn mà khách có khả năng quay lại."
+        description="Chức năng này chỉ dùng để xoá các đơn hàng có trạng thái 'Chưa thanh toán', thường là của khách vãng lai không quay lại. Hành động xoá sẽ **không thể hoàn tác**. Vui lòng **kiểm tra kỹ thông tin đơn hàng**, tránh xoá nhầm các đơn mà khách hàng CÓ KHẢ NĂNG QUAY TRỞ LẠI!"
         type="warning"
         showIcon
         icon={<WarningOutlined />}
@@ -489,7 +489,7 @@ const PendingOrdersManagerModal: React.FC<PendingOrdersManagerModalProps> = ({ v
             emptyText: (
               <div style={{ padding: "40px 0" }}>
                 <Text type="secondary" style={{ fontSize: 16 }}>
-                  {paymentFilter || priceRange !== "all" ? "Không tìm thấy đơn hàng phù hợp với bộ lọc" : "Không có đơn hàng pending nào"}
+                  {paymentFilter || priceRange !== "all" ? "Không tìm thấy đơn hàng phù hợp với bộ lọc" : "Không có đơn hàng 'Chờ Thanh Toán' nào!"}
                 </Text>
               </div>
             ),

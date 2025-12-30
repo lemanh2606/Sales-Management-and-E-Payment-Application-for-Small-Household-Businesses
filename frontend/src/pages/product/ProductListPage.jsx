@@ -77,10 +77,10 @@ export default function ProductListPage() {
     { key: "price", label: "Giá bán", default: true },
     { key: "stock_quantity", label: "Tồn kho", default: true },
     { key: "status", label: "Trạng thái", default: true },
-    { key: "cost_price", label: "Giá vốn", default: false },
+    { key: "cost_price", label: "Giá vốn", default: true },
     { key: "supplier", label: "Nhà cung cấp", default: false },
     { key: "group", label: "Nhóm sản phẩm", default: false },
-    { key: "unit", label: "Đơn vị", default: false },
+    { key: "unit", label: "Đơn vị", default: true },
     { key: "min_stock", label: "Tồn tối thiểu", default: false },
     { key: "max_stock", label: "Tồn tối đa", default: false },
     { key: "image", label: "Hình ảnh", default: false },
@@ -437,7 +437,7 @@ export default function ProductListPage() {
         ),
         dataIndex: "name",
         key: "name",
-        width: isMobile ? 180 : 250,
+        width: isMobile ? 180 : 230,
         ellipsis: true,
         render: (text) => (
           <Text strong style={{ color: "#1890ff", fontSize: "clamp(12px, 2.5vw, 14px)" }}>
@@ -449,10 +449,10 @@ export default function ProductListPage() {
         title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>SKU</span>,
         dataIndex: "sku",
         key: "sku",
-        width: isMobile ? 100 : 150,
+        width: isMobile ? 100 : 140,
         render: (text) => (
           <Tag color="cyan" style={{ fontSize: "clamp(10px, 2vw, 12px)" }}>
-            {text || "-"}
+            {text || "Trống"}
           </Tag>
         ),
       },
@@ -489,11 +489,11 @@ export default function ProductListPage() {
         ),
         dataIndex: "price",
         key: "price",
-        width: isMobile ? 110 : 150,
+        width: isMobile ? 110 : 130,
         align: "right",
         render: (value) => (
           <Text strong style={{ color: "#52c41a", fontSize: "clamp(11px, 2.5vw, 13px)" }}>
-            {value ? Number(value).toLocaleString() : "-"}
+            {value ? Number(value).toLocaleString() : "Trống"}
           </Text>
         ),
       },
@@ -506,7 +506,7 @@ export default function ProductListPage() {
         ),
         dataIndex: "stock_quantity",
         key: "stock_quantity",
-        width: isMobile ? 90 : 120,
+        width: isMobile ? 90 : 100,
         align: "center",
         render: (value, record) => {
           const qty = Number(value || 0);
@@ -549,9 +549,9 @@ export default function ProductListPage() {
         title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Giá vốn</span>,
         dataIndex: "cost_price",
         key: "cost_price",
-        width: isMobile ? 110 : 130,
+        width: isMobile ? 110 : 100,
         align: "center",
-        render: (value) => (value ? <Tag color="lime">{Number(value).toLocaleString()}</Tag> : "-"),
+        render: (value) => (value ? <Tag color="lime">{Number(value).toLocaleString()}</Tag> : "Trống"),
       },
       supplier: {
         title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Nhà cung cấp</span>,
@@ -559,7 +559,7 @@ export default function ProductListPage() {
         key: "supplier",
         width: isMobile ? 120 : 150,
         ellipsis: true,
-        render: (value) => <Text style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>{value?.name || "-"}</Text>,
+        render: (value) => <Text style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>{value?.name || "Trống"}</Text>,
       },
       group: {
         title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Nhóm sản phẩm</span>,
@@ -567,15 +567,15 @@ export default function ProductListPage() {
         key: "group",
         width: isMobile ? 120 : 150,
         ellipsis: true,
-        render: (value) => <Tag color="purple">{value?.name || "-"}</Tag>,
+        render: (value) => <Tag color="purple">{value?.name || "Trống"}</Tag>,
       },
       unit: {
         title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Đơn vị</span>,
         dataIndex: "unit",
         key: "unit",
-        width: 100,
+        width: 80,
         align: "center",
-        render: (value) => <span style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>{value || "-"}</span>,
+        render: (value) => <span style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>{value || "Trống"}</span>,
       },
       min_stock: {
         title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Tồn tối thiểu</span>,
@@ -610,7 +610,7 @@ export default function ProductListPage() {
               preview={{ mask: <EyeOutlined /> }}
             />
           ) : (
-            "-"
+            "Trống"
           ),
       },
       createdAt: {
@@ -619,7 +619,7 @@ export default function ProductListPage() {
         key: "createdAt",
         width: 120,
         align: "center",
-        render: (value) => (value ? new Date(value).toLocaleDateString("vi-VN") : "-"),
+        render: (value) => (value ? new Date(value).toLocaleDateString("vi-VN") : "Trống"),
       },
       updatedAt: {
         title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Cập nhật</span>,
@@ -627,7 +627,7 @@ export default function ProductListPage() {
         key: "updatedAt",
         width: 120,
         align: "center",
-        render: (value) => (value ? new Date(value).toLocaleDateString("vi-VN") : "-"),
+        render: (value) => (value ? new Date(value).toLocaleDateString("vi-VN") : "Trống"),
       },
     };
   }, [isMobile]);
@@ -686,8 +686,8 @@ export default function ProductListPage() {
 
   const columnSelectorContent = (
     <Card style={{ width: "100%", border: "1px solid #8c8c8c", maxHeight: isMobile ? "70vh" : 400, overflowY: "auto" }}>
-      <div style={{ padding: 16 }}>
-        <Text strong style={{ fontSize: "clamp(13px, 3vw, 14px)" }}>Chọn cột hiển thị</Text>
+      <div style={{ padding: 5 }}>
+        <Text strong style={{ fontSize: "clamp(13px, 3vw, 14px)" }}>Chọn cột hiển thị thêm:</Text>
         <Divider style={{ margin: "8px 0" }} />
         <Checkbox.Group value={visibleColumns} onChange={toggleColumn} style={{ width: "100%" }}>
           <Space direction="vertical" style={{ width: "100%" }} size={8}>

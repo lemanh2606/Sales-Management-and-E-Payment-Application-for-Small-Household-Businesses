@@ -104,7 +104,10 @@ const calcFinancialSummary = async ({
   // 4️⃣ Lợi nhuận gộp
   let grossProfit = totalRevenue - totalCOGS;
 
-  // 5️⃣ Chi phí vận hành (Operating Cost)
+  // 5️⃣ Chi phí vận hành (Operating Cost) - DEPRECATED: Lương + Hoa hồng
+  // ❌ DEPRECATED (Từ Dec 2025): Không còn tính lương nhân viên và hoa hồng vì là hộ kinh doanh nhỏ lẻ
+  // Tự trao đổi trực tiếp. Giữ lại code dưới để làm kỉ niệm học tập.
+  /*
   const months = getMonthsInPeriod(periodType);
   // cho dù là năm trong tương lai chưa bán hàng, vẫn tính lương cho nhân viên, nếu xoá nhân viên đi thì coi như mọi thứ là 0 vnđ,
   // còn nếu không thì kể cả là năm 2030 vẫn luôn cộng chi phí lương cho nhân viên,
@@ -140,6 +143,9 @@ const calcFinancialSummary = async ({
       sum + toNumber(r.totalRevenue) * (toNumber(emp?.commission_rate) / 100)
     );
   }, 0);
+  */
+  let totalSalary = 0; // DEPRECATED
+  let totalCommission = 0; // DEPRECATED
 
   // 👉 FE gửi: ?extraExpense=1000000,2000000 (có thể nhiều hơn hoặc ít hơn)
   if (typeof extraExpense === "string" && extraExpense.includes(",")) {
@@ -153,8 +159,8 @@ const calcFinancialSummary = async ({
     (sum, val) => sum + (val || 0),
     0
   );
-  //Tổng chi phí vận hành trước khi cộng thêm phần điều chỉnh và hao hụt hàng
-  let operatingCost = totalSalary + totalCommission + totalExtraExpense;
+  //Tổng chi phí vận hành = Chỉ tính Chi phí ngoài lệ (nhập tay) - Không còn lương + hoa hồng
+  let operatingCost = totalExtraExpense;
 
   // 9️⃣ Hao hụt kho - Từ InventoryVoucher loại OUT (không phải bán hàng)
   // Bao gồm: Hủy hàng, Thất thoát, Sai sót cân, Quà tặng, v.v.
