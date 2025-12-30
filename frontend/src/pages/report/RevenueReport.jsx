@@ -303,6 +303,16 @@ const RevenueReport = () => {
     return num; // fallback nếu không đủ 10 số
   };
 
+  const formatPeriodTypeVi = (t) => {
+    const v = String(t || "").toLowerCase();
+    if (v === "day") return "Ngày";
+    if (v === "month") return "Tháng";
+    if (v === "quarter") return "Quý";
+    if (v === "year") return "Năm";
+    if (!v) return "—";
+    return v.charAt(0).toUpperCase() + v.slice(1);
+  };
+
   // TABLE COLUMNS
   const totalRevenueNum = toNumber(summary?.totalRevenue);
 
@@ -313,7 +323,7 @@ const RevenueReport = () => {
       dataIndex: "periodType",
       key: "periodType",
       width: 120,
-      render: (t) => <span style={{ fontSize: 16, fontWeight: 600 }}>{t}</span>,
+      render: (t) => <span style={{ fontSize: 16, fontWeight: 600 }}>{formatPeriodTypeVi(t)}</span>,
     },
     {
       title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Mã kỳ</span>,
@@ -561,7 +571,7 @@ const RevenueReport = () => {
       dataIndex: "periodType",
       key: "periodType",
       width: 90,
-      render: (t) => <span style={{ fontSize: 16 }}>{t || periodType}</span>,
+      render: (t) => <span style={{ fontSize: 16 }}>{formatPeriodTypeVi(t || periodType)}</span>,
     },
     {
       title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Mã kỳ</span>,
@@ -753,7 +763,7 @@ const RevenueReport = () => {
                         return "";
                       }}
                       placeholder={`Chọn ${
-                        periodType === "day" ? "ngày" : periodType === "month" ? "tháng" : periodType === "quarter" ? "quý" : "năm"
+                        periodType === "day" ? "Ngày" : periodType === "month" ? "Tháng" : periodType === "quarter" ? "Quý" : "Năm"
                       }`}
                     />
                   ) : reportType === REPORT_TYPES.DAILY_PRODUCTS ? (

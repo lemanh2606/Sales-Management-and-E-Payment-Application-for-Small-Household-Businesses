@@ -5,7 +5,9 @@ const OrderItem = require("../models/OrderItem");
 const { periodToRange } = require("../utils/period");
 const { Parser } = require("json2csv");
 const PDFDocument = require("pdfkit");
-const XLSX = require("xlsx");
+// NOTE: `xlsx` community build ignores most cell styles.
+// Use `xlsx-js-style` to generate styled xlsx files.
+const XLSX = require("xlsx-js-style");
 const dayjs = require("dayjs");
 require("dayjs/locale/vi");
 dayjs.locale("vi");
@@ -45,8 +47,19 @@ function safeFilePart(value) {
   return normalized || "Unknown";
 }
 
+function getExporterNameDisplay(req) {
+  const name =
+    req?.user?.fullname ||
+    req?.user?.fullName ||
+    req?.user?.name ||
+    req?.user?.username ||
+    req?.user?.email;
+  const trimmed = String(name ?? "").trim();
+  return trimmed || "Không rõ";
+}
+
 function getExporterNameForFile(req) {
-  return safeFilePart(req?.user?.fullname || req?.user?.fullName || req?.user?.name || req?.user?.username || req?.user?.email);
+  return safeFilePart(getExporterNameDisplay(req));
 }
 
 function buildExportFileName({ reportName, req, periodKey }) {
@@ -59,6 +72,78 @@ function buildExportFileName({ reportName, req, periodKey }) {
     return `${reportPart}_${exportDate}_${exporterName}_${safeFilePart(periodKey)}.xlsx`;
   }
   return `${reportPart}_${exportDate}_${exporterName}.xlsx`;
+}
+
+function periodTypeToVietnamese(periodType) {
+  const t = String(periodType || "").toLowerCase();
+  if (t === "day") return "Ngày";
+  if (t === "month") return "Tháng";
+  if (t === "quarter") return "Quý";
+  if (t === "year") return "Năm";
+  // fallback: viết hoa chữ cái đầu
+  return t ? t.charAt(0).toUpperCase() + t.slice(1) : "—";
+}
+
+function createWorksheetWithReportHeader({ reportTitle, req, sheetData }) {
+  const exporterName = getExporterNameDisplay(req);
+  const ws = XLSX.utils.aoa_to_sheet([
+    ["Tên Báo cáo", reportTitle],
+    ["Tên người xuất", exporterName],
+    [],
+  ]);
+
+  XLSX.utils.sheet_add_json(ws, sheetData, {
+    origin: "A4",
+    skipHeader: false,
+  });
+
+  // ===== Styling (nếu lib xlsx build hiện tại hỗ trợ cell styles) =====
+  const styleCell = (addr, style) => {
+    if (!ws[addr]) ws[addr] = { t: "s", v: "" };
+    ws[addr].s = { ...(ws[addr].s || {}), ...style };
+  };
+
+  // 2 dòng header trên cùng
+  const topLabelStyle = {
+    font: { bold: true, color: { rgb: "FFFFFFFF" } },
+    fill: { patternType: "solid", fgColor: { rgb: "FF1890FF" } },
+    alignment: { horizontal: "left", vertical: "center" },
+  };
+  const topValueStyle = {
+    font: { bold: true, color: { rgb: "FF262626" } },
+    alignment: { horizontal: "left", vertical: "center" },
+  };
+
+  styleCell("A1", topLabelStyle);
+  styleCell("A2", topLabelStyle);
+  styleCell("B1", topValueStyle);
+  styleCell("B2", topValueStyle);
+
+  // Header của bảng dữ liệu nằm ở dòng 4 (index 3) vì có 2 dòng header + 1 dòng trống.
+  const headerStyle = {
+    font: { bold: true, color: { rgb: "FFFFFFFF" } },
+    fill: { patternType: "solid", fgColor: { rgb: "FF1890FF" } },
+    alignment: { horizontal: "center", vertical: "center" },
+  };
+
+  if (ws["!ref"]) {
+    const range = XLSX.utils.decode_range(ws["!ref"]);
+    const headerRowIndex = 3;
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const addr = XLSX.utils.encode_cell({ r: headerRowIndex, c });
+      if (!ws[addr]) continue;
+      ws[addr].s = { ...(ws[addr].s || {}), ...headerStyle };
+    }
+  }
+
+  // Chiều cao hàng cho dễ nhìn
+  ws["!rows"] = ws["!rows"] || [];
+  ws["!rows"][0] = { hpt: 20 };
+  ws["!rows"][1] = { hpt: 20 };
+  ws["!rows"][2] = { hpt: 8 };
+  ws["!rows"][3] = { hpt: 18 };
+
+  return ws;
 }
 
 // ========== HÀM TÍNH DOANH THU – CÓ CẢ HOÀN 1 NỬA partially_refunded ==========
@@ -285,11 +370,12 @@ const exportRevenue = async (req, res) => {
     const periodEndText = periodEnd ? dayjs(periodEnd).format("DD/MM/YYYY") : "—";
 
     const wb = XLSX.utils.book_new();
+    const reportTitle = "Báo cáo doanh thu chi tiết";
 
     // Sheet 1: Tổng hợp
     if (totalData && totalData.length > 0) {
       const totalSheetData = totalData.map((item) => ({
-        "Loại kỳ": item.periodType,
+        "Loại kỳ": periodTypeToVietnamese(item.periodType),
         "Mã kỳ": item.periodKey,
         "Từ ngày": item.periodStart ? dayjs(item.periodStart).format("DD/MM/YYYY") : "—",
         "Đến ngày": item.periodEnd ? dayjs(item.periodEnd).format("DD/MM/YYYY") : "—",
@@ -299,7 +385,7 @@ const exportRevenue = async (req, res) => {
         "Số đơn hoàn 1 phần": item.partialRefundOrders || 0,
         "TB / hóa đơn (VNĐ)": Number(item.avgOrderValue || 0),
       }));
-      const ws1 = XLSX.utils.json_to_sheet(totalSheetData);
+      const ws1 = createWorksheetWithReportHeader({ reportTitle, req, sheetData: totalSheetData });
       ws1["!cols"] = [
         { wch: 12 }, // Loại kỳ
         { wch: 14 }, // Mã kỳ
@@ -317,7 +403,7 @@ const exportRevenue = async (req, res) => {
     // Sheet 2: Nhân viên
     if (empData && empData.length > 0) {
       const empSheetData = empData.map((item) => ({
-        "Loại kỳ": item.periodType || periodType,
+        "Loại kỳ": periodTypeToVietnamese(item.periodType || periodType),
         "Mã kỳ": item.periodKey || periodKey,
         "Từ ngày": periodStartText,
         "Đến ngày": periodEndText,
@@ -332,7 +418,7 @@ const exportRevenue = async (req, res) => {
             : "0.00",
       }));
 
-      const ws2 = XLSX.utils.json_to_sheet(empSheetData);
+      const ws2 = createWorksheetWithReportHeader({ reportTitle, req, sheetData: empSheetData });
       ws2["!cols"] = [
         { wch: 12 }, // Loại kỳ
         { wch: 14 }, // Mã kỳ
@@ -346,18 +432,6 @@ const exportRevenue = async (req, res) => {
         { wch: 16 }, // % tổng doanh thu
       ];
 
-      // Tô đậm header
-      const headerRange = XLSX.utils.decode_range(ws2["!ref"]);
-      for (let C = headerRange.s.c; C <= headerRange.e.c; ++C) {
-        const cellAddress = XLSX.utils.encode_cell({ r: 0, c: C });
-        if (!ws2[cellAddress]) continue;
-        ws2[cellAddress].s = {
-          font: { bold: true, color: { rgb: "FFFFFF" } },
-          fill: { fgColor: { rgb: "1890ff" } },
-          alignment: { horizontal: "center", vertical: "center" },
-        };
-      }
-
       XLSX.utils.book_append_sheet(wb, ws2, "Nhân viên");
     }
 
@@ -365,7 +439,7 @@ const exportRevenue = async (req, res) => {
       return res.status(404).json({ message: "Không có dữ liệu để xuất" });
     }
 
-    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
 
     const fileName = buildExportFileName({
       reportName: "Bao_Cao_Doanh_Thu",
@@ -518,11 +592,15 @@ const exportRevenueSummaryByYear = async (req, res) => {
       "Doanh thu (VNĐ)": r.revenue,
     }));
 
-    const ws = XLSX.utils.json_to_sheet(sheetData);
+    const ws = createWorksheetWithReportHeader({
+      reportTitle: "Báo cáo doanh thu bán hàng tổng",
+      req,
+      sheetData,
+    });
     ws["!cols"] = [{ wch: 16 }, { wch: 10 }, { wch: 20 }, { wch: 18 }];
     XLSX.utils.book_append_sheet(wb, ws, "Báo cáo doanh thu bán hàng tổng");
 
-    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
     const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu_Tong_Hop", req });
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
@@ -684,13 +762,17 @@ const exportDailyProductSales = async (req, res) => {
       "Thực thu (VNĐ)": r.netTotal,
     }));
 
-    const ws = XLSX.utils.json_to_sheet(sheetData);
+    const ws = createWorksheetWithReportHeader({
+      reportTitle: "Báo cáo bán hàng hằng ngày",
+      req,
+      sheetData,
+    });
     ws["!cols"] = [{ wch: 14 }, { wch: 26 }, { wch: 34 }, { wch: 12 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
 
     // Tên sheet Excel bị giới hạn 31 ký tự; dùng tên ngắn để tránh lỗi khi export.
     XLSX.utils.book_append_sheet(wb, ws, "Bán hàng hằng ngày");
 
-    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
     const fileName = buildExportFileName({ reportName: "Bao_Cao_Ban_Hang_Hang_Ngay", req });
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
@@ -871,11 +953,15 @@ const exportYearlyCategoryCompare = async (req, res) => {
       "Tổng 2 năm": safeNumber(r.totalTwoYears),
     }));
 
-    const ws = XLSX.utils.json_to_sheet(sheetData);
+    const ws = createWorksheetWithReportHeader({
+      reportTitle: "So sánh doanh số hằng năm",
+      req,
+      sheetData,
+    });
     ws["!cols"] = [{ wch: 28 }, { wch: 18 }, { wch: 18 }, { wch: 16 }, { wch: 16 }];
     XLSX.utils.book_append_sheet(wb, ws, "So sánh doanh số hằng năm");
 
-    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
     const fileName = buildExportFileName({ reportName: "So_Sanh_Doanh_So_Hang_Nam", req });
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
@@ -1036,11 +1122,15 @@ const exportMonthlyRevenueByDay = async (req, res) => {
       "Số mặt hàng bán ra": r.itemsSold,
       "Doanh thu (VNĐ)": r.revenue,
     }));
-    const ws = XLSX.utils.json_to_sheet(sheetData);
+    const ws = createWorksheetWithReportHeader({
+      reportTitle: "Doanh thu theo tháng",
+      req,
+      sheetData,
+    });
     ws["!cols"] = [{ wch: 12 }, { wch: 10 }, { wch: 20 }, { wch: 16 }];
     XLSX.utils.book_append_sheet(wb, ws, "Doanh thu theo tháng");
 
-    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
     const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu_Theo_Thang", req });
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
@@ -1324,7 +1414,11 @@ const exportMonthlyRevenueSummary = async (req, res) => {
         "Doanh thu TB / ngày (VNĐ)": "",
         "So với tháng trước (VNĐ)": "",
       });
-      const ws = XLSX.utils.json_to_sheet(sheetData);
+      const ws = createWorksheetWithReportHeader({
+        reportTitle: "Tổng hợp doanh thu theo tháng",
+        req,
+        sheetData,
+      });
       ws["!cols"] = [{ wch: 10 }, { wch: 18 }, { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 18 }];
       XLSX.utils.book_append_sheet(wb, ws, "Tổng hợp theo tháng");
     } else {
@@ -1342,12 +1436,16 @@ const exportMonthlyRevenueSummary = async (req, res) => {
           "So với tháng trước (VNĐ)": safeNumber(row.diffVsPrevMonth),
         },
       ];
-      const ws = XLSX.utils.json_to_sheet(sheetData);
+      const ws = createWorksheetWithReportHeader({
+        reportTitle: "Tổng hợp doanh thu theo tháng",
+        req,
+        sheetData,
+      });
       ws["!cols"] = [{ wch: 10 }, { wch: 18 }, { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 18 }];
       XLSX.utils.book_append_sheet(wb, ws, "Tổng hợp theo tháng");
     }
 
-    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
     const fileName = buildExportFileName({ reportName: "Bao_Cao_Tong_Hop_Theo_Thang", req });
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
@@ -1481,11 +1579,15 @@ const exportMonthlyTopProducts = async (req, res) => {
       "Tổng doanh thu (VNĐ)": safeNumber(r.totalRevenue),
       "Tỷ lệ đóng góp (%)": safeNumber(r.contributionPercent),
     }));
-    const ws = XLSX.utils.json_to_sheet(sheetData);
+    const ws = createWorksheetWithReportHeader({
+      reportTitle: "Bán chạy theo sản phẩm",
+      req,
+      sheetData,
+    });
     ws["!cols"] = [{ wch: 28 }, { wch: 18 }, { wch: 18 }, { wch: 18 }];
     XLSX.utils.book_append_sheet(wb, ws, "Bán chạy theo sản phẩm");
 
-    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
     const fileName = buildExportFileName({ reportName: "Bao_Cao_Ban_Chay_Theo_San_Pham", req });
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
@@ -1701,11 +1803,15 @@ const exportYearlyProductGroupProductCompare = async (req, res) => {
       }
     }
 
-    const ws = XLSX.utils.json_to_sheet(rows);
+    const ws = createWorksheetWithReportHeader({
+      reportTitle: "Doanh thu hằng năm",
+      req,
+      sheetData: rows,
+    });
     ws["!cols"] = [{ wch: 34 }, { wch: 18 }, { wch: 18 }, { wch: 16 }, { wch: 18 }];
     XLSX.utils.book_append_sheet(wb, ws, "Doanh thu hằng năm");
 
-    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
     const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu_Hang_Nam", req });
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
@@ -1868,11 +1974,15 @@ const exportQuarterlyRevenueByCategory = async (req, res) => {
       [`Tháng ${m3} - Chênh lệch`]: safeNumber(r.month3?.diff),
     }));
 
-    const ws = XLSX.utils.json_to_sheet(sheetData);
+    const ws = createWorksheetWithReportHeader({
+      reportTitle: "Báo cáo theo quý",
+      req,
+      sheetData,
+    });
     ws["!cols"] = [{ wch: 22 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }];
     XLSX.utils.book_append_sheet(wb, ws, "Báo cáo theo quý");
 
-    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
     const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu_Theo_Quy", req });
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
@@ -2000,11 +2110,15 @@ const exportYearlyTopProducts = async (req, res) => {
       "Ước tính (VNĐ)": safeNumber(r.estimateRevenue),
       "Thực tế (VNĐ)": safeNumber(r.actualRevenue),
     }));
-    const ws = XLSX.utils.json_to_sheet(sheetData);
+    const ws = createWorksheetWithReportHeader({
+      reportTitle: "Báo cáo theo năm",
+      req,
+      sheetData,
+    });
     ws["!cols"] = [{ wch: 6 }, { wch: 14 }, { wch: 28 }, { wch: 14 }, { wch: 16 }, { wch: 16 }];
     XLSX.utils.book_append_sheet(wb, ws, "Báo cáo theo năm");
 
-    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
     const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu_Theo_Nam", req });
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
