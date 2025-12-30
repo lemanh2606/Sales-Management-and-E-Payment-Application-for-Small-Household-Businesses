@@ -38,6 +38,15 @@ import dayjs, { Dayjs } from "dayjs";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, PieLabelRenderProps } from "recharts";
 import debounce from "../../utils/debounce";
 import Swal from "sweetalert2";
+import utc from "dayjs/plugin/utc"; // ✅ THÊM
+import timezone from "dayjs/plugin/timezone"; // ✅ THÊM
+
+// Khởi tạo plugin
+dayjs.extend(utc); // ✅ THÊM
+dayjs.extend(timezone); // ✅ THÊM
+
+// Set timezone mặc định cho toàn app (nếu muốn)
+dayjs.tz.setDefault("Asia/Ho_Chi_Minh"); // ✅ THÊM (optional)
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -142,7 +151,8 @@ const EndOfDayReport: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [periodType, setPeriodType] = useState<string>("day");
-  const [selectedDate, setSelectedDate] = useState<Dayjs>(dayjs());
+  const [selectedDate, setSelectedDate] = useState(dayjs().tz("Asia/Ho_Chi_Minh")); // ✅ THÊM .tz()
+
   //dùng setPagination riêng (đỡ giẫm nhau nếu người dùng lật trang nhiều bảng khác loại cùng lúc)
   const [paginationEmployee, setPaginationEmployee] = useState({
     current: 1,
@@ -175,24 +185,30 @@ const EndOfDayReport: React.FC = () => {
       setLoading(true);
       try {
         let periodKey = "";
+
+        // ✅ Convert sang UTC+7 rồi mới format
+        const vnDate = date.tz("Asia/Ho_Chi_Minh");
+
         switch (period) {
           case "day":
-            periodKey = date.format("YYYY-MM-DD");
+            // ✅ Gửi cả start và end của ngày theo VN timezone
+            periodKey = vnDate.startOf("day").utc().format("YYYY-MM-DD");
             break;
           case "month":
-            periodKey = date.format("YYYY-MM");
+            periodKey = vnDate.format("YYYY-MM");
             break;
           case "quarter":
-            periodKey = `${date.year()}-Q${Math.floor(date.month() / 3 + 1)}`;
+            periodKey = `${vnDate.year()}-Q${Math.floor(vnDate.month() / 3 + 1)}`;
             break;
           case "year":
-            periodKey = date.format("YYYY");
+            periodKey = vnDate.format("YYYY");
             break;
           default:
-            periodKey = date.format("YYYY-MM-DD");
+            periodKey = vnDate.startOf("day").utc().format("YYYY-MM-DD");
         }
+
         const res = await axios.get(`${API_BASE}/financials/end-of-day/${storeId}`, {
-          params: { periodType: period, periodKey },
+          params: { periodType: period, periodKey, timezone: "Asia/Ho_Chi_Minh" },
           headers,
         });
         setReportData(res.data.report);

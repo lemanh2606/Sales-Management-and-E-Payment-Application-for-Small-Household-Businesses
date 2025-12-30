@@ -1892,8 +1892,11 @@ const OrderPOSHome: React.FC = () => {
           }
         }}
       />
+
+      {/* Modal show mã QRm=, nút xác nhận In hoá đơn và nút Huỷ */}
       <Modal
         open={!!(currentTab.qrImageUrl || currentTab.qrPayload)}
+<<<<<<< HEAD
         footer={[
           <Button
             key="cancel"
@@ -1946,6 +1949,57 @@ const OrderPOSHome: React.FC = () => {
             {isPrinting ? "Đang in..." : "In Hóa Đơn & Xác Nhận Thanh Toán"}
           </Button>,
         ]}
+=======
+        footer={
+          <div style={{ display: "flex", justifyContent: "center", gap: "12px" }}>
+            <Button
+              style={{ background: "#e7e4e4ff", borderColor: "#d9d9d9", color: "#595959" }}
+              key="cancel"
+              onClick={() => {
+                updateOrderTab((tab) => {
+                  tab.qrImageUrl = null;
+                  tab.qrPayload = null;
+                  tab.qrExpiryTs = null;
+                });
+              }}
+            >
+              Huỷ thanh toán
+            </Button>
+            <Button
+              key="print"
+              type="primary"
+              danger
+              onClick={() => {
+                if (currentTab.pendingOrderId) {
+                  // 🔴 Call API set-paid-QR + in bill trong 1 request
+                  (async () => {
+                    try {
+                      await axios.post(`${API_BASE}/orders/${currentTab.pendingOrderId}/print-bill`, {}, { headers });
+                      // Reset QR
+                      updateOrderTab((tab) => {
+                        tab.qrImageUrl = null;
+                        tab.qrPayload = null;
+                        tab.qrExpiryTs = null;
+                      });
+                      setBillModalOpen(true);
+                    } catch (err: any) {
+                      Swal.fire({
+                        icon: "error",
+                        title: "In hoá đơn thất bại",
+                        text: err.response?.data?.message || "Lỗi khi in hoá đơn",
+                        confirmButtonText: "OK",
+                      });
+                    }
+                  })();
+                }
+              }}
+              style={{ background: "#52c41a", borderColor: "#52c41a", color: "#fff" }}
+            >
+              In hoá đơn (Xác nhận thanh toán)
+            </Button>
+          </div>
+        }
+>>>>>>> b2d4ae6d4bdbc0132d750e32ca28b485054b8cb4
         onCancel={() => {
           updateOrderTab((tab) => {
             tab.qrImageUrl = null;
@@ -2013,6 +2067,7 @@ const OrderPOSHome: React.FC = () => {
           )}
         </div>
       </Modal>
+
       {/* Modal in hóa đơn */}
       <ModalPrintBill
         open={billModalOpen}

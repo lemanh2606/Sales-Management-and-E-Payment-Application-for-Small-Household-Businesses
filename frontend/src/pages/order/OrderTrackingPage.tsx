@@ -1,5 +1,6 @@
 // src/pages/order/OrderTrackingPage.tsx
 import React, { useState, useEffect, useCallback } from "react";
+<<<<<<< HEAD
 import {
   Card,
   Row,
@@ -16,6 +17,9 @@ import {
   Descriptions,
   Divider,
 } from "antd";
+=======
+import { Card, Row, Col, Input, Table, Tag, Space, DatePicker, Select, Typography, Empty, Spin, Descriptions, Divider, Button } from "antd";
+>>>>>>> b2d4ae6d4bdbc0132d750e32ca28b485054b8cb4
 import {
   SearchOutlined,
   ShoppingOutlined,
@@ -27,6 +31,7 @@ import {
   CheckCircleOutlined,
   ClockCircleOutlined,
   RollbackOutlined,
+  ReloadOutlined,
 } from "@ant-design/icons";
 import axios from "axios";
 import dayjs, { Dayjs } from "dayjs";
@@ -186,6 +191,11 @@ const OrderTrackingPage: React.FC = () => {
         icon: <RollbackOutlined />,
         text: "Hoàn 1 Phần",
       },
+      cancelled: {
+        color: "gray",
+        icon: <RollbackOutlined />,
+        text: "Đã Huỷ",
+      },
     };
     return configs[status] || configs.pending;
   };
@@ -320,13 +330,18 @@ const OrderTrackingPage: React.FC = () => {
               </Space>
             }
             extra={
-              <Text type="secondary">
-                Tổng có:{" "}
-                <Text strong style={{ color: "#1890ff" }}>
-                  {filteredOrders.length}
-                </Text>{" "}
-                đơn hàng
-              </Text>
+              <Space>
+                <Button icon={<ReloadOutlined />} onClick={loadOrders} loading={loading} type="default">
+                  Làm mới
+                </Button>
+                <Text type="secondary">
+                  Tổng có:{" "}
+                  <Text strong style={{ color: "#1890ff" }}>
+                    {filteredOrders.length}
+                  </Text>{" "}
+                  đơn hàng
+                </Text>
+              </Space>
             }
             style={{ borderRadius: 12 }}
           >
@@ -355,18 +370,17 @@ const OrderTrackingPage: React.FC = () => {
                 }}
                 size="large"
               />
-              <Select
-                placeholder="Lọc theo trạng thái"
-                style={{ width: "100%" }}
-                value={selectedStatus}
-                onChange={setSelectedStatus}
-                allowClear
-                size="large"
-              >
-                <Option value="pending">Chờ Thanh Toán</Option>
-                <Option value="paid">Đã Thanh Toán</Option>
-                <Option value="refunded">Hoàn Toàn Bộ</Option>
-                <Option value="partially_refunded">Hoàn 1 Phần</Option>
+              <Select placeholder="Trạng Thái" onChange={(value) => setSelectedStatus(value)} allowClear style={{ width: "100%" }} size="large">
+                {["pending", "paid", "refunded", "partially_refunded", "cancelled"].map((status) => {
+                  const cfg = getStatusConfig(status);
+                  return (
+                    <Option key={status} value={status}>
+                      <Tag color={cfg.color} icon={cfg.icon}>
+                        {cfg.text}
+                      </Tag>
+                    </Option>
+                  );
+                })}
               </Select>
             </Space>
 
@@ -404,7 +418,7 @@ const OrderTrackingPage: React.FC = () => {
                     <Space direction="vertical" size={0}>
                       <Text strong>{record.customer?.name || "Khách lẻ"}</Text>
                       <Text type="secondary" style={{ fontSize: 12 }}>
-                        {record.customer?.phone || "N/A"}
+                        {record.customer?.phone || "Trống"}
                       </Text>
                     </Space>
                   ),
@@ -473,7 +487,7 @@ const OrderTrackingPage: React.FC = () => {
                 <Spin size="large" tip="Đang tải chi tiết..." />
               </div>
             ) : !orderDetail ? (
-              <Empty description="Chọn một đơn hàng để xem chi tiết" />
+              <Empty description="Chọn một đơn hàng bên cạnh để xem chi tiết nó" />
             ) : (
               <div>
                 {/* Thông tin đơn hàng */}
