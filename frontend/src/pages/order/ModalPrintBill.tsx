@@ -54,9 +54,37 @@ const ModalPrintBill: React.FC<ModalPrintBillProps> = ({
 }) => {
   const printRef = useRef<HTMLDivElement>(null);
 
+  // ✅ THÊM REF ĐỂ CHẶN GỌI TRÙNG
+  const isPrintingRef = useRef(false);
+  const printTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleAfterPrint = () => {
+    console.log("🖨️ onAfterPrint called");
+    console.log("📋 isPrintingRef.current:", isPrintingRef.current);
+
+    // ✅ CHẶN NẾU ĐANG XỬ LÝ
+    if (isPrintingRef.current) {
+      console.log("⚠️ CHẶN: Đang xử lý print rồi!");
+      return;
+    }
+
+    isPrintingRef.current = true;
+    console.log("✅ Gọi onPrint()");
+    onPrint();
+
+    // ✅ RESET SAU 3 GIÂY
+    if (printTimeoutRef.current) {
+      clearTimeout(printTimeoutRef.current);
+    }
+    printTimeoutRef.current = setTimeout(() => {
+      console.log("🔓 Reset isPrintingRef");
+      isPrintingRef.current = false;
+    }, 3000);
+  };
+
   const handlePrint = useReactToPrint({
     contentRef: printRef,
-    onAfterPrint: onPrint,
+    onAfterPrint: handleAfterPrint, // ✅ Dùng hàm wrapper
   });
 
   const formatPrice = (price: any) => {

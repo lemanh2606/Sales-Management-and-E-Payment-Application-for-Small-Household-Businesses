@@ -1,6 +1,21 @@
 // src/pages/order/OrderTrackingPage.tsx
 import React, { useState, useEffect, useCallback } from "react";
-import { Card, Row, Col, Input, Table, Tag, Space, DatePicker, Select, Typography, Empty, Spin, Descriptions, Divider } from "antd";
+import {
+  Card,
+  Row,
+  Col,
+  Input,
+  Table,
+  Tag,
+  Space,
+  DatePicker,
+  Select,
+  Typography,
+  Empty,
+  Spin,
+  Descriptions,
+  Divider,
+} from "antd";
 import {
   SearchOutlined,
   ShoppingOutlined,
@@ -108,11 +123,18 @@ const OrderTrackingPage: React.FC = () => {
 
   // State
   const [searchText, setSearchText] = useState("");
-  const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null]>([null, null]);
-  const [selectedStatus, setSelectedStatus] = useState<string | undefined>(undefined);
+  const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null]>([
+    null,
+    null,
+  ]);
+  const [selectedStatus, setSelectedStatus] = useState<string | undefined>(
+    undefined
+  );
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
-  const [orderDetail, setOrderDetail] = useState<OrderDetailResponse | null>(null);
+  const [orderDetail, setOrderDetail] = useState<OrderDetailResponse | null>(
+    null
+  );
   const [loading, setLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
 
@@ -121,7 +143,10 @@ const OrderTrackingPage: React.FC = () => {
 
   // Helper: Format currency
   const formatCurrency = (value: MongoDecimal | number): string => {
-    const numValue = typeof value === "object" && value.$numberDecimal ? parseFloat(value.$numberDecimal) : Number(value);
+    const numValue =
+      typeof value === "object" && value.$numberDecimal
+        ? parseFloat(value.$numberDecimal)
+        : Number(value);
     return numValue.toLocaleString("vi-VN") + "₫";
   };
 
@@ -132,7 +157,15 @@ const OrderTrackingPage: React.FC = () => {
 
   // Helper: Get status config
   const getStatusConfig = (status: string) => {
-    const configs: Record<string, { color: string; icon: React.ReactNode; text: string }> = {
+    const configs: Record<
+      string,
+      { color: string; icon: React.ReactNode; text: string }
+    > = {
+      canceled: {
+        color: "gray",
+        icon: <Tag color="gray">Đã Hủy</Tag>,
+        text: "Đã Hủy",
+      },
       pending: {
         color: "orange",
         icon: <ClockCircleOutlined />,
@@ -161,10 +194,13 @@ const OrderTrackingPage: React.FC = () => {
   const loadOrders = async () => {
     setLoading(true);
     try {
-      const res = await axios.get<OrderListResponse>(`${API_BASE}/orders/list-all`, {
-        params: { storeId },
-        headers,
-      });
+      const res = await axios.get<OrderListResponse>(
+        `${API_BASE}/orders/list-all`,
+        {
+          params: { storeId },
+          headers,
+        }
+      );
       setOrders(res.data.orders);
     } catch (err: any) {
       Swal.fire({
@@ -182,10 +218,13 @@ const OrderTrackingPage: React.FC = () => {
     setDetailLoading(true);
     setSelectedOrderId(orderId);
     try {
-      const res = await axios.get<OrderDetailResponse>(`${API_BASE}/orders/${orderId}`, {
-        params: { storeId },
-        headers,
-      });
+      const res = await axios.get<OrderDetailResponse>(
+        `${API_BASE}/orders/${orderId}`,
+        {
+          params: { storeId },
+          headers,
+        }
+      );
       setOrderDetail(res.data);
     } catch (err: any) {
       Swal.fire({
@@ -227,7 +266,8 @@ const OrderTrackingPage: React.FC = () => {
     let matchDate = true;
     if (dateRange[0] && dateRange[1]) {
       const orderDate = dayjs(order.createdAt);
-      matchDate = orderDate.isAfter(dateRange[0]) && orderDate.isBefore(dateRange[1]);
+      matchDate =
+        orderDate.isAfter(dateRange[0]) && orderDate.isBefore(dateRange[1]);
     }
 
     return matchSearch && matchStatus && matchDate;
@@ -246,10 +286,13 @@ const OrderTrackingPage: React.FC = () => {
         <span style={{ color: "#1890ff", fontWeight: 600 }}>
           {range[0]} – {range[1]}
         </span>{" "}
-        trên tổng số <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> đơn hàng
+        trên tổng số{" "}
+        <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> đơn
+        hàng
       </div>
     ),
-    onChange: (page: number, pageSize: number) => setPagination({ current: page, pageSize }),
+    onChange: (page: number, pageSize: number) =>
+      setPagination({ current: page, pageSize }),
   };
 
   return (
@@ -288,7 +331,10 @@ const OrderTrackingPage: React.FC = () => {
             style={{ borderRadius: 12 }}
           >
             {/* Bộ lọc */}
-            <Space direction="vertical" style={{ width: "100%", marginBottom: 16 }}>
+            <Space
+              direction="vertical"
+              style={{ width: "100%", marginBottom: 16 }}
+            >
               <Input
                 placeholder="Tìm mã đơn hàng, tên khách, SĐT..."
                 prefix={<SearchOutlined />}
@@ -332,7 +378,9 @@ const OrderTrackingPage: React.FC = () => {
               pagination={paginationConfig}
               size="small"
               scroll={{ y: 500 }}
-              rowClassName={(record) => (record._id === selectedOrderId ? "ant-table-row-selected" : "")}
+              rowClassName={(record) =>
+                record._id === selectedOrderId ? "ant-table-row-selected" : ""
+              }
               onRow={(record) => ({
                 onClick: () => loadOrderDetail(record._id),
                 style: { cursor: "pointer" },
@@ -367,7 +415,9 @@ const OrderTrackingPage: React.FC = () => {
                   key: "totalAmount",
                   width: 110,
                   align: "right",
-                  render: (value) => <Text strong>{formatCurrency(value)}</Text>,
+                  render: (value) => (
+                    <Text strong>{formatCurrency(value)}</Text>
+                  ),
                 },
                 {
                   title: "Trạng Thái",
@@ -390,7 +440,17 @@ const OrderTrackingPage: React.FC = () => {
                   key: "createdAt",
                   align: "center",
                   width: 100,
-                  render: (date) => <Text style={{ fontSize: 12, color: "#2274efff", fontWeight: "bold" }}>{formatDate(date)}</Text>,
+                  render: (date) => (
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        color: "#2274efff",
+                        fontWeight: "bold",
+                      }}
+                    >
+                      {formatDate(date)}
+                    </Text>
+                  ),
                 },
               ]}
             />
@@ -422,8 +482,11 @@ const OrderTrackingPage: React.FC = () => {
                   title={
                     <Space>
                       <Text strong>Thông Tin Đơn Hàng:</Text>
-                      <Tag color={getStatusConfig(orderDetail.order.status).color}>
-                        {getStatusConfig(orderDetail.order.status).text} {getStatusConfig(orderDetail.order.status).icon}
+                      <Tag
+                        color={getStatusConfig(orderDetail.order.status).color}
+                      >
+                        {getStatusConfig(orderDetail.order.status).text}{" "}
+                        {getStatusConfig(orderDetail.order.status).icon}
                       </Tag>
                     </Space>
                   }
@@ -435,45 +498,79 @@ const OrderTrackingPage: React.FC = () => {
                         {orderDetail.order._id}
                       </Text>
                     </Descriptions.Item>
-                    <Descriptions.Item label="Cửa Hàng">{orderDetail.order.storeId.name}</Descriptions.Item>
+                    <Descriptions.Item label="Cửa Hàng">
+                      {orderDetail.order.storeId.name}
+                    </Descriptions.Item>
                     <Descriptions.Item label="Nhân Viên">
                       <Space>
                         <UserOutlined />
-                        {orderDetail.order.employeeId?.fullName ? orderDetail.order.employeeId.fullName : <Tag color="gold">Chủ cửa hàng</Tag>}
+                        {orderDetail.order.employeeId?.fullName ? (
+                          orderDetail.order.employeeId.fullName
+                        ) : (
+                          <Tag color="gold">Chủ cửa hàng</Tag>
+                        )}
                       </Space>
                     </Descriptions.Item>
                     <Descriptions.Item label="Khách Hàng">
                       {orderDetail.order.customer ? (
                         <Space direction="vertical" size={0}>
                           <Text strong>{orderDetail.order.customer.name}</Text>
-                          <Text type="secondary">{orderDetail.order.customer.phone}</Text>
+                          <Text type="secondary">
+                            {orderDetail.order.customer.phone}
+                          </Text>
                         </Space>
                       ) : (
                         "Khách lẻ"
                       )}
                     </Descriptions.Item>
                     <Descriptions.Item label="Phương Thức TT">
-                      <Tag color={orderDetail.order.paymentMethod === "cash" ? "green" : "blue"}>
-                        <DollarOutlined /> {orderDetail.order.paymentMethod === "cash" ? "Tiền Mặt" : "QR Code"}
+                      <Tag
+                        color={
+                          orderDetail.order.paymentMethod === "cash"
+                            ? "green"
+                            : "blue"
+                        }
+                      >
+                        <DollarOutlined />{" "}
+                        {orderDetail.order.paymentMethod === "cash"
+                          ? "Tiền Mặt"
+                          : "QR Code"}
                       </Tag>
                     </Descriptions.Item>
                     <Descriptions.Item label="Xuất VAT">
-                      <Tag color={orderDetail.order.isVATInvoice ? "cyan" : "default"}>{orderDetail.order.isVATInvoice ? "Có" : "Không"}</Tag>
+                      <Tag
+                        color={
+                          orderDetail.order.isVATInvoice ? "cyan" : "default"
+                        }
+                      >
+                        {orderDetail.order.isVATInvoice ? "Có" : "Không"}
+                      </Tag>
                     </Descriptions.Item>
                     <Descriptions.Item label="Ngày Tạo" span={2}>
-                      <span style={{ marginRight: 10 }}>{formatDate(orderDetail.order.createdAt)}</span>
+                      <span style={{ marginRight: 10 }}>
+                        {formatDate(orderDetail.order.createdAt)}
+                      </span>
                     </Descriptions.Item>
                     {orderDetail.order.printDate && (
                       <Descriptions.Item label="Ngày In Hoá Đơn" span={2}>
-                        <span style={{ marginRight: 10 }}>{formatDate(orderDetail.order.printDate)}</span>
-                        <Tag color="blue"> Đã in hoá đơn: {orderDetail.order.printCount} lần</Tag>
+                        <span style={{ marginRight: 10 }}>
+                          {formatDate(orderDetail.order.printDate)}
+                        </span>
+                        <Tag color="blue">
+                          {" "}
+                          Đã in hoá đơn: {orderDetail.order.printCount} lần
+                        </Tag>
                       </Descriptions.Item>
                     )}
                   </Descriptions>
                 </Card>
 
                 {/* Sản phẩm trong đơn */}
-                <Card type="inner" title={<Text strong>Sản Phẩm Trong Đơn</Text>} style={{ marginBottom: 16 }}>
+                <Card
+                  type="inner"
+                  title={<Text strong>Sản Phẩm Trong Đơn</Text>}
+                  style={{ marginBottom: 16 }}
+                >
                   <Table
                     dataSource={orderDetail.order.items}
                     rowKey="_id"
@@ -491,12 +588,16 @@ const OrderTrackingPage: React.FC = () => {
                         title: "Mã SKU",
                         key: "sku",
                         width: 120,
-                        render: (_, record) => <Text code>{record.productSku}</Text>,
+                        render: (_, record) => (
+                          <Text code>{record.productSku}</Text>
+                        ),
                       },
                       {
                         title: "Sản Phẩm",
                         key: "name",
-                        render: (_, record) => <Text strong>{record.productName}</Text>,
+                        render: (_, record) => (
+                          <Text strong>{record.productName}</Text>
+                        ),
                       },
                       {
                         title: "Số Lượng",
@@ -520,21 +621,31 @@ const OrderTrackingPage: React.FC = () => {
                         key: "subtotal",
                         align: "right",
                         width: 130,
-                        render: (value) => <Text strong>{formatCurrency(value)}</Text>,
+                        render: (value) => (
+                          <Text strong>{formatCurrency(value)}</Text>
+                        ),
                       },
                     ]}
                   />
                 </Card>
 
                 {/* Tổng tiền */}
-                <Card type="inner" title={<Text strong>Thông Tin Thanh Toán</Text>} style={{ borderColor: "#1890ff" }}>
+                <Card
+                  type="inner"
+                  title={<Text strong>Thông Tin Thanh Toán</Text>}
+                  style={{ borderColor: "#1890ff" }}
+                >
                   <Descriptions column={1} size="small">
                     <Descriptions.Item label="Tiền Trước Thuế">
-                      <Text style={{ fontSize: 16 }}>{formatCurrency(orderDetail.order.beforeTaxAmount)}</Text>
+                      <Text style={{ fontSize: 16 }}>
+                        {formatCurrency(orderDetail.order.beforeTaxAmount)}
+                      </Text>
                     </Descriptions.Item>
                     {orderDetail.order.isVATInvoice && (
                       <Descriptions.Item label="VAT (10%)">
-                        <Text style={{ fontSize: 16, color: "#faad14" }}>+{formatCurrency(orderDetail.order.vatAmount)}</Text>
+                        <Text style={{ fontSize: 16, color: "#faad14" }}>
+                          +{formatCurrency(orderDetail.order.vatAmount)}
+                        </Text>
                       </Descriptions.Item>
                     )}
                     <Descriptions.Item label="Tổng Tiền">
@@ -547,8 +658,14 @@ const OrderTrackingPage: React.FC = () => {
                   {orderDetail.order.refundId && (
                     <>
                       <Divider style={{ margin: "12px 0" }} />
-                      <Space style={{ width: "100%", justifyContent: "center" }}>
-                        <Tag icon={<RollbackOutlined />} color="red" style={{ fontSize: 14, padding: "4px 12px" }}>
+                      <Space
+                        style={{ width: "100%", justifyContent: "center" }}
+                      >
+                        <Tag
+                          icon={<RollbackOutlined />}
+                          color="red"
+                          style={{ fontSize: 14, padding: "4px 12px" }}
+                        >
                           Đơn hàng này đã được hoàn trả
                         </Tag>
                       </Space>

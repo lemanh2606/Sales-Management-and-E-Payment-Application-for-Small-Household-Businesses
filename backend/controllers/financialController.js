@@ -41,7 +41,6 @@ function getMonthsInPeriod(periodType) {
   }
 }
 
-// =====================================================================
 const calcFinancialSummary = async ({
   storeId,
   periodType,
@@ -51,16 +50,91 @@ const calcFinancialSummary = async ({
   const { start, end } = periodToRange(periodType, periodKey);
   const objectStoreId = new mongoose.Types.ObjectId(storeId);
 
-  // 1️⃣ Tổng doanh thu
-  const revenueData = await calcRevenueByPeriod({
-    storeId,
-    periodType,
-    periodKey,
-    type: "total",
-  });
-  let totalRevenue = toNumber(revenueData[0]?.totalRevenue);
+  // ================================================================
+  // 1️⃣ DOANH THU: CHỈ TÍNH ĐƠN PAID & PARTIALLY_REFUNDED
+  // ================================================================
+  const revenueAgg = await Order.aggregate([
+    {
+      $match: {
+        storeId: objectStoreId,
+        status: { $in: ["paid", "partially_refunded"] }, // ✅ KHÔNG tính "refunded"
+        createdAt: { $gte: start, $lte: end },
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        grossRevenue: { $sum: "$totalAmount" },
+        totalOrders: { $sum: 1 },
+        paidOrders: {
+          $sum: { $cond: [{ $eq: ["$status", "paid"] }, 1, 0] },
+        },
+        partiallyRefundedOrders: {
+          $sum: { $cond: [{ $eq: ["$status", "partially_refunded"] }, 1, 0] },
+        },
+      },
+    },
+  ]);
 
-  // 2️⃣ VAT
+  const revenueData = revenueAgg[0] || {
+    grossRevenue: 0,
+    totalOrders: 0,
+    paidOrders: 0,
+    partiallyRefundedOrders: 0,
+  };
+
+  // ✅ ĐẾM SỐ ĐƠN HOÀN TOÀN BỘ (KHÔNG TÍNH VÀO DOANH THU)
+  const fullyRefundedCount = await Order.countDocuments({
+    storeId: objectStoreId,
+    status: "refunded",
+    createdAt: { $gte: start, $lte: end },
+  });
+
+  // ================================================================
+  // 2️⃣ TỔNG TIỀN HOÀN TRẢ (Chỉ từ đơn partially_refunded)
+  // ================================================================
+  const refundAgg = await OrderRefund.aggregate([
+    {
+      $match: {
+        refundedAt: { $gte: start, $lte: end },
+      },
+    },
+    {
+      $lookup: {
+        from: "orders",
+        localField: "orderId",
+        foreignField: "_id",
+        as: "order",
+      },
+    },
+    {
+      $match: {
+        "order.storeId": objectStoreId,
+        "order.status": { $in: ["partially_refunded"] }, // ✅ CHỈ tính hoàn một phần
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        totalRefundAmount: { $sum: "$refundAmount" },
+        totalRefundCount: { $sum: 1 },
+      },
+    },
+  ]);
+
+  const refundData = refundAgg[0] || {
+    totalRefundAmount: 0,
+    totalRefundCount: 0,
+  };
+
+  // ✅ DOANH THU THỰC = Tổng đã thanh toán - Hoàn một phần
+  let grossRevenue = toNumber(revenueData.grossRevenue);
+  let totalRefundAmount = toNumber(refundData.totalRefundAmount);
+  let totalRevenue = grossRevenue - totalRefundAmount;
+
+  // ================================================================
+  // 3️⃣ VAT (Không tính đơn refunded)
+  // ================================================================
   const vat = await Order.aggregate([
     {
       $match: {
@@ -73,27 +147,39 @@ const calcFinancialSummary = async ({
   ]);
   let totalVAT = toNumber(vat[0]?.totalVAT);
 
-  // 3️⃣ Chi phí nhập hàng (COGS - Cost Of Goods Sold)
-  // ✅ CHUẨN: Lấy từ InventoryVoucher loại OUT (xuất) với status POSTED
-  // COGS = Σ(Số lượng xuất × Giá vốn tại thời điểm xuất)
-  // Nguyên tắc: Chỉ tính phần hàng đã xuất trong kỳ báo cáo
+  // ================================================================
+  // 4️⃣ COGS (Chi phí hàng bán) - CHỈ TỪ ĐƠN PAID & PARTIALLY_REFUNDED
+  // ================================================================
+  // Lấy danh sách orderId của đơn paid & partially_refunded
+  const validOrders = await Order.find({
+    storeId: objectStoreId,
+    status: { $in: ["paid", "partially_refunded"] },
+    createdAt: { $gte: start, $lte: end },
+  }).select("_id");
+
+  const validOrderIds = validOrders.map((o) => o._id);
+
   const cogsAgg = await InventoryVoucher.aggregate([
     {
       $match: {
         store_id: objectStoreId,
-        type: "OUT", // Chỉ lấy phiếu xuất
-        status: "POSTED", // Chỉ tính những phiếu đã ghi sổ
-        voucher_date: { $gte: start, $lte: end }, // Trong kỳ báo cáo
+        type: "OUT",
+        status: "POSTED",
+        ref_type: "ORDER",
+        ref_id: { $in: validOrderIds }, // ✅ CHỈ lấy COGS của đơn hợp lệ
+        voucher_date: { $gte: start, $lte: end },
       },
     },
-    { $unwind: "$items" }, // Mở rộng items array
+    { $unwind: "$items" },
     {
       $group: {
         _id: null,
         totalCOGS: {
-          // Tính: Số lượng xuất × Giá vốn (unit_cost từ phiếu xuất)
           $sum: {
-            $multiply: ["$items.qty_actual", { $toDecimal: "$items.unit_cost" }],
+            $multiply: [
+              "$items.qty_actual",
+              { $toDecimal: "$items.unit_cost" },
+            ],
           },
         },
       },
@@ -101,20 +187,61 @@ const calcFinancialSummary = async ({
   ]);
   let totalCOGS = toNumber(cogsAgg[0]?.totalCOGS);
 
-  // 4️⃣ Lợi nhuận gộp
+  // ✅ TRỪ ĐI COGS CỦA HÀNG HOÀN (Chỉ từ đơn partially_refunded)
+  const partiallyRefundedOrders = await Order.find({
+    storeId: objectStoreId,
+    status: "partially_refunded",
+    createdAt: { $gte: start, $lte: end },
+  }).select("_id");
+
+  const partiallyRefundedOrderIds = partiallyRefundedOrders.map((o) => o._id);
+
+  const refundCogsAgg = await InventoryVoucher.aggregate([
+    {
+      $match: {
+        store_id: objectStoreId,
+        type: "IN",
+        status: "POSTED",
+        ref_type: "ORDER_REFUND",
+        ref_id: { $in: partiallyRefundedOrderIds }, // ✅ CHỈ hoàn một phần
+        voucher_date: { $gte: start, $lte: end },
+      },
+    },
+    { $unwind: "$items" },
+    {
+      $group: {
+        _id: null,
+        totalRefundCOGS: {
+          $sum: {
+            $multiply: [
+              "$items.qty_actual",
+              { $toDecimal: "$items.unit_cost" },
+            ],
+          },
+        },
+      },
+    },
+  ]);
+  let totalRefundCOGS = toNumber(refundCogsAgg[0]?.totalRefundCOGS);
+
+  // COGS thực = COGS bán - COGS hoàn
+  totalCOGS = totalCOGS - totalRefundCOGS;
+
+  // ================================================================
+  // 5️⃣ LỢI NHUẬN GỘP
+  // ================================================================
   let grossProfit = totalRevenue - totalCOGS;
 
-  // 5️⃣ Chi phí vận hành (Operating Cost)
+  // ================================================================
+  // 6️⃣ CHI PHÍ VẬN HÀNH (giữ nguyên)
+  // ================================================================
   const months = getMonthsInPeriod(periodType);
-  // cho dù là năm trong tương lai chưa bán hàng, vẫn tính lương cho nhân viên, nếu xoá nhân viên đi thì coi như mọi thứ là 0 vnđ,
-  // còn nếu không thì kể cả là năm 2030 vẫn luôn cộng chi phí lương cho nhân viên,
-  // ví dụ 5 triệu 1 tháng thì 1 year là 60 triệu chi phí vận hành, lợi nhuận ròng là âm 60 triệu
   const employees = await Employee.find({
     store_id: objectStoreId,
     isDeleted: false,
   })
     .populate("user_id", "role")
-    .select("salary commission_rate user_id"); //lương và hoa hồng
+    .select("salary commission_rate user_id");
 
   const filteredEmployees = employees.filter((e) =>
     ["MANAGER", "STAFF"].includes(e.user_id?.role)
@@ -141,7 +268,6 @@ const calcFinancialSummary = async ({
     );
   }, 0);
 
-  // 👉 FE gửi: ?extraExpense=1000000,2000000 (có thể nhiều hơn hoặc ít hơn)
   if (typeof extraExpense === "string" && extraExpense.includes(",")) {
     extraExpense = extraExpense.split(",").map(Number);
   } else if (Array.isArray(extraExpense)) {
@@ -153,21 +279,19 @@ const calcFinancialSummary = async ({
     (sum, val) => sum + (val || 0),
     0
   );
-  //Tổng chi phí vận hành trước khi cộng thêm phần điều chỉnh và hao hụt hàng
+
   let operatingCost = totalSalary + totalCommission + totalExtraExpense;
 
-  // 9️⃣ Hao hụt kho - Từ InventoryVoucher loại OUT (không phải bán hàng)
-  // Bao gồm: Hủy hàng, Thất thoát, Sai sót cân, Quà tặng, v.v.
-  // Công thức: Σ(Số lượng xuất × Giá vốn) cho tất cả OUT vouchers POSTED trong kỳ, trừ phần bán hàng
-  // (Ghi chú: InventoryVoucher OUT xuất phát từ các nguồn: bán hàng Order hoặc các lý do khác)
-  // Vì vậy chúng ta sẽ tính tất cả OUT và trừ đi COGS (bán hàng), phần còn lại là hao hụt
+  // ================================================================
+  // 7️⃣ HAO HỤT KHO
+  // ================================================================
   const inventoryLossAgg = await InventoryVoucher.aggregate([
     {
       $match: {
         store_id: objectStoreId,
-        type: "OUT", // Chỉ lấy phiếu xuất
-        status: "POSTED", // Chỉ tính những phiếu đã ghi sổ
-        voucher_date: { $gte: start, $lte: end }, // Trong kỳ báo cáo
+        type: "OUT",
+        status: "POSTED",
+        voucher_date: { $gte: start, $lte: end },
       },
     },
     { $unwind: "$items" },
@@ -176,7 +300,10 @@ const calcFinancialSummary = async ({
         _id: null,
         totalOutValue: {
           $sum: {
-            $multiply: ["$items.qty_actual", { $toDecimal: "$items.unit_cost" }],
+            $multiply: [
+              "$items.qty_actual",
+              { $toDecimal: "$items.unit_cost" },
+            ],
           },
         },
       },
@@ -184,29 +311,22 @@ const calcFinancialSummary = async ({
   ]);
 
   let totalOutValue = toNumber(inventoryLossAgg[0]?.totalOutValue);
-  // Hao hụt kho = Tổng OUT - COGS (bán hàng)
-  // Nếu OUT > COGS thì có hao hụt, nếu bằng thì không hao hụt
-  let inventoryLoss = totalOutValue - totalCOGS;
+  let inventoryLoss = totalOutValue - (totalCOGS + totalRefundCOGS);
 
-  //Cập nhật operatingCost cuối cùng
   if (inventoryLoss > 0) {
-    // Nếu có hao hụt, thêm vào chi phí vận hành
     operatingCost += inventoryLoss;
   }
-  // Nếu inventoryLoss < 0 (OUT < COGS, hiếm xảy ra), bỏ qua
 
-  // ❌ DEPRECATED - Không còn sử dụng:
-  // const adj = await StockCheck.aggregate([...]) → StockCheck không dùng
-  // const disp = await StockDisposal.aggregate([...]) → StockDisposal không dùng
-  let stockAdjustmentValue = 0; // Giữ lại để FE không bị break
-  let stockDisposalCost = 0; // Giữ lại để FE không bị break
-
-  // 6️⃣ Lợi nhuận ròng
+  // ================================================================
+  // 8️⃣ LỢI NHUẬN RÒNG
+  // ================================================================
   const netProfit = grossProfit - operatingCost - totalVAT;
 
-  // 7️⃣ Giá trị tồn kho hiện tại (theo giá vốn + giá bán)
+  // ================================================================
+  // 9️⃣ GIÁ TRỊ TỒN KHO
+  // ================================================================
   const stockAgg = await Product.aggregate([
-    { $match: { store_id: objectStoreId, isDeleted: { $ne: true } } }, // thêm isDeleted để chắc chắn
+    { $match: { store_id: objectStoreId, isDeleted: { $ne: true } } },
     {
       $group: {
         _id: null,
@@ -215,7 +335,7 @@ const calcFinancialSummary = async ({
         },
         stockValueAtSale: {
           $sum: { $multiply: ["$stock_quantity", { $toDecimal: "$price" }] },
-        }, // ← TỒN KHO THEO GIÁ BÁN
+        },
       },
     },
   ]);
@@ -223,15 +343,16 @@ const calcFinancialSummary = async ({
     stockValueAtCost: 0,
     stockValueAtSale: 0,
   };
-  let stockValue = toNumber(stockResult.stockValueAtCost); // giữ nguyên tên cũ (giá vốn)
-  let stockValueAtSalePrice = toNumber(stockResult.stockValueAtSale); // ← MỚI!!!
+  let stockValue = toNumber(stockResult.stockValueAtCost);
+  let stockValueAtSalePrice = toNumber(stockResult.stockValueAtSale);
 
+  // ================================================================
+  // 🔟 THỐNG KÊ NHÓM HÀNG
+  // ================================================================
   const groupStats = await mongoose.model("ProductGroup").aggregate([
     {
       $match: { storeId: objectStoreId, isDeleted: false },
     },
-
-    // JOIN SẢN PHẨM
     {
       $lookup: {
         from: "products",
@@ -240,8 +361,6 @@ const calcFinancialSummary = async ({
         as: "products",
       },
     },
-
-    // JOIN ORDERITEM theo từng sản phẩm
     {
       $lookup: {
         from: "order_items",
@@ -257,13 +376,12 @@ const calcFinancialSummary = async ({
             },
           },
           { $unwind: { path: "$order", preserveNullAndEmptyArrays: true } },
-
           {
             $match: {
               $expr: {
                 $and: [
                   { $eq: ["$order.storeId", objectStoreId] },
-                  { $in: ["$order.status", ["paid", "partially_refunded"]] },
+                  { $in: ["$order.status", ["paid", "partially_refunded"]] }, // ✅ Không tính refunded
                   { $gte: ["$order.printDate", start] },
                   { $lte: ["$order.printDate", end] },
                 ],
@@ -274,15 +392,10 @@ const calcFinancialSummary = async ({
         as: "sales",
       },
     },
-
-    // TÍNH TOÁN
     {
       $project: {
         groupName: "$name",
-
         productCount: { $size: "$products" },
-
-        // TỒN KHO theo giá vốn
         stockValueCost: {
           $sum: {
             $map: {
@@ -292,8 +405,6 @@ const calcFinancialSummary = async ({
             },
           },
         },
-
-        // TỒN KHO theo giá bán
         stockValueSale: {
           $sum: {
             $map: {
@@ -306,13 +417,9 @@ const calcFinancialSummary = async ({
           },
         },
         stockQuantity: { $sum: "$products.stock_quantity" },
-
-        // SỐ LƯỢNG BÁN
         quantitySold: {
           $sum: "$sales.quantity",
         },
-
-        // DOANH THU
         revenue: {
           $sum: {
             $map: {
@@ -324,8 +431,6 @@ const calcFinancialSummary = async ({
         },
       },
     },
-
-    // TỈNH TOÁN PHỤ
     {
       $addFields: {
         potentialProfit: { $subtract: ["$stockValueSale", "$stockValueCost"] },
@@ -338,11 +443,9 @@ const calcFinancialSummary = async ({
         },
       },
     },
-
-    // SẮP XẾP
     { $sort: { revenue: -1 } },
   ]);
-  // Convert Decimal128 → number
+
   const formattedGroupStats = groupStats.map((g) => ({
     _id: g._id,
     groupName: g.groupName,
@@ -356,24 +459,44 @@ const calcFinancialSummary = async ({
     productCount: g.productCount || 0,
   }));
 
+  // ================================================================
+  // ✅ RETURN DATA
+  // ================================================================
   return {
-    totalRevenue, //doanh thu
-    totalVAT, //thuế GTGT
-    totalCOGS, //Chi phí nhập hàng (bán hàng)
-    grossProfit, //lợi nhuận gộp
-    operatingCost, //chi phí vận hành
-    netProfit, //lợi nhuận ròng
-    stockValue, //giá trị tồn kho
-    stockValueAtSalePrice, //giá trị tồn kho theo giá bán
-    inventoryLoss, //hao hụt kho (Tổng OUT - COGS)
-    totalOutValue, //tổng giá trị xuất kho (OUT)
-    groupStats: formattedGroupStats, //thống kê nhóm hàng hóa
-    // ❌ DEPRECATED (để FE không break):
-    stockAdjustmentValue, //[DEPRECATED] điều chỉnh tồn kho - không dùng
-    stockDisposalCost, //[DEPRECATED] hàng hóa hủy - không dùng
+    // ✅ Doanh thu (KHÔNG tính đơn refunded)
+    totalRevenue, // Doanh thu thực
+    grossRevenue, // Tổng đã thanh toán (không bao gồm đơn refunded)
+    totalRefundAmount, // Tiền hoàn từ đơn partially_refunded
+
+    // ✅ Thống kê đơn hàng
+    totalOrders: toNumber(revenueData.totalOrders), // Chỉ paid + partially_refunded
+    paidOrders: toNumber(revenueData.paidOrders),
+    partiallyRefundedOrders: toNumber(revenueData.partiallyRefundedOrders),
+    fullyRefundedOrders: fullyRefundedCount, // ✅ Đơn hoàn toàn bộ (không tính vào doanh thu)
+    totalRefundCount: toNumber(refundData.totalRefundCount),
+
+    // ✅ Chi phí & Lợi nhuận
+    totalVAT,
+    totalCOGS,
+    totalRefundCOGS,
+    grossProfit,
+    operatingCost,
+    netProfit,
+
+    // ✅ Tồn kho & Hao hụt
+    stockValue,
+    stockValueAtSalePrice,
+    inventoryLoss,
+    totalOutValue,
+
+    // ✅ Thống kê nhóm
+    groupStats: formattedGroupStats,
+
+    // ❌ DEPRECATED
+    stockAdjustmentValue: 0,
+    stockDisposalCost: 0,
   };
 };
-
 // =====================================================================
 const getFinancialSummary = async (req, res) => {
   try {
