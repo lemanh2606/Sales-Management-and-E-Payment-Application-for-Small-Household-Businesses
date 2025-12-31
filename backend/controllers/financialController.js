@@ -41,12 +41,7 @@ function getMonthsInPeriod(periodType) {
   }
 }
 
-const calcFinancialSummary = async ({
-  storeId,
-  periodType,
-  periodKey,
-  extraExpense = 0,
-}) => {
+const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpense = 0 }) => {
   const { start, end } = periodToRange(periodType, periodKey);
   const objectStoreId = new mongoose.Types.ObjectId(storeId);
 
@@ -176,10 +171,7 @@ const calcFinancialSummary = async ({
         _id: null,
         totalCOGS: {
           $sum: {
-            $multiply: [
-              "$items.qty_actual",
-              { $toDecimal: "$items.unit_cost" },
-            ],
+            $multiply: ["$items.qty_actual", { $toDecimal: "$items.unit_cost" }],
           },
         },
       },
@@ -213,10 +205,7 @@ const calcFinancialSummary = async ({
         _id: null,
         totalRefundCOGS: {
           $sum: {
-            $multiply: [
-              "$items.qty_actual",
-              { $toDecimal: "$items.unit_cost" },
-            ],
+            $multiply: ["$items.qty_actual", { $toDecimal: "$items.unit_cost" }],
           },
         },
       },
@@ -243,14 +232,9 @@ const calcFinancialSummary = async ({
     .populate("user_id", "role")
     .select("salary commission_rate user_id");
 
-  const filteredEmployees = employees.filter((e) =>
-    ["MANAGER", "STAFF"].includes(e.user_id?.role)
-  );
+  const filteredEmployees = employees.filter((e) => ["MANAGER", "STAFF"].includes(e.user_id?.role));
 
-  const totalSalary = filteredEmployees.reduce(
-    (sum, e) => sum + toNumber(e.salary) * months,
-    0
-  );
+  const totalSalary = filteredEmployees.reduce((sum, e) => sum + toNumber(e.salary) * months, 0);
 
   const empRevenue = await calcRevenueByPeriod({
     storeId,
@@ -260,12 +244,8 @@ const calcFinancialSummary = async ({
   });
 
   const totalCommission = empRevenue.reduce((sum, r) => {
-    const emp = filteredEmployees.find(
-      (e) => e._id.toString() === r._id.toString()
-    );
-    return (
-      sum + toNumber(r.totalRevenue) * (toNumber(emp?.commission_rate) / 100)
-    );
+    const emp = filteredEmployees.find((e) => e._id.toString() === r._id.toString());
+    return sum + toNumber(r.totalRevenue) * (toNumber(emp?.commission_rate) / 100);
   }, 0);
 
   if (typeof extraExpense === "string" && extraExpense.includes(",")) {
@@ -275,10 +255,7 @@ const calcFinancialSummary = async ({
   } else {
     extraExpense = [Number(extraExpense)];
   }
-  const totalExtraExpense = extraExpense.reduce(
-    (sum, val) => sum + (val || 0),
-    0
-  );
+  const totalExtraExpense = extraExpense.reduce((sum, val) => sum + (val || 0), 0);
 
   //Tổng chi phí vận hành = Chỉ tính Chi phí ngoài lệ (nhập tay) - Không còn lương + hoa hồng
   let operatingCost = totalExtraExpense;
@@ -301,10 +278,7 @@ const calcFinancialSummary = async ({
         _id: null,
         totalOutValue: {
           $sum: {
-            $multiply: [
-              "$items.qty_actual",
-              { $toDecimal: "$items.unit_cost" },
-            ],
+            $multiply: ["$items.qty_actual", { $toDecimal: "$items.unit_cost" }],
           },
         },
       },
@@ -436,11 +410,7 @@ const calcFinancialSummary = async ({
       $addFields: {
         potentialProfit: { $subtract: ["$stockValueSale", "$stockValueCost"] },
         stockToRevenueRatio: {
-          $cond: [
-            { $gt: ["$revenue", 0] },
-            { $divide: ["$stockValueSale", "$revenue"] },
-            999,
-          ],
+          $cond: [{ $gt: ["$revenue", 0] }, { $divide: ["$stockValueSale", "$revenue"] }, 999],
         },
       },
     },
@@ -532,13 +502,8 @@ const exportFinancial = async (req, res) => {
       res.setHeader("Content-Type", "application/pdf");
       const doc = new PDFDocument({ margin: 50 });
       doc.pipe(res);
-      doc
-        .fontSize(18)
-        .text("BÁO CÁO TÀI CHÍNH", { align: "center", underline: true })
-        .moveDown();
-      rows.forEach((r) =>
-        doc.text(`${r.metric}: ${r.value.toLocaleString("vi-VN")} VND`)
-      );
+      doc.fontSize(18).text("BÁO CÁO TÀI CHÍNH", { align: "center", underline: true }).moveDown();
+      rows.forEach((r) => doc.text(`${r.metric}: ${r.value.toLocaleString("vi-VN")} VND`));
       doc.end();
       return;
     }
@@ -555,10 +520,7 @@ const generateEndOfDayReport = async (req, res) => {
   try {
     const { format } = require("date-fns");
     const { storeId } = req.params;
-    const {
-      periodType = "day",
-      periodKey = new Date().toISOString().split("T")[0],
-    } = req.query; // Default today
+    const { periodType = "day", periodKey = new Date().toISOString().split("T")[0] } = req.query; // Default today
 
     // Lấy khoảng thời gian từ period.js
     const { start, end } = periodToRange(periodType, periodKey);
@@ -594,11 +556,7 @@ const generateEndOfDayReport = async (req, res) => {
         $addFields: {
           // Giảm giá từ điểm = usedPoints * vndPerPoint (mặc định nếu loyalty null thì 0)
           discountFromPoints: {
-            $cond: [
-              { $and: ["$usedPoints", "$loyalty.vndPerPoint"] },
-              { $multiply: ["$usedPoints", "$loyalty.vndPerPoint"] },
-              0,
-            ],
+            $cond: [{ $and: ["$usedPoints", "$loyalty.vndPerPoint"] }, { $multiply: ["$usedPoints", "$loyalty.vndPerPoint"] }, 0],
           },
         },
       },
