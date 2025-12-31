@@ -1896,60 +1896,6 @@ const OrderPOSHome: React.FC = () => {
       {/* Modal show mã QRm=, nút xác nhận In hoá đơn và nút Huỷ */}
       <Modal
         open={!!(currentTab.qrImageUrl || currentTab.qrPayload)}
-<<<<<<< HEAD
-        footer={[
-          <Button
-            key="cancel"
-            onClick={() => {
-              updateOrderTab((tab) => {
-                tab.qrImageUrl = null;
-                tab.qrPayload = null;
-                tab.qrExpiryTs = null;
-              });
-            }}
-          >
-            Huỷ
-          </Button>,
-          <Button
-            key="print"
-            loading={isPrinting} // ✅ HIỂN THỊ LOADING
-            disabled={isPrinting} // ✅ DISABLE KHI ĐANG IN
-            type="primary"
-            danger
-            onClick={() => {
-              if (currentTab.pendingOrderId) {
-                // 🔴 Call API set-paid-QR + in bill trong 1 request
-                (async () => {
-                  try {
-                    await axios.post(
-                      `${API_BASE}/orders/${currentTab.pendingOrderId}/print-bill`,
-                      {},
-                      { headers }
-                    );
-                    // Reset QR
-                    updateOrderTab((tab) => {
-                      tab.qrImageUrl = null;
-                      tab.qrPayload = null;
-                      tab.qrExpiryTs = null;
-                    });
-                    setBillModalOpen(true);
-                  } catch (err: any) {
-                    Swal.fire({
-                      icon: "error",
-                      title: "In hoá đơn thất bại",
-                      text: err.response?.data?.message || "Lỗi khi in hoá đơn",
-                      confirmButtonText: "OK",
-                    });
-                  }
-                })();
-              }
-            }}
-            style={{ background: "#ff7a45", borderColor: "#ff7a45" }}
-          >
-            {isPrinting ? "Đang in..." : "In Hóa Đơn & Xác Nhận Thanh Toán"}
-          </Button>,
-        ]}
-=======
         footer={
           <div style={{ display: "flex", justifyContent: "center", gap: "12px" }}>
             <Button
@@ -1999,7 +1945,6 @@ const OrderPOSHome: React.FC = () => {
             </Button>
           </div>
         }
->>>>>>> b2d4ae6d4bdbc0132d750e32ca28b485054b8cb4
         onCancel={() => {
           updateOrderTab((tab) => {
             tab.qrImageUrl = null;
