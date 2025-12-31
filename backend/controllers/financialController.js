@@ -232,16 +232,13 @@ const calcFinancialSummary = async ({
   // ================================================================
   let grossProfit = totalRevenue - totalCOGS;
 
-<<<<<<< HEAD
   // ================================================================
   // 6️⃣ CHI PHÍ VẬN HÀNH (giữ nguyên)
   // ================================================================
-=======
   // 5️⃣ Chi phí vận hành (Operating Cost) - DEPRECATED: Lương + Hoa hồng
   // ❌ DEPRECATED (Từ Dec 2025): Không còn tính lương nhân viên và hoa hồng vì là hộ kinh doanh nhỏ lẻ
   // Tự trao đổi trực tiếp. Giữ lại code dưới để làm kỉ niệm học tập.
   /*
->>>>>>> b2d4ae6d4bdbc0132d750e32ca28b485054b8cb4
   const months = getMonthsInPeriod(periodType);
   const employees = await Employee.find({
     store_id: objectStoreId,
@@ -289,13 +286,10 @@ const calcFinancialSummary = async ({
     (sum, val) => sum + (val || 0),
     0
   );
-<<<<<<< HEAD
 
-  let operatingCost = totalSalary + totalCommission + totalExtraExpense;
-=======
+  // let operatingCost = totalSalary + totalCommission + totalExtraExpense;
   //Tổng chi phí vận hành = Chỉ tính Chi phí ngoài lệ (nhập tay) - Không còn lương + hoa hồng
   let operatingCost = totalExtraExpense;
->>>>>>> b2d4ae6d4bdbc0132d750e32ca28b485054b8cb4
 
   // ================================================================
   // 7️⃣ HAO HỤT KHO
