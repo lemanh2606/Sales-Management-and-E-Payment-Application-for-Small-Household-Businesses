@@ -1,6 +1,5 @@
 // src/pages/order/OrderTrackingPage.tsx
 import React, { useState, useEffect, useCallback } from "react";
-<<<<<<< HEAD
 import {
   Card,
   Row,
@@ -16,10 +15,8 @@ import {
   Spin,
   Descriptions,
   Divider,
+  Button,
 } from "antd";
-=======
-import { Card, Row, Col, Input, Table, Tag, Space, DatePicker, Select, Typography, Empty, Spin, Descriptions, Divider, Button } from "antd";
->>>>>>> b2d4ae6d4bdbc0132d750e32ca28b485054b8cb4
 import {
   SearchOutlined,
   ShoppingOutlined,
@@ -331,7 +328,12 @@ const OrderTrackingPage: React.FC = () => {
             }
             extra={
               <Space>
-                <Button icon={<ReloadOutlined />} onClick={loadOrders} loading={loading} type="default">
+                <Button
+                  icon={<ReloadOutlined />}
+                  onClick={loadOrders}
+                  loading={loading}
+                  type="default"
+                >
                   Làm mới
                 </Button>
                 <Text type="secondary">
@@ -370,8 +372,20 @@ const OrderTrackingPage: React.FC = () => {
                 }}
                 size="large"
               />
-              <Select placeholder="Trạng Thái" onChange={(value) => setSelectedStatus(value)} allowClear style={{ width: "100%" }} size="large">
-                {["pending", "paid", "refunded", "partially_refunded", "cancelled"].map((status) => {
+              <Select
+                placeholder="Trạng Thái"
+                onChange={(value) => setSelectedStatus(value)}
+                allowClear
+                style={{ width: "100%" }}
+                size="large"
+              >
+                {[
+                  "pending",
+                  "paid",
+                  "refunded",
+                  "partially_refunded",
+                  "cancelled",
+                ].map((status) => {
                   const cfg = getStatusConfig(status);
                   return (
                     <Option key={status} value={status}>
