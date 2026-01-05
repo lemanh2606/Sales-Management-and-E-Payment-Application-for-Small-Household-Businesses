@@ -598,7 +598,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Onboarding Card */}
-        {showOnboardingCard && (
+        {/* {showOnboardingCard && (
           <div style={{ marginBottom: 24 }}>
             <Card
               style={{ border: "1px solid #8c8c8c", borderRadius: 12 }}
@@ -705,7 +705,7 @@ export default function DashboardPage() {
               )}
             </Card>
           </div>
-        )}
+        )} */}
 
         {/* Kết quả kinh doanh - RESPONSIVE GRID */}
         <div style={{ marginBottom: 24 }}>
@@ -773,7 +773,7 @@ export default function DashboardPage() {
               </Tooltip>
 
               {/* Dòng 1 - ô 2 */}
-              <Tooltip title="Trung bình mỗi đơn khách chi trả, công thức: Doanh thu thuần / Số đơn đã bán">
+              {/* <Tooltip title="Trung bình mỗi đơn khách chi trả, công thức: Doanh thu thuần / Số đơn đã bán">
                 <div className="p-4 bg-purple-50 rounded-lg flex items-center justify-between col-span-1 sm:col-span-1 lg:col-span-4 cursor-pointer">
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <Text type="secondary" style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
@@ -804,79 +804,7 @@ export default function DashboardPage() {
                     }}
                   />
                 </div>
-              </Tooltip>
-
-              {/* Dòng 1 - ô 3 */}
-              <Tooltip title="Tổng số đơn hàng đã tạo, bao gồm cả đã thanh toán và chưa thanh toán.">
-                <div className="p-4 bg-orange-50 rounded-lg flex items-center justify-between col-span-1 sm:col-span-1 lg:col-span-4 cursor-pointer">
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <Text type="secondary" style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
-                      Tổng tất cả đơn
-                    </Text>
-                    <Title
-                      level={4}
-                      style={{
-                        margin: 0,
-                        color: "#fa8c16",
-                        fontSize: "clamp(16px, 4vw, 20px)",
-                      }}
-                    >
-                      {orderStats.total}
-                    </Title>
-                  </div>
-                  <InfoCircleOutlined
-                    style={{
-                      color: "#fa8c16",
-                      fontSize: 16,
-                      cursor: "pointer",
-                      marginLeft: 8,
-                      flexShrink: 0,
-                    }}
-                  />
-                </div>
-              </Tooltip>
-
-              {/* Dòng 2 - ô 1 */}
-              <Tooltip
-                title={
-                  <>
-                    Tổng số sản phẩm trên các đơn hàng, sau khi đã trừ đi các đơn bị hoàn trả.
-                    <br />• Tổng đã bán: {orderStats.totalSoldItems.toLocaleString("vi-VN")}
-                    <br />• Hoàn lại: {orderStats.totalRefundedItems.toLocaleString("vi-VN")}
-                    <br />• Thực đã bán: {orderStats.netSoldItems.toLocaleString("vi-VN")}
-                  </>
-                }
-              >
-                {/* ✅ span bọc ngoài nhưng ép block để không phá grid */}
-                <span className="block col-span-1 sm:col-span-1 lg:col-span-3">
-                  <div className="p-4 bg-purple-50 rounded-lg flex items-center justify-between cursor-pointer">
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <Text type="secondary" style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
-                        Số lượng hàng thực bán
-                      </Text>
-                      <Title
-                        level={4}
-                        style={{
-                          margin: 0,
-                          color: "#722ed1",
-                          fontSize: "clamp(16px, 4vw, 20px)",
-                        }}
-                      >
-                        {orderStats.netSoldItems.toLocaleString("vi-VN")}
-                      </Title>
-                    </div>
-
-                    <InfoCircleOutlined
-                      style={{
-                        color: "#1890ff",
-                        fontSize: 16,
-                        marginLeft: 8,
-                        flexShrink: 0,
-                      }}
-                    />
-                  </div>
-                </span>
-              </Tooltip>
+              </Tooltip> */}
 
               {/* Dòng 2 - ô 2 */}
               <Tooltip title="Doanh thu − Giá vốn hàng bán (COGS). Đây là số tiền còn lại sau khi trừ chi phí nguyên vật liệu, chưa bao gồm chi phí vận hành khác.">
@@ -919,12 +847,84 @@ export default function DashboardPage() {
                 </div>
               </Tooltip>
 
-              {/* Dòng 2 - ô 3 */}
-              <Tooltip title="Số đơn hàng chưa được khách thanh toán.">
-                <div className="p-4 bg-red-50 rounded-lg flex items-center justify-between col-span-1 sm:col-span-1 lg:col-span-3 cursor-pointer">
+              {/* Dòng 1 - ô 3 */}
+              <Tooltip title="Tổng số đơn hàng đã tạo, bao gồm cả đã thanh toán và chưa thanh toán.">
+                <div className="p-4 bg-orange-50 rounded-lg flex items-center justify-between col-span-1 sm:col-span-1 lg:col-span-4 cursor-pointer">
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <Text type="secondary" style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
-                      Đơn chưa thanh toán
+                      Tổng tất cả các đơn hàng
+                    </Text>
+                    <Title
+                      level={4}
+                      style={{
+                        margin: 0,
+                        color: "#fa8c16",
+                        fontSize: "clamp(16px, 4vw, 20px)",
+                      }}
+                    >
+                      {orderStats.total}
+                    </Title>
+                  </div>
+                  <InfoCircleOutlined
+                    style={{
+                      color: "#fa8c16",
+                      fontSize: 16,
+                      cursor: "pointer",
+                      marginLeft: 8,
+                      flexShrink: 0,
+                    }}
+                  />
+                </div>
+              </Tooltip>
+
+              {/* Dòng 2 - ô 1 */}
+              <Tooltip
+                title={
+                  <>
+                    Tổng số sản phẩm trên các đơn hàng, sau khi đã trừ đi các đơn bị hoàn trả.
+                    <br />• Tổng đã bán: {orderStats.totalSoldItems.toLocaleString("vi-VN")}
+                    <br />• Hoàn lại: {orderStats.totalRefundedItems.toLocaleString("vi-VN")}
+                    <br />• Thực đã bán: {orderStats.netSoldItems.toLocaleString("vi-VN")}
+                  </>
+                }
+              >
+                {/* ✅ span bọc ngoài nhưng ép block để không phá grid */}
+                <span className="block col-span-1 sm:col-span-1 lg:col-span-4">
+                  <div className="p-4 bg-purple-50 rounded-lg flex items-center justify-between cursor-pointer">
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <Text type="secondary" style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
+                        Số lượng hàng thực bán
+                      </Text>
+                      <Title
+                        level={4}
+                        style={{
+                          margin: 0,
+                          color: "#722ed1",
+                          fontSize: "clamp(16px, 4vw, 20px)",
+                        }}
+                      >
+                        {orderStats.netSoldItems.toLocaleString("vi-VN")}
+                      </Title>
+                    </div>
+
+                    <InfoCircleOutlined
+                      style={{
+                        color: "#1890ff",
+                        fontSize: 16,
+                        marginLeft: 8,
+                        flexShrink: 0,
+                      }}
+                    />
+                  </div>
+                </span>
+              </Tooltip>
+
+              {/* Dòng 2 - ô 3 */}
+              <Tooltip title="Số đơn hàng chưa được khách thanh toán.">
+                <div className="p-4 bg-red-50 rounded-lg flex items-center justify-between col-span-1 sm:col-span-1 lg:col-span-4 cursor-pointer">
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <Text type="secondary" style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
+                      Đơn hàng chưa thanh toán
                     </Text>
                     <Title
                       level={4}
@@ -951,10 +951,10 @@ export default function DashboardPage() {
 
               {/* Dòng 2 - ô 4 */}
               <Tooltip title="Số đơn hàng khách đã trả lại và hoàn tiền.">
-                <div className="p-4 bg-gray-100 rounded-lg flex items-center justify-between col-span-1 sm:col-span-1 lg:col-span-2 cursor-pointer">
+                <div className="p-4 bg-gray-100 rounded-lg flex items-center justify-between col-span-1 sm:col-span-1 lg:col-span-4 cursor-pointer">
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <Text type="secondary" style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
-                      Đơn bị hoàn trả
+                      Đơn hàng bị hoàn trả
                     </Text>
                     <Title
                       level={4}
