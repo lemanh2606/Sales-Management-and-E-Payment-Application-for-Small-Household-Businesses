@@ -24,6 +24,7 @@ import {
   Dropdown,
   Menu,
   Divider,
+  Avatar,
 } from "antd";
 import {
   PlusOutlined,
@@ -43,6 +44,8 @@ import {
   UnorderedListOutlined,
   StarFilled,
   UndoOutlined,
+  PoweroffOutlined,
+  LogoutOutlined,
 } from "@ant-design/icons";
 import StoreFormModal from "../../components/store/StoreFormModal";
 import StoreDetailModal from "../../components/store/StoreDetailModal";
@@ -80,7 +83,7 @@ export default function SelectStorePage() {
     location: { lat: null, lng: null },
   });
 
-  const { setCurrentStore, user } = useAuth();
+  const { setCurrentStore, user, logout } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -187,7 +190,15 @@ export default function SelectStorePage() {
       ),
     }));
   }, [search, stores]);
-
+  const handleLogout = () => {
+    logout();
+    api.success({
+      message: "Đăng xuất thành công!",
+      placement: "topRight",
+      duration: 2,
+    });
+    navigate("/login");
+  };
   const handleSelect = async (store) => {
     try {
       setBusy(true);
@@ -411,6 +422,7 @@ export default function SelectStorePage() {
       {contextHolder}
       <Content style={{ padding: isMobile ? "12px" : "32px 48px" }}>
         <div style={{ maxWidth: 1400, margin: "0 auto" }}>
+
           {/* Hero Header Section */}
           <div
             style={{
@@ -451,7 +463,8 @@ export default function SelectStorePage() {
 
             <Row gutter={[24, 24]} align="middle" style={{ position: "relative", zIndex: 1 }}>
               <Col xs={24} lg={14}>
-                <Space direction="vertical" size={12}>
+                <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                  {/* Title */}
                   <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                     <div
                       style={{
@@ -471,12 +484,101 @@ export default function SelectStorePage() {
                       <Title level={2} style={{ color: "#fff", margin: 0, fontSize: isMobile ? 24 : 32 }}>
                         Cửa Hàng Của Bạn
                       </Title>
-                      <Text style={{ color: "rgba(255,255,255,0.95)", fontSize: 15 }}>Quản lý và điều hành cửa hàng một cách hiệu quả</Text>
+                      <Text style={{ color: "rgba(255,255,255,0.95)", fontSize: 15 }}>
+                        Quản lý và điều hành cửa hàng một cách hiệu quả
+                      </Text>
                     </div>
                   </div>
+
+                  {/* 👇 USER PROFILE CARD VỚI LOGOUT */}
+                  {user && (
+                    <Card
+                      style={{
+                        background: "rgba(255, 255, 255, 0.15)",
+                        backdropFilter: "blur(15px)",
+                        border: "1px solid rgba(255, 255, 255, 0.25)",
+                        borderRadius: 16,
+                        boxShadow: "0 8px 32px rgba(0, 0, 0, 0.12)",
+                      }}
+                      bodyStyle={{ padding: isMobile ? 16 : 20 }}
+                    >
+                      <Row gutter={16} align="middle">
+                        <Col flex="none">
+                          <Badge dot status="success" offset={[-8, 48]}>
+                            <Avatar
+                              size={isMobile ? 48 : 56}
+                              src={user.image}
+                              icon={!user.image && <UserOutlined />}
+                              style={{
+                                background: user.image
+                                  ? "transparent"
+                                  : "linear-gradient(135deg, rgba(102, 126, 234, 0.8) 0%, rgba(118, 75, 162, 0.8) 100%)",
+                                border: "3px solid rgba(255, 255, 255, 0.5)",
+                                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
+                              }}
+                            />
+                          </Badge>
+                        </Col>
+
+                        <Col flex="auto" style={{ minWidth: 0 }}>
+                          <div style={{ color: "rgba(255,255,255,0.85)", fontSize: 12, marginBottom: 4 }}>
+
+                          </div>
+                          <div
+                            style={{
+                              color: "#fff",
+                              fontSize: isMobile ? 16 : 18,
+                              fontWeight: 700,
+                              letterSpacing: 0.3,
+                              textShadow: "0 2px 8px rgba(0, 0, 0, 0.15)",
+                            }}
+                          >
+                            {user.fullname || user.username || user.name || "User"}
+                          </div>
+                          <Text style={{ color: "rgba(255,255,255,0.75)", fontSize: 12 }}>
+                            {user.role === "MANAGER" ? "👨‍💼 Quản lý" : "👤 Nhân viên"}
+                          </Text>
+                        </Col>
+
+                        <Col flex="none">
+                          <Tooltip title="Đăng xuất khỏi hệ thống" placement="left">
+                            <Button
+                              type="primary"
+                              danger
+                              icon={<PoweroffOutlined style={{ fontSize: 18 }} />}
+                              onClick={handleLogout}
+                              size="large"
+                              style={{
+                                height: isMobile ? 48 : 56,
+                                width: isMobile ? 48 : 56,
+                                borderRadius: 12,
+                                background: "linear-gradient(135deg, #ff4d4f 0%, #ff7875 100%)",
+                                border: "none",
+                                boxShadow: "0 6px 20px rgba(255, 77, 79, 0.4)",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                padding: 0,
+                                transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.transform = "translateY(-3px) scale(1.05)";
+                                e.currentTarget.style.boxShadow = "0 10px 30px rgba(255, 77, 79, 0.6)";
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.transform = "translateY(0) scale(1)";
+                                e.currentTarget.style.boxShadow = "0 6px 20px rgba(255, 77, 79, 0.4)";
+                              }}
+                            />
+                          </Tooltip>
+                        </Col>
+                      </Row>
+                    </Card>
+                  )}
                 </Space>
               </Col>
 
+              {/* Statistics Cards */}
               <Col xs={24} lg={10}>
                 <Row gutter={[16, 16]}>
                   <Col xs={12}>
@@ -486,8 +588,10 @@ export default function SelectStorePage() {
                         backdropFilter: "blur(10px)",
                         border: "1px solid rgba(255, 255, 255, 0.2)",
                         borderRadius: 16,
+                        transition: "all 0.3s ease",
                       }}
                       bodyStyle={{ padding: 20 }}
+                      className="stat-card"
                     >
                       <Statistic
                         title={<span style={{ color: "rgba(255,255,255,0.9)", fontSize: 13 }}>Tổng Cửa Hàng</span>}
@@ -504,8 +608,10 @@ export default function SelectStorePage() {
                         backdropFilter: "blur(10px)",
                         border: "1px solid rgba(255, 255, 255, 0.2)",
                         borderRadius: 16,
+                        transition: "all 0.3s ease",
                       }}
                       bodyStyle={{ padding: 20 }}
+                      className="stat-card"
                     >
                       <Statistic
                         title={<span style={{ color: "rgba(255,255,255,0.9)", fontSize: 13 }}>Kết Quả Lọc</span>}
@@ -1281,6 +1387,10 @@ export default function SelectStorePage() {
           background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
           color: #fff !important;
         }
+        .stat-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 40px rgba(255, 255, 255, 0.2) !important;
+  }
       `}</style>
     </Layout>
   );

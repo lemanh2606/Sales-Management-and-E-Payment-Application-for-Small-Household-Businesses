@@ -225,9 +225,6 @@ const verifyOtp = async (req, res) => {
   }
 };
 
-/* -------------------------
-   Controller: login
-   ------------------------- */
 const login = async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -268,14 +265,72 @@ const login = async (req, res) => {
         .json({ message: "Username hoặc password không đúng" });
     }
 
-    // Login success
+    // ========== 👇 SYNC MENU - CẬP NHẬT VÀO DB 👇 ==========
+    let menuUpdated = false;
+
+    if (user.role === "MANAGER") {
+      // MANAGER: Kiểm tra nếu thiếu quyền -> restore toàn bộ
+      const missingPermissions = ALL_PERMISSIONS.filter(
+        (perm) => !user.menu || !user.menu.includes(perm)
+      );
+
+      if (missingPermissions.length > 0) {
+        console.log(
+          `⚠️ MANAGER ${user.username}: thiếu ${missingPermissions.length}/${ALL_PERMISSIONS.length} quyền`
+        );
+
+        // Cập nhật đầy đủ quyền
+        user.menu = [...ALL_PERMISSIONS];
+        menuUpdated = true;
+
+        console.log(`✅ Đã restore full menu cho MANAGER ${user.username}`);
+      }
+    } else if (user.role === "STAFF") {
+      // STAFF: Chỉ bổ sung các quyền mặc định nếu thiếu, GIỮ NGUYÊN quyền thừa
+      const currentMenu = user.menu || [];
+
+      // Tìm các quyền mặc định bị thiếu
+      const missingDefaultPermissions = STAFF_DEFAULT_MENU.filter(
+        (perm) => !currentMenu.includes(perm)
+      );
+
+      if (missingDefaultPermissions.length > 0) {
+        console.log(
+          `⚠️ STAFF ${user.username}: thiếu ${missingDefaultPermissions.length}/${STAFF_DEFAULT_MENU.length} quyền mặc định`
+        );
+        console.log(`   Các quyền thiếu:`, missingDefaultPermissions);
+
+        // Bổ sung thêm các quyền thiếu, GIỮ NGUYÊN quyền cũ
+        user.menu = [
+          ...new Set([...currentMenu, ...missingDefaultPermissions]),
+        ];
+        menuUpdated = true;
+
+        console.log(
+          `✅ Đã bổ sung ${missingDefaultPermissions.length} quyền cho STAFF ${user.username}`
+        );
+        console.log(
+          `   Menu hiện tại có ${user.menu.length} quyền (bao gồm cả custom)`
+        );
+      }
+    }
+    // ========== 👆 END SYNC LOGIC 👆 ==========
+
+    // Login success - cập nhật thông tin login
     user.loginAttempts = 0;
     user.lockUntil = null;
     user.last_login = new Date();
     user.last_ip = req.ip || req.connection.remoteAddress;
     user.last_user_agent = req.headers["user-agent"] || "unknown";
 
+    // Lưu vào database
     await user.save();
+
+    if (menuUpdated) {
+      console.log(
+        `💾 Menu đã được lưu vào MongoDB cho ${user.role} ${user.username}`
+      );
+    }
 
     const accessToken = signAccessToken({ id: user._id, role: user.role });
     const refreshToken = signRefreshToken({ id: user._id, role: user.role });
@@ -315,7 +370,6 @@ const login = async (req, res) => {
     res.status(500).json({ message: "Lỗi server" });
   }
 };
-
 // ================== LOGOUT ==================
 const logout = async (req, res) => {
   try {
