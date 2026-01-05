@@ -750,9 +750,9 @@ const ReportDashboard = () => {
                     </div>
                     <div style={{ marginTop: 16, fontSize: 15, lineHeight: 1.6 }}>
                       <div>
-                        <span style={{ color: COLORS.vat, marginRight: 4 }}>●</span>
-                        <strong style={{ color: COLORS.vat }}>Doanh thu:</strong> {formatVND(data.totalRevenue)}
-                        <Tag color="#f5222d" style={{ fontSize: 14, lineHeight: 1.2, marginLeft: 8, padding: "2px 10px" }}>
+                        <span style={{ color: COLORS.grossProfit, marginRight: 4 }}>●</span>
+                        <strong style={{ color: COLORS.grossProfit }}>Doanh thu:</strong> {formatVND(data.totalRevenue)}
+                        <Tag color="green" style={{ fontSize: 14, lineHeight: 1.2, marginLeft: 8, padding: "2px 10px" }}>
                           Tổng số tiền thu được từ việc bán hàng
                         </Tag>
                       </div>
@@ -1010,28 +1010,28 @@ const ReportDashboard = () => {
                       <div>
                         <strong>Chi phí nhập hàng (COGS):</strong> {formatVND(data.totalCOGS)}
                       </div>
-                      <div>
+                      {/* <div>
                         <Popover content="Tổng giá trị tất cả phiếu xuất (OUT) trong kỳ - bao gồm bán hàng + hao hụt">
                           <strong style={{ cursor: "help" }}>
                             Tổng xuất kho <InfoCircleOutlined style={{ fontSize: 14, marginLeft: 4 }} />{" "}
                           </strong>
                         </Popover>
                         : {formatVND(data.totalOutValue)}
-                      </div>
-                      <div>
+                      </div> */}
+                      {/* <div>
                         <Popover content="Hao hụt kho = Tổng xuất - COGS (bán hàng). Bao gồm: Hủy hàng, Thất thoát, Sai sót cân, v.v.">
                           <strong style={{ cursor: "help", color: data.inventoryLoss > 0 ? "#ff4d4f" : "#52c41a" }}>
                             Hao hụt kho <InfoCircleOutlined style={{ fontSize: 14, marginLeft: 4 }} />{" "}
                           </strong>
                         </Popover>
                         : <strong style={{ color: data.inventoryLoss > 0 ? "#ff4d4f" : "#52c41a" }}>{formatVND(data.inventoryLoss)}</strong>
-                      </div>
+                      </div> */}
 
                       <Divider style={{ margin: "5px 0" }} />
 
                       {/* Lãi tiềm năng từ tồn kho */}
                       <div>
-                        <Popover content="Nếu bán hết hàng tồn kho theo giá bán hiện tại">
+                        <Popover content="Nếu bán hết hàng tồn kho theo giá bán hiện tại thì bạn sẽ thu về được từng này">
                           <strong style={{ cursor: "help", color: "#52c41a" }}>
                             Lãi tiềm năng từ tồn kho <InfoCircleOutlined />{" "}
                           </strong>
