@@ -5,13 +5,16 @@ const OrderItem = mongoose.model("OrderItem");
 const OrderRefund = mongoose.model("OrderRefund");
 const Product = require("../models/Product");
 const InventoryVoucher = require("../models/InventoryVoucher");
+const OperatingExpense = require("../models/OperatingExpense");
+
 // ❌ DEPRECATED - Không còn sử dụng trong tính toán tài chính:
 const PurchaseOrder = require("../models/PurchaseOrder");
 const PurchaseReturn = require("../models/PurchaseReturn");
 const StockCheck = require("../models/StockCheck");
 const StockDisposal = require("../models/StockDisposal");
+// ❌ DEPRECATED
+
 const Customer = mongoose.model("Customer");
-const Employee = require("../models/Employee");
 const Store = require("../models/Store");
 const { calcRevenueByPeriod } = require("./revenueController");
 const { periodToRange } = require("../utils/period");
@@ -221,43 +224,25 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
   // ================================================================
   let grossProfit = totalRevenue - totalCOGS;
 
-  // 5️⃣ Chi phí vận hành (Operating Cost) - DEPRECATED: Lương + Hoa hồng
-  // ❌ DEPRECATED (Từ Dec 2025): Không còn tính lương nhân viên và hoa hồng vì là hộ kinh doanh nhỏ lẻ
-  // Tự trao đổi trực tiếp. Giữ lại code dưới để làm kỉ niệm học tập.
-  const months = getMonthsInPeriod(periodType);
-  const employees = await Employee.find({
-    store_id: objectStoreId,
-    isDeleted: false,
-  })
-    .populate("user_id", "role")
-    .select("salary commission_rate user_id");
+  // ================================================================
+  // 6️⃣ CHI PHÍ NGOÀI LỀ (OperatingExpense) - LẤY TỪ DB THEO KỲ
+  // ================================================================
 
-  const filteredEmployees = employees.filter((e) => ["MANAGER", "STAFF"].includes(e.user_id?.role));
+  let totalExtraExpense = 0;
 
-  const totalSalary = filteredEmployees.reduce((sum, e) => sum + toNumber(e.salary) * months, 0);
-
-  const empRevenue = await calcRevenueByPeriod({
-    storeId,
+  const expenseDoc = await OperatingExpense.findOne({
+    storeId: objectStoreId,
     periodType,
     periodKey,
-    type: "employee",
-  });
+    isDeleted: false,
+    status: "active",
+  }).select("items");
 
-  const totalCommission = empRevenue.reduce((sum, r) => {
-    const emp = filteredEmployees.find((e) => e._id.toString() === r._id.toString());
-    return sum + toNumber(r.totalRevenue) * (toNumber(emp?.commission_rate) / 100);
-  }, 0);
-
-  if (typeof extraExpense === "string" && extraExpense.includes(",")) {
-    extraExpense = extraExpense.split(",").map(Number);
-  } else if (Array.isArray(extraExpense)) {
-    extraExpense = extraExpense.map(Number);
-  } else {
-    extraExpense = [Number(extraExpense)];
+  if (expenseDoc && Array.isArray(expenseDoc.items)) {
+    totalExtraExpense = expenseDoc.items.reduce((sum, it) => sum + (Number(it.amount) || 0), 0);
   }
-  const totalExtraExpense = extraExpense.reduce((sum, val) => sum + (val || 0), 0);
 
-  //Tổng chi phí vận hành = Chỉ tính Chi phí ngoài lệ (nhập tay) - Không còn lương + hoa hồng
+  // ✅ Tổng chi phí vận hành ban đầu = chi phí ngoài lề (từ DB)
   let operatingCost = totalExtraExpense;
 
   // ================================================================

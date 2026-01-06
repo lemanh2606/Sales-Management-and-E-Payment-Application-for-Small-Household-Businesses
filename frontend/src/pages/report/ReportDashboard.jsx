@@ -18,8 +18,17 @@ import {
   Typography,
   Divider,
   Tooltip as AntTooltip,
+  Input,
+  Checkbox,
 } from "antd";
-import { InfoCircleOutlined, CheckCircleOutlined, WarningOutlined, ClockCircleOutlined, ExclamationCircleOutlined } from "@ant-design/icons";
+import {
+  InfoCircleOutlined,
+  CheckCircleOutlined,
+  WarningOutlined,
+  ClockCircleOutlined,
+  ExclamationCircleOutlined,
+  DeleteOutlined,
+} from "@ant-design/icons";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import axios from "axios";
 import dayjs from "dayjs";
@@ -27,6 +36,7 @@ import localizedFormat from "dayjs/plugin/localizedFormat";
 import quarterOfYear from "dayjs/plugin/quarterOfYear";
 import Swal from "sweetalert2";
 import Layout from "../../components/Layout";
+import operatingExpenseService from "../../services/operatingExpenseService";
 import "dayjs/locale/vi"; // ✅ LOCALE VI
 
 const { Title, Text, Paragraph } = Typography;
@@ -85,10 +95,15 @@ const ReportDashboard = () => {
   const [periodKey, setPeriodKey] = useState("");
   const [pickerValue, setPickerValue] = useState(null);
 
-  // 🆕 Chi phí ngoài lệ: theo từng kỳ báo cáo (storeId + periodType + periodKey)
-  const [extraExpensesByPeriod, setExtraExpensesByPeriod] = useState({}); // { [periodId]: number[] }
-  const [unsavedByPeriod, setUnsavedByPeriod] = useState({}); // { [periodId]: boolean }
-  const [newExpense, setNewExpense] = useState("");
+  // 🆕 Chi phí ngoài lệ: items từ DB
+  const [expenseItems, setExpenseItems] = useState([]); // array of {amount, note}
+  const [operatingExpenseId, setOperatingExpenseId] = useState(null); // _id của document OperatingExpense
+  const [selectedExpenseIds, setselectedExpenseIds] = useState([]);
+  const [unsavedChanges, setUnsavedChanges] = useState(false);
+
+  // Form input
+  const [newExpenseAmount, setNewExpenseAmount] = useState(null);
+  const [newExpenseNote, setNewExpenseNote] = useState("");
 
   // Format tiền tệ việt nam (VND)
   const formatVND = (value) => {
@@ -101,22 +116,10 @@ const ReportDashboard = () => {
   };
 
   // ====== HELPERS ======
-  // periodId: store-based để tránh đổi store bị dính chi phí
-  const getPeriodId = (storeId, type, key) => `${storeId || "no-store"}|${type || "no-type"}|${key || "no-key"}`;
-
-  const currentPeriodId = getPeriodId(currentStore?._id, periodType, periodKey);
-
-  const getCurrentExpenses = () => extraExpensesByPeriod[currentPeriodId] || [];
-  const getCurrentTotalExpense = () => getCurrentExpenses().reduce((a, b) => a + (Number(b) || 0), 0);
-  const isCurrentUnsaved = () => !!unsavedByPeriod[currentPeriodId];
-
-  const setCurrentExpenses = (expenses) => {
-    setExtraExpensesByPeriod((prev) => ({ ...prev, [currentPeriodId]: expenses }));
-  };
-
-  const setCurrentUnsaved = (val) => {
-    setUnsavedByPeriod((prev) => ({ ...prev, [currentPeriodId]: !!val }));
-  };
+  const getCurrentTotalExpense = () => expenseItems.reduce((sum, it) => sum + (Number(it.amount) || 0), 0);
+  const getUnsavedItems = () => expenseItems.filter((it) => it && it.isSaved === false);
+  const getUnsavedTotalExpense = () => getUnsavedItems().reduce((sum, it) => sum + (Number(it.amount) || 0), 0);
+  const getUnsavedCount = () => getUnsavedItems().length;
 
   // Chuẩn hoá periodKey theo type (đảm bảo quarter có năm)
   const buildPeriodKey = (type, dateObj) => {
@@ -130,169 +133,115 @@ const ReportDashboard = () => {
     return "";
   };
 
-  // Parse quarterKey "2025-Q4" -> {year:2025, quarter:4}
-  const parseQuarterKey = (qKey) => {
-    const m = String(qKey).match(/^(\d{4})-Q([1-4])$/);
-    if (!m) return null;
-    return { year: Number(m[1]), quarter: Number(m[2]) };
-  };
-
-  // Allocate quarter expense -> 3 months in the same year-quarter
-  const allocateQuarterToMonths = ({ storeId, quarterPeriodKey, totalExpense }) => {
-    const parsed = parseQuarterKey(quarterPeriodKey);
-    if (!parsed) return;
-
-    const { year, quarter } = parsed;
-    const startMonth = (quarter - 1) * 3 + 1; // 1,4,7,10
-
-    // chia đều nhưng giữ đúng tổng
-    const m1 = Math.floor(totalExpense / 3);
-    const m2 = Math.floor(totalExpense / 3);
-    const m3 = totalExpense - m1 - m2;
-
-    setExtraExpensesByPeriod((prev) => {
-      const next = { ...prev };
-      const makeMonthId = (month) => getPeriodId(storeId, "month", `${year}-${String(month).padStart(2, "0")}`);
-
-      next[makeMonthId(startMonth)] = m1 > 0 ? [m1] : [];
-      next[makeMonthId(startMonth + 1)] = m2 > 0 ? [m2] : [];
-      next[makeMonthId(startMonth + 2)] = m3 > 0 ? [m3] : [];
-      return next;
-    });
-
-    setUnsavedByPeriod((prev) => {
-      const next = { ...prev };
-      const makeMonthId = (month) => getPeriodId(storeId, "month", `${year}-${String(month).padStart(2, "0")}`);
-      next[makeMonthId(startMonth)] = true;
-      next[makeMonthId(startMonth + 1)] = true;
-      next[makeMonthId(startMonth + 2)] = true;
-      return next;
-    });
-  };
-
-  // ⚠️ Handle đổi PeriodType
-  // ====== CORE: CHANGE PERIOD TYPE / KEY WITH CONFIRM ======
-  const commitChangePeriodType = (newType) => {
-    setPeriodType(newType);
-    setPeriodKey("");
-    setPickerValue(null);
-    setData(null);
-  };
-
+  // ⚠️ Handle đổi PeriodType - CHỈ HỎI NẾU CÓ UNSAVED
   const handlePeriodTypeChange = (newType) => {
     if (newType === periodType) return;
 
-    const totalCost = getCurrentTotalExpense();
-    if (isCurrentUnsaved() && totalCost > 0) {
+    const commitSwitchType = () => {
+      setPeriodType(newType);
+      setPeriodKey("");
+      setPickerValue(null);
+      setData(null);
+    };
 
-      // quarter -> month special flow
-      if (periodType === "quarter" && newType === "month") {
-        Swal.fire({
-          title: "Chuyển từ Quý sang Tháng",
-          html: `
-            <div style="text-align: center; font-size: 14px;">
-              <p>Chi phí chưa lưu của quý hiện tại:</p>
-              <p style="font-size: 18px; font-weight: bold; color: #722ed1; margin: 12px 0;">
-                ${totalCost.toLocaleString("vi-VN")} VND
-              </p>
-              <p style="margin-top: 12px;">Bạn muốn phân bổ xuống 3 tháng trong quý không?</p>
-            </div>
-          `,
-          icon: "question",
-          confirmButtonText: "Phân bổ",
-          cancelButtonText: "Bỏ qua",
-          showCancelButton: true,
-          confirmButtonColor: "#52c41a",
-          cancelButtonColor: "#d9534f",
-        }).then((result) => {
-          if (result.isConfirmed) {
-            // phân bổ dựa trên quarter periodKey hiện tại (vd 2025-Q4)
-            allocateQuarterToMonths({ storeId: currentStore?._id, quarterPeriodKey: periodKey, totalExpense: totalCost });
-            // bỏ dirty của quý hiện tại vì đã chuyển thành dữ liệu tháng
-            setCurrentUnsaved(false);
-            commitChangePeriodType(newType);
-          } else {
-            // bỏ thay đổi quý (dirty) và chuyển type
-            setCurrentUnsaved(false);
-            commitChangePeriodType(newType);
-          }
-        });
-        return;
-      }
-
-      // other type change: warn discard
-      Swal.fire({
-        title: "⚠️ Chi phí chưa lưu",
-        html: `
-          <div style="text-align: center; font-size: 14px;">
-            <p>Kỳ hiện tại có chi phí chưa lưu:</p>
-            <p style="font-size: 18px; font-weight: bold; color: #ff7a45; margin: 12px 0;">
-              ${totalCost.toLocaleString("vi-VN")} VND
-            </p>
-            <p style="margin-top: 12px; color: #ff4d4f;">Nếu tiếp tục đổi loại kỳ, thay đổi sẽ bị bỏ.</p>
-          </div>
-        `,
-        icon: "warning",
-        confirmButtonText: "Tiếp tục",
-        cancelButtonText: "Hủy",
-        showCancelButton: true,
-        confirmButtonColor: "#ff7a45",
-        cancelButtonColor: "#1890ff",
-      }).then((result) => {
-        if (result.isConfirmed) {
-          setCurrentUnsaved(false);
-          commitChangePeriodType(newType);
-        }
-      });
+    if (!unsavedChanges) {
+      commitSwitchType();
       return;
     }
 
-    commitChangePeriodType(newType);
+    Swal.fire({
+      title: "⚠️ Bạn có thay đổi chưa lưu",
+      html: `
+      <div style="text-align: center; font-size: 14px;">
+        <p>Bạn có <b>${getUnsavedCount()}</b> khoản chi phí chưa lưu:</p>
+        <p style="font-size: 18px; font-weight: bold; color: #ff7a45; margin: 12px 0;">
+          ${getUnsavedTotalExpense().toLocaleString("vi-VN")} VND
+        </p>
+        <p style="margin-top: 12px;">Bạn muốn làm gì?</p>
+      </div>
+    `,
+      icon: "question",
+      showDenyButton: true,
+      showCancelButton: true,
+      confirmButtonText: "Lưu và Chuyển",
+      denyButtonText: "Ở lại trang",
+      cancelButtonText: "Không lưu, chuyển",
+      confirmButtonColor: "#52c41a",
+      denyButtonColor: "#1677ff",
+      cancelButtonColor: "#d9534f",
+    }).then(async (result) => {
+      if (result.isConfirmed) {
+        await saveOperatingExpense();
+        commitSwitchType();
+        return;
+      }
+
+      if (result.isDenied) {
+        return; // ở lại
+      }
+
+      // ✅ Cancel button
+      if (result.isDismissed) {
+        setUnsavedChanges(false);
+        commitSwitchType();
+      }
+    });
   };
 
   // ⚠️ Handle đổi PeriodKey (trong cùng loại)
-  const commitChangePeriodKey = (newKey, dateObj) => {
-    setPeriodKey(newKey);
-    setPickerValue(dateObj);
-    setData(null);
-  };
-
   const handlePeriodKeyChange = (dateObj) => {
     if (!dateObj) return;
 
     const newKey = buildPeriodKey(periodType, dateObj);
     if (!newKey || newKey === periodKey) return;
 
-    const totalCost = getCurrentTotalExpense();
-    if (isCurrentUnsaved() && totalCost > 0) {
+    const commitSwitchKey = () => {
+      setPeriodKey(newKey);
+      setPickerValue(dateObj);
+      setData(null);
+    };
 
-      Swal.fire({
-        title: "⚠️ Chi phí chưa lưu",
-        html: `
-          <div style="text-align: center; font-size: 14px;">
-            <p>Kỳ hiện tại có chi phí chưa lưu:</p>
-            <p style="font-size: 18px; font-weight: bold; color: #ff7a45; margin: 12px 0;">
-              ${totalCost.toLocaleString("vi-VN")} VND
-            </p>
-            <p style="margin-top: 12px; color: #ff4d4f;">Nếu chuyển sang kỳ khác, thay đổi sẽ bị bỏ.</p>
-          </div>
-        `,
-        icon: "warning",
-        confirmButtonText: "Tiếp tục",
-        cancelButtonText: "Quay lại",
-        showCancelButton: true,
-        confirmButtonColor: "#ff7a45",
-        cancelButtonColor: "#1890ff",
-      }).then((result) => {
-        if (result.isConfirmed) {
-          setCurrentUnsaved(false);
-          commitChangePeriodKey(newKey, dateObj);
-        }
-      });
+    if (!unsavedChanges) {
+      commitSwitchKey();
       return;
     }
 
-    commitChangePeriodKey(newKey, dateObj);
+    Swal.fire({
+      title: "⚠️ Bạn có thay đổi chưa lưu",
+      html: `
+      <div style="text-align: center; font-size: 14px;">
+        <p>Bạn có <b>${getUnsavedCount()}</b> khoản chi phí chưa lưu:</p>
+        <p style="font-size: 18px; font-weight: bold; color: #ff7a45; margin: 12px 0;">
+          ${getUnsavedTotalExpense().toLocaleString("vi-VN")} VND
+        </p>
+        <p style="margin-top: 12px;">Bạn muốn làm gì?</p>
+      </div>
+    `,
+      icon: "question",
+      showDenyButton: true,
+      showCancelButton: true,
+      confirmButtonText: "Lưu & Chuyển",
+      denyButtonText: "Ở lại trang",
+      cancelButtonText: "Không lưu, chuyển",
+      confirmButtonColor: "#52c41a",
+      denyButtonColor: "#1677ff",
+      cancelButtonColor: "#d9534f",
+    }).then(async (result) => {
+      if (result.isConfirmed) {
+        await saveOperatingExpense();
+        commitSwitchKey();
+        return;
+      }
+
+      if (result.isDenied) {
+        return;
+      }
+
+      if (result.isDismissed) {
+        setUnsavedChanges(false);
+        commitSwitchKey();
+      }
+    });
   };
 
   // Biểu đồ
@@ -308,6 +257,34 @@ const ReportDashboard = () => {
   };
 
   // ====== API ======
+  // Load operating expenses từ DB
+  const loadOperatingExpenses = async () => {
+    if (!currentStore?._id || !periodType || !periodKey) {
+      setExpenseItems([]);
+      setOperatingExpenseId(null);
+      setUnsavedChanges(false);
+      return;
+    }
+
+    try {
+      const data = await operatingExpenseService.getOperatingExpenseByPeriod({
+        storeId: currentStore._id,
+        periodType,
+        periodKey,
+      });
+
+      setExpenseItems(data.items || []);
+      setOperatingExpenseId(data._id || null);
+      setUnsavedChanges(false);
+    } catch (error) {
+      console.error("loadOperatingExpenses error:", error);
+      setExpenseItems([]);
+      setOperatingExpenseId(null);
+      setUnsavedChanges(false);
+    }
+  };
+
+  // Gọi fetch financial report
   const fetchFinancial = async () => {
     if (!currentStore?._id) {
       setError("Vui lòng chọn cửa hàng trước.");
@@ -330,9 +307,7 @@ const ReportDashboard = () => {
         periodType,
         periodKey,
       });
-
-      const expenses = getCurrentExpenses();
-      if (expenses.length > 0) params.append("extraExpense", expenses.join(","));
+      // ✅ Không gửi extraExpense nữa vì backend tự lấy từ DB
 
       const url = `${apiUrl}/financials?${params.toString()}`;
       const res = await axios.get(url, { headers: { Authorization: `Bearer ${token}` }, timeout: 10000 });
@@ -346,76 +321,264 @@ const ReportDashboard = () => {
     }
   };
 
-  // Gọi lại khi filter đổi hoặc khi chi phí của kỳ hiện tại đổi
+  // Auto load expenses khi period thay đổi
+  useEffect(() => {
+    loadOperatingExpenses();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStore?._id, periodType, periodKey]);
+
+  // Auto fetch financial khi period hoặc expenses thay đổi
   useEffect(() => {
     fetchFinancial();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [periodType, periodKey, currentPeriodId, extraExpensesByPeriod[currentPeriodId]?.length]);
+  }, [currentStore?._id, periodType, periodKey]);
 
-  // "Save" theo cách A: chỉ đánh dấu đã lưu tạm (không ghi DB)
-  const saveExpenses = () => {
-    setCurrentUnsaved(false);
+  // ====== SAVE OPERATING EXPENSE =======
+  const saveOperatingExpense = async () => {
+    if (!currentStore?._id || !periodType || !periodKey) {
+      Swal.fire({
+        icon: "warning",
+        title: "Thiếu dữ liệu",
+        text: "Vui lòng chọn đầy đủ kỳ báo cáo",
+        timer: 1500,
+        showConfirmButton: false,
+      });
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const itemsToSave = expenseItems.map((it) => ({
+        amount: it.amount,
+        note: it.note,
+        isSaved: true,
+      }));
+
+      await operatingExpenseService.upsertOperatingExpense({
+        storeId: currentStore._id,
+        periodType,
+        periodKey,
+        items: itemsToSave,
+      });
+
+      setExpenseItems(itemsToSave);
+      setUnsavedChanges(false);
+      setselectedExpenseIds([]); // Reset checkbox
+
+      Swal.fire({
+        icon: "success",
+        title: "Lưu thành công",
+        text: `Chi phí kỳ này: ${getCurrentTotalExpense().toLocaleString("vi-VN")} VND`,
+        timer: 1500,
+        showConfirmButton: false,
+      });
+
+      // Reload expense items từ DB để có _id thực
+      await loadOperatingExpenses();
+      // Reload financial data
+      await fetchFinancial();
+    } catch (error) {
+      console.error("saveOperatingExpense error:", error);
+      Swal.fire({
+        icon: "error",
+        title: "❌ Lỗi khi lưu",
+        text: error.response?.data?.message || error.message,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ====== CHI PHÍ NGOÀI LỀ ======
+  // Thêm 1 khoản chi phí
+  const addExpenseItem = () => {
+    if (newExpenseAmount === null || newExpenseAmount === undefined || newExpenseAmount <= 0) {
+      Swal.fire({
+        icon: "warning",
+        title: "Số tiền không hợp lệ",
+        text: "Vui lòng nhập số tiền > 0",
+        timer: 1000,
+        showConfirmButton: false,
+      });
+      return;
+    }
+
+    const newItem = {
+      amount: Number(newExpenseAmount),
+      note: newExpenseNote.trim(),
+      isSaved: false,
+    };
+
+    setExpenseItems([...expenseItems, newItem]);
+    setNewExpenseAmount(null);
+    setNewExpenseNote("");
+    setUnsavedChanges(true);
+  };
+
+  // Xoá 1 khoản chi phí (hard delete từ DB)
+  const removeExpenseItem = (index) => {
+    const item = expenseItems[index];
+
+    if (!item) {
+      Swal.fire({
+        icon: "error",
+        title: "Lỗi",
+        text: "Không tìm thấy khoản chi phí",
+        timer: 1500,
+        showConfirmButton: false,
+      });
+      return;
+    }
+
     Swal.fire({
-      icon: "success",
-      title: "Đã lưu tạm chi phí",
-      text: `Chi phí kỳ này: ${getCurrentTotalExpense().toLocaleString("vi-VN")} VND`,
-      timer: 1200,
-      showConfirmButton: false,
+      title: "Xoá khoản chi phí",
+      html: `
+        <div style="text-align: center; font-size: 14px;">
+          <p>Bạn chắc chắn muốn xoá khoản chi phí này không?</p>
+          <p style="font-size: 16px; font-weight: bold; color: #ff7a45; margin: 12px 0;">
+            ${formatVND(item.amount || 0)}
+          </p>
+          <p style="font-size: 12px; color: #8c8c8c; margin: 8px 0;">
+            ${item.note || "(không có ghi chú)"}
+          </p>
+        </div>
+      `,
+      icon: "question",
+      confirmButtonText: "Xoá",
+      cancelButtonText: "Quay lại",
+      showCancelButton: true,
+      confirmButtonColor: "#ff4d4f",
+      cancelButtonColor: "#1890ff",
+    }).then(async (result) => {
+      if (result.isConfirmed) {
+        try {
+          setLoading(true);
+
+          // Nếu item đã lưu (isSaved: true), gọi API xoá từ DB
+          if (item.isSaved && operatingExpenseId) {
+            const token = localStorage.getItem("token");
+            await fetch(`${apiUrl}/operating-expenses/${operatingExpenseId}/item/${index}`, {
+              method: "DELETE",
+              headers: { Authorization: `Bearer ${token}` },
+            }).then((res) => {
+              if (!res.ok) throw new Error("Lỗi khi xoá từ DB");
+            });
+          }
+
+          // Cập nhật state
+          setExpenseItems(expenseItems.filter((_, i) => i !== index));
+
+          // Re-fetch financial report để cập nhật chi phí vận hành
+          await fetchFinancial();
+
+          Swal.fire({
+            icon: "success",
+            title: "Đã xoá",
+            text: "Chi phí vận hành đã cập nhật",
+            timer: 800,
+            showConfirmButton: false,
+          });
+        } catch (error) {
+          console.error("removeExpenseItem error:", error);
+          Swal.fire({
+            icon: "error",
+            title: "Lỗi khi xoá",
+            text: error.message || "Vui lòng thử lại",
+            timer: 1500,
+            showConfirmButton: false,
+          });
+        } finally {
+          setLoading(false);
+        }
+      }
     });
-    fetchFinancial();
   };
 
-  // TỰ ĐỘNG GỌI KHI THAY ĐỔI FILTER
-  useEffect(() => {
-    fetchFinancial();
-  }, [periodType, periodKey, extraExpensesByPeriod]);
+  // Xoá nhiều khoản chi phí (hàng loạt)
+  const deleteMultipleExpenseItems = async () => {
+    // Validate: chỉ cho phép xóa items đã lưu (có _id từ DB)
+    const validSelectedIds = selectedExpenseIds.filter((id) => {
+      const item = expenseItems.find((it) => String(it._id) === String(id));
+      return item && item._id; // Phải có _id thực từ DB
+    });
 
-  // XỬ LÝ THAY ĐỔI TYPE
-  const handleTypeChange = (value) => {
-    handlePeriodTypeChange(value);
-  };
-
-  // XỬ LÝ KỲ (KEY)
-  const handlePeriodChange = (date) => {
-    if (!date) return;
-    let key = "";
-    if (periodType === "month") {
-      key = date.format("YYYY-MM");
-    } else if (periodType === "quarter") {
-      const q = Math.floor(date.month() / 3) + 1;
-      key = `Q${q}`;
-    } else if (periodType === "year") {
-      key = date.year().toString();
+    if (validSelectedIds.length === 0) {
+      Swal.fire({
+        icon: "warning",
+        title: "Không thể xóa",
+        text: "Bạn chỉ có thể xóa các khoản đã lưu. Vui lòng lưu chi phí trước khi xóa.",
+        timer: 1500,
+        showConfirmButton: false,
+      });
+      return;
     }
-    handlePeriodKeyChange(key);
-    setPickerValue(date);
-  };
+    
+    const deleteCount = validSelectedIds.length;
+    const selectedSet = new Set(validSelectedIds.map(String));
+    const selectedItems = expenseItems.filter((it) => selectedSet.has(String(it._id)));
+    const totalSelectedAmount = selectedItems.reduce((sum, it) => sum + (Number(it?.amount) || 0), 0);
 
-  // CHI PHÍ NGOÀI LỀ (tự nhập thêm nếu cần)
-  // ====== ACTIONS: ADD/REMOVE/SAVE ======
-  const addExtraExpense = () => {
-    if (newExpense === "" || newExpense === null || newExpense === undefined) return;
-    const val = Number(newExpense);
-    if (Number.isNaN(val) || val < 0) return;
+    Swal.fire({
+      title: "Xoá các khoản chi phí",
+      html: `
+        <div style="text-align: center; font-size: 14px;">
+          <p>Bạn chắc chắn muốn xoá ${selectedExpenseIds.length} khoản chi phí này không?</p>
+          <p style="font-size: 16px; font-weight: bold; color: #ff7a45; margin: 12px 0;">
+            Tổng: ${formatVND(totalSelectedAmount)}
+          </p>
+        </div>
+      `,
+      icon: "question",
+      confirmButtonText: "Xoá tất cả",
+      cancelButtonText: "Quay lại",
+      showCancelButton: true,
+      confirmButtonColor: "#ff4d4f",
+      cancelButtonColor: "#1890ff",
+    }).then(async (result) => {
+      if (result.isConfirmed) {
+        try {
+          setLoading(true);
 
-    const next = [...getCurrentExpenses(), val];
-    setCurrentExpenses(next);
-    setNewExpense("");
-    // Chỉ đánh dấu unsaved nếu tổng > 0
-    const total = next.reduce((a, b) => a + (Number(b) || 0), 0);
-    if (total > 0) setCurrentUnsaved(true);
-  };
+          // Gọi API xoá hàng loạt
+          if (operatingExpenseId) {
+            await operatingExpenseService.deleteMultipleItems({
+              id: operatingExpenseId,
+              itemIds: selectedExpenseIds,
+            });
+          }
 
-  const removeExpense = (index) => {
-    const next = getCurrentExpenses().filter((_, i) => i !== index);
-    setCurrentExpenses(next);
-    // Nếu xóa hết hoặc tổng = 0 → reset unsaved
-    const total = next.reduce((a, b) => a + (Number(b) || 0), 0);
-    if (total > 0) {
-      setCurrentUnsaved(true);
-    } else {
-      setCurrentUnsaved(false);
-    }
+          // Cập nhật state: xoá các items theo _id
+          const deletedSet = new Set(selectedExpenseIds.map(String));
+          const newItems = expenseItems.filter((it) => !deletedSet.has(String(it._id)));
+          
+          setExpenseItems(newItems);
+          setselectedExpenseIds([]);
+
+          // Re-fetch financial report để cập nhật chi phí vận hành
+          await fetchFinancial();
+
+          Swal.fire({
+            icon: "success",
+            title: "Đã xoá thành công",
+            text: `Xoá ${deleteCount} khoản, chi phí vận hành đã cập nhật`,
+            timer: 800,
+            showConfirmButton: false,
+          });
+        } catch (error) {
+          console.error("deleteMultipleExpenseItems error:", error);
+          Swal.fire({
+            icon: "error",
+            title: "Lỗi khi xoá",
+            text: error.message || "Vui lòng thử lại",
+            timer: 1500,
+            showConfirmButton: false,
+          });
+        } finally {
+          setLoading(false);
+        }
+      }
+    });
   };
 
   return (
@@ -434,7 +597,7 @@ const ReportDashboard = () => {
                 </Text>
               </Col>
 
-              <Col span={5}>
+              <Col span={9}>
                 <label>Kỳ báo cáo:</label>
                 <Select style={{ width: "100%", marginTop: 8 }} value={periodType} onChange={handlePeriodTypeChange}>
                   <Select.Option value="">Chưa chọn</Select.Option>
@@ -443,7 +606,7 @@ const ReportDashboard = () => {
                   <Select.Option value="year">Theo năm</Select.Option>
                 </Select>
               </Col>
-              <Col span={5}>
+              <Col span={9}>
                 <label>Chọn kỳ:</label>
                 {!periodType && <Alert message="Hãy chọn kỳ báo cáo trước" type="warning" style={{ marginTop: 8 }} />}
                 {periodType && (
@@ -488,73 +651,194 @@ const ReportDashboard = () => {
                   />
                 )}
               </Col>
+            </Row>
+          </Card>
+
+          {/* CHI PHÍ NGOÀI LỄ - RIÊNG */}
+
+          <Card style={{ border: "1px solid #8c8c8c" }}>
+            <Space align="center" style={{ marginBottom: 12 }}>
+              <Title level={4} style={{ margin: 0 }}>
+                Chi phí ngoài lề
+              </Title>
+
+              <AntTooltip title="Bạn có thể thêm các chi phí bên ngoài hệ thống vào đây để hệ thống tính toán hộ. Số tiền này sẽ được cộng vào mục chi phí vận hành">
+                <InfoCircleOutlined style={{ color: "#1677ff", fontSize: 16, cursor: "pointer" }} />
+              </AntTooltip>
+            </Space>
+            <Row gutter={[16, 16]}>
               <Col span={8}>
-                <label>Chi phí ngoài: </label>
-                <Space style={{ marginTop: 8 }}>
-                  <InputNumber
-                    min={0}
-                    value={newExpense}
-                    onChange={setNewExpense}
-                    formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
-                    parser={(v) => v.replace(/\$\s?|(,*)/g, "")}
-                    style={{ width: 120 }}
-                    placeholder="VD: 1000000"
-                    onKeyPress={(e) => {
-                      if (/[a-zA-Z]/.test(e.key)) {
-                        e.preventDefault(); // ⛔ chặn nhập chữ cái
-                      }
-                    }}
-                    onPaste={(e) => {
-                      e.preventDefault();
-                      const pastedText = e.clipboardData.getData("text"); // lấy nội dung vừa paste
-                      const numericOnly = pastedText.replace(/[^0-9]/g, ""); // chỉ giữ lại số
-                      const value = Number(numericOnly || 0);
-                      setNewExpense(value); // cập nhật lại state
-                    }}
-                  />
+                <label style={{ display: "block", marginBottom: 8 }}>Nhập Số Tiền</label>
+                <InputNumber
+                  min={0}
+                  value={newExpenseAmount}
+                  onChange={setNewExpenseAmount}
+                  formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
+                  parser={(v) => v.replace(/\$\s?|(,*)/g, "")}
+                  style={{ width: "100%" }}
+                  placeholder="Số tiền (VND)"
+                  size="large"
+                />
+              </Col>
 
-                  <Button type="primary" onClick={addExtraExpense} disabled={!newExpense || isNaN(newExpense)}>
-                    Thêm
-                  </Button>
+              <Col span={8}>
+                <label style={{ display: "block", marginBottom: 8 }}>Ghi Chú</label>
+                <Input
+                  placeholder="VD: Mặt bằng, điện, nước, lương nhân viên, tiếp thị..."
+                  value={newExpenseNote}
+                  onChange={(e) => setNewExpenseNote(e.target.value)}
+                  maxLength={100}
+                  size="large"
+                  onKeyPress={(e) => {
+                    if (e.key === "Enter" && newExpenseAmount && newExpenseAmount > 0) {
+                      addExpenseItem();
+                    }
+                  }}
+                />
+              </Col>
 
-                  {/* 🆕 Nút Lưu chi phí */}
-                  <Button
-                    type={isCurrentUnsaved() && getCurrentExpenses().length > 0 ? "primary" : "default"}
-                    danger={isCurrentUnsaved() && getCurrentExpenses().length > 0}
-                    onClick={saveExpenses}
-                    disabled={!isCurrentUnsaved() || getCurrentExpenses().length === 0}
-                  >
-                    {isCurrentUnsaved() && getCurrentExpenses().length > 0 ? "Lưu chi phí" : "Đã lưu"}
+              <Col span={8}>
+                <label style={{ display: "block", marginBottom: 8 }}>Hành Động</label>
+                <Space style={{ width: "100%", justifyContent: "space-between" }}>
+                  <Button type="primary" block onClick={addExpenseItem} disabled={!newExpenseAmount || newExpenseAmount <= 0} size="large">
+                    Thêm Khoản
                   </Button>
                 </Space>
+              </Col>
 
-                {/* 🆕 Alert cảnh báo chưa lưu - chỉ hiện khi có chi phí thực tế */}
-                {isCurrentUnsaved() && getCurrentExpenses().length > 0 && (
-                  <Alert type="warning" showIcon message={`Có ${getCurrentExpenses().length} chi phí chưa lưu cho kỳ này`} />
-                )}
-
-                <div style={{ marginTop: 8 }}>
-                  {getCurrentExpenses().map((exp, i) => (
-                    <span
-                      key={i}
+              {/* Danh sách chi phí */}
+              {expenseItems.length > 0 && (
+                <Col span={24}>
+                  <Divider style={{ margin: "12px 0" }} />
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                    <Text strong style={{ fontSize: 14 }}>
+                      Danh Sách Chi Phí ({expenseItems.length} khoản)
+                    </Text>
+                    <div
                       style={{
-                        marginRight: 8,
-                        background: "#f0f0f0",
-                        padding: "2px 8px",
+                        background: "#fff7e6",
+                        padding: "6px 16px",
                         borderRadius: 4,
-                        fontSize: 12,
+                        fontWeight: "bold",
+                        color: "#faad14",
+                        fontSize: 14,
                       }}
                     >
-                      {formatVND(exp)}{" "}
-                      <a onClick={() => removeExpense(i)} style={{ color: "#ff4d4f" }}>
-                        x
-                      </a>
-                    </span>
-                  ))}
-                </div>
-                <small style={{ display: "block", color: "blue", marginBottom: 4 }}>
-                  (Chi phí không nằm trong hệ thống, VD: mặt bằng, điện-nước, marketing,...)
-                </small>
+                      Tổng: {formatVND(getCurrentTotalExpense())}
+                    </div>
+                  </div>
+
+                  <Table
+                    rowKey={(record) => record._id}
+                    rowSelection={{
+                      selectedRowKeys: selectedExpenseIds,
+                      onChange: (keys) => setselectedExpenseIds(keys), // keys sẽ là array of _id
+                    }}
+                    dataSource={expenseItems}
+                    columns={[
+                      {
+                        title: "STT",
+                        render: (_, __, idx) => idx + 1,
+                        width: 50,
+                        align: "center",
+                      },
+                      {
+                        title: "Số Tiền",
+                        dataIndex: "amount",
+                        render: (val) => <span style={{ fontWeight: "bold", color: "#faad14", fontSize: 14 }}>{formatVND(val)}</span>,
+                        width: "30%",
+                      },
+                      {
+                        title: "Ghi Chú",
+                        dataIndex: "note",
+                        render: (text) => <span style={{ fontSize: 13 }}>{text || "—"}</span>,
+                        flex: 1,
+                      },
+                      {
+                        title: "Trạng Thái",
+                        dataIndex: "isSaved",
+                        render: (saved) => (
+                          <span
+                            style={{
+                              padding: "2px 8px",
+                              borderRadius: "3px",
+                              fontSize: 12,
+                              fontWeight: "500",
+                              backgroundColor: saved ? "#f6ffed" : "#fff1f0",
+                              color: saved ? "#52c41a" : "#f5222d",
+                            }}
+                          >
+                            {saved ? "Đã lưu" : "Chưa lưu"}
+                          </span>
+                        ),
+                        width: 90,
+                        align: "center",
+                      },
+                      {
+                        title: "Thao Tác",
+                        width: 80,
+                        align: "center",
+                        render: (_, __, idx) => (
+                          <Button
+                            type="text"
+                            danger
+                            size="small"
+                            icon={<DeleteOutlined />}
+                            onClick={() => removeExpenseItem(idx)}
+                            title="Xoá khoản chi phí này"
+                          />
+                        ),
+                      },
+                    ]}
+                    pagination={false}
+                    size="small"
+                    bordered
+                  />
+
+                  {selectedExpenseIds.length > 0 && (
+                    <div style={{ marginTop: 12, display: "flex", gap: 8, padding: 8 }}>
+                      <Button
+                        type="primary"
+                        danger
+                        size="small"
+                        onClick={deleteMultipleExpenseItems}
+                        loading={loading}
+                        disabled={getUnsavedCount() > 0 || loading}
+                        title={getUnsavedCount() > 0 ? "Vui lòng lưu chi phí trước khi xoá" : ""}
+                      >
+                        Xoá {selectedExpenseIds.length} khoản đã chọn
+                      </Button>
+                      <Button size="small" onClick={() => setselectedExpenseIds([])} disabled={loading}>
+                        Bỏ chọn
+                      </Button>
+                    </div>
+                  )}
+                </Col>
+              )}
+
+              {/* Nút Lưu + Alert */}
+              <Col span={24}>
+                <Space style={{ width: "100%" }}>
+                  <Button
+                    type={unsavedChanges && expenseItems.length > 0 ? "primary" : "default"}
+                    onClick={saveOperatingExpense}
+                    disabled={!unsavedChanges || expenseItems.length === 0 || loading}
+                    loading={loading}
+                    size="large"
+                    style={{ minWidth: 180 }}
+                  >
+                    {unsavedChanges && expenseItems.length > 0 ? "Lưu Chi Phí" : "Đã Lưu"}
+                  </Button>
+
+                  {unsavedChanges && expenseItems.filter((it) => !it.isSaved).length > 0 && (
+                    <Alert
+                      type="warning"
+                      showIcon
+                      message={`Có ${expenseItems.filter((it) => !it.isSaved).length} khoản chi phí chưa lưu`}
+                      style={{ flex: 1, margin: 0 }}
+                    />
+                  )}
+                </Space>
               </Col>
             </Row>
           </Card>
@@ -1041,82 +1325,6 @@ const ReportDashboard = () => {
                     </Space>
                   </Card>
                 </Col>
-
-                {/* CỘT PHẢI: HIỆU SUẤT */}
-                {/* <Col span={12}>
-                  <Card
-                    title="Hiệu suất kinh doanh"
-                    style={{ border: "1px solid #8c8c8c", height: "100%" }}
-                    extra={<Text type="secondary">Đơn vị: %</Text>}
-                  >
-                    <Space direction="vertical" style={{ width: "100%", fontSize: 16 }}>
-                      <div>
-                        <Popover content="Lợi nhuận gộp = Doanh thu - Giá vốn hàng bán">
-                          <strong style={{ cursor: "help" }}>
-                            Lợi nhuận gộp <InfoCircleOutlined style={{ fontSize: 14, marginLeft: 4 }} />{" "}
-                          </strong>
-                        </Popover>
-                        :{" "}
-                        <strong style={{ color: getProfitColorByValue(data?.grossProfit) }}>
-                          {data?.totalRevenue ? ((data.grossProfit / data.totalRevenue) * 100).toFixed(1) : 0}%
-                        </strong>
-                      </div>
-
-                      <div>
-                        <Popover content="Chi phí vận hành / doanh thu – càng thấp càng tốt">
-                          <strong style={{ cursor: "help" }}>
-                            Tỷ lệ chi phí vận hành <InfoCircleOutlined style={{ fontSize: 14, marginLeft: 4 }} />{" "}
-                          </strong>
-                        </Popover>
-                        :{" "}
-                        <strong
-                          style={{
-                            color: data?.operatingCost / data?.totalRevenue > 0.7 ? "#ff4d4f" : "#faad14",
-                          }}
-                        >
-                          {data?.totalRevenue ? ((data.operatingCost / data.totalRevenue) * 100).toFixed(1) : 0}%
-                        </strong>
-                      </div>
-
-                      <div>
-                        <Popover content="Tỷ lệ hàng tồn / doanh thu – nhỏ hơn 50% là tốt, lớn hơn 100% là tồn nặng">
-                          <strong style={{ cursor: "help" }}>
-                            Tỷ lệ hàng tồn / doanh thu <InfoCircleOutlined style={{ fontSize: 14, marginLeft: 4 }} />{" "}
-                          </strong>
-                        </Popover>
-                        :{" "}
-                        <strong
-                          style={{
-                            color:
-                              data.stockValue / data.totalRevenue > 1 ? "#ff4d4f" : data.stockValue / data.totalRevenue > 0.5 ? "#faad14" : "#52c41a",
-                          }}
-                        >
-                          {data?.totalRevenue ? ((data.stockValue / data.totalRevenue) * 100).toFixed(1) : 0}%
-                        </strong>
-                      </div>
-
-                      <Divider style={{ margin: "5px 0" }} />
-
-                      {/* Lợi nhuận ròng — hiển thị như dòng bình thường */}
-                      {/* <div>
-                        <Popover content="Lợi nhuận ròng = Lợi nhuận gộp - Chi phí vận hành - Thuế">
-                          <strong style={{ cursor: "help", fontSize: 16, color: "#ff1038ff" }}>
-                            Lợi nhuận ròng cuối cùng <InfoCircleOutlined />{" "}
-                          </strong>
-                        </Popover>
-                        :{" "}
-                        <strong
-                          style={{
-                            color: getProfitColorByValue(data?.netProfit),
-                            fontSize: 20,
-                          }}
-                        >
-                          {data?.totalRevenue ? ((data.netProfit / data.totalRevenue) * 100).toFixed(1) : 0}%
-                        </strong>
-                      </div>
-                    </Space>
-                  </Card>
-                </Col> */}
               </Row>
               {/* ======= Hết ====== */}
             </>
