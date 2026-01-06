@@ -440,15 +440,15 @@ const createInventoryVoucher = async (req, res) => {
       document_place: header.document_place || "",
 
       warehouse_id: warehouse?._id || null,
-      warehouse_name: warehouse?.name || "",
-      warehouse_location: warehouse?.full_address || "",
+      warehouse_name: header.warehouse_name || warehouse?.name || "",
+      warehouse_location: header.warehouse_location || warehouse?.full_address || warehouse?.address || "",
 
       supplier_id: supplier?._id || null,
-      supplier_name_snapshot: supplier?.name || "",
+      supplier_name_snapshot: header.supplier_name_snapshot || supplier?.name || "",
 
-      partner_name: supplier?.name || "",
-      partner_phone: supplier?.phone || "",
-      partner_address: supplier?.address || "",
+      partner_name: header.partner_name || supplier?.name || "",
+      partner_phone: header.partner_phone || supplier?.phone || "",
+      partner_address: header.partner_address || supplier?.address || "",
 
       deliverer_name: header.deliverer_name || supplier?.contact_person || "",
       receiver_name: header.receiver_name || req.user?.fullname || req.user?.username || "",
@@ -547,6 +547,7 @@ const getInventoryVoucherById = async (req, res) => {
       .populate("cancelled_by", "fullname username")
       .populate("warehouse_keeper_id", "fullname username")
       .populate("accountant_id", "fullname username")
+      .populate("supplier_id")
       .populate({ path: "items.product_id" })
       .populate({ path: "items.supplier_id", strictPopulate: false });
 
@@ -609,17 +610,84 @@ const updateInventoryVoucher = async (req, res) => {
 
     const rawItems = req.body.items !== undefined ? sanitizeItems(req.body.items) : null;
 
-    // supplier header-level nếu có
+    // warehouse header-level nếu có (đã sanitized ID)
+    if (header.warehouse_id !== undefined) {
+      if (header.warehouse_id) {
+        if (!mongoose.isValidObjectId(header.warehouse_id)) {
+           await session.abortTransaction();
+           session.endSession();
+           return res.status(400).json({ message: "warehouse_id không hợp lệ" });
+        }
+        const wh = await Warehouse.findOne({
+          _id: new mongoose.Types.ObjectId(header.warehouse_id),
+          store_id: storeId,
+          isDeleted: false,
+        }).session(session).lean();
+        
+        if (!wh) {
+          await session.abortTransaction();
+          session.endSession();
+          return res.status(404).json({ message: "Kho không tồn tại" });
+        }
+        
+        doc.warehouse_id = header.warehouse_id;
+        // Priority: Client Override > DB Master > Existing
+        doc.warehouse_name = header.warehouse_name || wh.name || "";
+        doc.warehouse_location = header.warehouse_location || wh.address || wh.full_address || "";
+      } else {
+        doc.warehouse_id = null;
+        doc.warehouse_name = header.warehouse_name || "";
+        doc.warehouse_location = header.warehouse_location || "";
+      }
+      delete header.warehouse_id;
+      delete header.warehouse_name; 
+      delete header.warehouse_location; 
+    } else {
+       // Nếu client chỉ gửi warehouse_location string (sửa tay) mà không đổi ID
+       if (header.warehouse_location !== undefined) {
+          doc.warehouse_location = header.warehouse_location;
+          delete header.warehouse_location;
+       }
+       if (header.warehouse_name !== undefined) {
+          doc.warehouse_name = header.warehouse_name;
+          delete header.warehouse_name;
+       }
+    }
+
+    // supplier header-level nếu có (đã sanitized ID)
     if (header.supplier_id !== undefined) {
       if (header.supplier_id) {
         const sup = await validateSupplierOrThrow(storeId, header.supplier_id, session);
         doc.supplier_id = header.supplier_id;
-        doc.supplier_name_snapshot = sup.name || "";
+        // Priority: Client Override > DB Master > Existing
+        doc.supplier_name_snapshot = header.supplier_name_snapshot || sup.name || "";
+        doc.partner_name = header.partner_name || sup.supplier?.name || "";
+        doc.partner_phone = header.partner_phone || sup.supplier?.phone || "";
+        doc.partner_address = header.partner_address || sup.supplier?.address || "";
       } else {
         doc.supplier_id = null;
-        doc.supplier_name_snapshot = "";
+        doc.supplier_name_snapshot = header.supplier_name_snapshot || "";
+        doc.partner_name = header.partner_name || "";
+        doc.partner_phone = header.partner_phone || "";
+        doc.partner_address = header.partner_address || "";
       }
       delete header.supplier_id;
+      // remove used fields from header so they don't overwrite again in the final loop (though harmless if logic is correct)
+      delete header.supplier_name_snapshot;
+      delete header.partner_name;
+      delete header.partner_phone;
+      delete header.partner_address;
+    } else {
+      // Allow manual edits to these fields even if supplier_id didn't change (or is null)
+      if (header.supplier_name_snapshot !== undefined) doc.supplier_name_snapshot = header.supplier_name_snapshot;
+      if (header.partner_name !== undefined) doc.partner_name = header.partner_name;
+      if (header.partner_phone !== undefined) doc.partner_phone = header.partner_phone;
+      if (header.partner_address !== undefined) doc.partner_address = header.partner_address;
+
+      delete header.supplier_name_snapshot;
+      delete header.partner_name;
+      delete header.partner_phone;
+      delete header.partner_address;
     }
 
     if (rawItems) {

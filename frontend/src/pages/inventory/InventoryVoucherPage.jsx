@@ -518,6 +518,11 @@ export default function InventoryVoucherPage() {
       if (!v) throw new Error("Không có dữ liệu phiếu");
 
       form.resetFields();
+      
+      // Handle warehouses carefully
+      const whId = v.warehouse_id?._id || v.warehouse_id || null;
+      
+      // Map đúng theo cấu trúc API trả về
       form.setFieldsValue({
         type: v.type,
         voucher_code: v.voucher_code,
@@ -527,44 +532,47 @@ export default function InventoryVoucherPage() {
 
         deliverer_name: v.deliverer_name || "",
         receiver_name: v.receiver_name || "",
-        deliverer_phone: v.deliverer_phone || "",
-        receiver_phone: v.receiver_phone || "",
+        deliverer_phone: v.deliverer_phone || "", // Thêm field này
+        receiver_phone: v.receiver_phone || "",   // Thêm field này
 
-        warehouse_id: v.warehouse_id || null,
+        warehouse_id: whId,
         warehouse_name: v.warehouse_name || "",
         warehousename: v.warehouse_name || "",
         warehouse_location: v.warehouse_location || "",
         ref_no: v.ref_no || "",
         ref_date: v.ref_date ? dayjs(v.ref_date) : null,
 
-        // NEW: supplier (nếu backend có lưu)
-        supplier_id: v.supplier_id || v.supplier?._id || null,
-        supplier_name_snapshot: v.supplier_name_snapshot || v.supplier?.name || "",
-        supplier_phone_snapshot: v.supplier_phone_snapshot || v.supplier?.phone || "",
-        supplier_email_snapshot: v.supplier_email_snapshot || v.supplier?.email || "",
-        supplier_address_snapshot: v.supplier_address_snapshot || v.supplier?.address || "",
-        supplier_taxcode_snapshot: v.supplier_taxcode_snapshot || v.supplier?.taxcode || "",
-        supplier_contact_person_snapshot: v.supplier_contact_person_snapshot || v.supplier?.contact_person || "",
+        // FIX: Map đúng supplier fields từ API response (v.supplier_id có thể là object populated)
+        supplier_id: v.supplier_id?._id || v.supplier_id || null, 
+        
+        supplier_name_snapshot: v.supplier_name_snapshot || v.partner_name || v.supplier_id?.name || "",
+        supplier_phone_snapshot: v.supplier_phone_snapshot || v.partner_phone || v.supplier_id?.phone || "",
+        supplier_email_snapshot: v.supplier_email_snapshot || v.supplier_id?.email || "",
+        supplier_address_snapshot: v.supplier_address_snapshot || v.partner_address || v.supplier_id?.address || "",
+        supplier_taxcode_snapshot: v.supplier_taxcode_snapshot || v.supplier_id?.taxcode || "",
+        supplier_contact_person_snapshot: v.supplier_contact_person_snapshot || v.supplier_id?.contact_person || "",
 
+        // FIX: Map items với supplier_id là object
         items: (v.items || []).map((it) => ({
-          product_id: it.product_id?._id || it.product_id,
-          sku_snapshot: it.sku_snapshot || "",
-          name_snapshot: it.name_snapshot || "",
-          unit_snapshot: it.unit_snapshot || "",
+          product_id: it.product_id?._id || it.product_id, // ensure ID string for Select
+          sku_snapshot: it.sku_snapshot || it.product_id?.sku || "",
+          name_snapshot: it.name_snapshot || it.product_id?.name || "",
+          unit_snapshot: it.unit_snapshot || it.product_id?.unit || "",
           qty_actual: Number(it.qty_actual || 0),
           unit_cost: toNumberDecimal(it.unit_cost),
           note: it.note || "",
         })),
       });
 
-      // nếu phiếu NHẬP có supplier_id nhưng snapshot trống, thử fill từ list hiện tại
+      // Auto-fill supplier nếu có supplier_id nhưng chưa có snapshot
       const t = v.type;
-      const sid = v.supplier_id || v.supplier?._id || null;
+      const sid = v.supplier_id?._id || v.supplier_id;
       if (t === "IN" && sid) {
         const snap = form.getFieldValue("supplier_name_snapshot");
         if (!snap) setSupplierToForm(sid);
       }
     } catch (err) {
+      console.error(err);
       api.error({
         message: "Không thể mở phiếu để sửa",
         description: err?.response?.data?.message || err?.message || "Vui lòng thử lại.",
@@ -574,6 +582,7 @@ export default function InventoryVoucherPage() {
       setEditingVoucher(null);
     }
   };
+
 
   const closeModal = () => {
     setIsModalOpen(false);
@@ -617,6 +626,12 @@ export default function InventoryVoucherPage() {
           ? {
               supplier_id: values.supplier_id,
               supplier_name_snapshot: values.supplier_name_snapshot || "",
+              
+              // Map supplier snapshot fields to partner fields for backend override
+              partner_name: values.supplier_name_snapshot || "",
+              partner_phone: values.supplier_phone_snapshot || "",
+              partner_address: values.supplier_address_snapshot || "",
+
               supplier_phone_snapshot: values.supplier_phone_snapshot || "",
               supplier_email_snapshot: values.supplier_email_snapshot || "",
               supplier_address_snapshot: values.supplier_address_snapshot || "",

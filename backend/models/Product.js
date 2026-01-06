@@ -18,6 +18,12 @@ const productSchema = new mongoose.Schema(
       default: "Đang kinh doanh",
     },
 
+    // ===== Thông tin pháp lý & Hóa đơn (Thông tư 88/40/78) =====
+    tax_rate: { type: Number, default: 0 }, // % Thuế GTGT (0, 5, 8, 10). -1: Không chịu thuế
+    origin: { type: String, maxlength: 100, trim: true, default: "" }, // Xuất xứ (Việt Nam, TQ...)
+    brand: { type: String, maxlength: 100, trim: true, default: "" }, // Thương hiệu
+    warranty_period: { type: String, maxlength: 100, default: "" }, // Thời gian bảo hành (12 tháng)
+
     // ===== Cửa hàng & kho =====
     store_id: { type: mongoose.Schema.Types.ObjectId, ref: "Store", required: true },
 
@@ -38,6 +44,19 @@ const productSchema = new mongoose.Schema(
       url: { type: String, default: null },
       public_id: { type: String, default: null },
     },
+
+    // ===== Quản lý Lô & Hạn sử dụng =====
+    batches: [
+      {
+        batch_no: { type: String, trim: true },
+        expiry_date: { type: Date, default: null },
+        cost_price: { type: Number, default: 0 }, // Giá vốn của lô này
+        quantity: { type: Number, default: 0 },   // Số lượng tồn của lô này (ban đầu = nhập, sau này trừ dần nếu implement FIFO)
+        warehouse_id: { type: mongoose.Schema.Types.ObjectId, ref: "Warehouse" }, // Lô này ở kho nào
+        created_at: { type: Date, default: Date.now }
+      }
+    ],
+
     lowStockAlerted: { type: Boolean, default: false },
     isDeleted: { type: Boolean, default: false },
   },
