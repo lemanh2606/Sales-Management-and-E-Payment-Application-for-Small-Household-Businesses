@@ -95,10 +95,11 @@ const ReportDashboard = () => {
   const [periodKey, setPeriodKey] = useState("");
   const [pickerValue, setPickerValue] = useState(null);
 
-  // 🆕 Chi phí ngoài lệ: items từ DB
+  // Chi phí ngoài lệ: items từ DB
   const [expenseItems, setExpenseItems] = useState([]); // array of {amount, note}
   const [operatingExpenseId, setOperatingExpenseId] = useState(null); // _id của document OperatingExpense
   const [selectedExpenseIds, setselectedExpenseIds] = useState([]);
+  const [allocationSuggestion, setAllocationSuggestion] = useState(null); // suggestion từ API
   const [unsavedChanges, setUnsavedChanges] = useState(false);
 
   // Form input
@@ -137,11 +138,25 @@ const ReportDashboard = () => {
   const handlePeriodTypeChange = (newType) => {
     if (newType === periodType) return;
 
-    const commitSwitchType = () => {
+    const commitSwitchType = async () => {
       setPeriodType(newType);
       setPeriodKey("");
       setPickerValue(null);
       setData(null);
+
+      // Kiểm tra allocation suggestion từ period type cũ sang mới
+      if (periodType && periodKey && currentStore?._id) {
+        const suggestion = await operatingExpenseService.suggestAllocation({
+          storeId: currentStore._id,
+          fromPeriodType: periodType,
+          fromPeriodKey: periodKey,
+          toPeriodType: newType,
+        });
+
+        if (suggestion.canAllocate) {
+          setAllocationSuggestion(suggestion);
+        }
+      }
     };
 
     if (!unsavedChanges) {
@@ -150,7 +165,7 @@ const ReportDashboard = () => {
     }
 
     Swal.fire({
-      title: "⚠️ Bạn có thay đổi chưa lưu",
+      title: "Bạn có thay đổi chưa lưu",
       html: `
       <div style="text-align: center; font-size: 14px;">
         <p>Bạn có <b>${getUnsavedCount()}</b> khoản chi phí chưa lưu:</p>
@@ -172,7 +187,7 @@ const ReportDashboard = () => {
     }).then(async (result) => {
       if (result.isConfirmed) {
         await saveOperatingExpense();
-        commitSwitchType();
+        await commitSwitchType();
         return;
       }
 
@@ -180,10 +195,10 @@ const ReportDashboard = () => {
         return; // ở lại
       }
 
-      // ✅ Cancel button
+      // Cancel button
       if (result.isDismissed) {
         setUnsavedChanges(false);
-        commitSwitchType();
+        await commitSwitchType();
       }
     });
   };
@@ -195,10 +210,31 @@ const ReportDashboard = () => {
     const newKey = buildPeriodKey(periodType, dateObj);
     if (!newKey || newKey === periodKey) return;
 
-    const commitSwitchKey = () => {
+    const commitSwitchKey = async () => {
       setPeriodKey(newKey);
       setPickerValue(dateObj);
       setData(null);
+
+      // Kiểm tra allocation suggestion khi chuyển period key (cùng loại)
+      if (periodKey && currentStore?._id) {
+        const suggestion = await operatingExpenseService.suggestAllocation({
+          storeId: currentStore._id,
+          fromPeriodType: periodType,
+          fromPeriodKey: periodKey,
+          toPeriodType: periodType,
+        });
+
+        if (suggestion.canAllocate && suggestion.suggestions && suggestion.suggestions.length > 0) {
+          const targetKeys = suggestion.suggestions.map((s) => s.periodKey);
+          if (targetKeys.includes(newKey)) {
+            setAllocationSuggestion(suggestion);
+          } else {
+            setAllocationSuggestion(null);
+          }
+        } else {
+          setAllocationSuggestion(null);
+        }
+      }
     };
 
     if (!unsavedChanges) {
@@ -229,7 +265,7 @@ const ReportDashboard = () => {
     }).then(async (result) => {
       if (result.isConfirmed) {
         await saveOperatingExpense();
-        commitSwitchKey();
+        await commitSwitchKey();
         return;
       }
 
@@ -239,7 +275,7 @@ const ReportDashboard = () => {
 
       if (result.isDismissed) {
         setUnsavedChanges(false);
-        commitSwitchKey();
+        await commitSwitchKey();
       }
     });
   };
@@ -581,6 +617,78 @@ const ReportDashboard = () => {
     });
   };
 
+  // Hàm xử lý allocation (phân bổ chi phí)
+  const handleAllocationSuggestion = async () => {
+    if (!allocationSuggestion || !allocationSuggestion.canAllocate) return;
+
+    Swal.fire({
+      title: "Phân bổ chi phí",
+      html: `
+        <div style="text-align: left; font-size: 13px;">
+          <p>${allocationSuggestion.message}</p>
+          <div style="background: #f6f8fb; padding: 12px; border-radius: 4px; margin-top: 12px;">
+            <p style="margin: 0 0 8px 0; font-weight: 500; color: #333;">Chi tiết phân bổ:</p>
+            ${allocationSuggestion.suggestions
+              .map(
+                (s, idx) =>
+                  `<p style="margin: 4px 0; color: #555;">
+                    <span style="font-weight: 500;">${s.periodKey}</span>: ${formatVND(s.amount)}
+                  </p>`
+              )
+              .join("")}
+            <p style="margin: 8px 0 0 0; color: #faad14; font-weight: 500;">
+              Tổng: ${formatVND(allocationSuggestion.suggestions.reduce((sum, s) => sum + s.amount, 0))}
+            </p>
+          </div>
+        </div>
+      `,
+      icon: "question",
+      confirmButtonText: "Đồng ý phân bổ",
+      cancelButtonText: "Hủy",
+      showCancelButton: true,
+      confirmButtonColor: "#1890ff",
+      cancelButtonColor: "#f80707ff",
+    }).then(async (result) => {
+      if (result.isConfirmed) {
+        try {
+          setLoading(true);
+
+          await operatingExpenseService.executeAllocation({
+            storeId: currentStore._id,
+            fromPeriodType: allocationSuggestion.fromData.periodType,
+            fromPeriodKey: allocationSuggestion.fromData.periodKey,
+            allocations: allocationSuggestion.suggestions,
+          });
+
+          setAllocationSuggestion(null);
+
+          Swal.fire({
+            icon: "success",
+            title: "Phân bổ thành công",
+            text: `Đã phân bổ chi phí sang ${allocationSuggestion.suggestions.length} khoảng thời gian`,
+            timer: 2000,
+            showConfirmButton: false,
+          });
+
+          // Reload expenses sau phân bổ
+          await loadOperatingExpenses();
+          await fetchFinancial();
+        } catch (error) {
+          console.error("handleAllocationSuggestion error:", error);
+          Swal.fire({
+            icon: "error",
+            title: "Lỗi phân bổ",
+            text: error.message || "Vui lòng thử lại",
+            timer: 1500,
+            showConfirmButton: false,
+          });
+        } finally {
+          setLoading(false);
+        }
+      }
+    });
+  };
+
   return (
     <Layout>
       <div>
@@ -657,6 +765,64 @@ const ReportDashboard = () => {
           {/* CHI PHÍ NGOÀI LỄ - RIÊNG */}
 
           <Card style={{ border: "1px solid #8c8c8c" }}>
+            {/* Allocation Suggestion Alert */}
+            {allocationSuggestion && allocationSuggestion.canAllocate && (
+              <Alert
+                type="info"
+                message={
+                  <div
+                    style={{
+                      cursor: "pointer",
+                      padding: "8px 0",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 12,
+                      userSelect: "none",
+                    }}
+                    onClick={handleAllocationSuggestion}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = "rgba(24, 144, 255, 0.08)";
+                      e.currentTarget.style.borderRadius = "4px";
+                      e.currentTarget.style.padding = "8px 8px";
+                      e.currentTarget.style.marginLeft = "-8px";
+                      e.currentTarget.style.marginRight = "-8px";
+                      e.currentTarget.style.paddingLeft = "16px";
+                      e.currentTarget.style.paddingRight = "16px";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "transparent";
+                      e.currentTarget.style.padding = "8px 0";
+                      e.currentTarget.style.marginLeft = "0";
+                      e.currentTarget.style.marginRight = "0";
+                      e.currentTarget.style.paddingLeft = "0";
+                      e.currentTarget.style.paddingRight = "0";
+                    }}
+                    title="Bấm để xem chi tiết và thực hiện phân bổ"
+                  >
+                    <div style={{ flex: 1 }}>
+                      <strong>Gợi ý phân bổ:</strong> {allocationSuggestion.message}
+                    </div>
+                    <span
+                      style={{
+                        fontSize: "12px",
+                        color: "#1890ff",
+                        fontWeight: "600",
+                        whiteSpace: "nowrap",
+                        marginLeft: "auto",
+                        paddingLeft: 12,
+                      }}
+                    >
+                      Bấm để xem →
+                    </span>
+                  </div>
+                }
+                showIcon
+                closable
+                onClose={() => setAllocationSuggestion(null)}
+                style={{ marginBottom: 16 }}
+              />
+            )}
+
             <Space align="center" style={{ marginBottom: 12 }}>
               <Title level={4} style={{ margin: 0 }}>
                 Chi phí ngoài lề

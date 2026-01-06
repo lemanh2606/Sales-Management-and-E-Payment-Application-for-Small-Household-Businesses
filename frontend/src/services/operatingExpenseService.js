@@ -21,19 +21,21 @@ export const getOperatingExpenseByPeriod = async ({ storeId, periodType, periodK
       timeout: 5000,
     });
 
-    // Success: return data
-    if (response.data.success && response.data.data) {
+    // ✅ Giờ luôn là 200 (success)
+    if (response.data.success) {
+      // Nếu data = null (chưa có record) → return rỗng
+      if (!response.data.data) {
+        return { items: [], totalAmount: 0 };
+      }
+
+      // Nếu có data → return data
       return response.data.data;
     }
 
-    // Fallback
+    // Fallback (không bình thường xảy ra)
     return { items: [], totalAmount: 0 };
   } catch (error) {
-    // 404 or any error: return empty items
-    if (error.response?.status === 404) {
-      return { items: [], totalAmount: 0 };
-    }
-
+    // ✅ Chỉ log lỗi thực sự (5XX, network error, v.v.)
     console.error("getOperatingExpenseByPeriod error:", error.message);
     return { items: [], totalAmount: 0 };
   }
@@ -128,9 +130,77 @@ export const deleteMultipleItems = async ({ id, itemIds }) => {
   throw new Error(response.data?.message || "Lỗi khi xoá các khoản chi phí");
 };
 
+/**
+ * Suggest allocation: preview phân bổ chi phí từ 1 period sang period khác
+ * @param {object} params - { storeId, fromPeriodType, fromPeriodKey, toPeriodType }
+ * @returns {object} suggestion preview
+ */
+export const suggestAllocation = async ({ storeId, fromPeriodType, fromPeriodKey, toPeriodType }) => {
+  try {
+    if (!storeId || !fromPeriodType || !fromPeriodKey || !toPeriodType) {
+      return { canAllocate: false, suggestions: [] };
+    }
+
+    const token = localStorage.getItem("token");
+    const response = await axios.get(`${apiUrl}/operating-expenses/allocation-suggest`, {
+      params: { storeId, fromPeriodType, fromPeriodKey, toPeriodType },
+      headers: { Authorization: `Bearer ${token}` },
+      timeout: 5000,
+    });
+
+    if (response.data?.success) {
+      return response.data;
+    }
+
+    return { canAllocate: false, suggestions: [] };
+  } catch (error) {
+    console.error("suggestAllocation error:", error.message);
+    return { canAllocate: false, suggestions: [] };
+  }
+};
+
+/**
+ * Execute allocation: thực hiện phân bổ chi phí
+ * @param {object} params - { storeId, fromPeriodType, fromPeriodKey, allocations }
+ * @returns {object} created records
+ */
+export const executeAllocation = async ({ storeId, fromPeriodType, fromPeriodKey, allocations }) => {
+  try {
+    if (!storeId || !fromPeriodType || !fromPeriodKey || !Array.isArray(allocations)) {
+      throw new Error("Thiếu dữ liệu bắt buộc");
+    }
+
+    const token = localStorage.getItem("token");
+    const response = await axios.post(
+      `${apiUrl}/operating-expenses/allocation-execute`,
+      {
+        storeId,
+        fromPeriodType,
+        fromPeriodKey,
+        allocations,
+      },
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        timeout: 5000,
+      }
+    );
+
+    if (response.data?.success) {
+      return response.data;
+    }
+
+    throw new Error(response.data?.message || "Lỗi khi phân bổ chi phí");
+  } catch (error) {
+    console.error("executeAllocation error:", error);
+    throw error;
+  }
+};
+
 export default {
   getOperatingExpenseByPeriod,
   upsertOperatingExpense,
   getOperatingExpenseTotal,
   deleteMultipleItems,
+  suggestAllocation,
+  executeAllocation,
 };
