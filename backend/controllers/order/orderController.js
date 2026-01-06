@@ -527,10 +527,10 @@ const setPaidCash = async (req, res) => {
   session.startTransaction();
 
   try {
-    const orderId = req.params.id;
+    const orderId = req.params.orderId;
 
     // Lock đơn hàng để xử lý
-    const order = await Order.findById(orderId).session(session);
+    const order = await Order.findById(orderId).populate("customer").session(session);
     if (!order) {
       throw new Error("Đơn hàng không tồn tại");
     }
@@ -595,6 +595,11 @@ const setPaidCash = async (req, res) => {
       }
 
       // 3. Tạo phiếu xuất OUT
+      const totalCost = voucherItems.reduce(
+        (acc, item) => acc + item.qty_actual * item.unit_cost,
+        0
+      );
+
       const voucher = await new InventoryVoucher({
         store_id: order.storeId,
         type: "OUT",
@@ -608,8 +613,18 @@ const setPaidCash = async (req, res) => {
         ref_id: order._id,
         ref_no: order._id.toString(),
         ref_date: order.createdAt,
+        
+        // Full info
         warehouse_id: voucherItems[0]?.warehouse_id || null,
         warehouse_name: voucherItems[0]?.warehouse_name || "",
+        
+        deliverer_name: req.user?.fullname || req.user?.username || "Nhân viên bán hàng",
+        receiver_name: order.customer?.name || "Khách lẻ",
+        partner_name: order.customer?.name || "Khách lẻ",
+        partner_phone: order.customer?.phone || "",
+        partner_address: order.customer?.address || "",
+
+        total_cost: totalCost,
         created_by: req.user?.id,
         items: voucherItems,
       }).save({ session });
@@ -743,6 +758,11 @@ const printBill = async (req, res) => {
       }
 
       // Tạo phiếu OUT
+      const totalCost = voucherItems.reduce(
+        (acc, item) => acc + item.qty_actual * item.unit_cost,
+        0
+      );
+
       const voucher = await new InventoryVoucher({
         store_id: order.storeId._id || order.storeId,
         type: "OUT",
@@ -756,9 +776,19 @@ const printBill = async (req, res) => {
         ref_id: order._id,
         ref_no: order._id.toString(),
         ref_date: order.createdAt,
+        
+        // Full info
         warehouse_id: voucherItems[0]?.warehouse_id || null,
         warehouse_name: voucherItems[0]?.warehouse_name || "",
-        created_by: order.employeeId?._id,
+        
+        deliverer_name: order.employeeId?.fullName || req.user?.fullname || "Nhân viên bán hàng",
+        receiver_name: order.customer?.name || "Khách lẻ",
+        partner_name: order.customer?.name || "Khách lẻ",
+        partner_phone: order.customer?.phone || "",
+        partner_address: order.customer?.address || "",
+
+        total_cost: totalCost,
+        created_by: order.employeeId?._id || req.user?._id,
         items: voucherItems,
       }).save();
 

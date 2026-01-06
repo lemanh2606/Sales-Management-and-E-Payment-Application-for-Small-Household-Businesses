@@ -181,7 +181,6 @@ const ALL_PERMISSIONS = [
 
 const STAFF_DEFAULT_MENU = [
   // Store
-  "store:dashboard:view",
   "store:employee:view", // 👈 THÊM: staff có thể xem nhân viên cùng store
 
   // Orders

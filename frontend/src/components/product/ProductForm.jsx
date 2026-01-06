@@ -184,6 +184,12 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
         group_id: groupValue || undefined,
         default_warehouse_id: warehouseValue || undefined, // ✅ ĐÚNG
 
+        // Legal fields
+        tax_rate: product.tax_rate ?? 0,
+        origin: product.origin || "",
+        brand: product.brand || "",
+        warranty_period: product.warranty_period || "",
+
         image: defaultImage,
         description: product.description || "",
       });
@@ -346,6 +352,7 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
                   prefix={<StockOutlined style={{ color: "#722ed1" }} />}
                   placeholder="Nhập số lượng"
                   style={{ width: "100%", borderRadius: "8px" }}
+                  disabled={!!product} // Không cho sửa tồn kho khi edit -> Phải dùng Import/Kiểm kê
                 />
               </Form.Item>
             </Col>
@@ -465,6 +472,43 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
               <Col xs={24} md={12}>
                 <Form.Item name="max_stock" label={<span style={{ fontWeight: 600 }}>Tồn tối đa</span>}>
                   <InputNumber placeholder="Số lượng tối đa" style={{ width: "100%", borderRadius: "8px" }} min={0} />
+                </Form.Item>
+              </Col>
+
+              <Divider dashed style={{ margin: "10px 0", borderColor: "#e8e8e8" }} orientation="left" plain>
+                <span style={{ fontSize: 13, color: "#888" }}>Thông tin pháp lý & Bảo hành</span>
+              </Divider>
+
+              <Col xs={24} md={12}>
+                <Form.Item name="tax_rate" label={<span style={{ fontWeight: 600 }}>Thuế GTGT (%)</span>} initialValue={0}>
+                  <Select
+                    style={{ borderRadius: "8px" }}
+                    options={[
+                      { value: -1, label: "KCT (Không chịu thuế)" },
+                      { value: 0, label: "0% (Hoặc không kê khai)" },
+                      { value: 5, label: "5%" },
+                      { value: 8, label: "8%" },
+                      { value: 10, label: "10%" },
+                    ]}
+                  />
+                </Form.Item>
+              </Col>
+
+              <Col xs={24} md={12}>
+                <Form.Item name="origin" label={<span style={{ fontWeight: 600 }}>Xuất xứ (Nước SX)</span>}>
+                  <Input placeholder="VD: Việt Nam, Trung Quốc, Nhật Bản..." style={{ borderRadius: "8px" }} />
+                </Form.Item>
+              </Col>
+
+              <Col xs={24} md={12}>
+                <Form.Item name="brand" label={<span style={{ fontWeight: 600 }}>Thương hiệu</span>}>
+                  <Input placeholder="VD: Sony, Samsung, Vinamilk..." style={{ borderRadius: "8px" }} />
+                </Form.Item>
+              </Col>
+
+              <Col xs={24} md={12}>
+                <Form.Item name="warranty_period" label={<span style={{ fontWeight: 600 }}>Bảo hành</span>}>
+                  <Input placeholder="VD: 12 tháng, 2 năm..." style={{ borderRadius: "8px" }} />
                 </Form.Item>
               </Col>
 

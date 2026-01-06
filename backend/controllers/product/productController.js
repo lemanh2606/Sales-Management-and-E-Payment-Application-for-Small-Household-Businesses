@@ -18,23 +18,35 @@ const {
 } = require("../../utils/fileImport");
 
 // ============= HELPER FUNCTIONS =============
+// ============= HELPER FUNCTIONS =============
 const generateSKU = async (storeId) => {
-  const lastProduct = await Product.findOne({ store_id: storeId }).sort({
-    createdAt: -1,
-  });
+  // Find the max SKU matching "SP" + digits
+  const lastProduct = await Product.findOne({
+    store_id: storeId,
+    sku: { $regex: /^SP\d+$/ },
+  }).sort({ sku: -1 });
+
   let nextNumber = 1;
 
-  if (lastProduct && lastProduct.sku && lastProduct.sku.startsWith("SP")) {
-    const lastNumber = parseInt(lastProduct.sku.substring(2));
+  if (lastProduct && lastProduct.sku) {
+    const lastNumber = parseInt(lastProduct.sku.replace("SP", ""));
     if (!isNaN(lastNumber)) nextNumber = lastNumber + 1;
   }
 
-  let paddingLength = 6;
-  if (nextNumber > 999999)
-    paddingLength = Math.max(6, nextNumber.toString().length);
+  // Ensure uniqueness loop
+  while (true) {
+    let paddingLength = 6;
+    if (nextNumber > 999999)
+      paddingLength = Math.max(6, nextNumber.toString().length);
+    const sku = `SP${String(nextNumber).padStart(paddingLength, "0")}`;
 
-  return `SP${nextNumber.toString().padStart(paddingLength, "0")}`;
+    const exists = await Product.exists({ store_id: storeId, sku });
+    if (!exists) return sku;
+    nextNumber++;
+  }
 };
+
+
 
 // ============= CREATE - Tạo sản phẩm mới =============
 const createProduct = async (req, res) => {
@@ -87,6 +99,11 @@ const createProduct = async (req, res) => {
       group_id,
       default_warehouse_id,
       default_warehouse_name,
+      // Legal fields
+      tax_rate,
+      origin,
+      brand,
+      warranty_period
     } = req.body || {};
 
     if (!name || price === undefined || cost_price === undefined) {
@@ -115,8 +132,8 @@ const createProduct = async (req, res) => {
     // UI vẫn gửi stock_quantity => coi là "tồn đầu kỳ"
     const openingQty =
       stock_quantity !== undefined &&
-      stock_quantity !== null &&
-      stock_quantity !== ""
+        stock_quantity !== null &&
+        stock_quantity !== ""
         ? Number(stock_quantity)
         : 0;
 
@@ -312,6 +329,12 @@ const createProduct = async (req, res) => {
       // ✅ GẮN KHO MẶC ĐỊNH VÀO PRODUCT
       default_warehouse_id: finalDefaultWarehouseId,
       default_warehouse_name: finalDefaultWarehouseName,
+
+      // ✅ LEGAL FIELDS
+      tax_rate: tax_rate !== undefined ? Number(tax_rate) : 0,
+      origin: origin || "",
+      brand: brand || "",
+      warranty_period: warranty_period || "",
     };
 
     // ===== IMAGE: lưu đúng schema image.publicid + image.url =====
@@ -388,9 +411,25 @@ const createProduct = async (req, res) => {
 
       await createdVoucher.save({ session });
 
+      await createdVoucher.save({ session });
+
+      // ===== UPDATE STOCK & INITIAL BATCH =====
+      // Tạo batch mặc định cho tồn đầu kỳ
       await Product.updateOne(
         { _id: newProduct._id, store_id: storeId, isDeleted: false },
-        { $inc: { stock_quantity: openingQty } },
+        {
+          $inc: { stock_quantity: openingQty },
+          $push: {
+            batches: {
+              batch_no: `BATCH-INIT-${Date.now()}`,
+              expiry_date: null, // Mặc định null nếu form không nhập
+              cost_price: costNum, // Giá vốn nhập ban đầu
+              quantity: openingQty,
+              warehouse_id: finalDefaultWarehouseId,
+              created_at: now
+            }
+          }
+        },
         { session }
       );
     }
@@ -427,13 +466,11 @@ const createProduct = async (req, res) => {
         entityId: createdVoucher._id,
         entityName: `Phiếu nhập kho ${createdVoucher.voucher_code}`,
         req,
-        description: `Nhập tồn đầu kỳ khi tạo sản phẩm ${
-          newProduct.name
-        } (SKU: ${newProduct.sku}) số lượng ${openingQty} ${
-          finalDefaultWarehouseName
+        description: `Nhập tồn đầu kỳ khi tạo sản phẩm ${newProduct.name
+          } (SKU: ${newProduct.sku}) số lượng ${openingQty} ${finalDefaultWarehouseName
             ? `tại kho ${finalDefaultWarehouseName}`
             : ""
-        }`,
+          }`,
       });
     }
 
@@ -443,15 +480,15 @@ const createProduct = async (req, res) => {
       openingStock: openingQty,
       inventoryVoucher: createdVoucher
         ? {
-            _id: createdVoucher._id,
-            voucher_code: createdVoucher.voucher_code,
-            type: createdVoucher.type,
-            status: createdVoucher.status,
-            voucher_date: createdVoucher.voucher_date,
-            // ✅ TRẢ VỀ THÔNG TIN KHO
-            warehouse_id: createdVoucher.warehouse_id,
-            warehouse_name: createdVoucher.warehouse_name,
-          }
+          _id: createdVoucher._id,
+          voucher_code: createdVoucher.voucher_code,
+          type: createdVoucher.type,
+          status: createdVoucher.status,
+          voucher_date: createdVoucher.voucher_date,
+          // ✅ TRẢ VỀ THÔNG TIN KHO
+          warehouse_id: createdVoucher.warehouse_id,
+          warehouse_name: createdVoucher.warehouse_name,
+        }
         : null,
     });
   } catch (error) {
@@ -460,7 +497,7 @@ const createProduct = async (req, res) => {
     try {
       await session.abortTransaction();
       session.endSession();
-    } catch (_) {}
+    } catch (_) { }
 
     return res
       .status(500)
@@ -505,6 +542,11 @@ const updateProduct = async (req, res) => {
       group_id,
       default_warehouse_id,
       default_warehouse_name,
+      // Legal
+      tax_rate,
+      origin,
+      brand,
+      warranty_period
     } = req.body || {};
 
     // ===== Check user =====
@@ -776,12 +818,11 @@ const updateProduct = async (req, res) => {
             ? updateData.cost_price
             : typeof product.cost_price === "object" &&
               product.cost_price?.toString
-            ? Number(product.cost_price.toString())
-            : Number(product.cost_price || 0);
+              ? Number(product.cost_price.toString())
+              : Number(product.cost_price || 0);
 
-        const voucherCode = `${
-          voucherType === "IN" ? "NK" : "XK"
-        }-${y}${m}${d}-${product.sku}-${Date.now()}`;
+        const voucherCode = `${voucherType === "IN" ? "NK" : "XK"
+          }-${y}${m}${d}-${product.sku}-${Date.now()}`;
 
         createdVoucher = new InventoryVoucher({
           store_id: productStoreId,
@@ -819,9 +860,8 @@ const updateProduct = async (req, res) => {
               unit_cost: mongoose.Types.Decimal128.fromString(
                 String(effectiveCost)
               ),
-              note: `Set tồn từ ${currentQty} -> ${targetStockQty} (delta ${
-                delta > 0 ? "+" : "-"
-              }${absQty})`,
+              note: `Set tồn từ ${currentQty} -> ${targetStockQty} (delta ${delta > 0 ? "+" : "-"
+                }${absQty})`,
             },
           ],
         });
@@ -879,13 +919,11 @@ const updateProduct = async (req, res) => {
         entityId: createdVoucher._id,
         entityName: `Phiếu kho ${createdVoucher.voucher_code}`,
         req,
-        description: `Điều chỉnh tồn kho sản phẩm ${updatedProduct.name}: ${
-          createdVoucher.type
-        } ${
-          finalDefaultWarehouseName
+        description: `Điều chỉnh tồn kho sản phẩm ${updatedProduct.name}: ${createdVoucher.type
+          } ${finalDefaultWarehouseName
             ? `tại kho ${finalDefaultWarehouseName}`
             : ""
-        }`,
+          }`,
       });
     }
 
@@ -894,15 +932,15 @@ const updateProduct = async (req, res) => {
       product: updatedProduct,
       inventoryVoucher: createdVoucher
         ? {
-            _id: createdVoucher._id,
-            voucher_code: createdVoucher.voucher_code,
-            type: createdVoucher.type,
-            status: createdVoucher.status,
-            voucher_date: createdVoucher.voucher_date,
-            // ✅ TRẢ VỀ THÔNG TIN KHO
-            warehouse_id: createdVoucher.warehouse_id,
-            warehouse_name: createdVoucher.warehouse_name,
-          }
+          _id: createdVoucher._id,
+          voucher_code: createdVoucher.voucher_code,
+          type: createdVoucher.type,
+          status: createdVoucher.status,
+          voucher_date: createdVoucher.voucher_date,
+          // ✅ TRẢ VỀ THÔNG TIN KHO
+          warehouse_id: createdVoucher.warehouse_id,
+          warehouse_name: createdVoucher.warehouse_name,
+        }
         : null,
     });
   } catch (error) {
@@ -911,7 +949,7 @@ const updateProduct = async (req, res) => {
     try {
       await session.abortTransaction();
       session.endSession();
-    } catch (_) {}
+    } catch (_) { }
 
     return res
       .status(500)
@@ -990,7 +1028,7 @@ const deleteProduct = async (req, res) => {
     try {
       await session.abortTransaction();
       session.endSession();
-    } catch (_) {}
+    } catch (_) { }
 
     return res
       .status(500)
@@ -1255,8 +1293,7 @@ const getLowStockProducts = async (req, res) => {
       .lean(); // Lean cho nhanh
 
     console.log(
-      `Query low stock thành công, số lượng: ${
-        lowStockProds.length
+      `Query low stock thành công, số lượng: ${lowStockProds.length
       } sản phẩm cho store ${storeId || "tất cả"}`
     );
     res.json({
@@ -1427,6 +1464,15 @@ const importProducts = async (req, res) => {
       suppliers.map((s) => [s.name.toLowerCase(), s])
     );
 
+    const groups = await ProductGroup.find({
+      storeId: storeId, // Fix: Model uses storeId
+      isDeleted: false,
+    }).lean();
+
+    const groupMap = new Map(
+      groups.map((g) => [g.name.toLowerCase(), g])
+    );
+
     const existingProducts = await Product.find({
       store_id: storeId,
       isDeleted: false,
@@ -1455,6 +1501,31 @@ const importProducts = async (req, res) => {
       }
     };
 
+    // Helper: Parse Date an toàn (hỗ trợ dd/mm/yyyy, yyyy-mm-dd, Excel date)
+    const parseImportDate = (str) => {
+      if (!str) return null;
+      // Nếu là số (Excel serial date)
+      if (typeof str === "number") {
+        return new Date(Math.round((str - 25569) * 86400 * 1000));
+      }
+      // Nếu là string
+      const s = String(str).trim();
+
+      // Định dạng dd/mm/yyyy
+      if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)) {
+        const [d, m, y] = s.split("/").map(Number);
+        return new Date(y, m - 1, d);
+      }
+      // Định dạng dd-mm-yyyy
+      if (/^\d{1,2}-\d{1,2}-\d{4}$/.test(s)) {
+        const [d, m, y] = s.split("-").map(Number);
+        return new Date(y, m - 1, d);
+      }
+
+      const d = new Date(s);
+      return isNaN(d.getTime()) ? null : d;
+    };
+
     // ================= IMPORT LOOP =================
     for (let i = 0; i < data.length; i++) {
       const session = await mongoose.startSession();
@@ -1472,11 +1543,46 @@ const importProducts = async (req, res) => {
         let sku = row["Mã SKU"]?.trim();
         if (!sku) sku = await generateSKU();
 
-        const supplierName = row["Nhà cung cấp"]?.trim();
-        const supplier =
-          supplierName && supplierMap.get(supplierName.toLowerCase());
+        // --- SUPPLIER (Auto Create) ---
+        let supplierId = null;
+        let supplierName = row["Nhà cung cấp"] ? row["Nhà cung cấp"].trim() : "";
+        if (supplierName) {
+          const lowerName = supplierName.toLowerCase();
+          if (supplierMap.has(lowerName)) {
+            supplierId = supplierMap.get(lowerName)._id;
+          } else {
+            // Create new Supplier
+            const newSupplier = new Supplier({
+              name: supplierName,
+              store_id: storeId,
+            });
+            await newSupplier.save({ session });
+            supplierId = newSupplier._id;
+            // Update cache
+            supplierMap.set(lowerName, newSupplier);
+          }
+        }
 
-        const supplierId = supplier?._id || null;
+        // --- GROUP (Auto Create) ---
+        let groupId = null;
+        let groupName = row["Nhóm sản phẩm"] ? row["Nhóm sản phẩm"].trim() : "";
+        if (groupName) {
+          const lowerName = groupName.toLowerCase();
+          if (groupMap.has(lowerName)) {
+            groupId = groupMap.get(lowerName)._id;
+          } else {
+            // Create new Group
+            const newGroup = new ProductGroup({
+              name: groupName,
+              storeId: storeId, // Fix: Model uses storeId
+              description: "Tự động tạo từ Import Excel"
+            });
+            await newGroup.save({ session });
+            groupId = newGroup._id;
+            // Update cache
+            groupMap.set(lowerName, newGroup);
+          }
+        }
 
         let product = await Product.findOne({
           sku,
@@ -1487,6 +1593,13 @@ const importProducts = async (req, res) => {
         let isNew = false;
 
         if (product) {
+          // Legal fields
+          const taxRate = row["Thuế GTGT (%)"] !== undefined ? Number(row["Thuế GTGT (%)"]) : 0;
+          const origin = row["Xuất xứ"] ? row["Xuất xứ"].toString().trim() : "";
+          const brand = row["Thương hiệu"] ? row["Thương hiệu"].toString().trim() : "";
+          const warranty = row["Bảo hành"] ? row["Bảo hành"].toString().trim() : "";
+          const unit = row["Đơn vị"] ? row["Đơn vị"].toString().trim() : "";
+
           await Product.updateOne(
             { _id: product._id },
             {
@@ -1495,6 +1608,13 @@ const importProducts = async (req, res) => {
                 price,
                 cost_price: cost,
                 supplier_id: supplierId,
+                group_id: groupId,
+                unit: unit,
+                // Update legal fields
+                tax_rate: isNaN(taxRate) ? 0 : taxRate,
+                origin: origin,
+                brand: brand,
+                warranty_period: warranty
               },
             },
             { session }
@@ -1502,6 +1622,13 @@ const importProducts = async (req, res) => {
           product = await Product.findById(product._id).session(session);
           results.debug.productsUpdated++;
         } else {
+          // Legal fields
+          const taxRate = row["Thuế GTGT (%)"] !== undefined ? Number(row["Thuế GTGT (%)"]) : 0;
+          const origin = row["Xuất xứ"] ? row["Xuất xứ"].toString().trim() : "";
+          const brand = row["Thương hiệu"] ? row["Thương hiệu"].toString().trim() : "";
+          const warranty = row["Bảo hành"] ? row["Bảo hành"].toString().trim() : "";
+          const unit = row["Đơn vị"] ? row["Đơn vị"].toString().trim() : "";
+
           product = new Product({
             name: row["Tên sản phẩm"],
             sku,
@@ -1510,9 +1637,17 @@ const importProducts = async (req, res) => {
             stock_quantity: 0,
             store_id: storeId,
             supplier_id: supplierId,
+            group_id: groupId,
             default_warehouse_id: warehouseId,
             default_warehouse_name: warehouseName,
             createdBy: userId,
+            unit: unit,
+
+            // Save legal fields
+            tax_rate: isNaN(taxRate) ? 0 : taxRate,
+            origin: origin,
+            brand: brand,
+            warranty_period: warranty
           });
           await product.save({ session });
           results.debug.productsCreated++;
@@ -1551,9 +1686,7 @@ const importProducts = async (req, res) => {
 
             ref_type: isNew ? "PRODUCT_IMPORT_CREATE" : "PRODUCT_IMPORT_UPDATE",
             ref_no: row["Số chứng từ"] || "",
-            ref_date: row["Ngày chứng từ"]
-              ? new Date(row["Ngày chứng từ"])
-              : null,
+            ref_date: parseImportDate(row["Ngày chứng từ"]),
 
             created_by: userId,
             posted_by: userId,
@@ -1576,6 +1709,9 @@ const importProducts = async (req, res) => {
                 qty_actual: openingQty,
 
                 unit_cost: mongoose.Types.Decimal128.fromString(String(cost)),
+                // Support Batch & Expiry
+                batch_no: row["Số lô"] || "",
+                expiry_date: parseImportDate(row["Hạn sử dụng"]),
                 note: "Nhập tồn khi import Excel",
               },
             ],
@@ -1583,11 +1719,35 @@ const importProducts = async (req, res) => {
 
           await voucher.save({ session });
 
-          await Product.updateOne(
-            { _id: product._id },
-            { $inc: { stock_quantity: openingQty } },
-            { session }
-          );
+          // ===== UPDATE PRODUCT BATCHES (QUẢN LÝ LÔ) =====
+          const batchNo = row["Số lô"] ? row["Số lô"].toString().trim() : "";
+          const expiryDate = parseImportDate(row["Hạn sử dụng"]);
+
+          if (batchNo || expiryDate) {
+            await Product.updateOne(
+              { _id: product._id },
+              {
+                $inc: { stock_quantity: openingQty },
+                $push: {
+                  batches: {
+                    batch_no: batchNo || `BATCH-${Date.now()}`,
+                    expiry_date: expiryDate,
+                    cost_price: cost,
+                    quantity: openingQty,
+                    warehouse_id: warehouseId,
+                    created_at: new Date()
+                  }
+                }
+              },
+              { session }
+            );
+          } else {
+            await Product.updateOne(
+              { _id: product._id },
+              { $inc: { stock_quantity: openingQty } },
+              { session }
+            );
+          }
 
           results.debug.vouchersCreated++;
         }
@@ -1622,31 +1782,104 @@ const importProducts = async (req, res) => {
   }
 };
 
-// Download Product Template
-const downloadProductTemplate = (req, res) => {
-  const filePath = path.resolve(
-    __dirname,
-    "../../templates/product_template.xlsx"
-  );
+// Download Product Template (Dynamic with ExcelJS)
+const downloadProductTemplate = async (req, res) => {
+  try {
+    const XLSX = require("xlsx");
+    const workbook = XLSX.utils.book_new();
 
-  return res.sendFile(
-    filePath,
-    {
-      headers: {
-        "Content-Type":
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": "attachment; filename=product_template.xlsx",
-      },
-    },
-    (err) => {
-      if (err) {
-        console.error("Lỗi downloadProductTemplate:", err);
-        if (!res.headersSent) {
-          res.status(500).json({ message: "Lỗi server", error: err.message });
-        }
-      }
-    }
-  );
+    // Các cột trong template import
+    const headers = [
+      "Tên sản phẩm",
+      "Mã SKU",
+      "Giá bán",
+      "Giá vốn",
+      "Tồn kho",
+      "Đơn vị",
+      "Nhà cung cấp",
+      "Nhóm sản phẩm",      // New: Cho phép import nhóm
+      "Số lô",
+      "Hạn sử dụng",
+      "Thuế GTGT (%)",      // New
+      "Xuất xứ",            // New
+      "Thương hiệu",        // New
+      "Bảo hành",           // New
+      "Số chứng từ",
+      "Ngày chứng từ",
+    ];
+
+    // Tạo dữ liệu mẫu (1 dòng ví dụ + dòng trống)
+    const sampleData = [
+      [
+        "Coca Cola Lon 330ml", // Tên
+        "SP000001",            // SKU (optional)
+        10000,                 // Giá bán
+        8000,                  // Giá vốn
+        100,                   // Tồn
+        "Lon",                 // Đơn vị
+        "Công ty CocaCola",    // Nhà cung cấp
+        "Đồ uống",             // Nhóm sản phẩm
+        "BATCH001",            // Số lô
+        "31/12/2026",          // Hạn dùng (dd/mm/yyyy)
+        10,                    // Thuế GTGT
+        "Việt Nam",            // Xuất xứ
+        "CocaCola",            // Thương hiệu
+        "12 tháng",            // Bảo hành
+        "NK001",               // Số chứng từ
+        "01/01/2025",          // Ngày chứng từ (dd/mm/yyyy)
+      ],
+    ];
+
+    // Tạo sheet từ mảng
+    const worksheet = XLSX.utils.aoa_to_sheet([headers, ...sampleData]);
+
+    // Định dạng độ rộng cột cho dễ nhìn
+    const wscols = [
+      { wch: 25 }, // Tên
+      { wch: 15 }, // SKU
+      { wch: 12 }, // Giá bán
+      { wch: 12 }, // Giá vốn
+      { wch: 10 }, // Tồn
+      { wch: 10 }, // Đơn vị
+      { wch: 20 }, // Nhà cung cấp
+      { wch: 15 }, // Số lô
+      { wch: 15 }, // Hạn sử dụng
+      { wch: 15 }, // Số chứng từ
+      { wch: 15 }, // Ngày chứng từ
+    ];
+    worksheet["!cols"] = wscols;
+
+    // Add sheet to workbook
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Template");
+
+    // Tạo buffer
+    const excelBuffer = XLSX.write(workbook, {
+      bookType: "xlsx",
+      type: "buffer",
+    });
+
+    const filename = "product_import_template_v2.xlsx";
+    const encodedFilename = encodeURIComponent(filename).replace(
+      /['()]/g,
+      escape
+    );
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${encodedFilename}"; filename*=UTF-8''${encodedFilename}`
+    );
+    res.setHeader("Content-Length", excelBuffer.length);
+
+    console.log("✅ Generated dynamic Import Template with Batch/Expiry");
+    return res.send(excelBuffer);
+  } catch (error) {
+    console.error("❌ Lỗi downloadProductTemplate:", error);
+    return res.status(500).json({ message: "Lỗi server", error: error.message });
+  }
 };
 
 // ============= EXPORT - Xuất danh sách sản phẩm ra Excel =============

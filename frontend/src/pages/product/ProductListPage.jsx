@@ -22,6 +22,7 @@ import {
   Drawer,
   AutoComplete,
   Alert,
+  Select,
 } from "antd";
 import {
   PlusOutlined,
@@ -40,7 +41,8 @@ import {
   MenuOutlined,
   FileExcelOutlined,
   DownloadOutlined,
-  EnvironmentOutlined, // ✅ icon thay cho "warehouse"
+  EnvironmentOutlined,
+  CalendarOutlined, // ✅ icon cho Expiry
 } from "@ant-design/icons";
 import Layout from "../../components/Layout";
 import ProductForm from "../../components/product/ProductForm";
@@ -86,6 +88,7 @@ export default function ProductListPage() {
     { key: "image", label: "Hình ảnh", default: false },
     { key: "createdAt", label: "Ngày tạo", default: false },
     { key: "updatedAt", label: "Cập nhật", default: false },
+    { key: "expiry", label: "Hạn sử dụng", default: true }, // ✅ NEW
   ];
 
   const [visibleColumns, setVisibleColumns] = useState(() => {
@@ -201,25 +204,62 @@ export default function ProductListPage() {
     if (storeId) fetchProducts();
   }, [storeId]);
 
-  // ✅ SEARCH: thêm warehouse
+  const [viewMode, setViewMode] = useState("merge"); // "merge" | "split"
+
+  // Logic làm phẳng (flatten) sản phẩm theo lô
+  const flattenProducts = useMemo(() => {
+    return allProducts.reduce((acc, product) => {
+      const batches = product.batches && product.batches.length > 0
+        ? product.batches.filter(b => b.quantity > 0) // Chỉ lấy lô còn hàng
+        : [];
+
+      if (batches.length === 0) {
+        // Nếu không có lô hoặc hết hàng -> giữ nguyên 1 dòng
+        acc.push({ ...product, uniqueId: product._id, isBatch: false });
+      } else {
+        // Tách mỗi lô thành 1 dòng
+        batches.forEach((batch, index) => {
+          acc.push({
+            ...product, // Kế thừa thông tin chung
+            uniqueId: `${product._id}_${batch.batch_no}_${index}`,
+            isBatch: true,
+            // Override thông tin riêng của lô
+            stock_quantity: batch.quantity,
+            cost_price: batch.cost_price,
+            expiry_date: batch.expiry_date,
+            batch_no: batch.batch_no,
+            warehouse: batch.warehouse_id || product.warehouse // Lấy kho của lô nếu có
+          });
+        });
+      }
+      return acc;
+    }, []);
+  }, [allProducts]);
+
+  // ✅ SEARCH & FILTER
   useEffect(() => {
+    // 1. Chọn nguồn dữ liệu dựa trên viewMode
+    const sourceData = viewMode === "split" ? flattenProducts : allProducts;
+
     if (!searchValue.trim()) {
-      setFilteredProducts(allProducts);
+      setFilteredProducts(sourceData);
       setCurrentPage(1);
       return;
     }
 
     const searchLower = searchValue.toLowerCase().trim();
-    const filtered = allProducts.filter((product) => {
+    const filtered = sourceData.filter((product) => {
       const name = (product.name || "").toLowerCase();
       const sku = (product.sku || "").toLowerCase();
+      const batchNo = (product.batch_no || "").toLowerCase(); // Search cả số lô
       const supplierName = (product.supplier?.name || "").toLowerCase();
       const groupName = (product.group?.name || "").toLowerCase();
-      const warehouseName = (product.warehouse?.name || product.warehouse || "").toString().toLowerCase(); // ✅
+      const warehouseName = (product.warehouse?.name || product.warehouse || "").toString().toLowerCase();
 
       return (
         name.includes(searchLower) ||
         sku.includes(searchLower) ||
+        batchNo.includes(searchLower) ||
         supplierName.includes(searchLower) ||
         groupName.includes(searchLower) ||
         warehouseName.includes(searchLower)
@@ -228,7 +268,7 @@ export default function ProductListPage() {
 
     setFilteredProducts(filtered);
     setCurrentPage(1);
-  }, [searchValue, allProducts]);
+  }, [searchValue, allProducts, flattenProducts, viewMode]);
 
   const searchOptions = useMemo(() => {
     if (!searchValue.trim()) return [];
@@ -629,6 +669,70 @@ export default function ProductListPage() {
         align: "center",
         render: (value) => (value ? new Date(value).toLocaleDateString("vi-VN") : "Trống"),
       },
+      expiry: {
+        title: (
+          <Space>
+            <CalendarOutlined style={{ color: "#ff4d4f" }} />
+            <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Hạn sử dụng</span>
+          </Space>
+        ),
+        key: "expiry",
+        width: isMobile ? 120 : 150,
+        align: "center",
+        render: (_, record) => {
+          // 1. Chế độ Split Mode -> Hiển thị chính xác ngày của lô đó
+          if (record.isBatch) {
+            if (!record.expiry_date) return <Tag>Không có hạn</Tag>;
+            const expiryDate = new Date(record.expiry_date);
+            const now = new Date();
+            const diffTime = expiryDate - now;
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            let color = "green";
+            let text = expiryDate.toLocaleDateString("vi-VN");
+            if (diffDays < 0) { color = "red"; text = `Hết hạn ${text}`; }
+            else if (diffDays <= 30) color = "orange";
+            else if (diffDays <= 90) color = "blue";
+
+            return <Tag color={color} style={{ fontSize: "clamp(10px, 2vw, 12px)" }}>{text}</Tag>;
+          }
+
+          // 2. Chế độ Merge -> Tìm hạn gần nhất
+          const batches = record.batches || [];
+          const validBatches = batches.filter(b => b.quantity > 0 && b.expiry_date);
+
+          if (validBatches.length === 0) return <Tag>Không có hạn</Tag>;
+
+          // Sort date asc
+          validBatches.sort((a, b) => new Date(a.expiry_date) - new Date(b.expiry_date));
+
+          const nearestBatch = validBatches[0];
+          const expiryDate = new Date(nearestBatch.expiry_date);
+          const now = new Date();
+          const diffTime = expiryDate - now;
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+          let color = "green";
+          let text = expiryDate.toLocaleDateString("vi-VN");
+
+          if (diffDays < 0) {
+            color = "red";
+            text = `Hết hạn ${text}`;
+          } else if (diffDays <= 30) {
+            color = "orange"; // Cảnh báo sắp hết hạn
+          } else if (diffDays <= 90) {
+            color = "blue";
+          }
+
+          return (
+            <Tooltip title={`Lô: ${nearestBatch.batch_no} (Còn ${nearestBatch.quantity})`}>
+              <Tag color={color} style={{ fontSize: "clamp(10px, 2vw, 12px)" }}>
+                {text}
+              </Tag>
+            </Tooltip>
+          );
+        }
+      },
     };
   }, [isMobile]);
 
@@ -960,15 +1064,31 @@ export default function ProductListPage() {
                 Tải lên
               </Button>
 
-              <Button
-                type="primary"
-                size={isMobile ? "middle" : "large"}
-                icon={<PlusOutlined />}
-                onClick={openCreateModal}
-                style={{ background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)", border: "none" }}
-              >
-                {isMobile ? "Thêm" : "Thêm sản phẩm"}
-              </Button>
+              <Space>
+                <Text strong>Chế độ xem:</Text>
+                <Select
+                  value={viewMode}
+                  onChange={setViewMode}
+                  style={{ width: 140 }}
+                  options={[
+                    { value: "merge", label: "Gộp theo SP" },
+                    { value: "split", label: "Chi tiết Lô" }
+                  ]}
+                />
+                <Button
+                  type="primary"
+                  size={isMobile ? "middle" : "large"}
+                  icon={<PlusOutlined />}
+                  onClick={openCreateModal}
+                  style={{
+                    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                    border: "none",
+                    boxShadow: "0 2px 8px rgba(118, 75, 162, 0.4)",
+                  }}
+                >
+                  {isMobile ? "Thêm" : "Thêm sản phẩm"}
+                </Button>
+              </Space>
             </Space>
           </Space>
 
@@ -976,7 +1096,7 @@ export default function ProductListPage() {
             <Table
               columns={getTableColumns()}
               dataSource={filteredProducts}
-              rowKey={(r) => r._id || r.id}
+              rowKey={(r) => viewMode === "split" ? r.uniqueId : (r._id || r.id)}
               loading={loading}
               pagination={{
                 current: currentPage,
@@ -987,7 +1107,7 @@ export default function ProductListPage() {
                 showTotal: (total, range) => (
                   <div style={{ fontSize: isMobile ? 12 : 14, textAlign: isMobile ? "center" : "left" }}>
                     Đang xem <span style={{ color: "#1890ff", fontWeight: 600 }}>{range[0]}-{range[1]}</span> trên tổng{" "}
-                    <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> sản phẩm
+                    <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> dòng
                   </div>
                 ),
               }}
@@ -1004,6 +1124,58 @@ export default function ProductListPage() {
                   </div>
                 ),
               }}
+
+              expandable={viewMode === "merge" ? {
+                expandedRowRender: (record) => {
+                  const data = record.batches || [];
+                  if (data.length === 0) {
+                    return <Text type="secondary" italic style={{ paddingLeft: 48 }}>Chưa có thông tin lô hàng</Text>;
+                  }
+
+                  const batchColumns = [
+                    { title: "Số lô", dataIndex: "batch_no", key: "batch_no" },
+                    {
+                      title: "Hạn sử dụng",
+                      dataIndex: "expiry_date",
+                      key: "expiry_date",
+                      render: (val) => val ? new Date(val).toLocaleDateString("vi-VN") : "Không có hạn"
+                    },
+                    {
+                      title: "Giá vốn nhập",
+                      dataIndex: "cost_price",
+                      key: "cost_price",
+                      render: (val) => val ? val.toLocaleString() : 0
+                    },
+                    {
+                      title: "Số lượng tồn",
+                      dataIndex: "quantity",
+                      key: "quantity",
+                      render: (val) => <Tag color="blue">{val}</Tag>
+                    },
+                    {
+                      title: "Ngày nhập",
+                      dataIndex: "created_at",
+                      key: "created_at",
+                      render: (val) => new Date(val).toLocaleDateString("vi-VN")
+                    }
+                  ];
+
+                  return (
+                    <div style={{ margin: 0, paddingLeft: 48, paddingRight: 24, paddingBottom: 12, background: "#f9f9f9", borderRadius: 8 }}>
+                      <Text strong style={{ display: "block", marginBottom: 8, color: "#1890ff" }}>📦 Chi tiết lô hàng & Hạn sử dụng:</Text>
+                      <Table
+                        columns={batchColumns}
+                        dataSource={data}
+                        pagination={false}
+                        size="small"
+                        rowKey={(item) => item.batch_no + item.created_at}
+                        bordered
+                      />
+                    </div>
+                  );
+                },
+                rowExpandable: (record) => record.batches && record.batches.length > 0,
+              } : undefined}
             />
           </div>
         </Card>

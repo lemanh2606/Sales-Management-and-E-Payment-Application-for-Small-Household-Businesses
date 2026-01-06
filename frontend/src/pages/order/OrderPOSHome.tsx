@@ -587,6 +587,16 @@ const OrderPOSHome: React.FC = () => {
         confirmButtonText: "OK",
       });
 
+    // Validate cash payment
+    if (currentTab.paymentMethod === "cash" && currentTab.cashReceived < totalAmount) {
+      return Swal.fire({
+        icon: "warning" ,
+        title: "Chưa đủ tiền thanh toán",
+        text: `Tổng tiền thanh toán là ${formatPrice(totalAmount)}. Vui lòng nhận đủ tiền từ khách.`,
+        confirmButtonText: "Kiểm tra lại",
+      });
+    }
+
     // if (!currentTab.employeeId)
     //   return Swal.fire({
     //     icon: "info",
@@ -745,14 +755,16 @@ const OrderPOSHome: React.FC = () => {
     >
       {/* HEADER */}
       <div
+        className="glass-card"
         style={{
-          background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+          background: "var(--primary-gradient)",
           padding: "16px 24px",
-          boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
           gap: "20px",
+          borderRadius: "0 0 16px 16px !important",
+          zIndex: 10,
         }}
       >
         <div
@@ -763,112 +775,106 @@ const OrderPOSHome: React.FC = () => {
             flex: 1,
           }}
         >
-          <ShopOutlined style={{ fontSize: 28, color: "#fff" }} />
+          <div style={{ background: 'rgba(255,255,255,0.2)', padding: 10, borderRadius: 12, display: 'flex' }}>
+            <ShopOutlined style={{ fontSize: 24, color: "#fff" }} />
+          </div>
           <div>
-            <Title level={4} style={{ margin: 0, color: "#fff", fontSize: "20px" }}>
+            <Title level={4} className="premium-title" style={{ margin: 0, color: "#fff", background: 'none', WebkitTextFillColor: 'white' }}>
               {currentStore.name || "Cửa Hàng"}
             </Title>
-            <Text style={{ color: "rgba(255,255,255,0.85)", fontSize: "12px" }}>Hệ thống bán hàng POS</Text>
+            <Text style={{ color: "rgba(255,255,255,0.8)", fontSize: "12px", letterSpacing: 1 }}>POS TERMINAL v2.0</Text>
           </div>
         </div>
 
         <Input
           size="large"
           placeholder="Tìm sản phẩm (SKU/Tên) hoặc quét mã vạch..."
-          prefix={<SearchOutlined />}
+          prefix={<SearchOutlined style={{ color: '#6366f1' }} />}
+          className="premium-cart-search"
           value={searchProduct}
           onChange={(e) => setSearchProduct(e.target.value)}
           style={{
             maxWidth: 500,
             flex: 2,
-            borderRadius: "8px",
+            borderRadius: "12px",
+            border: 'none',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
           }}
           autoFocus
         />
 
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={addNewOrderTab}
-          size="large"
-          style={{
-            background: "#52c41a",
-            borderColor: "#52c41a",
-            borderRadius: "8px",
-            fontWeight: 600,
-          }}
-        >
-          Tạo đơn Mới
-        </Button>
+        <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+           <Badge count={currentTab.cart.length} offset={[-2, 2]}>
+              <Button ghost icon={<PlusOutlined />} onClick={addNewOrderTab}>Tạo đơn mới</Button>
+           </Badge>
+        </div>
       </div>
       {/* Dropdown sản phẩm tìm kiếm */}
       {searchedProducts.length > 0 && (
         <div
           style={{
             position: "absolute",
-            top: "80px",
+            top: "90px",
             left: "50%",
-            width: "600px",
-            maxHeight: "480px",
+            transform: `translateX(-50%) ${searchedProducts.length > 0 ? "translateY(0)" : "translateY(-10px)"}`,
+            width: "80%",
+            maxWidth: 600,
+            background: "rgba(255, 255, 255, 0.95)",
+            backdropFilter: "blur(12px)",
+            borderRadius: "16px",
+            boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
+            zIndex: 1001,
+            maxHeight: "450px",
             overflowY: "auto",
-            background: "#fff",
-            boxShadow: "0 6px 20px rgba(0,0,0,0.15)",
-            borderRadius: "10px",
-            zIndex: 1000,
             padding: "8px",
-            scrollbarWidth: "thin",
-            transition: "transform 0.15s ease, opacity 0.15s ease",
+            border: "1px solid rgba(255,255,255,0.3)",
             opacity: searchedProducts.length > 0 ? 1 : 0,
-            transform: `translateX(-50%) ${searchedProducts.length > 0 ? "translateY(0)" : "translateY(-5px)"}`,
+            transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+            pointerEvents: searchedProducts.length > 0 ? "auto" : "none",
           }}
         >
-          {searchedProducts.map((prod) => (
+          {searchedProducts.map((p) => (
             <div
-              key={prod._id}
-              onClick={() => addToCart(prod)}
+              key={p._id}
+              onClick={() => addToCart(p)}
               style={{
-                padding: "14px 16px",
+                display: "flex",
+                alignItems: "center",
+                gap: "16px",
+                padding: "12px",
                 cursor: "pointer",
-                borderBottom: "1px solid #f0f0f0",
-                borderRadius: "6px",
-                transition: "all 0.2s ease",
+                borderRadius: "12px",
                 marginBottom: "4px",
+                transition: "all 0.2s",
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "#f5faff")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "rgba(99, 102, 241, 0.1)";
+                e.currentTarget.style.paddingLeft = "20px";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "transparent";
+                e.currentTarget.style.paddingLeft = "12px";
+              }}
             >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <div>
-                  <Text strong style={{ fontSize: "15px", color: "#000" }}>
-                    {prod.name}
-                  </Text>
-                  <div style={{ marginTop: 2 }}>
-                    <Text type="secondary" style={{ fontSize: "12px" }}>
-                      Mã SKU: {prod.sku}
-                    </Text>
-                    <Text type="secondary" style={{ fontSize: "12px", marginLeft: 12 }}>
-                      Đơn vị: {prod.unit}
-                    </Text>
+              <div style={{ width: 50, height: 50, borderRadius: 8, overflow: 'hidden', background: '#f0f2f5', flexShrink: 0 }}>
+                {p.image?.url ? (
+                  <img src={p.image.url} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                     <ShopOutlined style={{ fontSize: 20, color: '#d9d9d9' }} />
                   </div>
+                )}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600, fontSize: "15px" }}>{p.name}</div>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                  <Tag color="blue" style={{ margin: 0, borderRadius: 4, fontSize: 10 }}>{p.sku}</Tag>
+                  <Text type="secondary" style={{ fontSize: 13 }}>Tồn: {p.stock_quantity}</Text>
                 </div>
-
-                <div style={{ textAlign: "right" }}>
-                  <Text strong style={{ color: "#1890ff", fontSize: "17px" }}>
-                    {formatPrice(prod.price)}
-                  </Text>
-                  <div style={{ marginTop: 2 }}>
-                    Tồn kho:{" "}
-                    <Tag color={prod.stock_quantity > 0 ? "green" : "red"} style={{ fontWeight: 500, fontSize: "12px" }}>
-                      {prod.stock_quantity}
-                    </Tag>
-                  </div>
-                </div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <Text strong style={{ color: "#6366f1", fontSize: "16px" }}>{formatPrice(p.price)}</Text>
+                <div style={{ fontSize: 11, color: '#94a3b8' }}>{p.unit}</div>
               </div>
             </div>
           ))}
@@ -1134,15 +1140,16 @@ const OrderPOSHome: React.FC = () => {
           </Row>
         </Col>
 
-        {/* CỘT PHẢI - THANH TOÁN (CHIẾM 8/24) */}
+        {/* CỘT PHẢI - THANH TOÁN */}
         <Col xs={24} md={8} lg={7} xl={6}>
           <Card
+            className="glass-card"
             style={{
-              borderRadius: 12,
-              boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
               display: "flex",
               flexDirection: "column",
-              height: "100%",
+              height: "calc(100vh - 120px)",
+              position: "sticky",
+              top: 20
             }}
             styles={{
               body: {
@@ -1564,11 +1571,12 @@ const OrderPOSHome: React.FC = () => {
                     <InputNumber
                       min={0}
                       value={currentTab.cashReceived}
-                      onChange={(v) =>
+                      onChange={(v) => {
+                        const val = typeof v === 'string' ? parseFloat(v) : v;
                         updateOrderTab((t) => {
-                          t.cashReceived = v || 0;
-                        })
-                      }
+                          t.cashReceived = val || 0;
+                        });
+                      }}
                       formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
                       parser={(v) => parseFloat(v?.replace(/\$\s?|(,*)/g, "") || "0")}
                       size="large"
@@ -1601,7 +1609,7 @@ const OrderPOSHome: React.FC = () => {
                         color: changeAmount >= 0 ? "#52c41a" : "#ff4d4f",
                       }}
                     >
-                      {changeAmount >= 0 ? formatPrice(changeAmount) : "0đ"}
+                      {formatPrice(changeAmount)}
                     </Text>
                   </div>
                 </>
