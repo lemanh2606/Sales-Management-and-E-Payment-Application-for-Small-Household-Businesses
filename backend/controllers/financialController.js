@@ -221,9 +221,8 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
   // ================================================================
   let grossProfit = totalRevenue - totalCOGS;
 
-  // 5️⃣ Chi phí vận hành (Operating Cost) - DEPRECATED: Lương + Hoa hồng
-  // ❌ DEPRECATED (Từ Dec 2025): Không còn tính lương nhân viên và hoa hồng vì là hộ kinh doanh nhỏ lẻ
-  // Tự trao đổi trực tiếp. Giữ lại code dưới để làm kỉ niệm học tập.
+  // 5️⃣ Chi phí vận hành (Operating Cost)
+  // Tính lương nhân viên và hoa hồng (Dành cho hộ kinh doanh có thuê staff)
   const months = getMonthsInPeriod(periodType);
   const employees = await Employee.find({
     store_id: objectStoreId,
@@ -232,6 +231,7 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
     .populate("user_id", "role")
     .select("salary commission_rate user_id");
 
+  // Chỉ tính chi phí cho MANAGER và STAFF (không tính owner/admin)
   const filteredEmployees = employees.filter((e) => ["MANAGER", "STAFF"].includes(e.user_id?.role));
 
   const totalSalary = filteredEmployees.reduce((sum, e) => sum + toNumber(e.salary) * months, 0);
@@ -244,7 +244,8 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
   });
 
   const totalCommission = empRevenue.reduce((sum, r) => {
-    const emp = filteredEmployees.find((e) => e._id.toString() === r._id.toString());
+    if (!r._id) return sum;
+    const emp = filteredEmployees.find((e) => e._id && e._id.toString() === r._id.toString());
     return sum + toNumber(r.totalRevenue) * (toNumber(emp?.commission_rate) / 100);
   }, 0);
 
@@ -257,8 +258,8 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
   }
   const totalExtraExpense = extraExpense.reduce((sum, val) => sum + (val || 0), 0);
 
-  //Tổng chi phí vận hành = Chỉ tính Chi phí ngoài lệ (nhập tay) - Không còn lương + hoa hồng
-  let operatingCost = totalExtraExpense;
+  // Tổng chi phí vận hành = Chi phí ngoài (điện, nước...) + Lương + Hoa hồng
+  let operatingCost = totalExtraExpense + totalSalary + totalCommission;
 
   // ================================================================
   // 7️⃣ HAO HỤT KHO
@@ -287,15 +288,20 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
 
   let totalOutValue = toNumber(inventoryLossAgg[0]?.totalOutValue);
   let inventoryLoss = totalOutValue - (totalCOGS + totalRefundCOGS);
-
-  if (inventoryLoss > 0) {
-    operatingCost += inventoryLoss;
-  }
+  if (inventoryLoss < 0) inventoryLoss = 0; // Tránh trường hợp âm do sai số
 
   // ================================================================
-  // 8️⃣ LỢI NHUẬN RÒNG
+  // 8️⃣ LỢI NHUẬN GỘP & LỢI NHUẬN RÒNG (Chuẩn nghiệp vụ)
   // ================================================================
-  const netProfit = grossProfit - operatingCost - totalVAT;
+  // Doanh thu thuần (Net Sales) = Tổng doanh thu thu về - Thuế VAT (thu hộ)
+  const netSales = totalRevenue - totalVAT;
+
+  // Lợi nhuận gộp (Gross Profit) = Doanh thu thuần - Giá vốn hàng bán
+  const grossProfitStandard = netSales - totalCOGS;
+
+  // Lợi nhuận ròng (Net Profit) = Lợi nhuận gộp - Chi phí vận hành
+  // (Bỏ khấu trừ hao hụt kho theo yêu cầu người dùng)
+  const netProfit = grossProfitStandard - operatingCost;
 
   // ================================================================
   // 9️⃣ GIÁ TRỊ TỒN KHO
@@ -447,10 +453,11 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
     totalRefundCount: toNumber(refundData.totalRefundCount),
 
     // ✅ Chi phí & Lợi nhuận
-    totalVAT,
+    totalVAT, // VAT thu hộ (10% nếu có)
+    netSales,
     totalCOGS,
     totalRefundCOGS,
-    grossProfit,
+    grossProfit: grossProfitStandard,
     operatingCost,
     netProfit,
 

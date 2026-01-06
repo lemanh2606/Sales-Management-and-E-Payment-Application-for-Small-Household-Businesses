@@ -18,6 +18,10 @@ import {
   Typography,
   Divider,
   Tooltip as AntTooltip,
+  Badge,
+  Modal,
+  Form,
+  Input,
 } from "antd";
 import {
   InfoCircleOutlined,
@@ -305,14 +309,12 @@ const ReportDashboard = () => {
     commitChangePeriodKey(newKey, dateObj);
   };
 
-  // Biểu đồ
   const generateBarData = () => {
     if (!data) return [];
     return [
       { name: "Doanh thu", value: data.totalRevenue, fill: COLORS.revenue },
       { name: "Lợi nhuận gộp", value: data.grossProfit, fill: COLORS.grossProfit },
       { name: "Chi phí vận hành", value: data.operatingCost, fill: COLORS.operatingCost },
-      { name: "VAT", value: data.totalVAT, fill: COLORS.totalVAT },
       { name: "Lợi nhuận ròng", value: data.netProfit, fill: COLORS.netProfit },
     ];
   };
@@ -531,7 +533,7 @@ const ReportDashboard = () => {
             <>
               {/* CHỈ SỐ */}
               <Row gutter={[20, 20]}>
-                <Col xs={24} sm={12} lg={4}>
+                <Col xs={24} sm={12} lg={6}>
                   <div className="stat-card-inner gradient-info">
                     <Statistic
                       title={<span style={{ color: 'rgba(255,255,255,0.8)' }}>Doanh thu</span>}
@@ -543,7 +545,7 @@ const ReportDashboard = () => {
                   </div>
                 </Col>
 
-                <Col xs={24} sm={12} lg={5}>
+                <Col xs={24} sm={12} lg={6}>
                   <div className="stat-card-inner gradient-success">
                     <Statistic
                       title={<span style={{ color: 'rgba(255,255,255,0.8)' }}>Lợi nhuận gộp</span>}
@@ -555,31 +557,21 @@ const ReportDashboard = () => {
                   </div>
                 </Col>
 
-                <Col xs={24} sm={12} lg={5}>
+                <Col xs={24} sm={12} lg={6}>
                   <div className="stat-card-inner gradient-warning">
-                    <Statistic
-                      title={<span style={{ color: 'rgba(255,255,255,0.8)' }}>Chi phí vận hành</span>}
-                      value={data.operatingCost}
-                      formatter={formatVND}
-                      valueStyle={{ color: '#fff', fontWeight: 800, fontSize: '24px' }}
-                      prefix={<DollarOutlined />}
-                    />
+                    <AntTooltip title="Bao gồm: Lương nhân viên, Hoa hồng & Chi phí ngoài hệ thống">
+                      <Statistic
+                        title={<span style={{ color: 'rgba(255,255,255,0.8)' }}>Chi phí vận hành</span>}
+                        value={data.operatingCost}
+                        formatter={formatVND}
+                        valueStyle={{ color: '#fff', fontWeight: 800, fontSize: '24px' }}
+                        prefix={<DollarOutlined />}
+                      />
+                    </AntTooltip>
                   </div>
                 </Col>
 
-                <Col xs={24} sm={12} lg={5}>
-                  <div className="stat-card-inner gradient-error">
-                    <Statistic
-                      title={<span style={{ color: 'rgba(255,255,255,0.8)' }}>Thuế VAT</span>}
-                      value={data.totalVAT}
-                      formatter={formatVND}
-                      valueStyle={{ color: '#fff', fontWeight: 800, fontSize: '24px' }}
-                      prefix={<PercentageOutlined />}
-                    />
-                  </div>
-                </Col>
-
-                <Col xs={24} sm={12} lg={5}>
+                <Col xs={24} sm={12} lg={6}>
                   <div className="stat-card-inner gradient-primary">
                     <Statistic
                       title={<span style={{ color: 'rgba(255,255,255,0.8)' }}>Lợi nhuận ròng</span>}
@@ -678,173 +670,7 @@ const ReportDashboard = () => {
                 </Col>
               </Row>
 
-              {/* ========== 2 Biểu đồ tròn ========== */}
-              <Row gutter={[16, 16]}>
-                {/* BIỂU ĐỒ TRÒN BÊN TRÁI */}
-                <Col xs={24} lg={12}>
-                  <Card style={{ border: "1px solid #8c8c8c" }} title="Doanh thu & Giá trị hàng tồn kho">
-                    <ResponsiveContainer width="100%" height={320}>
-                      <PieChart>
-                        <Pie
-                          data={[
-                            { name: "Doanh thu", value: data.totalRevenue, fill: COLORS.totalRevenue },
-                            { name: "Hàng tồn kho", value: data.stockValue, fill: COLORS.stockValue },
-                          ]}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={60}
-                          outerRadius={100}
-                          label={(entry) => `${entry.name}: ${formatVND(entry.value)}`}
-                          dataKey="value"
-                          onMouseEnter={(e, idx) => {
-                            e.target.outerRadius = 110;
-                          }}
-                          onMouseLeave={(e, idx) => {
-                            e.target.outerRadius = 100;
-                          }}
-                        >
-                          <Cell fill={COLORS.vat} />
-                          <Cell fill={COLORS.stockValue} />
-                        </Pie>
-                        <Tooltip formatter={formatVND} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                    {/* BOX Ở GIỮA – TỶ LỆ HÀNG TỒN VỚI DOANH THU */}
-                    <div
-                      style={{
-                        marginTop: 10,
-                        padding: "16px 20px",
-                        background: "linear-gradient(120deg, #e6f7ff 0%, #bae7ff 100%)",
-                        borderRadius: 12,
-                        border: "2px dashed #1890ff",
-                        textAlign: "center",
-                      }}
-                    >
-                      <Text strong style={{ fontSize: 14, color: "#1890ff", display: "block" }}>
-                        Tỷ lệ hàng tồn so với doanh thu
-                      </Text>
-                      <Text
-                        style={{
-                          fontSize: 20,
-                          fontWeight: "bold",
-                          color: "#1890ff",
-                          textShadow: "0 2px 4px rgba(24, 144, 255, 0.3)",
-                        }}
-                      >
-                        {data.totalRevenue > 0 ? ((data.stockValue / data.totalRevenue) * 100).toFixed(1) : 0}%
-                      </Text>
-                      <div style={{ marginTop: 8 }}>
-                        <Tag color="blue" style={{ fontSize: 14, padding: "4px 12px" }}>
-                          {data.totalRevenue > 0 && data.stockValue / data.totalRevenue < 0.5
-                            ? "Tốt – Hàng hóa luân chuyển nhanh"
-                            : data.stockValue / data.totalRevenue < 1
-                            ? "Bình thường – Cần theo dõi"
-                            : "Cảnh báo – Hàng tồn quá nhiều"}
-                        </Tag>
-                      </div>
-                    </div>
-                    <div style={{ marginTop: 16, fontSize: 15, lineHeight: 1.6 }}>
-                      <div>
-                        <span style={{ color: COLORS.grossProfit, marginRight: 4 }}>●</span>
-                        <strong style={{ color: COLORS.grossProfit }}>Doanh thu:</strong> {formatVND(data.totalRevenue)}
-                        <Tag color="green" style={{ fontSize: 14, lineHeight: 1.2, marginLeft: 8, padding: "2px 10px" }}>
-                          Tổng số tiền thu được từ việc bán hàng
-                        </Tag>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4 }}>
-                        <span style={{ color: COLORS.stockValue }}>●</span>
-                        <strong style={{ color: COLORS.stockValue }}>Hàng tồn kho:</strong>
-                        <span>{formatVND(data.stockValue)}</span>
-                        <Tag color="#13c2c2" style={{ fontSize: 14, lineHeight: 1.2, marginLeft: 8, padding: "2px 10px" }}>
-                          Tổng số lượng hàng tồn × Giá vốn nhập hàng
-                        </Tag>
-                      </div>
-                    </div>
-                  </Card>
-                </Col>
 
-                {/* BIỂU ĐỒ TRÒN BÊN PHẢI */}
-                <Col xs={24} lg={12}>
-                  <Card title="Giá trị hàng tồn kho: Giá vốn & Giá bán" style={{ border: "1px solid #8c8c8c" }}>
-                    <ResponsiveContainer width="100%" height={320}>
-                      <PieChart>
-                        <Pie
-                          data={[
-                            { name: "Tồn kho (giá vốn)", value: data.stockValue, fill: COLORS.stockValue },
-                            { name: "Tồn kho (giá bán)", value: data.stockValueAtSalePrice, fill: COLORS.stockValueAtSalePrice },
-                          ]}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={60}
-                          outerRadius={100}
-                          label={(entry) => `${entry.name}: ${formatVND(entry.value)}`}
-                          dataKey="value"
-                          onMouseEnter={(e, idx) => {
-                            e.target.outerRadius = 110;
-                          }}
-                          onMouseLeave={(e, idx) => {
-                            e.target.outerRadius = 100;
-                          }}
-                        >
-                          <Cell fill={COLORS.stockValue} />
-                          <Cell fill={COLORS.stockValueAtSalePrice} />
-                        </Pie>
-                        <Tooltip formatter={formatVND} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                    {/* LÃI TIỀM NĂNG – BOX Ở GIỮA */}
-                    <div
-                      style={{
-                        marginTop: 10,
-                        padding: "16px 20px",
-                        background: "linear-gradient(120deg, #fdfbfb 0%, #ebedee 100%)",
-                        borderRadius: 12,
-                        border: "2px dashed #52c41a",
-                        textAlign: "center",
-                      }}
-                    >
-                      <Text strong style={{ fontSize: 14, color: "#52c41a", display: "block" }}>
-                        Lãi tiềm năng nếu bán hết hàng tồn kho
-                      </Text>
-                      <Text
-                        style={{
-                          fontSize: 20,
-                          fontWeight: "bold",
-                          color: "#52c41a",
-                          textShadow: "0 2px 4px rgba(82, 196, 26, 0.3)",
-                        }}
-                      >
-                        {formatVND(data.stockValueAtSalePrice - data.stockValue)}
-                      </Text>
-                      <div style={{ marginTop: 8 }}>
-                        <Tag color="green" style={{ fontSize: 14, padding: "4px 12px" }}>
-                          {data.stockValue > 0 ? (((data.stockValueAtSalePrice - data.stockValue) / data.stockValue) * 100).toFixed(1) : 0}% biên lợi
-                          nhuận gộp trung bình
-                        </Tag>
-                      </div>
-                    </div>
-                    {/* Hiển thị chi tiết giá trị */}
-                    <div style={{ marginTop: 16, fontSize: 15, lineHeight: 1.6 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                        <span style={{ color: COLORS.stockValue }}>●</span>
-                        <strong style={{ color: COLORS.stockValue }}>Hàng tồn kho (giá vốn):</strong>
-                        <span>{formatVND(data.stockValue)}</span>
-                        <Tag color="#13c2c2" style={{ fontSize: 14, lineHeight: 1.2, marginLeft: 8, padding: "2px 10px" }}>
-                          Tổng số lượng hàng tồn × Giá vốn nhập hàng
-                        </Tag>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4 }}>
-                        <span style={{ color: COLORS.stockValueAtSalePrice }}>●</span>
-                        <strong style={{ color: COLORS.stockValueAtSalePrice }}>Hàng tồn kho (giá bán):</strong>
-                        <span>{formatVND(data.stockValueAtSalePrice)}</span>
-                        <Tag color="#e90c77ff" style={{ fontSize: 14, lineHeight: 1.2, marginLeft: 8, padding: "2px 10px" }}>
-                          Tổng số lượng hàng tồn × Giá bán thị trường
-                        </Tag>
-                      </div>
-                    </div>
-                  </Card>
-                </Col>
-              </Row>
 
               {/* THỐNG KÊ NHÓM HÀNG */}
               <Card className="glass-card" title={<Title level={4}>Phân tích hiệu quả theo nhóm hàng</Title>}>
@@ -892,50 +718,7 @@ const ReportDashboard = () => {
                 />
               </Card>
 
-              {/* CHI TIẾT KHO & HAO HỤT */}
-              <Row gutter={[20, 20]}>
-                <Col xs={24} lg={12}>
-                  <Card className="glass-card" title="Phân tích Hao hụt & Giá vốn">
-                    <Space direction="vertical" style={{ width: '100%' }} size="middle">
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <Text type="secondary">Giá vốn hàng bán (COGS)</Text>
-                        <Text strong>{formatVND(data.totalCOGS)}</Text>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <Text type="secondary">Hao hụt kho thực tế</Text>
-                        <Text strong style={{ color: data.inventoryLoss > 0 ? '#ef4444' : '#22c55e' }}>
-                          {formatVND(data.inventoryLoss)}
-                        </Text>
-                      </div>
-                      <Divider />
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <Text strong>Tổng chi phí hàng hóa</Text>
-                        <Text strong style={{ fontSize: '18px' }}>{formatVND(data.totalCOGS + data.inventoryLoss)}</Text>
-                      </div>
-                    </Space>
-                  </Card>
-                </Col>
-                <Col xs={24} lg={12}>
-                  <Card className="glass-card" title="Chỉ số hiệu quả (KPIs)">
-                    <Space direction="vertical" style={{ width: '100%' }} size="middle">
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <Text type="secondary">Biên lợi nhuận gộp</Text>
-                        <Text strong>{data.totalRevenue ? ((data.grossProfit / data.totalRevenue) * 100).toFixed(1) : 0}%</Text>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <Text type="secondary">Tỷ lệ chi phí vận hành</Text>
-                        <Text strong>{data.totalRevenue ? ((data.operatingCost / data.totalRevenue) * 100).toFixed(1) : 0}%</Text>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <Text strong>Biên lợi nhuận ròng</Text>
-                        <Text strong style={{ color: '#6366f1', fontSize: '18px' }}>
-                          {data.totalRevenue ? ((data.netProfit / data.totalRevenue) * 100).toFixed(1) : 0}%
-                        </Text>
-                      </div>
-                    </Space>
-                  </Card>
-                </Col>
-              </Row>
+
               {/* ======= Hết ====== */}
             </>
           )}
