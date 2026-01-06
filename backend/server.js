@@ -105,6 +105,7 @@ const fileRouters = require("./routers/fileRouters"); //api quản lý file
 const subscriptionRouters = require("./routers/subscriptionRouters"); //api mua gói dịch vụ
 const notificationRouters = require("./routers/notificationRouters"); //api list thông báo real-time
 const inventoryReportRouters = require("./routers/inventoryReportRouters"); //api báo cáo tồn kho
+const operatingExpenseRouters = require("./routers/operatingExpenseRouters"); //api quản lý chi phí ngoài lệ
 
 const exportRouters = require("./routers/exportRouters"); //api xuất các báo cáo
 const warehouseRouters = require("./routers/warehouseRouters"); //api quản lý kho
@@ -133,6 +134,7 @@ app.use("/api/files", fileRouters);
 app.use("/api/subscriptions", subscriptionRouters);
 app.use("/api/notifications", notificationRouters);
 app.use("/api/inventory-reports", inventoryReportRouters);
+app.use("/api/operating-expenses", operatingExpenseRouters); //chi phí ngoài lề
 app.use("/api/export", exportRouters);
 app.use("/api/stores", inventoryVoucherRouters);
 app.use("/api/stores", warehouseRouters);
