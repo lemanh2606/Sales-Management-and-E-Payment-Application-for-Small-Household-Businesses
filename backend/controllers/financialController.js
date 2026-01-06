@@ -13,6 +13,7 @@ const StockDisposal = require("../models/StockDisposal");
 const Customer = mongoose.model("Customer");
 const Employee = require("../models/Employee");
 const Store = require("../models/Store");
+const OperatingExpense = require("../models/OperatingExpense");
 const { calcRevenueByPeriod } = require("./revenueController");
 const { periodToRange } = require("../utils/period");
 const { Parser } = require("json2csv");
@@ -249,14 +250,17 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
     return sum + toNumber(r.totalRevenue) * (toNumber(emp?.commission_rate) / 100);
   }, 0);
 
-  if (typeof extraExpense === "string" && extraExpense.includes(",")) {
-    extraExpense = extraExpense.split(",").map(Number);
-  } else if (Array.isArray(extraExpense)) {
-    extraExpense = extraExpense.map(Number);
-  } else {
-    extraExpense = [Number(extraExpense)];
-  }
-  const totalExtraExpense = extraExpense.reduce((sum, val) => sum + (val || 0), 0);
+  // Fetch manual extra expenses from DB
+  const opExpDoc = await OperatingExpense.findOne({
+    storeId: objectStoreId,
+    periodType: periodType,
+    periodKey: periodKey,
+    isDeleted: false,
+  });
+
+  const totalExtraExpense = opExpDoc
+    ? opExpDoc.items.reduce((sum, it) => sum + (Number(it.amount) || 0), 0)
+    : 0;
 
   // Tổng chi phí vận hành = Chi phí ngoài (điện, nước...) + Lương + Hoa hồng
   let operatingCost = totalExtraExpense + totalSalary + totalCommission;
