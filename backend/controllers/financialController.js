@@ -1,4 +1,4 @@
-// backend/controllers/financialController.js
+//  // backend/controllers/financialController.js
 const mongoose = require("mongoose");
 const Order = require("../models/Order");
 const OrderItem = mongoose.model("OrderItem");
@@ -78,7 +78,7 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
     partiallyRefundedOrders: 0,
   };
 
-  // ✅ ĐẾM SỐ ĐƠN HOÀN TOÀN BỘ (KHÔNG TÍNH VÀO DOANH THU)
+  //// ✅ ĐẾM SỐ ĐƠN HOÀN TOÀN BỘ (KHÔNG TÍNH VÀO DOANH THU)
   const fullyRefundedCount = await Order.countDocuments({
     storeId: objectStoreId,
     status: "refunded",
