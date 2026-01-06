@@ -606,12 +606,12 @@ const generateEndOfDayReport = async (req, res) => {
       },
     ]);
 
-    // 3. Phân loại theo nhân viên (chỉ nhân viên thực, không lấy owner/manager bán)
+    // 3. Phân loại theo nhân viên
     const byEmployee = await Order.aggregate([
       {
         $match: {
           storeId: new mongoose.Types.ObjectId(storeId),
-          employeeId: { $ne: null }, // 🟢 Chỉ lấy orders có employeeId (loại owner tức chủ đứng bán)
+          // employeeId: { $ne: null }, // Đã mở để tính cho cả Owner
           createdAt: { $gte: start, $lte: end },
           status: { $in: ["paid", "partially_refunded"] },
         },
@@ -634,7 +634,13 @@ const generateEndOfDayReport = async (req, res) => {
       {
         $project: {
           _id: "$_id",
-          name: { $arrayElemAt: ["$employee.fullName", 0] },
+          name: {
+            $cond: {
+              if: { $eq: ["$_id", null] },
+              then: "Chủ cửa hàng (Admin)",
+              else: { $ifNull: [{ $arrayElemAt: ["$employee.fullName", 0] }, "Nhân viên đã xóa"] },
+            },
+          },
           revenue: 1,
           orders: 1,
           avgOrderValue: { $divide: ["$revenue", "$orders"] },
@@ -656,7 +662,7 @@ const generateEndOfDayReport = async (req, res) => {
       {
         $match: {
           "order.storeId": new mongoose.Types.ObjectId(storeId),
-          "order.status": "paid",
+          "order.status": { $in: ["paid", "partially_refunded"] },
         },
       },
       {

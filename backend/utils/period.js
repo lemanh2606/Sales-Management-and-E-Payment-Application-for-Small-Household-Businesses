@@ -40,6 +40,15 @@ function periodToRange(periodType, periodKey, monthFrom, monthTo) {
     end = new Date(Date.UTC(toYear, toMonth, 0, 23, 59, 59, 999)); // Ngày cuối tháng to UTC + ms 999
   }
 
+  // ADJUST FOR VIETNAM TIME (UTC+7)
+  // Backend lưu UTC. Client gửi ngày (ví dụ 2025-01-01).
+  // Mong muốn: 2025-01-01 00:00:00 VN -> 2025-01-01 23:59:59 VN
+  // Tương đương: 2024-12-31 17:00:00 UTC -> 2024-01-01 16:59:59 UTC
+  // Logic hiện tại đang tạo theo UTC 00:00 -> 23:59. Cần trừ đi 7 giờ.
+  const OFFSET_MS = 7 * 60 * 60 * 1000;
+  if (start) start = new Date(start.getTime() - OFFSET_MS);
+  if (end) end = new Date(end.getTime() - OFFSET_MS);
+
   return { start, end };
 }
 

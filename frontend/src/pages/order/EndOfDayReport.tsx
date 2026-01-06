@@ -38,8 +38,9 @@ import dayjs, { Dayjs } from "dayjs";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, PieLabelRenderProps } from "recharts";
 import debounce from "../../utils/debounce";
 import Swal from "sweetalert2";
-import utc from "dayjs/plugin/utc"; // ✅ THÊM
-import timezone from "dayjs/plugin/timezone"; // ✅ THÊM
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
+import "../../premium.css";
 
 // Khởi tạo plugin
 dayjs.extend(utc); // ✅ THÊM
@@ -191,8 +192,8 @@ const EndOfDayReport: React.FC = () => {
 
         switch (period) {
           case "day":
-            // ✅ Gửi cả start và end của ngày theo VN timezone
-            periodKey = vnDate.startOf("day").utc().format("YYYY-MM-DD");
+            // periodKey dạng YYYY-MM-DD
+            periodKey = vnDate.format("YYYY-MM-DD");
             break;
           case "month":
             periodKey = vnDate.format("YYYY-MM");
@@ -204,7 +205,7 @@ const EndOfDayReport: React.FC = () => {
             periodKey = vnDate.format("YYYY");
             break;
           default:
-            periodKey = vnDate.startOf("day").utc().format("YYYY-MM-DD");
+            periodKey = vnDate.format("YYYY-MM-DD");
         }
 
         const res = await axios.get(`${API_BASE}/financials/end-of-day/${storeId}`, {
@@ -325,268 +326,140 @@ const EndOfDayReport: React.FC = () => {
   };
 
   return (
-    <div style={{ padding: "24px", background: "#f0f2f5", minHeight: "100vh" }}>
-      {/* HEADER */}
-      <Card
-        style={{
-          marginBottom: 24,
-          borderRadius: 12,
-          boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-        }}
-      >
-        <Row justify="space-between" align="middle" gutter={[16, 16]}>
-          <Col xs={24} md={12}>
-            <div className="flex flex-col sm:flex-row sm:items-center  mb-4 gap-3">
-              <Title level={3} style={{ margin: 0 }}>
-                <BarChartOutlined /> Báo Cáo Cuối Ngày
+    <div className="premium-layout">
+      <Space direction="vertical" size="large" style={{ width: "100%" }}>
+        {/* HEADER & FILTERS */}
+        <Card className="glass-card">
+          <Row gutter={[24, 24]} align="middle">
+            <Col xs={24} lg={8}>
+              <Title level={2} className="premium-title" style={{ margin: 0 }}>
+                Báo cáo kết quả bán hàng
               </Title>
-              <span className="px-4 py-2 text-base font-semibold bg-[#e6f4ff] text-[#1890ff] rounded-xl shadow-sm duration-200">
-                {currentStore?.name}
-              </span>
+              <Text type="secondary">
+                {currentStore.name} • {PERIOD_LABELS[periodType] || ""} {selectedDate.format("DD/MM/YYYY")}
+              </Text>
+            </Col>
+
+            <Col xs={12} lg={4}>
+              <Text strong style={{ display: "block", marginBottom: 8 }}>Chọn phạm vi</Text>
+              <Select
+                value={periodType}
+                onChange={handlePeriodChange}
+                style={{ width: "100%" }}
+                size="large"
+              >
+                <Option value="day">Hàng ngày</Option>
+                <Option value="month">Hàng tháng</Option>
+                <Option value="quarter">Hàng quý</Option>
+                <Option value="year">Hàng năm</Option>
+              </Select>
+            </Col>
+
+            <Col xs={12} lg={4}>
+              <Text strong style={{ display: "block", marginBottom: 8 }}>Chọn thời gian</Text>
+              <DatePicker
+                value={selectedDate}
+                onChange={handleDateChange}
+                picker={periodType === "month" ? "month" : periodType === "year" ? "year" : periodType === "quarter" ? "quarter" : "date"}
+                style={{ width: "100%" }}
+                size="large"
+                allowClear={false}
+              />
+            </Col>
+
+            <Col xs={24} lg={8} style={{ textAlign: "right" }}>
+              <Space>
+                <Button 
+                  size="large" 
+                  icon={<UndoOutlined />} 
+                  onClick={() => loadReport(selectedDate, periodType)}
+                >
+                  Làm mới
+                </Button>
+                <Button 
+                  type="primary" 
+                  size="large" 
+                  icon={<FilePdfOutlined />} 
+                  onClick={handleExportPDF}
+                  className="gradient-primary"
+                  style={{ border: 'none' }}
+                >
+                  Xuất PDF
+                </Button>
+              </Space>
+            </Col>
+          </Row>
+        </Card>
+
+        {/* SUMMARY STATS */}
+        <Row gutter={[20, 20]}>
+          <Col xs={24} sm={12} lg={4}>
+            <div className="stat-card-inner gradient-info">
+              <Statistic
+                title={<span style={{ color: 'rgba(255,255,255,0.8)' }}>Tổng doanh thu</span>}
+                value={reportData.summary.totalRevenue}
+                formatter={(v) => formatCurrency(Number(v))}
+                valueStyle={{ color: '#fff', fontWeight: 800, fontSize: '20px' }}
+                prefix={<DollarOutlined />}
+              />
             </div>
           </Col>
-          <Col xs={24} md={12}>
-            <Space size="middle" wrap style={{ justifyContent: "flex-end", width: "100%" }}>
-              <Select value={periodType} onChange={handlePeriodChange} style={{ width: 150 }} size="large">
-                <Option value="day">Hôm nay</Option>
-                <Option value="month">Tháng này</Option>
-                <Option value="quarter">Quý này</Option>
-                <Option value="year">Năm này</Option>
-              </Select>
-              <DatePicker format="DD/MM/YYYY" size="large" placeholder="Chọn ngày" style={{ width: 180 }} onChange={handleDateChange} />
-              <Button type="primary" icon={<FilePdfOutlined />} size="large" style={{ background: "#ff4d4f", borderColor: "#ff4d4f" }}>
-                Xuất PDF
-              </Button>
-            </Space>
-          </Col>
-        </Row>
-        <Divider style={{ margin: "16px 0" }} />
-        <Text strong style={{ fontSize: 16 }}>
-          {periodType === "day" && `Ngày báo cáo: ${selectedDate.format("DD/MM/YYYY")}`}
-          {periodType === "month" && `Tháng báo cáo: ${selectedDate.format("MM/YYYY")}`}
-          {periodType === "quarter" && `Báo cáo quý ${Math.floor(selectedDate.month() / 3) + 1} - ${selectedDate.year()}`}
-          {periodType === "year" && `Báo cáo năm ${selectedDate.year()}`}
-        </Text>
-      </Card>
-
-      {/* SUMMARY CARDS */}
-      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-        {/* 1. TỔNG ĐƠN HÀNG */}
-        <Col xs={24} sm={12} lg={8}>
-          <AntdTooltip title="Tổng số đơn hàng đã hoàn thành trong kỳ đã chọn">
-            <Card
-              style={{
-                background: "#84A98C",
-                borderRadius: 12,
-                border: "none",
-                cursor: "pointer",
-              }}
-            >
+          <Col xs={24} sm={12} lg={4}>
+            <div className="stat-card-inner gradient-success">
               <Statistic
-                title={
-                  <span
-                    style={{
-                      color: "#fff",
-                      opacity: 0.9,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      fontSize: "15px",
-                    }}
-                  >
-                    Tổng Đơn Hàng
-                    <InfoCircleOutlined style={{ color: "#1890ff", fontSize: 20 }} />
-                  </span>
-                }
+                title={<span style={{ color: 'rgba(255,255,255,0.8)' }}>Tiền mặt (Két)</span>}
+                value={reportData.summary.cashInDrawer}
+                formatter={(v) => formatCurrency(Number(v))}
+                valueStyle={{ color: '#fff', fontWeight: 800, fontSize: '20px' }}
+                prefix={<WalletOutlined />}
+              />
+            </div>
+          </Col>
+          <Col xs={24} sm={12} lg={4}>
+            <div className="stat-card-inner gradient-warning">
+              <Statistic
+                title={<span style={{ color: 'rgba(255,255,255,0.8)' }}>Số đơn hàng</span>}
                 value={reportData.summary.totalOrders}
+                valueStyle={{ color: '#fff', fontWeight: 800, fontSize: '20px' }}
                 prefix={<ShoppingOutlined />}
-                valueStyle={{ color: "#fff", fontSize: 32, fontWeight: 700 }}
                 suffix="đơn"
               />
-            </Card>
-          </AntdTooltip>
-        </Col>
-
-        {/* 2. DOANH THU */}
-        <Col xs={24} sm={12} lg={8}>
-          <AntdTooltip title="Tổng doanh thu sau hóa đơn đã thanh toán">
-            <Card
-              style={{
-                background: "#3A4F50",
-                borderRadius: 12,
-                border: "none",
-                cursor: "pointer",
-              }}
-            >
+            </div>
+          </Col>
+          <Col xs={24} sm={12} lg={4}>
+            <div className="stat-card-inner gradient-error">
               <Statistic
-                title={
-                  <span
-                    style={{
-                      color: "#fff",
-                      opacity: 0.9,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      fontSize: "15px",
-                    }}
-                  >
-                    Doanh Thu
-                    <InfoCircleOutlined style={{ color: "#1890ff", fontSize: 20 }} />
-                  </span>
-                }
-                value={reportData.summary.totalRevenue}
-                prefix={<DollarOutlined />}
-                valueStyle={{ color: "#fff", fontSize: 32, fontWeight: 700 }}
-                formatter={(value) => formatCurrency(Number(value))}
-              />
-            </Card>
-          </AntdTooltip>
-        </Col>
-
-        {/* 3. VAT TỔNG */}
-        <Col xs={24} sm={12} lg={8}>
-          <AntdTooltip title="Tổng VAT thu được trong kỳ">
-            <Card
-              style={{
-                background: "#84A98C",
-                borderRadius: 12,
-                border: "none",
-                cursor: "pointer",
-              }}
-            >
-              <Statistic
-                title={
-                  <span
-                    style={{
-                      color: "#fff",
-                      opacity: 0.9,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      fontSize: "15px",
-                    }}
-                  >
-                    VAT Tổng
-                    <InfoCircleOutlined style={{ color: "#1890ff", fontSize: 20 }} />
-                  </span>
-                }
-                value={reportData.summary.vatTotal}
-                prefix={<PercentageOutlined />}
-                valueStyle={{ color: "#fff", fontSize: 32, fontWeight: 700 }}
-                formatter={(value) => formatCurrency(Number(value))}
-              />
-            </Card>
-          </AntdTooltip>
-        </Col>
-
-        {/* 4. TIỀN MẶT TRONG KÉT — giữ nguyên */}
-        <Col xs={24} sm={12} lg={8}>
-          <AntdTooltip title="Số tiền hiện có trong két của cửa hàng, hãy kiểm tra và đối chiếu với số liệu này">
-            <Card
-              style={{
-                background: "#3A4F50",
-                borderRadius: 12,
-                border: "none",
-                cursor: "pointer",
-              }}
-            >
-              <Statistic
-                title={
-                  <span
-                    style={{
-                      color: "#fff",
-                      opacity: 0.9,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      fontSize: "15px",
-                    }}
-                  >
-                    Tiền Mặt Trong Két
-                    <InfoCircleOutlined style={{ color: "#1890ff", fontSize: 20 }} />
-                  </span>
-                }
-                value={reportData.summary.cashInDrawer}
-                prefix={<WalletOutlined />}
-                valueStyle={{ color: "#fff", fontSize: 32, fontWeight: 700 }}
-                formatter={(value) => formatCurrency(Number(value))}
-              />
-            </Card>
-          </AntdTooltip>
-        </Col>
-
-        {/* 5. TỔNG ĐIỂM THƯỞNG */}
-        <Col xs={24} sm={12} lg={8}>
-          <AntdTooltip title="Tổng điểm khách đã tích được khi mua hàng">
-            <Card
-              style={{
-                background: "#84A98C",
-                borderRadius: 12,
-                border: "none",
-                cursor: "pointer",
-              }}
-            >
-              <Statistic
-                title={
-                  <span
-                    style={{
-                      color: "#fff",
-                      opacity: 0.9,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      fontSize: "15px",
-                    }}
-                  >
-                    Tổng điểm Thưởng Đã Cộng
-                    <InfoCircleOutlined style={{ color: "#1890ff", fontSize: 20 }} />
-                  </span>
-                }
-                value={reportData.summary.totalLoyaltyEarned}
-                prefix={<GiftOutlined />}
-                valueStyle={{ color: "#fff", fontSize: 32, fontWeight: 700 }}
-                suffix="điểm"
-              />
-            </Card>
-          </AntdTooltip>
-        </Col>
-
-        {/* 6. TIỀN HOÀN HÀNG */}
-        <Col xs={24} sm={12} lg={8}>
-          <AntdTooltip title="Tổng tiền đã hoàn cho khách (refund)">
-            <Card
-              style={{
-                background: "#3A4F50",
-                borderRadius: 12,
-                border: "none",
-                cursor: "pointer",
-              }}
-            >
-              <Statistic
-                title={
-                  <span
-                    style={{
-                      color: "#fff",
-                      opacity: 0.9,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      fontSize: "15px",
-                    }}
-                  >
-                    Tổng tiền hoàn Hàng ({reportData.summary.totalRefunds} đơn)
-                    <InfoCircleOutlined style={{ color: "#1890ff", fontSize: 20 }} />
-                  </span>
-                }
+                title={<span style={{ color: 'rgba(255,255,255,0.8)' }}>Tiền hoàn hàng</span>}
                 value={reportData.summary.refundAmount}
+                formatter={(v) => formatCurrency(Number(v))}
+                valueStyle={{ color: '#fff', fontWeight: 800, fontSize: '20px' }}
                 prefix={<UndoOutlined />}
-                valueStyle={{ color: "#fff", fontSize: 32, fontWeight: 700 }}
-                formatter={(value) => formatCurrency(Number(value))}
               />
-            </Card>
-          </AntdTooltip>
-        </Col>
-      </Row>
+            </div>
+          </Col>
+           <Col xs={24} sm={12} lg={4}>
+            <div className="stat-card-inner gradient-primary">
+              <Statistic
+                title={<span style={{ color: 'rgba(255,255,255,0.8)' }}>VAT Tổng</span>}
+                value={reportData.summary.vatTotal}
+                formatter={(v) => formatCurrency(Number(v))}
+                valueStyle={{ color: '#fff', fontWeight: 800, fontSize: '20px' }}
+                prefix={<PercentageOutlined />}
+              />
+            </div>
+          </Col>
+           <Col xs={24} sm={12} lg={4}>
+            <div className="stat-card-inner gradient-info" style={{ background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)' }}>
+              <Statistic
+                title={<span style={{ color: 'rgba(255,255,255,0.8)' }}>Điểm tích lũy</span>}
+                value={reportData.summary.totalLoyaltyEarned}
+                valueStyle={{ color: '#fff', fontWeight: 800, fontSize: '20px' }}
+                prefix={<GiftOutlined />}
+                suffix="đ"
+              />
+            </div>
+          </Col>
+        </Row>
 
       {/* BIỂU ĐỒ VÀ BẢNG */}
       <Row gutter={[16, 16]}>
@@ -668,8 +541,8 @@ const EndOfDayReport: React.FC = () => {
             title={
               <span>
                 <UserOutlined style={{ marginRight: 8 }} />
-                Doanh Thu Theo Nhân Viên
-                <AntdTooltip title="Chỉ tính doanh thu đối với nhân viên bán hàng, không tính đối với chủ cửa hàng tự bán hàng">
+                Doanh Thu Theo Nhân Viên & Admin
+                <AntdTooltip title="Bao gồm doanh thu từ nhân viên và cả chủ cửa hàng (Admin)">
                   <InfoCircleOutlined style={{ marginLeft: 6, color: "#1890ff", cursor: "pointer" }} />
                 </AntdTooltip>
               </span>
@@ -948,6 +821,7 @@ const EndOfDayReport: React.FC = () => {
           ]}
         />
       </Card>
+      </Space>
     </div>
   );
 };

@@ -251,7 +251,7 @@ async function calcRevenueByPeriod({ storeId, periodType, periodKey, type = "tot
       {
         $match: {
           ...baseMatch,
-          employeeId: { $ne: null }, // ⭐ DÒNG QUAN TRỌNG
+          // employeeId: { $ne: null }, // REMOVED to include Owner sales
         },
       },
       {
@@ -278,7 +278,22 @@ async function calcRevenueByPeriod({ storeId, periodType, periodKey, type = "tot
           pipeline: [{ $project: { fullName: 1, phone: 1 } }],
         },
       },
-      { $unwind: "$employeeInfo" },
+      { $unwind: { path: "$employeeInfo", preserveNullAndEmptyArrays: true } },
+      {
+        $addFields: {
+          // If _id (employeeId) is null, it's the Owner/Admin. IF _id exists but lookup failed, it's deleted staff.
+          employeeInfo: {
+            fullName: {
+              $cond: {
+                if: { $eq: ["$_id", null] },
+                then: "Chủ cửa hàng (Admin)",
+                else: { $ifNull: ["$employeeInfo.fullName", "Nhân viên đã nghỉ"] },
+              },
+            },
+            phone: { $ifNull: ["$employeeInfo.phone", ""] },
+          },
+        },
+      },
       { $sort: { totalRevenue: -1 } },
     ];
 
