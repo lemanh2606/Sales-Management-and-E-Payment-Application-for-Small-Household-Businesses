@@ -32,6 +32,8 @@ const {
   exportTopFrequentCustomers,
   exportAllOrdersToExcel,
   deletePendingOrder,
+  generatePosPaymentLink,
+  checkPosPaymentStatus
 } = require("../controllers/order/orderController");
 const {
   getPaidNotPrintedOrders,
@@ -40,6 +42,22 @@ const {
 } = require("../controllers/order/orderReconciliationController");
 
 //API CHUNG: http://localhost:9999/api/orders
+
+// === POS PAYMENT SUPPORT ===
+// Tạo link thanh toán PayOS cho POS
+router.post(
+  "/pos/payment-link",
+  verifyToken,
+  checkStoreAccess,
+  generatePosPaymentLink
+);
+// Kiểm tra trạng thái thanh toán PayOS cho POS
+router.get(
+  "/pos/payment-status/:orderCode",
+  verifyToken,
+  checkStoreAccess,
+  checkPosPaymentStatus
+);
 
 // Lấy toàn bộ danh sách đơn hàng (mọi trạng thái)
 router.get(

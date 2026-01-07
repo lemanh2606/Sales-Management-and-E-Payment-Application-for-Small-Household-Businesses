@@ -681,6 +681,49 @@ const OrderPOSHome: React.FC = () => {
   const vatAmount = currentTab.isVAT ? beforeTax * 0.1 : 0;
   const totalAmount = beforeTax + vatAmount;
   const changeAmount = Math.max(0, currentTab.cashReceived - totalAmount);
+  
+  // Polling check QR Payment (Web Ver PayOS)
+  useEffect(() => {
+     const orderCode = currentTab?.qrPayload;
+     // Chỉ poll khi có QR và đang hiển thị (hoặc đơn đang pending chờ)
+     if (!orderCode || !currentTab.qrImageUrl || !currentTab.pendingOrderId) return;
+     
+     // Cờ để tránh gọi liên tục nếu component unmount
+     let isActive = true;
+
+     const checkPayment = async () => {
+         try {
+             const res = await axios.get(`${API_BASE}/orders/pos/payment-status/${orderCode}?storeId=${storeId}`, { headers });
+             if (isActive && res.data.success && String(res.data.status).toUpperCase() === 'PAID') {
+                  
+                  // Stop polling
+                  clearInterval(pollId);
+                  
+                  // Show success
+                  Swal.fire({
+                      icon: 'success',
+                      title: 'Đã nhận thanh toán!',
+                      text: 'Hệ thống PayOS xác nhận thành công.',
+                      timer: 2000,
+                      showConfirmButton: false
+                  });
+
+                  // Trigger print bill (bao gồm set-paid)
+                  if (!isPrinting) {
+                     triggerPrint(currentTab.pendingOrderId!);
+                  }
+             }
+         } catch(e) {
+             // ignore
+         }
+     };
+
+     const pollId = setInterval(checkPayment, 3000);
+     return () => {
+         isActive = false;
+         clearInterval(pollId);
+     };
+  }, [currentTab?.qrPayload, currentTab?.qrImageUrl, currentTab?.pendingOrderId]); // triggerPrint và isPrinting có thể cần check
 
   // Tạo đơn hàng
   const createOrder = async () => {
@@ -761,6 +804,8 @@ const OrderPOSHome: React.FC = () => {
         if (currentTab.paymentMethod === "qr" && res.data.qrDataURL) {
           tab.qrImageUrl = res.data.qrDataURL;
           tab.savedQrImageUrl = res.data.qrDataURL; // 🟢 Lưu giữ QR để restore lại
+          tab.qrPayload = (res.data.order as any)?.paymentRef; // Save code for polling
+          
           tab.qrExpiryTs = res.data.order?.qrExpiry ? new Date(res.data.order.qrExpiry).getTime() : null;
           tab.savedQrExpiryTs = res.data.order?.qrExpiry ? new Date(res.data.order.qrExpiry).getTime() : null; // 🟢 Lưu giữ
         }
@@ -1503,17 +1548,29 @@ const OrderPOSHome: React.FC = () => {
                     )}
                   </Space>
 
-                  <Switch
-                    checked={!!currentTab.usedPointsEnabled}
-                    disabled={!loyaltySetting?.isActive}
-                    onChange={(checked) => {
-                      updateOrderTab((t) => {
-                        t.usedPointsEnabled = checked;
-                        // Nếu vừa bật mà chưa có điểm thì để 0 để user tự nhập
-                        if (checked && t.usedPoints < 0) t.usedPoints = 0;
-                      });
-                    }}
-                  />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {currentTab.customer && (
+                       <Text type="secondary" style={{ fontSize: 13 }}>
+                         (Có sẵn: <Text strong style={{ color: '#faad14' }}>{currentTab.customer.loyaltyPoints || 0}</Text> điểm)
+                       </Text>
+                    )}
+                    <Switch
+                      checked={!!currentTab.usedPointsEnabled}
+                      disabled={!loyaltySetting?.isActive || !currentTab.customer}
+                      onChange={(checked) => {
+                        updateOrderTab((t) => {
+                          t.usedPointsEnabled = checked;
+                          // Tự động lấy điểm tích lũy ra dùng
+                          if (checked) {
+                            const maxPoints = t.customer?.loyaltyPoints || 0;
+                            t.usedPoints = maxPoints;
+                          } else {
+                            t.usedPoints = 0;
+                          }
+                        });
+                      }}
+                    />
+                  </div>
                 </div>
 
                 {/* Thêm dòng text nhỏ bên dưới khi bị tắt – rất rõ ràng */}
@@ -1525,10 +1582,27 @@ const OrderPOSHome: React.FC = () => {
                     </Text>
                   </div>
                 )}
+                
+                {/* Khi chưa chọn khách hàng */}
+                {loyaltySetting?.isActive && !currentTab.customer && (
+                   <div style={{ marginTop: 8 }}>
+                    <Text type="secondary" style={{ fontSize: 13, fontStyle: 'italic' }}>
+                      Vui lòng chọn khách hàng để dùng điểm
+                    </Text>
+                  </div>
+                )}
 
-                {/* Ô nhập điểm */}
-                {currentTab.usedPointsEnabled && (
+                {/* Ô nhập điểm (cho phép sửa nếu không muốn dùng hết) */}
+                {currentTab.usedPointsEnabled && currentTab.customer && (
                   <div style={{ marginTop: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                       <Text style={{ fontSize: 12, color: '#666' }}>Số điểm sử dụng:</Text>
+                       <Text style={{ fontSize: 12, color: '#1890ff', cursor: 'pointer' }} onClick={() => {
+                          updateOrderTab(t => {
+                             t.usedPoints = t.customer?.loyaltyPoints || 0;
+                          });
+                       }}>Dùng tối đa</Text>
+                    </div>
                     <InputNumber
                       min={0}
                       max={currentTab.customer?.loyaltyPoints ?? 9999999}
@@ -1543,7 +1617,7 @@ const OrderPOSHome: React.FC = () => {
                       }}
                       size="large"
                       style={{ width: "100%" }}
-                      placeholder="Nhập số điểm muốn sử dụng"
+                      placeholder="Số điểm dùng"
                       formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
                       parser={(v) => parseInt((v || "0").toString().replace(/(,*)/g, ""), 10)}
                       addonAfter="điểm"

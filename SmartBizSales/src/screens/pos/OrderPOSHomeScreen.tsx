@@ -1138,6 +1138,7 @@ const OrderPOSHomeScreen: React.FC = () => {
         if (currentTab.paymentMethod === "qr" && res?.data?.qrDataURL) {
           tab.qrImageUrl = res.data.qrDataURL;
           tab.savedQrImageUrl = res.data.qrDataURL;
+          tab.qrPayload = order?.paymentRef; // Save code for polling
 
           tab.qrExpiryTs = order?.qrExpiry
             ? new Date(order.qrExpiry).getTime()
@@ -1381,30 +1382,68 @@ const OrderPOSHomeScreen: React.FC = () => {
   useEffect(() => {
     if (!qrModalOpen) return;
 
+    // --- 1. Countdown Logic ---
+    let countdownId: any = null;
     const expiry = currentTab.qrExpiryTs;
-    if (!expiry) {
-      setQrRemainingSec(null);
-      return;
+
+    if (expiry) {
+        const tick = () => {
+          const diff = Math.max(0, Math.floor((expiry - Date.now()) / 1000));
+          setQrRemainingSec(diff);
+
+          if (diff <= 0) {
+            updateOrderTab((t) => {
+              t.qrImageUrl = null;
+              t.qrPayload = null;
+              t.qrExpiryTs = null;
+            });
+            Alert.alert("Hết hạn", "QR đã hết hạn. Vui lòng tạo QR mới.");
+          }
+        };
+
+        tick();
+        countdownId = setInterval(tick, 1000);
+    } else {
+        setQrRemainingSec(null);
     }
 
-    const tick = () => {
-      const diff = Math.max(0, Math.floor((expiry - Date.now()) / 1000));
-      setQrRemainingSec(diff);
+    // --- 2. Polling Logic for PayOS ---
+    let pollId: any = null;
+    const orderCode = currentTab.qrPayload;
 
-      if (diff <= 0) {
-        updateOrderTab((t) => {
-          t.qrImageUrl = null;
-          t.qrPayload = null;
-          t.qrExpiryTs = null;
-        });
-        Alert.alert("Hết hạn", "QR đã hết hạn. Vui lòng tạo QR mới.");
-      }
+    if (orderCode) {
+        const checkPayment = async () => {
+             try {
+                 const res: any = await apiClient.get(`/orders/pos/payment-status/${orderCode}?storeId=${storeId}`, {
+                     headers: authHeaders
+                 });
+                 // PayOS status: PENDING | PAID | CANCELLED
+                 if (res.data.success && String(res.data.status).toUpperCase() === 'PAID') {
+                      console.log("PayOS CONFIRMED PAID:", orderCode);
+                      // Dừng polling ngay
+                      if(pollId) clearInterval(pollId);
+                      closeQrModal(); // Close QR
+                      
+                      // Xác nhận đơn hàng thành công
+                      await confirmPaidCash(); 
+                      Alert.alert("Thanh toán thành công!", "PayOS đã xác nhận thanh toán.");
+                 }
+             } catch(e) {
+                 // ignore polling error
+             }
+        };
+        
+        // Check ngay lập tức 1 phát
+        // checkPayment();
+        // Sau đó loop 3s
+        pollId = setInterval(checkPayment, 3000);
+    }
+
+    return () => {
+        if (countdownId) clearInterval(countdownId);
+        if (pollId) clearInterval(pollId);
     };
-
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [qrModalOpen, currentTab.qrExpiryTs, updateOrderTab]);
+  }, [qrModalOpen, currentTab.qrExpiryTs, currentTab.qrPayload, updateOrderTab]);
 
   const closeQrModal = () => {
     setQrModalOpen(false);
@@ -2021,7 +2060,15 @@ const OrderPOSHomeScreen: React.FC = () => {
                 Có {currentTab.customer.loyaltyPoints?.toLocaleString("vi-VN") || 0} điểm
               </Text>
               <Pressable
-                onPress={() => updateOrderTab((t) => (t.usedPointsEnabled = !t.usedPointsEnabled))}
+                onPress={() => updateOrderTab((t) => {
+                    const nextState = !t.usedPointsEnabled;
+                    t.usedPointsEnabled = nextState;
+                    if (nextState) {
+                        t.usedPoints = t.customer?.loyaltyPoints || 0;
+                    } else {
+                        t.usedPoints = 0;
+                    }
+                })}
                 style={[styles.pointsToggle, currentTab.usedPointsEnabled && styles.pointsToggleOn]}
               >
                 <Text style={[styles.pointsToggleText, currentTab.usedPointsEnabled && styles.pointsToggleTextOn]}>
@@ -2029,17 +2076,22 @@ const OrderPOSHomeScreen: React.FC = () => {
                 </Text>
               </Pressable>
               {currentTab.usedPointsEnabled && (
-                <TextInput
-                  value={String(currentTab.usedPoints || 0)}
-                  onChangeText={(txt) => {
-                    const max = currentTab.customer?.loyaltyPoints || 0;
-                    const n = clampInt(txt, 0, max);
-                    updateOrderTab((t) => (t.usedPoints = n));
-                  }}
-                  keyboardType="numeric"
-                  style={styles.pointsInput}
-                  placeholder="0"
-                />
+                <View style={{flexDirection: 'row', alignItems: 'center', gap: 4}}>
+                    <TextInput
+                    value={String(currentTab.usedPoints || 0)}
+                    onChangeText={(txt) => {
+                        const max = currentTab.customer?.loyaltyPoints || 0;
+                        const n = clampInt(txt, 0, max);
+                        updateOrderTab((t) => (t.usedPoints = n));
+                    }}
+                    keyboardType="numeric"
+                    style={styles.pointsInput}
+                    placeholder="0"
+                    />
+                     <Pressable onPress={() => updateOrderTab(t => t.usedPoints = t.customer?.loyaltyPoints || 0)}>
+                        <Text style={{fontSize: 10, color: COLORS.primary, fontWeight: 'bold'}}>MAX</Text>
+                    </Pressable>
+                </View>
               )}
             </View>
           )}

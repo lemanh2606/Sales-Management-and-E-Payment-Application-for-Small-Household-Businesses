@@ -187,66 +187,21 @@ export const AuthProvider = ({ children }) => {
                     return skipPaths.some((path) => originalRequest.url.includes(path));
                 })();
 
-                // ✅ HANDLE 401 với Token Refresh Queue
+                // ✅ HANDLE 401 - AUTO LOGOUT
                 if (
                     !isPublicAuthRequest &&
                     error.response &&
-                    error.response.status === 401 &&
-                    !originalRequest._retry
+                    error.response.status === 401
                 ) {
-                    // Nếu đang refresh, đưa request vào queue
-                    if (isRefreshing.current) {
-                        return new Promise((resolve, reject) => {
-                            failedQueue.current.push({ resolve, reject });
-                        })
-                            .then(token => {
-                                originalRequest.headers['Authorization'] = `Bearer ${token}`;
-                                return apiClient(originalRequest);
-                            })
-                            .catch(err => {
-                                return Promise.reject(err);
-                            });
+                    console.warn("⚠️ 401 Unauthorized - Token expired or invalid.");
+                    console.log("🔒 Auto logout triggered.");
+
+                    // Avoid infinite loop if logout api itself fails
+                    if (!originalRequest.url.includes("/logout")) {
+                         await logout();
                     }
-
-                    originalRequest._retry = true;
-                    isRefreshing.current = true;
-
-                    console.warn("⚠️ 401 Unauthorized - Attempting token refresh...");
-
-                    try {
-                        // Try to refresh token
-                        const data = await userApi.refreshToken();
-
-                        console.log("✅ Token refreshed successfully");
-
-                        // Update token
-                        const newToken = data.token;
-                        setToken(newToken);
-                        persist(user, newToken, currentStore);
-
-                        // Update headers
-                        apiClient.defaults.headers.common["Authorization"] = `Bearer ${newToken}`;
-                        originalRequest.headers["Authorization"] = `Bearer ${newToken}`;
-
-                        // Process queued requests
-                        processQueue(null, newToken);
-
-                        // Retry original request
-                        return apiClient(originalRequest);
-                    } catch (refreshError) {
-                        console.error("❌ Token refresh failed:", refreshError);
-
-                        // Process queue with error
-                        processQueue(refreshError, null);
-
-                        // Auto logout
-                        console.log("🔒 Auto logout: Token refresh failed");
-                        await logout();
-
-                        return Promise.reject(refreshError);
-                    } finally {
-                        isRefreshing.current = false;
-                    }
+                    
+                    return Promise.reject(error);
                 }
 
                 // ✅ HANDLE 403

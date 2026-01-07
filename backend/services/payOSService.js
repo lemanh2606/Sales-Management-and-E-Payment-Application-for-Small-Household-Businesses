@@ -14,11 +14,17 @@ const VIETQR_ACCOUNT_NAME = process.env.VIETQR_ACCOUNT_NAME;
 const API_URL = process.env.API_URL;
 
 /**
- * 🧩 Tạo QR thanh toán qua PayOS (nhưng render ảnh bằng VietQR vì 2 cái này là đối tác)
+ * 🧩 Tạo QR thanh toán qua PayOS
+ * credentials: { clientId, apiKey, checksumKey } (optional - if null uses env)
  */
-async function generateQRWithPayOS(input = {}) {
-  if (!PAYOS_CLIENT_ID || !PAYOS_API_KEY || !PAYOS_CHECKSUM_KEY) {
-    throw new Error("Missing PayOS env variables");
+async function generateQRWithPayOS(input = {}, credentials = null) {
+  // Determine creds
+  const clientId = credentials?.clientId || PAYOS_CLIENT_ID;
+  const apiKey = credentials?.apiKey || PAYOS_API_KEY;
+  const checksumKey = credentials?.checksumKey || PAYOS_CHECKSUM_KEY;
+
+  if (!clientId || !apiKey || !checksumKey) {
+    throw new Error("Missing PayOS credentials (Env or Config)");
   }
 
   const payload = input.body || input; // chấp nhận req Express hoặc object thuần
@@ -55,15 +61,15 @@ async function generateQRWithPayOS(input = {}) {
     .map((k) => `${k}=${bodyData[k]}`)
     .join("&");
 
-  const signature = crypto.createHmac("sha256", PAYOS_CHECKSUM_KEY).update(kvString, "utf8").digest("hex");
+  const signature = crypto.createHmac("sha256", checksumKey).update(kvString, "utf8").digest("hex");
 
   const finalBody = { ...bodyData, signature };
 
   // Gửi request tạo link thanh toán PayOS
   const response = await axios.post(`${PAYOS_HOST}/v2/payment-requests`, finalBody, {
     headers: {
-      "x-client-id": PAYOS_CLIENT_ID,
-      "x-api-key": PAYOS_API_KEY,
+      "x-client-id": clientId,
+      "x-api-key": apiKey,
       "Content-Type": "application/json",
     },
     timeout: 30000,
@@ -77,24 +83,30 @@ async function generateQRWithPayOS(input = {}) {
 
   const data = response.data.data;
 
-  // ✅ Dùng VietQR API render ảnh QR thật, có amount + addInfo
-  const qrDataURL = `https://img.vietqr.io/image/${VIETQR_ACQ_ID}-${VIETQR_ACCOUNT_NO}-compact2.png?amount=${amount}&addInfo=${encodeURIComponent(
-    description
-  )}&accountName=${encodeURIComponent(VIETQR_ACCOUNT_NAME)}`;
+  // ✅ FIX: Dùng thông tin CHÍNH XÁC từ PayOS trả về (Bin, tk, nội dung) để tạo QR
+  // PayOS có thể thêm prefix vào description, phải dùng đúng description này thì mới tracking được.
+  const qrDataURL = `https://img.vietqr.io/image/${data.bin}-${data.accountNumber}-compact2.png?amount=${data.amount}&addInfo=${encodeURIComponent(
+    data.description
+  )}&accountName=${encodeURIComponent(data.accountName || "Thanh Toan")}`;
 
   console.log("=== PAYOS QR DEBUG ===");
   console.log("txnRef:", txnRef);
-  console.log("Checkout URL:", data.checkoutUrl);
+  console.log("PayOS Description (Required):", data.description);
   console.log("QR Image URL:", qrDataURL);
   console.log("===============================");
 
+  // Trả về qrDataURL chuẩn
   return { txnRef, amount, paymentLink: data.checkoutUrl, qrDataURL };
 }
 
 // verify webhook PayOS và update order status (tự động check thanh toán QR)
 async function verifyPaymentWithPayOS(parsedWebhook) {
   try {
-    const secret = process.env.PAYOS_CHECKSUM_KEY;
+    // Note: Verify webhook dùng secret nào? Thường là checksumKey.
+    // Nếu multi-tenant, webhook gửi về cần identify store.
+    // PayOS webhook logic cần phức tạp hơn để support multi-tenant (truy vấn store by orderCode để lấy secret?).
+    // Nhưng hiện tại giữ nguyên logic env global cho webhook để tránh rủi ro break.
+    const secret = process.env.PAYOS_CHECKSUM_KEY; 
     if (!secret) throw new Error("Missing PAYOS_CHECKSUM_KEY");
 
     const receivedSignature = (parsedWebhook.signature || "").toUpperCase();
@@ -153,8 +165,44 @@ function computePayOSSignatureFromData(data, secret) {
   return crypto.createHmac("sha256", secret).update(kvString, "utf8").digest("hex").toUpperCase();
 }
 
+/**
+ * Lấy thông tin thanh toán chủ động từ PayOS
+ * Dùng để polling từ client
+ */
+async function getPaymentInfo(orderCode, credentials = null) {
+  const clientId = credentials?.clientId || PAYOS_CLIENT_ID;
+  const apiKey = credentials?.apiKey || PAYOS_API_KEY;
+
+  if (!clientId || !apiKey) {
+    console.error("Missing PayOS credentials (Env or Config)");
+    return null;
+  }
+
+  try {
+    const url = `${PAYOS_HOST}/v2/payment-requests/${orderCode}`;
+    const response = await axios.get(url, {
+      headers: {
+        "x-client-id": clientId,
+        "x-api-key": apiKey,
+      },
+      timeout: 10000,
+    });
+
+    if (response.data && response.data.code == "00") {
+      return response.data.data; 
+      // data fields: id, orderCode, amount, amountPaid, amountRemaining, status, transactions[], createdAt, ...
+      // status: PENDING, PAID, CANCELLED, EXPIRED
+    }
+    return null;
+  } catch (error) {
+    console.error("PayOS getPaymentInfo error:", error.message);
+    return null;
+  }
+}
+
 module.exports = {
   generateQRWithPayOS,
   verifyPaymentWithPayOS,
   computePayOSSignatureFromData,
+  getPaymentInfo,
 };

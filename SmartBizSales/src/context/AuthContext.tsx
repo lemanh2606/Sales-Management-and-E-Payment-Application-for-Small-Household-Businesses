@@ -104,62 +104,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [token]);
 
-  // Xử lý tự động làm mới token khi nhận lỗi 401 (Unauthorized)
-  useEffect(() => {
-    const interceptor = apiClient.interceptors.response.use(
-      (res) => res,
-      async (error) => {
-        const originalRequest = (error?.config ?? {}) as any;
-        const status = error?.response?.status;
-
-        if (
-          status === 401 &&
-          originalRequest &&
-          !originalRequest._retry &&
-          !isRefreshingRef.current
-        ) {
-          originalRequest._retry = true;
-          isRefreshingRef.current = true;
-
-          try {
-            const data = await userApi.refreshToken();
-            const newToken = (data as any)?.token;
-
-            if (newToken) {
-              await AsyncStorage.setItem(TOKEN_KEY, newToken);
-              setToken(newToken);
-              apiClient.defaults.headers.common["Authorization"] =
-                `Bearer ${newToken}`;
-
-              if (originalRequest.headers) {
-                originalRequest.headers["Authorization"] = `Bearer ${newToken}`;
-              }
-
-              isRefreshingRef.current = false;
-              return apiClient(originalRequest);
-            } else {
-              isRefreshingRef.current = false;
-              await logout();
-            }
-          } catch (error) {
-            console.warn("Làm mới token thất bại:", error);
-            isRefreshingRef.current = false;
-            await logout();
-          }
-        }
-
-        return Promise.reject(error);
-      }
-    );
-
-    return () => {
-      try {
-        apiClient.interceptors.response.eject(interceptor);
-      } catch {
-        // Bỏ qua lỗi khi eject
-      }
-    };
-  }, [user, token, currentStore]);
 
   // Hàm lưu trạng thái vào bộ nhớ thiết bị
   const persist = async (
@@ -364,6 +308,35 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       await AsyncStorage.removeItem(USER_KEY);
     }
   };
+
+  // Xử lý tự động đăng xuất khi nhận lỗi 401 (Unauthorized)
+  // Đặt ở đây để đảm bảo hàm logout đã được initialize
+  useEffect(() => {
+    // Biến để tracking interceptor ID
+    const interceptorId = apiClient.interceptors.response.use(
+      (res) => res,
+      async (error) => {
+        // Nếu API trả về 401 Unauthorized
+        if (error?.response?.status === 401) {
+          console.log("🔒 Token hết hạn hoặc không hợp lệ (401). Đang đăng xuất tự động...");
+          
+          // Tránh loop vô tận nếu api logout cũng bị 401
+          const isLogoutApi = error.config?.url?.includes('/logout');
+          if (!isLogoutApi) {
+             await logout();
+          }
+        }
+        return Promise.reject(error);
+      }
+    );
+
+    return () => {
+      // Eject interceptor khi unmount để tránh memory leak
+      try {
+        apiClient.interceptors.response.eject(interceptorId);
+      } catch (e) {}
+    };
+  }, [logout]);
 
   // Giá trị cung cấp cho context
   const contextValue: AuthContextValue = {
