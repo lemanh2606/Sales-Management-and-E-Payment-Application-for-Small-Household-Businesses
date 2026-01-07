@@ -1,21 +1,19 @@
-// backend/controllers/financialController.js
+//  // backend/controllers/financialController.js
 const mongoose = require("mongoose");
 const Order = require("../models/Order");
 const OrderItem = mongoose.model("OrderItem");
 const OrderRefund = mongoose.model("OrderRefund");
 const Product = require("../models/Product");
 const InventoryVoucher = require("../models/InventoryVoucher");
-const OperatingExpense = require("../models/OperatingExpense");
-
 // ❌ DEPRECATED - Không còn sử dụng trong tính toán tài chính:
 const PurchaseOrder = require("../models/PurchaseOrder");
 const PurchaseReturn = require("../models/PurchaseReturn");
 const StockCheck = require("../models/StockCheck");
 const StockDisposal = require("../models/StockDisposal");
-// ❌ DEPRECATED
-
 const Customer = mongoose.model("Customer");
+const Employee = require("../models/Employee");
 const Store = require("../models/Store");
+const OperatingExpense = require("../models/OperatingExpense");
 const { calcRevenueByPeriod } = require("./revenueController");
 const { periodToRange } = require("../utils/period");
 const { Parser } = require("json2csv");
@@ -81,7 +79,7 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
     partiallyRefundedOrders: 0,
   };
 
-  // ✅ ĐẾM SỐ ĐƠN HOÀN TOÀN BỘ (KHÔNG TÍNH VÀO DOANH THU)
+  //// ✅ ĐẾM SỐ ĐƠN HOÀN TOÀN BỘ (KHÔNG TÍNH VÀO DOANH THU)
   const fullyRefundedCount = await Order.countDocuments({
     storeId: objectStoreId,
     status: "refunded",
@@ -224,26 +222,48 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
   // ================================================================
   let grossProfit = totalRevenue - totalCOGS;
 
-  // ================================================================
-  // 6️⃣ CHI PHÍ NGOÀI LỀ (OperatingExpense) - LẤY TỪ DB THEO KỲ
-  // ================================================================
+  // 5️⃣ Chi phí vận hành (Operating Cost)
+  // Tính lương nhân viên và hoa hồng (Dành cho hộ kinh doanh có thuê staff)
+  const months = getMonthsInPeriod(periodType);
+  const employees = await Employee.find({
+    store_id: objectStoreId,
+    isDeleted: false,
+  })
+    .populate("user_id", "role")
+    .select("salary commission_rate user_id");
 
-  let totalExtraExpense = 0;
+  // Chỉ tính chi phí cho MANAGER và STAFF (không tính owner/admin)
+  const filteredEmployees = employees.filter((e) => ["MANAGER", "STAFF"].includes(e.user_id?.role));
 
-  const expenseDoc = await OperatingExpense.findOne({
-    storeId: objectStoreId,
+  const totalSalary = filteredEmployees.reduce((sum, e) => sum + toNumber(e.salary) * months, 0);
+
+  const empRevenue = await calcRevenueByPeriod({
+    storeId,
     periodType,
     periodKey,
+    type: "employee",
+  });
+
+  const totalCommission = empRevenue.reduce((sum, r) => {
+    if (!r._id) return sum;
+    const emp = filteredEmployees.find((e) => e._id && e._id.toString() === r._id.toString());
+    return sum + toNumber(r.totalRevenue) * (toNumber(emp?.commission_rate) / 100);
+  }, 0);
+
+  // Fetch manual extra expenses from DB
+  const opExpDoc = await OperatingExpense.findOne({
+    storeId: objectStoreId,
+    periodType: periodType,
+    periodKey: periodKey,
     isDeleted: false,
-    status: "active",
-  }).select("items");
+  });
 
-  if (expenseDoc && Array.isArray(expenseDoc.items)) {
-    totalExtraExpense = expenseDoc.items.reduce((sum, it) => sum + (Number(it.amount) || 0), 0);
-  }
+  const totalExtraExpense = opExpDoc
+    ? opExpDoc.items.reduce((sum, it) => sum + (Number(it.amount) || 0), 0)
+    : 0;
 
-  // ✅ Tổng chi phí vận hành ban đầu = chi phí ngoài lề (từ DB)
-  let operatingCost = totalExtraExpense;
+  // Tổng chi phí vận hành = Chi phí ngoài (điện, nước...) + Lương + Hoa hồng
+  let operatingCost = totalExtraExpense + totalSalary + totalCommission;
 
   // ================================================================
   // 7️⃣ HAO HỤT KHO
@@ -272,15 +292,20 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
 
   let totalOutValue = toNumber(inventoryLossAgg[0]?.totalOutValue);
   let inventoryLoss = totalOutValue - (totalCOGS + totalRefundCOGS);
-
-  if (inventoryLoss > 0) {
-    operatingCost += inventoryLoss;
-  }
+  if (inventoryLoss < 0) inventoryLoss = 0; // Tránh trường hợp âm do sai số
 
   // ================================================================
-  // 8️⃣ LỢI NHUẬN RÒNG
+  // 8️⃣ LỢI NHUẬN GỘP & LỢI NHUẬN RÒNG (Chuẩn nghiệp vụ)
   // ================================================================
-  const netProfit = grossProfit - operatingCost - totalVAT;
+  // Doanh thu thuần (Net Sales) = Tổng doanh thu thu về - Thuế VAT (thu hộ)
+  const netSales = totalRevenue - totalVAT;
+
+  // Lợi nhuận gộp (Gross Profit) = Doanh thu thuần - Giá vốn hàng bán
+  const grossProfitStandard = netSales - totalCOGS;
+
+  // Lợi nhuận ròng (Net Profit) = Lợi nhuận gộp - Chi phí vận hành
+  // (Bỏ khấu trừ hao hụt kho theo yêu cầu người dùng)
+  const netProfit = grossProfitStandard - operatingCost;
 
   // ================================================================
   // 9️⃣ GIÁ TRỊ TỒN KHO
@@ -432,10 +457,11 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
     totalRefundCount: toNumber(refundData.totalRefundCount),
 
     // ✅ Chi phí & Lợi nhuận
-    totalVAT,
+    totalVAT, // VAT thu hộ (10% nếu có)
+    netSales,
     totalCOGS,
     totalRefundCOGS,
-    grossProfit,
+    grossProfit: grossProfitStandard,
     operatingCost,
     netProfit,
 
