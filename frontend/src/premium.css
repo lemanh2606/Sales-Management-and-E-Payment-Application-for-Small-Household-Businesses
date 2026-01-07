@@ -12,9 +12,8 @@
 }
 
 .premium-layout {
-  background: var(--premium-bg);
   min-height: 100vh;
-  padding: 24px;
+  padding: 0px;
 }
 
 .glass-card {
