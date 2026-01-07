@@ -365,11 +365,19 @@ const createOrder = async (req, res) => {
         isDeleted: { $ne: true },
       }).session(session);
 
-      if (!prod) throw new Error("Sản phẩm không tồn tại");
-
-      if (prod.stock_quantity < qty) {
-        throw new Error(`Không đủ tồn kho: ${prod.name}`);
+      if (!prod) {
+        throw new Error(`Sản phẩm ID ${item.productId} không tồn tại hoặc đã ngừng kinh doanh`);
       }
+
+      // Enhanced stock validation
+      const currentStock = Number(prod.stock_quantity || 0);
+      if (currentStock <= 0) {
+        throw new Error(`Sản phẩm "${prod.name}" đã hết hàng trong kho`);
+      }
+      if (currentStock < qty) {
+        throw new Error(`Sản phẩm "${prod.name}" không đủ tồn kho. Còn lại: ${currentStock}, Yêu cầu: ${qty}`);
+      }
+
 
       // PRICE
       let price = Number(prod.price);

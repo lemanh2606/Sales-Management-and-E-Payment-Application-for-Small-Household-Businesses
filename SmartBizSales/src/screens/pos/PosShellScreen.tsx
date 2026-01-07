@@ -20,14 +20,12 @@ import OrderRefundScreen from "./OrderRefundScreen";
 import InventoryLookupScreen from "./InventoryLookupScreen";
 import OrderTrackingScreen from "./OrderTrackingScreen";
 import EndOfDayReportScreen from "./EndOfDayReportScreen";
-import OrderPOSReconcileTabScreen from "./OrderPOSReconcileTabScreen";
 
 type PageType =
   | "pos"
   | "refund"
   | "inventory"
   | "trackingpage"
-  | "reconcile"
   | "endofdayreport";
 
 const PosShellScreen: React.FC = () => {
@@ -75,11 +73,6 @@ const PosShellScreen: React.FC = () => {
         label: "Tra cứu đơn",
       },
       {
-        key: "reconcile" as const,
-        icon: "shield-checkmark-outline",
-        label: "Đối soát",
-      },
-      {
         key: "endofdayreport" as const,
         icon: "stats-chart-outline",
         label: "BC cuối ngày",
@@ -103,8 +96,6 @@ const PosShellScreen: React.FC = () => {
         return <InventoryLookupScreen />;
       case "trackingpage":
         return <OrderTrackingScreen />;
-      case "reconcile":
-        return <OrderPOSReconcileTabScreen />;
       case "endofdayreport":
         return <EndOfDayReportScreen />;
 

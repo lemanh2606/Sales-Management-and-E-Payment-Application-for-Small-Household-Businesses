@@ -518,7 +518,12 @@ const getInventoryVouchers = async (req, res) => {
     const skip = (pageNum - 1) * limitNum;
 
     const [rows, total] = await Promise.all([
-      InventoryVoucher.find(filter).sort(sort).skip(skip).limit(limitNum).lean(),
+      InventoryVoucher.find(filter)
+        .populate("created_by", "fullname username")
+        .sort(sort)
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
       InventoryVoucher.countDocuments(filter),
     ]);
 

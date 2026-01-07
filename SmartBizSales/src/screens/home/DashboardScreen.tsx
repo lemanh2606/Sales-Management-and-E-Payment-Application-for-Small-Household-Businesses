@@ -12,6 +12,7 @@ import {
   NativeScrollEvent,
   NativeSyntheticEvent,
   Animated,
+  TextInput,
 } from "react-native";
 import { useAuth } from "../../context/AuthContext";
 import apiClient from "../../api/apiClient";
@@ -19,8 +20,17 @@ import dayjs from "dayjs";
 import { LineChart, BarChart, PieChart } from "react-native-chart-kit";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
 
 const { width } = Dimensions.get("window");
+
+const COLORS = {
+  primary: "#10b981",
+  muted: "#64748b",
+  placeholder: "#94a3b8",
+  white: "#ffffff",
+};
 
 // ==================== TYPES ====================
 interface Store {
@@ -177,9 +187,12 @@ const getStoreId = (store: Store | null): string | null => {
 
 // ==================== MAIN COMPONENT ====================
 export default function DashboardScreen() {
+  const navigation = useNavigation<any>();
   const { user } = useAuth();
   const [currentStore, setCurrentStore] = useState<Store | null>(null);
   const [storeId, setStoreId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
 
   const [orderStats, setOrderStats] = useState<OrderStats>({
     total: 0,
@@ -262,6 +275,22 @@ export default function DashboardScreen() {
       setRefreshing(false);
     }
   };
+
+  const fetchUnreadNotifications = async (): Promise<void> => {
+    if (!storeId) return;
+    try {
+      const res: any = await apiClient.get(`/notifications`, {
+        params: { storeId, read: false, limit: 1 },
+      });
+      setUnreadNotifications(res?.data?.meta?.total || 0);
+    } catch (e) {
+      console.error("❌ Notifications error:", e);
+    }
+  };
+
+  useEffect(() => {
+    if (storeId) fetchUnreadNotifications();
+  }, [storeId]);
 
   // ==================== FETCH ORDER STATS ====================
   const fetchOrderStats = async (): Promise<void> => {
@@ -580,10 +609,51 @@ export default function DashboardScreen() {
                 {currentStore?.name || "Cửa hàng"}
               </Text>
             </View>
-            <View style={styles.dateBadge}>
-              <Text style={styles.dateText}>
-                {dayjs().format("DD/MM/YYYY")}
-              </Text>
+            <View style={styles.headerButtons}>
+              <TouchableOpacity
+                style={styles.notifBtn}
+                onPress={() => navigation.navigate("NotificationSettings")}
+              >
+                <Ionicons name="notifications-outline" size={24} color="#fff" />
+                {unreadNotifications > 0 && (
+                  <View style={styles.notifBadge}>
+                    <Text style={styles.notifBadgeText}>
+                      {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+              <View style={styles.dateBadge}>
+                <Text style={styles.dateText}>
+                  {dayjs().format("DD/MM/YYYY")}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Search Bar */}
+          <View style={styles.searchContainer}>
+            <View style={styles.searchBox}>
+              <Ionicons name="search-outline" size={20} color={COLORS.muted} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Tìm đơn hàng, sản phẩm, khách hàng..."
+                placeholderTextColor={COLORS.placeholder}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                returnKeyType="search"
+                onSubmitEditing={() => {
+                   if(searchQuery.trim()){
+                      navigation.navigate("OrderList", { query: searchQuery });
+                      setSearchQuery("");
+                   }
+                }}
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchQuery("")}>
+                  <Ionicons name="close-circle" size={20} color={COLORS.muted} />
+                </TouchableOpacity>
+              )}
             </View>
           </View>
 
@@ -657,13 +727,37 @@ export default function DashboardScreen() {
                   trend={12.5}
                 />
                 <StatCard
-                  title="Lợi nhuận"
+                  title="Lợi nhuận gộp"
+                  value={formatCurrency(financials?.grossProfit || 0)}
+                  subtitle="Doanh thu - Giá vốn"
+                  icon="💸"
+                  color="#2563eb"
+                  gradient={["#eff6ff", "#dbeafe"]}
+                />
+                <StatCard
+                  title="Lợi nhuận ròng"
                   value={formatCurrency(financials?.netProfit || 0)}
-                  subtitle="Lợi nhuận thực sau chi phí"
+                  subtitle="Lợi nhuận sau toàn bộ chi phí"
                   icon="📈"
                   color="#f59e0b"
                   gradient={["#fffbeb", "#fef3c7"]}
                   trend={8.3}
+                />
+                <StatCard
+                  title="CP vận hành"
+                  value={formatCurrency(financials?.operatingCost || 0)}
+                  subtitle="Lương, hoa hồng, phí khác"
+                  icon="📉"
+                  color="#ef4444"
+                  gradient={["#fef2f2", "#fee2e2"]}
+                />
+                <StatCard
+                  title="GT tồn kho"
+                  value={formatCurrency(financials?.stockValue || 0)}
+                  subtitle="Tổng giá trị hàng tại kho"
+                  icon="📦"
+                  color="#8b5cf6"
+                  gradient={["#faf5ff", "#e9d5ff"]}
                 />
                 <StatCard
                   title="Đơn hàng"
@@ -673,15 +767,6 @@ export default function DashboardScreen() {
                   color="#3b82f6"
                   gradient={["#eff6ff", "#dbeafe"]}
                   trend={15.2}
-                />
-                <StatCard
-                  title="Tỷ lệ chuyển đổi"
-                  value={`${conversionRate.toFixed(1)}%`}
-                  subtitle="Tỷ lệ chốt đơn thành công"
-                  icon="🎯"
-                  color="#8b5cf6"
-                  gradient={["#faf5ff", "#e9d5ff"]}
-                  trend={5.7}
                 />
               </View>
 
@@ -1171,4 +1256,57 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   scrollHintIcon: { color: "#ffffff", fontSize: 20, fontWeight: "800" },
+  headerButtons: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  notifBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+  },
+  notifBadge: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    backgroundColor: "#ef4444",
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: "#10b981",
+  },
+  notifBadgeText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  searchContainer: {
+    paddingHorizontal: 0,
+    marginTop: 16,
+  },
+  searchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.2)",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    height: 48,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.3)",
+  },
+  searchInput: {
+    flex: 1,
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "600",
+    marginLeft: 10,
+  },
 });

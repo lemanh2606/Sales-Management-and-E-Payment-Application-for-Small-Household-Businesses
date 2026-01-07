@@ -1309,7 +1309,7 @@ const getLowStockProducts = async (req, res) => {
 // GET /api/products/search - Tìm sản phẩm theo tên hoặc SKU (regex case-insensitive)
 const searchProducts = async (req, res) => {
   try {
-    const { query, storeId, limit = 10 } = req.query; // Params: query (tên/SKU), storeId, limit (default 10)
+    const { query, storeId, limit = 50 } = req.query; // Tăng limit mặc định lên 50
 
     if (!query || query.trim().length === 0) {
       return res
@@ -1317,10 +1317,13 @@ const searchProducts = async (req, res) => {
         .json({ message: "Query tìm kiếm không được để trống" });
     }
 
+    const searchTerm = query.trim();
+    
     const searchQuery = {
       $or: [
-        { name: { $regex: query.trim(), $options: "i" } }, // Tìm tên (case-insensitive)
-        { sku: { $regex: query.trim(), $options: "i" } }, // Tìm SKU (case-insensitive)
+        { name: { $regex: searchTerm, $options: "i" } }, // Tìm tên (case-insensitive)
+        { sku: { $regex: searchTerm, $options: "i" } }, // Tìm SKU (case-insensitive)
+        { description: { $regex: searchTerm, $options: "i" } }, // Tìm cả mô tả
       ],
       status: "Đang kinh doanh", // Chỉ sản phẩm đang bán
       store_id: new mongoose.Types.ObjectId(storeId), // Filter store của staff/manager
@@ -1329,7 +1332,7 @@ const searchProducts = async (req, res) => {
 
     const products = await Product.find(searchQuery)
       .select("image name sku price cost_price stock_quantity unit") // Chỉ lấy field cần thiết
-      .sort({ name: 1 }) // Sắp xếp theo tên A-Z
+      .sort({ stock_quantity: -1, name: 1 }) // Ưu tiên có stock, sau đó A-Z
       .limit(parseInt(limit)) // Limit số kết quả
       .lean(); // Lean cho nhanh
 

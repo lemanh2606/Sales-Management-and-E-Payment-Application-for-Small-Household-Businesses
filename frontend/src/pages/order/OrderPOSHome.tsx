@@ -120,7 +120,9 @@ interface CartItem {
   unit: string;
   quantity: number;
   subtotal: string; // lưu chuỗi như hiện tại (format .toFixed(2))
+  stock_quantity?: number; // Store original stock for validation
 }
+
 
 interface OrderTab {
   key: string;
@@ -290,6 +292,17 @@ const OrderPOSHome: React.FC = () => {
     setTempPhone(""); // Clear temp phone
     setFoundCustomers([]); // Clear customer dropdown
     setShowCustomerDropdown(false); // Close dropdown
+    
+    // 🗑️ Clear saved cart from localStorage after successful order
+    try {
+      const userInfo = JSON.parse(localStorage.getItem("user") || "{}");
+      const uId = userInfo?.id || userInfo?._id || "anonymous";
+      const cartKey = `pos_cart_${storeId}_${uId}`;
+      localStorage.removeItem(cartKey);
+      console.log("🗑️ Đã xóa giỏ hàng đã lưu sau khi hoàn thành đơn");
+    } catch (err) {
+      console.error("Lỗi xóa cart:", err);
+    }
   };
 
   // Socket - Kết nối socket để nhận các thông báo khác (low_stock, etc) - WEBHOOK PAYMENT KHÔNG DÙNG NỮA
@@ -302,6 +315,61 @@ const OrderPOSHome: React.FC = () => {
       s.disconnect();
     };
   }, [token]);
+
+  // ===== CART PERSISTENCE - localStorage =====
+  // Include userId in key to separate carts for different users on same device
+  const loggedInUser = JSON.parse(localStorage.getItem("user") || "{}");
+  const userId = loggedInUser?.id || loggedInUser?._id || "anonymous";
+  const CART_STORAGE_KEY = `pos_cart_${storeId}_${userId}`;
+  
+  // Load cart from localStorage on mount
+  useEffect(() => {
+    if (!storeId || !userId) return;
+    try {
+      const savedData = localStorage.getItem(CART_STORAGE_KEY);
+      if (savedData) {
+        const parsed = JSON.parse(savedData);
+        if (parsed.orders && Array.isArray(parsed.orders) && parsed.orders.length > 0) {
+          setOrders(parsed.orders);
+          if (parsed.activeTab) setActiveTab(parsed.activeTab);
+          console.log(`✅ Đã khôi phục giỏ hàng POS cho user ${userId}`);
+        }
+      }
+    } catch (err) {
+      console.error("Lỗi đọc cart từ localStorage:", err);
+    }
+  }, [storeId, userId]);
+
+  // Save cart to localStorage whenever orders change
+  useEffect(() => {
+    if (!storeId || !userId) return;
+    // Don't save if all carts are empty (initial state)
+    const hasItems = orders.some(tab => tab.cart.length > 0 || tab.customer || tab.pendingOrderId);
+    if (hasItems) {
+      try {
+        const dataToSave = {
+          orders,
+          activeTab,
+          userId, // Store userId to verify ownership
+          savedAt: new Date().toISOString(),
+        };
+        localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(dataToSave));
+      } catch (err) {
+        console.error("Lỗi lưu cart vào localStorage:", err);
+      }
+    }
+  }, [orders, activeTab, storeId, userId]);
+
+  // Clear cart from localStorage when order is completed
+  const clearSavedCart = () => {
+    try {
+      localStorage.removeItem(CART_STORAGE_KEY);
+      console.log("🗑️ Đã xóa giỏ hàng đã lưu");
+    } catch (err) {
+      console.error("Lỗi xóa cart:", err);
+    }
+  };
+
 
   useEffect(() => {
     if (storeId) {
@@ -431,11 +499,32 @@ const OrderPOSHome: React.FC = () => {
 
   // Thêm sản phẩm vào giỏ hàng
   const addToCart = (product: Product) => {
+    // Don't add products with no stock
+    if (product.stock_quantity <= 0) {
+      Swal.fire({
+        icon: "warning",
+        title: "Hết hàng",
+        text: `Sản phẩm "${product.name}" đã hết hàng trong kho.`,
+        confirmButtonText: "OK",
+      });
+      return;
+    }
+    
     const priceNum = getPriceNumber(product.price);
     updateOrderTab((tab) => {
       const existing = tab.cart.find((item) => item.productId === product._id);
       if (existing) {
+        // Check if adding more would exceed stock
         const newQty = existing.quantity + 1;
+        if (newQty > product.stock_quantity) {
+          Swal.fire({
+            icon: "warning",
+            title: "Vượt tồn kho",
+            text: `Chỉ còn ${product.stock_quantity} sản phẩm trong kho.`,
+            confirmButtonText: "OK",
+          });
+          return;
+        }
         tab.cart = tab.cart.map((item) =>
           item.productId === product._id
             ? {
@@ -460,6 +549,7 @@ const OrderPOSHome: React.FC = () => {
             overridePrice: undefined,
             saleType: "NORMAL",
             subtotal: priceNum.toFixed(2),
+            stock_quantity: product.stock_quantity, // Store stock for validation
           },
         ];
       }
@@ -477,12 +567,26 @@ const OrderPOSHome: React.FC = () => {
       if (qty <= 0) {
         tab.cart = tab.cart.filter((i) => i.productId !== id);
       } else {
+        // Check max stock - find from cart item or searchedProducts
+        const maxStock = (item as any).stock_quantity ?? 
+                         searchedProducts.find(p => p._id === id)?.stock_quantity ?? 9999;
+        const cappedQty = Math.min(qty, maxStock);
+        
+        if (qty > maxStock) {
+          Swal.fire({
+            icon: "warning",
+            title: "Vượt tồn kho",
+            text: `Sản phẩm chỉ còn ${maxStock} đơn vị trong kho.`,
+            confirmButtonText: "OK",
+          });
+        }
+        
         tab.cart = tab.cart.map((i) =>
           i.productId === id
             ? {
                 ...i,
-                quantity: qty,
-                subtotal: (getItemUnitPrice(i) * qty).toFixed(2),
+                quantity: cappedQty,
+                subtotal: (getItemUnitPrice(i) * cappedQty).toFixed(2),
               }
             : i
         );
@@ -576,7 +680,7 @@ const OrderPOSHome: React.FC = () => {
   const beforeTax = Math.max(subtotal - discount, 0);
   const vatAmount = currentTab.isVAT ? beforeTax * 0.1 : 0;
   const totalAmount = beforeTax + vatAmount;
-  const changeAmount = currentTab.cashReceived - totalAmount;
+  const changeAmount = Math.max(0, currentTab.cashReceived - totalAmount);
 
   // Tạo đơn hàng
   const createOrder = async () => {
@@ -786,22 +890,47 @@ const OrderPOSHome: React.FC = () => {
           </div>
         </div>
 
-        <Input
-          size="large"
-          placeholder="Tìm sản phẩm (SKU/Tên) hoặc quét mã vạch..."
-          prefix={<SearchOutlined style={{ color: '#6366f1' }} />}
-          className="premium-cart-search"
-          value={searchProduct}
-          onChange={(e) => setSearchProduct(e.target.value)}
-          style={{
-            maxWidth: 500,
-            flex: 2,
-            borderRadius: "12px",
-            border: 'none',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
-          }}
-          autoFocus
-        />
+        <div style={{ flex: 2, display: 'flex', gap: 8, alignItems: 'center', maxWidth: 550 }}>
+          <Input
+            size="large"
+            placeholder="Tìm sản phẩm (SKU/Tên)..."
+            prefix={<SearchOutlined style={{ color: '#6366f1' }} />}
+            className="premium-cart-search"
+            value={searchProduct}
+            onChange={(e) => setSearchProduct(e.target.value)}
+            style={{
+              flex: 1,
+              borderRadius: "12px",
+              border: 'none',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+            }}
+            autoFocus
+          />
+          
+          {/* Voice Search Button */}
+          <Button
+            type="text"
+            icon={<span style={{ fontSize: 20 }}>🎤</span>}
+            onClick={() => {
+              const query = window.prompt("🎤 Tìm kiếm sản phẩm\nNhập tên sản phẩm cần tìm:");
+              if (query && query.trim()) {
+                setSearchProduct(query.trim());
+              }
+            }}
+            style={{
+              height: 42,
+              width: 42,
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
+              border: 'none'
+            }}
+            title="Tìm kiếm bằng giọng nói / nhập nhanh"
+          />
+        </div>
 
         <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
            <Badge count={currentTab.cart.length} offset={[-2, 2]}>
@@ -833,7 +962,7 @@ const OrderPOSHome: React.FC = () => {
             pointerEvents: searchedProducts.length > 0 ? "auto" : "none",
           }}
         >
-          {searchedProducts.map((p) => (
+          {searchedProducts.filter(p => p.stock_quantity > 0).map((p) => (
             <div
               key={p._id}
               onClick={() => addToCart(p)}
