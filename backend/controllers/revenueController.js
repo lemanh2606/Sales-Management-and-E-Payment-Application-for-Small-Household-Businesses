@@ -62,6 +62,8 @@ function getExporterNameForFile(req) {
   return safeFilePart(getExporterNameDisplay(req));
 }
 
+const path = require("path");
+
 function buildExportFileName({ reportName, req, periodKey }) {
   const exportDate = dayjs().format("DD-MM-YYYY");
   const exporterName = getExporterNameForFile(req);
@@ -86,14 +88,30 @@ function periodTypeToVietnamese(periodType) {
 
 function createWorksheetWithReportHeader({ reportTitle, req, sheetData }) {
   const exporterName = getExporterNameDisplay(req);
-  const ws = XLSX.utils.aoa_to_sheet([
-    ["Tên Báo cáo", reportTitle],
-    ["Tên người xuất", exporterName],
+  const storeName = req.store?.name || "Cửa hàng";
+  
+  const headerAOA = [
+    [storeName.toUpperCase(), "", "", "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM"],
+    ["", "", "", "Độc lập - Tự do - Hạnh phúc"],
+    ["", "", "", "-----------------"],
     [],
-  ]);
+    ["", reportTitle.toUpperCase()],
+    ["", `Người xuất: ${exporterName}`],
+    ["", `Ngày xuất: ${dayjs().format("DD/MM/YYYY HH:mm")}`],
+    [],
+  ];
+
+  const ws = XLSX.utils.aoa_to_sheet(headerAOA);
+
+  // Merge cells for legal header and title
+  if (!ws["!merges"]) ws["!merges"] = [];
+  ws["!merges"].push({ s: { r: 0, c: 3 }, e: { r: 0, c: 6 } }); // Motto line 1
+  ws["!merges"].push({ s: { r: 1, c: 3 }, e: { r: 1, c: 6 } }); // Motto line 2
+  ws["!merges"].push({ s: { r: 2, c: 3 }, e: { r: 2, c: 6 } }); // Motto dash
+  ws["!merges"].push({ s: { r: 4, c: 1 }, e: { r: 4, c: 4 } }); // Title
 
   XLSX.utils.sheet_add_json(ws, sheetData, {
-    origin: "A4",
+    origin: "A9",
     skipHeader: false,
   });
 
@@ -367,10 +385,6 @@ const exportRevenue = async (req, res) => {
       return res.status(400).json({ message: "Thiếu periodType hoặc storeId" });
     }
 
-    if (format !== "xlsx") {
-      return res.status(400).json({ message: "Chỉ hỗ trợ xuất Excel (.xlsx)" });
-    }
-
     // LẤY CẢ 2 DỮ LIỆU
     const [totalData, empData] = await Promise.all([
       calcRevenueByPeriod({ storeId, periodType, periodKey, type: "total" }),
@@ -378,95 +392,146 @@ const exportRevenue = async (req, res) => {
     ]);
 
     const totalRow = totalData?.[0] || null;
-    const totalRevenueForShare = Number(totalRow?.totalRevenue || 0) || 0;
-    const periodStart = totalRow?.periodStart;
-    const periodEnd = totalRow?.periodEnd;
-    const periodStartText = periodStart ? dayjs(periodStart).format("DD/MM/YYYY") : "—";
-    const periodEndText = periodEnd ? dayjs(periodEnd).format("DD/MM/YYYY") : "—";
 
-    const wb = XLSX.utils.book_new();
-    const reportTitle = "Báo cáo doanh thu chi tiết";
+    if (format === "xlsx") {
+      const totalRevenueForShare = Number(totalRow?.totalRevenue || 0) || 0;
+      const periodStart = totalRow?.periodStart;
+      const periodEnd = totalRow?.periodEnd;
+      const periodStartText = periodStart ? dayjs(periodStart).format("DD/MM/YYYY") : "—";
+      const periodEndText = periodEnd ? dayjs(periodEnd).format("DD/MM/YYYY") : "—";
 
-    // Sheet 1: Tổng hợp
-    if (totalData && totalData.length > 0) {
-      const totalSheetData = totalData.map((item) => ({
-        "Loại kỳ": periodTypeToVietnamese(item.periodType),
-        "Mã kỳ": item.periodKey,
-        "Từ ngày": item.periodStart ? dayjs(item.periodStart).format("DD/MM/YYYY") : "—",
-        "Đến ngày": item.periodEnd ? dayjs(item.periodEnd).format("DD/MM/YYYY") : "—",
-        "Tổng doanh thu (VNĐ)": Number(item.totalRevenue),
-        "Số hóa đơn": item.countOrders,
-        "Số đơn hoàn tất": item.completedOrders || 0,
-        "Số đơn hoàn 1 phần": item.partialRefundOrders || 0,
-        "TB / hóa đơn (VNĐ)": Number(item.avgOrderValue || 0),
-      }));
-      const ws1 = createWorksheetWithReportHeader({ reportTitle, req, sheetData: totalSheetData });
-      ws1["!cols"] = [
-        { wch: 12 }, // Loại kỳ
-        { wch: 14 }, // Mã kỳ
-        { wch: 12 }, // Từ ngày
-        { wch: 12 }, // Đến ngày
-        { wch: 22 }, // Tổng doanh thu
-        { wch: 14 }, // Số hóa đơn
-        { wch: 16 }, // Hoàn tất
-        { wch: 18 }, // Hoàn 1 phần
-        { wch: 18 }, // TB/hóa đơn
-      ];
-      XLSX.utils.book_append_sheet(wb, ws1, "Tổng hợp");
+      const wb = XLSX.utils.book_new();
+      const reportTitle = "Báo cáo doanh thu chi tiết";
+
+      // Sheet 1: Tổng hợp
+      if (totalData && totalData.length > 0) {
+        const totalSheetData = totalData.map((item) => ({
+          "Loại kỳ": periodTypeToVietnamese(item.periodType),
+          "Mã kỳ": item.periodKey,
+          "Từ ngày": item.periodStart ? dayjs(item.periodStart).format("DD/MM/YYYY") : "—",
+          "Đến ngày": item.periodEnd ? dayjs(item.periodEnd).format("DD/MM/YYYY") : "—",
+          "Tổng doanh thu (VNĐ)": Number(item.totalRevenue),
+          "Số hóa đơn": item.countOrders,
+          "Số đơn hoàn tất": item.completedOrders || 0,
+          "Số đơn hoàn 1 phần": item.partialRefundOrders || 0,
+          "TB / hóa đơn (VNĐ)": Number(item.avgOrderValue || 0),
+        }));
+        const ws1 = createWorksheetWithReportHeader({ reportTitle, req, sheetData: totalSheetData });
+        ws1["!cols"] = [
+          { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 22 }, { wch: 14 }, { wch: 16 }, { wch: 18 }, { wch: 18 }
+        ];
+        XLSX.utils.book_append_sheet(wb, ws1, "Tổng hợp");
+      }
+
+      // Sheet 2: Nhân viên
+      if (empData && empData.length > 0) {
+        const empSheetData = empData.map((item) => ({
+          "Loại kỳ": periodTypeToVietnamese(item.periodType || periodType),
+          "Mã kỳ": item.periodKey || periodKey,
+          "Từ ngày": periodStartText,
+          "Đến ngày": periodEndText,
+          "Nhân viên": item.employeeInfo?.fullName || "Nhân viên đã nghỉ",
+          "Số điện thoại": item.employeeInfo?.phone || "—",
+          "Doanh thu (VNĐ)": Number(item.totalRevenueNumber ?? item.totalRevenueDouble ?? item.totalRevenue),
+          "Số hóa đơn": item.countOrders,
+          "TB / hóa đơn (VNĐ)": Number(item.avgOrderValue || 0),
+          "% tổng doanh thu": totalRevenueForShare > 0
+              ? Number(((Number(item.totalRevenueNumber ?? item.totalRevenueDouble ?? item.totalRevenue) || 0) / totalRevenueForShare) * 100).toFixed(2)
+              : "0.00",
+        }));
+
+        const ws2 = createWorksheetWithReportHeader({ reportTitle, req, sheetData: empSheetData });
+        ws2["!cols"] = [
+          { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 28 }, { wch: 16 }, { wch: 22 }, { wch: 14 }, { wch: 18 }, { wch: 16 }
+        ];
+        XLSX.utils.book_append_sheet(wb, ws2, "Nhân viên");
+      }
+
+      if (!totalData?.length && !empData?.length) {
+        return res.status(404).json({ message: "Không có dữ liệu để xuất" });
+      }
+
+      const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
+      const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu", req, periodKey: periodKey || "hien_tai" });
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      return res.send(buffer);
     }
 
-    // Sheet 2: Nhân viên
-    if (empData && empData.length > 0) {
-      const empSheetData = empData.map((item) => ({
-        "Loại kỳ": periodTypeToVietnamese(item.periodType || periodType),
-        "Mã kỳ": item.periodKey || periodKey,
-        "Từ ngày": periodStartText,
-        "Đến ngày": periodEndText,
-        "Nhân viên": item.employeeInfo?.fullName || "Nhân viên đã nghỉ",
-        "Số điện thoại": item.employeeInfo?.phone || "—",
-        "Doanh thu (VNĐ)": Number(item.totalRevenueNumber ?? item.totalRevenueDouble ?? item.totalRevenue),
-        "Số hóa đơn": item.countOrders,
-        "TB / hóa đơn (VNĐ)": Number(item.avgOrderValue || 0),
-        "% tổng doanh thu":
-          totalRevenueForShare > 0
-            ? Number(((Number(item.totalRevenueNumber ?? item.totalRevenueDouble ?? item.totalRevenue) || 0) / totalRevenueForShare) * 100).toFixed(2)
-            : "0.00",
-      }));
+    if (format === "pdf") {
+      res.setHeader("Content-Type", "application/pdf");
+      const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu", req });
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName.replace(".xlsx", ".pdf")}"`);
 
-      const ws2 = createWorksheetWithReportHeader({ reportTitle, req, sheetData: empSheetData });
-      ws2["!cols"] = [
-        { wch: 12 }, // Loại kỳ
-        { wch: 14 }, // Mã kỳ
-        { wch: 12 }, // Từ ngày
-        { wch: 12 }, // Đến ngày
-        { wch: 28 }, // Nhân viên
-        { wch: 16 }, // Số điện thoại
-        { wch: 22 }, // Doanh thu
-        { wch: 14 }, // Số hóa đơn
-        { wch: 18 }, // TB/hóa đơn
-        { wch: 16 }, // % tổng doanh thu
-      ];
+      const doc = new PDFDocument({ margin: 50, size: "A4" });
+      doc.pipe(res);
 
-      XLSX.utils.book_append_sheet(wb, ws2, "Nhân viên");
+      const fontPath = path.join(__dirname, "..", "fonts", "Roboto", "static");
+      doc.registerFont("Roboto-Regular", path.join(fontPath, "Roboto-Regular.ttf"));
+      doc.registerFont("Roboto-Bold", path.join(fontPath, "Roboto-Bold.ttf"));
+      doc.registerFont("Roboto-Italic", path.join(fontPath, "Roboto-Italic.ttf"));
+
+      // 1. Legal Header
+      doc.font("Roboto-Bold").fontSize(10).text((req.store?.name || "Cửa hàng").toUpperCase(), { align: "left" });
+      doc.moveUp();
+      doc.text("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", { align: "right" });
+      doc.text("Độc lập - Tự do - Hạnh phúc", { align: "right" });
+      doc.fontSize(9).font("Roboto-Italic").text("-----------------", { align: "right" });
+      doc.moveDown(2);
+
+      // 2. Title
+      doc.font("Roboto-Bold").fontSize(18).text("BÁO CÁO DOANH THU CHI TIẾT", { align: "center" });
+      doc.font("Roboto-Italic").fontSize(11).text(`Kỳ báo cáo: ${periodKey || "Hiện tại"} (${periodTypeToVietnamese(periodType)})`, { align: "center" });
+      doc.moveDown(2);
+
+      // 3. Info
+      doc.font("Roboto-Regular").fontSize(10).text(`Người xuất: ${getExporterNameDisplay(req)}`);
+      doc.text(`Ngày xuất: ${dayjs().format("DD/MM/YYYY HH:mm")}`);
+      doc.moveDown(1);
+      doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+      doc.moveDown(1);
+
+      // 4. Content - Summary
+      doc.font("Roboto-Bold").fontSize(12).text("TỔNG HỢP CHUNG");
+      doc.font("Roboto-Regular").fontSize(10);
+      if (totalRow) {
+        doc.text(`Tổng doanh thu: ${new Intl.NumberFormat("vi-VN").format(totalRow.totalRevenue)} VND`);
+        doc.text(`Số hóa đơn: ${totalRow.countOrders}`);
+        doc.text(`Giá trị trung bình/đơn: ${new Intl.NumberFormat("vi-VN").format(totalRow.avgOrderValue)} VND`);
+      }
+      doc.moveDown(2);
+
+      // 5. Content - Employee breakdown
+      if (empData && empData.length > 0) {
+        doc.font("Roboto-Bold").fontSize(12).text("CHI TIẾT THEO NHÂN VIÊN");
+        doc.moveDown(0.5);
+        empData.forEach((emp, idx) => {
+          doc.font("Roboto-Regular").fontSize(10).text(`${idx + 1}. ${emp.employeeInfo?.fullName || "N/A"}: ${new Intl.NumberFormat("vi-VN").format(emp.totalRevenueNumber ?? emp.totalRevenue)} VND (${emp.countOrders} đơn)`);
+        });
+      }
+
+      doc.moveDown(3);
+
+      // 6. Signatures
+      const startY = doc.y > 650 ? (doc.addPage(), 50) : doc.y;
+      doc.font("Roboto-Bold").text("Người lập biểu", 50, startY, { width: 150, align: "center" });
+      doc.text("Kế toán trưởng", 220, startY, { width: 150, align: "center" });
+      doc.text("Chủ hộ kinh doanh", 390, startY, { width: 150, align: "center" });
+      
+      doc.font("Roboto-Italic").fontSize(9).text("(Ký, họ tên)", 50, doc.y, { width: 150, align: "center" });
+      doc.moveUp();
+      doc.text("(Ký, họ tên)", 220, doc.y, { width: 150, align: "center" });
+      doc.moveUp();
+      doc.text("(Ký, họ tên, đóng dấu)", 390, doc.y, { width: 150, align: "center" });
+
+      doc.end();
+      return;
     }
 
-    if (!totalData?.length && !empData?.length) {
-      return res.status(404).json({ message: "Không có dữ liệu để xuất" });
-    }
-
-    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
-
-    const fileName = buildExportFileName({
-      reportName: "Bao_Cao_Doanh_Thu",
-      req,
-      periodKey: periodKey || "hien_tai",
-    });
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-    res.send(buffer);
+    res.status(400).json({ message: "Format không hỗ trợ" });
   } catch (err) {
     console.error("Lỗi export báo cáo doanh thu:", err);
-    res.status(500).json({ message: "Lỗi server khi xuất Excel" });
+    res.status(500).json({ message: "Lỗi server khi xuất báo cáo" });
   }
 };
 
@@ -615,11 +680,65 @@ const exportRevenueSummaryByYear = async (req, res) => {
     ws["!cols"] = [{ wch: 16 }, { wch: 10 }, { wch: 20 }, { wch: 18 }];
     XLSX.utils.book_append_sheet(wb, ws, "Báo cáo doanh thu bán hàng tổng");
 
-    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
-    const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu_Tong_Hop", req });
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-    return res.send(buffer);
+    if (format === "xlsx") {
+      const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
+      const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu_Tong_Hop", req });
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      return res.send(buffer);
+    }
+
+    if (format === "pdf") {
+      res.setHeader("Content-Type", "application/pdf");
+      const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu_Tong_Hop", req });
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName.replace(".xlsx", ".pdf")}"`);
+
+      const doc = new PDFDocument({ margin: 50, size: "A4" });
+      doc.pipe(res);
+
+      const fontPath = path.join(__dirname, "..", "fonts", "Roboto", "static");
+      doc.registerFont("Roboto-Regular", path.join(fontPath, "Roboto-Regular.ttf"));
+      doc.registerFont("Roboto-Bold", path.join(fontPath, "Roboto-Bold.ttf"));
+      doc.registerFont("Roboto-Italic", path.join(fontPath, "Roboto-Italic.ttf"));
+
+      // Legal Header
+      doc.font("Roboto-Bold").fontSize(10).text((req.store?.name || "Cửa hàng").toUpperCase(), { align: "left" });
+      doc.moveUp();
+      doc.text("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", { align: "right" });
+      doc.text("Độc lập - Tự do - Hạnh phúc", { align: "right" });
+      doc.fontSize(9).font("Roboto-Italic").text("-----------------", { align: "right" });
+      doc.moveDown(2);
+
+      // Title
+      doc.font("Roboto-Bold").fontSize(18).text("BÁO CÁO DOANH THU TỔNG HỢP", { align: "center" });
+      doc.font("Roboto-Italic").fontSize(11).text(`Năm: ${year}`, { align: "center" });
+      doc.moveDown(2);
+
+      // Info
+      doc.font("Roboto-Regular").fontSize(10).text(`Người xuất: ${getExporterNameDisplay(req)}`);
+      doc.text(`Ngày xuất: ${dayjs().format("DD/MM/YYYY HH:mm")}`);
+      doc.moveDown(1);
+      doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+      doc.moveDown(1);
+
+      // Data
+      rows.forEach((r, idx) => {
+        doc.font("Roboto-Bold").fontSize(11).text(`${idx + 1}. Tháng ${r.monthLabel || ""}`);
+        doc.font("Roboto-Regular").fontSize(10);
+        doc.text(`   Sản phẩm bán ra: ${safeNumber(r.itemsSold)}`, { indent: 20 });
+        doc.text(`   Doanh thu: ${new Intl.NumberFormat("vi-VN").format(safeNumber(r.totalRevenue))} VND`, { indent: 20 });
+        doc.moveDown(0.5);
+      });
+
+      doc.moveDown(2);
+      // Signatures
+      const startY = doc.y > 650 ? (doc.addPage(), 50) : doc.y;
+      doc.font("Roboto-Bold").fontSize(10).text("Người lập biểu", 50, startY, { width: 150, align: "center" });
+      doc.text("Chủ hộ kinh doanh", 390, startY, { width: 150, align: "center" });
+
+      doc.end();
+      return;
+    }
   } catch (err) {
     console.error("Lỗi export báo cáo tổng hợp:", err);
     return res.status(500).json({ message: "Lỗi server khi xuất Excel" });
@@ -744,8 +863,8 @@ const exportDailyProductSales = async (req, res) => {
     if (!storeId || !date) {
       return res.status(400).json({ message: "Thiếu storeId hoặc date (YYYY-MM-DD)" });
     }
-    if (format !== "xlsx") {
-      return res.status(400).json({ message: "Chỉ hỗ trợ xuất Excel (.xlsx)" });
+    if (format !== "xlsx" && format !== "pdf") {
+      return res.status(400).json({ message: "Chỉ hỗ trợ xuất Excel (.xlsx) hoặc PDF (.pdf)" });
     }
 
     // Call logic JSON -> map lại theo đúng header template
@@ -787,11 +906,66 @@ const exportDailyProductSales = async (req, res) => {
     // Tên sheet Excel bị giới hạn 31 ký tự; dùng tên ngắn để tránh lỗi khi export.
     XLSX.utils.book_append_sheet(wb, ws, "Bán hàng hằng ngày");
 
-    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
-    const fileName = buildExportFileName({ reportName: "Bao_Cao_Ban_Hang_Hang_Ngay", req });
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-    return res.send(buffer);
+    if (format === "xlsx") {
+      const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
+      const fileName = buildExportFileName({ reportName: "Bao_Cao_Ban_Hang_Hang_Ngay", req });
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      return res.send(buffer);
+    }
+
+    if (format === "pdf") {
+      res.setHeader("Content-Type", "application/pdf");
+      const fileName = buildExportFileName({ reportName: "Bao_Cao_Ban_Hang_Hang_Ngay", req });
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName.replace(".xlsx", ".pdf")}"`);
+
+      const doc = new PDFDocument({ margin: 50, size: "A4" });
+      doc.pipe(res);
+
+      const fontPath = path.join(__dirname, "..", "fonts", "Roboto", "static");
+      doc.registerFont("Roboto-Regular", path.join(fontPath, "Roboto-Regular.ttf"));
+      doc.registerFont("Roboto-Bold", path.join(fontPath, "Roboto-Bold.ttf"));
+      doc.registerFont("Roboto-Italic", path.join(fontPath, "Roboto-Italic.ttf"));
+
+      // 1. Legal Header
+      doc.font("Roboto-Bold").fontSize(10).text((req.store?.name || "Cửa hàng").toUpperCase(), { align: "left" });
+      doc.moveUp();
+      doc.text("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", { align: "right" });
+      doc.text("Độc lập - Tự do - Hạnh phúc", { align: "right" });
+      doc.fontSize(9).font("Roboto-Italic").text("-----------------", { align: "right" });
+      doc.moveDown(2);
+
+      // 2. Title
+      doc.font("Roboto-Bold").fontSize(18).text("BÁO CÁO BÁN HÀNG HẰNG NGÀY", { align: "center" });
+      doc.font("Roboto-Italic").fontSize(11).text(`Ngày: ${dayjs(date).format("DD/MM/YYYY")}`, { align: "center" });
+      doc.moveDown(2);
+
+      // 3. Info
+      doc.font("Roboto-Regular").fontSize(10).text(`Người xuất: ${getExporterNameDisplay(req)}`);
+      doc.text(`Ngày xuất: ${dayjs().format("DD/MM/YYYY HH:mm")}`);
+      doc.moveDown(1);
+      doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+      doc.moveDown(1);
+
+      // 4. Content
+      doc.font("Roboto-Bold").fontSize(10);
+      rows.forEach((r, idx) => {
+        doc.font("Roboto-Bold").text(`${idx + 1}. ${r.productName} (${r.sku})`);
+        doc.font("Roboto-Regular").text(`   SL: ${r.quantity} | Giá: ${new Intl.NumberFormat("vi-VN").format(r.unitPrice)} | Tổng: ${new Intl.NumberFormat("vi-VN").format(r.grossTotal)}`, { indent: 20 });
+        doc.text(`   Giảm: ${new Intl.NumberFormat("vi-VN").format(r.discountAmount)} | Thực thu: ${new Intl.NumberFormat("vi-VN").format(r.netTotal)}`, { indent: 20 });
+        doc.moveDown(0.5);
+      });
+
+      doc.moveDown(2);
+
+      // Signatures
+      const startY = doc.y > 650 ? (doc.addPage(), 50) : doc.y;
+      doc.font("Roboto-Bold").fontSize(10).text("Người lập biểu", 50, startY, { width: 150, align: "center" });
+      doc.text("Chủ hộ kinh doanh", 390, startY, { width: 150, align: "center" });
+
+      doc.end();
+      return;
+    }
   } catch (err) {
     console.error("Lỗi export báo cáo bán hàng theo ngày:", err);
     return res.status(500).json({ message: "Lỗi server khi xuất Excel" });
@@ -976,11 +1150,52 @@ const exportYearlyCategoryCompare = async (req, res) => {
     ws["!cols"] = [{ wch: 28 }, { wch: 18 }, { wch: 18 }, { wch: 16 }, { wch: 16 }];
     XLSX.utils.book_append_sheet(wb, ws, "So sánh doanh số hằng năm");
 
-    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
-    const fileName = buildExportFileName({ reportName: "So_Sanh_Doanh_So_Hang_Nam", req });
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-    return res.send(buffer);
+    if (format === "xlsx") {
+      const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
+      const fileName = buildExportFileName({ reportName: "So_Sanh_Doanh_So_Hang_Nam", req });
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      return res.send(buffer);
+    }
+
+    if (format === "pdf") {
+      res.setHeader("Content-Type", "application/pdf");
+      const fileName = buildExportFileName({ reportName: "So_Sanh_Doanh_So_Hang_Nam", req });
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName.replace(".xlsx", ".pdf")}"`);
+
+      const doc = new PDFDocument({ margin: 50, size: "A4" });
+      doc.pipe(res);
+
+      const fontPath = path.join(__dirname, "..", "fonts", "Roboto", "static");
+      doc.registerFont("Roboto-Regular", path.join(fontPath, "Roboto-Regular.ttf"));
+      doc.registerFont("Roboto-Bold", path.join(fontPath, "Roboto-Bold.ttf"));
+      doc.registerFont("Roboto-Italic", path.join(fontPath, "Roboto-Italic.ttf"));
+
+      // Header
+      doc.font("Roboto-Bold").fontSize(10).text((req.store?.name || "Cửa hàng").toUpperCase(), { align: "left" });
+      doc.moveUp();
+      doc.text("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", { align: "right" });
+      doc.text("Độc lập - Tự do - Hạnh phúc", { align: "right" });
+      doc.moveDown(2);
+
+      // Title
+      doc.font("Roboto-Bold").fontSize(18).text("SO SÁNH DOANH THU DANH MỤC", { align: "center" });
+      doc.font("Roboto-Italic").fontSize(11).text(`Năm: ${year} và ${prevYear}`, { align: "center" });
+      doc.moveDown(2);
+
+      // Data
+      rows.forEach((r, idx) => {
+        doc.font("Roboto-Bold").fontSize(11).text(`${idx + 1}. ${r.category}`);
+        doc.font("Roboto-Regular").fontSize(10);
+        doc.text(`   Năm ${prevYear}: ${new Intl.NumberFormat("vi-VN").format(safeNumber(r.revenuePrevYear))} VND`, { indent: 20 });
+        doc.text(`   Năm ${year}: ${new Intl.NumberFormat("vi-VN").format(safeNumber(r.revenueThisYear))} VND`, { indent: 20 });
+        doc.text(`   Chênh lệch: ${new Intl.NumberFormat("vi-VN").format(safeNumber(r.difference))} VND`, { indent: 20 });
+        doc.moveDown(0.5);
+      });
+
+      doc.end();
+      return;
+    }
   } catch (err) {
     console.error("Lỗi export so sánh doanh số:", err);
     return res.status(500).json({ message: "Lỗi server khi xuất Excel" });
@@ -1088,6 +1303,7 @@ const getMonthlyRevenueByDay = async (req, res) => {
       const o = orderMap.get(key) || { revenue: 0, orderCount: 0 };
       return {
         date: dayjs(`${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`).format("YYYY-MM-DD"),
+        dayLabel: d, // Add dayLabel for PDF
         orderCount: o.orderCount,
         itemsSold: itemsMap.get(key) || 0,
         revenue: o.revenue,
@@ -1110,8 +1326,8 @@ const exportMonthlyRevenueByDay = async (req, res) => {
     if (!storeId || !month) {
       return res.status(400).json({ message: "Thiếu storeId hoặc month (YYYY-MM)" });
     }
-    if (format !== "xlsx") {
-      return res.status(400).json({ message: "Chỉ hỗ trợ xuất Excel (.xlsx)" });
+    if (format !== "xlsx" && format !== "pdf") {
+      return res.status(400).json({ message: "Chỉ hỗ trợ xuất Excel (.xlsx) hoặc PDF (.pdf)" });
     }
 
     let rows;
@@ -1145,11 +1361,46 @@ const exportMonthlyRevenueByDay = async (req, res) => {
     ws["!cols"] = [{ wch: 12 }, { wch: 10 }, { wch: 20 }, { wch: 16 }];
     XLSX.utils.book_append_sheet(wb, ws, "Doanh thu theo tháng");
 
-    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
-    const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu_Theo_Thang", req });
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-    return res.send(buffer);
+    if (format === "xlsx") {
+      const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
+      const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu_Theo_Thang", req });
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      return res.send(buffer);
+    }
+
+    if (format === "pdf") {
+      res.setHeader("Content-Type", "application/pdf");
+      const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu_Theo_Thang", req });
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName.replace(".xlsx", ".pdf")}"`);
+
+      const doc = new PDFDocument({ margin: 50, size: "A4" });
+      doc.pipe(res);
+
+      const fontPath = path.join(__dirname, "..", "fonts", "Roboto", "static");
+      doc.registerFont("Roboto-Regular", path.join(fontPath, "Roboto-Regular.ttf"));
+      doc.registerFont("Roboto-Bold", path.join(fontPath, "Roboto-Bold.ttf"));
+
+      // Header
+      doc.font("Roboto-Bold").fontSize(10).text((req.store?.name || "Cửa hàng").toUpperCase(), { align: "left" });
+      doc.moveUp();
+      doc.text("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", { align: "right" });
+      doc.text("Độc lập - Tự do - Hạnh phúc", { align: "right" });
+      doc.moveDown(2);
+
+      doc.font("Roboto-Bold").fontSize(18).text("BÁO CÁO DOANH THU THEO THÁNG", { align: "center" });
+      doc.font("Roboto-Regular").fontSize(11).text(`Tháng: ${month}`, { align: "center" });
+      doc.moveDown(2);
+
+      rows.forEach((r, idx) => {
+        doc.font("Roboto-Bold").fontSize(10).text(`${idx + 1}. Ngày ${r.dayLabel}:`);
+        doc.font("Roboto-Regular").text(`   Số đơn: ${r.orderCount} | Số SP: ${r.itemsSold} | Doanh thu: ${new Intl.NumberFormat("vi-VN").format(safeNumber(r.revenue))} VND`, { indent: 20 });
+        doc.moveDown(0.3);
+      });
+
+      doc.end();
+      return;
+    }
   } catch (err) {
     console.error("Lỗi export báo cáo theo tháng:", err);
     return res.status(500).json({ message: "Lỗi server khi xuất Excel" });
@@ -1388,8 +1639,8 @@ const exportMonthlyRevenueSummary = async (req, res) => {
     if (!storeId || (!month && !year)) {
       return res.status(400).json({ message: "Thiếu storeId hoặc (month YYYY-MM) hoặc (year YYYY)" });
     }
-    if (format !== "xlsx") {
-      return res.status(400).json({ message: "Chỉ hỗ trợ xuất Excel (.xlsx)" });
+    if (format !== "xlsx" && format !== "pdf") {
+      return res.status(400).json({ message: "Chỉ hỗ trợ xuất Excel (.xlsx) hoặc PDF (.pdf)" });
     }
 
     let payload;
@@ -1460,11 +1711,78 @@ const exportMonthlyRevenueSummary = async (req, res) => {
       XLSX.utils.book_append_sheet(wb, ws, "Tổng hợp theo tháng");
     }
 
-    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
-    const fileName = buildExportFileName({ reportName: "Bao_Cao_Tong_Hop_Theo_Thang", req });
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-    return res.send(buffer);
+    if (format === "xlsx") {
+      const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
+      const fileName = buildExportFileName({ reportName: "Bao_Cao_Tong_Hop_Theo_Thang", req });
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      return res.send(buffer);
+    }
+
+    if (format === "pdf") {
+      res.setHeader("Content-Type", "application/pdf");
+      const fileName = buildExportFileName({ reportName: "Bao_Cao_Tong_Hop_Theo_Thang", req });
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName.replace(".xlsx", ".pdf")}"`);
+
+      const doc = new PDFDocument({ margin: 50, size: "A4" });
+      doc.pipe(res);
+
+      const fontPath = path.join(__dirname, "..", "fonts", "Roboto", "static");
+      doc.registerFont("Roboto-Regular", path.join(fontPath, "Roboto-Regular.ttf"));
+      doc.registerFont("Roboto-Bold", path.join(fontPath, "Roboto-Bold.ttf"));
+      doc.registerFont("Roboto-Italic", path.join(fontPath, "Roboto-Italic.ttf"));
+
+      // 1. Legal Header
+      doc.font("Roboto-Bold").fontSize(10).text((req.store?.name || "Cửa hàng").toUpperCase(), { align: "left" });
+      doc.moveUp();
+      doc.text("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", { align: "right" });
+      doc.text("Độc lập - Tự do - Hạnh phúc", { align: "right" });
+      doc.fontSize(9).font("Roboto-Italic").text("-----------------", { align: "right" });
+      doc.moveDown(2);
+
+      // 2. Title
+      doc.font("Roboto-Bold").fontSize(18).text("TỔNG HỢP DOANH THU THEO THÁNG", { align: "center" });
+      doc.font("Roboto-Italic").fontSize(11).text(year ? `Năm: ${year}` : `Tháng: ${month}`, { align: "center" });
+      doc.moveDown(2);
+
+      // 3. Info
+      doc.font("Roboto-Regular").fontSize(10).text(`Người xuất: ${getExporterNameDisplay(req)}`);
+      doc.text(`Ngày xuất: ${dayjs().format("DD/MM/YYYY HH:mm")}`);
+      doc.moveDown(1);
+      doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+      doc.moveDown(1);
+
+      // 4. Data
+      const rows = year ? payload?.data : [payload?.data];
+      if (rows && rows.length > 0) {
+        rows.forEach((r, idx) => {
+          if (!r) return;
+          doc.font("Roboto-Bold").fontSize(11).text(`${idx + 1}. ${r.monthLabel || ""}`);
+          doc.font("Roboto-Regular").fontSize(10);
+          doc.text(`   Doanh thu: ${new Intl.NumberFormat("vi-VN").format(safeNumber(r.totalRevenue))} VND`, { indent: 20 });
+          doc.text(`   Đơn hàng: ${safeNumber(r.orderCount)} | Sản phẩm: ${safeNumber(r.itemsSold)}`, { indent: 20 });
+          doc.text(`   TB / ngày: ${new Intl.NumberFormat("vi-VN").format(safeNumber(r.avgRevenuePerDay))} VND`, { indent: 20 });
+          doc.moveDown(0.5);
+        });
+      }
+
+      doc.moveDown(2);
+
+      // Signatures
+      const startY = doc.y > 650 ? (doc.addPage(), 50) : doc.y;
+      doc.font("Roboto-Bold").fontSize(10).text("Người lập biểu", 50, startY, { width: 150, align: "center" });
+      doc.text("Kế toán trưởng", 220, startY, { width: 150, align: "center" });
+      doc.text("Chủ hộ kinh doanh", 390, startY, { width: 150, align: "center" });
+      
+      doc.font("Roboto-Italic").fontSize(9).text("(Ký, họ tên)", 50, doc.y + 5, { width: 150, align: "center" });
+      doc.moveUp();
+      doc.text("(Ký, họ tên)", 220, doc.y, { width: 150, align: "center" });
+      doc.moveUp();
+      doc.text("(Ký, họ tên, đóng dấu)", 390, doc.y, { width: 150, align: "center" });
+
+      doc.end();
+      return;
+    }
   } catch (err) {
     console.error("Lỗi export tổng hợp theo tháng:", err);
     return res.status(500).json({ message: "Lỗi server khi xuất Excel" });
@@ -1567,8 +1885,8 @@ const exportMonthlyTopProducts = async (req, res) => {
     if (!storeId || !month) {
       return res.status(400).json({ message: "Thiếu storeId hoặc month (YYYY-MM)" });
     }
-    if (format !== "xlsx") {
-      return res.status(400).json({ message: "Chỉ hỗ trợ xuất Excel (.xlsx)" });
+    if (format !== "xlsx" && format !== "pdf") {
+      return res.status(400).json({ message: "Chỉ hỗ trợ xuất Excel (.xlsx) hoặc PDF (.pdf)" });
     }
 
     let payload;
@@ -1602,11 +1920,39 @@ const exportMonthlyTopProducts = async (req, res) => {
     ws["!cols"] = [{ wch: 28 }, { wch: 18 }, { wch: 18 }, { wch: 18 }];
     XLSX.utils.book_append_sheet(wb, ws, "Bán chạy theo sản phẩm");
 
-    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
-    const fileName = buildExportFileName({ reportName: "Bao_Cao_Ban_Chay_Theo_San_Pham", req });
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-    return res.send(buffer);
+    if (format === "xlsx") {
+      const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
+      const fileName = buildExportFileName({ reportName: "Bao_Cao_Ban_Chay_Theo_San_Pham", req });
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      return res.send(buffer);
+    }
+
+    if (format === "pdf") {
+      res.setHeader("Content-Type", "application/pdf");
+      const fileName = buildExportFileName({ reportName: "Bao_Cao_Ban_Chay_Theo_San_Pham", req });
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName.replace(".xlsx", ".pdf")}"`);
+
+      const doc = new PDFDocument({ margin: 50, size: "A4" });
+      doc.pipe(res);
+
+      const fontPath = path.join(__dirname, "..", "fonts", "Roboto", "static");
+      doc.registerFont("Roboto-Regular", path.join(fontPath, "Roboto-Regular.ttf"));
+      doc.registerFont("Roboto-Bold", path.join(fontPath, "Roboto-Bold.ttf"));
+
+      doc.font("Roboto-Bold").fontSize(18).text("BÁO CÁO SẢN PHẨM BÁN CHẠY", { align: "center" });
+      doc.font("Roboto-Regular").fontSize(11).text(`Tháng: ${month}`, { align: "center" });
+      doc.moveDown(2);
+
+      rows.forEach((r, idx) => {
+        doc.font("Roboto-Bold").fontSize(10).text(`${idx + 1}. ${r.productName}`);
+        doc.font("Roboto-Regular").text(`   Số lượng: ${safeNumber(r.totalQuantity)} | Doanh thu: ${new Intl.NumberFormat("vi-VN").format(safeNumber(r.totalRevenue))} VND | Tỷ lệ: ${safeNumber(r.contributionPercent).toFixed(2)}%`, { indent: 20 });
+        doc.moveDown(0.4);
+      });
+
+      doc.end();
+      return;
+    }
   } catch (err) {
     console.error("Lỗi export bán chạy theo sản phẩm:", err);
     return res.status(500).json({ message: "Lỗi server khi xuất Excel" });
@@ -1826,11 +2172,70 @@ const exportYearlyProductGroupProductCompare = async (req, res) => {
     ws["!cols"] = [{ wch: 34 }, { wch: 18 }, { wch: 18 }, { wch: 16 }, { wch: 18 }];
     XLSX.utils.book_append_sheet(wb, ws, "Doanh thu hằng năm");
 
-    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
-    const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu_Hang_Nam", req });
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-    return res.send(buffer);
+    if (format === "xlsx") {
+      const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
+      const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu_Hang_Nam", req });
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      return res.send(buffer);
+    }
+
+    if (format === "pdf") {
+      res.setHeader("Content-Type", "application/pdf");
+      const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu_Hang_Nam", req });
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName.replace(".xlsx", ".pdf")}"`);
+
+      const doc = new PDFDocument({ margin: 50, size: "A4" });
+      doc.pipe(res);
+
+      const fontPath = path.join(__dirname, "..", "fonts", "Roboto", "static");
+      doc.registerFont("Roboto-Regular", path.join(fontPath, "Roboto-Regular.ttf"));
+      doc.registerFont("Roboto-Bold", path.join(fontPath, "Roboto-Bold.ttf"));
+      doc.registerFont("Roboto-Italic", path.join(fontPath, "Roboto-Italic.ttf"));
+
+      // 1. Legal Header
+      doc.font("Roboto-Bold").fontSize(10).text((req.store?.name || "Cửa hàng").toUpperCase(), { align: "left" });
+      doc.moveUp();
+      doc.text("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", { align: "right" });
+      doc.text("Độc lập - Tự do - Hạnh phúc", { align: "right" });
+      doc.fontSize(9).font("Roboto-Italic").text("-----------------", { align: "right" });
+      doc.moveDown(2);
+
+      // 2. Title
+      doc.font("Roboto-Bold").fontSize(18).text("SO SÁNH DOANH THU HẰNG NĂM", { align: "center" });
+      doc.font("Roboto-Italic").fontSize(11).text(`Năm đối chiếu: ${prevYear} và ${year}`, { align: "center" });
+      doc.moveDown(2);
+
+      // 3. Info
+      doc.font("Roboto-Regular").fontSize(10).text(`Người xuất: ${getExporterNameDisplay(req)}`);
+      doc.text(`Ngày xuất: ${dayjs().format("DD/MM/YYYY HH:mm")}`);
+      doc.moveDown(1);
+      doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+      doc.moveDown(1);
+
+      // 4. Data
+      groups.forEach((g) => {
+        doc.font("Roboto-Bold").fontSize(12).text(g.productGroup?.name || "(Chưa phân nhóm)");
+        doc.moveDown(0.2);
+        (g.items || []).forEach((it) => {
+          doc.font("Roboto-Regular").fontSize(10).text(`${it.productName}:`);
+          doc.text(`   ${prevYear}: ${new Intl.NumberFormat("vi-VN").format(safeNumber(it.revenuePrevYear))} | ${year}: ${new Intl.NumberFormat("vi-VN").format(safeNumber(it.revenueThisYear))}`, { indent: 20 });
+          doc.text(`   Chênh lệch: ${new Intl.NumberFormat("vi-VN").format(safeNumber(it.difference))} | Tổng: ${new Intl.NumberFormat("vi-VN").format(safeNumber(it.totalTwoYears))}`, { indent: 20 });
+          doc.moveDown(0.3);
+        });
+        doc.moveDown(0.5);
+      });
+
+      doc.moveDown(2);
+
+      // Signatures
+      const startY = doc.y > 650 ? (doc.addPage(), 50) : doc.y;
+      doc.font("Roboto-Bold").fontSize(10).text("Người lập biểu", 50, startY, { width: 150, align: "center" });
+      doc.text("Chủ hộ kinh doanh", 390, startY, { width: 150, align: "center" });
+
+      doc.end();
+      return;
+    }
   } catch (err) {
     console.error("Lỗi export báo cáo doanh thu hằng năm:", err);
     return res.status(500).json({ message: "Lỗi server khi xuất Excel" });
@@ -1997,11 +2402,39 @@ const exportQuarterlyRevenueByCategory = async (req, res) => {
     ws["!cols"] = [{ wch: 22 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }];
     XLSX.utils.book_append_sheet(wb, ws, "Báo cáo theo quý");
 
-    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
-    const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu_Theo_Quy", req });
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-    return res.send(buffer);
+    if (format === "xlsx") {
+      const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
+      const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu_Theo_Quy", req });
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      return res.send(buffer);
+    }
+
+    if (format === "pdf") {
+      res.setHeader("Content-Type", "application/pdf");
+      const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu_Theo_Quy", req });
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName.replace(".xlsx", ".pdf")}"`);
+
+      const doc = new PDFDocument({ margin: 50, size: "A4" });
+      doc.pipe(res);
+
+      const fontPath = path.join(__dirname, "..", "fonts", "Roboto", "static");
+      doc.registerFont("Roboto-Regular", path.join(fontPath, "Roboto-Regular.ttf"));
+      doc.registerFont("Roboto-Bold", path.join(fontPath, "Roboto-Bold.ttf"));
+
+      doc.font("Roboto-Bold").fontSize(18).text("BÁO CÁO DOANH THU THEO QUÝ", { align: "center" });
+      doc.font("Roboto-Regular").fontSize(11).text(`Quý: ${quarter}`, { align: "center" });
+      doc.moveDown(2);
+
+      rows.forEach((r, idx) => {
+        doc.font("Roboto-Bold").fontSize(10).text(`${idx + 1}. ${r.category}`);
+        doc.font("Roboto-Regular").text(`   T1: ${new Intl.NumberFormat("vi-VN").format(r.month1?.actual)} | T2: ${new Intl.NumberFormat("vi-VN").format(r.month2?.actual)} | T3: ${new Intl.NumberFormat("vi-VN").format(r.month3?.actual)}`, { indent: 20 });
+        doc.moveDown(0.4);
+      });
+
+      doc.end();
+      return;
+    }
   } catch (err) {
     console.error("Lỗi export báo cáo theo quý:", err);
     return res.status(500).json({ message: "Lỗi server khi xuất Excel" });
@@ -2133,11 +2566,39 @@ const exportYearlyTopProducts = async (req, res) => {
     ws["!cols"] = [{ wch: 6 }, { wch: 14 }, { wch: 28 }, { wch: 14 }, { wch: 16 }, { wch: 16 }];
     XLSX.utils.book_append_sheet(wb, ws, "Báo cáo theo năm");
 
-    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
-    const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu_Theo_Nam", req });
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-    return res.send(buffer);
+    if (format === "xlsx") {
+      const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
+      const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu_Theo_Nam", req });
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      return res.send(buffer);
+    }
+
+    if (format === "pdf") {
+      res.setHeader("Content-Type", "application/pdf");
+      const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu_Theo_Nam", req });
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName.replace(".xlsx", ".pdf")}"`);
+
+      const doc = new PDFDocument({ margin: 50, size: "A4" });
+      doc.pipe(res);
+
+      const fontPath = path.join(__dirname, "..", "fonts", "Roboto", "static");
+      doc.registerFont("Roboto-Regular", path.join(fontPath, "Roboto-Regular.ttf"));
+      doc.registerFont("Roboto-Bold", path.join(fontPath, "Roboto-Bold.ttf"));
+
+      doc.font("Roboto-Bold").fontSize(18).text("BÁO CÁO DOANH THU THEO NĂM", { align: "center" });
+      doc.font("Roboto-Regular").fontSize(11).text(`Năm: ${year}`, { align: "center" });
+      doc.moveDown(2);
+
+      rows.forEach((r, idx) => {
+        doc.font("Roboto-Bold").fontSize(10).text(`${idx + 1}. ${r.name || r.sku}`);
+        doc.font("Roboto-Regular").text(`   Số lượng: ${safeNumber(r.itemsSold)} | Thực tế: ${new Intl.NumberFormat("vi-VN").format(safeNumber(r.actualRevenue))} VND`, { indent: 20 });
+        doc.moveDown(0.4);
+      });
+
+      doc.end();
+      return;
+    }
   } catch (err) {
     console.error("Lỗi export báo cáo theo năm:", err);
     return res.status(500).json({ message: "Lỗi server khi xuất Excel" });

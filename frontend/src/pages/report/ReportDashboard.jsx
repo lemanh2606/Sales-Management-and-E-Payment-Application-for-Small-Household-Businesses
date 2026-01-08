@@ -24,7 +24,8 @@ import {
   Form,
   Input,
   Checkbox,
-
+  Dropdown,
+  Menu,
 } from "antd";
 import {
   InfoCircleOutlined,
@@ -36,6 +37,12 @@ import {
   PlusOutlined,
   DollarOutlined,
   PercentageOutlined,
+  DownloadOutlined,
+  FileExcelOutlined,
+  FilePdfOutlined,
+  FileTextOutlined,
+  CaretUpOutlined,
+  CaretDownOutlined,
 } from "@ant-design/icons";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import axios from "axios";
@@ -124,6 +131,55 @@ const ReportDashboard = () => {
       minimumFractionDigits: 0,
     }).format(value);
   };
+
+  const renderComparison = (change) => {
+    if (change === null || change === undefined) return null;
+    const isPositive = change > 0;
+    const color = isPositive ? "#52c41a" : "#ff4d4f";
+    const Icon = isPositive ? CaretUpOutlined : CaretDownOutlined;
+    
+    return (
+      <div style={{ fontSize: "12px", color: "#fff", display: "flex", alignItems: "center", gap: 4, marginTop: 4 }}>
+        <div style={{ 
+          background: "rgba(255, 255, 255, 0.2)", 
+          padding: "2px 6px", 
+          borderRadius: "4px",
+          display: "flex",
+          alignItems: "center",
+          gap: 2
+        }}>
+          <Icon />
+          <span>{Math.abs(change)}%</span>
+        </div>
+        <span style={{ opacity: 0.8 }}>so với kỳ trước</span>
+      </div>
+    );
+  };
+
+  const handleExport = (format) => {
+    if (!currentStore?._id || !periodType || !periodKey) {
+      Swal.fire("Cảnh báo", "Vui lòng chọn kỳ báo cáo trước khi xuất", "warning");
+      return;
+    }
+    const token = localStorage.getItem("token");
+    const url = `${apiUrl}/financials/export?storeId=${currentStore._id}&periodType=${periodType}&periodKey=${periodKey}&format=${format}&token=${token}`;
+    
+    window.open(url, "_blank"); // Redirect to download URL
+  };
+
+  const exportMenu = (
+    <Menu onClick={({ key }) => handleExport(key)}>
+      <Menu.Item key="xlsx" icon={<FileExcelOutlined style={{ color: "#1d6f42" }} />}>
+        Xuất file Excel (.xlsx)
+      </Menu.Item>
+      <Menu.Item key="pdf" icon={<FilePdfOutlined style={{ color: "#e60101" }} />}>
+        Xuất file PDF (.pdf)
+      </Menu.Item>
+      <Menu.Item key="csv" icon={<FileTextOutlined style={{ color: "#1890ff" }} />}>
+        Xuất file CSV (.csv)
+      </Menu.Item>
+    </Menu>
+  );
 
   // ====== HELPERS ======
   const getCurrentTotalExpense = () => expenseItems.reduce((sum, it) => sum + (Number(it.amount) || 0), 0);
@@ -744,6 +800,14 @@ const ReportDashboard = () => {
                   />
                 )}
               </Col>
+
+              <Col xs={24} lg={10} style={{ display: "flex", justifyContent: "flex-end", alignItems: "flex-end" }}>
+                <Dropdown overlay={exportMenu} trigger={['click']}>
+                  <Button type="primary" size="large" icon={<DownloadOutlined />} className="premium-btn">
+                    Xuất báo cáo <CaretDownOutlined />
+                  </Button>
+                </Dropdown>
+              </Col>
             </Row>
           </Card>
 
@@ -1027,6 +1091,7 @@ const ReportDashboard = () => {
                       valueStyle={{ color: '#fff', fontWeight: 800, fontSize: '24px' }}
                       prefix={<DollarOutlined />}
                     />
+                    {renderComparison(data.comparison?.revenueChange)}
                   </div>
                 </Col>
 
@@ -1039,6 +1104,7 @@ const ReportDashboard = () => {
                       valueStyle={{ color: '#fff', fontWeight: 800, fontSize: '24px' }}
                       prefix={<DollarOutlined />}
                     />
+                    {renderComparison(data.comparison?.grossProfitChange)}
                   </div>
                 </Col>
 
@@ -1053,6 +1119,7 @@ const ReportDashboard = () => {
                         prefix={<DollarOutlined />}
                       />
                     </AntTooltip>
+                    {renderComparison(data.comparison?.operatingCostChange)}
                   </div>
                 </Col>
 
@@ -1065,6 +1132,7 @@ const ReportDashboard = () => {
                       valueStyle={{ color: '#fff', fontWeight: 800, fontSize: '24px' }}
                       prefix={<DollarOutlined />}
                     />
+                    {renderComparison(data.comparison?.netProfitChange)}
                   </div>
                 </Col>
               </Row>

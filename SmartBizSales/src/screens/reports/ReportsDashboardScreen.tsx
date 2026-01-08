@@ -14,7 +14,9 @@ import {
   Pressable,
   Platform,
   SafeAreaView,
+  Linking,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -40,6 +42,13 @@ interface FinancialData {
   totalCOGS: number;
   stockAdjustmentValue: number;
   stockDisposalCost: number;
+  comparison?: {
+    prevPeriodKey: string;
+    revenueChange: number;
+    grossProfitChange: number;
+    netProfitChange: number;
+    operatingCostChange: number;
+  };
 }
 
 interface FinancialResponse {
@@ -428,6 +437,36 @@ const ReportsDashboardScreen: React.FC = () => {
     setPickerKind(null);
   };
 
+  const handleExport = async (format: "xlsx" | "pdf" | "csv") => {
+    if (!storeId || !applied.periodType || !periodKey) {
+      return Alert.alert("Thông báo", "Vui lòng chọn kỳ báo cáo trước");
+    }
+    
+    const token = await AsyncStorage.getItem("token");
+    const exportUrl = `${apiClient.defaults.baseURL}/financials/export?storeId=${storeId}&periodType=${applied.periodType}&periodKey=${periodKey}&format=${format}&token=${token}`;
+    
+    Linking.openURL(exportUrl).catch(err => {
+      Alert.alert("Lỗi", "Không thể mở liên kết tải về: " + err.message);
+    });
+  };
+
+  const renderComparison = (change: number | undefined) => {
+    if (change === undefined || change === null) return null;
+    const isPositive = change > 0;
+    const IconName = isPositive ? "trending-up" : "trending-down";
+    const color = isPositive ? "#16a34a" : "#ef4444";
+
+    return (
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+         <Ionicons name={IconName as any} size={14} color={color} />
+         <Text style={{ fontSize: 11, color, fontWeight: '700', marginLeft: 4 }}>
+           {isPositive ? "+" : ""}{change}%
+         </Text>
+         <Text style={{ fontSize: 10, color: '#64748b', marginLeft: 4 }}>so với kỳ trước</Text>
+      </View>
+    );
+  };
+
   // ========== RENDER GUARD ==========
   if (!storeId) {
     return (
@@ -520,11 +559,31 @@ const ReportsDashboardScreen: React.FC = () => {
             ) : (
               <>
                 <Ionicons name="search" size={18} color="#0f172a" />
-                <Text style={styles.secondaryBtnText}>Xem</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </View>
+              <Text style={styles.secondaryBtnText}>Xem</Text>
+            </>
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.secondaryBtn, { backgroundColor: '#16a34a', borderColor: '#16a34a' }]}
+          onPress={() => {
+            Alert.alert(
+              "Xuất báo cáo",
+              "Chọn định dạng bạn muốn xuất",
+              [
+                { text: "Excel (.xlsx)", onPress: () => handleExport("xlsx") },
+                { text: "PDF (.pdf)", onPress: () => handleExport("pdf") },
+                { text: "CSV (.csv)", onPress: () => handleExport("csv") },
+                { text: "Hủy", style: "cancel" }
+              ]
+            );
+          }}
+          disabled={!isReadyToFetch || loading}
+        >
+          <Ionicons name="download-outline" size={18} color="#fff" />
+          <Text style={[styles.secondaryBtnText, { color: '#fff' }]}>Xuất</Text>
+        </TouchableOpacity>
+      </View>
 
         <ScrollView
           style={styles.scrollView}
@@ -599,10 +658,11 @@ const ReportsDashboardScreen: React.FC = () => {
                     />
                     <Text style={styles.statLabel}>Doanh thu</Text>
                   </View>
-                  <Text style={[styles.statValue, { color: COLORS.revenue }]}>
-                    {formatVND(data.totalRevenue)}
-                  </Text>
-                </View>
+                    <Text style={[styles.statValue, { color: COLORS.revenue }]}>
+                      {formatVND(data.totalRevenue)}
+                    </Text>
+                    {renderComparison(data.comparison?.revenueChange)}
+                  </View>
 
                 <View
                   style={[
@@ -618,12 +678,13 @@ const ReportsDashboardScreen: React.FC = () => {
                     />
                     <Text style={styles.statLabel}>Lợi nhuận gộp</Text>
                   </View>
-                  <Text
-                    style={[styles.statValue, { color: COLORS.grossProfit }]}
-                  >
-                    {formatVND(data.grossProfit)}
-                  </Text>
-                </View>
+                    <Text
+                      style={[styles.statValue, { color: COLORS.grossProfit }]}
+                    >
+                      {formatVND(data.grossProfit)}
+                    </Text>
+                    {renderComparison(data.comparison?.grossProfitChange)}
+                  </View>
 
                 <View
                   style={[
@@ -639,12 +700,13 @@ const ReportsDashboardScreen: React.FC = () => {
                     />
                     <Text style={styles.statLabel}>Chi phí vận hành</Text>
                   </View>
-                  <Text
-                    style={[styles.statValue, { color: COLORS.operatingCost }]}
-                  >
-                    {formatVND(data.operatingCost)}
-                  </Text>
-                </View>
+                    <Text
+                      style={[styles.statValue, { color: COLORS.operatingCost }]}
+                    >
+                      {formatVND(data.operatingCost)}
+                    </Text>
+                    {renderComparison(data.comparison?.operatingCostChange)}
+                  </View>
 
                 <View
                   style={[
@@ -660,15 +722,16 @@ const ReportsDashboardScreen: React.FC = () => {
                     />
                     <Text style={styles.statLabel}>Lợi nhuận ròng</Text>
                   </View>
-                  <Text
-                    style={[
-                      styles.statValue,
-                      { color: getProfitColor(data.netProfit) },
-                    ]}
-                  >
-                    {formatVND(data.netProfit)}
-                  </Text>
-                </View>
+                    <Text
+                      style={[
+                        styles.statValue,
+                        { color: getProfitColor(data.netProfit) },
+                      ]}
+                    >
+                      {formatVND(data.netProfit)}
+                    </Text>
+                    {renderComparison(data.comparison?.netProfitChange)}
+                  </View>
               </View>
 
               <View style={styles.detailCard}>

@@ -20,21 +20,26 @@ async function verifyToken(req, res, next) {
     // Lấy header Authorization (hỗ trợ cả "authorization" và "Authorization")
     const authHeader =
       req.headers["authorization"] || req.headers["Authorization"];
-    if (!authHeader) {
+    
+    let token = null;
+    if (authHeader) {
+      // Kiểm tra định dạng: phải là "Bearer <token>"
+      const parts = authHeader.split(" ");
+      if (parts.length === 2 && parts[0] === "Bearer") {
+        token = parts[1];
+      }
+    }
+
+    // Nếu không có header, thử lấy từ query param (hữu ích cho download file)
+    if (!token && req.query.token) {
+      token = req.query.token;
+    }
+
+    if (!token) {
       return res
         .status(401)
         .json({ message: "Không tìm thấy token, vui lòng đăng nhập" });
     }
-
-    // Kiểm tra định dạng: phải là "Bearer <token>"
-    const parts = authHeader.split(" ");
-    if (parts.length !== 2 || parts[0] !== "Bearer") {
-      return res
-        .status(401)
-        .json({ message: "Token sai định dạng (phải là 'Bearer <token>')" });
-    }
-
-    const token = parts[1];
     let decoded;
     try {
       // Xác thực token bằng secret

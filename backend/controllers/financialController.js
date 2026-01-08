@@ -1,5 +1,6 @@
 //  // backend/controllers/financialController.js
 const mongoose = require("mongoose");
+const path = require("path");
 const Order = require("../models/Order");
 const OrderItem = mongoose.model("OrderItem");
 const OrderRefund = mongoose.model("OrderRefund");
@@ -18,6 +19,32 @@ const { calcRevenueByPeriod } = require("./revenueController");
 const { periodToRange } = require("../utils/period");
 const { Parser } = require("json2csv");
 const PDFDocument = require("pdfkit");
+const ExcelJS = require("exceljs");
+
+// 📆 Helper: lấy kỳ trước đó để so sánh
+const getPreviousPeriodKey = (periodType, periodKey) => {
+  if (periodType === "month") {
+    const [year, month] = periodKey.split("-").map(Number);
+    const date = new Date(year, month - 2, 1); // Trừ 1 tháng
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+  }
+  if (periodType === "quarter") {
+    const [yearStr, qStr] = periodKey.split("-Q");
+    let year = Number(yearStr);
+    let q = Number(qStr);
+    if (q === 1) {
+      q = 4;
+      year -= 1;
+    } else {
+      q -= 1;
+    }
+    return `${year}-Q${q}`;
+  }
+  if (periodType === "year") {
+    return String(Number(periodKey) - 1);
+  }
+  return null;
+};
 
 // 🧮 Helper: safe convert
 const toNumber = (val) => {
@@ -500,8 +527,39 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
 // =====================================================================
 const getFinancialSummary = async (req, res) => {
   try {
-    const data = await calcFinancialSummary(req.query);
-    res.json({ message: "Báo cáo tài chính thành công", data });
+    const currentData = await calcFinancialSummary(req.query);
+    
+    // Tính thêm dữ liệu kỳ trước để so sánh nếu có
+    const { periodType, periodKey, storeId } = req.query;
+    const prevKey = getPreviousPeriodKey(periodType, periodKey);
+    let comparison = null;
+
+    if (prevKey) {
+      try {
+        const prevData = await calcFinancialSummary({ storeId, periodType, periodKey: prevKey });
+        
+        // Tính % thay đổi cho các chỉ số chính
+        const calculateChange = (cur, prev) => {
+          if (!prev || prev === 0) return cur > 0 ? 100 : 0;
+          return Number(((cur - prev) / prev * 100).toFixed(1));
+        };
+
+        comparison = {
+          prevPeriodKey: prevKey,
+          revenueChange: calculateChange(currentData.totalRevenue, prevData.totalRevenue),
+          grossProfitChange: calculateChange(currentData.grossProfit, prevData.grossProfit),
+          netProfitChange: calculateChange(currentData.netProfit, prevData.netProfit),
+          operatingCostChange: calculateChange(currentData.operatingCost, prevData.operatingCost),
+        };
+      } catch (e) {
+        console.warn("Lỗi tính so sánh kỳ trước:", e.message);
+      }
+    }
+
+    res.json({ 
+      message: "Báo cáo tài chính thành công", 
+      data: { ...currentData, comparison } 
+    });
   } catch (err) {
     console.error("Lỗi báo cáo tài chính:", err);
     res.status(500).json({ message: "Lỗi server khi báo cáo tài chính" });
@@ -514,25 +572,191 @@ const exportFinancial = async (req, res) => {
     const { format = "csv" } = req.query;
     const data = await calcFinancialSummary(req.query);
 
-    const rows = Object.entries(data).map(([metric, value]) => ({
-      metric,
-      value,
-    }));
+    const rows = [
+      { metric: "Tổng doanh thu thực", value: data.totalRevenue, unit: "VND" },
+      { metric: "Tổng doanh thu cơ sở", value: data.grossRevenue, unit: "VND" },
+      { metric: "Tiền hoàn trả", value: data.totalRefundAmount, unit: "VND" },
+      { metric: "Lợi nhuận gộp", value: data.grossProfit, unit: "VND" },
+      { metric: "Chi phí vận hành", value: data.operatingCost, unit: "VND" },
+      { metric: "Lợi nhuận ròng", value: data.netProfit, unit: "VND" },
+      { metric: "Giá trị tồn kho (vốn)", value: data.stockValue, unit: "VND" },
+      { metric: "Số đơn hàng", value: data.totalOrders, unit: "Đơn" },
+      { metric: "Đơn hoàn hoàn toàn", value: data.fullyRefundedOrders, unit: "Đơn" },
+      { metric: "Thuế VAT thu hộ", value: data.totalVAT, unit: "VND" },
+    ];
 
     if (format === "csv") {
-      const parser = new Parser({ fields: ["metric", "value"] });
+      const parser = new Parser({ fields: ["metric", "value", "unit"] });
       const csv = parser.parse(rows);
-      res.header("Content-Type", "text/csv");
-      res.attachment("financial_report.csv");
-      return res.send(csv);
+      res.header("Content-Type", "text/csv; charset=utf-8");
+      res.attachment(`financial_report_${req.query.periodKey}.csv`);
+      return res.send("\uFEFF" + csv); // Add BOM for Excel UTF-8
+    }
+
+    if (format === "xlsx") {
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet("Báo cáo tài chính");
+
+      // 1. Thông tin cửa hàng & Tiêu ngữ (Circular compliant header)
+      worksheet.mergeCells("A1:C1");
+      worksheet.getCell("A1").value = (req.store?.name || "Cửa hàng phụ tùng").toUpperCase();
+      worksheet.getCell("A1").font = { bold: true, size: 11 };
+
+      worksheet.mergeCells("E1:G1");
+      worksheet.getCell("E1").value = "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM";
+      worksheet.getCell("E1").alignment = { horizontal: "center" };
+      worksheet.getCell("E1").font = { bold: true, size: 11 };
+
+      worksheet.mergeCells("E2:G2");
+      worksheet.getCell("E2").value = "Độc lập - Tự do - Hạnh phúc";
+      worksheet.getCell("E2").alignment = { horizontal: "center" };
+      worksheet.getCell("E2").font = { bold: true, size: 11, italic: true };
+
+      // 2. Tên báo cáo
+      worksheet.mergeCells("A4:G4");
+      worksheet.getCell("A4").value = "BÁO CÁO TỔNG HỢP TÌNH HÌNH TÀI CHÍNH";
+      worksheet.getCell("A4").alignment = { horizontal: "center" };
+      worksheet.getCell("A4").font = { bold: true, size: 16 };
+
+      worksheet.mergeCells("A5:G5");
+      worksheet.getCell("A5").value = `Kỳ báo cáo: ${req.query.periodKey}`;
+      worksheet.getCell("A5").alignment = { horizontal: "center" };
+      worksheet.getCell("A5").font = { italic: true };
+
+      // 3. Metadata (Người xuất, Ngày xuất)
+      worksheet.getCell("A7").value = "Người xuất:";
+      worksheet.getCell("B7").value = req.user?.fullname || "Hệ thống";
+      worksheet.getCell("A8").value = "Ngày xuất:";
+      worksheet.getCell("B8").value = new Date().toLocaleDateString("vi-VN");
+
+      // 4. Data Table Header
+      const headerRow = 10;
+      worksheet.getRow(headerRow).values = ["STT", "Chỉ số tài chính", "Giá trị", "Đơn vị", "Ghi chú"];
+      worksheet.getRow(headerRow).font = { bold: true };
+      worksheet.getRow(headerRow).alignment = { horizontal: "center", vertical: "middle" };
+      
+      ["A", "B", "C", "D", "E"].forEach(col => {
+        worksheet.getCell(`${col}${headerRow}`).fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFE0E0E0" },
+        };
+        worksheet.getCell(`${col}${headerRow}`).border = {
+          top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" }
+        };
+      });
+
+      // 5. Populate Data
+      rows.forEach((row, idx) => {
+        const r = worksheet.addRow([idx + 1, row.metric, row.value, row.unit, ""]);
+        r.getCell(1).alignment = { horizontal: "center" };
+        r.getCell(3).numFmt = "#,##0";
+        r.getCell(4).alignment = { horizontal: "center" };
+        
+        // Add borders to each cell in the row
+        for (let i = 1; i <= 5; i++) {
+          r.getCell(i).border = {
+            top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" }
+          };
+        }
+      });
+
+      // 6. Signatures (Bottom)
+      const lastRow = headerRow + rows.length + 3;
+      worksheet.getCell(`A${lastRow}`).value = "Người lập biểu";
+      worksheet.getCell(`A${lastRow}`).font = { italic: true };
+      worksheet.getCell(`A${lastRow}`).alignment = { horizontal: "center" };
+
+      worksheet.getCell(`C${lastRow}`).value = "Kế toán trưởng";
+      worksheet.getCell(`C${lastRow}`).font = { italic: true };
+      worksheet.getCell(`C${lastRow}`).alignment = { horizontal: "center" };
+
+      worksheet.getCell(`F${lastRow}`).value = "Chủ hộ kinh doanh";
+      worksheet.getCell(`F${lastRow}`).font = { italic: true };
+      worksheet.getCell(`F${lastRow}`).alignment = { horizontal: "center" };
+
+      worksheet.getCell(`F${lastRow + 1}`).value = "(Ký, họ tên, đóng dấu)";
+      worksheet.getCell(`F${lastRow + 1}`).font = { size: 9, italic: true };
+      worksheet.getCell(`F${lastRow + 1}`).alignment = { horizontal: "center" };
+
+      // 7. Column Widths
+      worksheet.getColumn(1).width = 5;
+      worksheet.getColumn(2).width = 35;
+      worksheet.getColumn(3).width = 20;
+      worksheet.getColumn(4).width = 10;
+      worksheet.getColumn(5).width = 15;
+
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename=financial_report_${req.query.periodKey}.xlsx`);
+      
+      await workbook.xlsx.write(res);
+      return res.end();
     }
 
     if (format === "pdf") {
       res.setHeader("Content-Type", "application/pdf");
-      const doc = new PDFDocument({ margin: 50 });
+      res.setHeader("Content-Disposition", `attachment; filename=financial_report_${req.query.periodKey}.pdf`);
+      
+      const doc = new PDFDocument({ margin: 50, size: "A4" });
       doc.pipe(res);
-      doc.fontSize(18).text("BÁO CÁO TÀI CHÍNH", { align: "center", underline: true }).moveDown();
-      rows.forEach((r) => doc.text(`${r.metric}: ${r.value.toLocaleString("vi-VN")} VND`));
+
+      // Register fonts for Vietnamese support
+      const fontPath = path.join(__dirname, "..", "fonts", "Roboto", "static");
+      const regularFont = path.join(fontPath, "Roboto-Regular.ttf");
+      const boldFont = path.join(fontPath, "Roboto-Bold.ttf");
+      const italicFont = path.join(fontPath, "Roboto-Italic.ttf");
+
+      doc.registerFont("Roboto-Regular", regularFont);
+      doc.registerFont("Roboto-Bold", boldFont);
+      doc.registerFont("Roboto-Italic", italicFont);
+
+      // 1. Legal Header
+      doc.font("Roboto-Bold").fontSize(10).text((req.store?.name || "Cửa hàng phụ tùng").toUpperCase(), { align: "left" });
+      doc.moveUp();
+      doc.text("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", { align: "right" });
+      doc.font("Roboto-Bold").text("Độc lập - Tự do - Hạnh phúc", { align: "right" });
+      doc.fontSize(9).font("Roboto-Italic").text("-----------------", { align: "right" });
+      
+      doc.moveDown(2);
+
+      // 2. Title
+      doc.font("Roboto-Bold").fontSize(18).text("BÁO CÁO TỔNG HỢP TÌNH HÌNH TÀI CHÍNH", { align: "center" });
+      doc.font("Roboto-Italic").fontSize(11).text(`Kỳ báo cáo: ${req.query.periodKey}`, { align: "center" });
+      
+      doc.moveDown(2);
+
+      // 3. User Info
+      doc.font("Roboto-Regular").fontSize(10).text(`Người xuất báo cáo: ${req.user?.fullname || "Hệ thống"}`);
+      doc.text(`Ngày xuất: ${new Date().toLocaleDateString("vi-VN")} ${new Date().toLocaleTimeString("vi-VN")}`);
+      
+      doc.moveDown(1);
+      doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+      doc.moveDown(1);
+
+      // 4. Data Rows
+      rows.forEach((r, idx) => {
+        const y = doc.y;
+        doc.font("Roboto-Regular").text(`${idx + 1}. ${r.metric}:`, 50, y);
+        doc.font("Roboto-Bold").text(`${r.value.toLocaleString("vi-VN")} ${r.unit}`, 350, y, { align: "right" });
+        doc.moveDown(0.5);
+      });
+
+      doc.moveDown(2);
+      doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+      doc.moveDown(2);
+
+      // 5. Signatures
+      const startY = doc.y;
+      doc.font("Roboto-Bold").text("Người lập biểu", 50, startY, { width: 150, align: "center" });
+      doc.font("Roboto-Bold").text("Kế toán trưởng", 220, startY, { width: 150, align: "center" });
+      doc.font("Roboto-Bold").text("Chủ hộ kinh doanh", 390, startY, { width: 150, align: "center" });
+      
+      doc.font("Roboto-Italic").fontSize(9).text("(Ký, họ tên)", 50, doc.y, { width: 150, align: "center" });
+      doc.moveUp();
+      doc.text("(Ký, họ tên)", 220, doc.y, { width: 150, align: "center" });
+      doc.moveUp();
+      doc.text("(Ký, họ tên, đóng dấu)", 390, doc.y, { width: 150, align: "center" });
+
       doc.end();
       return;
     }

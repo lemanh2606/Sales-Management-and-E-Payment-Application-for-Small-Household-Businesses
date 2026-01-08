@@ -1,8 +1,11 @@
 // src/pages/reports/InventoryReport.tsx
 import React, { useState, useEffect } from "react";
-import { Card, Row, Col, Button, Table, Tag, Space, Statistic, Input, Empty, Spin, Typography, Tooltip, Alert, DatePicker, Tabs, Select } from "antd";
+import { Card, Row, Col, Button, Table, Tag, Space, Statistic, Input, Empty, Spin, Typography, Tooltip, Alert, DatePicker, Tabs, Select, message } from "antd";
 import {
   FileExcelOutlined,
+  FilePdfOutlined,
+  CaretDownOutlined,
+  DownloadOutlined,
   ReloadOutlined,
   SearchOutlined,
   WarningOutlined,
@@ -15,6 +18,7 @@ import {
 import type { ColumnsType } from "antd/es/table";
 import type { Dayjs } from "dayjs";
 import dayjs from "dayjs";
+import { Dropdown, Menu } from "antd";
 import axios from "axios";
 import * as XLSX from "xlsx";
 import Layout from "../../components/Layout";
@@ -204,109 +208,25 @@ const InventoryReport: React.FC = () => {
     fetchRealtimeReport();
   }, [storeId]);
 
-  // Export Excel - Realtime
-  const exportRealtimeExcel = () => {
-    if (!reportData) return;
-
-    const ws_data: any[][] = [
-      [`BÁO CÁO TỒN KHO HIỆN TẠI - ${currentStore.name}`],
-      [`Thời điểm: ${new Date().toLocaleString("vi-VN")}`],
-      [],
-      ["STT", "Tên sản phẩm", "Mã SKU", "Tồn kho", "Giá vốn", "Giá trị tồn", "Cảnh báo"],
-    ];
-
-    reportData.details.forEach((item) => {
-      ws_data.push([
-        item.index,
-        item.productName,
-        item.sku,
-        item.closingStock,
-        parseFloat(item.costPrice.$numberDecimal),
-        item.closingValue,
-        item.lowStock ? "Tồn thấp" : "",
-      ]);
-    });
-
-    ws_data.push([]);
-    ws_data.push(["TỔNG CỘNG", "", "", reportData.summary.totalStock, "", reportData.summary.totalValue, ""]);
-
-    const ws = XLSX.utils.aoa_to_sheet(ws_data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Tồn kho hiện tại");
-    XLSX.writeFile(wb, `TonKho_HienTai_${new Date().toISOString().slice(0, 10)}.xlsx`);
-  };
-
-  // Export Excel - Variance Report
-  const exportVarianceExcel = () => {
-    if (!varianceData) return;
-
-    const { from, to } = varianceData.reportPeriod;
-    const ws_data: any[][] = [
-      [`BÁO CÁO BIẾN THIÊN TỒN KHO - ${currentStore.name}`],
-      [`Từ ngày: ${from} đến ${to}`],
-      [],
-      [
-        "STT",
-        "Sản phẩm",
-        "Mã SKU",
-        "Đơn vị",
-        "Tồn đầu kỳ",
-        "Nhập trong kỳ",
-        "Xuất trong kỳ",
-        "Tồn cuối kỳ",
-        "Giá vốn",
-        "COGS",
-        "Giá trị tồn đầu",
-        "Giá trị tồn cuối",
-      ],
-    ];
-
-    varianceData.details.forEach((item, idx) => {
-      ws_data.push([
-        idx + 1,
-        item.productName,
-        item.sku,
-        item.unit,
-        item.beginningStock,
-        item.importQty,
-        item.exportQty,
-        item.endingStock,
-        item.costPrice,
-        item.periodCOGS,
-        item.beginningValue,
-        item.endingValue,
-      ]);
-    });
-
-    ws_data.push([]);
-    ws_data.push([
-      "TỔNG CỘNG",
-      "",
-      "",
-      "",
-      varianceData.summary.totalBeginningStock,
-      varianceData.summary.totalImportQty,
-      varianceData.summary.totalExportQty,
-      varianceData.summary.totalEndingStock,
-      "",
-      varianceData.summary.totalCOGS,
-      "",
-      "",
-    ]);
-
-    const ws = XLSX.utils.aoa_to_sheet(ws_data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Biến thiên tồn kho");
-    XLSX.writeFile(wb, `TonKho_BiemThien_${from}_${to}.xlsx`);
-  };
-
-  // Export Excel
-  const exportExcel = () => {
-    if (activeTab === "realtime") {
-      exportRealtimeExcel();
-    } else {
-      exportVarianceExcel();
+  // Export backend call
+  const handleExport = (format: string) => {
+    if (!storeId) return;
+    
+    const params: any = { storeId, format, type: activeTab };
+    if (activeTab === "variance") {
+      if (periodType) params.periodType = periodType;
+      if (periodKey) params.periodKey = periodKey;
+      if (dateRange && dateRange[0] && dateRange[1]) {
+        params.monthFrom = dateRange[0].format("YYYY-MM");
+        params.monthTo = dateRange[1].format("YYYY-MM");
+      }
     }
+    
+    const query = new URLSearchParams(params).toString();
+    const url = `${apiUrl}/inventory-reports/export?${query}&token=${token}`;
+    
+    window.open(url, "_blank");
+    message.success(`Đang chuẩn bị file ${format.toUpperCase()}...`);
   };
 
   // Columns cho Variance Report
@@ -575,15 +495,22 @@ const InventoryReport: React.FC = () => {
               >
                 Làm mới
               </Button>
-              <Button
-                type="primary"
-                icon={<FileExcelOutlined />}
-                onClick={exportExcel}
-                size="large"
-                style={{ background: "#52c41a", borderColor: "#52c41a" }}
+              <Dropdown
+                overlay={
+                  <Menu onClick={({ key }) => handleExport(key)}>
+                    <Menu.Item key="xlsx" icon={<FileExcelOutlined />}>Xuất Excel</Menu.Item>
+                    <Menu.Item key="pdf" icon={<FilePdfOutlined />}>Xuất PDF</Menu.Item>
+                  </Menu>
+                }
               >
-                Xuất Excel
-              </Button>
+                <Button
+                  type="primary"
+                  icon={<DownloadOutlined />}
+                  size="large"
+                >
+                  Xuất báo cáo <CaretDownOutlined />
+                </Button>
+              </Dropdown>
             </Space>
           </div>
 

@@ -1,7 +1,8 @@
 // src/pages/report/RevenueReport.jsx
 import React, { useState, useEffect } from "react";
 import { Card, Col, Row, Select, DatePicker, Statistic, Table, Spin, Alert, Space, Button, Tooltip, message, Typography } from "antd";
-import { DownloadOutlined, FileExcelOutlined, DollarOutlined, ShoppingOutlined, InfoCircleOutlined } from "@ant-design/icons";
+import { DownloadOutlined, FileExcelOutlined, FilePdfOutlined, CaretDownOutlined, DollarOutlined, ShoppingOutlined, InfoCircleOutlined } from "@ant-design/icons";
+import { Dropdown, Menu } from "antd";
 import axios from "axios";
 import dayjs from "dayjs";
 import quarterOfYear from "dayjs/plugin/quarterOfYear";
@@ -215,8 +216,8 @@ const RevenueReport = () => {
     setPagination((prev) => ({ ...prev, current: 1 }));
   }, [reportType, periodKey, periodType]);
 
-  // EXPORT ra excel
-  const handleExportExcel = async () => {
+  // EXPORT ra file
+  const handleExport = async (format) => {
     if (!currentStore?._id) {
       message.warning("Chưa chọn cửa hàng");
       return;
@@ -233,29 +234,29 @@ const RevenueReport = () => {
 
       if (reportType === REPORT_TYPES.MONTHLY_SUMMARY) {
         const year = selectedYear.year();
-        const params = new URLSearchParams({ storeId: currentStore._id, year: String(year), format: "xlsx" });
+        const params = new URLSearchParams({ storeId: currentStore._id, year: String(year), format });
         url = `${apiUrl}/revenues/export-monthly-summary?${params.toString()}`;
-        fileName = `${reportName}_${exportDate}_${exporterName}.xlsx`;
+        fileName = `${reportName}_${exportDate}_${exporterName}.${format}`;
       } else if (reportType === REPORT_TYPES.DAILY_PRODUCTS) {
         const date = selectedDate.format("YYYY-MM-DD");
-        const params = new URLSearchParams({ storeId: currentStore._id, date, format: "xlsx" });
+        const params = new URLSearchParams({ storeId: currentStore._id, date, format });
         url = `${apiUrl}/revenues/export-daily-products?${params.toString()}`;
-        fileName = `${reportName}_${exportDate}_${exporterName}.xlsx`;
+        fileName = `${reportName}_${exportDate}_${exporterName}.${format}`;
       } else if (reportType === REPORT_TYPES.YEARLY_PRODUCTGROUP_PRODUCTS) {
         const year = selectedYear.year();
-        const params = new URLSearchParams({ storeId: currentStore._id, year: String(year), format: "xlsx" });
+        const params = new URLSearchParams({ storeId: currentStore._id, year: String(year), format });
         url = `${apiUrl}/revenues/export-yearly-productgroup-products?${params.toString()}`;
-        fileName = `${reportName}_${exportDate}_${exporterName}.xlsx`;
+        fileName = `${reportName}_${exportDate}_${exporterName}.${format}`;
       } else {
         // Báo cáo chi tiết kiểu cũ
         if (!periodKey) {
           message.warning("Vui lòng chọn kỳ báo cáo");
           return;
         }
-        const params = new URLSearchParams({ storeId: currentStore._id, periodType, periodKey, format: "xlsx" });
+        const params = new URLSearchParams({ storeId: currentStore._id, periodType, periodKey, format });
         url = `${apiUrl}/revenues/export?${params.toString()}`;
         // Kì xuất chỉ có nếu là báo cáo chi tiết
-        fileName = `${reportName}_${exportDate}_${exporterName}_${String(periodKey).replace(/[\\/:*?\"<>|]/g, "-")}.xlsx`;
+        fileName = `${reportName}_${exportDate}_${exporterName}_${String(periodKey).replace(/[\\/:*?\"<>|]/g, "-")}.${format}`;
       }
 
       const res = await axios.get(url, {
@@ -263,13 +264,13 @@ const RevenueReport = () => {
         responseType: "blob",
       });
 
-      const blob = new Blob([res.data], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const blob = new Blob([res.data], { type: format === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
       const link = document.createElement("a");
       link.href = window.URL.createObjectURL(blob);
       link.download = fileName;
       link.click();
 
-      message.success("Xuất Excel thành công!");
+      message.success(`Xuất ${format.toUpperCase()} thành công!`);
     } catch (err) {
       let msg = "Lỗi xuất file Excel";
       try {
@@ -793,9 +794,18 @@ const RevenueReport = () => {
               {/* Nút xuất file */}
               <Col xs={24} sm={12} md={8} lg={4}>
                 <div style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "flex-end" }}>
-                  <Button type="primary" icon={<FileExcelOutlined />} onClick={handleExportExcel}>
-                    Xuất Excel
-                  </Button>
+                  <Dropdown
+                    overlay={
+                      <Menu onClick={({ key }) => handleExport(key)}>
+                        <Menu.Item key="xlsx" icon={<FileExcelOutlined />}>Xuất Excel</Menu.Item>
+                        <Menu.Item key="pdf" icon={<FilePdfOutlined />}>Xuất PDF</Menu.Item>
+                      </Menu>
+                    }
+                  >
+                    <Button type="primary" icon={<DownloadOutlined />}>
+                      Xuất báo cáo <CaretDownOutlined />
+                    </Button>
+                  </Dropdown>
                 </div>
               </Col>
             </Row>
