@@ -98,7 +98,31 @@ const create = async (req, res) => {
   }
 };
 
-// ========== READ: Lấy chi phí ngoài cho 1 kỳ báo cáo ==========
+// ========== UTILITY: Lấy tất cả periodKeys liên quan để gộp ==========
+const getSubPeriodKeys = (periodType, periodKey) => {
+  const keys = [{ periodType, periodKey }];
+
+  if (periodType === "quarter") {
+    const [year, qStr] = periodKey.split("-Q");
+    const q = parseInt(qStr, 10);
+    const months = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"];
+    const quarterMonths = months.slice((q - 1) * 3, q * 3).map((m) => `${year}-${m}`);
+    quarterMonths.forEach((m) => keys.push({ periodType: "month", periodKey: m }));
+  } else if (periodType === "year") {
+    const year = periodKey;
+    // Thêm các quý
+    for (let q = 1; q <= 4; q++) {
+      keys.push({ periodType: "quarter", periodKey: `${year}-Q${q}` });
+    }
+    // Thêm các tháng
+    for (let m = 1; m <= 12; m++) {
+      keys.push({ periodType: "month", periodKey: `${year}-${String(m).padStart(2, "0")}` });
+    }
+  }
+  return keys;
+};
+
+// ========== READ: Lấy chi phí ngoài cho 1 kỳ báo cáo (Đã gộp từ các kỳ con) ==========
 const getByPeriod = async (req, res) => {
   try {
     const { storeId, periodType, periodKey } = req.query;
@@ -107,17 +131,57 @@ const getByPeriod = async (req, res) => {
       return res.status(400).json({ message: "Thiếu dữ liệu bắt buộc: storeId, periodType, periodKey" });
     }
 
-    const doc = await OperatingExpense.findOne({
+    // Lấy các keys liên quan (ví dụ Quý thì lấy thêm các tháng thuộc quý đó)
+    const relatedPeriods = getSubPeriodKeys(periodType, periodKey);
+
+    const docs = await OperatingExpense.find({
       storeId,
-      periodType,
-      periodKey,
+      $or: relatedPeriods,
       isDeleted: false,
     });
 
-    // ✅ Trả 200 thay vì 404, data = null nếu không có
+    if (docs.length === 0) {
+      return res.json({
+        success: true,
+        data: null,
+      });
+    }
+
+    // Tìm document chính của kỳ đang chọn
+    const mainDoc = docs.find((d) => d.periodType === periodType && d.periodKey === periodKey);
+
+    // Gộp tất cả items từ các docs lại
+    let allItems = [];
+    docs.forEach((doc) => {
+      // Đánh dấu item thuộc kỳ nào nếu không phải kỳ chính (để frontend hiển thị nếu cần)
+      const itemsWithOrigin = doc.items.map((it) => {
+        const itemObj = it.toObject ? it.toObject() : it;
+        if (doc.periodType !== periodType || doc.periodKey !== periodKey) {
+          return {
+            ...itemObj,
+            originPeriod: formatPeriodVN(doc.periodType, doc.periodKey),
+          };
+        }
+        return itemObj;
+      });
+      allItems = allItems.concat(itemsWithOrigin);
+    });
+
+    // Trả về dữ liệu gộp. Nếu không có mainDoc thì tạo 1 object giả để chứa items
+    const resultData = mainDoc ? mainDoc.toObject() : {
+      storeId,
+      periodType,
+      periodKey,
+      items: [],
+      status: "active",
+      isDeleted: false,
+    };
+
+    resultData.items = allItems;
+
     return res.json({
       success: true,
-      data: doc || null,
+      data: resultData,
     });
   } catch (error) {
     console.error("operatingExpenseController.getByPeriod:", error);
@@ -274,7 +338,7 @@ const hardDelete = async (req, res) => {
   }
 };
 
-// ========== UTILITY: Tính tổng chi phí ngoài cho 1 kỳ ==========
+// ========== UTILITY: Tính tổng chi phí ngoài cho 1 kỳ (Gộp từ các kỳ con) ==========
 const getTotalByPeriod = async (req, res) => {
   try {
     const { storeId, periodType, periodKey } = req.query;
@@ -283,14 +347,15 @@ const getTotalByPeriod = async (req, res) => {
       return res.status(400).json({ message: "storeId, periodType, periodKey là bắt buộc" });
     }
 
-    const doc = await OperatingExpense.findOne({
+    const relatedPeriods = getSubPeriodKeys(periodType, periodKey);
+
+    const docs = await OperatingExpense.find({
       storeId,
-      periodType,
-      periodKey,
+      $or: relatedPeriods,
       isDeleted: false,
     });
 
-    const total = doc ? doc.totalAmount : 0;
+    const total = docs.reduce((sum, doc) => sum + doc.totalAmount, 0);
 
     return res.json({ success: true, total });
   } catch (error) {

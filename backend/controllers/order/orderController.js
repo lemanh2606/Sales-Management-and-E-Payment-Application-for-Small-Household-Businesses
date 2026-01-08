@@ -457,20 +457,45 @@ const createOrder = async (req, res) => {
     }
 
     // ================= 7. CREATE ORDER =================
-    const order = await new Order({
-      storeId,
-      employeeId: finalEmployeeId,
-      customer: customer?._id || null,
-      totalAmount: total.toFixed(2),
-      paymentMethod,
-      isVATInvoice,
-      vatInfo,
-      vatAmount,
-      beforeTaxAmount: beforeTax,
-      usedPoints: usedPoints || 0,
-      status: "pending",
-      printCount: 0,
-    }).save({ session });
+    // ================= 7. CREATE OR UPDATE ORDER =================
+    let order;
+
+    // Check if we are updating an existing Pending Order
+    if (req.body.orderId && mongoose.isValidObjectId(req.body.orderId)) {
+       order = await Order.findOne({
+          _id: req.body.orderId,
+          storeId: storeId,
+          status: 'pending' // Only allow updating pending orders
+       }).session(session);
+
+       if (order) {
+          // Clean up old items before adding new ones
+          await OrderItem.deleteMany({ orderId: order._id }).session(session);
+       }
+    }
+
+    // If no existing order found, create new one
+    if (!order) {
+       order = new Order({
+          storeId,
+          status: 'pending',
+          printCount: 0,
+       });
+    }
+
+    // Update/Set fields
+    order.employeeId = finalEmployeeId;
+    order.customer = customer?._id || null;
+    order.totalAmount = total.toFixed(2);
+    order.paymentMethod = paymentMethod;
+    order.isVATInvoice = isVATInvoice;
+    order.vatInfo = vatInfo;
+    order.vatAmount = vatAmount;
+    order.beforeTaxAmount = beforeTax;
+    order.usedPoints = usedPoints || 0;
+
+    // Ensure we save to generate ID (if new) or update (if existing)
+    await order.save({ session });
 
     for (const it of orderItems) {
       await new OrderItem({ orderId: order._id, ...it }).save({ session });

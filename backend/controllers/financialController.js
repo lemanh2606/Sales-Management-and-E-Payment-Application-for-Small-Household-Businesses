@@ -250,17 +250,35 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
     return sum + toNumber(r.totalRevenue) * (toNumber(emp?.commission_rate) / 100);
   }, 0);
 
-  // Fetch manual extra expenses from DB
-  const opExpDoc = await OperatingExpense.findOne({
-    storeId: objectStoreId,
-    periodType: periodType,
-    periodKey: periodKey,
-    isDeleted: false,
-  });
+  // Fetch manual extra expenses from DB (Aggregate from sub-periods)
+  let opExpFilter = { storeId: objectStoreId, isDeleted: false };
+  if (periodType === "month") {
+    opExpFilter.periodType = "month";
+    opExpFilter.periodKey = periodKey;
+  } else if (periodType === "quarter") {
+    const [year, qStr] = periodKey.split("-Q");
+    const q = parseInt(qStr, 10);
+    const months = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"];
+    const quarterMonths = months.slice((q - 1) * 3, q * 3).map((m) => `${year}-${m}`);
+    opExpFilter.$or = [
+      { periodType: "quarter", periodKey: periodKey },
+      { periodType: "month", periodKey: { $in: quarterMonths } }
+    ];
+  } else if (periodType === "year") {
+    const year = periodKey;
+    const quarters = ["Q1", "Q2", "Q3", "Q4"].map((q) => `${year}-${q}`);
+    const months = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, "0")}`);
+    opExpFilter.$or = [
+      { periodType: "year", periodKey: periodKey },
+      { periodType: "quarter", periodKey: { $in: quarters } },
+      { periodType: "month", periodKey: { $in: months } }
+    ];
+  }
 
-  const totalExtraExpense = opExpDoc
-    ? opExpDoc.items.reduce((sum, it) => sum + (Number(it.amount) || 0), 0)
-    : 0;
+  const opExpDocs = await OperatingExpense.find(opExpFilter);
+  const totalExtraExpense = opExpDocs.reduce((sum, doc) => {
+    return sum + (doc.items || []).reduce((s, it) => s + (Number(it.amount) || 0), 0);
+  }, 0);
 
   // Tổng chi phí vận hành = Chi phí ngoài (điện, nước...) + Lương + Hoa hồng
   let operatingCost = totalExtraExpense + totalSalary + totalCommission;
