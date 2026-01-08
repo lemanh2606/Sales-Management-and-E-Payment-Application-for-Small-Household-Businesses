@@ -498,14 +498,11 @@ const ReportDashboard = () => {
         try {
           setLoading(true);
 
-          // Nếu item đã lưu (isSaved: true), gọi API xoá từ DB
-          if (item.isSaved && operatingExpenseId) {
-            const token = localStorage.getItem("token");
-            await fetch(`${apiUrl}/operating-expenses/${operatingExpenseId}/item/${index}`, {
-              method: "DELETE",
-              headers: { Authorization: `Bearer ${token}` },
-            }).then((res) => {
-              if (!res.ok) throw new Error("Lỗi khi xoá từ DB");
+          // Nếu item đã lưu (isSaved: true), gọi API xoá từ DB theo _id
+          if (item.isSaved && item._id && operatingExpenseId) {
+            await operatingExpenseService.deleteMultipleItems({
+              id: operatingExpenseId,
+              itemIds: [item._id],
             });
           }
 
@@ -886,7 +883,10 @@ const ReportDashboard = () => {
                     rowKey={(record) => record._id}
                     rowSelection={{
                       selectedRowKeys: selectedExpenseIds,
-                      onChange: (keys) => setselectedExpenseIds(keys), // keys sẽ là array of _id
+                      onChange: (keys) => setselectedExpenseIds(keys),
+                      getCheckboxProps: (record) => ({
+                        disabled: !!record.originPeriod,
+                      }),
                     }}
                     dataSource={expenseItems}
                     columns={[
@@ -902,11 +902,18 @@ const ReportDashboard = () => {
                         render: (val) => <span style={{ fontWeight: "bold", color: "#faad14", fontSize: 14 }}>{formatVND(val)}</span>,
                         width: "30%",
                       },
-                      {
+                       {
                         title: "Ghi Chú",
                         dataIndex: "note",
                         render: (text) => <span style={{ fontSize: 13 }}>{text || "—"}</span>,
                         flex: 1,
+                      },
+                      {
+                        title: "Kỳ Gốc",
+                        dataIndex: "originPeriod",
+                        render: (text) => text ? <Tag color="blue">{text}</Tag> : <Tag color="green">Hiện tại</Tag>,
+                        width: 120,
+                        hidden: periodType === "month",
                       },
                       {
                         title: "Trạng Thái",
@@ -932,15 +939,18 @@ const ReportDashboard = () => {
                         title: "Thao Tác",
                         width: 80,
                         align: "center",
-                        render: (_, __, idx) => (
-                          <Button
-                            type="text"
-                            danger
-                            size="small"
-                            icon={<DeleteOutlined />}
-                            onClick={() => removeExpenseItem(idx)}
-                            title="Xoá khoản chi phí này"
-                          />
+                         render: (_, record, idx) => (
+                          <AntTooltip title={record.originPeriod ? `Khoản chi này thuộc ${record.originPeriod}. Vui lòng chuyển sang kỳ đó để xoá.` : ""}>
+                            <Button
+                              type="text"
+                              danger
+                              size="small"
+                              icon={<DeleteOutlined />}
+                              onClick={() => removeExpenseItem(idx)}
+                              disabled={!!record.originPeriod}
+                              title={record.originPeriod ? "" : "Xoá khoản chi phí này"}
+                            />
+                          </AntTooltip>
                         ),
                       },
                     ]}

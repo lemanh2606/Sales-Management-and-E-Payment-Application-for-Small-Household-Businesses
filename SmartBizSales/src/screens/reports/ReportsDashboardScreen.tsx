@@ -260,8 +260,8 @@ const ReportsDashboardScreen: React.FC = () => {
       try {
         setLoading(true);
         if (item._id && operatingExpenseId) {
-          // Xóa từ DB
-          await operatingExpenseApi.deleteExpenseItem(operatingExpenseId, index);
+          // Xóa từ DB theo _id
+          await operatingExpenseApi.deleteMultipleExpenseItems(operatingExpenseId, [item._id]);
         }
         
         const newItems = expenseItems.filter((_, idx) => idx !== index);
@@ -280,6 +280,10 @@ const ReportsDashboardScreen: React.FC = () => {
         setLoading(false);
       }
     };
+
+    if (item.originPeriod) {
+      return Alert.alert("Thông báo", `Khoản chi này thuộc ${item.originPeriod}. Vui lòng chuyển sang kỳ đó để xoá.`);
+    }
 
     Alert.alert("Xác nhận", "Xóa khoản chi phí này?", [
       { text: "Hủy", style: "cancel" },
@@ -947,17 +951,24 @@ const ReportsDashboardScreen: React.FC = () => {
                         <View style={{ flex: 1 }}>
                           <Text style={styles.expenseItemAmount}>{formatVND(exp.amount)}</Text>
                           <Text style={styles.expenseItemNote}>{exp.note || "(Không có ghi chú)"}</Text>
+                          {exp.originPeriod && (
+                            <Text style={{ fontSize: 10, color: '#2563eb', marginTop: 2, fontWeight: '700' }}>
+                              Kỳ gốc: {exp.originPeriod}
+                            </Text>
+                          )}
                         </View>
-                        <TouchableOpacity 
-                          style={styles.removeExpenseBtn} 
-                          onPress={() => removeExpenseItem(index)}
-                        >
-                          <Ionicons
-                            name="trash-outline"
-                            size={18}
-                            color="#ef4444"
-                          />
-                        </TouchableOpacity>
+                        {!exp.originPeriod && (
+                          <TouchableOpacity 
+                            style={styles.removeExpenseBtn} 
+                            onPress={() => removeExpenseItem(index)}
+                          >
+                            <Ionicons
+                              name="trash-outline"
+                              size={18}
+                              color="#ef4444"
+                            />
+                          </TouchableOpacity>
+                        )}
                       </View>
                     ))}
                   </View>
