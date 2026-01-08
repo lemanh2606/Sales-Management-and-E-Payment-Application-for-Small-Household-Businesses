@@ -701,7 +701,7 @@ const ReportDashboard = () => {
       <div className="premium-layout">
         <Space direction="vertical" size="large" style={{ width: "100%" }}>
           {/* HEADER & FILTERS */}
-          <Card className="glass-card">
+          <Card className="glass-card" style={{ border: "1px solid #8c8c8c" }}>
             <Row gutter={[24, 24]} align="middle">
               <Col xs={24} lg={6}>
                 <Title level={2} className="premium-title" style={{ margin: 0 }}>
