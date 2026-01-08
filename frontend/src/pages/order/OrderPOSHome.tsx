@@ -774,6 +774,7 @@ const OrderPOSHome: React.FC = () => {
         items,
         paymentMethod: currentTab.paymentMethod,
         isVATInvoice: currentTab.isVAT,
+        orderId: currentTab.pendingOrderId || undefined, // Gửi ID nếu đang có đơn pending
       };
 
       // Nếu có customer được chọn thì gửi customerInfo, ko có thì thôi
@@ -1825,19 +1826,25 @@ const OrderPOSHome: React.FC = () => {
                 block
                 loading={loading}
                 onClick={createOrder}
-                disabled={!!currentTab.pendingOrderId} // 🔴 Disable khi đã tạo đơn (per-tab)
+                // disabled={!!currentTab.pendingOrderId} // 🟢 Cho phép update
                 style={{
                   marginTop: 12,
                   height: "40px",
                   fontSize: "16px",
                   fontWeight: 600,
                   borderRadius: "8px",
-                  background: currentTab.pendingOrderId ? "#ccc" : "#1890ff",
+                  background: "#1890ff",
                   border: "none",
-                  cursor: currentTab.pendingOrderId ? "not-allowed" : "pointer",
+                  cursor: "pointer",
                 }}
               >
-                {currentTab.paymentMethod === "qr" ? "Tạo QR Thanh Toán" : "Tạo Đơn Hàng"}
+                {currentTab.pendingOrderId
+                  ? currentTab.paymentMethod === "qr"
+                    ? "Cập nhật QR"
+                    : "Cập nhật Đơn"
+                  : currentTab.paymentMethod === "qr"
+                  ? "Tạo QR Thanh Toán"
+                  : "Tạo Đơn Hàng"}
               </Button>
 
               {/* Tiếp tục thanh toán QR - Show khi đã tạo đơn QR */}

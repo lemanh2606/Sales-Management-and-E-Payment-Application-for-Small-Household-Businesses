@@ -1106,6 +1106,7 @@ const OrderPOSHomeScreen: React.FC = () => {
         items,
         paymentMethod: currentTab.paymentMethod,
         isVATInvoice: currentTab.isVAT,
+        orderId: currentTab.pendingOrderId || undefined, // Gửi ID nếu đang có đơn pending
       };
 
       if (currentTab.customer) {
@@ -1706,18 +1707,42 @@ const OrderPOSHomeScreen: React.FC = () => {
     );
   }
 
-  // ===== bottom actions computed =====
-  const canCreateOrder = currentTab.cart.length > 0 && !loading;
-  const canContinueQr =
-    !!currentTab.pendingOrderId && currentTab.paymentMethod === "qr";
-  const canOpenBill = !!currentTab.pendingOrderId;
+  // ===== UI: Buttons State =====
+  const canOpenBill = useMemo(() => {
+    return !!currentTab.pendingOrderId;
+  }, [currentTab.pendingOrderId]);
 
-  const primaryActionText =
-    currentTab.paymentMethod === "qr" ? "Tạo QR" : "Tạo đơn";
+  const canContinueQr = useMemo(() => {
+    return (
+      !!currentTab.pendingOrderId &&
+      !!currentTab.savedQrImageUrl &&
+      currentTab.paymentMethod === "qr"
+    );
+  }, [
+    currentTab.pendingOrderId,
+    currentTab.savedQrImageUrl,
+    currentTab.paymentMethod,
+  ]);
+
+  const primaryActionText = useMemo(() => {
+    if (currentTab.pendingOrderId) {
+        if (currentTab.paymentMethod === "qr") return "Cập nhật QR";
+        return "Cập nhật Đơn";
+    }
+    if (currentTab.paymentMethod === "qr") return "Tạo QR";
+    return "Tạo Đơn Hàng";
+  }, [currentTab.paymentMethod, currentTab.pendingOrderId]);
+
+  const canCreateOrder = useMemo(() => {
+    // Luôn cho phép tạo/cập nhật nếu có hàng và chọn employee (nếu cần)
+    if (currentTab.cart.length === 0) return false;
+    // Cho phép update kể cả khi đã có pendingOrderId
+    return true;
+  }, [currentTab.cart, currentTab.pendingOrderId]);
 
   return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.surface} />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
