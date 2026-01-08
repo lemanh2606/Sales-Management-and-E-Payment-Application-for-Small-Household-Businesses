@@ -44,6 +44,12 @@ const InventoryVoucherItemSchema = new Schema(
       default: () => mongoose.Types.Decimal128.fromString("0"),
     },
 
+    // Giá bán (để tham chiếu khi nhập hàng)
+    selling_price: {
+      type: Schema.Types.Decimal128,
+      default: () => mongoose.Types.Decimal128.fromString("0"),
+    },
+
     note: { type: String, default: "" },
   },
   { _id: false }

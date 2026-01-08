@@ -37,6 +37,7 @@
     "expo-print": "~15.0.8",
     "expo-sharing": "~14.0.8",
     "expo-speech": "~14.0.8",
+    "expo-speech-recognition": "^3.0.1",
     "expo-status-bar": "~3.0.9",
     "expo-web-browser": "~15.0.10",
     "mongodb": "^6.20.0",

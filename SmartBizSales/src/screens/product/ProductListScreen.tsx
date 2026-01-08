@@ -1,5 +1,5 @@
 // src/screens/product/ProductListScreen.tsx
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -80,6 +80,9 @@ const ProductListScreen: React.FC = () => {
   // Thêm state mới
   const [importProgress, setImportProgress] = useState<string>("");
 
+  // View mode: "merge" = gộp lô, "split" = tách từng lô (giống web)
+  const [viewMode, setViewMode] = useState<"merge" | "split">("merge");
+
   // ================= HÀM LẤY DANH SÁCH NHÓM SẢN PHẨM =================
   const fetchProductGroups = useCallback(async () => {
     if (!storeId) return;
@@ -125,13 +128,47 @@ const ProductListScreen: React.FC = () => {
     fetchProducts();
   }, [fetchProductGroups, fetchProducts]);
 
+  // Logic làm phẳng (flatten) sản phẩm theo lô - giống web
+  const flattenProducts = useMemo(() => {
+    return products.reduce<any[]>((acc, product) => {
+      const batches = product.batches && product.batches.length > 0
+        ? product.batches.filter(b => b.quantity > 0)
+        : [];
+
+      if (batches.length === 0) {
+        // Nếu không có lô hoặc hết hàng -> giữ nguyên 1 dòng
+        acc.push({ ...product, uniqueId: product._id, isBatch: false });
+      } else {
+        // Tách mỗi lô thành 1 dòng
+        batches.forEach((batch, index) => {
+          acc.push({
+            ...product,
+            _id: product._id,
+            uniqueId: `${product._id}_${batch.batch_no}_${index}`,
+            isBatch: true,
+            stock_quantity: batch.quantity,
+            cost_price: batch.cost_price,
+            expiry_date: batch.expiry_date,
+            batch_no: batch.batch_no,
+            warehouse: batch.warehouse_id || product.default_warehouse_id,
+            createdAt: batch.created_at || product.createdAt,
+            batches: [batch],
+          });
+        });
+      }
+      return acc;
+    }, []);
+  }, [products]);
+
   // ================= XỬ LÝ LỌC VÀ TÌM KIẾM SẢN PHẨM =================
   useEffect(() => {
-    let temp = [...products];
+    // Chọn nguồn dữ liệu dựa trên viewMode (giống web)
+    const sourceData = viewMode === "split" ? flattenProducts : products;
+    let temp = [...sourceData];
 
     // Lọc theo nhóm sản phẩm
     if (selectedGroupIds.length > 0) {
-      temp = temp.filter((product) => {
+      temp = temp.filter((product: any) => {
         return (
           product.group?._id &&
           selectedGroupIds.includes(product.group?._id.toString())
@@ -141,26 +178,27 @@ const ProductListScreen: React.FC = () => {
 
     // Lọc theo trạng thái
     if (statusFilter !== "all") {
-      temp = temp.filter((product) => product.status === statusFilter);
+      temp = temp.filter((product: any) => product.status === statusFilter);
     }
 
     // Lọc theo từ khóa tìm kiếm
     if (searchText.trim()) {
       const lower = searchText.toLowerCase();
-      temp = temp.filter((product) => {
+      temp = temp.filter((product: any) => {
         const groupName = product.group?.name?.toLowerCase() || "";
+        const batchNo = (product as any).batch_no?.toLowerCase() || "";
         return (
-          product.name.toLowerCase().includes(lower) ||
-          product.sku.toLowerCase().includes(lower) ||
+          product.name?.toLowerCase().includes(lower) ||
+          product.sku?.toLowerCase().includes(lower) ||
           groupName.includes(lower) ||
-          (product.description &&
-            product.description.toLowerCase().includes(lower))
+          batchNo.includes(lower) ||
+          (product.description && product.description.toLowerCase().includes(lower))
         );
       });
     }
 
     setFilteredProducts(temp);
-  }, [products, selectedGroupIds, statusFilter, searchText, productGroups]);
+  }, [products, flattenProducts, selectedGroupIds, statusFilter, searchText, productGroups, viewMode]);
 
   // ================= HÀM XỬ LÝ CHỌN/BỎ CHỌN NHÓM SẢN PHẨM =================
   const toggleGroupSelection = (groupId: string) => {
@@ -312,6 +350,8 @@ const ProductListScreen: React.FC = () => {
           const newlyCreated = response.newlyCreated || {
             suppliers: 0,
             productGroups: 0,
+            warehouses: 0,
+            products: 0,
           };
 
           let message = "";
@@ -320,37 +360,37 @@ const ProductListScreen: React.FC = () => {
           if (successCount > 0 && failedCount === 0) {
             // Tất cả đều thành công
             title = "🎉 Thành công";
-            message = `Import thành công ${successCount} sản phẩm`;
+            message = `Import thành công ${successCount} dòng`;
 
             // Thêm thông tin về đối tượng mới được tạo
-            if (newlyCreated.suppliers > 0 || newlyCreated.productGroups > 0) {
-              message += `\n\nĐã tự động tạo mới:`;
-              if (newlyCreated.suppliers > 0) {
-                message += `\n• ${newlyCreated.suppliers} nhà cung cấp`;
-              }
-              if (newlyCreated.productGroups > 0) {
-                message += `\n• ${newlyCreated.productGroups} nhóm sản phẩm`;
-              }
+            const createdParts: string[] = [];
+            if (newlyCreated.products > 0) createdParts.push(`${newlyCreated.products} sản phẩm mới`);
+            if (newlyCreated.suppliers > 0) createdParts.push(`${newlyCreated.suppliers} nhà cung cấp`);
+            if (newlyCreated.productGroups > 0) createdParts.push(`${newlyCreated.productGroups} nhóm sản phẩm`);
+            if (newlyCreated.warehouses > 0) createdParts.push(`${newlyCreated.warehouses} kho hàng`);
+            
+            if (createdParts.length > 0) {
+              message += `\n\nĐã tự động tạo mới:\n• ${createdParts.join("\n• ")}`;
             }
           } else if (successCount > 0 && failedCount > 0) {
             // Một phần thành công
             title = "⚠️ Hoàn thành một phần";
-            message = `Import thành công ${successCount}/${totalCount} sản phẩm\n${failedCount} sản phẩm thất bại`;
+            message = `Import thành công ${successCount}/${totalCount} dòng\n${failedCount} dòng thất bại`;
 
             // Thêm thông tin về đối tượng mới được tạo
-            if (newlyCreated.suppliers > 0 || newlyCreated.productGroups > 0) {
-              message += `\n\nĐã tự động tạo mới:`;
-              if (newlyCreated.suppliers > 0) {
-                message += `\n• ${newlyCreated.suppliers} nhà cung cấp`;
-              }
-              if (newlyCreated.productGroups > 0) {
-                message += `\n• ${newlyCreated.productGroups} nhóm sản phẩm`;
-              }
+            const createdParts: string[] = [];
+            if (newlyCreated.products > 0) createdParts.push(`${newlyCreated.products} sản phẩm mới`);
+            if (newlyCreated.suppliers > 0) createdParts.push(`${newlyCreated.suppliers} nhà cung cấp`);
+            if (newlyCreated.productGroups > 0) createdParts.push(`${newlyCreated.productGroups} nhóm sản phẩm`);
+            if (newlyCreated.warehouses > 0) createdParts.push(`${newlyCreated.warehouses} kho hàng`);
+            
+            if (createdParts.length > 0) {
+              message += `\n\nĐã tạo mới:\n• ${createdParts.join("\n• ")}`;
             }
           } else {
             // Tất cả đều thất bại
             title = "❌ Có lỗi xảy ra";
-            message = `Không có sản phẩm nào được import thành công\n${failedCount} sản phẩm thất bại`;
+            message = `Không có sản phẩm nào được import thành công\n${failedCount} dòng thất bại`;
           }
 
           // Hiển thị chi tiết lỗi nếu có sản phẩm thất bại
@@ -483,48 +523,94 @@ const ProductListScreen: React.FC = () => {
   };
 
   // ================= RENDER MỖI SẢN PHẨM TRONG DANH SÁCH =================
-  const renderProductItem = ({ item }: { item: Product }) => (
-    <View style={styles.productCard}>
-      <View style={styles.productHeader}>
-        <View style={styles.productInfo}>
-          <Text style={styles.productName}>{item.name}</Text>
-          <Text style={styles.productSKU}>SKU: {item.sku}</Text>
-          <View style={styles.productMeta}>
-            <Text style={styles.productPrice}>
-              {productApi.formatPrice(item.price)}
-            </Text>
-            <Text style={styles.productStock}>
-              Tồn kho: {item.stock_quantity}
-            </Text>
-          </View>
-          <View style={styles.productDetails}>
-            <View
-              style={[
-                styles.statusBadge,
-                { backgroundColor: getStatusColor(item.status) },
-              ]}
-            >
-              <Text style={styles.statusText}>{item.status}</Text>
+  const renderProductItem = ({ item }: { item: Product }) => {
+    const batches = item.batches || [];
+    const validBatches = batches.filter(b => b.quantity > 0);
+    const batchesWithExpiry = validBatches.filter(b => b.expiry_date);
+    
+    // Sort by expiry date to get nearest
+    let nearestExpiry: Date | null = null;
+    let expiryColor = "#4caf50";
+    if (batchesWithExpiry.length > 0) {
+      batchesWithExpiry.sort((a, b) => new Date(a.expiry_date!).getTime() - new Date(b.expiry_date!).getTime());
+      nearestExpiry = new Date(batchesWithExpiry[0].expiry_date!);
+      const diff = (nearestExpiry.getTime() - new Date().getTime()) / (1000 * 3600 * 24);
+      if (diff < 0) expiryColor = "#f44336";
+      else if (diff <= 30) expiryColor = "#ff9800";
+    }
+
+    return (
+      <View style={styles.productCard}>
+        <View style={styles.productHeader}>
+          <View style={styles.productInfo}>
+            <Text style={styles.productName}>{item.name}</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Text style={styles.productSKU}>SKU: {item.sku}</Text>
+              {item.unit && <Text style={styles.productUnit}>({item.unit})</Text>}
             </View>
-            {item.group && (
-              <Text style={styles.productGroup}>{item.group.name}</Text>
-            )}
-            {productApi.isLowStock(item) && (
-              <View style={styles.lowStockBadge}>
-                <Text style={styles.lowStockText}>Tồn kho thấp</Text>
+            <View style={styles.productMeta}>
+              <View>
+                <Text style={styles.productPrice}>
+                  {productApi.formatPrice(item.price)}
+                </Text>
+                <Text style={styles.productCostPrice}>
+                  Vốn: {productApi.formatPrice(item.cost_price)}
+                </Text>
               </View>
-            )}
+              <View style={{ alignItems: "flex-end" }}>
+                <Text style={styles.productStock}>
+                  Tồn: {item.stock_quantity} {item.unit || ""}
+                </Text>
+                {validBatches.length > 0 && (
+                  <Text style={styles.batchCount}>{validBatches.length} lô</Text>
+                )}
+              </View>
+            </View>
+            <View style={styles.productDetails}>
+              <View
+                style={[
+                  styles.statusBadge,
+                  { backgroundColor: getStatusColor(item.status) },
+                ]}
+              >
+                <Text style={styles.statusText}>{item.status}</Text>
+              </View>
+              {item.group && (
+                <Text style={styles.productGroup}>{item.group.name}</Text>
+              )}
+              {/* Hiển thị số lô khi ở chế độ split */}
+              {(item as any).batch_no && (
+                <View style={[styles.expiryBadge, { backgroundColor: "#1976d2" }]}>
+                  <Text style={styles.expiryText}>Lô: {(item as any).batch_no}</Text>
+                </View>
+              )}
+              {productApi.isLowStock(item) && (
+                <View style={styles.lowStockBadge}>
+                  <Text style={styles.lowStockText}>Tồn kho thấp</Text>
+                </View>
+              )}
+              {/* Hiển thị HSD: ở chế độ split lấy từ item.expiry_date, ở merge lấy nearestExpiry */}
+              {((item as any).expiry_date || nearestExpiry) && (
+                <View style={[styles.expiryBadge, { backgroundColor: expiryColor }]}>
+                  <Text style={styles.expiryText}>
+                    HSD: {(item as any).expiry_date 
+                      ? new Date((item as any).expiry_date).toLocaleDateString("vi-VN")
+                      : nearestExpiry?.toLocaleDateString("vi-VN")}
+                  </Text>
+                </View>
+              )}
+            </View>
           </View>
+          <TouchableOpacity
+            style={styles.editButton}
+            onPress={() => setEditingProduct(item)}
+          >
+            <Ionicons name="create-outline" size={18} color="#fff" />
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity
-          style={styles.editButton}
-          onPress={() => setEditingProduct(item)}
-        >
-          <Ionicons name="create-outline" size={18} color="#fff" />
-        </TouchableOpacity>
       </View>
-    </View>
-  );
+    );
+  };
 
   // Lấy màu cho trạng thái
   const getStatusColor = (status: ProductStatus): string => {
@@ -572,6 +658,20 @@ const ProductListScreen: React.FC = () => {
           </Text>
         </View>
         <View style={styles.headerActions}>
+          {/* View Mode Toggle */}
+          <TouchableOpacity
+            style={[styles.viewModeButton, viewMode === "split" && styles.viewModeButtonActive]}
+            onPress={() => setViewMode(viewMode === "merge" ? "split" : "merge")}
+          >
+            <Ionicons 
+              name={viewMode === "split" ? "list" : "layers"} 
+              size={18} 
+              color={viewMode === "split" ? "#fff" : "#1976d2"} 
+            />
+            <Text style={[styles.viewModeText, viewMode === "split" && styles.viewModeTextActive]}>
+              {viewMode === "split" ? "Theo lô" : "Gộp"}
+            </Text>
+          </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionButton}
             onPress={() => setActionMenuVisible(true)}
@@ -684,7 +784,7 @@ const ProductListScreen: React.FC = () => {
       ) : (
         <FlatList
           data={filteredProducts}
-          keyExtractor={(item) => item._id.toString()}
+          keyExtractor={(item: any) => item.uniqueId || item._id?.toString() || Math.random().toString()}
           renderItem={renderProductItem}
           contentContainerStyle={styles.productList}
           showsVerticalScrollIndicator={false}
@@ -1136,6 +1236,56 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: "#fff",
     fontWeight: "500",
+  },
+  expiryBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  expiryText: {
+    fontSize: 10,
+    color: "#fff",
+    fontWeight: "500",
+  },
+  productUnit: {
+    fontSize: 12,
+    color: "#888",
+    fontStyle: "italic",
+  },
+  productCostPrice: {
+    fontSize: 12,
+    color: "#888",
+    marginTop: 2,
+  },
+  batchCount: {
+    fontSize: 11,
+    color: "#1976d2",
+    fontWeight: "500",
+    marginTop: 2,
+  },
+  viewModeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#1976d2",
+    backgroundColor: "#fff",
+    marginRight: 8,
+    gap: 4,
+  },
+  viewModeButtonActive: {
+    backgroundColor: "#1976d2",
+    borderColor: "#1976d2",
+  },
+  viewModeText: {
+    fontSize: 12,
+    color: "#1976d2",
+    fontWeight: "500",
+  },
+  viewModeTextActive: {
+    color: "#fff",
   },
   editButton: {
     backgroundColor: "#1976d2",

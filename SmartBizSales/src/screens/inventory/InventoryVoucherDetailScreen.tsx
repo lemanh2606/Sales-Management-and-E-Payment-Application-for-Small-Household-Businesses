@@ -228,6 +228,11 @@ const InventoryVoucherDetailScreen: React.FC = () => {
                 <View style={styles.itemPriceBlock}>
                   <Text style={styles.itemCost}>{formatCurrency(it.unit_cost)}</Text>
                   <Text style={styles.itemQty}>x{it.qty_actual} {it.unit_snapshot || it.product_id?.unit || ""}</Text>
+                  {it.expiry_date && (
+                    <Text style={[styles.itemSku, { color: "#ef4444", fontWeight: "700", marginTop: 4 }]}>
+                      HSD: {new Date(it.expiry_date).toLocaleDateString("vi-VN")}
+                    </Text>
+                  )}
                 </View>
               </View>
               <View style={styles.itemFooter}>

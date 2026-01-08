@@ -33,7 +33,7 @@ const InventoryVoucherFormScreen: React.FC = () => {
   const [suppliers, setSuppliers] = useState<any[]>([]);
   
   // Form State
-  const [type, setType] = useState<"IN" | "OUT">("IN");
+  const [type, setType] = useState<"IN" | "OUT" | "RETURN">("IN");
   const [warehouseId, setWarehouseId] = useState("");
   const [supplierId, setSupplierId] = useState<string | null>(null);
   const [voucherCode, setVoucherCode] = useState("");
@@ -119,17 +119,22 @@ const InventoryVoucherFormScreen: React.FC = () => {
   // Products to display: search results if searching, otherwise all products
   const displayProducts = searchQuery.trim() ? searchResults : allProducts;
 
+
+
+  const extractNumber = (val: any) => {
+    if (typeof val === 'object' && val !== null) {
+        if (val.$numberDecimal) return parseFloat(val.$numberDecimal);
+        if (val.numberDecimal) return parseFloat(val.numberDecimal); // Handle variants
+    }
+    return parseFloat(val || 0);
+  };
+  
   const addItem = (product: any) => {
     const existing = items.find(it => it.productId === product._id);
     if (existing) {
       Alert.alert("Thông báo", "Sản phẩm đã có trong danh sách");
       return;
     }
-    
-    const extractNumber = (val: any) => {
-      if (typeof val === 'object' && val?.$numberDecimal) return parseFloat(val.$numberDecimal);
-      return parseFloat(val || 0);
-    };
 
     setItems([...items, {
       productId: product._id,
@@ -137,13 +142,128 @@ const InventoryVoucherFormScreen: React.FC = () => {
       sku: product.sku,
       unit: product.unit || "Cái",
       quantity: 1,
-      unit_cost: type === "IN" ? extractNumber(product.cost_price) : extractNumber(product.price),
+      unit_cost: extractNumber(product.cost_price),
+      selling_price: extractNumber(product.price),
+      expiry_date: "",
+      batch_no: "",
       note: "",
     }]);
     setShowProductModal(false);
     setSearchQuery("");
     setSearchResults([]);
   };
+
+  // Ref Voucher Logic
+  const [showRefVoucherModal, setShowRefVoucherModal] = useState(false);
+  const [refVouchers, setRefVouchers] = useState<any[]>([]);
+  const [loadingRefVouchers, setLoadingRefVouchers] = useState(false);
+
+  const fetchRefVouchers = async () => {
+    try {
+      setLoadingRefVouchers(true);
+      const res = await inventoryVoucherApi.getInventoryVouchers(storeId || "", { 
+          type: "IN", 
+          status: "COMPLETED", 
+          supplier_id: supplierId || undefined,
+          limit: 20 
+      });
+      if (res && res.data) {
+        setRefVouchers(res.data);
+      }
+    } catch (error) {
+       console.log("Err fetch ref vouchers", error);
+    } finally {
+      setLoadingRefVouchers(false);
+    }
+  };
+
+  const handleSelectRefVoucher = (voucher: any) => {
+      const newItems = voucher.items.map((it: any) => {
+          const p = allProducts.find((prod: any) => prod._id === it.product_id);
+          return {
+            productId: it.product_id,
+            name: p ? p.name : (it.name_snapshot || it.product_name || "Unknown"),
+            sku: p ? p.sku : (it.sku_snapshot || it.sku || ""),
+            unit: p ? p.unit : (it.unit_snapshot || it.unit || ""),
+            quantity: it.qty_actual || 0,
+            quantity_in_stock: 9999,
+            unit_cost: extractNumber(it.unit_cost),
+            selling_price: 0,
+            batch_no: it.batch_no || "",
+            expiry_date: it.expiry_date,
+            note: "",
+          };
+      });
+      setItems(newItems);
+      setShowRefVoucherModal(false);
+      // Auto fill info from voucher if needed?
+      // Use voucher.supplier_id to set supplier?
+      if (voucher.supplier_id) {
+         setSupplierId(voucher.supplier_id);
+      }
+  };
+
+  // BatchPicker Logic
+  const [showBatchModal, setShowBatchModal] = useState(false);
+  const [currentPickingIndex, setCurrentPickingIndex] = useState(-1);
+  const [availableBatches, setAvailableBatches] = useState<any[]>([]);
+
+  const openBatchPicker = (idx: number, productId: string) => {
+      const prod = allProducts.find(p => p._id === productId);
+      if (prod && prod.batches && prod.batches.length > 0) {
+          const validBatches = prod.batches.filter((b:any) => b.quantity > 0);
+          if (validBatches.length > 0) {
+            setAvailableBatches(validBatches);
+            setCurrentPickingIndex(idx);
+            setShowBatchModal(true);
+          } else {
+            Alert.alert("Thông báo", "Sản phẩm này hiện hết lô hàng tồn kho");
+          }
+      } else {
+          Alert.alert("Thông báo", "Sản phẩm này chưa có lô hàng nào");
+      }
+  };
+
+  const handleSelectBatch = (batch: any) => {
+      if (currentPickingIndex === -1) return;
+      const newItems = [...items];
+      const selectedItem = newItems[currentPickingIndex];
+      newItems[currentPickingIndex] = {
+          ...selectedItem,
+          batch_no: batch.batch_no,
+          expiry_date: batch.expiry_date ? (typeof batch.expiry_date === 'string' ? batch.expiry_date.split('T')[0] : new Date(batch.expiry_date).toISOString().split('T')[0]) : "",
+          unit_cost: extractNumber(batch.cost_price) || selectedItem.unit_cost,
+          selling_price: extractNumber(batch.selling_price) || selectedItem.selling_price || 0
+      };
+      setItems(newItems);
+      setShowBatchModal(false);
+  };
+
+  // Auto-fill effects
+  useEffect(() => {
+    if (type === "RETURN") {
+        setDelivererName(user?.fullname || "");
+        setReceiverName(""); 
+        setSupplierId(null);
+    } else if (type === "OUT") {
+        setDelivererName(user?.fullname || "");
+        setReceiverName("");
+        setSupplierId(null);
+    } else { // IN
+        setReceiverName(user?.fullname || "");
+        setDelivererName("");
+    }
+  }, [type, user]);
+
+  useEffect(() => {
+     if ((type === "RETURN" || type === "OUT") && supplierId) {
+         const sup = suppliers.find(s => s._id === supplierId);
+         if (sup) {
+             setReceiverName(sup.contact_person || sup.name);
+             setReceiverPhone(sup.phone || "");
+         }
+     }
+  }, [type, supplierId]);
 
   const removeItem = (index: number) => {
     const newItems = [...items];
@@ -171,6 +291,25 @@ const InventoryVoucherFormScreen: React.FC = () => {
     setItems(newItems);
   };
 
+  const updateItemExpiry = (index: number, expiry: string) => {
+    const newItems = [...items];
+    newItems[index].expiry_date = expiry;
+    setItems(newItems);
+  };
+
+  const updateItemBatchNo = (index: number, batchNo: string) => {
+    const newItems = [...items];
+    newItems[index].batch_no = batchNo;
+    setItems(newItems);
+  };
+
+  const updateItemPrice = (index: number, price: string) => {
+    const n = parseFloat(price) || 0;
+    const newItems = [...items];
+    newItems[index].selling_price = n;
+    setItems(newItems);
+  };
+
   const totalAmount = useMemo(() => {
     return items.reduce((sum, it) => {
       const uCost = typeof it.unit_cost === 'number' ? it.unit_cost : 0;
@@ -193,9 +332,30 @@ const InventoryVoucherFormScreen: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!storeId) return;
-    if (!warehouseId) return Alert.alert("Lỗi", "Vui lòng chọn kho hàng");
-    if (items.length === 0) return Alert.alert("Lỗi", "Vui lòng thêm ít nhất 1 sản phẩm");
+    if (!storeId) return Alert.alert("Lỗi", "Không tìm thấy cửa hàng. Vui lòng đăng nhập lại.");
+    
+    // Validate required fields
+    const errors: string[] = [];
+    
+    if (!warehouseId) errors.push("• Chưa chọn kho hàng");
+    if (!reason.trim()) errors.push("• Chưa nhập lý do nhập/xuất kho");
+    if (!delivererName.trim()) errors.push("• Chưa nhập tên người giao");
+    if (!receiverName.trim()) errors.push("• Chưa nhập tên người nhận");
+    if (items.length === 0) errors.push("• Chưa thêm sản phẩm nào");
+    
+    // Validate items
+    items.forEach((item, idx) => {
+      if (!item.quantity || item.quantity <= 0) {
+        errors.push(`• Dòng ${idx + 1}: Số lượng phải > 0`);
+      }
+      if (item.unit_cost < 0) {
+        errors.push(`• Dòng ${idx + 1}: Giá vốn không hợp lệ`);
+      }
+    });
+    
+    if (errors.length > 0) {
+      return Alert.alert("Thiếu thông tin bắt buộc", errors.join("\n"));
+    }
     
     try {
       setLoading(true);
@@ -220,6 +380,9 @@ const InventoryVoucherFormScreen: React.FC = () => {
           product_id: it.productId,
           qty_actual: it.quantity,
           unit_cost: it.unit_cost,
+          selling_price: it.selling_price || 0,
+          expiry_date: it.expiry_date || null,
+          batch_no: it.batch_no || "",
           note: it.note || "",
           name_snapshot: it.name,
           sku_snapshot: it.sku,
@@ -362,7 +525,7 @@ const InventoryVoucherFormScreen: React.FC = () => {
         </>
       ))}
 
-          {type === "IN" ? renderSection("Nhà cung cấp", "people-outline", (
+          {(type === "IN" || type === "OUT" || type === "RETURN") ? renderSection("Nhà cung cấp", "people-outline", (
             <>
               <TouchableOpacity style={styles.selectBox} onPress={() => setShowSupplierModal(true)}>
                 <View>
@@ -460,10 +623,16 @@ const InventoryVoucherFormScreen: React.FC = () => {
           <View style={styles.itemsCard}>
             <View style={styles.itemsHeader}>
               <Text style={styles.itemsTitle}>Sản phẩm ({items.length})</Text>
-              <TouchableOpacity style={styles.addItemBtn} onPress={() => setShowProductModal(true)}>
-                <Ionicons name="add" size={18} color="#fff" />
-                <Text style={styles.addItemText}>Thêm hàng</Text>
-              </TouchableOpacity>
+              <View style={{flexDirection: 'row'}}>
+                 <TouchableOpacity style={[styles.addItemBtn, {marginRight: 8, backgroundColor: '#6366f1'}]} onPress={() => { setShowRefVoucherModal(true); fetchRefVouchers(); }}>
+                    <Ionicons name="document-text-outline" size={18} color="#fff" />
+                    <Text style={styles.addItemText}>Chọn phiếu nhập</Text>
+                 </TouchableOpacity>
+                 <TouchableOpacity style={styles.addItemBtn} onPress={() => setShowProductModal(true)}>
+                    <Ionicons name="add" size={18} color="#fff" />
+                    <Text style={styles.addItemText}>Thêm hàng</Text>
+                 </TouchableOpacity>
+              </View>
             </View>
 
             {items.map((it, idx) => (
@@ -487,8 +656,8 @@ const InventoryVoucherFormScreen: React.FC = () => {
                       keyboardType="numeric"
                     />
                   </View>
-                  <View style={[styles.inputSmallWrap, { flex: 1, marginLeft: 12 }]}>
-                    <Text style={styles.labelSmall}>Đơn giá ({type === "IN" ? "Mua" : "Bán"})</Text>
+                  <View style={[styles.inputSmallWrap, { flex: 1, marginLeft: 8 }]}>
+                    <Text style={styles.labelSmall}>Giá vốn</Text>
                     <TextInput 
                       style={styles.inputSmall} 
                       value={it.unit_cost.toString()} 
@@ -496,14 +665,57 @@ const InventoryVoucherFormScreen: React.FC = () => {
                       keyboardType="numeric"
                     />
                   </View>
-                  <View style={{ marginLeft: 12, alignItems: "flex-end" }}>
+                  <View style={[styles.inputSmallWrap, { flex: 1, marginLeft: 8 }]}>
+                    <Text style={styles.labelSmall}>Giá bán</Text>
+                    <TextInput 
+                      style={styles.inputSmall} 
+                      value={(it.selling_price || 0).toString()} 
+                      onChangeText={(v) => updateItemPrice(idx, v)}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                </View>
+                <View style={[styles.itemNoteRow, { flexDirection: "row", gap: 8, marginTop: 8 }]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.labelSmall}>Số lô</Text>
+                    
+                    {(type === "OUT" || type === "RETURN") ? (
+                         <TouchableOpacity onPress={() => openBatchPicker(idx, it.productId)}>
+                            <View style={[styles.itemNoteInput, { justifyContent: 'center', height: 40 }]}>
+                                <Text style={{ color: it.batch_no ? '#10b981' : '#94a3b8', fontWeight: it.batch_no ? '700' : '400' }}>
+                                   {it.batch_no || "Chọn lô..."}
+                                </Text>
+                            </View>
+                         </TouchableOpacity>
+                    ) : (
+                        <TextInput 
+                          style={styles.itemNoteInput} 
+                          value={it.batch_no || ""} 
+                          onChangeText={(v) => updateItemBatchNo(idx, v)}
+                          placeholder="VD: BATCH001"
+                          placeholderTextColor="#94a3b8"
+                        />
+                    )}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.labelSmall}>Hạn sử dụng</Text>
+                    <TextInput 
+                      style={styles.itemNoteInput} 
+                      value={it.expiry_date || ""} 
+                      onChangeText={(v) => updateItemExpiry(idx, v)}
+                      placeholder="VD: 2026-12-31"
+                      placeholderTextColor="#94a3b8"
+                    />
+                  </View>
+                  <View style={{ alignItems: "flex-end", justifyContent: "flex-end" }}>
                     <Text style={styles.labelSmall}>Thành tiền</Text>
                     <Text style={styles.itemTotalText}>
-                      {new Intl.NumberFormat('vi-VN').format(it.quantity * it.unit_cost)}
+                      {new Intl.NumberFormat('vi-VN').format(it.quantity * it.unit_cost)}đ
                     </Text>
                   </View>
                 </View>
-                <View style={styles.itemNoteRow}>
+                <View style={[styles.itemNoteRow, { marginTop: 6 }]}>
+                  <Text style={styles.labelSmall}>Ghi chú</Text>
                   <TextInput 
                     style={styles.itemNoteInput} 
                     value={it.note || ""} 
@@ -527,8 +739,14 @@ const InventoryVoucherFormScreen: React.FC = () => {
 
       <View style={styles.footer}>
         <View style={styles.totalBlock}>
-          <Text style={styles.totalLabel}>TỔNG TIỀN PHIẾU</Text>
-          <Text style={styles.totalValue}>{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND'}).format(totalAmount)}</Text>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 4 }}>
+            <Text style={styles.totalLabelSmall}>Số dòng: {items.filter(x => x.productId).length}</Text>
+            <Text style={styles.totalLabelSmall}>Tổng SL: {items.reduce((sum, it) => sum + (it.quantity || 0), 0)}</Text>
+          </View>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <Text style={styles.totalLabel}>TỔNG TIỀN</Text>
+            <Text style={styles.totalValue}>{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND'}).format(totalAmount)}</Text>
+          </View>
         </View>
         <TouchableOpacity style={styles.submitBtn} onPress={handleSave} disabled={loading}>
           {loading ? <ActivityIndicator color="#fff" /> : (
@@ -646,6 +864,49 @@ const InventoryVoucherFormScreen: React.FC = () => {
         </View>
       </Modal>
 
+      {/* Batch Select Modal */}
+      <Modal visible={showBatchModal} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+            <View style={[styles.modalContent, { height: '50%' }]}>
+                <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>Chọn lô hàng</Text>
+                    <TouchableOpacity onPress={() => setShowBatchModal(false)}>
+                        <Ionicons name="close" size={24} color="#64748b" />
+                    </TouchableOpacity>
+                </View>
+                {availableBatches.length > 0 ? (
+                    <FlatList
+                        data={availableBatches}
+                        keyExtractor={(item, index) => item.batch_no || index.toString()}
+                        renderItem={({ item }) => (
+                            <TouchableOpacity style={styles.searchItem} onPress={() => handleSelectBatch(item)}>
+                                <View style={{flex: 1}}>
+                                    <View style={{flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap'}}>
+                                       <Ionicons name="cube-outline" size={16} color="#4f46e5" style={{marginRight: 6}} />
+                                       <Text style={[styles.searchItemName, {flex: 1, marginRight: 8}]} numberOfLines={2}>{item.batch_no}</Text>
+                                    </View>
+                                    <View style={{marginTop: 4}}>
+                                        <Text style={styles.searchItemSku}>SL: {item.quantity}</Text>
+                                        <Text style={styles.searchItemSku}>HSD: {item.expiry_date ? (new Date(item.expiry_date).toISOString().split('T')[0]) : '---'}</Text>
+                                    </View>
+                                </View>
+                                <View style={{alignItems: 'flex-end', justifyContent: 'center'}}>
+                                   {item.cost_price && <Text style={styles.searchItemPrice}>{new Intl.NumberFormat('vi-VN').format(extractNumber(item.cost_price))}đ</Text>}
+                                   {item.selling_price && <Text style={[styles.searchItemSku, {color: '#059669'}]}>Bán: {new Intl.NumberFormat('vi-VN').format(extractNumber(item.selling_price))}đ</Text>}
+                                </View>
+                            </TouchableOpacity>
+                        )}
+                        contentContainerStyle={{ padding: 16 }}
+                    />
+                ) : (
+                    <View style={styles.emptyItems}>
+                        <Text style={styles.emptyItemsText}>Không tìm thấy lô hàng nào</Text>
+                    </View>
+                )}
+            </View>
+        </View>
+      </Modal>
+
       {/* Warehouse Modal */}
       <Modal visible={showWarehouseModal} animationType="fade" transparent>
         <View style={styles.modalOverlay}>
@@ -670,9 +931,83 @@ const InventoryVoucherFormScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
+      {/* Batch Select Modal */}
+      <Modal visible={showBatchModal} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+            <View style={[styles.modalContent, { height: '50%' }]}>
+                <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>Chọn lô hàng</Text>
+                    <TouchableOpacity onPress={() => setShowBatchModal(false)}>
+                        <Ionicons name="close" size={24} color="#64748b" />
+                    </TouchableOpacity>
+                </View>
+                {availableBatches.length > 0 ? (
+                    <FlatList
+                        data={availableBatches}
+                        keyExtractor={(item, index) => item.batch_no || index.toString()}
+                        renderItem={({ item }) => (
+                            <TouchableOpacity style={styles.searchItem} onPress={() => handleSelectBatch(item)}>
+                                <View>
+                                    <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                                       <Ionicons name="cube-outline" size={16} color="#4f46e5" style={{marginRight: 6}} />
+                                       <Text style={styles.searchItemName}>{item.batch_no}</Text>
+                                    </View>
+                                    <Text style={styles.searchItemSku}>SL: {item.quantity} • HSD: {item.expiry_date ? (new Date(item.expiry_date).toISOString().split('T')[0]) : '---'}</Text>
+                                </View>
+                                <View style={{alignItems: 'flex-end'}}>
+                                   {item.cost_price && <Text style={styles.searchItemPrice}>{new Intl.NumberFormat('vi-VN').format(Number(item.cost_price))}đ</Text>}
+                                   {item.selling_price && <Text style={[styles.searchItemSku, {color: '#059669'}]}>Bán: {new Intl.NumberFormat('vi-VN').format(Number(item.selling_price))}đ</Text>}
+                                </View>
+                            </TouchableOpacity>
+                        )}
+                        contentContainerStyle={{ padding: 16 }}
+                    />
+                ) : (
+                    <View style={styles.emptyItems}>
+                        <Text style={styles.emptyItemsText}>Không tìm thấy lô hàng nào</Text>
+                    </View>
+                )}
+            </View>
+        </View>
+      </Modal>
+      {/* Ref Voucher Modal */}
+      <Modal visible={showRefVoucherModal} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+            <View style={[styles.modalContent, { height: '70%' }]}>
+                <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>Chọn phiếu nhập nguồn</Text>
+                    <TouchableOpacity onPress={() => setShowRefVoucherModal(false)}>
+                        <Ionicons name="close" size={24} color="#64748b" />
+                    </TouchableOpacity>
+                </View>
+                {loadingRefVouchers ? (
+                    <ActivityIndicator size="large" color="#10b981" style={{ marginTop: 20 }} />
+                ) : (
+                    <FlatList
+                        data={refVouchers}
+                        keyExtractor={(item) => item._id}
+                        renderItem={({ item }) => (
+                            <TouchableOpacity style={styles.searchItem} onPress={() => handleSelectRefVoucher(item)}>
+                                <View>
+                                    <Text style={styles.searchItemName}>{item.code} • {new Date(item.voucher_date).toLocaleDateString("vi-VN")}</Text>
+                                    <Text style={styles.searchItemSku}>NCC: {item.supplier_name_snapshot || "---"}</Text>
+                                    <Text style={styles.searchItemSku}>Tổng tiền: {new Intl.NumberFormat('vi-VN').format(item.total_amount || 0)}đ ({item.items.length} SP)</Text>
+                                </View>
+                                <Ionicons name="chevron-forward" size={20} color="#cbd5e1" />
+                            </TouchableOpacity>
+                        )}
+                        contentContainerStyle={{ padding: 16 }}
+                        ListEmptyComponent={<Text style={{textAlign: 'center', marginTop: 20, color: '#64748b'}}>Không có phiếu nhập nào</Text>}
+                    />
+                )}
+            </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 };
+
+
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f8fafc" },
@@ -737,6 +1072,7 @@ const styles = StyleSheet.create({
   footer: { position: "absolute", bottom: 0, left: 0, right: 0, padding: 16, backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: "#e2e8f0", flexDirection: "row", alignItems: "center", gap: 12 },
   totalBlock: { flex: 1 },
   totalLabel: { fontSize: 10, fontWeight: "700", color: "#94a3b8", letterSpacing: 1 },
+  totalLabelSmall: { fontSize: 11, fontWeight: "600", color: "#64748b" },
   totalValue: { fontSize: 20, fontWeight: "900", color: "#10b981" },
   submitBtn: { backgroundColor: "#10b981", paddingHorizontal: 20, height: 54, borderRadius: 14, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8, flex: 1 },
   submitText: { color: "#fff", fontWeight: "800", fontSize: 15 },

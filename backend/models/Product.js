@@ -51,6 +51,7 @@ const productSchema = new mongoose.Schema(
         batch_no: { type: String, trim: true },
         expiry_date: { type: Date, default: null },
         cost_price: { type: Number, default: 0 }, // Giá vốn của lô này
+        selling_price: { type: Number, default: 0 }, // Giá bán của lô này
         quantity: { type: Number, default: 0 },   // Số lượng tồn của lô này (ban đầu = nhập, sau này trừ dần nếu implement FIFO)
         warehouse_id: { type: mongoose.Schema.Types.ObjectId, ref: "Warehouse" }, // Lô này ở kho nào
         created_at: { type: Date, default: Date.now }
@@ -58,6 +59,7 @@ const productSchema = new mongoose.Schema(
     ],
 
     lowStockAlerted: { type: Boolean, default: false },
+    expiryAlerted: { type: Boolean, default: false },
     isDeleted: { type: Boolean, default: false },
   },
   {

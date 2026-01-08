@@ -86,9 +86,9 @@ export default function ProductListPage() {
     { key: "min_stock", label: "Tồn tối thiểu", default: false },
     { key: "max_stock", label: "Tồn tối đa", default: false },
     { key: "image", label: "Hình ảnh", default: false },
-    { key: "createdAt", label: "Ngày tạo", default: false },
-    { key: "updatedAt", label: "Cập nhật", default: false },
     { key: "expiry", label: "Hạn sử dụng", default: true }, // ✅ NEW
+    { key: "createdAt", label: "Ngày nhập", default: false },
+    { key: "updatedAt", label: "Cập nhật", default: false },
   ];
 
   const [visibleColumns, setVisibleColumns] = useState(() => {
@@ -228,7 +228,8 @@ export default function ProductListPage() {
             cost_price: batch.cost_price,
             expiry_date: batch.expiry_date,
             batch_no: batch.batch_no,
-            warehouse: batch.warehouse_id || product.warehouse // Lấy kho của lô nếu có
+            warehouse: batch.warehouse_id || product.warehouse, // Lấy kho của lô nếu có
+            createdAt: batch.created_at || product.createdAt, // Ngày nhập của lô
           });
         });
       }
@@ -834,15 +835,43 @@ export default function ProductListPage() {
 
     try {
       setIsImporting(true);
-      await importProductsByExcel(storeId, importFile);
+      const response = await importProductsByExcel(storeId, importFile);
       await fetchProducts(false);
 
-      api.success({
-        message: "✅ Nhập sản phẩm thành công",
-        description: "Danh sách sản phẩm đã cập nhật",
-        placement: "topRight",
-        duration: 3,
-      });
+      const results = response?.results || {};
+      const newlyCreated = response?.newlyCreated || results?.newlyCreated || {};
+      const successCount = results?.success?.length || 0;
+      const failedCount = results?.failed?.length || 0;
+
+      let description = `Thành công: ${successCount}/${results?.total || successCount} dòng`;
+      
+      // Show newly created items
+      const createdParts = [];
+      if (newlyCreated.products > 0) createdParts.push(`${newlyCreated.products} sản phẩm mới`);
+      if (newlyCreated.suppliers > 0) createdParts.push(`${newlyCreated.suppliers} nhà cung cấp`);
+      if (newlyCreated.productGroups > 0) createdParts.push(`${newlyCreated.productGroups} nhóm sản phẩm`);
+      if (newlyCreated.warehouses > 0) createdParts.push(`${newlyCreated.warehouses} kho hàng`);
+      
+      if (createdParts.length > 0) {
+        description += `. Đã tạo mới: ${createdParts.join(", ")}`;
+      }
+
+      if (failedCount > 0) {
+        description += `. Thất bại: ${failedCount} dòng`;
+        api.warning({
+          message: "⚠️ Import hoàn tất một phần",
+          description,
+          placement: "topRight",
+          duration: 8,
+        });
+      } else {
+        api.success({
+          message: "✅ Nhập sản phẩm thành công",
+          description,
+          placement: "topRight",
+          duration: 5,
+        });
+      }
 
       setImportModalOpen(false);
       resetImportState();

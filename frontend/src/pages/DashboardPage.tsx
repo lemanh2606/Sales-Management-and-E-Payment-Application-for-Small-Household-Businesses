@@ -122,6 +122,9 @@ export default function DashboardPage() {
   const [loadingRevenue, setLoadingRevenue] = useState(false);
   const [errorRevenue, setErrorRevenue] = useState<string | null>(null);
 
+  const [expiringProducts, setExpiringProducts] = useState([]);
+  const [loadingExpiring, setLoadingExpiring] = useState(false);
+
   const [steps, setSteps] = useState<OnboardingStep[]>(() => {
     const saved = localStorage.getItem(`onboardingSteps_${storeId}`);
     if (saved) {
@@ -355,6 +358,25 @@ export default function DashboardPage() {
     };
 
     fetchFinancials();
+  }, [storeId]);
+
+  useEffect(() => {
+    const fetchExpiring = async () => {
+      if (!storeId) return;
+      setLoadingExpiring(true);
+      try {
+        const token = localStorage.getItem("token");
+        const res = await axios.get(`${apiUrl}/products/expiring?storeId=${storeId}&days=30`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setExpiringProducts(res.data.data || []);
+      } catch (err) {
+        console.error("Lỗi tải sản phẩm sắp hết hạn:", err);
+      } finally {
+        setLoadingExpiring(false);
+      }
+    };
+    fetchExpiring();
   }, [storeId]);
 
   const avgOrderValue = orderStats.paid > 0 && financials ? financials.totalRevenue / orderStats.paid : 0;
@@ -706,6 +728,34 @@ export default function DashboardPage() {
             </Card>
           </div>
         )} */}
+
+        {/* Expiry Alerts */}
+        {expiringProducts.length > 0 && (
+          <div style={{ marginBottom: 24 }}>
+            <Alert
+              message={<Text strong style={{ color: "#d46b08" }}>Cảnh báo: Có {expiringProducts.length} lô hàng sắp hết hạn trong 30 ngày tới</Text>}
+              description={
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ marginBottom: 8 }}>
+                    {expiringProducts.slice(0, 3).map((p: any, i: number) => (
+                      <div key={i} style={{ marginBottom: 4 }}>
+                        • <b>{p.product_name}</b> <Text type="secondary" style={{ fontSize: 11 }}>(SKU: {p.product_sku})</Text> - Lô: <b>{p.batch_no}</b> - HSD: <Text style={{ color: "#f5222d", fontWeight: 600 }}>{dayjs(p.expiry_date).format("DD/MM/YYYY")}</Text> (SL: {p.quantity})
+                      </div>
+                    ))}
+                    {expiringProducts.length > 3 && <div style={{ fontStyle: "italic", marginLeft: 12 }}>... và {expiringProducts.length - 3} lô hàng khác.</div>}
+                  </div>
+                  <Button type="primary" size="small" onClick={() => navigate("/products/list")} ghost>
+                    Quản lý kho hàng
+                  </Button>
+                </div>
+              }
+              type="warning"
+              showIcon
+              closable
+              style={{ borderRadius: 12, border: "1px solid #ffe58f", background: "#fffbe6" }}
+            />
+          </div>
+        )}
 
         {/* Kết quả kinh doanh - RESPONSIVE GRID */}
         <div style={{ marginBottom: 24 }}>

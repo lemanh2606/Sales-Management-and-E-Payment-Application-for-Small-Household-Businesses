@@ -147,7 +147,7 @@ const InventoryVoucherListScreen: React.FC = () => {
           {(item.items || []).slice(0, 2).map((it: any, idx: number) => (
             <View key={idx} style={styles.productBadge}>
               <Text style={styles.productBadgeText} numberOfLines={1}>
-                {it.name_snapshot || it.product_id?.name || "SP"} (x{it.qty_actual})
+                {it.name_snapshot || it.product_id?.name || "SP"} (x{it.qty_actual} {it.unit_snapshot || it.product_id?.unit || ""})
               </Text>
             </View>
           ))}

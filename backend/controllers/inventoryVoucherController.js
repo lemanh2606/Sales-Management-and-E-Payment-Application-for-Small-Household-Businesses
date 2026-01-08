@@ -406,6 +406,15 @@ const createInventoryVoucher = async (req, res) => {
       const p = productMap.get(String(it.product_id));
       if (!p) throw new Error(`Sản phẩm ${it.product_id} không tồn tại`);
 
+      // Parse expiry_date properly
+      let expiryDate = null;
+      if (it.expiry_date && it.expiry_date !== "") {
+        const parsed = new Date(it.expiry_date);
+        if (!isNaN(parsed.getTime())) {
+          expiryDate = parsed;
+        }
+      }
+
       return {
         product_id: p._id,
 
@@ -424,6 +433,9 @@ const createInventoryVoucher = async (req, res) => {
         qty_actual: Number(it.qty_actual),
 
         unit_cost: it.unit_cost,
+        selling_price: it.selling_price || 0,
+        batch_no: it.batch_no || "",
+        expiry_date: expiryDate,
         note: it.note || "",
       };
     });
@@ -486,13 +498,14 @@ const createInventoryVoucher = async (req, res) => {
 const getInventoryVouchers = async (req, res) => {
   try {
     const storeId = toObjectId(req.params.storeId);
-    const { type, status, from, to, q, page = 1, limit = 20, sort = "-voucher_date" } = req.query;
+    const { type, status, from, to, q, page = 1, limit = 20, sort = "-voucher_date", supplier_id } = req.query;
 
     if (!storeId) return res.status(400).json({ message: "storeId không hợp lệ" });
 
     const filter = { store_id: storeId };
-    if (type && ["IN", "OUT"].includes(type)) filter.type = type;
+    if (type && ["IN", "OUT", "RETURN"].includes(type)) filter.type = type;
     if (status && ["DRAFT", "APPROVED", "POSTED", "CANCELLED"].includes(status)) filter.status = status;
+    if (supplier_id) filter.supplier_id = toObjectId(supplier_id);
 
     if (from || to) {
       filter.voucher_date = {};
@@ -744,6 +757,7 @@ const updateInventoryVoucher = async (req, res) => {
         qty_document: it.qty_document,
         qty_actual: it.qty_actual,
         unit_cost: it.unit_cost,
+        selling_price: it.selling_price || 0,
         note: it.note,
       }));
     }
@@ -1041,27 +1055,97 @@ const postInventoryVoucher = async (req, res) => {
       }
     }
 
-    // ===== bulkWrite cập nhật tồn kho =====
-    const ops = doc.items.map((it) => {
+    // ===== Business logic: Update stock and batches =====
+    for (const it of doc.items) {
       const qty = Number(it.qty_actual || 0);
-      const delta = String(doc.type).toUpperCase() === "IN" ? qty : -qty;
+      const isIN = String(doc.type).toUpperCase() === "IN";
+      const delta = isIN ? qty : -qty;
 
-      return {
-        updateOne: {
-          filter: {
-            _id: it.product_id,
-            store_id: storeId, // ✅ FIX
-            isDeleted: false,
-          },
-          update: {
-            $inc: { stock_quantity: delta }, // ✅ FIX QUAN TRỌNG
-          },
-        },
-      };
-    });
+      const product = productMap.get(String(it.product_id));
+      if (!product) continue;
 
-    if (ops.length) {
-      await Product.bulkWrite(ops, { session });
+      // Update total stock
+      product.stock_quantity = (Number(product.stock_quantity) || 0) + delta;
+
+      if (isIN) {
+        // Add new batch or increment if same batch_no and expiry_date already exists in same warehouse
+        const existingBatch = product.batches.find(b => 
+          b.batch_no === (it.batch_no || "") && 
+          (it.expiry_date ? new Date(b.expiry_date).getTime() === new Date(it.expiry_date).getTime() : !b.expiry_date) &&
+          String(b.warehouse_id || "") === String(it.warehouse_id || doc.warehouse_id || "")
+        );
+
+        if (existingBatch) {
+          existingBatch.quantity += qty;
+        } else {
+          product.batches.push({
+            batch_no: it.batch_no || `BATCH-${Date.now()}`,
+            expiry_date: it.expiry_date || null,
+            cost_price: it.unit_cost ? Number(it.unit_cost.toString()) : 0,
+            quantity: qty,
+            warehouse_id: it.warehouse_id || doc.warehouse_id,
+            created_at: new Date()
+          });
+        }
+      } else {
+        // OUT or RETURN: Deduct from batches
+        let remainingToDeduct = qty;
+
+        // 1. Nếu có chỉ định lô (batch_no), ưu tiên trừ từ lô đó trước
+        if (it.batch_no) {
+          const warehouseIdStr = String(it.warehouse_id || doc.warehouse_id || "");
+          const targetBatchIndex = product.batches.findIndex(b => 
+            b.batch_no === it.batch_no && 
+            String(b.warehouse_id || "") === warehouseIdStr &&
+            b.quantity > 0
+          );
+
+          if (targetBatchIndex !== -1) {
+            const b = product.batches[targetBatchIndex];
+            const deduct = Math.min(b.quantity, remainingToDeduct);
+            b.quantity -= deduct;
+            remainingToDeduct -= deduct;
+          }
+        }
+
+        // 2. Nếu vẫn còn cần trừ (hoặc không chỉ định lô), dùng FIFO
+        if (remainingToDeduct > 0) {
+          // Sort batches by expiry date (earliest first) then by created_at
+          product.batches.sort((a, b) => {
+            if (!a.expiry_date && b.expiry_date) return 1;
+            if (a.expiry_date && !b.expiry_date) return -1;
+            if (a.expiry_date && b.expiry_date) {
+              return new Date(a.expiry_date) - new Date(b.expiry_date);
+            }
+            return new Date(a.created_at) - new Date(b.created_at);
+          });
+
+          for (const batch of product.batches) {
+            if (remainingToDeduct <= 0) break;
+            if (batch.quantity <= 0) continue;
+            // Skip batch nếu nó chính là batch đã trừ ở bước 1 (để tránh trừ 2 lần nếu logic trên chưa clean? Không, quantity đã giảm rồi, nên safe)
+            
+            if (batch.quantity >= remainingToDeduct) {
+              batch.quantity -= remainingToDeduct;
+              remainingToDeduct = 0;
+            } else {
+              remainingToDeduct -= batch.quantity;
+              batch.quantity = 0;
+            }
+          }
+        }
+        
+        if (remainingToDeduct > 0) {
+            // Trường hợp này lẽ ra đã được catch ở check tồn kho tổng phía trên, 
+            // nhưng để an toàn double check ở đây.
+            // Có thể throw error hoặc log warning.
+        }
+        
+        // Remove empty batches? Some systems keep them for history, but here we can keep them or remove.
+        // Let's keep them for now but maybe filter them out in UI.
+      }
+
+      await product.save({ session });
     }
 
     // ===== Update voucher =====
@@ -1304,18 +1388,69 @@ const reverseInventoryVoucher = async (req, res) => {
 
     await reversal.save({ session });
 
-    const ops = reversal.items.map((it) => {
-      const qty = Number(it.qty_actual || 0);
-      const delta = reversal.type === "IN" ? qty : -qty;
-      return {
-        updateOne: {
-          filter: { _id: it.product_id, store_id: storeId, isDeleted: false },
-          update: { $inc: { [stockField]: delta } },
-        },
-      };
-    });
+    // Update product stock & batches
+    for (const it of reversal.items) {
+      const product = await Product.findOne({ _id: it.product_id, store_id: storeId, isDeleted: false }).session(session);
+      if (!product) continue;
 
-    if (ops.length) await Product.bulkWrite(ops, { session });
+      const qty = Number(it.qty_actual || 0);
+      const isIncoming = reversal.type === "IN";
+      const warehouseId = original.warehouse_id;
+
+      if (isIncoming) {
+        // Increment stock
+        product.stock_quantity = (product.stock_quantity || 0) + qty;
+        
+        // Find existing batch or create new
+        const batchNo = it.batch_no || `BATCH-${Date.now()}`;
+        const expiryDate = it.expiry_date;
+        const exists = (product.batches || []).find(b => 
+          b.batch_no === batchNo && 
+          String(b.warehouse_id) === String(warehouseId) &&
+          (expiryDate ? new Date(b.expiry_date).getTime() === new Date(expiryDate).getTime() : !b.expiry_date)
+        );
+
+        if (exists) {
+          exists.quantity += qty;
+        } else {
+          product.batches.push({
+            batch_no: batchNo,
+            expiry_date: expiryDate,
+            cost_price: Number(it.unit_cost?.toString() || 0),
+            quantity: qty,
+            warehouse_id: warehouseId,
+            created_at: new Date()
+          });
+        }
+      } else {
+        // Decrement stock
+        product.stock_quantity = Math.max(0, (product.stock_quantity || 0) - qty);
+
+        // FIFO-like deduction from batches
+        let remaining = qty;
+        const sortedBatches = (product.batches || []).sort((a, b) => {
+          if (a.expiry_date && b.expiry_date) return new Date(a.expiry_date) - new Date(b.expiry_date);
+          if (a.expiry_date) return -1;
+          if (b.expiry_date) return 1;
+          return new Date(a.created_at) - new Date(b.created_at);
+        });
+
+        for (const b of sortedBatches) {
+          if (remaining <= 0) break;
+          if (String(b.warehouse_id) !== String(warehouseId)) continue;
+
+          if (b.quantity >= remaining) {
+            b.quantity -= remaining;
+            remaining = 0;
+          } else {
+            remaining -= b.quantity;
+            b.quantity = 0;
+          }
+        }
+      }
+
+      await product.save({ session });
+    }
 
     original.reversal_voucher_id = reversal._id;
     await original.save({ session });

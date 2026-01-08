@@ -244,9 +244,57 @@ export default function InventoryVoucherPage() {
   const [products, setProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
 
-  // suppliers (NEW)
   const [suppliers, setSuppliers] = useState([]);
   const [loadingSuppliers, setLoadingSuppliers] = useState(false);
+
+  // Ref Voucher Logic (NEW)
+  const [refVoucherModalOpen, setRefVoucherModalOpen] = useState(false);
+  const [refVouchers, setRefVouchers] = useState([]);
+  const [loadingRef, setLoadingRef] = useState(false);
+
+  const fetchRefVouchers = async () => {
+    try {
+      setLoadingRef(true);
+      const supId = form.getFieldValue("supplier_id");
+      const res = await getInventoryVouchers(storeId, { type: "IN", status: "COMPLETED", supplier_id: supId, limit: 20 });
+      if (res && res.data) {
+        setRefVouchers(res.data);
+      }
+    } catch (error) {
+       notification.error({ message: "Lỗi tải phiếu nhập", description: error.message });
+    } finally {
+      setLoadingRef(false);
+    }
+  };
+
+  const handleSelectRefVoucher = (v) => {
+      const itemsArr = v.items || [];
+      const newItems = itemsArr.map(it => {
+          // Try to find product for full info
+          const p = products.find(prod => prod._id === it.product_id || prod.id === it.product_id);
+          return {
+             product_id: it.product_id,
+             sku_snapshot: p ? p.sku : (it.sku_snapshot || it.sku || ""),
+             name_snapshot: p ? p.name : (it.name_snapshot || it.product_name || ""),
+             unit_snapshot: p ? p.unit : (it.unit_snapshot || it.unit || ""),
+             qty_actual: it.qty_actual || it.quantity || 1,
+             unit_cost: toNumberDecimal(it.unit_cost),
+             selling_price: 0,
+             batch_no: it.batch_no || "",
+             expiry_date: it.expiry_date ? dayjs(it.expiry_date) : null,
+             note: ""
+          };
+      });
+
+      const currentItems = form.getFieldValue("items") || [];
+      form.setFieldsValue({ items: [...currentItems, ...newItems] });
+      setRefVoucherModalOpen(false);
+      
+      if (v.supplier_id) {
+           form.setFieldsValue({ supplier_id: v.supplier_id });
+           // Auto-set receiver if needed?
+      }
+  };
 
   // filters
   const [q, setQ] = useState("");
@@ -560,6 +608,9 @@ export default function InventoryVoucherPage() {
           unit_snapshot: it.unit_snapshot || it.product_id?.unit || "",
           qty_actual: Number(it.qty_actual || 0),
           unit_cost: toNumberDecimal(it.unit_cost),
+          selling_price: toNumberDecimal(it.selling_price),
+          batch_no: it.batch_no || "",
+          expiry_date: it.expiry_date ? dayjs(it.expiry_date) : null,
           note: it.note || "",
         })),
       });
@@ -594,7 +645,39 @@ export default function InventoryVoucherPage() {
     try {
       const values = await form.validateFields();
 
-      // NEW: nếu NHẬP mà chưa chọn NCC => warn (bạn có thể bỏ rule này nếu muốn optional)
+      // Comprehensive validation
+      const errors = [];
+      
+      if (!values.warehouse_id) errors.push("Chưa chọn kho hàng");
+      if (!values.reason?.trim()) errors.push("Chưa nhập lý do nhập/xuất kho");
+      if (!values.deliverer_name?.trim()) errors.push("Chưa nhập tên người giao");
+      if (!values.receiver_name?.trim()) errors.push("Chưa nhập tên người nhận");
+      
+      // Validate items
+      const itemErrors = [];
+      (values.items || []).forEach((item, idx) => {
+        if (item?.product_id) {
+          if (!item.qty_actual || item.qty_actual <= 0) {
+            itemErrors.push(`Dòng ${idx + 1}: Số lượng phải > 0`);
+          }
+        }
+      });
+      
+      if (errors.length > 0 || itemErrors.length > 0) {
+        const allErrors = [...errors, ...itemErrors];
+        return api.error({
+          message: "Thiếu thông tin bắt buộc",
+          description: (
+            <ul style={{ margin: 0, paddingLeft: 16 }}>
+              {allErrors.map((err, i) => <li key={i}>{err}</li>)}
+            </ul>
+          ),
+          placement: "topRight",
+          duration: 5,
+        });
+      }
+
+      // Warn if import without supplier
       if (values.type === "IN" && !values.supplier_id) {
         return api.warning({
           message: "Thiếu nhà cung cấp",
@@ -646,6 +729,9 @@ export default function InventoryVoucherPage() {
             product_id: x.product_id,
             qty_actual: Number(x.qty_actual || 0),
             unit_cost: Number(x.unit_cost || 0),
+            selling_price: Number(x.selling_price || 0),
+            batch_no: x.batch_no || "",
+            expiry_date: x.expiry_date ? x.expiry_date.toISOString() : null,
             note: x.note || "",
             sku_snapshot: x.sku_snapshot || "",
             name_snapshot: x.name_snapshot || "",
@@ -1025,11 +1111,11 @@ export default function InventoryVoucherPage() {
       title: "Tổng tiền",
       dataIndex: "total_cost",
       key: "total_cost",
-      width: 110,
+      width: 140,
       align: "right",
       render: (v, r) => {
         const cost = v ?? computeTotalsFromItems(r?.items || []).totalCost;
-        return <Text strong>{formatCurrency(toNumberDecimal(cost))}</Text>;
+        return <Text strong style={{ color: "#057a55" }}>{formatCurrency(toNumberDecimal(cost))}</Text>;
       },
     },
     {
@@ -1363,14 +1449,17 @@ export default function InventoryVoucherPage() {
             size="middle"
             requiredMark="optional"
             colon={false}
-            onValuesChange={(changed) => {
-              // Trigger totalsLive recalculation whenever form values change
+            onValuesChange={(changed, allValues) => {
               setFormChangeKey((k) => k + 1);
 
-              if (Object.prototype.hasOwnProperty.call(changed, "type")) {
+              // Auto-fill Logic
+              if (changed.type) {
                 const t = changed.type;
+                
                 if (t === "OUT") {
                   form.setFieldsValue({
+                    deliverer_name: userDisplayName || "",
+                    receiver_name: "",
                     supplier_id: null,
                     supplier_name_snapshot: "",
                     supplier_phone_snapshot: "",
@@ -1379,10 +1468,30 @@ export default function InventoryVoucherPage() {
                     supplier_taxcode_snapshot: "",
                     supplier_contact_person_snapshot: "",
                   });
-                } else {
+                } else if (t === "RETURN") {
+                   form.setFieldsValue({
+                      deliverer_name: userDisplayName || "", 
+                      // Clear receiver to wait for supplier selection
+                      receiver_name: "",
+                      receiver_phone: "",
+                      supplier_id: null,
+                   });
+                } else { // IN
                   const rn = form.getFieldValue("receiver_name");
                   if (!rn) form.setFieldsValue({ receiver_name: userDisplayName || "", receiver_phone: userPhone || "" });
+                  form.setFieldsValue({ deliverer_name: "" });
                 }
+              }
+
+              // Auto-fill receiver when supplier selected for RETURN
+              if (changed.supplier_id && allValues.type === "RETURN") {
+                 const sup = suppliers.find(s => s._id === changed.supplier_id);
+                 if (sup) {
+                    form.setFieldsValue({
+                        receiver_name: sup.contact_person || sup.name || "",
+                        receiver_phone: sup.phone || ""
+                    });
+                 }
               }
             }}
           >
@@ -1475,7 +1584,7 @@ export default function InventoryVoucherPage() {
             <Form.Item shouldUpdate noStyle>
               {() => {
                 const t = form.getFieldValue("type");
-                if (t !== "IN") return null;
+                if (t !== "IN" && t !== "OUT") return null;
 
                 return (
                   <Card
@@ -1682,20 +1791,29 @@ export default function InventoryVoucherPage() {
                     borderRadius: "16px 16px 0 0",
                   }}
                 >
-                  <Row gutter={20} align="middle">
-                    <Col xs={24} md={10}>
+                  <Row gutter={12} align="middle">
+                    <Col xs={24} md={5}>
                       <div style={{ fontWeight: 700, color: "#334155" }}>Sản phẩm</div>
                     </Col>
-                    <Col xs={8} md={3}>
-                      <div style={{ fontWeight: 700, color: "#334155", textAlign: "center" }}>Số lượng</div>
+                    <Col xs={6} md={2}>
+                      <div style={{ fontWeight: 700, color: "#334155", textAlign: "center" }}>SL</div>
                     </Col>
-                    <Col xs={8} md={3}>
-                      <div style={{ fontWeight: 700, color: "#334155", textAlign: "right" }}>Đơn giá</div>
+                    <Col xs={6} md={2}>
+                      <div style={{ fontWeight: 700, color: "#334155", textAlign: "right" }}>Giá vốn</div>
                     </Col>
-                    <Col xs={8} md={3}>
+                    <Col xs={6} md={2}>
+                      <div style={{ fontWeight: 700, color: "#334155", textAlign: "right" }}>Giá bán</div>
+                    </Col>
+                    <Col xs={6} md={2}>
                       <div style={{ fontWeight: 700, color: "#334155", textAlign: "right" }}>Thành tiền</div>
                     </Col>
-                    <Col xs={24} md={4}>
+                    <Col xs={8} md={3}>
+                      <div style={{ fontWeight: 700, color: "#334155" }}>Hạn SD</div>
+                    </Col>
+                    <Col xs={8} md={2}>
+                      <div style={{ fontWeight: 700, color: "#334155" }}>Số lô</div>
+                    </Col>
+                    <Col xs={8} md={5}>
                       <div style={{ fontWeight: 700, color: "#334155" }}>Ghi chú</div>
                     </Col>
                     <Col xs={24} md={1} />
@@ -1717,8 +1835,8 @@ export default function InventoryVoucherPage() {
                           onMouseEnter={(e) => (e.currentTarget.style.background = "#f0fdf4")}
                           onMouseLeave={(e) => (e.currentTarget.style.background = idx % 2 === 0 ? "#ffffff" : "#fafbfc")}
                         >
-                          <Row gutter={20} align="middle">
-                            <Col xs={24} md={10}>
+                          <Row gutter={12} align="middle">
+                            <Col xs={24} md={5}>
                               <Form.Item
                                 {...restField}
                                 name={[name, "product_id"]}
@@ -1727,31 +1845,31 @@ export default function InventoryVoucherPage() {
                               >
                                 <Select
                                   showSearch
-                                  placeholder="Tìm tên / SKU sản phẩm..."
+                                  placeholder="Sản phẩm..."
                                   options={productOptions}
                                   filterOption={filterProductOption}
-                                  size="large"
-                                  style={{ borderRadius: 10 }}
-                                  popupMatchSelectWidth={560}
+                                  size="middle"
+                                  style={{ borderRadius: 8 }}
+                                  popupMatchSelectWidth={480}
                                   optionRender={(opt) => {
                                     const d = opt?.data;
                                     const meta = d?.meta || {};
                                     return (
                                       <div style={{ lineHeight: 1.3 }}>
                                         <div style={{ fontWeight: 700, ...S.ellipsis1 }}>
-                                          {meta.name || d?.label} <Text type="secondary">(Mã sku: {meta.sku || "Trống"})</Text>
+                                          {meta.name || d?.label} <Text type="secondary">(SKU: {meta.sku || "Trống"})</Text>
                                         </div>
-                                        <div style={{ fontSize: 12, color: "#64748b" }}>
-                                          Đơn vị tính:{" "}
-                                          <Tag color="blue" style={{ fontSize: 12 }}>
+                                        <div style={{ fontSize: 11, color: "#64748b" }}>
+                                          Đơn vị:{" "}
+                                          <Tag color="blue" style={{ fontSize: 11 }}>
                                             {meta.unit || "Trống"}
                                           </Tag>
                                           • Tồn:{" "}
-                                          <Tag color="blue" style={{ fontSize: 12 }}>
+                                          <Tag color="blue" style={{ fontSize: 11 }}>
                                             {(meta.stock ?? 0).toLocaleString("vi-VN")}
                                           </Tag>{" "}
                                           • Giá vốn:{" "}
-                                          <Tag color="blue" style={{ fontSize: 12 }}>
+                                          <Tag color="blue" style={{ fontSize: 11 }}>
                                             {formatCurrency(meta.cost ?? 0)}
                                           </Tag>
                                         </div>
@@ -1766,6 +1884,7 @@ export default function InventoryVoucherPage() {
                                     const next = items.map((it, i) => {
                                       if (i !== idx) return it;
                                       const currentUnitCost = it?.unit_cost !== undefined ? it.unit_cost : undefined;
+                                      const currentSellingPrice = it?.selling_price !== undefined ? it.selling_price : undefined;
                                       return {
                                         ...it,
                                         sku_snapshot: p.sku || "",
@@ -1773,6 +1892,8 @@ export default function InventoryVoucherPage() {
                                         unit_snapshot: p.unit || "",
                                         unit_cost:
                                           currentUnitCost !== undefined ? currentUnitCost : toNumberDecimal(p.costprice ?? p.cost_price ?? 0),
+                                        selling_price:
+                                          currentSellingPrice !== undefined ? currentSellingPrice : toNumberDecimal(p.price ?? 0),
                                       };
                                     });
                                     form.setFieldsValue({ items: next });
@@ -1781,74 +1902,186 @@ export default function InventoryVoucherPage() {
                               </Form.Item>
                             </Col>
 
-                            <Col xs={8} md={3}>
+                            <Col xs={6} md={2}>
                               <Form.Item
                                 {...restField}
                                 name={[name, "qty_actual"]}
                                 rules={[
-                                  { required: true, message: "Nhập Số lượng" },
-                                  { type: "number", min: 1, message: "SL >= 1" },
+                                  { required: true, message: "Nhập SL" },
+                                  { type: "number", min: 1, message: ">= 1" },
                                 ]}
                                 style={{ marginBottom: 0 }}
                               >
-                                <InputNumber min={1} style={{ width: "100%", borderRadius: 10 }} size="large" />
+                                <InputNumber min={1} style={{ width: "100%", borderRadius: 8 }} size="middle" />
                               </Form.Item>
                             </Col>
 
-                            <Col xs={8} md={3}>
+                            <Col xs={6} md={2}>
                               <Form.Item {...restField} name={[name, "unit_cost"]} rules={[{ type: "number", min: 0 }]} style={{ marginBottom: 0 }}>
                                 <InputNumber
                                   min={0}
+                                  placeholder="Giá vốn"
+                                  style={{ width: "100%", borderRadius: 8 }}
+                                  size="middle"
                                   formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
-                                  style={{ width: "100%", borderRadius: 10 }}
-                                  size="large"
+                                  parser={(value) => value.replace(/\$\s?|(,*)/g, "")}
                                 />
                               </Form.Item>
                             </Col>
 
-                            <Col xs={8} md={3}>
+                            <Col xs={6} md={2}>
+                              <Form.Item {...restField} name={[name, "selling_price"]} rules={[{ type: "number", min: 0 }]} style={{ marginBottom: 0 }}>
+                                <InputNumber
+                                  min={0}
+                                  placeholder="Giá bán"
+                                  style={{ width: "100%", borderRadius: 8 }}
+                                  size="middle"
+                                  formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
+                                  parser={(value) => value.replace(/\$\s?|(,*)/g, "")}
+                                />
+                              </Form.Item>
+                            </Col>
+
+                            <Col xs={6} md={2}>
                               <Form.Item shouldUpdate noStyle>
                                 {() => {
                                   const items = form.getFieldValue("items") || [];
                                   const it = items[idx] || {};
                                   const line = computeLineCost(it?.qty_actual, it?.unit_cost);
                                   return (
-                                    <div style={{ textAlign: "right", fontSize: 15, fontWeight: 700, color: "#16a34a" }}>{formatCurrency(line)}</div>
+                                    <div style={{ textAlign: "right", fontWeight: 700, color: "#16a34a", fontSize: 13, paddingTop: 6 }}>
+                                      {formatCurrency(line)}
+                                    </div>
                                   );
                                 }}
                               </Form.Item>
                             </Col>
 
-                            <Col xs={24} md={4}>
+                            <Col xs={8} md={3}>
+                              <Form.Item {...restField} name={[name, "expiry_date"]} style={{ marginBottom: 0 }}>
+                                <DatePicker placeholder="Hạn SD" style={{ width: "100%", borderRadius: 8 }} size="middle" format="DD/MM/YYYY" />
+                              </Form.Item>
+                            </Col>
+
+                            <Col xs={8} md={2}>
+                              <Form.Item shouldUpdate={(prev, curr) => prev.type !== curr.type || prev.items?.[name]?.product_id !== curr.items?.[name]?.product_id} noStyle>
+                                {({ getFieldValue, setFieldsValue }) => {
+                                  const type = getFieldValue("type");
+                                  const items = getFieldValue("items") || [];
+                                  const item = items[name] || {};
+                                  const prodId = item.product_id;
+                                  let availableBatches = [];
+                                  
+                                  if ((type === "OUT" || type === "RETURN") && prodId) {
+                                      const p = products.find(x => String(getId(x) || x?._id) === String(prodId));
+                                      if (p && p.batches) availableBatches = p.batches.filter(b => b.quantity > 0);
+                                  }
+
+                                  if (availableBatches.length > 0) {
+                                     return (
+                                        <Form.Item {...restField} name={[name, "batch_no"]} style={{ marginBottom: 0 }}>
+                                            <Select 
+                                                placeholder="Chọn lô"
+                                                size="middle" 
+                                                style={{ borderRadius: 8 }}
+                                                allowClear
+                                                showSearch
+                                                onChange={(val) => {
+                                                    const b = availableBatches.find(x => x.batch_no === val);
+                                                    if (b) {
+                                                        const newItems = [...items];
+                                                        // Update expiry and cost from batch (for return/out logic)
+                                                        newItems[name] = {
+                                                            ...newItems[name],
+                                                            expiry_date: b.expiry_date ? dayjs(b.expiry_date) : null,
+                                                            unit_cost: b.cost_price,
+                                                            batch_no: val
+                                                        };
+                                                        setFieldsValue({ items: newItems });
+                                                    }
+                                                }}
+                                            >
+                                                {availableBatches.map((b, idxBatch) => (
+                                                    <Option key={`${b.batch_no}_${idxBatch}`} value={b.batch_no}>
+                                                        {b.batch_no} (SL: {b.quantity})
+                                                    </Option>
+                                                ))}
+                                            </Select>
+                                        </Form.Item>
+                                     );
+                                  }
+                                  return (
+                                     <Form.Item {...restField} name={[name, "batch_no"]} style={{ marginBottom: 0 }}>
+                                        <Input placeholder="Số lô" size="middle" style={{ borderRadius: 8 }} />
+                                     </Form.Item>
+                                  );
+                                }}
+                              </Form.Item>
+                            </Col>
+
+                            <Col xs={8} md={5}>
                               <Form.Item {...restField} name={[name, "note"]} style={{ marginBottom: 0 }}>
-                                <Input placeholder="Ghi chú..." size="large" style={{ borderRadius: 10 }} />
+                                <Input placeholder="Ghi chú..." size="middle" style={{ borderRadius: 8 }} />
                               </Form.Item>
                             </Col>
 
                             <Col xs={24} md={1} style={{ textAlign: "right" }}>
                               <Button
-                                size="middle"
+                                size="small"
                                 danger
                                 type="text"
-                                icon={<DeleteOutlined />}
+                                icon={<DeleteOutlined style={{ fontSize: 16 }} />}
                                 onClick={() => remove(name)}
-                                style={{ borderRadius: 8 }}
                               />
                             </Col>
 
-                            {/* Hidden fields */}
-                            <Form.Item {...restField} name={[name, "sku_snapshot"]} hidden>
-                              <Input />
-                            </Form.Item>
-                            <Form.Item {...restField} name={[name, "name_snapshot"]} hidden>
-                              <Input />
-                            </Form.Item>
-                            <Form.Item {...restField} name={[name, "unit_snapshot"]} hidden>
-                              <Input />
-                            </Form.Item>
+                            {/* Hidden fields for snapshot storage */}
+                            <Form.Item {...restField} name={[name, "sku_snapshot"]} hidden><Input /></Form.Item>
+                            <Form.Item {...restField} name={[name, "name_snapshot"]} hidden><Input /></Form.Item>
+                            <Form.Item {...restField} name={[name, "unit_snapshot"]} hidden><Input /></Form.Item>
                           </Row>
                         </div>
                       ))}
+
+                      {/* Summary Row */}
+                      <Form.Item shouldUpdate noStyle>
+                        {() => {
+                          const items = form.getFieldValue("items") || [];
+                          const totalQty = items.reduce((sum, it) => sum + (Number(it?.qty_actual) || 0), 0);
+                          const totalCost = items.reduce((sum, it) => sum + computeLineCost(it?.qty_actual, it?.unit_cost), 0);
+                          return (
+                            <div style={{ 
+                              padding: "16px 20px", 
+                              background: "linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)",
+                              borderTop: "2px solid #10b981",
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center"
+                            }}>
+                              <div style={{ display: "flex", gap: 24 }}>
+                                <div>
+                                  <Text type="secondary" style={{ fontSize: 12 }}>Tổng số lượng</Text>
+                                  <div style={{ fontWeight: 700, fontSize: 18, color: "#059669" }}>
+                                    {totalQty.toLocaleString("vi-VN")}
+                                  </div>
+                                </div>
+                                <div>
+                                  <Text type="secondary" style={{ fontSize: 12 }}>Số dòng hàng</Text>
+                                  <div style={{ fontWeight: 700, fontSize: 18, color: "#059669" }}>
+                                    {items.filter(x => x?.product_id).length}
+                                  </div>
+                                </div>
+                              </div>
+                              <div style={{ textAlign: "right" }}>
+                                <Text type="secondary" style={{ fontSize: 12 }}>Tổng tiền</Text>
+                                <div style={{ fontWeight: 700, fontSize: 22, color: "#059669" }}>
+                                  {formatCurrency(totalCost)} ₫
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }}
+                      </Form.Item>
 
                       <div style={{ padding: "12px 20px", background: "#f8fafc" }}>
                         <Button
@@ -1856,10 +2089,21 @@ export default function InventoryVoucherPage() {
                           size="large"
                           type="dashed"
                           icon={<PlusOutlined />}
-                          onClick={() => add({ product_id: null, qty_actual: 1, unit_cost: 0, note: "" })}
-                          style={{ height: 48, borderRadius: 12, fontWeight: 600 }}
+                          onClick={() => add({ product_id: null, qty_actual: 1, unit_cost: 0, selling_price: 0, batch_no: "", expiry_date: null, note: "" })}
+                          style={{ height: 44, borderRadius: 10, fontWeight: 600 }}
                         >
                           Thêm dòng hàng hóa
+                        </Button>
+                        <Button
+                          size="large"
+                          type="primary" 
+                          ghost
+                          icon={<UploadOutlined />}
+                          onClick={() => { setRefVoucherModalOpen(true); fetchRefVouchers(); }}
+                          style={{ height: 44, borderRadius: 10, fontWeight: 600, marginTop: 8 }}
+                          block
+                        >
+                          Chọn từ phiếu nhập đã duyệt
                         </Button>
                       </div>
                     </>
@@ -1868,6 +2112,31 @@ export default function InventoryVoucherPage() {
               </Card>
             </div>
           </Form>
+        </Modal>
+
+        {/* Ref Voucher Modal */}
+        <Modal
+          title="Chọn phiếu nhập nguồn"
+          open={refVoucherModalOpen}
+          onCancel={() => setRefVoucherModalOpen(false)}
+          footer={null}
+          width={700}
+        >
+             <Table
+                dataSource={refVouchers}
+                loading={loadingRef}
+                rowKey="_id"
+                pagination={false}
+                size="small"
+                scroll={{ y: 300 }}
+                columns={[
+                    { title: "Mã phiếu", dataIndex: "voucher_code", key: "code" },
+                    { title: "Ngày", dataIndex: "voucher_date", key: "date", render: (d) => d ? dayjs(d).format("DD/MM/YYYY") : "" },
+                    { title: "Nhà cung cấp", dataIndex: "supplier_name_snapshot", key: "supplier" },
+                    { title: "Mặt hàng", key: "items", render: (_, r) => r.items?.length || 0 },
+                    { title: "", key: "action", render: (_, r) => <Button size="small" type="primary" onClick={() => handleSelectRefVoucher(r)}>Chọn</Button> }
+                ]}
+             />
         </Modal>
 
         {/* ===== DETAIL DRAWER ===== */}
