@@ -23,6 +23,8 @@ import quarterOfYear from "dayjs/plugin/quarterOfYear";
 import "dayjs/locale/vi";
 import { useAuth } from "../../context/AuthContext";
 import apiClient from "../../api/apiClient";
+import operatingExpenseApi from "../../api/operatingExpenseApi";
+import { useNavigation } from "@react-navigation/native";
 
 dayjs.extend(quarterOfYear);
 dayjs.locale("vi");
@@ -76,9 +78,12 @@ const ReportsDashboardScreen: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<FinancialData | null>(null);
 
-  // Extra expenses
-  const [extraExpenses, setExtraExpenses] = useState<number[]>([]);
-  const [newExpense, setNewExpense] = useState<string>("");
+  // Operating expenses from DB
+  const [expenseItems, setExpenseItems] = useState<any[]>([]);
+  const [operatingExpenseId, setOperatingExpenseId] = useState<string | null>(null);
+  const [newExpenseAmount, setNewExpenseAmount] = useState<string>("");
+  const [newExpenseNote, setNewExpenseNote] = useState<string>("");
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
 
   // Applied filter (chỉ đổi khi bấm "Áp dụng")
   const [applied, setApplied] = useState<AppliedFilter>({
@@ -154,6 +159,31 @@ const ReportsDashboardScreen: React.FC = () => {
     return "Chưa chọn kỳ";
   }, [applied]);
 
+  // ========== FETCH OPERATING EXPENSES ==========
+  const loadOperatingExpenses = async (): Promise<void> => {
+    if (!storeId || !applied.periodType || !periodKey) {
+      setExpenseItems([]);
+      setOperatingExpenseId(null);
+      setHasUnsavedChanges(false);
+      return;
+    }
+
+    try {
+      const resp = await operatingExpenseApi.getOperatingExpenseByPeriod({
+        storeId,
+        periodType: applied.periodType,
+        periodKey,
+      });
+      setExpenseItems(resp.items || []);
+      setOperatingExpenseId(resp._id || null);
+      setHasUnsavedChanges(false);
+    } catch (err) {
+      console.error("loadOperatingExpenses error:", err);
+      setExpenseItems([]);
+      setOperatingExpenseId(null);
+    }
+  };
+
   // ========== FETCH FINANCIAL ==========
   const fetchFinancial = async (isRefresh: boolean = false): Promise<void> => {
     if (!storeId) {
@@ -179,10 +209,6 @@ const ReportsDashboardScreen: React.FC = () => {
         periodKey,
       });
 
-      if (extraExpenses.length > 0) {
-        params.append("extraExpense", extraExpenses.join(","));
-      }
-
       const response = await apiClient.get<FinancialResponse>(
         `/financials?${params.toString()}`
       );
@@ -199,46 +225,94 @@ const ReportsDashboardScreen: React.FC = () => {
     }
   };
 
-  // Auto fetch lần đầu nếu có storeId
+  // Auto fetch lần đầu
   useEffect(() => {
-    if (storeId && applied.periodType) fetchFinancial(false);
+    if (storeId && applied.periodType) {
+      fetchFinancial(false);
+      loadOperatingExpenses();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storeId]);
-
-  // Khi extraExpenses thay đổi và đã có kỳ áp dụng -> tự load lại (đỡ phải bấm lại)
-  useEffect(() => {
-    if (!storeId) return;
-    if (!applied.periodType || !periodKey) return;
-    // tránh gọi khi đang mở filter sửa dở
-    if (filterOpen) return;
-    fetchFinancial(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [extraExpenses]);
+  }, [storeId, applied.periodType, periodKey]);
 
   // ========== EXPENSE ACTIONS ==========
-  const addExtraExpense = (): void => {
-    const value = parseFloat(newExpense.replace(/\./g, ""));
-    if (!isNaN(value) && value > 0) {
-      setExtraExpenses((prev) => [...prev, value]);
-      setNewExpense("");
-    } else {
-      Alert.alert("Lỗi", "Vui lòng nhập số tiền hợp lệ");
+  const addExpenseItem = (): void => {
+    const amount = parseFloat(newExpenseAmount.replace(/\./g, ""));
+    if (isNaN(amount) || amount <= 0) {
+      return Alert.alert("Lỗi", "Vui lòng nhập số tiền hợp lệ");
     }
+
+    const newItem = {
+      amount,
+      note: newExpenseNote.trim(),
+      isSaved: false,
+    };
+
+    setExpenseItems([...expenseItems, newItem]);
+    setNewExpenseAmount("");
+    setNewExpenseNote("");
+    setHasUnsavedChanges(true);
   };
 
-  const removeExpense = (index: number): void => {
-    setExtraExpenses((prev) => prev.filter((_, idx) => idx !== index));
-  };
+  const removeExpenseItem = (index: number): void => {
+    const item = expenseItems[index];
 
-  const clearAllExpense = (): void => {
-    Alert.alert("Xác nhận", "Xóa tất cả chi phí ngoài?", [
+    const performRemove = async () => {
+      try {
+        setLoading(true);
+        if (item._id && operatingExpenseId) {
+          // Xóa từ DB
+          await operatingExpenseApi.deleteExpenseItem(operatingExpenseId, index);
+        }
+        
+        const newItems = expenseItems.filter((_, idx) => idx !== index);
+        setExpenseItems(newItems);
+        
+        // Nếu không còn item nào chưa lưu, reset change flag
+        if (!newItems.some(it => !it._id)) {
+           setHasUnsavedChanges(false);
+        }
+
+        Alert.alert("Thành công", "Đã xóa khoản chi phí");
+        fetchFinancial();
+      } catch (err: any) {
+        Alert.alert("Lỗi", "Không thể xóa chi phí: " + (err?.message || "Lỗi server"));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    Alert.alert("Xác nhận", "Xóa khoản chi phí này?", [
       { text: "Hủy", style: "cancel" },
-      {
-        text: "Xóa",
-        style: "destructive",
-        onPress: () => setExtraExpenses([]),
-      },
+      { text: "Xóa", style: "destructive", onPress: performRemove },
     ]);
+  };
+
+  const saveExpenses = async (): Promise<void> => {
+    if (!storeId || !applied.periodType || !periodKey) return;
+
+    try {
+      setLoading(true);
+      const payload = {
+        storeId,
+        periodType: applied.periodType,
+        periodKey,
+        items: expenseItems.map(it => ({
+          amount: it.amount,
+          note: it.note
+        })),
+      };
+
+      await operatingExpenseApi.createOperatingExpense(payload);
+      Alert.alert("Thành công", "Đã lưu danh sách chi phí");
+      
+      setHasUnsavedChanges(false);
+      loadOperatingExpenses();
+      fetchFinancial();
+    } catch (err: any) {
+      Alert.alert("Lỗi", "Không thể lưu chi phí: " + (err?.message || "Lỗi server"));
+    } finally {
+      setLoading(false);
+    }
   };
 
   // ========== FILTER SHEET ==========
@@ -409,8 +483,8 @@ const ReportsDashboardScreen: React.FC = () => {
               <Ionicons name="funnel-outline" size={14} color="#fff" />
               <Text style={styles.headerPillText}>
                 Bộ lọc{" "}
-                {extraExpenses.length > 0
-                  ? `• ${extraExpenses.length} CP ngoài`
+                {expenseItems.length > 0
+                  ? `• ${expenseItems.length} CP`
                   : ""}
               </Text>
             </TouchableOpacity>
@@ -818,52 +892,68 @@ const ReportsDashboardScreen: React.FC = () => {
                 )}
               </View>
 
-              <Text style={styles.blockTitle}>Chi phí ngoài</Text>
-              <Text style={styles.blockHint}>
-                (Chi phí không trong hệ thống: mặt bằng, điện nước,
-                marketing...)
-              </Text>
-
-              <View style={styles.expenseRow}>
-                <View style={styles.expenseInputWrap}>
-                  <Ionicons name="cash-outline" size={16} color="#334155" />
-                  <TextInput
-                    style={styles.expenseInput}
-                    value={formatNumber(newExpense)}
-                    onChangeText={(t) => setNewExpense(t.replace(/\./g, ""))}
-                    placeholder="VD: 1000000"
-                    keyboardType="numeric"
-                    placeholderTextColor="#94a3b8"
-                  />
+              <Text style={styles.blockTitle}>Chi phí vận hành (Điện, nước, mặt bằng...)</Text>
+              
+              <View style={styles.expenseInputCard}>
+                <View style={styles.expenseInputRow}>
+                   <View style={styles.expenseInputWrap}>
+                    <Ionicons name="cash-outline" size={16} color="#334155" />
+                    <TextInput
+                      style={styles.expenseInput}
+                      value={formatNumber(newExpenseAmount)}
+                      onChangeText={(t) => setNewExpenseAmount(t.replace(/\./g, ""))}
+                      placeholder="Số tiền"
+                      keyboardType="numeric"
+                      placeholderTextColor="#94a3b8"
+                    />
+                  </View>
+                  <View style={[styles.expenseInputWrap, { flex: 1.5 }]}>
+                    <Ionicons name="create-outline" size={16} color="#334155" />
+                    <TextInput
+                      style={styles.expenseInput}
+                      value={newExpenseNote}
+                      onChangeText={setNewExpenseNote}
+                      placeholder="Ghi chú (VD: Tiền điện)"
+                      placeholderTextColor="#94a3b8"
+                    />
+                  </View>
                 </View>
-
+                
                 <TouchableOpacity
-                  style={[styles.addBtn, !newExpense && { opacity: 0.5 }]}
-                  onPress={addExtraExpense}
-                  disabled={!newExpense}
+                  style={[styles.addBtnLarge, (!newExpenseAmount || !newExpenseNote) && { opacity: 0.5 }]}
+                  onPress={addExpenseItem}
+                  disabled={!newExpenseAmount || !newExpenseNote}
                 >
-                  <Ionicons name="add" size={18} color="#fff" />
+                  <Ionicons name="add-circle" size={20} color="#fff" />
+                  <Text style={styles.addBtnLargeText}>Thêm vào danh sách</Text>
                 </TouchableOpacity>
               </View>
 
-              {extraExpenses.length > 0 && (
+              {expenseItems.length > 0 && (
                 <>
                   <View style={styles.expenseHeaderRow}>
-                    <Text style={styles.expenseHeaderText}>Đã thêm</Text>
-                    <TouchableOpacity onPress={clearAllExpense}>
-                      <Text style={styles.clearAllText}>Xóa tất cả</Text>
-                    </TouchableOpacity>
+                    <Text style={styles.expenseHeaderText}>Danh sách chi phí ({expenseItems.length})</Text>
+                    {hasUnsavedChanges && (
+                      <TouchableOpacity onPress={saveExpenses} style={styles.saveExpensesBtn}>
+                        <Ionicons name="save-outline" size={16} color="#fff" />
+                        <Text style={styles.saveExpensesBtnText}>Lưu ngay</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
 
-                  <View style={styles.expenseChips}>
-                    {extraExpenses.map((exp, index) => (
-                      <View key={index} style={styles.expenseChip}>
-                        <Text style={styles.expenseChipText}>
-                          {formatVND(exp)}
-                        </Text>
-                        <TouchableOpacity onPress={() => removeExpense(index)}>
+                  <View style={styles.expenseList}>
+                    {expenseItems.map((exp, index) => (
+                      <View key={index} style={[styles.expenseListItem, !exp._id && styles.expenseListItemUnsaved]}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.expenseItemAmount}>{formatVND(exp.amount)}</Text>
+                          <Text style={styles.expenseItemNote}>{exp.note || "(Không có ghi chú)"}</Text>
+                        </View>
+                        <TouchableOpacity 
+                          style={styles.removeExpenseBtn} 
+                          onPress={() => removeExpenseItem(index)}
+                        >
                           <Ionicons
-                            name="close-circle"
+                            name="trash-outline"
                             size={18}
                             color="#ef4444"
                           />
@@ -871,6 +961,10 @@ const ReportsDashboardScreen: React.FC = () => {
                       </View>
                     ))}
                   </View>
+
+                  {hasUnsavedChanges && (
+                    <Text style={styles.unsavedHint}>* Bạn có thay đổi chưa lưu. Hãy bấm lưu để cập nhật báo cáo.</Text>
+                  )}
                 </>
               )}
             </ScrollView>
@@ -1414,6 +1508,99 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   footerPrimaryText: { color: "#fff", fontWeight: "900" },
+
+  // Expense List styles
+  expenseInputCard: {
+    marginHorizontal: 16,
+    padding: 12,
+    borderRadius: 18,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  expenseInputRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 10,
+  },
+  addBtnLarge: {
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "#16a34a",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  addBtnLargeText: {
+    color: "#fff",
+    fontWeight: "800",
+    fontSize: 13,
+  },
+  expenseList: {
+    marginTop: 10,
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  expenseListItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  expenseListItemUnsaved: {
+    borderColor: "#f97316",
+    backgroundColor: "#fff7ed",
+  },
+  expenseItemAmount: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#0f172a",
+  },
+  expenseItemNote: {
+    fontSize: 12,
+    color: "#64748b",
+    marginTop: 2,
+    fontWeight: "600",
+  },
+  removeExpenseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "#fef2f2",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  saveExpensesBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#0ea5e9",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  saveExpensesBtnText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  unsavedHint: {
+    marginTop: 10,
+    marginHorizontal: 16,
+    fontSize: 11,
+    color: "#f97316",
+    fontWeight: "700",
+    fontStyle: "italic",
+  },
 
   // Picker modal
   pickerOverlay: { flex: 1, backgroundColor: "rgba(2,6,23,0.45)" },

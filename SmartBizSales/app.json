@@ -42,7 +42,8 @@
         }
       ],
       "expo-web-browser",
-      "expo-font"
+      "expo-font",
+      "expo-speech-recognition"
     ],
     "extra": {
       "eas": {

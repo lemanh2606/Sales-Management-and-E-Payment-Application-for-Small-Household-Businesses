@@ -139,8 +139,8 @@ async function checkStoreAccess(req, res, next) {
       req.query.shopId ||
       req.query.storeId ||
       req.params.storeId ||
-      req.body.storeId ||
-      req.body.shopId ||
+      req.body?.storeId ||
+      req.body?.shopId ||
       null;
 
     // Nếu chưa có storeId từ request, dùng current_store của user (nếu có)

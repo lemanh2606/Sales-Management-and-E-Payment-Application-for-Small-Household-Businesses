@@ -365,11 +365,19 @@ const createOrder = async (req, res) => {
         isDeleted: { $ne: true },
       }).session(session);
 
-      if (!prod) throw new Error("Sản phẩm không tồn tại");
-
-      if (prod.stock_quantity < qty) {
-        throw new Error(`Không đủ tồn kho: ${prod.name}`);
+      if (!prod) {
+        throw new Error(`Sản phẩm ID ${item.productId} không tồn tại hoặc đã ngừng kinh doanh`);
       }
+
+      // Enhanced stock validation
+      const currentStock = Number(prod.stock_quantity || 0);
+      if (currentStock <= 0) {
+        throw new Error(`Sản phẩm "${prod.name}" đã hết hàng trong kho`);
+      }
+      if (currentStock < qty) {
+        throw new Error(`Sản phẩm "${prod.name}" không đủ tồn kho. Còn lại: ${currentStock}, Yêu cầu: ${qty}`);
+      }
+
 
       // PRICE
       let price = Number(prod.price);
@@ -469,38 +477,74 @@ const createOrder = async (req, res) => {
     }
 
     // ================= 9. QR PAYMENT =================
+    // ================= 9. QR PAYMENT (PayOS) =================
     let qrData = null;
     let bankInfo = null;
 
     if (paymentMethod === "qr") {
-      const paymentConfig = await StorePaymentConfig.findOne({
-        store: storeId,
-      }).session(session);
+      try {
+        // Lấy config PayOS của Store
+        const paymentConfig = await StorePaymentConfig.findOne({
+          store: storeId,
+        }).session(session);
 
-      if (!paymentConfig || !paymentConfig.banks.length) {
-        throw new Error("Chưa cấu hình ngân hàng QR");
+        const amount = Math.round(total);
+        const description = `DH ${order._id.toString().slice(-6)}`;
+
+        let usedPayOS = false;
+        let qrUrl = "";
+
+        // Ưu tiên 1: PayOS (Nếu đã bật và có config)
+        if (paymentConfig?.payos?.isEnabled && paymentConfig.payos.clientId) {
+           const creds = {
+             clientId: paymentConfig.payos.clientId,
+             apiKey: paymentConfig.payos.apiKey,
+             checksumKey: paymentConfig.payos.checksumKey,
+           };
+           console.log("Using Store PayOS Creds for Store:", storeId);
+
+           // Generate paymentRef (bắt buộc số cho PayOS orderCode)
+           const paymentRef = Number(`${Date.now()}${Math.floor(Math.random() * 1000).toString().slice(0,3)}`).toString().slice(0, 14); 
+
+           const { generateQRWithPayOS } = require('../../services/payOSService');
+           
+           // Gọi Service (với creds, không null)
+           const payResult = await generateQRWithPayOS({
+             amount,
+             description,
+             orderCode: Number(paymentRef)
+           }, creds);
+
+           qrUrl = payResult.qrDataURL;
+           order.paymentRef = paymentRef.toString();
+           order.qrExpiry = new Date(Date.now() + 15 * 60 * 1000); 
+           bankInfo = { bankName: "PayOS QR", accountNumber: "" };
+           usedPayOS = true;
+
+        } else if (paymentConfig?.banks?.length > 0) {
+           // Ưu tiên 2: QR Tĩnh (Ngân hàng)
+           console.log("PayOS Disabled/Missing. Using Static Bank QR for Store:", storeId);
+           const bank = paymentConfig.banks.find(b => b.isDefault) || paymentConfig.banks[0];
+           
+           const addInfo = encodeURIComponent(description);
+           const accName = encodeURIComponent(bank.accountName);
+           // Link VietQR Tĩnh
+           qrUrl = `https://img.vietqr.io/image/${bank.bankCode}-${bank.accountNumber}-compact2.png?amount=${amount}&addInfo=${addInfo}&accountName=${accName}`;
+           
+           order.paymentRef = order._id.toString(); // Dùng ID đơn làm ref
+           bankInfo = { bankName: bank.bankName, accountNumber: bank.accountNumber };
+           
+        } else {
+           // Không có config nào
+           throw new Error("Cửa hàng chưa cấu hình thanh toán (PayOS hoặc Tài khoản Ngân hàng).");
+        }
+
+        qrData = qrUrl;
+
+      } catch (payOsErr) {
+        console.error("PayOS Generation Failed:", payOsErr.message);
+        throw new Error("Không thể tạo QR PayOS: " + payOsErr.message);
       }
-
-      const bank = paymentConfig.banks.find((b) => b.isDefault);
-      if (!bank) throw new Error("Chưa có ngân hàng mặc định");
-
-      const amount = Math.round(total);
-      const desc = `Thanh toan don ${order._id}`;
-
-      const qrUrl = `https://img.vietqr.io/image/${bank.bankCode}-${
-        bank.accountNumber
-      }-compact2.png?amount=${amount}&addInfo=${encodeURIComponent(
-        desc
-      )}&accountName=${encodeURIComponent(bank.accountName)}`;
-
-      order.qrImageUrl = qrUrl;
-      order.qrExpiry = new Date(Date.now() + 15 * 60 * 1000);
-
-      qrData = qrUrl;
-      bankInfo = {
-        bankName: bank.bankName,
-        accountNumber: bank.accountNumber,
-      };
     }
 
     await order.save({ session });
@@ -2738,6 +2782,82 @@ const deletePendingOrder = async (req, res) => {
   }
 };
 
+/* ============= POS PAYMENT SUPPORT (PayOS) ============= */
+// POST /api/orders/pos/payment-link
+const generatePosPaymentLink = async (req, res) => {
+    try {
+        const { amount, description, orderCode } = req.body;
+        // Nếu không có orderCode thì tự sinh
+        const finalOrderCode = orderCode || Date.now();
+        const { generateQRWithPayOS } = require('../../services/payOSService');
+        
+        const result = await generateQRWithPayOS({
+            amount,
+            description: description || `POS-${finalOrderCode}`,
+            orderCode: finalOrderCode
+        });
+        
+        return res.json({
+            success: true,
+            data: result // { txnRef, amount, paymentLink, qrDataURL }
+        });
+    } catch (error) {
+        console.error("Generate POS Link error:", error);
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// GET /api/orders/pos/payment-status/:orderCode
+const checkPosPaymentStatus = async (req, res) => {
+    try {
+        const { orderCode } = req.params;
+        const { getPaymentInfo } = require('../../services/payOSService');
+        const mongoose = require('mongoose');
+
+        // Check Valid ObjectId -> Static QR -> Manual Check
+        if (mongoose.isValidObjectId(orderCode)) {
+            return res.json({
+                success: true,
+                status: "MANUAL_CHECK_REQUIRED",
+                message: "QR Tĩnh: Vui lòng kiểm tra tài khoản và xác nhận thủ công."
+            });
+        }
+        
+        // Tìm Order để biết thuộc store nào mà lấy cấu hình PayOS
+        let creds = null;
+        // orderCode chính là paymentRef
+        const order = await Order.findOne({ paymentRef: orderCode.toString() });
+        
+        if (order) {
+           const paymentConfig = await StorePaymentConfig.findOne({ store: order.storeId });
+           if (paymentConfig?.payos?.isEnabled && paymentConfig.payos.clientId) {
+                creds = {
+                    clientId: paymentConfig.payos.clientId,
+                    apiKey: paymentConfig.payos.apiKey,
+                    checksumKey: paymentConfig.payos.checksumKey
+                };
+           }
+        }
+
+        const info = await getPaymentInfo(orderCode, creds);
+        
+        if (!info) {
+             return res.json({ success: false, status: 'NOT_FOUND' });
+        }
+        
+        return res.json({
+            success: true,
+            status: info.status, 
+            amountPaid: info.amountPaid,
+            data: info
+        });
+    } catch (error) {
+         console.error("Check POS Status error:", error);
+         // Don't return 500 effectively, just PENDING so client keeps retry or manual
+         return res.json({ success: false, status: 'PENDING', message: error.message });
+    }
+};
+
 module.exports = {
   createOrder,
   setPaidCash,
@@ -2761,4 +2881,6 @@ module.exports = {
   getOrderListAll,
   exportAllOrdersToExcel,
   deletePendingOrder,
+  generatePosPaymentLink,
+  checkPosPaymentStatus
 };

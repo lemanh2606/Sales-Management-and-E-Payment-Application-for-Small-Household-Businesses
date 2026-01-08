@@ -8,6 +8,7 @@ const Employee = require("../../models/Employee");
 const Supplier = require("../../models/Supplier");
 const logActivity = require("../../utils/logActivity");
 const InventoryVoucher = require("../../models/InventoryVoucher");
+const Warehouse = require("../../models/Warehouse"); // Imported logic
 const path = require("path");
 const { cloudinary, deleteFromCloudinary } = require("../../utils/cloudinary");
 const {
@@ -1309,7 +1310,7 @@ const getLowStockProducts = async (req, res) => {
 // GET /api/products/search - Tìm sản phẩm theo tên hoặc SKU (regex case-insensitive)
 const searchProducts = async (req, res) => {
   try {
-    const { query, storeId, limit = 10 } = req.query; // Params: query (tên/SKU), storeId, limit (default 10)
+    const { query, storeId, limit = 50 } = req.query; // Tăng limit mặc định lên 50
 
     if (!query || query.trim().length === 0) {
       return res
@@ -1317,10 +1318,13 @@ const searchProducts = async (req, res) => {
         .json({ message: "Query tìm kiếm không được để trống" });
     }
 
+    const searchTerm = query.trim();
+    
     const searchQuery = {
       $or: [
-        { name: { $regex: query.trim(), $options: "i" } }, // Tìm tên (case-insensitive)
-        { sku: { $regex: query.trim(), $options: "i" } }, // Tìm SKU (case-insensitive)
+        { name: { $regex: searchTerm, $options: "i" } }, // Tìm tên (case-insensitive)
+        { sku: { $regex: searchTerm, $options: "i" } }, // Tìm SKU (case-insensitive)
+        { description: { $regex: searchTerm, $options: "i" } }, // Tìm cả mô tả
       ],
       status: "Đang kinh doanh", // Chỉ sản phẩm đang bán
       store_id: new mongoose.Types.ObjectId(storeId), // Filter store của staff/manager
@@ -1329,7 +1333,7 @@ const searchProducts = async (req, res) => {
 
     const products = await Product.find(searchQuery)
       .select("image name sku price cost_price stock_quantity unit") // Chỉ lấy field cần thiết
-      .sort({ name: 1 }) // Sắp xếp theo tên A-Z
+      .sort({ stock_quantity: -1, name: 1 }) // Ưu tiên có stock, sau đó A-Z
       .limit(parseInt(limit)) // Limit số kết quả
       .lean(); // Lean cho nhanh
 
@@ -1473,6 +1477,10 @@ const importProducts = async (req, res) => {
       groups.map((g) => [g.name.toLowerCase(), g])
     );
 
+    // ===== WAREHOUSE CACHE =====
+    const warehouses = await Warehouse.find({ store_id: storeId }).lean();
+    const warehouseMap = new Map(warehouses.map(w => [w.name.toLowerCase(), w]));
+
     const existingProducts = await Product.find({
       store_id: storeId,
       isDeleted: false,
@@ -1536,14 +1544,43 @@ const importProducts = async (req, res) => {
         const row = sanitizeData(data[i]);
         const rowNumber = i + 2;
 
-        const price = Number(row["Giá bán"] || 0);
-        const cost = Number(row["Giá vốn"] || 0);
+        const priceInput = Number(row["Giá bán"] || 0);
+        const costInput = Number(row["Giá vốn"] || 0);
         const openingQty = Number(row["Tồn kho"] || 0);
-
+        
         let sku = row["Mã SKU"]?.trim();
-        if (!sku) sku = await generateSKU();
+        const productName = row["Tên sản phẩm"]?.trim();
+        
+        if (!productName) {
+            throw new Error("Tên sản phẩm là bắt buộc");
+        }
 
-        // --- SUPPLIER (Auto Create) ---
+        // --- 1. IDENTIFY PRODUCT ---
+        let product = null;
+        
+        // Check by SKU first
+        if (sku) {
+            product = await Product.findOne({ sku, store_id: storeId, isDeleted: false }).session(session);
+        }
+        
+        // If not found by SKU, check by Name
+        if (!product) {
+            product = await Product.findOne({ name: productName, store_id: storeId, isDeleted: false }).session(session);
+        }
+
+        // If still not found -> New Product -> Generate SKU if missing
+        let isNew = false;
+        if (!product) {
+            isNew = true;
+            if (!sku) {
+                sku = await generateSKU();
+            }
+        } else {
+            // Found product -> Use its SKU
+            sku = product.sku;
+        }
+
+        // --- 2. SUPPLIER (Auto Create) ---
         let supplierId = null;
         let supplierName = row["Nhà cung cấp"] ? row["Nhà cung cấp"].trim() : "";
         if (supplierName) {
@@ -1560,10 +1597,11 @@ const importProducts = async (req, res) => {
             supplierId = newSupplier._id;
             // Update cache
             supplierMap.set(lowerName, newSupplier);
+            results.debug.suppliersUsed++; 
           }
         }
 
-        // --- GROUP (Auto Create) ---
+        // --- 3. GROUP (Auto Create) ---
         let groupId = null;
         let groupName = row["Nhóm sản phẩm"] ? row["Nhóm sản phẩm"].trim() : "";
         if (groupName) {
@@ -1574,7 +1612,7 @@ const importProducts = async (req, res) => {
             // Create new Group
             const newGroup = new ProductGroup({
               name: groupName,
-              storeId: storeId, // Fix: Model uses storeId
+              storeId: storeId, 
               description: "Tự động tạo từ Import Excel"
             });
             await newGroup.save({ session });
@@ -1584,66 +1622,86 @@ const importProducts = async (req, res) => {
           }
         }
 
-        let product = await Product.findOne({
-          sku,
-          store_id: storeId,
-          isDeleted: false,
-        }).session(session);
+        // --- 4. WAREHOUSE (Auto Create) ---
+        let warehouseIdForRow = warehouseId; // Default store default
+        let warehouseNameForRow = warehouseName; // Default store default
+        
+        const rowWarehouseName = row["Tên kho"] ? row["Tên kho"].trim() : "";
+        if (rowWarehouseName) {
+             const lowerWName = rowWarehouseName.toLowerCase();
+             if (warehouseMap.has(lowerWName)) {
+                 const wh = warehouseMap.get(lowerWName);
+                 warehouseIdForRow = wh._id;
+                 warehouseNameForRow = wh.name;
+             } else {
+                 // Create New Warehouse
+                 const newWh = new Warehouse({
+                     name: rowWarehouseName,
+                     store_id: storeId,
+                     is_default: false,
+                     address: "Tạo tự động từ Import",
+                 });
+                 await newWh.save({ session });
+                 warehouseIdForRow = newWh._id;
+                 warehouseNameForRow = newWh.name;
+                 warehouseMap.set(lowerWName, newWh);
+             }
+        }
 
-        let isNew = false;
+        // --- 5. CREATE OR UPDATE PRODUCT ---
+        // Legal fields common logic
+        const taxRate = row["Thuế GTGT (%)"] !== undefined ? Number(row["Thuế GTGT (%)"]) : 0;
+        const origin = row["Xuất xứ"] ? row["Xuất xứ"].toString().trim() : "";
+        const brand = row["Thương hiệu"] ? row["Thương hiệu"].toString().trim() : "";
+        const warranty = row["Bảo hành"] ? row["Bảo hành"].toString().trim() : "";
+        const unit = row["Đơn vị"] ? row["Đơn vị"].toString().trim() : "";
 
         if (product) {
-          // Legal fields
-          const taxRate = row["Thuế GTGT (%)"] !== undefined ? Number(row["Thuế GTGT (%)"]) : 0;
-          const origin = row["Xuất xứ"] ? row["Xuất xứ"].toString().trim() : "";
-          const brand = row["Thương hiệu"] ? row["Thương hiệu"].toString().trim() : "";
-          const warranty = row["Bảo hành"] ? row["Bảo hành"].toString().trim() : "";
-          const unit = row["Đơn vị"] ? row["Đơn vị"].toString().trim() : "";
+          // UPDATE
+          // Only update cost/price if provided in Excel (avoid overwriting with 0)
+          const newPrice = priceInput > 0 ? priceInput : product.price;
+          const newCost = costInput > 0 ? costInput : product.cost_price;
 
           await Product.updateOne(
             { _id: product._id },
             {
               $set: {
-                name: row["Tên sản phẩm"],
-                price,
-                cost_price: cost,
-                supplier_id: supplierId,
-                group_id: groupId,
-                unit: unit,
+                name: productName, // Update name standardization
+                price: newPrice,
+                cost_price: newCost,
+                supplier_id: supplierId || product.supplier_id, // Update supplier if provided
+                group_id: groupId || product.group_id, // Update group if provided
+                unit: unit || product.unit,
                 // Update legal fields
-                tax_rate: isNaN(taxRate) ? 0 : taxRate,
-                origin: origin,
-                brand: brand,
-                warranty_period: warranty
+                tax_rate: isNaN(taxRate) ? product.tax_rate : taxRate,
+                origin: origin || product.origin,
+                brand: brand || product.brand,
+                warranty_period: warranty || product.warranty_period
+                // Note: Don't change default_warehouse of existing product via excel usually, unless explicitly asked.
+                // Keeping old one is safer. Or we can update it if rowWarehouseName is provided?
+                // Let's keep existing default warehouse to minimize side effects.
               },
             },
             { session }
           );
-          product = await Product.findById(product._id).session(session);
+          product = await Product.findById(product._id).session(session); // reload
           results.debug.productsUpdated++;
         } else {
-          // Legal fields
-          const taxRate = row["Thuế GTGT (%)"] !== undefined ? Number(row["Thuế GTGT (%)"]) : 0;
-          const origin = row["Xuất xứ"] ? row["Xuất xứ"].toString().trim() : "";
-          const brand = row["Thương hiệu"] ? row["Thương hiệu"].toString().trim() : "";
-          const warranty = row["Bảo hành"] ? row["Bảo hành"].toString().trim() : "";
-          const unit = row["Đơn vị"] ? row["Đơn vị"].toString().trim() : "";
-
+          // CREATE
           product = new Product({
-            name: row["Tên sản phẩm"],
+            name: productName,
             sku,
-            price,
-            cost_price: cost,
-            stock_quantity: 0,
+            price: priceInput,
+            cost_price: costInput,
+            stock_quantity: 0, // Initial 0, will add via voucher
             store_id: storeId,
             supplier_id: supplierId,
             group_id: groupId,
-            default_warehouse_id: warehouseId,
-            default_warehouse_name: warehouseName,
+            default_warehouse_id: warehouseIdForRow, // Use resolved warehouse
+            default_warehouse_name: warehouseNameForRow,
             createdBy: userId,
             unit: unit,
 
-            // Save legal fields
             tax_rate: isNaN(taxRate) ? 0 : taxRate,
             origin: origin,
             brand: brand,
@@ -1651,12 +1709,13 @@ const importProducts = async (req, res) => {
           });
           await product.save({ session });
           results.debug.productsCreated++;
-          isNew = true;
         }
 
         // ===== TẠO PHIẾU NHẬP KHO =====
         if (openingQty > 0) {
           const now = new Date();
+          // Giá vốn cho lần nhập này: ưu tiên file Import, fallback về giá hiện tại
+          const entryCost = costInput > 0 ? costInput : (product.cost_price || 0);
 
           const voucher = new InventoryVoucher({
             store_id: storeId,
@@ -1670,18 +1729,18 @@ const importProducts = async (req, res) => {
               ? "Nhập tồn đầu kỳ khi import sản phẩm"
               : "Nhập bổ sung tồn kho khi import",
 
-            warehouse_id: warehouseId,
-            warehouse_name: warehouseName,
+            warehouse_id: warehouseIdForRow,
+            warehouse_name: warehouseNameForRow,
 
             // ===== NGHIỆP VỤ ĐẦY ĐỦ =====
             supplier_id: supplierId,
-            supplier_name_snapshot: supplier?.name || "",
+            supplier_name_snapshot: supplierName || (supplierId ? "Nhà cung cấp cũ" : ""),
 
-            partner_name: supplier?.name || "Nhập file Excel",
-            partner_phone: supplier?.phone || "",
-            partner_address: supplier?.address || "",
+            partner_name: supplierName || "Nhập file Excel",
+            // partner_phone
+            // partner_address
 
-            deliverer_name: supplier?.contact_person || "Nhà cung cấp",
+            // deliverer_name
             receiver_name: user.fullname || user.username,
 
             ref_type: isNew ? "PRODUCT_IMPORT_CREATE" : "PRODUCT_IMPORT_UPDATE",
@@ -1695,20 +1754,20 @@ const importProducts = async (req, res) => {
             items: [
               {
                 product_id: product._id,
-                supplier_id: supplierId,
-                supplier_name_snapshot: supplier?.name || "",
+                supplier_id: supplierId || product.supplier_id,
+                supplier_name_snapshot: supplierName || "",
 
                 sku_snapshot: product.sku,
                 name_snapshot: product.name,
                 unit_snapshot: product.unit || "",
 
-                warehouse_id: warehouseId,
-                warehouse_name: warehouseName,
+                warehouse_id: warehouseIdForRow,
+                warehouse_name: warehouseNameForRow,
 
                 qty_document: openingQty,
                 qty_actual: openingQty,
 
-                unit_cost: mongoose.Types.Decimal128.fromString(String(cost)),
+                unit_cost: mongoose.Types.Decimal128.fromString(String(entryCost)),
                 // Support Batch & Expiry
                 batch_no: row["Số lô"] || "",
                 expiry_date: parseImportDate(row["Hạn sử dụng"]),
@@ -1732,9 +1791,9 @@ const importProducts = async (req, res) => {
                   batches: {
                     batch_no: batchNo || `BATCH-${Date.now()}`,
                     expiry_date: expiryDate,
-                    cost_price: cost,
+                    cost_price: entryCost,
                     quantity: openingQty,
-                    warehouse_id: warehouseId,
+                    warehouse_id: warehouseIdForRow,
                     created_at: new Date()
                   }
                 }
@@ -1798,6 +1857,7 @@ const downloadProductTemplate = async (req, res) => {
       "Đơn vị",
       "Nhà cung cấp",
       "Nhóm sản phẩm",      // New: Cho phép import nhóm
+      "Tên kho",            // New: Auto create Warehouse
       "Số lô",
       "Hạn sử dụng",
       "Thuế GTGT (%)",      // New
