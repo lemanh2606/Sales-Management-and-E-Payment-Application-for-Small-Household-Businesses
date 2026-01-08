@@ -39,11 +39,34 @@ export const deleteMultipleExpenseItems = async (id: string, itemIds: string[]):
   return response.data;
 };
 
+export const suggestAllocation = async (params: {
+  storeId: string;
+  fromPeriodType: string;
+  fromPeriodKey: string;
+  toPeriodType: string;
+}): Promise<any> => {
+  const response = await apiClient.get("/operating-expenses/suggest-allocation", { params });
+  return response.data;
+};
+
+export const executeAllocation = async (data: {
+  storeId: string;
+  fromPeriodType: string;
+  fromPeriodKey: string;
+  toPeriodType: string;
+  suggestions: any[];
+}): Promise<any> => {
+  const response = await apiClient.post("/operating-expenses/execute-allocation", data);
+  return response.data;
+};
+
 export default {
     getOperatingExpenses,
     getOperatingExpenseByPeriod,
     createOperatingExpense,
     updateOperatingExpense,
     deleteExpenseItem,
-    deleteMultipleExpenseItems,
+    deleteItemWithCheckbox: deleteMultipleExpenseItems,
+    suggestAllocation,
+    executeAllocation,
 };

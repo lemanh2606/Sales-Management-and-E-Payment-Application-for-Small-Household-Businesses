@@ -93,6 +93,9 @@ const ReportsDashboardScreen: React.FC = () => {
   const [newExpenseAmount, setNewExpenseAmount] = useState<string>("");
   const [newExpenseNote, setNewExpenseNote] = useState<string>("");
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
+  const [previousPeriodType, setPreviousPeriodType] = useState<PeriodType>("");
+  const [prevPeriodKey, setPrevPeriodKey] = useState<string>("");
+  const [allocationSuggestion, setAllocationSuggestion] = useState<any>(null);
 
   // Applied filter (chỉ đổi khi bấm "Áp dụng")
   const [applied, setApplied] = useState<AppliedFilter>({
@@ -233,7 +236,6 @@ const ReportsDashboardScreen: React.FC = () => {
       setRefreshing(false);
     }
   };
-
   // Auto fetch lần đầu
   useEffect(() => {
     if (storeId && applied.periodType) {
@@ -242,6 +244,32 @@ const ReportsDashboardScreen: React.FC = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeId, applied.periodType, periodKey]);
+
+  // Suggest allocation when period type changes
+  useEffect(() => {
+    const checkAllocation = async () => {
+      if (previousPeriodType && previousPeriodType !== applied.periodType && prevPeriodKey && storeId) {
+        try {
+          const suggestion = await operatingExpenseApi.suggestAllocation({
+            storeId,
+            fromPeriodType: previousPeriodType,
+            fromPeriodKey: prevPeriodKey,
+            toPeriodType: applied.periodType,
+          });
+          if (suggestion?.success && suggestion?.canAllocate) {
+            setAllocationSuggestion(suggestion);
+          }
+        } catch (err) {
+          console.error("suggestAllocation error:", err);
+          setAllocationSuggestion(null);
+        }
+      } else {
+        setAllocationSuggestion(null);
+      }
+    };
+    checkAllocation();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applied.periodType, periodKey, storeId]);
 
   // ========== EXPENSE ACTIONS ==========
   const addExpenseItem = (): void => {
@@ -270,7 +298,7 @@ const ReportsDashboardScreen: React.FC = () => {
         setLoading(true);
         if (item._id && operatingExpenseId) {
           // Xóa từ DB theo _id
-          await operatingExpenseApi.deleteMultipleExpenseItems(operatingExpenseId, [item._id]);
+          await operatingExpenseApi.deleteItemWithCheckbox(operatingExpenseId, [item._id]);
         }
         
         const newItems = expenseItems.filter((_, idx) => idx !== index);
@@ -328,6 +356,42 @@ const ReportsDashboardScreen: React.FC = () => {
     }
   };
 
+  const handleExecuteAllocation = async (): Promise<void> => {
+    if (!allocationSuggestion || !storeId) return;
+
+    Alert.alert(
+      "Xác nhận phân bổ",
+      `Hệ thống sẽ tự động tạo ${allocationSuggestion.suggestions.length} khoản chi phí tương ứng. Bạn có chắc chắn?`,
+      [
+        { text: "Hủy", style: "cancel" },
+        {
+          text: "Đồng ý",
+          onPress: async () => {
+            try {
+              setLoading(true);
+              await operatingExpenseApi.executeAllocation({
+                storeId,
+                fromPeriodType: allocationSuggestion.fromData.periodType,
+                fromPeriodKey: allocationSuggestion.fromData.periodKey,
+                toPeriodType: applied.periodType,
+                suggestions: allocationSuggestion.suggestions,
+              });
+
+              Alert.alert("Thành công", "Đã thực hiện phân bổ chi phí");
+              setAllocationSuggestion(null);
+              loadOperatingExpenses();
+              fetchFinancial();
+            } catch (err: any) {
+              Alert.alert("Lỗi", "Không thể phân bổ: " + (err?.message || "Lỗi server"));
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   // ========== FILTER SHEET ==========
   const openFilter = () => {
     setDPeriodType(applied.periodType);
@@ -366,6 +430,10 @@ const ReportsDashboardScreen: React.FC = () => {
       month: dMonth,
       quarter: dQuarter,
     };
+
+    // Track historical for allocation
+    setPreviousPeriodType(applied.periodType);
+    setPrevPeriodKey(periodKey);
 
     setApplied(next);
     setFilterOpen(false);
@@ -604,6 +672,29 @@ const ReportsDashboardScreen: React.FC = () => {
               <Text style={styles.errorAlertText}>{error}</Text>
               <TouchableOpacity onPress={() => setError(null)}>
                 <Ionicons name="close-circle" size={20} color="#ef4444" />
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Allocation Suggestion Alert */}
+          {allocationSuggestion && (
+            <View style={styles.suggestionAlert}>
+              <View style={styles.suggestionIcon}>
+                <Ionicons name="bulb-outline" size={24} color="#f59e0b" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.suggestionTitle}>Gợi ý phân bổ chi phí</Text>
+                <Text style={styles.suggestionText}>{allocationSuggestion.message}</Text>
+                <TouchableOpacity 
+                  style={styles.suggestionBtn} 
+                  onPress={handleExecuteAllocation}
+                >
+                  <Text style={styles.suggestionBtnText}>Thực hiện ngay</Text>
+                  <Ionicons name="chevron-forward" size={16} color="#fff" />
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity onPress={() => setAllocationSuggestion(null)}>
+                <Ionicons name="close" size={20} color="#64748b" />
               </TouchableOpacity>
             </View>
           )}
@@ -1266,7 +1357,60 @@ const styles = StyleSheet.create({
     color: "#991b1b",
     fontWeight: "700",
   },
-
+  suggestionAlert: {
+    flexDirection: "row",
+    backgroundColor: "#fffbeb",
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#fde68a",
+    gap: 12,
+    alignItems: "flex-start",
+    shadowColor: "#f59e0b",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  suggestionIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: "#fef3c7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  suggestionTitle: {
+    color: "#92400e",
+    fontWeight: "900",
+    fontSize: 15,
+  },
+  suggestionText: {
+    color: "#b45309",
+    marginTop: 4,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "600",
+  },
+  suggestionBtn: {
+    marginTop: 12,
+    backgroundColor: "#d97706",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "flex-start",
+    gap: 6,
+  },
+  suggestionBtnText: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 13,
+  },
   infoBox: {
     marginHorizontal: 16,
     marginTop: 16,
