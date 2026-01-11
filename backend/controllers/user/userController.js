@@ -348,6 +348,18 @@ const login = async (req, res) => {
 
     res.cookie("refreshToken", refreshToken, cookieOptions);
 
+    // === LOG ACTIVITY: LOGIN ===
+    await logActivity({
+      req,
+      user,
+      store: user.current_store ? { _id: user.current_store } : null,
+      action: "auth",
+      entity: "Store",
+      entityId: user.current_store || user._id, // Nếu chưa có store thì log vào profile user
+      entityName: user.current_store ? "Cửa hàng" : "Hệ thống",
+      description: `Đăng nhập vào ${user.current_store ? "Store" : "System"}`,
+    });
+
     res.json({
       message: "Đăng nhập thành công",
       token: accessToken,

@@ -48,7 +48,7 @@ const ActivityLog = () => {
   const [stats, setStats] = useState(null);
   const [users, setUsers] = useState([]);
   const [entities, setEntities] = useState([]);
-  const [actions] = useState(["create", "update", "delete", "restore", "auth", "other"]);
+  const [actions] = useState(["create", "update", "delete", "restore", "auth", "export", "other"]);
   const [detailVisible, setDetailVisible] = useState(false);
   const [selectedLog, setSelectedLog] = useState(null);
   const [filterApplied, setFilterApplied] = useState(false);
@@ -345,6 +345,8 @@ const ActivityLog = () => {
         ? "red"
         : log.action === "auth"
         ? "purple"
+        : log.action === "export"
+        ? "cyan"
         : "gray",
     children: (
       <div>

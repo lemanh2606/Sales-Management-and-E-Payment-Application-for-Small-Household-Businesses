@@ -577,6 +577,18 @@ const createOrder = async (req, res) => {
     await session.commitTransaction();
     session.endSession();
 
+    // === LOG ACTIVITY: CREATE ORDER ===
+    await logActivity({
+      user: req.user, // req.user đã có info user
+      store: { _id: storeId },
+      action: "create",
+      entity: "Order",
+      entityId: order._id,
+      entityName: `Đơn hàng #${order._id}`,
+      req,
+      description: `Tạo đơn hàng mới trị giá ${order.totalAmount} (${paymentMethod.toUpperCase()})`,
+    });
+
     return res.status(201).json({
       message: "Tạo đơn hàng thành công",
       order,
@@ -989,11 +1001,23 @@ const printBill = async (req, res) => {
       { new: true }
     );
 
+    // === LOG ACTIVITY: PRINT BILL ===
+    await logActivity({
+      user: req.user,
+      store: { _id: order.storeId._id || order.storeId }, // storeId được populate
+      action: "export", // Hoặc "other" / "print"
+      entity: "Order",
+      entityId: order._id,
+      entityName: `Hóa đơn #${order._id}`,
+      req,
+      description: `In hóa đơn #${order._id} (Lần in thứ ${order.printCount})`,
+    });
+
     res.json({
       message: "In hóa đơn thành công",
-      bill: bill,
-      orderId: order._id,
+      billText: bill,
       printCount: updatedOrder.printCount,
+      earnedPoints: roundedEarnedPoints,
     });
   } catch (err) {
     console.error("Lỗi in hóa đơn:", err.message);
@@ -1275,13 +1299,27 @@ const refundOrder = async (req, res) => {
 
     await order.save({ session });
 
+    // === LOG ACTIVITY: REFUND ORDER ===
+    await logActivity({
+      user: req.user || { _id: refundedByUserId },
+      store: { _id: order.storeId },
+      action: "update",
+      entity: "Order",
+      entityId: order._id,
+      entityName: `Đơn hàng #${order._id}`,
+      req,
+      description: `Hoàn hàng cho đơn #${order._id} (Lý do: ${refundReason}). Tổng tiền hoàn: ${refundTotal}. Mới tạo phiếu nhập hoàn ${refundVoucher.voucher_code}`,
+    });
+
     await session.commitTransaction();
     session.endSession();
 
-    console.log("✅ REFUND SUCCESS");
+    console.log("🏁 Hoàn hàng thành công");
 
-    return res.json({
+    return res.status(200).json({
       message: "Hoàn hàng thành công",
+      refundId: refundDoc._id,
+      refundVoucherCode: refundVoucher.voucher_code,
       refund: refundDoc,
       inventoryVoucher: {
         _id: refundVoucher._id,
@@ -2783,6 +2821,20 @@ const deletePendingOrder = async (req, res) => {
 
     await session.commitTransaction();
     session.endSession();
+
+    // === LOG ACTIVITY: CANCEL PENDING ORDER ===
+    await logActivity({
+      user: req.user,
+      store: { _id: order.storeId },
+      action: "update", // Change status to cancelled
+      entity: "Order",
+      entityId: order._id,
+      entityName: `Đơn hàng #${order._id}`,
+      req,
+      description: `Hủy đơn hàng đang chờ thanh toán (Pending). ${
+        needRestoreStock ? "Đã hoàn lại kho." : "Chưa xuất kho."
+      }`,
+    });
 
     return res.json({
       message: needRestoreStock

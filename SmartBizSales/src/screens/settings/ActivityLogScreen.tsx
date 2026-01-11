@@ -569,6 +569,7 @@ const ActivityLogScreen: FC = () => {
     "delete",
     "restore",
     "auth",
+    "export",
     "other",
   ];
 
@@ -905,6 +906,7 @@ const ActivityLogScreen: FC = () => {
       delete: "#ff4d4f",
       restore: "#722ed1",
       auth: "#fa8c16",
+      export: "#13c2c2",
       other: "#8c8c8c",
     };
     return colorMap[actionType] || "#8c8c8c";

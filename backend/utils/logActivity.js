@@ -40,14 +40,15 @@ const logActivity = async ({
 
     const log = new ActivityLog({
       user: user._id,
-      userName: user.fullName || user.email || "Unknown",
+      // Fix: check fullname (User) or fullName (Employee)
+      userName: user.fullname || user.fullName || user.username || user.email || "Unknown",
       userRole: user.role,
       action,
       entity,
       entityId,
       entityName,
       description: description || (action === "auth" ? "Đăng nhập vào hệ thống" : undefined),
-      store: store?._id || null, // ← cho phép null
+      store: store?._id || null, 
       ip: req?.ip || req?.connection?.remoteAddress || req?.headers["x-forwarded-for"]?.split(",")[0] || "unknown",
       userAgent: req?.headers["user-agent"] || "unknown",
     });
@@ -56,14 +57,6 @@ const logActivity = async ({
     if (changes && !description) {
       log.description = JSON.stringify(changes);
     }
-
-    
-    // Trong logActivity.js – THÊM DÒNG NÀY
-console.log("ĐANG GHI LOG:", {
- userName: user.fullname || user.username || user.email || "Unknown",
-  action,
-  store: store?._id || null
-});
 
 
     await log.save();
