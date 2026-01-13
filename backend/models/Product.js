@@ -88,8 +88,8 @@ productSchema.pre(/^find/, function (next) {
   next();
 });
 
-// Index compound để đảm bảo SKU unique trong phạm vi cửa hàng
-productSchema.index({ store_id: 1, sku: 1 }, { unique: true, name: "store_sku_unique" });
+// Cho phép trùng SKU trong phạm vi cửa hàng theo yêu cầu người dùng (Bỏ unique: true)
+productSchema.index({ store_id: 1, sku: 1 }, { name: "store_sku_normal" });
 // Query sản phẩm theo store + soft delete
 productSchema.index({ store_id: 1, isDeleted: 1 });
 // Lọc theo nhóm sản phẩm trong store

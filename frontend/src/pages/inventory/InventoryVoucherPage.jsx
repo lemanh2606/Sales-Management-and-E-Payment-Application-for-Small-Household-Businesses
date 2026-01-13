@@ -91,7 +91,10 @@ const toNumberDecimal = (v) => {
   return 0;
 };
 
-const formatCurrency = (n) => new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(Number(n || 0));
+const formatCurrency = (n) => {
+  const val = toNumberDecimal(n);
+  return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(val) + " ₫";
+};
 
 const statusColor = (stRaw) => {
   const st = normalizeStatus(stRaw);
@@ -966,6 +969,13 @@ export default function InventoryVoucherPage() {
   const productOptions = useMemo(() => {
     return (products || []).map((p) => {
       const stock = safeNumber(p.stockquantity ?? p.stock_quantity ?? 0, 0);
+      
+      // Tính tồn kho khả dụng (không tính hàng hết hạn)
+      const avail = (p.batches || []).reduce((sum, b) => {
+        const isExpired = b.expiry_date && new Date(b.expiry_date) < new Date();
+        return isExpired ? sum : sum + (b.quantity || 0);
+      }, p.batches?.length > 0 ? 0 : stock); // Nếu ko có lô thì dùng tồn tổng (mặc định)
+
       const cost = toNumberDecimal(p.costprice ?? p.cost_price ?? 0);
       const price = toNumberDecimal(p.price ?? 0);
       const unit = p.unit || "Trống";
@@ -976,7 +986,7 @@ export default function InventoryVoucherPage() {
         value: getId(p),
         label: `${name} (${sku})`,
         searchText: `${name} ${sku} ${unit}`.toLowerCase(),
-        meta: { name, sku, unit, stock, cost, price },
+        meta: { name, sku, unit, stock, avail, cost, price },
       };
     });
   }, [products]);
@@ -1860,18 +1870,18 @@ export default function InventoryVoucherPage() {
                                           {meta.name || d?.label} <Text type="secondary">(SKU: {meta.sku || "Trống"})</Text>
                                         </div>
                                         <div style={{ fontSize: 11, color: "#64748b" }}>
-                                          Đơn vị:{" "}
                                           <Tag color="blue" style={{ fontSize: 11 }}>
                                             {meta.unit || "Trống"}
                                           </Tag>
-                                          • Tồn:{" "}
-                                          <Tag color="blue" style={{ fontSize: 11 }}>
-                                            {(meta.stock ?? 0).toLocaleString("vi-VN")}
-                                          </Tag>{" "}
-                                          • Giá vốn:{" "}
-                                          <Tag color="blue" style={{ fontSize: 11 }}>
-                                            {formatCurrency(meta.cost ?? 0)}
+                                          • Khả dụng:{" "}
+                                          <Tag color={meta.avail > 0 ? "success" : "error"} style={{ fontSize: 11 }}>
+                                            {(meta.avail ?? 0).toLocaleString("vi-VN")}
                                           </Tag>
+                                          {meta.stock > meta.avail && (
+                                            <>
+                                              {" "}• Tổng: <Text delete type="secondary" style={{ fontSize: 11 }}>{meta.stock}</Text>
+                                            </>
+                                          )}
                                         </div>
                                       </div>
                                     );
@@ -1906,12 +1916,36 @@ export default function InventoryVoucherPage() {
                               <Form.Item
                                 {...restField}
                                 name={[name, "qty_actual"]}
-                                rules={[
-                                  { required: true, message: "Nhập SL" },
-                                  { type: "number", min: 1, message: ">= 1" },
-                                ]}
-                                style={{ marginBottom: 0 }}
-                              >
+                                 rules={[
+                                   { required: true, message: "Nhập SL" },
+                                   { type: "number", min: 1, message: ">= 1" },
+                                   ({ getFieldValue }) => ({
+                                     validator(_, value) {
+                                       const type = getFieldValue("type");
+                                       if (type !== "OUT") return Promise.resolve();
+                                       
+                                       const items = getFieldValue("items") || [];
+                                       const it = items[idx];
+                                       if (!it?.product_id) return Promise.resolve();
+                                       
+                                       const p = products.find(x => getId(x) === it.product_id);
+                                       if (!p) return Promise.resolve();
+                                       
+                                       // Tính avail
+                                       const avail = (p.batches || []).reduce((sum, b) => {
+                                         const isExpired = b.expiry_date && new Date(b.expiry_date) < new Date();
+                                         return isExpired ? sum : sum + (b.quantity || 0);
+                                       }, p.batches?.length > 0 ? 0 : (p.stock_quantity || 0));
+                                       
+                                       if (value > avail) {
+                                         return Promise.reject(new Error(`Tối đa ${avail}`));
+                                       }
+                                       return Promise.resolve();
+                                     },
+                                   }),
+                                 ]}
+                                 style={{ marginBottom: 0 }}
+                               >
                                 <InputNumber min={1} style={{ width: "100%", borderRadius: 8 }} size="middle" />
                               </Form.Item>
                             </Col>

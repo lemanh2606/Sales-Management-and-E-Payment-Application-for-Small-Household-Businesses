@@ -641,23 +641,75 @@ const setPaidCash = async (req, res) => {
         orderId: order._id,
       }).session(session);
 
-      // 2. Trừ kho
+      // 2. Trừ kho (Dùng logic Batch FIFO)
       const voucherItems = [];
       for (const it of orderItems) {
         const prod = await Product.findById(it.productId).session(session);
         if (!prod) continue;
 
-        const stockQty = Number(prod.stock_quantity || 0);
         const quantity = Number(it.quantity || 0);
 
-        if (stockQty < quantity) {
-          throw new Error(
-            `Sản phẩm ${prod.name} không đủ tồn kho. Còn ${stockQty}, cần ${quantity}`
-          );
+        // a. Kiểm tra tổng tồn kho
+        if (prod.stock_quantity < quantity) {
+          throw new Error(`Sản phẩm "${prod.name}" không đủ tồn kho (Còn: ${prod.stock_quantity}, Cần: ${quantity})`);
         }
 
-        // Trừ kho
-        prod.stock_quantity = stockQty - quantity;
+        // b. Logic trừ theo lô (Batch FIFO)
+        let remainingToDeduct = quantity;
+        
+        // Sắp xếp lô theo hạn dùng (sớm nhất trước) -> FIFO
+        const sortedBatches = (prod.batches || []).sort((a, b) => {
+          if (!a.expiry_date && b.expiry_date) return 1;
+          if (a.expiry_date && !b.expiry_date) return -1;
+          if (a.expiry_date && b.expiry_date) return new Date(a.expiry_date) - new Date(b.expiry_date);
+          return new Date(a.created_at) - new Date(b.created_at);
+        });
+
+        for (const batch of sortedBatches) {
+          if (remainingToDeduct <= 0) break;
+          if (batch.quantity <= 0) continue;
+
+          // Kiểm tra hạn sử dụng: Nếu đã hết hạn thì không cho bán
+          if (batch.expiry_date && new Date(batch.expiry_date) < new Date()) {
+             // Bỏ qua lô hết hạn hoặc throw lỗi? 
+             // Theo yêu cầu "không cho bán", ta nên throw lỗi nếu đơn hàng này nhắm vào lô đó, 
+             // nhưng đây là logic tự động trừ (FIFO), nên ta bỏ qua lô hết hạn.
+             continue; 
+          }
+
+          const deduct = Math.min(batch.quantity, remainingToDeduct);
+          batch.quantity -= deduct;
+          remainingToDeduct -= deduct;
+
+          // Tạo thông báo nếu lô sắp hết (ví dụ < 10)
+          if (batch.quantity <= 10 && batch.quantity > 0) {
+            await Notification.create([{
+              storeId: order.storeId,
+              type: "inventory",
+              title: "Cảnh báo lô hàng sắp hết",
+              message: `Lô "${batch.batch_no}" của sản phẩm "${prod.name}" chỉ còn ${batch.quantity} ${prod.unit || 'đơn vị'}.`,
+            }], { session });
+          }
+        }
+
+        if (remainingToDeduct > 0) {
+          throw new Error(`Sản phẩm "${prod.name}" không đủ tồn kho khả dụng (tính cả lô hàng chưa hết hạn)`);
+        }
+
+        // Cập nhật tổng tồn kho
+        prod.stock_quantity -= quantity;
+
+        // Tạo thông báo nếu tồn kho thấp
+        if (prod.stock_quantity <= prod.min_stock && !prod.lowStockAlerted) {
+          await Notification.create([{
+            storeId: order.storeId,
+            type: "inventory",
+            title: "Cảnh báo tồn kho thấp",
+            message: `Sản phẩm "${prod.name}" đạt ngưỡng tồn kho thấp (${prod.stock_quantity} <= ${prod.min_stock}).`,
+          }], { session });
+          prod.lowStockAlerted = true;
+        }
+
         await prod.save({ session });
 
         // Chuẩn bị data cho phiếu OUT
@@ -671,7 +723,7 @@ const setPaidCash = async (req, res) => {
           unit_cost: it.cost_price_snapshot || prod.cost_price || 0,
           warehouse_id: it.warehouse_id || null,
           warehouse_name: it.warehouse_name || "",
-          note: "Bán hàng",
+          note: "Bán hàng (POS)",
         });
       }
 
@@ -1157,14 +1209,20 @@ const refundOrder = async (req, res) => {
     }
 
     // ===== XÁC ĐỊNH NGƯỜI HOÀN =====
-    const refundedByUserId =
-      employeeId || req.user?._id || order.employeeId?._id;
+    // Nếu có employeeId từ FE -> dùng, không thì là chủ cửa hàng (null)
+    let refundedByEmployeeId = employeeId || null;
+    let refundedByName = "Chủ cửa hàng";
 
-    if (!refundedByUserId) {
-      throw new Error("Không xác định được người thực hiện hoàn hàng");
+    if (refundedByEmployeeId) {
+      // Lấy tên nhân viên
+      const emp = await mongoose.model("Employee").findById(refundedByEmployeeId).lean();
+      refundedByName = emp?.fullName || "Nhân viên";
+    } else if (req.user?.fullname) {
+      // Nếu không có employeeId nhưng có thông tin user (Manager/Admin)
+      refundedByName = req.user.fullname;
     }
 
-    console.log(employeeId ? "👷 Refund by STAFF" : "👑 Refund by OWNER");
+    console.log(`👤 Refund by: ${refundedByName} (empId: ${refundedByEmployeeId || "OWNER"})`);
 
     // ===== LOAD ORDER ITEMS =====
     console.log("📦 Load OrderItems");
@@ -1199,6 +1257,18 @@ const refundOrder = async (req, res) => {
         oi.cost_price_snapshot || oi.productId.cost_price || 0
       );
 
+      // ✅ KIỂM TRA HẠN MỨC HOÀN
+      const alreadyRefunded = Number(oi.refundedQuantity || 0);
+      const maxRefundable = oi.quantity - alreadyRefunded;
+      
+      if (refundQty > maxRefundable) {
+        throw new Error(`Sản phẩm "${oi.productId.name}" chỉ còn ${maxRefundable} cái có thể hoàn (đã hoàn ${alreadyRefunded})`);
+      }
+
+      // ✅ CẬP NHẬT REFUNDED QUANTITY
+      oi.refundedQuantity = alreadyRefunded + refundQty;
+      await oi.save({ session });
+
       refundTotal += subtotal;
 
       // Data cho OrderRefund
@@ -1207,8 +1277,6 @@ const refundOrder = async (req, res) => {
         quantity: refundQty,
         priceAtTime: unitPrice,
         subtotal,
-        warehouse_id: oi.warehouse_id || null,
-        warehouse_name: oi.warehouse_name || "",
       });
 
       // ✅ Data cho InventoryVoucher (Phiếu nhập hoàn)
@@ -1245,23 +1313,25 @@ const refundOrder = async (req, res) => {
     console.log("🧾 Create inventory voucher (IN)");
     const refundVoucher = new InventoryVoucher({
       store_id: order.storeId,
-      type: "IN", // ✅ Phiếu nhập
-      status: "POSTED", // ✅ Đã ghi sổ
+      type: "IN",
+      status: "POSTED",
       voucher_code: `HN-REFUND-${Date.now()}`,
       voucher_date: new Date(),
       document_place: "Tại quầy",
       reason: `Hoàn hàng đơn #${order._id}`,
       note: refundReason || `Hoàn hàng đơn #${order._id}`,
-      ref_type: "ORDER_REFUND", // ✅ QUAN TRỌNG: Để dashboard tính COGS hoàn
+      ref_type: "ORDER_REFUND",
       ref_id: order._id,
       ref_no: order._id.toString(),
       ref_date: order.createdAt,
       warehouse_id: voucherItems[0]?.warehouse_id || null,
       warehouse_name: voucherItems[0]?.warehouse_name || "",
-      created_by: refundedByUserId,
-      posted_by: refundedByUserId,
+      deliverer_name: order.customer?.name || "Khách hàng trả hàng",
+      receiver_name: refundedByName,
+      created_by: req.user?._id || refundedByEmployeeId,
+      posted_by: req.user?._id || refundedByEmployeeId,
       posted_at: new Date(),
-      items: voucherItems, // ✅ Đã có unit_cost
+      items: voucherItems,
     });
 
     await refundVoucher.save({ session });
@@ -1271,7 +1341,8 @@ const refundOrder = async (req, res) => {
     const refundDoc = new OrderRefund({
       orderId,
       inventory_voucher_id: refundVoucher._id,
-      refundedBy: refundedByUserId,
+      refundedBy: refundedByEmployeeId, // null nếu là chủ cửa hàng
+      refundedByName,
       refundedAt: new Date(),
       refundReason: refundReason || "Hoàn hàng",
       refundAmount: refundTotal,
@@ -1280,22 +1351,24 @@ const refundOrder = async (req, res) => {
 
     await refundDoc.save({ session });
 
-    // ===== UPDATE ORDER STATUS & TOTAL =====
-    const totalRefundedQty = refundItems.reduce((s, i) => s + i.quantity, 0);
-    const totalOrderQty = orderItems.reduce((s, i) => s + i.quantity, 0);
+    // ===== UPDATE ORDER STATUS & REFUNDED FIELDS =====
+    const allOrderItems = await OrderItem.find({ orderId }).session(session);
+    const totalOrderQty = allOrderItems.reduce((s, i) => s + i.quantity, 0);
+    const totalRefundedQtyNow = allOrderItems.reduce((s, i) => s + (i.refundedQuantity || 0), 0);
 
-    // Tính tổng tiền mới
-    const newTotal = Number(order.totalAmount) - refundTotal;
-    order.totalAmount = newTotal.toFixed(2);
+    // Update refundedAmount
+    const prevRefundedAmount = Number(order.refundedAmount || 0);
+    order.refundedAmount = mongoose.Types.Decimal128.fromString((prevRefundedAmount + refundTotal).toFixed(2));
+    order.totalRefundedQuantity = totalRefundedQtyNow;
 
     // ✅ XÁC ĐỊNH STATUS MỚI
-    if (totalRefundedQty >= totalOrderQty) {
-      // Hoàn toàn bộ
+    if (totalRefundedQtyNow >= totalOrderQty) {
       order.status = "refunded";
     } else {
-      // Hoàn một phần
       order.status = "partially_refunded";
     }
+
+    order.refundId = refundDoc._id;
 
     await order.save({ session });
 
@@ -2346,10 +2419,11 @@ const getListRefundOrders = async (req, res) => {
       .populate({
         path: "orderId",
         match: { storeId: storeId }, // Chỉ lấy refund của đơn hàng thuộc store này
-        select: "totalAmount customer storeId paymentMethod status", // Lấy các trường cần thiết của đơn gốc
+        select: "totalAmount customer storeId paymentMethod status employeeId", // Lấy các trường cần thiết của đơn gốc (thêm employeeId)
         populate: [
           { path: "customer", select: "name phone" }, // Lấy thông tin khách từ đơn gốc
           { path: "storeId", select: "name" },
+          { path: "employeeId", select: "fullName" }, // Lấy thông tin nhân viên bán hàng gốc
         ],
       })
       .populate("refundedBy", "fullName") // Người thực hiện hoàn
@@ -2389,24 +2463,58 @@ const getOrderRefundDetail = async (req, res) => {
       });
     }
 
-    // 2. SỬA ĐOẠN NÀY: Tìm chi tiết hoàn trả bằng orderId (an toàn hơn)
-    // Thay vì check if (order.refundId), ta query trực tiếp bảng OrderRefund
-    const refundDetail = await OrderRefund.findOne({ orderId: orderId })
+    // 2. Lấy TẤT CẢ lịch sử hoàn trả (hỗ trợ partial refund nhiều lần)
+    const refundRecords = await OrderRefund.find({ orderId: orderId })
       .populate("orderId", "totalAmount paymentMethod status")
       .populate("refundedBy", "fullName")
       .populate("refundItems.productId", "name price sku")
+      .sort({ createdAt: -1 }) // Mới nhất trước
       .lean();
 
-    // 3. Lấy danh sách sản phẩm của đơn gốc
+    // Phiếu hoàn mới nhất để hiển thị (backward compatible)
+    const refundDetail = refundRecords[0] || null;
+
+    // 3. Lấy danh sách sản phẩm của đơn gốc + số lượng đã hoàn
     const orderItems = await OrderItem.find({ orderId })
-      .populate("productId", "name price sku")
+      .populate("productId", "name price sku cost_price")
       .lean();
+
+    // 4. Tính số lượng còn có thể hoàn cho mỗi item
+    const orderItemsWithRefundable = orderItems.map((item) => {
+      const refunded = Number(item.refundedQuantity || 0);
+      const maxRefundable = item.quantity - refunded;
+      return {
+        ...item,
+        refundedQuantity: refunded,
+        maxRefundableQuantity: maxRefundable,
+      };
+    });
+
+    // 5. Tính summary
+    const totalRefundedAmount = refundRecords.reduce((acc, r) => {
+      const amt = r.refundAmount?.$numberDecimal 
+        ? parseFloat(r.refundAmount.$numberDecimal) 
+        : Number(r.refundAmount || 0);
+      return acc + amt;
+    }, 0);
+    const totalRefundedQty = orderItems.reduce((acc, it) => acc + Number(it.refundedQuantity || 0), 0);
+    const totalOrderQty = orderItems.reduce((acc, it) => acc + it.quantity, 0);
 
     return res.status(200).json({
       message: "Lấy chi tiết đơn hoàn hàng thành công",
       order,
-      refundDetail, // Nếu có đơn hoàn, biến này sẽ có dữ liệu
-      orderItems,
+      refundDetail, // Phiếu hoàn mới nhất (backward compatible)
+      refundRecords, // Tất cả lịch sử hoàn
+      orderItems: orderItemsWithRefundable, // Có thêm maxRefundableQuantity
+      summary: {
+        totalOrderAmount: order.totalAmount,
+        totalRefundedAmount,
+        totalRefundedQty,
+        totalOrderQty,
+        remainingRefundableQty: totalOrderQty - totalRefundedQty,
+        refundCount: refundRecords.length,
+        orderStatus: order.status,
+      },
     });
   } catch (error) {
     console.error("getOrderRefundDetail error:", error);
@@ -2652,8 +2760,6 @@ const getOrderStats = async (req, res) => {
       .select("_id status")
       .lean();
 
-    const orderIds = orders.map((o) => o._id);
-
     // Đếm đơn từng trạng thái
     const total = orders.length;
     const pending = orders.filter((o) => o.status === "pending").length;
@@ -2662,9 +2768,14 @@ const getOrderStats = async (req, res) => {
     ).length;
     const paid = orders.filter((o) => o.status === "paid").length;
 
-    // ✅ Tổng số lượng sản phẩm bán ra (theo order_items)
+    // ✅ CHỈ tính số lượng sản phẩm từ đơn ĐÃ THANH TOÁN (paid, partially_refunded, refunded)
+    // KHÔNG tính đơn pending vì chưa thực sự bán
+    const paidOrderIds = orders
+      .filter((o) => ["paid", "partially_refunded", "refunded"].includes(o.status))
+      .map((o) => o._id);
+
     const orderItems = await OrderItem.find({
-      orderId: { $in: orderIds },
+      orderId: { $in: paidOrderIds }, // Chỉ lấy từ đơn đã thanh toán
       createdAt: { $gte: start, $lte: end },
     })
       .select("quantity")
@@ -2677,7 +2788,7 @@ const getOrderStats = async (req, res) => {
 
     // ✅ Tổng số lượng sản phẩm bị hoàn trả (theo order_refunds)
     const refundDocs = await OrderRefund.find({
-      orderId: { $in: orderIds },
+      orderId: { $in: paidOrderIds },
       refundedAt: { $gte: start, $lte: end },
     })
       .select("refundItems.quantity")
@@ -2700,7 +2811,7 @@ const getOrderStats = async (req, res) => {
       paid,
       totalSoldItems,
       totalRefundedItems,
-      netSoldItems: netSoldItems >= 0 ? netSoldItems : 0, // Đây chính là “Số lượng hàng thực bán”
+      netSoldItems: netSoldItems >= 0 ? netSoldItems : 0, // Đây chính là "Số lượng hàng thực bán"
     });
   } catch (err) {
     console.error("Lỗi khi lấy thống kê đơn:", err.message);

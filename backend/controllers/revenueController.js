@@ -172,7 +172,7 @@ async function calcRevenueByPeriod({ storeId, periodType, periodKey, type = "tot
   // Chỉ lấy các đơn ĐÃ THANH TOÁN (toàn bộ hoặc 1 phần)
   const baseMatch = {
     storeId: toObjectId(storeId),
-    status: { $in: PAID_STATUSES }, // ← quan trọng: lấy cả 2 loại
+    status: { $in: ["paid", "partially_refunded", "refunded"] }, // Lấy cả 3 loại
     createdAt: { $gte: start, $lte: end },
   };
 
@@ -182,40 +182,57 @@ async function calcRevenueByPeriod({ storeId, periodType, periodKey, type = "tot
       {
         $group: {
           _id: null,
-          totalRevenue: {
-            $sum: { $toDecimal: "$totalAmount" },
-          },
+          grossRevenue: { $sum: { $toDecimal: "$totalAmount" } },
           countOrders: { $sum: 1 },
-          //đếm đơn đã hoàn thành
           completedOrders: {
-            $sum: {
-              $cond: [{ $eq: ["$status", "paid"] }, 1, 0],
-            },
+            $sum: { $cond: [{ $eq: ["$status", "paid"] }, 1, 0] },
           },
-          //đếm đơn hoàn 1 nữa vì vẫn có doanh thu
           partialRefundOrders: {
-            $sum: {
-              $cond: [{ $eq: ["$status", "partially_refunded"] }, 1, 0],
-            },
+            $sum: { $cond: [{ $eq: ["$status", "partially_refunded"] }, 1, 0] },
+          },
+          refundedOrders: {
+            $sum: { $cond: [{ $eq: ["$status", "refunded"] }, 1, 0] },
           },
         },
       },
       {
         $project: {
           _id: 0,
-          totalRevenue: { $toDouble: "$totalRevenue" },
+          grossRevenue: { $toDouble: "$grossRevenue" },
           countOrders: 1,
           completedOrders: 1,
           partialRefundOrders: 1,
-          avgOrderValue: {
-            $cond: [{ $gt: ["$countOrders", 0] }, { $toDouble: { $divide: ["$totalRevenue", "$countOrders"] } }, 0],
-          },
+          refundedOrders: 1,
         },
       },
     ];
 
     const result = await Order.aggregate(pipeline);
-    const row = result[0] || { totalRevenue: 0, countOrders: 0 };
+    const row = result[0] || { grossRevenue: 0, countOrders: 0 };
+
+    // --- LẤY TIỀN HOÀN PHÁT SINH TRONG KỲ ---
+    const refundAgg = await mongoose.model("OrderRefund").aggregate([
+      { $match: { refundedAt: { $gte: start, $lte: end } } },
+      {
+        $lookup: {
+          from: "orders",
+          localField: "orderId",
+          foreignField: "_id",
+          as: "orderInfo",
+        },
+      },
+      { $unwind: "$orderInfo" },
+      { $match: { "orderInfo.storeId": toObjectId(storeId) } },
+      {
+        $group: {
+          _id: null,
+          totalRefundAmount: { $sum: { $toDecimal: "$refundAmount" } },
+        },
+      },
+    ]);
+    const totalRefundAmount = refundAgg[0] ? Number(refundAgg[0].totalRefundAmount.toString()) : 0;
+    const finalRevenue = row.grossRevenue - totalRefundAmount;
+
     const dailyPipeline = [
       { $match: baseMatch },
       {
@@ -245,86 +262,165 @@ async function calcRevenueByPeriod({ storeId, periodType, periodKey, type = "tot
     ];
     const dailyRevenue = await Order.aggregate(dailyPipeline);
 
+    // Bổ sung các khoản hoàn vào daily revenue
+    const dailyRefundAgg = await mongoose.model("OrderRefund").aggregate([
+      { $match: { refundedAt: { $gte: start, $lte: end } } },
+      {
+        $lookup: {
+          from: "orders",
+          localField: "orderId",
+          foreignField: "_id",
+          as: "orderInfo",
+        },
+      },
+      { $unwind: "$orderInfo" },
+      { $match: { "orderInfo.storeId": toObjectId(storeId) } },
+      {
+        $group: {
+          _id: {
+            day: {
+              $dateToString: {
+                format: "%Y-%m-%d",
+                date: "$refundedAt",
+                timezone: "Asia/Ho_Chi_Minh",
+              },
+            },
+          },
+          refund: { $sum: { $toDecimal: "$refundAmount" } },
+        },
+      },
+    ]);
+
+    const refundMap = new Map(dailyRefundAgg.map(r => [r._id.day, Number(r.refund.toString())]));
+    
+    // Merge: Nếu ngày nào có hoàn mà không có bán, vẫn phải hiện? 
+    // Thường chart chỉ hiện ngày có bán, nhưng ta nên merge.
+    const mergedDaily = [...dailyRevenue];
+    refundMap.forEach((refundVal, day) => {
+      const existing = mergedDaily.find(d => d.day === day);
+      if (existing) {
+        existing.revenue -= refundVal;
+      } else {
+        mergedDaily.push({ day, revenue: -refundVal, countOrders: 0 });
+      }
+    });
+    mergedDaily.sort((a, b) => a.day.localeCompare(b.day));
+
     return [
       {
         periodType,
         periodKey,
         periodStart: start,
         periodEnd: end,
-        totalRevenue: row.totalRevenue,
+        totalRevenue: finalRevenue,
+        grossRevenue: row.grossRevenue,
+        totalRefundAmount: totalRefundAmount,
         countOrders: row.countOrders,
-        // ✅ THÊM 2 FIELD NÀY
         completedOrders: row.completedOrders || 0,
         partialRefundOrders: row.partialRefundOrders || 0,
-        avgOrderValue: row.avgOrderValue || 0,
-        // ✅ THÊM MỚI – FE xài chart
-        dailyRevenue,
+        refundedOrders: row.refundedOrders || 0,
+        avgOrderValue: row.countOrders > 0 ? finalRevenue / row.countOrders : 0,
+        dailyRevenue: mergedDaily,
       },
     ];
   }
 
   // =================== THEO NHÂN VIÊN ===================
   if (type === "employee") {
-    const pipeline = [
-      {
-        $match: {
-          ...baseMatch,
-          // employeeId: { $ne: null }, // REMOVED to include Owner sales
-        },
-      },
+    // 1. Gross revenue by original seller
+    const grossPipeline = [
+      { $match: baseMatch },
       {
         $group: {
           _id: "$employeeId",
-          totalRevenue: { $sum: { $toDecimal: "$totalAmount" } },
+          grossRevenue: { $sum: { $toDecimal: "$totalAmount" } },
           countOrders: { $sum: 1 },
         },
       },
-      {
-        $addFields: {
-          totalRevenueDouble: { $toDouble: "$totalRevenue" },
-          avgOrderValue: {
-            $cond: [{ $gt: ["$countOrders", 0] }, { $toDouble: { $divide: ["$totalRevenue", "$countOrders"] } }, 0],
-          },
-        },
-      },
+    ];
+    const grossResults = await Order.aggregate(grossPipeline);
+
+    // 2. Refunds by original seller's orders (Dựa trên ngày hoàn)
+    const refundPipeline = [
+      { $match: { refundedAt: { $gte: start, $lte: end } } },
       {
         $lookup: {
-          from: "employees",
-          localField: "_id",
+          from: "orders",
+          localField: "orderId",
           foreignField: "_id",
-          as: "employeeInfo",
-          pipeline: [{ $project: { fullName: 1, phone: 1 } }],
+          as: "orderInfo",
         },
       },
-      { $unwind: { path: "$employeeInfo", preserveNullAndEmptyArrays: true } },
+      { $unwind: "$orderInfo" },
+      { $match: { "orderInfo.storeId": toObjectId(storeId) } },
       {
-        $addFields: {
-          // If _id (employeeId) is null, it's the Owner/Admin. IF _id exists but lookup failed, it's deleted staff.
-          employeeInfo: {
-            fullName: {
-              $cond: {
-                if: { $eq: ["$_id", null] },
-                then: "Chủ cửa hàng (Admin)",
-                else: { $ifNull: ["$employeeInfo.fullName", "Nhân viên đã nghỉ"] },
-              },
-            },
-            phone: { $ifNull: ["$employeeInfo.phone", ""] },
-          },
+        $group: {
+          _id: "$orderInfo.employeeId",
+          refundAmount: { $sum: { $toDecimal: "$refundAmount" } },
         },
       },
-      { $sort: { totalRevenue: -1 } },
     ];
+    const refundResults = await mongoose.model("OrderRefund").aggregate(refundPipeline);
+    const refundMap = new Map(refundResults.map(r => [String(r._id), Number(r.refundAmount.toString())]));
 
-    const result = await Order.aggregate(pipeline);
-    return (result || []).map((row) => ({
-      ...row,
-      periodType,
-      periodKey,
-      periodStart: start,
-      periodEnd: end,
-      // keep original Decimal128 field for backward compatibility
-      totalRevenueNumber: typeof row.totalRevenueDouble === "number" ? row.totalRevenueDouble : undefined,
-    }));
+    // 3. Merge
+    const merged = grossResults.map(g => {
+      const empId = String(g._id);
+      const refund = refundMap.get(empId) || 0;
+      const gross = Number(g.grossRevenue.toString());
+      const net = gross - refund;
+      refundMap.delete(empId); // Mark as processed
+      return {
+        _id: g._id,
+        totalRevenue: net,
+        grossRevenue: gross,
+        totalRefundAmount: refund,
+        countOrders: g.countOrders,
+      };
+    });
+
+    // Add employees who only had refunds in this period (negative revenue)
+    refundMap.forEach((refund, empId) => {
+      merged.push({
+        _id: empId === "null" || empId === "undefined" ? null : toObjectId(empId),
+        totalRevenue: -refund,
+        grossRevenue: 0,
+        totalRefundAmount: refund,
+        countOrders: 0,
+      });
+    });
+
+    const pipeline = [
+      { $match: { _id: { $in: merged.map(m => m._id) } } }, // This is dummy just to use aggregate for lookup if needed
+    ];
+    // Actually, it's easier to just map and populate manually or use another aggregate.
+    // Let's use a simpler way since we have the merged array.
+    
+    const finalData = [];
+    for (const item of merged) {
+      let employeeInfo = { fullName: "Chủ cửa hàng (Admin)", phone: "" };
+      if (item._id) {
+        const empDoc = await mongoose.model("Employee").findById(item._id).select("fullName phone").lean();
+        if (empDoc) {
+          employeeInfo = { fullName: empDoc.fullName, phone: empDoc.phone };
+        } else {
+          employeeInfo = { fullName: "Nhân viên đã nghỉ", phone: "" };
+        }
+      }
+
+      finalData.push({
+        ...item,
+        totalRevenueDouble: item.totalRevenue,
+        avgOrderValue: item.countOrders > 0 ? item.totalRevenue / item.countOrders : 0,
+        employeeInfo,
+        periodType,
+        periodKey,
+        periodStart: start,
+        periodEnd: end,
+      });
+    }
+
+    return finalData.sort((a, b) => b.totalRevenue - a.totalRevenue);
   }
 
   return [];
@@ -555,7 +651,7 @@ const getRevenueSummaryByYear = async (req, res) => {
 
     const orderMatch = {
       storeId: toObjectId(storeId),
-      status: { $in: PAID_STATUSES },
+      status: { $in: ["paid", "partially_refunded", "refunded"] },
       createdAt: { $gte: start, $lte: end },
     };
 
@@ -567,20 +663,32 @@ const getRevenueSummaryByYear = async (req, res) => {
         {
           $group: {
             _id: { month: { $month: "$createdAt" } },
-            revenue: { $sum: { $toDecimal: "$totalAmount" } },
+            grossRevenue: { $sum: { $toDecimal: "$totalAmount" } },
           },
         },
+        { $sort: { "_id.month": 1 } },
+      ]),
+      mongoose.model("OrderRefund").aggregate([
+        { $match: { refundedAt: { $gte: start, $lte: end } } },
         {
-          $project: {
-            _id: 0,
-            month: "$_id.month",
-            revenue: { $toDouble: "$revenue" },
+          $lookup: {
+            from: "orders",
+            localField: "orderId",
+            foreignField: "_id",
+            as: "orderInfo",
           },
         },
-        { $sort: { month: 1 } },
+        { $unwind: "$orderInfo" },
+        { $match: { "orderInfo.storeId": toObjectId(storeId) } },
+        {
+          $group: {
+            _id: { month: { $month: "$refundedAt" } },
+            refundAmount: { $sum: { $toDecimal: "$refundAmount" } },
+          },
+        },
       ]),
       OrderItem.aggregate([
-        // Join Order để lọc theo store/status/createdAt (OrderItem chỉ có orderId)
+        // ... qty logic stays mostly same but needs to subtract refunded qty ...
         {
           $lookup: {
             from: "orders",
@@ -593,7 +701,7 @@ const getRevenueSummaryByYear = async (req, res) => {
         {
           $match: {
             "order.storeId": toObjectId(storeId),
-            "order.status": { $in: PAID_STATUSES },
+            "order.status": { $in: ["paid", "partially_refunded", "refunded"] },
             "order.createdAt": { $gte: start, $lte: end },
           },
         },
@@ -603,28 +711,48 @@ const getRevenueSummaryByYear = async (req, res) => {
             itemsSold: { $sum: "$quantity" },
           },
         },
+        { $sort: { "_id.month": 1 } },
+      ]),
+      mongoose.model("OrderRefund").aggregate([
+        { $match: { refundedAt: { $gte: start, $lte: end } } },
         {
-          $project: {
-            _id: 0,
-            month: "$_id.month",
-            itemsSold: 1,
+          $lookup: {
+            from: "orders",
+            localField: "orderId",
+            foreignField: "_id",
+            as: "orderInfo",
           },
         },
-        { $sort: { month: 1 } },
+        { $unwind: "$orderInfo" },
+        { $match: { "orderInfo.storeId": toObjectId(storeId) } },
+        { $unwind: "$refundItems" },
+        {
+          $group: {
+            _id: { month: { $month: "$refundedAt" } },
+            itemsRefunded: { $sum: "$refundItems.quantity" },
+          },
+        },
       ]),
     ]);
 
-    const revenueMap = new Map((revenueByMonth || []).map((r) => [r.month, safeNumber(r.revenue)]));
-    const qtyMap = new Map((qtyByMonth || []).map((r) => [r.month, safeNumber(r.itemsSold)]));
+    const revenueMap = new Map((revenueByMonth || []).map((r) => [r._id.month, safeNumber(r.grossRevenue.toString())]));
+    const refundMap = new Map((refundByMonth || []).map((r) => [r._id.month, safeNumber(r.refundAmount.toString())]));
+    const qtyMap = new Map((qtyByMonth || []).map((r) => [r._id.month, safeNumber(r.itemsSold)]));
+    const qtyRefundMap = new Map((qtyRefundByMonth || []).map((r) => [r._id.month, safeNumber(r.itemsRefunded)]));
 
-    // Xuất đủ 12 tháng: tháng không có dữ liệu -> 0 (đúng format template tổng hợp)
+    // Xuất đủ 12 tháng
     const rows = Array.from({ length: 12 }, (_, idx) => {
       const month = idx + 1;
+      const gross = revenueMap.get(month) || 0;
+      const refund = refundMap.get(month) || 0;
+      const qSold = qtyMap.get(month) || 0;
+      const qRefund = qtyRefundMap.get(month) || 0;
       return {
         time: `Tháng ${month}`,
+        monthNo: month,
         year,
-        itemsSold: qtyMap.get(month) || 0,
-        revenue: revenueMap.get(month) || 0,
+        itemsSold: qSold - qRefund,
+        revenue: gross - refund,
       };
     });
 
@@ -763,91 +891,115 @@ const getDailyProductSales = async (req, res) => {
 
     const { start, end } = periodToRange("day", date);
 
-    const rows = await OrderItem.aggregate([
-      // Join Order để lọc theo store/status/createdAt
-      {
-        $lookup: {
-          from: "orders",
-          localField: "orderId",
-          foreignField: "_id",
-          as: "order",
-        },
-      },
-      { $unwind: "$order" },
-      {
-        $match: {
-          "order.storeId": toObjectId(storeId),
-          "order.status": { $in: PAID_STATUSES },
-          "order.createdAt": { $gte: start, $lte: end },
-        },
-      },
-      // Join Product để lấy mã hàng / tên / mô tả
-      {
-        $lookup: {
-          from: "products",
-          localField: "productId",
-          foreignField: "_id",
-          as: "product",
-        },
-      },
-      { $unwind: "$product" },
-      {
-        $addFields: {
-          // grossLine = đơn giá tại thời điểm bán * số lượng
-          // netLine   = subtotal đã lưu (thường là số tiền thực thu của line)
-          grossLine: { $multiply: [{ $toDouble: "$priceAtTime" }, "$quantity"] },
-          netLine: { $toDouble: "$subtotal" },
-          unitPrice: { $toDouble: "$priceAtTime" },
-        },
-      },
-      {
-        $group: {
-          // Gom theo productId để ra 1 dòng / sản phẩm
-          _id: "$productId",
-          sku: { $first: "$product.sku" },
-          name: { $first: "$product.name" },
-          description: { $first: "$product.description" },
-          qty: { $sum: "$quantity" },
-          grossTotal: { $sum: "$grossLine" },
-          netTotal: { $sum: "$netLine" },
-          // store the sum of unitPrice*qty for recomputing avg unit price
-          unitPriceQtySum: { $sum: "$grossLine" },
-        },
-      },
-      {
-        $addFields: {
-          // Đơn giá trung bình theo trọng số số lượng
-          unitPriceAvg: {
-            $cond: [{ $gt: ["$qty", 0] }, { $divide: ["$unitPriceQtySum", "$qty"] }, 0],
+    const [salesRows, refundRows] = await Promise.all([
+      OrderItem.aggregate([
+        {
+          $lookup: {
+            from: "orders",
+            localField: "orderId",
+            foreignField: "_id",
+            as: "order",
           },
-          // Tổng giảm = max(0, gross - net)
-          discountAmount: { $max: [0, { $subtract: ["$grossTotal", "$netTotal"] }] },
         },
-      },
-      { $sort: { netTotal: -1 } },
+        { $unwind: "$order" },
+        {
+          $match: {
+            "order.storeId": toObjectId(storeId),
+            "order.status": { $in: ["paid", "partially_refunded", "refunded"] },
+            "order.createdAt": { $gte: start, $lte: end },
+          },
+        },
+        {
+          $lookup: {
+            from: "products",
+            localField: "productId",
+            foreignField: "_id",
+            as: "product",
+          },
+        },
+        { $unwind: "$product" },
+        {
+          $addFields: {
+            grossLine: { $multiply: [{ $toDouble: "$priceAtTime" }, "$quantity"] },
+            netLine: { $toDouble: "$subtotal" },
+          },
+        },
+        {
+          $group: {
+            _id: "$productId",
+            sku: { $first: "$product.sku" },
+            name: { $first: "$product.name" },
+            description: { $first: "$product.description" },
+            qty: { $sum: "$quantity" },
+            grossTotal: { $sum: "$grossLine" },
+            netTotal: { $sum: "$netLine" },
+          },
+        },
+      ]),
+      mongoose.model("OrderRefund").aggregate([
+        { $match: { refundedAt: { $gte: start, $lte: end } } },
+        {
+          $lookup: {
+            from: "orders",
+            localField: "orderId",
+            foreignField: "_id",
+            as: "orderInfo",
+          },
+        },
+        { $unwind: "$orderInfo" },
+        { $match: { "orderInfo.storeId": toObjectId(storeId) } },
+        { $unwind: "$refundItems" },
+        {
+          $group: {
+            _id: "$refundItems.productId",
+            refundedQty: { $sum: "$refundItems.quantity" },
+            refundedAmount: { $sum: { $toDecimal: "$refundItems.subtotal" } },
+          },
+        },
+      ]),
     ]);
 
-    const data = (rows || []).map((r) => {
-      const gross = safeNumber(r.grossTotal);
-      const net = safeNumber(r.netTotal);
+    const refundMap = new Map(refundRows.map(r => [String(r._id), r]));
+    
+    // Merge
+    const mergedData = salesRows.map(s => {
+      const ref = refundMap.get(String(s._id));
+      const rQty = ref ? ref.refundedQty : 0;
+      const rAmt = ref ? Number(ref.refundedAmount.toString()) : 0;
+      
+      const finalQty = s.qty - rQty;
+      const finalNet = s.netTotal - rAmt;
 
-      // Giảm giá (ước tính): phần chênh lệch giữa tổng trước giảm (gross) và subtotal thực thu (net)
-      const discount = Math.max(0, gross - net);
-      const discountPct = gross > 0 ? (discount / gross) * 100 : 0;
+      refundMap.delete(String(s._id));
+
       return {
-        sku: r.sku || "",
-        productName: r.name || "",
-        productDescription: r.description || "",
-        unitPrice: safeNumber(r.unitPriceAvg),
-        quantity: safeNumber(r.qty),
-        grossTotal: gross,
-        discountPercent: Number(discountPct.toFixed(2)),
-        discountAmount: discount,
-        netTotal: net,
+        sku: s.sku || "",
+        productName: s.name || "",
+        productDescription: s.description || "",
+        unitPrice: s.qty > 0 ? s.grossTotal / s.qty : 0,
+        quantity: finalQty,
+        grossTotal: s.grossTotal,
+        discountAmount: Math.max(0, s.grossTotal - s.netTotal),
+        netTotal: finalNet,
       };
     });
 
-    return res.json({ message: "Báo cáo bán hàng theo ngày", date, data });
+    // Add items that were ONLY refunded today (negative sales)
+    for (const [prodId, r] of refundMap) {
+      const prod = await mongoose.model("Product").findById(prodId).select("name sku description").lean();
+      mergedData.push({
+        sku: prod?.sku || "",
+        productName: prod?.name || "Sản phẩm đã xóa",
+        productDescription: prod?.description || "",
+        unitPrice: 0,
+        quantity: -r.refundedQty,
+        grossTotal: 0,
+        discountAmount: 0,
+        netTotal: -Number(r.refundedAmount.toString()),
+      });
+    }
+
+    return res.json({ message: "Báo cáo bán hàng theo ngày thành công", date, data: mergedData });
   } catch (err) {
     console.error("Lỗi báo cáo bán hàng theo ngày:", err);
     return res.status(500).json({ message: "Lỗi server khi báo cáo bán hàng theo ngày" });

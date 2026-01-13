@@ -434,29 +434,21 @@ export default function DashboardPage() {
 
   return (
     <Layout>
-      {/* Header Dashboard - RESPONSIVE */}
+      {/* Header Dashboard - MODERN & COMPACT */}
       <div
         className="dashboard-header"
         style={{
-          padding: "12px 16px",
+          padding: "16px 24px",
           borderBottom: "1px solid #f0f0f0",
-          background: "#fff",
+          background: "linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)",
           display: "flex",
-          justifyContent: "space-between",
+          justifyContent: "flex-end",
           alignItems: "center",
-          gap: 12,
-          flexWrap: "wrap",
+          gap: 16,
+          boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
         }}
       >
-        {/* Ô tìm kiếm - RESPONSIVE */}
-        <Input
-          placeholder="Tìm kiếm đơn hàng, sản phẩm, khách hàng..."
-          style={{ width: "100%", maxWidth: 600, minWidth: 200 }}
-          prefix={<SearchOutlined style={{ color: "#bfbfbf" }} />}
-          allowClear
-        />
-
-        {/* Nhóm 2 icon: Chuông + Hỏi chấm */}
+        {/* Nhóm icon: Chuông + Hỏi chấm + User */}
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           {/* Icon hỏi chấm - có dropdown */}
           <Dropdown
@@ -739,7 +731,7 @@ export default function DashboardPage() {
                   <div style={{ marginBottom: 8 }}>
                     {expiringProducts.slice(0, 3).map((p: any, i: number) => (
                       <div key={i} style={{ marginBottom: 4 }}>
-                        • <b>{p.product_name}</b> <Text type="secondary" style={{ fontSize: 11 }}>(SKU: {p.product_sku})</Text> - Lô: <b>{p.batch_no}</b> - HSD: <Text style={{ color: "#f5222d", fontWeight: 600 }}>{dayjs(p.expiry_date).format("DD/MM/YYYY")}</Text> (SL: {p.quantity})
+                        • <b>{p.name}</b> <Text type="secondary" style={{ fontSize: 11 }}>(SKU: {p.sku})</Text> - Lô: <b>{p.batch_no}</b> - HSD: <Text style={{ color: "#f5222d", fontWeight: 600 }}>{dayjs(p.expiry_date).format("DD/MM/YYYY")}</Text> (SL: {p.quantity})
                       </div>
                     ))}
                     {expiringProducts.length > 3 && <div style={{ fontStyle: "italic", marginLeft: 12 }}>... và {expiringProducts.length - 3} lô hàng khác.</div>}

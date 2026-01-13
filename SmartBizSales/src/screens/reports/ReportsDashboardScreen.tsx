@@ -23,6 +23,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import dayjs from "dayjs";
 import quarterOfYear from "dayjs/plugin/quarterOfYear";
 import "dayjs/locale/vi";
+import { PieChart } from "react-native-gifted-charts";
 import { useAuth } from "../../context/AuthContext";
 import apiClient from "../../api/apiClient";
 import operatingExpenseApi from "../../api/operatingExpenseApi";
@@ -65,6 +66,16 @@ type AppliedFilter = {
   quarter: 1 | 2 | 3 | 4;
 };
 
+interface OrderStats {
+  total: number;
+  pending: number;
+  refunded: number;
+  paid: number;
+  totalSoldItems: number;
+  totalRefundedItems: number;
+  netSoldItems: number;
+}
+
 type PickerKind = null | "month" | "year" | "quarterYear";
 
 const COLORS = {
@@ -86,6 +97,17 @@ const ReportsDashboardScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<FinancialData | null>(null);
+
+  // Order Stats
+  const [orderStats, setOrderStats] = useState<OrderStats>({
+    total: 0,
+    pending: 0,
+    refunded: 0,
+    paid: 0,
+    totalSoldItems: 0,
+    totalRefundedItems: 0,
+    netSoldItems: 0,
+  });
 
   // Operating expenses from DB
   const [expenseItems, setExpenseItems] = useState<any[]>([]);
@@ -196,6 +218,47 @@ const ReportsDashboardScreen: React.FC = () => {
     }
   };
 
+  // Load expenses theo draft period (dùng trong modal khi user chọn period mới)
+  const loadExpensesWithDraftPeriod = async (): Promise<void> => {
+    if (!storeId || !dPeriodType) {
+      setExpenseItems([]);
+      setOperatingExpenseId(null);
+      setHasUnsavedChanges(false);
+      return;
+    }
+
+    // Build periodKey từ draft values
+    let draftPeriodKey = "";
+    if (dPeriodType === "month") {
+      draftPeriodKey = `${dYear}-${String(dMonth).padStart(2, "0")}`;
+    } else if (dPeriodType === "quarter") {
+      draftPeriodKey = `${dYear}-Q${dQuarter}`;
+    } else if (dPeriodType === "year") {
+      draftPeriodKey = String(dYear);
+    }
+
+    if (!draftPeriodKey) {
+      setExpenseItems([]);
+      return;
+    }
+
+    try {
+      const resp = await operatingExpenseApi.getOperatingExpenseByPeriod({
+        storeId,
+        periodType: dPeriodType,
+        periodKey: draftPeriodKey,
+      });
+      setExpenseItems(resp.items || []);
+      setOperatingExpenseId(resp._id || null);
+      setHasUnsavedChanges(false);
+    } catch (err) {
+      console.error("loadExpensesWithDraftPeriod error:", err);
+      setExpenseItems([]);
+      setOperatingExpenseId(null);
+    }
+  };
+
+
   // ========== FETCH FINANCIAL ==========
   const fetchFinancial = async (isRefresh: boolean = false): Promise<void> => {
     if (!storeId) {
@@ -236,11 +299,30 @@ const ReportsDashboardScreen: React.FC = () => {
       setRefreshing(false);
     }
   };
+
+  // ========== FETCH ORDER STATS ==========
+  const fetchOrderStats = async (): Promise<void> => {
+    if (!storeId || !applied.periodType || !periodKey) return;
+    try {
+      const res = await apiClient.get<OrderStats>("/orders/stats", {
+        params: {
+          storeId,
+          periodType: applied.periodType,
+          periodKey,
+        }
+      });
+      // Backend returns flat object: { total, pending, ... }
+      setOrderStats(res.data);
+    } catch (err) {
+      console.error("fetchOrderStats error:", err);
+    }
+  };
   // Auto fetch lần đầu
   useEffect(() => {
     if (storeId && applied.periodType) {
       fetchFinancial(false);
       loadOperatingExpenses();
+      fetchOrderStats();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeId, applied.periodType, periodKey]);
@@ -270,91 +352,6 @@ const ReportsDashboardScreen: React.FC = () => {
     checkAllocation();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [applied.periodType, periodKey, storeId]);
-
-  // ========== EXPENSE ACTIONS ==========
-  const addExpenseItem = (): void => {
-    const amount = parseFloat(newExpenseAmount.replace(/\./g, ""));
-    if (isNaN(amount) || amount <= 0) {
-      return Alert.alert("Lỗi", "Vui lòng nhập số tiền hợp lệ");
-    }
-
-    const newItem = {
-      amount,
-      note: newExpenseNote.trim(),
-      isSaved: false,
-    };
-
-    setExpenseItems([...expenseItems, newItem]);
-    setNewExpenseAmount("");
-    setNewExpenseNote("");
-    setHasUnsavedChanges(true);
-  };
-
-  const removeExpenseItem = (index: number): void => {
-    const item = expenseItems[index];
-
-    const performRemove = async () => {
-      try {
-        setLoading(true);
-        if (item._id && operatingExpenseId) {
-          // Xóa từ DB theo _id
-          await operatingExpenseApi.deleteItemWithCheckbox(operatingExpenseId, [item._id]);
-        }
-        
-        const newItems = expenseItems.filter((_, idx) => idx !== index);
-        setExpenseItems(newItems);
-        
-        // Nếu không còn item nào chưa lưu, reset change flag
-        if (!newItems.some(it => !it._id)) {
-           setHasUnsavedChanges(false);
-        }
-
-        Alert.alert("Thành công", "Đã xóa khoản chi phí");
-        fetchFinancial();
-      } catch (err: any) {
-        Alert.alert("Lỗi", "Không thể xóa chi phí: " + (err?.message || "Lỗi server"));
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (item.originPeriod) {
-      return Alert.alert("Thông báo", `Khoản chi này thuộc ${item.originPeriod}. Vui lòng chuyển sang kỳ đó để xoá.`);
-    }
-
-    Alert.alert("Xác nhận", "Xóa khoản chi phí này?", [
-      { text: "Hủy", style: "cancel" },
-      { text: "Xóa", style: "destructive", onPress: performRemove },
-    ]);
-  };
-
-  const saveExpenses = async (): Promise<void> => {
-    if (!storeId || !applied.periodType || !periodKey) return;
-
-    try {
-      setLoading(true);
-      const payload = {
-        storeId,
-        periodType: applied.periodType,
-        periodKey,
-        items: expenseItems.map(it => ({
-          amount: it.amount,
-          note: it.note
-        })),
-      };
-
-      await operatingExpenseApi.createOperatingExpense(payload);
-      Alert.alert("Thành công", "Đã lưu danh sách chi phí");
-      
-      setHasUnsavedChanges(false);
-      loadOperatingExpenses();
-      fetchFinancial();
-    } catch (err: any) {
-      Alert.alert("Lỗi", "Không thể lưu chi phí: " + (err?.message || "Lỗi server"));
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleExecuteAllocation = async (): Promise<void> => {
     if (!allocationSuggestion || !storeId) return;
@@ -392,6 +389,91 @@ const ReportsDashboardScreen: React.FC = () => {
     );
   };
 
+  // ========== EXPENSE MANAGEMENT ==========
+  const addExpenseItem = (): void => {
+    if (!newExpenseAmount || newExpenseAmount.trim() === "") {
+      Alert.alert("Lỗi", "Vui lòng nhập số tiền");
+      return;
+    }
+    const amount = parseFloat(newExpenseAmount.replace(/\./g, ""));
+    if (isNaN(amount) || amount <= 0) {
+      Alert.alert("Lỗi", "Số tiền phải lớn hơn 0");
+      return;
+    }
+
+    const newItem = {
+      amount,
+      note: newExpenseNote.trim(),
+      isSaved: false,
+    };
+
+    setExpenseItems([...expenseItems, newItem as any]);
+    setNewExpenseAmount("");
+    setNewExpenseNote("");
+    setHasUnsavedChanges(true);
+  };
+
+  const removeExpenseItem = (index: number): void => {
+    const item = expenseItems[index];
+    if (!item) return;
+
+    Alert.alert(
+      "Xóa chi phí",
+      `Bạn chắc chắn muốn xóa chi phí ${formatVND(item.amount)}?`,
+      [
+        { text: "Hủy", style: "cancel" },
+        {
+          text: "Xóa",
+          style: "destructive",
+          onPress: () => {
+            const updated = expenseItems.filter((_, i) => i !== index);
+            setExpenseItems(updated);
+            setHasUnsavedChanges(true);
+          },
+        },
+      ]
+    );
+  };
+
+  const saveOperatingExpense = async (): Promise<void> => {
+    if (!storeId || !applied.periodType || !periodKey) {
+      Alert.alert("Lỗi", "Thiếu thông tin kỳ báo cáo");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const itemsToSave = expenseItems.map((it) => ({
+        amount: it.amount,
+        note: it.note || "",
+        isSaved: true,
+      }));
+
+      await operatingExpenseApi.upsertOperatingExpense({
+        storeId,
+        periodType: applied.periodType,
+        periodKey,
+        items: itemsToSave,
+      });
+
+      setHasUnsavedChanges(false);
+      
+      // Reload để có _id thực từ DB
+      await loadOperatingExpenses();
+      
+      // Reload financial data
+      await fetchFinancial(false);
+
+      Alert.alert("Thành công", "Đã lưu chi phí vận hành");
+    } catch (err: any) {
+      console.error("saveOperatingExpense error:", err);
+      Alert.alert("Lỗi", err?.message || "Không thể lưu chi phí");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // ========== FILTER SHEET ==========
   const openFilter = () => {
     setDPeriodType(applied.periodType);
@@ -399,6 +481,11 @@ const ReportsDashboardScreen: React.FC = () => {
     setDMonth(applied.month);
     setDQuarter(applied.quarter);
     setFilterOpen(true);
+    
+    // Load chi phí khi mở modal (nếu đã có period)
+    if (storeId && applied.periodType && periodKey) {
+      loadOperatingExpenses();
+    }
   };
 
   const closeFilter = () => setFilterOpen(false);
@@ -503,6 +590,9 @@ const ReportsDashboardScreen: React.FC = () => {
       setDYear(d.year());
     }
     setPickerKind(null);
+    
+    // Load expenses với period mới chọn
+    setTimeout(() => loadExpensesWithDraftPeriod(), 100);
   };
 
   const handleExport = async (format: "xlsx" | "pdf" | "csv") => {
@@ -577,27 +667,13 @@ const ReportsDashboardScreen: React.FC = () => {
 
             <TouchableOpacity
               style={styles.headerIconBtn}
-              onPress={() => fetchFinancial(false)}
+              onPress={() => {
+                fetchFinancial(false);
+                fetchOrderStats();
+              }}
               disabled={!isReadyToFetch || loading}
             >
               <Ionicons name="refresh" size={20} color="#fff" />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.headerPills}>
-            <View style={styles.headerPill}>
-              <Ionicons name="calendar-outline" size={14} color="#fff" />
-              <Text style={styles.headerPillText}>{periodDisplay}</Text>
-            </View>
-
-            <TouchableOpacity style={styles.headerPill} onPress={openFilter}>
-              <Ionicons name="funnel-outline" size={14} color="#fff" />
-              <Text style={styles.headerPillText}>
-                Bộ lọc{" "}
-                {expenseItems.length > 0
-                  ? `• ${expenseItems.length} CP`
-                  : ""}
-              </Text>
             </TouchableOpacity>
           </View>
         </LinearGradient>
@@ -659,7 +735,10 @@ const ReportsDashboardScreen: React.FC = () => {
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={() => fetchFinancial(true)}
+              onRefresh={() => {
+                fetchFinancial(true);
+                fetchOrderStats();
+              }}
               colors={["#2563eb"]}
               tintColor="#2563eb"
             />
@@ -674,8 +753,7 @@ const ReportsDashboardScreen: React.FC = () => {
                 <Ionicons name="close-circle" size={20} color="#ef4444" />
               </TouchableOpacity>
             </View>
-          )}
-
+          )}     
           {/* Allocation Suggestion Alert */}
           {allocationSuggestion && (
             <View style={styles.suggestionAlert}>
@@ -685,8 +763,8 @@ const ReportsDashboardScreen: React.FC = () => {
               <View style={{ flex: 1 }}>
                 <Text style={styles.suggestionTitle}>Gợi ý phân bổ chi phí</Text>
                 <Text style={styles.suggestionText}>{allocationSuggestion.message}</Text>
-                <TouchableOpacity 
-                  style={styles.suggestionBtn} 
+                <TouchableOpacity
+                  style={styles.suggestionBtn}
                   onPress={handleExecuteAllocation}
                 >
                   <Text style={styles.suggestionBtnText}>Thực hiện ngay</Text>
@@ -731,135 +809,246 @@ const ReportsDashboardScreen: React.FC = () => {
 
           {/* Data */}
           {!loading && data && (
-            <>
+            <View style={{ paddingBottom: 40 }}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Tổng quan</Text>
+                <Text style={styles.sectionTitle}>Chỉ số quan trọng</Text>
                 <Text style={styles.sectionSubTitle}>{periodDisplay}</Text>
               </View>
 
               <View style={styles.statsGrid}>
-                <View
-                  style={[styles.statCard, { borderLeftColor: COLORS.revenue }]}
-                >
+                {/* Doanh thu */}
+                <View style={[styles.statCard, { borderLeftColor: COLORS.revenue }]}>
+                  <LinearGradient
+                    colors={["rgba(37, 99, 235, 0.05)", "transparent"]}
+                    style={StyleSheet.absoluteFill}
+                  />
                   <View style={styles.statTop}>
-                    <Ionicons
-                      name="trending-up"
-                      size={22}
-                      color={COLORS.revenue}
-                    />
+                    <View style={[styles.statIconWrap, { backgroundColor: "rgba(37, 99, 235, 0.1)" }]}>
+                      <Ionicons name="trending-up" size={18} color={COLORS.revenue} />
+                    </View>
                     <Text style={styles.statLabel}>Doanh thu</Text>
                   </View>
-                    <Text style={[styles.statValue, { color: COLORS.revenue }]}>
-                      {formatVND(data.totalRevenue)}
-                    </Text>
-                    {renderComparison(data.comparison?.revenueChange)}
-                  </View>
+                  <Text style={[styles.statValue, { color: COLORS.revenue }]}>
+                    {formatVND(data.totalRevenue)}
+                  </Text>
+                  {renderComparison(data.comparison?.revenueChange)}
+                </View>
 
-                <View
-                  style={[
-                    styles.statCard,
-                    { borderLeftColor: COLORS.grossProfit },
-                  ]}
-                >
+                {/* Lợi nhuận gộp */}
+                <View style={[styles.statCard, { borderLeftColor: COLORS.grossProfit }]}>
+                  <LinearGradient
+                    colors={["rgba(22, 163, 74, 0.05)", "transparent"]}
+                    style={StyleSheet.absoluteFill}
+                  />
                   <View style={styles.statTop}>
-                    <Ionicons
-                      name="cash-outline"
-                      size={22}
-                      color={COLORS.grossProfit}
-                    />
+                    <View style={[styles.statIconWrap, { backgroundColor: "rgba(22, 163, 74, 0.1)" }]}>
+                      <Ionicons name="cash-outline" size={18} color={COLORS.grossProfit} />
+                    </View>
                     <Text style={styles.statLabel}>Lợi nhuận gộp</Text>
                   </View>
-                    <Text
-                      style={[styles.statValue, { color: COLORS.grossProfit }]}
-                    >
-                      {formatVND(data.grossProfit)}
-                    </Text>
-                    {renderComparison(data.comparison?.grossProfitChange)}
-                  </View>
+                  <Text style={[styles.statValue, { color: COLORS.grossProfit }]}>
+                    {formatVND(data.grossProfit)}
+                  </Text>
+                  {renderComparison(data.comparison?.grossProfitChange)}
+                </View>
 
-                <View
-                  style={[
-                    styles.statCard,
-                    { borderLeftColor: COLORS.operatingCost },
-                  ]}
-                >
+                {/* Chi phí vận hành */}
+                <View style={[styles.statCard, { borderLeftColor: COLORS.operatingCost }]}>
+                  <LinearGradient
+                    colors={["rgba(249, 115, 22, 0.05)", "transparent"]}
+                    style={StyleSheet.absoluteFill}
+                  />
                   <View style={styles.statTop}>
-                    <Ionicons
-                      name="wallet-outline"
-                      size={22}
-                      color={COLORS.operatingCost}
-                    />
-                    <Text style={styles.statLabel}>Chi phí vận hành</Text>
+                    <View style={[styles.statIconWrap, { backgroundColor: "rgba(249, 115, 22, 0.1)" }]}>
+                      <Ionicons name="wallet-outline" size={18} color={COLORS.operatingCost} />
+                    </View>
+                    <Text style={styles.statLabel}>CP vận hành</Text>
                   </View>
-                    <Text
-                      style={[styles.statValue, { color: COLORS.operatingCost }]}
-                    >
-                      {formatVND(data.operatingCost)}
-                    </Text>
-                    {renderComparison(data.comparison?.operatingCostChange)}
-                  </View>
+                  <Text style={[styles.statValue, { color: COLORS.operatingCost }]}>
+                    {formatVND(data.operatingCost)}
+                  </Text>
+                  {renderComparison(data.comparison?.operatingCostChange)}
+                </View>
 
-                <View
-                  style={[
-                    styles.statCard,
-                    { borderLeftColor: getProfitColor(data.netProfit) },
-                  ]}
-                >
+                {/* Lợi nhuận ròng */}
+                <View style={[styles.statCard, { borderLeftColor: getProfitColor(data.netProfit) }]}>
+                  <LinearGradient
+                    colors={[`${getProfitColor(data.netProfit)}10`, "transparent"]}
+                    style={StyleSheet.absoluteFill}
+                  />
                   <View style={styles.statTop}>
-                    <Ionicons
-                      name="trophy-outline"
-                      size={22}
-                      color={getProfitColor(data.netProfit)}
-                    />
-                    <Text style={styles.statLabel}>Lợi nhuận ròng</Text>
+                    <View style={[styles.statIconWrap, { backgroundColor: `${getProfitColor(data.netProfit)}15` }]}>
+                      <Ionicons name="star-outline" size={18} color={getProfitColor(data.netProfit)} />
+                    </View>
+                    <Text style={styles.statLabel}>LN thực tế</Text>
                   </View>
-                    <Text
-                      style={[
-                        styles.statValue,
-                        { color: getProfitColor(data.netProfit) },
-                      ]}
-                    >
-                      {formatVND(data.netProfit)}
-                    </Text>
-                    {renderComparison(data.comparison?.netProfitChange)}
-                  </View>
-              </View>
+                  <Text style={[styles.statValue, { color: getProfitColor(data.netProfit) }]}>
+                    {formatVND(data.netProfit)}
+                  </Text>
+                  {renderComparison(data.comparison?.netProfitChange)}
+                </View>
 
-              <View style={styles.detailCard}>
-                <Text style={styles.detailCardTitle}>Thuế & Tồn kho</Text>
-
-                <View style={styles.detailRow}>
-                  <View style={styles.detailItem}>
-                    <View
-                      style={[styles.colorDot, { backgroundColor: COLORS.vat }]}
-                    />
-                    <Text style={styles.detailLabel}>Thuế GTGT</Text>
+                {/* Thuế VAT */}
+                <View style={[styles.statCard, { borderLeftColor: COLORS.vat }]}>
+                  <View style={styles.statTop}>
+                    <View style={[styles.statIconWrap, { backgroundColor: "rgba(239, 68, 68, 0.1)" }]}>
+                      <Ionicons name="receipt-outline" size={18} color={COLORS.vat} />
+                    </View>
+                    <Text style={styles.statLabel}>Thuế VAT</Text>
                   </View>
-                  <Text style={[styles.detailValue, { color: COLORS.vat }]}>
+                  <Text style={[styles.statValue, { color: COLORS.vat }]}>
                     {formatVND(data.totalVAT)}
                   </Text>
                 </View>
 
-                <View style={styles.detailRow}>
-                  <View style={styles.detailItem}>
-                    <View
-                      style={[
-                        styles.colorDot,
-                        { backgroundColor: COLORS.stockValue },
-                      ]}
-                    />
-                    <Text style={styles.detailLabel}>Tồn kho</Text>
+                {/* Giá trị tồn kho */}
+                <View style={[styles.statCard, { borderLeftColor: COLORS.stockValue }]}>
+                  <View style={styles.statTop}>
+                    <View style={[styles.statIconWrap, { backgroundColor: "rgba(6, 182, 212, 0.1)" }]}>
+                      <Ionicons name="cube-outline" size={18} color={COLORS.stockValue} />
+                    </View>
+                    <Text style={styles.statLabel}>Giá trị kho</Text>
                   </View>
-                  <Text
-                    style={[styles.detailValue, { color: COLORS.stockValue }]}
-                  >
+                  <Text style={[styles.statValue, { color: COLORS.stockValue }]}>
                     {formatVND(data.stockValue)}
                   </Text>
                 </View>
               </View>
 
+              {/* Charts Section */}
+              <View style={styles.chartCard}>
+                <Text style={styles.chartTitle}>Cơ cấu tài chính</Text>
+                <View style={styles.chartRow}>
+                  <PieChart
+                    data={[
+                      {
+                        value: Math.max(0, data.netProfit),
+                        color: COLORS.netProfit,
+                        text: "LN",
+                      },
+                      {
+                        value: Math.max(0, data.operatingCost),
+                        color: COLORS.operatingCost,
+                        text: "CP",
+                      },
+                      {
+                        value: Math.max(0, data.totalCOGS),
+                        color: "#6b7280",
+                        text: "Vốn",
+                      },
+                    ]}
+                    radius={70}
+                    innerRadius={45}
+                    innerCircleColor={"#fff"}
+                    centerLabelComponent={() => (
+                      <View style={{ alignItems: "center", justifyContent: "center" }}>
+                        <Text style={{ fontSize: 10, color: "#64748b", fontWeight: "700" }}>Ròng</Text>
+                        <Text style={{ fontSize: 12, fontWeight: "900", color: "#0f172a" }}>
+                          {((data.netProfit / (data.totalRevenue || 1)) * 100).toFixed(0)}%
+                        </Text>
+                      </View>
+                    )}
+                  />
+
+                  <View style={styles.chartLegend}>
+                    <View style={styles.legendItem}>
+                      <View style={[styles.legendDot, { backgroundColor: COLORS.netProfit }]} />
+                      <Text style={styles.legendText}>LN Ròng: {formatVND(data.netProfit)}</Text>
+                    </View>
+                    <View style={styles.legendItem}>
+                      <View style={[styles.legendDot, { backgroundColor: COLORS.operatingCost }]} />
+                      <Text style={styles.legendText}>CP Vận hành: {formatVND(data.operatingCost)}</Text>
+                    </View>
+                    <View style={styles.legendItem}>
+                      <View style={[styles.legendDot, { backgroundColor: "#6b7280" }]} />
+                      <Text style={styles.legendText}>Giá vốn hàng: {formatVND(data.totalCOGS)}</Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+
+              {/* Analysis Summary */}
+              <View style={styles.analysisBox}>
+                <View style={[StyleSheet.absoluteFill, { borderRadius: 18, overflow: 'hidden' }]}>
+                  <LinearGradient
+                    colors={["#eff6ff", "#f8fafc"]}
+                    style={StyleSheet.absoluteFill}
+                  />
+                </View>
+                <View style={styles.analysisHeader}>
+                  <Ionicons name="analytics-outline" size={20} color="#2563eb" />
+                  <Text style={styles.analysisTitle}>Phân tích hiệu quả</Text>
+                </View>
+                <Text style={styles.analysisText}>
+                  Tỷ suất lợi nhuận ròng đạt <Text style={{ fontWeight: "800", color: "#0f172a" }}>{((data.netProfit / (data.totalRevenue || 1)) * 100).toFixed(1)}%</Text>.
+                  {data.comparison?.netProfitChange && data.comparison.netProfitChange > 0
+                    ? " Hiệu suất đang cải thiện so với kỳ trước."
+                    : " Cần tối ưu chi phí vận hành để cải thiện dòng tiền."}
+                </Text>
+              </View>
+
+              {/* Danh sách Chi phí đã lưu */}
+              {expenseItems.length > 0 && (
+                <View style={styles.expenseListCard}>
+                  <View style={styles.expenseListHeader}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Ionicons name="wallet-outline" size={20} color="#f97316" />
+                      <Text style={styles.expenseListTitle}>Chi phí vận hành ({periodDisplay})</Text>
+                    </View>
+                    <View style={styles.expenseTotalBadge}>
+                      <Text style={styles.expenseTotalText}>
+                        {formatVND(expenseItems.reduce((sum, item) => sum + (item.amount || 0), 0))}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.expenseListBody}>
+                    {expenseItems.map((item, index) => (
+                      <View key={index} style={styles.expenseItem}>
+                        <View style={styles.expenseItemLeft}>
+                          <View style={styles.expenseIndexBadge}>
+                            <Text style={styles.expenseIndexText}>{index + 1}</Text>
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.expenseNote} numberOfLines={2}>
+                              {item.note || "Không có ghi chú"}
+                            </Text>
+                            {item.originPeriod && (
+                              <View style={styles.expenseOriginBadge}>
+                                <Ionicons name="link-outline" size={10} color="#64748b" />
+                                <Text style={styles.expenseOriginText}>
+                                  Phân bổ từ {item.originPeriod}
+                                </Text>
+                              </View>
+                            )}
+                          </View>
+                        </View>
+                        <View style={styles.expenseItemRight}>
+                          <Text style={styles.expenseAmount}>{formatVND(item.amount)}</Text>
+                          <TouchableOpacity
+                            onPress={() => removeExpenseItem(index)}
+                            style={styles.expenseDeleteBtn}
+                            disabled={loading}
+                          >
+                            <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+
+                  <View style={styles.expenseListFooter}>
+                    <Ionicons name="information-circle-outline" size={14} color="#64748b" />
+                    <Text style={styles.expenseListFooterText}>
+                      Các khoản chi phí này đã được tính vào báo cáo tài chính
+                    </Text>
+                  </View>
+                </View>
+              )}
               <View style={styles.detailCard}>
                 <Text style={styles.detailCardTitle}>Chi tiết</Text>
+
+
 
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>
@@ -937,10 +1126,10 @@ const ReportsDashboardScreen: React.FC = () => {
                   </View>
                 </View>
               </View>
-            </>
+            </View>
           )}
 
-          <View style={{ height: 28 }} />
+          <View style={{ height: 40 }} />
         </ScrollView>
 
         {/* ================= FILTER BOTTOM SHEET ================= */}
@@ -969,19 +1158,28 @@ const ReportsDashboardScreen: React.FC = () => {
                   label="Tháng"
                   icon="calendar-outline"
                   active={dPeriodType === "month"}
-                  onPress={() => setDPeriodType("month")}
+                  onPress={() => {
+                    setDPeriodType("month");
+                    setTimeout(() => loadExpensesWithDraftPeriod(), 100);
+                  }}
                 />
                 <FilterChip
                   label="Quý"
                   icon="grid-outline"
                   active={dPeriodType === "quarter"}
-                  onPress={() => setDPeriodType("quarter")}
+                  onPress={() => {
+                    setDPeriodType("quarter");
+                    setTimeout(() => loadExpensesWithDraftPeriod(), 100);
+                  }}
                 />
                 <FilterChip
                   label="Năm"
                   icon="time-outline"
                   active={dPeriodType === "year"}
-                  onPress={() => setDPeriodType("year")}
+                  onPress={() => {
+                    setDPeriodType("year");
+                    setTimeout(() => loadExpensesWithDraftPeriod(), 100);
+                  }}
                 />
               </View>
 
@@ -1032,7 +1230,10 @@ const ReportsDashboardScreen: React.FC = () => {
                           label={`Q${q}`}
                           icon="pie-chart-outline"
                           active={dQuarter === q}
-                          onPress={() => setDQuarter(q as 1 | 2 | 3 | 4)}
+                          onPress={() => {
+                            setDQuarter(q as 1 | 2 | 3 | 4);
+                            setTimeout(() => loadExpensesWithDraftPeriod(), 100);
+                          }}
                         />
                       ))}
                     </View>
@@ -1051,7 +1252,7 @@ const ReportsDashboardScreen: React.FC = () => {
               </View>
 
               <Text style={styles.blockTitle}>Chi phí vận hành (Điện, nước, mặt bằng...)</Text>
-              
+
               <View style={styles.expenseInputCard}>
                 <View style={styles.expenseInputRow}>
                    <View style={styles.expenseInputWrap}>
@@ -1076,7 +1277,7 @@ const ReportsDashboardScreen: React.FC = () => {
                     />
                   </View>
                 </View>
-                
+
                 <TouchableOpacity
                   style={[styles.addBtnLarge, (!newExpenseAmount || !newExpenseNote) && { opacity: 0.5 }]}
                   onPress={addExpenseItem}
@@ -1087,33 +1288,90 @@ const ReportsDashboardScreen: React.FC = () => {
                 </TouchableOpacity>
               </View>
 
+              {/* NÚT LƯU CHI PHÍ - GIỐNG WEB */}
+              {expenseItems.length > 0 && (
+                <View style={styles.saveSection}>
+                  <TouchableOpacity
+                    style={[
+                      styles.saveExpenseBtn,
+                      (!hasUnsavedChanges || loading) && { opacity: 0.5, backgroundColor: '#94a3b8' }
+                    ]}
+                    onPress={saveOperatingExpense}
+                    disabled={!hasUnsavedChanges || loading}
+                  >
+                    {loading ? (
+                      <ActivityIndicator color="#fff" size="small" />
+                    ) : (
+                      <>
+                        <Ionicons name="save-outline" size={18} color="#fff" />
+                        <Text style={styles.saveExpenseBtnText}>
+                          {hasUnsavedChanges ? "Lưu Chi Phí" : "Đã Lưu"}
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+
+                  {hasUnsavedChanges && expenseItems.filter(it => !it.isSaved).length > 0 && (
+                    <View style={styles.warningAlert}>
+                      <Ionicons name="warning-outline" size={18} color="#f59e0b" />
+                      <Text style={styles.warningAlertText}>
+                        Có {expenseItems.filter(it => !it.isSaved).length} khoản chi phí chưa lưu
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              )}
+
               {expenseItems.length > 0 && (
                 <>
                   <View style={styles.expenseHeaderRow}>
-                    <Text style={styles.expenseHeaderText}>Danh sách chi phí ({expenseItems.length})</Text>
-                    {hasUnsavedChanges && (
-                      <TouchableOpacity onPress={saveExpenses} style={styles.saveExpensesBtn}>
-                        <Ionicons name="save-outline" size={16} color="#fff" />
-                        <Text style={styles.saveExpensesBtnText}>Lưu ngay</Text>
-                      </TouchableOpacity>
-                    )}
+                    <Text style={styles.expenseHeaderText}>
+                      Danh sách chi phí ({expenseItems.length} khoản)
+                    </Text>
+                    <View style={styles.expenseTotalBadge}>
+                      <Text style={styles.expenseTotalText}>
+                        {formatVND(expenseItems.reduce((sum, item) => sum + (item.amount || 0), 0))}
+                      </Text>
+                    </View>
                   </View>
 
                   <View style={styles.expenseList}>
                     {expenseItems.map((exp, index) => (
-                      <View key={index} style={[styles.expenseListItem, !exp._id && styles.expenseListItemUnsaved]}>
+                      <View 
+                        key={exp._id || index} 
+                        style={[
+                          styles.expenseListItem, 
+                          !exp.isSaved && styles.expenseListItemUnsaved
+                        ]}
+                      >
                         <View style={{ flex: 1 }}>
-                          <Text style={styles.expenseItemAmount}>{formatVND(exp.amount)}</Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                            <Text style={styles.expenseItemAmount}>{formatVND(exp.amount)}</Text>
+                            <View style={[
+                              styles.statusBadge,
+                              exp.isSaved ? styles.statusBadgeSaved : styles.statusBadgeUnsaved
+                            ]}>
+                              <Text style={[
+                                styles.statusBadgeText,
+                                exp.isSaved ? styles.statusBadgeTextSaved : styles.statusBadgeTextUnsaved
+                              ]}>
+                                {exp.isSaved ? 'Đã lưu' : 'Chưa lưu'}
+                              </Text>
+                            </View>
+                          </View>
                           <Text style={styles.expenseItemNote}>{exp.note || "(Không có ghi chú)"}</Text>
                           {exp.originPeriod && (
-                            <Text style={{ fontSize: 10, color: '#2563eb', marginTop: 2, fontWeight: '700' }}>
-                              Kỳ gốc: {exp.originPeriod}
-                            </Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                              <Ionicons name="link-outline" size={12} color="#2563eb" />
+                              <Text style={{ fontSize: 11, color: '#2563eb', fontWeight: '600' }}>
+                                Kỳ gốc: {exp.originPeriod}
+                              </Text>
+                            </View>
                           )}
                         </View>
                         {!exp.originPeriod && (
-                          <TouchableOpacity 
-                            style={styles.removeExpenseBtn} 
+                          <TouchableOpacity
+                            style={styles.removeExpenseBtn}
                             onPress={() => removeExpenseItem(index)}
                           >
                             <Ionicons
@@ -1180,9 +1438,26 @@ const ReportsDashboardScreen: React.FC = () => {
                   value={tempPickedDate}
                   mode="date"
                   display={Platform.OS === "ios" ? "spinner" : "default"}
-                  onChange={(_, date) => {
-                    if (!date) return;
-                    setTempPickedDate(date);
+                  onChange={(event, date) => {
+                    if (Platform.OS === "android") {
+                      // Android: picker tự đóng, nên ta confirm luôn
+                      if (event.type === "set" && date) {
+                        const d = dayjs(date);
+                        if (pickerKind === "month") {
+                          setDYear(d.year());
+                          setDMonth(d.month() + 1);
+                        } else if (pickerKind === "year" || pickerKind === "quarterYear") {
+                          setDYear(d.year());
+                        }
+                        // Load expenses với period mới chọn
+                        setTimeout(() => loadExpensesWithDraftPeriod(), 100);
+                      }
+                      // Đóng modal
+                      setPickerKind(null);
+                    } else {
+                      // iOS: chỉ update temp, user sẽ bấm "Áp dụng"
+                      if (date) setTempPickedDate(date);
+                    }
                   }}
                   minimumDate={new Date(2000, 0, 1)}
                   maximumDate={new Date(2100, 11, 31)}
@@ -1461,22 +1736,118 @@ const styles = StyleSheet.create({
   sectionSubTitle: { color: "#64748b", marginTop: 4, fontWeight: "700" },
 
   // Cards
-  statsGrid: { paddingHorizontal: 16, marginTop: 12, gap: 12 },
+  statsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+    marginTop: 12,
+    marginHorizontal: 16,
+  },
   statCard: {
+    width: "48%",
     backgroundColor: "#fff",
-    padding: 16,
-    borderRadius: 16,
-    borderLeftWidth: 5,
-    borderColor: "#eef2f7",
+    borderRadius: 18,
+    padding: 14,
+    borderLeftWidth: 4,
     shadowColor: "#0f172a",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.06,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
     shadowRadius: 10,
+    elevation: 2,
+    overflow: "hidden",
+  },
+  statTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+    gap: 8,
+  },
+  statIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  statLabel: {
+    fontSize: 12,
+    color: "#64748b",
+    fontWeight: "700",
+  },
+  statValue: {
+    fontSize: 16,
+    fontWeight: "900",
+  },
+
+  chartCard: {
+    marginHorizontal: 16,
+    marginTop: 20,
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    padding: 16,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
     elevation: 3,
   },
-  statTop: { flexDirection: "row", alignItems: "center", gap: 10 },
-  statLabel: { color: "#64748b", fontWeight: "800" },
-  statValue: { marginTop: 10, fontSize: 20, fontWeight: "900" },
+  chartTitle: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#0f172a",
+    marginBottom: 16,
+  },
+  chartRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 20,
+  },
+  chartLegend: {
+    flex: 1,
+    gap: 8,
+  },
+  legendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  legendText: {
+    fontSize: 11,
+    color: "#64748b",
+    fontWeight: "600",
+  },
+
+  analysisBox: {
+    marginHorizontal: 16,
+    marginTop: 20,
+    padding: 16,
+    borderRadius: 18,
+    minHeight: 80,
+    position: "relative",
+    overflow: "hidden",
+  },
+  analysisHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
+  },
+  analysisTitle: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#2563eb",
+  },
+  analysisText: {
+    fontSize: 13,
+    color: "#334155",
+    lineHeight: 18,
+    fontWeight: "500",
+  },
 
   detailCard: {
     backgroundColor: "#fff",
@@ -1850,4 +2221,218 @@ const styles = StyleSheet.create({
     color: "#64748b",
     fontWeight: "700",
   },
+
+  // Expense List Card Styles
+  expenseListCard: {
+    backgroundColor: "#fff",
+    marginHorizontal: 16,
+    marginTop: 20,
+    borderRadius: 18,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 3,
+    overflow: "hidden",
+  },
+  expenseListHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+  },
+  expenseListTitle: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#0f172a",
+  },
+  expenseTotalBadge: {
+    backgroundColor: "#fef3c7",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  expenseTotalText: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#f59e0b",
+  },
+  expenseListBody: {
+    padding: 16,
+    gap: 12,
+  },
+  expenseItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#f8fafc",
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  expenseItemLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+  },
+  expenseIndexBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#f97316",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  expenseIndexText: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#fff",
+  },
+  expenseNote: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#334155",
+  },
+  expenseOriginBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 4,
+  },
+  expenseOriginText: {
+    fontSize: 10,
+    color: "#64748b",
+    fontWeight: "600",
+  },
+  expenseItemRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  expenseAmount: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#0f172a",
+  },
+  expenseDeleteBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: "#fef2f2",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  expenseListFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    padding: 12,
+    backgroundColor: "#f8fafc",
+    borderTopWidth: 1,
+    borderTopColor: "#f1f5f9",
+  },
+  expenseListFooterText: {
+    fontSize: 11,
+    color: "#64748b",
+    fontWeight: "600",
+    flex: 1,
+  },
+  
+  // Status Badge Styles
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  statusBadgeSaved: {
+    backgroundColor: "#f6ffed",
+  },
+  statusBadgeUnsaved: {
+    backgroundColor: "#fff1f0",
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  statusBadgeTextSaved: {
+    color: "#52c41a",
+  },
+  statusBadgeTextUnsaved: {
+    color: "#f5222d",
+  },
+
+  // Save Section Styles
+  saveSection: {
+    marginTop: 16,
+    gap: 12,
+  },
+  saveExpenseBtn: {
+    backgroundColor: "#16a34a",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    gap: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  saveExpenseBtnText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#fff",
+  },
+  warningAlert: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#fef3c7",
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#fbbf24",
+  },
+  warningAlertText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#92400e",
+    flex: 1,
+  },
+  // STATS GRID STYLES
+  
+  
+  statCardBlue: { backgroundColor: '#eff6ff', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#dbeafe' },
+  statLabelBlue: { fontSize: 11, color: '#1e40af', fontWeight: '600', marginBottom: 4 },
+  statValueBlue: { fontSize: 16, color: '#2563eb', fontWeight: '800' },
+
+  statCardGreen: { backgroundColor: '#f0fdf4', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#dcfce7' },
+  statLabelGreen: { fontSize: 11, color: '#166534', fontWeight: '600', marginBottom: 4 },
+  statValueGreen: { fontSize: 16, color: '#16a34a', fontWeight: '800' },
+
+  statCardOrange: { backgroundColor: '#fff7ed', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#ffedd5' },
+  statLabelOrange: { fontSize: 11, color: '#c2410c', fontWeight: '600', marginBottom: 4 },
+  statValueOrange: { fontSize: 16, color: '#f97316', fontWeight: '800' },
+
+  statCardPurple: { backgroundColor: '#faf5ff', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#f3e8ff' },
+  statLabelPurple: { fontSize: 11, color: '#7e22ce', fontWeight: '600', marginBottom: 4 },
+  statValuePurple: { fontSize: 16, color: '#9333ea', fontWeight: '800' },
+
+  statCardRed: { backgroundColor: '#fef2f2', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#fee2e2' },
+  statLabelRed: { fontSize: 11, color: '#b91c1c', fontWeight: '600', marginBottom: 4 },
+  statValueRed: { fontSize: 16, color: '#ef4444', fontWeight: '800' },
+
+  statCardGray: { backgroundColor: '#f8fafc', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#e2e8f0' },
+  statLabelGray: { fontSize: 11, color: '#475569', fontWeight: '600', marginBottom: 4 },
+  statValueGray: { fontSize: 16, color: '#64748b', fontWeight: '800' },
+
+  // Analysis Box
+
 });

@@ -1,4 +1,4 @@
-// src/pages/ProductGroupsPage.jsx
+// src/pages/productGroup/ProductGroupsPage.jsx
 import React, { useEffect, useState } from "react";
 import {
   Card,
@@ -15,7 +15,13 @@ import {
   Tooltip,
   Badge,
   Progress,
-  notification
+  notification,
+  Table,
+  Segmented,
+  Input,
+  Dropdown,
+  Avatar,
+  Divider,
 } from "antd";
 import {
   PlusOutlined,
@@ -29,6 +35,13 @@ import {
   InfoCircleOutlined,
   ExclamationCircleOutlined,
   CheckCircleOutlined,
+  UnorderedListOutlined,
+  AppstoreFilled,
+  SearchOutlined,
+  MoreOutlined,
+  FolderOpenOutlined,
+  TagsOutlined,
+  ReloadOutlined,
 } from "@ant-design/icons";
 import { getProductGroupsByStore, deleteProductGroup } from "../../api/productGroupApi";
 import ProductGroupForm from "../../components/productGroup/ProductGroupForm";
@@ -45,8 +58,9 @@ export default function ProductGroupsPage() {
   const [deleting, setDeleting] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState(null);
+  const [viewMode, setViewMode] = useState("list"); // Mặc định là list (chiều ngang)
+  const [searchText, setSearchText] = useState("");
 
-  // ✅ DÙNG Modal.useModal() THAY VÌ Modal.confirm STATIC
   const [deleteModal, deleteContextHolder] = Modal.useModal();
 
   const fetchGroups = async () => {
@@ -64,13 +78,6 @@ export default function ProductGroupsPage() {
       const res = await getProductGroupsByStore(storeId);
       const groupList = res?.productGroups || [];
       setGroups(groupList);
-
-      notification.success({
-        message: "✅ Tải dữ liệu thành công",
-        description: `Đã tải ${groupList.length} nhóm sản phẩm`,
-        placement: "topRight",
-        duration: 2,
-      });
     } catch (err) {
       console.error("Fetch groups error:", err);
       notification.error({
@@ -96,15 +103,8 @@ export default function ProductGroupsPage() {
   const handleEdit = (group) => {
     setEditingGroup(group);
     setModalOpen(true);
-    notification.info({
-      message: "📝 Chế độ chỉnh sửa",
-      description: `Đang chỉnh sửa nhóm "${group.name}"`,
-      placement: "topRight",
-      duration: 2,
-    });
   };
 
-  // ✅ HANDLE DELETE DÙNG deleteModal.confirm()
   const handleDelete = (group) => {
     const groupId = group._id;
     const groupName = group.name;
@@ -127,9 +127,6 @@ export default function ProductGroupsPage() {
               ⚠️ Nhóm này đang có <Text strong>{productCount} sản phẩm</Text>. Các sản phẩm sẽ không bị xóa nhưng sẽ không còn thuộc nhóm này.
             </Paragraph>
           )}
-          <Paragraph type="secondary" style={{ fontSize: 13, marginTop: 8 }}>
-            ID: {groupId}
-          </Paragraph>
         </div>
       ),
       okText: "Xóa nhóm",
@@ -140,241 +137,547 @@ export default function ProductGroupsPage() {
       onOk: async () => {
         try {
           setDeleting(true);
-
-          // Call delete API
           await deleteProductGroup(groupId);
-
-          // Success notification
           notification.success({
             message: "✅ Xóa thành công",
-            description: (
-              <div>
-                <div>
-                  Đã xóa nhóm <Text strong>"{groupName}"</Text>
-                </div>
-                {productCount > 0 && (
-                  <div style={{ fontSize: 12, marginTop: 4, color: "#8c8c8c" }}>
-                    {productCount} sản phẩm đã được giải phóng khỏi nhóm
-                  </div>
-                )}
-              </div>
-            ),
+            description: `Đã xóa nhóm "${groupName}"`,
             placement: "topRight",
-            duration: 4,
             icon: <CheckCircleOutlined style={{ color: "#52c41a" }} />,
           });
-
-          // Reload groups
           fetchGroups();
         } catch (err) {
-          console.error("Delete error:", err);
-
-          // Error notification with details
           notification.error({
             message: "❌ Lỗi xóa nhóm",
-            description: (
-              <div>
-                <div>{err?.response?.data?.message || "Không thể xóa nhóm sản phẩm"}</div>
-                {err?.response?.data?.error && (
-                  <div style={{ fontSize: 12, marginTop: 4, color: "#8c8c8c" }}>
-                    Chi tiết: {err.response.data.error}
-                  </div>
-                )}
-              </div>
-            ),
+            description: err?.response?.data?.message || "Không thể xóa nhóm sản phẩm",
             placement: "topRight",
-            duration: 5,
           });
         } finally {
           setDeleting(false);
         }
-      },
-      onCancel: () => {
-        notification.info({
-          message: "ℹ️ Đã hủy",
-          description: "Không xóa nhóm sản phẩm",
-          placement: "topRight",
-          duration: 2,
-        });
       },
     });
   };
 
   const handleFormSuccess = () => {
     setModalOpen(false);
-    notification.success({
-      message: editingGroup ? "✅ Cập nhật thành công" : "✅ Tạo mới thành công",
-      description: editingGroup
-        ? `Đã cập nhật nhóm "${editingGroup.name}"`
-        : "Đã tạo nhóm sản phẩm mới",
-      placement: "topRight",
-      duration: 3,
-    });
     fetchGroups();
   };
+
+  // Filter groups by search text
+  const filteredGroups = groups.filter(
+    (g) =>
+      g.name?.toLowerCase().includes(searchText.toLowerCase()) ||
+      g.description?.toLowerCase().includes(searchText.toLowerCase())
+  );
 
   // Calculate stats
   const totalProducts = groups.reduce((sum, g) => sum + (g.productCount || 0), 0);
   const avgProducts = groups.length > 0 ? (totalProducts / groups.length).toFixed(1) : 0;
   const maxProducts = groups.length > 0 ? Math.max(...groups.map((g) => g.productCount || 0)) : 0;
 
+  // Table columns for list view
+  const columns = [
+    {
+      title: (
+        <Space>
+          <AppstoreOutlined style={{ color: "#52c41a" }} />
+          <span>Nhóm sản phẩm</span>
+        </Space>
+      ),
+      dataIndex: "name",
+      key: "name",
+      render: (text, record) => (
+        <Space size={12}>
+          <Avatar
+            size={44}
+            style={{
+              background: "linear-gradient(135deg, #52c41a 0%, #73d13d 100%)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+            icon={<FolderOpenOutlined style={{ fontSize: 20 }} />}
+          />
+          <div>
+            <Text strong style={{ fontSize: 15, display: "block" }}>
+              {text}
+            </Text>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {record.description || "Không có mô tả"}
+            </Text>
+          </div>
+        </Space>
+      ),
+    },
+    {
+      title: (
+        <Space>
+          <ShoppingOutlined style={{ color: "#1890ff" }} />
+          <span>Số lượng SP</span>
+        </Space>
+      ),
+      dataIndex: "productCount",
+      key: "productCount",
+      width: 140,
+      align: "center",
+      sorter: (a, b) => (a.productCount || 0) - (b.productCount || 0),
+      render: (count) => (
+        <Badge
+          count={count || 0}
+          showZero
+          style={{
+            backgroundColor: count > 0 ? "#52c41a" : "#d9d9d9",
+            fontSize: 13,
+            fontWeight: 600,
+            padding: "0 10px",
+            height: 24,
+            lineHeight: "24px",
+          }}
+          overflowCount={999}
+        />
+      ),
+    },
+    {
+      title: (
+        <Space>
+          <CalendarOutlined style={{ color: "#faad14" }} />
+          <span>Ngày tạo</span>
+        </Space>
+      ),
+      dataIndex: "createdAt",
+      key: "createdAt",
+      width: 150,
+      align: "center",
+      sorter: (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
+      render: (date) => (
+        <Tag
+          style={{
+            background: "linear-gradient(135deg, #fff7e6 0%, #ffe7ba 100%)",
+            border: "1px solid #ffc53d",
+            color: "#d46b08",
+            borderRadius: 8,
+            padding: "4px 12px",
+            fontSize: 12,
+            fontWeight: 500,
+          }}
+        >
+          {date ? new Date(date).toLocaleDateString("vi-VN") : "N/A"}
+        </Tag>
+      ),
+    },
+    {
+      title: (
+        <Space>
+          <InfoCircleOutlined style={{ color: "#722ed1" }} />
+          <span>Mã nhóm</span>
+        </Space>
+      ),
+      dataIndex: "_id",
+      key: "_id",
+      width: 130,
+      align: "center",
+      render: (id) => (
+        <Tooltip title={id}>
+          <Tag
+            style={{
+              background: "linear-gradient(135deg, #f9f0ff 0%, #efdbff 100%)",
+              border: "1px solid #b37feb",
+              color: "#722ed1",
+              borderRadius: 8,
+              padding: "4px 10px",
+              fontSize: 11,
+              fontWeight: 500,
+              cursor: "pointer",
+            }}
+          >
+            #{id?.slice(-6)}
+          </Tag>
+        </Tooltip>
+      ),
+    },
+    {
+      title: "Thao tác",
+      key: "actions",
+      width: 140,
+      align: "center",
+      render: (_, record) => (
+        <Space size={8}>
+          <Tooltip title="Chỉnh sửa">
+            <Button
+              type="primary"
+              ghost
+              icon={<EditOutlined />}
+              onClick={() => handleEdit(record)}
+              style={{
+                borderRadius: 8,
+                borderColor: "#52c41a",
+                color: "#52c41a",
+              }}
+            />
+          </Tooltip>
+          <Tooltip title="Xóa nhóm">
+            <Button
+              danger
+              icon={<DeleteOutlined />}
+              loading={deleting}
+              onClick={() => handleDelete(record)}
+              style={{ borderRadius: 8 }}
+            />
+          </Tooltip>
+        </Space>
+      ),
+    },
+  ];
+
   return (
     <Layout>
-      <div style={{ maxWidth: 1600, margin: "0 auto" }}>
-        {/* Header Card */}
+      <div
+        style={{
+          maxWidth: 1600,
+          margin: "0 auto",
+          padding: "0 16px",
+          background: "#ffffff",
+          minHeight: "100vh",
+        }}
+      >
+        {/* Header Card - Premium Design */}
         <Card
           style={{
             marginBottom: 24,
-            borderRadius: 12,
-            border: "1px solid #8c8c8c",
-            background: "linear-gradient(135deg, #52c41a 0%, #3080e9ff 100%)",
-            boxShadow: "0 8px 24px rgba(82, 196, 26, 0.25)",
+            borderRadius: 20,
+            border: "none",
+            background: "linear-gradient(135deg, #52c41a 0%, #237804 50%, #135200 100%)",
+            boxShadow: "0 12px 40px rgba(82, 196, 26, 0.35)",
+            overflow: "hidden",
+            position: "relative",
           }}
-          styles={{ body: { padding: "32px" } }}
+          styles={{ body: { padding: "36px 40px" } }}
         >
-          <Row gutter={[24, 16]} align="middle">
-            <Col xs={24} md={16}>
-              <Space direction="vertical" size={8}>
-                <Title level={2} style={{ color: "#fff", margin: 0, fontSize: 32, fontWeight: 700 }}>
-                  📦 Quản lý nhóm sản phẩm
-                </Title>
-                <Text style={{ color: "rgba(255,255,255,0.95)", fontSize: 15 }}>
-                  Tổ chức và phân loại sản phẩm thành các nhóm để quản lý dễ dàng hơn
-                </Text>
+          {/* Decorative elements */}
+          <div
+            style={{
+              position: "absolute",
+              top: -60,
+              right: -60,
+              width: 200,
+              height: 200,
+              borderRadius: "50%",
+              background: "rgba(255,255,255,0.08)",
+            }}
+          />
+          <div
+            style={{
+              position: "absolute",
+              bottom: -40,
+              left: 100,
+              width: 120,
+              height: 120,
+              borderRadius: "50%",
+              background: "rgba(255,255,255,0.05)",
+            }}
+          />
+          <div
+            style={{
+              position: "absolute",
+              top: 20,
+              left: -30,
+              width: 80,
+              height: 80,
+              borderRadius: "50%",
+              background: "rgba(255,255,255,0.06)",
+            }}
+          />
+
+          <Row gutter={[32, 24]} align="middle">
+            <Col xs={24} lg={14}>
+              <Space direction="vertical" size={12}>
+                <Space align="center" size={16}>
+                  <div
+                    style={{
+                      width: 64,
+                      height: 64,
+                      borderRadius: 16,
+                      background: "rgba(255,255,255,0.15)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      backdropFilter: "blur(10px)",
+                    }}
+                  >
+                    <TagsOutlined style={{ fontSize: 32, color: "#fff" }} />
+                  </div>
+                  <div>
+                    <Title level={2} style={{ color: "#fff", margin: 0, fontSize: 32, fontWeight: 700 }}>
+                      Quản lý nhóm sản phẩm
+                    </Title>
+                    <Text style={{ color: "rgba(255,255,255,0.9)", fontSize: 15 }}>
+                      Tổ chức và phân loại sản phẩm thành các nhóm để quản lý dễ dàng hơn
+                    </Text>
+                  </div>
+                </Space>
               </Space>
             </Col>
-            <Col xs={24} md={8}>
-              <Button
-                type="primary"
-                size="large"
-                icon={<PlusOutlined />}
-                onClick={handleCreate}
-                block
-                style={{
-                  background: "#fff",
-                  color: "#52c41a",
-                  border: "none",
-                  borderRadius: 12,
-                  height: 50,
-                  fontWeight: 600,
-                  fontSize: 16,
-                  boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
-                }}
-              >
-                Tạo nhóm sản phẩm mới
-              </Button>
+            <Col xs={24} lg={10}>
+              <Space size={12} style={{ width: "100%", justifyContent: "flex-end" }} wrap>
+                <Button
+                  size="large"
+                  icon={<ReloadOutlined />}
+                  onClick={fetchGroups}
+                  loading={loading}
+                  style={{
+                    background: "rgba(255,255,255,0.15)",
+                    color: "#fff",
+                    border: "1px solid rgba(255,255,255,0.3)",
+                    borderRadius: 12,
+                    height: 50,
+                    fontWeight: 600,
+                    backdropFilter: "blur(10px)",
+                  }}
+                >
+                  Làm mới
+                </Button>
+                <Button
+                  type="primary"
+                  size="large"
+                  icon={<PlusOutlined />}
+                  onClick={handleCreate}
+                  style={{
+                    background: "#fff",
+                    color: "#52c41a",
+                    border: "none",
+                    borderRadius: 12,
+                    height: 50,
+                    fontWeight: 700,
+                    fontSize: 16,
+                    paddingInline: 28,
+                    boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
+                  }}
+                >
+                  Tạo nhóm mới
+                </Button>
+              </Space>
             </Col>
           </Row>
         </Card>
 
-        {/* Stats Card */}
+        {/* Stats Cards */}
         {groups.length > 0 && (
-          <Card
-            style={{
-              marginBottom: 24,
-              borderRadius: 12,
-              border: "1px solid #8c8c8c",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
-            }}
-          >
-            <Row gutter={[16, 16]}>
-              <Col xs={12} sm={6}>
+          <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+            <Col xs={12} sm={6}>
+              <Card
+                style={{
+                  borderRadius: 16,
+                  border: "none",
+                  background: "linear-gradient(135deg, #e6fffb 0%, #b5f5ec 100%)",
+                  boxShadow: "0 4px 16px rgba(82, 196, 26, 0.12)",
+                }}
+                styles={{ body: { padding: "20px 24px" } }}
+              >
                 <Statistic
-                  title="Tổng nhóm"
+                  title={<Text style={{ color: "#006d75", fontWeight: 600 }}>Tổng nhóm</Text>}
                   value={groups.length}
-                  prefix={<AppstoreOutlined />}
-                  valueStyle={{ color: "#52c41a", fontSize: 28, fontWeight: 700 }}
-                  suffix={
-                    <Text type="secondary" style={{ fontSize: 14 }}>
-                      nhóm
-                    </Text>
-                  }
+                  prefix={<AppstoreOutlined style={{ color: "#13c2c2" }} />}
+                  valueStyle={{ color: "#08979c", fontSize: 28, fontWeight: 700 }}
                 />
-              </Col>
-              <Col xs={12} sm={6}>
+              </Card>
+            </Col>
+            <Col xs={12} sm={6}>
+              <Card
+                style={{
+                  borderRadius: 16,
+                  border: "none",
+                  background: "linear-gradient(135deg, #f6ffed 0%, #d9f7be 100%)",
+                  boxShadow: "0 4px 16px rgba(82, 196, 26, 0.12)",
+                }}
+                styles={{ body: { padding: "20px 24px" } }}
+              >
                 <Statistic
-                  title="Tổng sản phẩm"
+                  title={<Text style={{ color: "#237804", fontWeight: 600 }}>Tổng sản phẩm</Text>}
                   value={totalProducts}
-                  prefix={<ShoppingOutlined />}
-                  valueStyle={{ color: "#1890ff", fontSize: 28, fontWeight: 700 }}
-                  suffix={
-                    <Text type="secondary" style={{ fontSize: 14 }}>
-                      Sản phẩm
-                    </Text>
-                  }
+                  prefix={<ShoppingOutlined style={{ color: "#52c41a" }} />}
+                  valueStyle={{ color: "#389e0d", fontSize: 28, fontWeight: 700 }}
                 />
-              </Col>
-              <Col xs={12} sm={6}>
+              </Card>
+            </Col>
+            <Col xs={12} sm={6}>
+              <Card
+                style={{
+                  borderRadius: 16,
+                  border: "none",
+                  background: "linear-gradient(135deg, #fff7e6 0%, #ffe58f 100%)",
+                  boxShadow: "0 4px 16px rgba(250, 173, 20, 0.12)",
+                }}
+                styles={{ body: { padding: "20px 24px" } }}
+              >
                 <Statistic
-                  title="Trung bình sản phẩm/nhóm"
+                  title={<Text style={{ color: "#ad6800", fontWeight: 600 }}>TB sản phẩm/nhóm</Text>}
                   value={avgProducts}
-                  prefix={<BarChartOutlined />}
-                  valueStyle={{ color: "#faad14", fontSize: 28, fontWeight: 700 }}
-                  suffix={
-                    <Text type="secondary" style={{ fontSize: 14 }}>
-                      Sản phẩm
-                    </Text>
-                  }
+                  prefix={<BarChartOutlined style={{ color: "#faad14" }} />}
+                  valueStyle={{ color: "#d48806", fontSize: 28, fontWeight: 700 }}
                 />
-              </Col>
-              <Col xs={12} sm={6}>
+              </Card>
+            </Col>
+            <Col xs={12} sm={6}>
+              <Card
+                style={{
+                  borderRadius: 16,
+                  border: "none",
+                  background: "linear-gradient(135deg, #f9f0ff 0%, #d3adf7 100%)",
+                  boxShadow: "0 4px 16px rgba(114, 46, 209, 0.12)",
+                }}
+                styles={{ body: { padding: "20px 24px" } }}
+              >
                 <Statistic
-                  title="Tối đa sản phẩm/nhóm"
+                  title={<Text style={{ color: "#531dab", fontWeight: 600 }}>Max SP/nhóm</Text>}
                   value={maxProducts}
-                  prefix={<FileTextOutlined />}
-                  valueStyle={{ color: "#f5222d", fontSize: 28, fontWeight: 700 }}
-                  suffix={
-                    <Text type="secondary" style={{ fontSize: 14 }}>
-                      Sản phẩm
-                    </Text>
-                  }
+                  prefix={<FileTextOutlined style={{ color: "#722ed1" }} />}
+                  valueStyle={{ color: "#722ed1", fontSize: 28, fontWeight: 700 }}
                 />
-              </Col>
-            </Row>
-          </Card>
+              </Card>
+            </Col>
+          </Row>
         )}
+
+        {/* Toolbar */}
+        <Card
+          style={{
+            marginBottom: 24,
+            borderRadius: 16,
+            border: "1px solid #e8e8e8",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+          }}
+          styles={{ body: { padding: "16px 24px" } }}
+        >
+          <Row gutter={[16, 16]} align="middle" justify="space-between">
+            <Col xs={24} sm={12} md={10}>
+              <Input
+                placeholder="Tìm kiếm nhóm sản phẩm..."
+                prefix={<SearchOutlined style={{ color: "#bfbfbf" }} />}
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                allowClear
+                size="large"
+                style={{ borderRadius: 12 }}
+              />
+            </Col>
+            <Col xs={24} sm={12} md={8}>
+              <Space style={{ width: "100%", justifyContent: "flex-end" }}>
+                <Text type="secondary" style={{ fontSize: 14 }}>
+                  Hiển thị:
+                </Text>
+                <Segmented
+                  value={viewMode}
+                  onChange={setViewMode}
+                  options={[
+                    {
+                      value: "list",
+                      icon: <UnorderedListOutlined />,
+                      label: "Danh sách",
+                    },
+                    {
+                      value: "grid",
+                      icon: <AppstoreFilled />,
+                      label: "Lưới",
+                    },
+                  ]}
+                  style={{
+                    background: "#f0f0f0",
+                    borderRadius: 10,
+                    padding: 4,
+                  }}
+                />
+              </Space>
+            </Col>
+          </Row>
+        </Card>
 
         {/* Content */}
         {loading ? (
-          <div style={{ textAlign: "center", padding: "80px 0" }}>
-            <Spin size="large" tip={<Text style={{ fontSize: 16, marginTop: 16 }}>Đang tải...</Text>} />
-          </div>
-        ) : groups.length === 0 ? (
-          <Card style={{ borderRadius: 12, textAlign: "center", padding: "60px 20px", border: "1px solid #8c8c8c" }}>
+          <Card style={{ borderRadius: 16, textAlign: "center", padding: "80px 20px" }}>
+            <Spin size="large" />
+            <Text style={{ display: "block", marginTop: 16, fontSize: 16, color: "#8c8c8c" }}>
+              Đang tải dữ liệu...
+            </Text>
+          </Card>
+        ) : filteredGroups.length === 0 ? (
+          <Card
+            style={{
+              borderRadius: 20,
+              textAlign: "center",
+              padding: "80px 20px",
+              border: "2px dashed #d9d9d9",
+              background: "linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%)",
+            }}
+          >
             <Empty
               image={Empty.PRESENTED_IMAGE_SIMPLE}
-              imageStyle={{ height: 120 }}
+              imageStyle={{ height: 140 }}
               description={
-                <Space direction="vertical" size={16}>
-                  <Title level={4} style={{ color: "#8c8c8c" }}>
-                    Chưa có nhóm sản phẩm nào
+                <Space direction="vertical" size={20}>
+                  <Title level={4} style={{ color: "#595959", margin: 0 }}>
+                    {searchText ? "Không tìm thấy nhóm sản phẩm phù hợp" : "Chưa có nhóm sản phẩm nào"}
                   </Title>
                   <Text type="secondary" style={{ fontSize: 15 }}>
-                    Tạo nhóm sản phẩm đầu tiên để bắt đầu tổ chức kho hàng
+                    {searchText
+                      ? "Thử tìm kiếm với từ khóa khác"
+                      : "Tạo nhóm sản phẩm đầu tiên để bắt đầu tổ chức kho hàng"}
                   </Text>
-                  <Button
-                    type="primary"
-                    size="large"
-                    icon={<PlusOutlined />}
-                    onClick={handleCreate}
-                    style={{
-                      background: "linear-gradient(135deg, #52c41a 0%, #73d13d 100%)",
-                      border: "none",
-                      borderRadius: 12,
-                      height: 48,
-                      fontSize: 15,
-                      marginTop: 12,
-                    }}
-                  >
-                    Tạo nhóm đầu tiên
-                  </Button>
+                  {!searchText && (
+                    <Button
+                      type="primary"
+                      size="large"
+                      icon={<PlusOutlined />}
+                      onClick={handleCreate}
+                      style={{
+                        background: "linear-gradient(135deg, #52c41a 0%, #73d13d 100%)",
+                        border: "none",
+                        borderRadius: 12,
+                        height: 52,
+                        fontSize: 16,
+                        fontWeight: 600,
+                        paddingInline: 32,
+                        marginTop: 8,
+                        boxShadow: "0 8px 24px rgba(82, 196, 26, 0.4)",
+                      }}
+                    >
+                      Tạo nhóm đầu tiên
+                    </Button>
+                  )}
                 </Space>
               }
             />
           </Card>
+        ) : viewMode === "list" ? (
+          /* List View - Default */
+          <Card
+            style={{
+              borderRadius: 16,
+              border: "none",
+              boxShadow: "0 4px 16px rgba(0,0,0,0.06)",
+              overflow: "hidden",
+            }}
+            styles={{ body: { padding: 0 } }}
+          >
+            <Table
+              dataSource={filteredGroups}
+              columns={columns}
+              rowKey="_id"
+              pagination={{
+                pageSize: 10,
+                showSizeChanger: true,
+                showTotal: (total, range) => `${range[0]}-${range[1]} của ${total} nhóm`,
+                style: { padding: "16px 24px" },
+              }}
+              style={{
+                borderRadius: 16,
+              }}
+              rowClassName={() => "product-group-table-row"}
+            />
+          </Card>
         ) : (
+          /* Grid View */
           <Row gutter={[20, 20]}>
-            {groups.map((group) => {
+            {filteredGroups.map((group) => {
               const productPercent = maxProducts > 0 ? ((group.productCount || 0) / maxProducts) * 100 : 0;
               const createdDate = group.createdAt ? new Date(group.createdAt).toLocaleDateString("vi-VN") : "N/A";
 
@@ -383,165 +686,190 @@ export default function ProductGroupsPage() {
                   <Card
                     hoverable
                     style={{
-                      borderRadius: 16,
+                      borderRadius: 20,
                       height: "100%",
-                      border: "1px solid #8c8c8c",
+                      border: "none",
+                      boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
                       transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                      overflow: "hidden",
                     }}
-                    styles={{ body: { padding: 20 } }}
+                    styles={{ body: { padding: 0 } }}
                     className="product-group-card"
                   >
-                    <Space direction="vertical" size={14} style={{ width: "100%" }}>
-                      {/* Header with Icon & Badge */}
+                    {/* Card Header with Gradient */}
+                    <div
+                      style={{
+                        background: "linear-gradient(135deg, #52c41a 0%, #73d13d 100%)",
+                        padding: "20px 20px 16px",
+                        position: "relative",
+                        overflow: "hidden",
+                      }}
+                    >
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: -20,
+                          right: -20,
+                          width: 60,
+                          height: 60,
+                          borderRadius: "50%",
+                          background: "rgba(255,255,255,0.15)",
+                        }}
+                      />
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                         <div
                           style={{
                             width: 48,
                             height: 48,
-                            borderRadius: 12,
-                            background: "linear-gradient(135deg, #52c41a 0%, #73d13d 100%)",
+                            borderRadius: 14,
+                            background: "rgba(255,255,255,0.2)",
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
-                            boxShadow: "0 4px 12px rgba(82, 196, 26, 0.3)",
+                            backdropFilter: "blur(10px)",
                           }}
                         >
-                          <AppstoreOutlined style={{ fontSize: 24, color: "#fff" }} />
+                          <FolderOpenOutlined style={{ fontSize: 24, color: "#fff" }} />
                         </div>
                         <Badge
                           count={group.productCount || 0}
                           overflowCount={999}
                           style={{
-                            backgroundColor: "#52c41a",
+                            backgroundColor: "#fff",
+                            color: "#52c41a",
                             fontSize: 14,
-                            fontWeight: 600,
-                            padding: "0 8px",
-                            boxShadow: "0 2px 8px rgba(82, 196, 26, 0.3)",
+                            fontWeight: 700,
+                            padding: "0 12px",
+                            height: 26,
+                            lineHeight: "26px",
+                            boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
                           }}
                         />
                       </div>
+                    </div>
 
-                      {/* Group Name */}
-                      <div>
-                        <Text type="secondary" style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase" }}>
-                          Tên nhóm
-                        </Text>
-                        <Tooltip title={group.name}>
-                          <Title level={5} ellipsis={{ rows: 1 }} style={{ margin: "4px 0 0", fontSize: 17, fontWeight: 700 }}>
-                            {group.name}
-                          </Title>
-                        </Tooltip>
-                      </div>
-
-                      {/* Description */}
-                      <div>
-                        <Text type="secondary" style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase" }}>
-                          Mô tả
-                        </Text>
-                        <Paragraph ellipsis={{ rows: 2 }} style={{ margin: "4px 0 0", fontSize: 13, color: "#595959", minHeight: 38 }}>
-                          {group.description || "Không có mô tả"}
-                        </Paragraph>
-                      </div>
-
-                      {/* Product Count Progress */}
-                      <div>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                          <Text type="secondary" style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase" }}>
-                            Số lượng Sản phẩm
-                          </Text>
-                          <Text strong style={{ fontSize: 13, color: "#52c41a" }}>
-                            {group.productCount || 0} Sản phẩm
-                          </Text>
-                        </div>
-                        <Progress
-                          percent={productPercent}
-                          showInfo={false}
-                          strokeColor={{
-                            "0%": "#52c41a",
-                            "100%": "#73d13d",
-                          }}
-                          strokeWidth={8}
-                        />
-                      </div>
-
-                      {/* Meta Info */}
-                      <div style={{ background: "#fafafa", borderRadius: 8, padding: "10px 12px" }}>
-                        <Space direction="vertical" size={4} style={{ width: "100%" }}>
-                          {/* Ngày tạo */}
-                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <CalendarOutlined style={{ color: "#8c8c8c", fontSize: 13 }} />
-                            <Text type="primary" style={{ fontSize: 12 }}>
-                              Ngày tạo:
-                            </Text>
-                            <Tag
+                    {/* Card Body */}
+                    <div style={{ padding: "20px" }}>
+                      <Space direction="vertical" size={14} style={{ width: "100%" }}>
+                        {/* Group Name */}
+                        <div>
+                          <Tooltip title={group.name}>
+                            <Title
+                              level={5}
+                              ellipsis={{ rows: 1 }}
                               style={{
-                                background: "#E6F4FF",
-                                border: "1px solid #1677FF",
-                                color: "#1677FF",
-                                borderRadius: 6,
-                                padding: "0px 6px",
-                                fontSize: 11,
+                                margin: 0,
+                                fontSize: 18,
+                                fontWeight: 700,
+                                color: "#1f1f1f",
                               }}
                             >
-                              {createdDate}
-                            </Tag>
-                          </div>
+                              {group.name}
+                            </Title>
+                          </Tooltip>
+                        </div>
 
-                          {/* Mã nhóm */}
-                          {group._id && (
-                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                              <InfoCircleOutlined style={{ color: "#8c8c8c", fontSize: 13 }} />
-                              <Text type="primary" style={{ fontSize: 11 }}>
-                                Mã nhóm:
-                              </Text>
-                              <Tag
-                                style={{
-                                  background: "#E6F4FF",
-                                  border: "1px solid #1677FF",
-                                  color: "#1677FF",
-                                  borderRadius: 6,
-                                  padding: "0px 6px",
-                                  fontSize: 11,
-                                }}
-                              >
-                                {group._id.slice(-8)}
-                              </Tag>
-                            </div>
-                          )}
-                        </Space>
-                      </div>
-
-                      {/* Actions */}
-                      <Space size={8} style={{ width: "100%", marginTop: 4 }}>
-                        <Button
-                          icon={<EditOutlined />}
-                          onClick={() => handleEdit(group)}
+                        {/* Description */}
+                        <Paragraph
+                          ellipsis={{ rows: 2 }}
                           style={{
-                            flex: 1,
-                            borderRadius: 10,
-                            height: 38,
-                            borderColor: "#52c41a",
-                            color: "#52c41a",
-                            fontWeight: 600,
+                            margin: 0,
+                            fontSize: 13,
+                            color: "#8c8c8c",
+                            minHeight: 40,
                           }}
                         >
-                          Sửa
-                        </Button>
-                        <Tooltip title="Xóa nhóm">
-                          <Button
-                            icon={<DeleteOutlined />}
-                            danger
-                            loading={deleting}
-                            onClick={() => handleDelete(group)}
+                          {group.description || "Không có mô tả"}
+                        </Paragraph>
+
+                        {/* Progress */}
+                        <div>
+                          <div
                             style={{
-                              borderRadius: 10,
-                              height: 38,
-                              width: 38,
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              marginBottom: 6,
                             }}
+                          >
+                            <Text type="secondary" style={{ fontSize: 12 }}>
+                              Số lượng sản phẩm
+                            </Text>
+                            <Text strong style={{ fontSize: 13, color: "#52c41a" }}>
+                              {group.productCount || 0}
+                            </Text>
+                          </div>
+                          <Progress
+                            percent={productPercent}
+                            showInfo={false}
+                            strokeColor={{
+                              "0%": "#52c41a",
+                              "100%": "#73d13d",
+                            }}
+                            trailColor="#f0f0f0"
+                            strokeWidth={6}
+                            style={{ borderRadius: 10 }}
                           />
-                        </Tooltip>
+                        </div>
+
+                        {/* Meta Info */}
+                        <div
+                          style={{
+                            background: "linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%)",
+                            borderRadius: 12,
+                            padding: "12px",
+                          }}
+                        >
+                          <Space direction="vertical" size={6} style={{ width: "100%" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <CalendarOutlined style={{ color: "#8c8c8c", fontSize: 13 }} />
+                              <Text style={{ fontSize: 12, color: "#595959" }}>
+                                Ngày tạo: <Text strong>{createdDate}</Text>
+                              </Text>
+                            </div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <InfoCircleOutlined style={{ color: "#8c8c8c", fontSize: 13 }} />
+                              <Text style={{ fontSize: 12, color: "#595959" }}>
+                                Mã: <Text strong style={{ color: "#722ed1" }}>#{group._id?.slice(-6)}</Text>
+                              </Text>
+                            </div>
+                          </Space>
+                        </div>
+
+                        <Divider style={{ margin: "8px 0" }} />
+
+                        {/* Actions */}
+                        <Space size={10} style={{ width: "100%" }}>
+                          <Button
+                            icon={<EditOutlined />}
+                            onClick={() => handleEdit(group)}
+                            style={{
+                              flex: 1,
+                              borderRadius: 12,
+                              height: 42,
+                              borderColor: "#52c41a",
+                              color: "#52c41a",
+                              fontWeight: 600,
+                            }}
+                          >
+                            Chỉnh sửa
+                          </Button>
+                          <Tooltip title="Xóa nhóm">
+                            <Button
+                              icon={<DeleteOutlined />}
+                              danger
+                              loading={deleting}
+                              onClick={() => handleDelete(group)}
+                              style={{
+                                borderRadius: 12,
+                                height: 42,
+                                width: 42,
+                              }}
+                            />
+                          </Tooltip>
+                        </Space>
                       </Space>
-                    </Space>
+                    </div>
                   </Card>
                 </Col>
               );
@@ -554,11 +882,12 @@ export default function ProductGroupsPage() {
           open={modalOpen}
           onCancel={() => setModalOpen(false)}
           footer={null}
-          width={700}
+          width={600}
           styles={{
             body: { padding: 0 },
           }}
           destroyOnClose
+          centered
         >
           <ProductGroupForm
             storeId={storeId}
@@ -568,19 +897,39 @@ export default function ProductGroupsPage() {
           />
         </Modal>
 
-        {/* ✅ DELETE MODAL CONTEXT HOLDER - QUAN TRỌNG NHẤT */}
         {deleteContextHolder}
       </div>
 
       <style jsx global>{`
         .product-group-card:hover {
-          box-shadow: 0 12px 32px rgba(82, 196, 26, 0.25) !important;
-          transform: translateY(-4px);
-          border-color: #52c41a !important;
+          box-shadow: 0 16px 48px rgba(82, 196, 26, 0.25) !important;
+          transform: translateY(-6px);
+        }
+
+        .product-group-table-row:hover {
+          background: linear-gradient(135deg, #f6ffed 0%, #e6fffb 100%) !important;
+        }
+
+        .ant-table-thead > tr > th {
+          background: linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%) !important;
+          font-weight: 600 !important;
+          color: #262626 !important;
+          border-bottom: 2px solid #e8e8e8 !important;
+          padding: 16px !important;
+        }
+
+        .ant-table-tbody > tr > td {
+          padding: 16px !important;
+          border-bottom: 1px solid #f0f0f0 !important;
         }
 
         .ant-progress-bg {
-          border-radius: 4px !important;
+          border-radius: 10px !important;
+        }
+
+        .ant-segmented-item-selected {
+          background: linear-gradient(135deg, #52c41a 0%, #73d13d 100%) !important;
+          color: #fff !important;
         }
       `}</style>
     </Layout>

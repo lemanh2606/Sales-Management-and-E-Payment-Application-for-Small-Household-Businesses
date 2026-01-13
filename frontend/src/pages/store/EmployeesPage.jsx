@@ -65,15 +65,15 @@ const PERMISSION_GROUP_ORDER = [
   "purchase-orders",
   "purchase-returns",
   "inventory",
-  "supplier",
-  "tax",
+  "suppliers",
+  "taxes",
   "reports",
   "employees",
   "users",
   "settings",
   "notifications",
   "subscription",
-  "file",
+  "files",
 ];
 
 const PERMISSION_CATEGORY_LABELS = {
@@ -87,14 +87,14 @@ const PERMISSION_CATEGORY_LABELS = {
   "purchase-orders": "Đơn nhập hàng",
   "purchase-returns": "Trả hàng nhập",
   inventory: "Kiểm kho & xử lý tồn",
-  supplier: "Nhà cung cấp",
-  tax: "Khai báo thuế",
+  suppliers: "Nhà cung cấp",
+  taxes: "Khai báo thuế",
   employees: "Nhân sự toàn hệ thống",
   users: "Người dùng & quyền",
   settings: "Thiết lập hệ thống",
   notifications: "Thông báo",
   subscription: "Gói dịch vụ",
-  file: "Tệp & xuất liệu",
+  files: "Tệp & xuất liệu",
 };
 
 // === CHỈNH Ở ĐÂY ĐỂ ẨN/HIỆN QUYỀN TRÊN UI ===
@@ -153,7 +153,7 @@ const PERMISSION_LABELS = {
   // "products:delete": "Xóa sản phẩm",
   // "products:image:delete": "Xóa hình ảnh sản phẩm",
   "products:search": "Tìm kiếm sản phẩm",
-  "products:get": "Lấy sản phẩm",
+  "products:view": "Xem danh sách sản phẩm",
   // "products:low-stock": "Xem cảnh báo tồn kho thấp",
 
   // ========== PRODUCT GROUP PERMISSIONS ==========
@@ -186,22 +186,22 @@ const PERMISSION_LABELS = {
   "inventory:disposal:delete": "Xóa phiếu xử lý",
 
   // ========== SUPPLIER PERMISSIONS ==========
-  // "supplier:create": "Thêm nhà cung cấp",
-  // "supplier:view": "Xem nhà cung cấp",
-  // "supplier:update": "Cập nhật nhà cung cấp",
-  // "supplier:delete": "Xóa nhà cung cấp",
-  // "supplier:restore": "Khôi phục nhà cung cấp",
-  // "supplier:export": "Xuất danh sách nhà cung cấp",
+  // "suppliers:create": "Thêm nhà cung cấp",
+  // "suppliers:view": "Xem nhà cung cấp",
+  // "suppliers:update": "Cập nhật nhà cung cấp",
+  // "suppliers:delete": "Xóa nhà cung cấp",
+  // "suppliers:restore": "Khôi phục nhà cung cấp",
+  // "suppliers:export": "Xuất danh sách nhà cung cấp",
 
   // ========== TAX PERMISSIONS ==========
-  // "tax:preview": "Xem trước tờ khai thuế",
-  // "tax:create": "Tạo tờ khai thuế",
-  // "tax:update": "Cập nhật tờ khai thuế",
-  // "tax:clone": "Nhân bản tờ khai thuế",
-  // "tax:delete": "Xóa tờ khai thuế",
-  // "tax:list": "Danh sách tờ khai thuế",
-  // "tax:export": "Xuất tờ khai thuế",
-  // "tax:view": "Xem thuế",
+  // "taxes:preview": "Xem trước tờ khai thuế",
+  // "taxes:create": "Tạo tờ khai thuế",
+  // "taxes:update": "Cập nhật tờ khai thuế",
+  // "taxes:clone": "Nhân bản tờ khai thuế",
+  // "taxes:delete": "Xóa tờ khai thuế",
+  // "taxes:list": "Danh sách tờ khai thuế",
+  // "taxes:export": "Xuất tờ khai thuế",
+  // "taxes:view": "Xem thuế",
 
   // ========== EMPLOYEE (GLOBAL) PERMISSIONS ==========
   // "employees:view": "Xem danh sách nhân sự",
@@ -235,9 +235,9 @@ const PERMISSION_LABELS = {
   // "subscription:history": "Lịch sử thanh toán gói",
 
   // ========== FILE PERMISSIONS ==========
-  "file:view": "Xem & tải tệp",
-  "file:upload": "Tải lên tệp",
-  "file:delete": "Xóa tệp",
+  "files:view": "Xem & tải tệp",
+  "files:upload": "Tải lên tệp",
+  "files:delete": "Xóa tệp",
 
   // ========== WILDCARDS (có label nhưng mặc định ẩn khỏi UI) ==========
   // "*": "Toàn quyền hệ thống",
@@ -249,7 +249,7 @@ const PERMISSION_LABELS = {
   "customers:*": "Toàn quyền khách hàng",
   "reports:*": "Toàn quyền báo cáo",
   "inventory:*": "Toàn quyền kho",
-  // "tax:*": "Toàn quyền thuế",
+  // "taxes:*": "Toàn quyền thuế",
   "users:*": "Toàn quyền người dùng",
 };
 

@@ -128,12 +128,12 @@ export default function Sidebar({ onCollapsedChange }) {
           {
             key: "/suppliers",
             label: <span style={{ fontSize: 13.5 }}>Nhà cung cấp</span>,
-            permission: "supplier:view",
+            permission: "suppliers:view",
           },
           {
             key: "/product-groups",
             label: <span style={{ fontSize: 13.5 }}>Nhóm hàng hoá</span>,
-            permission: "products:view",
+            permission: "product-groups:view",
           },
         ],
       },
@@ -179,7 +179,7 @@ export default function Sidebar({ onCollapsedChange }) {
           {
             key: `/stores/${storeId}/employees`,
             label: <span style={{ fontSize: 13.5 }}>Danh sách nhân viên</span>,
-            permission: "employees:view",
+            permission: "store:employee:view",
           },
         ],
       },
@@ -203,7 +203,7 @@ export default function Sidebar({ onCollapsedChange }) {
           {
             key: "/reports/dashboard",
             label: <span style={{ fontSize: 13.5 }}>Báo cáo tổng quan</span>,
-            permission: "reports:financial:view",
+            permission: "reports:revenue:view",
           },
           {
             key: "/reports/revenue",
@@ -257,22 +257,22 @@ export default function Sidebar({ onCollapsedChange }) {
           {
             key: "/settings/profile",
             label: <span style={{ fontSize: 13.5 }}>Hồ sơ cá nhân</span>,
-            permission: "users:view",
+            permission: null,
           },
           {
             key: "/settings/notification",
             label: <span style={{ fontSize: 13.5 }}>Thông báo</span>,
-            permission: "notifications:view",
+            permission: null,
           },
           {
             key: "/settings/export-data",
             label: <span style={{ fontSize: 13.5 }}>Xuất dữ liệu</span>,
-            permission: "data:export",
+            permission: "reports:financial:export",
           },
           {
             key: "/settings/file",
             label: <span style={{ fontSize: 13.5 }}>Quản lý file</span>,
-            permission: "file:view",
+            permission: "files:view",
           },
         ],
       },

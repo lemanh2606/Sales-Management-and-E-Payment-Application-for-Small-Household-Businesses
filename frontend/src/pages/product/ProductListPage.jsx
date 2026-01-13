@@ -550,21 +550,54 @@ export default function ProductListPage() {
         width: isMobile ? 90 : 100,
         align: "center",
         render: (value, record) => {
-          const qty = Number(value || 0);
+          const qtyTotal = Number(value || 0);
           const min = Number(record?.min_stock || 0);
-          const isLowStock = min > 0 && qty > 0 && qty <= min;
+          
+          // Tính tồn khả dụng (trừ hết hạn)
+          const avail = (record.batches || []).reduce((sum, b) => {
+             const isExp = b.expiry_date && new Date(b.expiry_date) < new Date();
+             return isExp ? sum : sum + (b.quantity || 0);
+          }, record.batches?.length > 0 ? 0 : qtyTotal);
+
+          const isLowStock = min > 0 && avail > 0 && avail <= min;
+          const hasExpired = qtyTotal > avail;
 
           return (
-            <Tooltip title={qty === 0 ? "Hết hàng!" : isLowStock ? "Tồn kho thấp!" : ""}>
-              <Badge
-                count={qty}
-                overflowCount={999999}
-                showZero
-                style={{
-                  backgroundColor: qty >= 10 ? "#52c41a" : qty === 0 ? "#faad14" : "#f5222d",
-                  fontSize: "clamp(10px, 2vw, 12px)",
-                }}
-              />
+            <Tooltip title={
+               <div style={{ padding: '4px' }}>
+                  <div style={{ marginBottom: 4, borderBottom: '1px solid rgba(255,255,255,0.2)' }}>CHI TIẾT TỒN KHO</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 20 }}>
+                     <span>Tổng tồn:</span>
+                     <span style={{ fontWeight: 600 }}>{qtyTotal}</span>
+                  </div>
+                  {hasExpired && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 20, color: '#ff4d4f' }}>
+                       <span>Hết hạn:</span>
+                       <span style={{ fontWeight: 600 }}>-{qtyTotal - avail}</span>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 20, color: '#52c41a', marginTop: 4, paddingTop: 4, borderTop: '1px solid rgba(255,255,255,0.2)' }}>
+                     <span>KHẢ DỤNG:</span>
+                     <span style={{ fontWeight: 800 }}>{avail}</span>
+                  </div>
+                  {isLowStock && <div style={{ color: '#faad14', fontSize: 11, marginTop: 4 }}>⚠️ Cảnh báo: Dưới mức tối thiểu!</div>}
+               </div>
+            }>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                <Badge
+                  count={avail}
+                  overflowCount={999999}
+                  showZero
+                  style={{
+                    backgroundColor: avail >= 10 ? "#52c41a" : avail === 0 ? "#f5222d" : "#faad14",
+                    fontSize: "clamp(10px, 2vw, 12px)",
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                  }}
+                />
+                {hasExpired && (
+                   <Text delete type="danger" style={{ fontSize: 10, opacity: 0.7 }}>{qtyTotal}</Text>
+                )}
+              </div>
             </Tooltip>
           );
         },
@@ -681,7 +714,7 @@ export default function ProductListPage() {
         width: isMobile ? 120 : 150,
         align: "center",
         render: (_, record) => {
-          // 1. Chế độ Split Mode -> Hiển thị chính xác ngày của lô đó
+          // 1. Chế độ Split Mode (Tách lô) -> Hiển thị chính xác ngày của lô đó
           if (record.isBatch) {
             if (!record.expiry_date) return <Tag>Không có hạn</Tag>;
             const expiryDate = new Date(record.expiry_date);
@@ -698,39 +731,27 @@ export default function ProductListPage() {
             return <Tag color={color} style={{ fontSize: "clamp(10px, 2vw, 12px)" }}>{text}</Tag>;
           }
 
-          // 2. Chế độ Merge -> Tìm hạn gần nhất
+          // 2. Chế độ Merge (Gộp sản phẩm) -> Đếm số lô còn hạn/hết hạn
           const batches = record.batches || [];
-          const validBatches = batches.filter(b => b.quantity > 0 && b.expiry_date);
+          if (batches.length === 0) return <Tag>Không có hạn</Tag>;
 
-          if (validBatches.length === 0) return <Tag>Không có hạn</Tag>;
-
-          // Sort date asc
-          validBatches.sort((a, b) => new Date(a.expiry_date) - new Date(b.expiry_date));
-
-          const nearestBatch = validBatches[0];
-          const expiryDate = new Date(nearestBatch.expiry_date);
           const now = new Date();
-          const diffTime = expiryDate - now;
-          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-          let color = "green";
-          let text = expiryDate.toLocaleDateString("vi-VN");
-
-          if (diffDays < 0) {
-            color = "red";
-            text = `Hết hạn ${text}`;
-          } else if (diffDays <= 30) {
-            color = "orange"; // Cảnh báo sắp hết hạn
-          } else if (diffDays <= 90) {
-            color = "blue";
-          }
+          const expiredBatches = batches.filter(b => b.expiry_date && new Date(b.expiry_date) < now);
+          const validBatches = batches.filter(b => !b.expiry_date || new Date(b.expiry_date) >= now);
 
           return (
-            <Tooltip title={`Lô: ${nearestBatch.batch_no} (Còn ${nearestBatch.quantity})`}>
-              <Tag color={color} style={{ fontSize: "clamp(10px, 2vw, 12px)" }}>
-                {text}
-              </Tag>
-            </Tooltip>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>
+               {validBatches.length > 0 && (
+                  <Tag color="success" style={{ margin: 0, fontSize: 10 }}>
+                     {validBatches.length} lô còn hạn
+                  </Tag>
+               )}
+               {expiredBatches.length > 0 && (
+                  <Tag color="error" style={{ margin: 0, fontSize: 10 }}>
+                     {expiredBatches.length} lô hết hạn
+                  </Tag>
+               )}
+            </div>
           );
         }
       },
@@ -1170,36 +1191,50 @@ export default function ProductListPage() {
                       render: (val) => val ? new Date(val).toLocaleDateString("vi-VN") : "Không có hạn"
                     },
                     {
-                      title: "Giá vốn nhập",
+                      title: "Giá vốn",
                       dataIndex: "cost_price",
                       key: "cost_price",
-                      render: (val) => val ? val.toLocaleString() : 0
+                      render: (val) => <Text style={{ fontSize: 12 }}>{val ? val.toLocaleString() : 0}</Text>
                     },
                     {
-                      title: "Số lượng tồn",
+                      title: "Giá bán",
+                      dataIndex: "selling_price",
+                      key: "selling_price",
+                      render: (val, b) => <Text strong style={{ color: "#52c41a", fontSize: 12 }}>{val ? val.toLocaleString() : record.price?.toLocaleString() || 0}</Text>
+                    },
+                    {
+                      title: "Số lượng",
                       dataIndex: "quantity",
                       key: "quantity",
-                      render: (val) => <Tag color="blue">{val}</Tag>
+                      render: (val) => <Badge count={val} overflowCount={9999} style={{ backgroundColor: val > 0 ? '#1890ff' : '#d9d9d9' }} />
                     },
                     {
                       title: "Ngày nhập",
                       dataIndex: "created_at",
                       key: "created_at",
-                      render: (val) => new Date(val).toLocaleDateString("vi-VN")
+                      render: (val) => <span style={{ fontSize: 11, color: '#8c8c8c' }}>{new Date(val).toLocaleDateString("vi-VN")}</span>
                     }
                   ];
 
                   return (
-                    <div style={{ margin: 0, paddingLeft: 48, paddingRight: 24, paddingBottom: 12, background: "#f9f9f9", borderRadius: 8 }}>
-                      <Text strong style={{ display: "block", marginBottom: 8, color: "#1890ff" }}>📦 Chi tiết lô hàng & Hạn sử dụng:</Text>
+                    <div style={{ margin: 0, padding: "12px 24px 12px 48px", background: "#fdfdfd", borderRadius: 8, border: '1px solid #f0f0f0' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12, gap: 8 }}>
+                         <div style={{ width: 4, height: 16, background: '#1890ff', borderRadius: 2 }}></div>
+                         <Text strong style={{ color: "#262626", fontSize: 13 }}>CHI TIẾT LÔ HÀNG & HẠN SỬ DỤNG</Text>
+                      </div>
                       <Table
                         columns={batchColumns}
                         dataSource={data}
                         pagination={false}
                         size="small"
                         rowKey={(item) => item.batch_no + item.created_at}
+                        rowClassName={(b) => b.expiry_date && new Date(b.expiry_date) < new Date() ? "expired-row-bg" : ""}
                         bordered
                       />
+                      <style>{`
+                        .expired-row-bg { background-color: #fff1f0 !important; }
+                        .expired-row-bg td { color: #cf1322 !important; }
+                      `}</style>
                     </div>
                   );
                 },

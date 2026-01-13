@@ -1,17 +1,22 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  TextInput,
   ActivityIndicator,
   Alert,
-  RefreshControl,
+  Animated,
+  Dimensions,
+  FlatList,
+  Modal,
   Platform,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -115,11 +120,56 @@ const EmployeesScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
 
   const [activeEmployees, setActiveEmployees] = useState<EmployeeRecord[]>([]);
-  const [deletedEmployees, setDeletedEmployees] = useState<EmployeeRecord[]>(
-    []
-  );
+  const [deletedEmployees, setDeletedEmployees] = useState<EmployeeRecord[]>([]);
   const [filteredActive, setFilteredActive] = useState<EmployeeRecord[]>([]);
   const [filteredDeleted, setFilteredDeleted] = useState<EmployeeRecord[]>([]);
+
+  // Animation values for Collapsible Header
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const lastScrollY = useRef(0);
+  const headerTranslate = useRef(new Animated.Value(0)).current;
+  const [headerVisible, setHeaderVisible] = useState(true);
+
+  const HEADER_HEIGHT = 160 + insets.top;
+
+  useEffect(() => {
+    const listener = scrollY.addListener(({ value }: { value: number }) => {
+      const diff = value - lastScrollY.current;
+      lastScrollY.current = value;
+
+      if (value < 50) {
+        Animated.timing(headerTranslate, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }).start();
+        setHeaderVisible(true);
+        return;
+      }
+
+      if (diff > 5) {
+        if (headerVisible) {
+          Animated.timing(headerTranslate, {
+            toValue: -HEADER_HEIGHT,
+            duration: 250,
+            useNativeDriver: true,
+          }).start();
+          setHeaderVisible(false);
+        }
+      } else if (diff < -5) {
+        if (!headerVisible) {
+          Animated.timing(headerTranslate, {
+            toValue: 0,
+            duration: 200,
+            useNativeDriver: true,
+          }).start();
+          setHeaderVisible(true);
+        }
+      }
+    });
+
+    return () => scrollY.removeListener(listener);
+  }, [headerVisible, HEADER_HEIGHT]);
 
   // ====== STATE PHÂN QUYỀN ======
   const [permissionLoading, setPermissionLoading] = useState(false);
@@ -462,89 +512,80 @@ const EmployeesScreen: React.FC = () => {
     const isDeleted = tabKey === "deleted";
 
     return (
-      <View style={styles.rowCard}>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={styles.empName} numberOfLines={1}>
-            {item.fullName || user.username || "—"}
-          </Text>
-          <Text style={styles.empEmail} numberOfLines={1}>
-            {user.email || "—"}
-          </Text>
-
-          <View style={styles.empMetaRow}>
-            <View style={styles.metaChip}>
-              <Ionicons name="call-outline" size={14} color="#2563eb" />
-              <Text style={styles.metaChipText}>
-                {phone ? formatPhone(phone) : "—"}
-              </Text>
-            </View>
-
-            <View style={styles.metaChip}>
-              <Ionicons name="time-outline" size={14} color="#6b7280" />
-              <Text
-                style={[styles.metaChipText, { color: "#374151" }]}
-                numberOfLines={1}
-              >
-                {item.shift || "Chưa thiết lập ca"}
+      <View style={styles.employeeCard}>
+        <View style={styles.cardHeader}>
+          <LinearGradient
+            colors={isDeleted ? ["#94a3b8", "#64748b"] : ["#3b82f6", "#2563eb"]}
+            style={styles.avatarCircle}
+          >
+            <Text style={styles.avatarInitial}>
+              {(item.fullName || user.username || "?").charAt(0).toUpperCase()}
+            </Text>
+          </LinearGradient>
+          <View style={styles.headerText}>
+            <Text style={styles.empName} numberOfLines={1}>
+              {item.fullName || user.username || "Staff Name"}
+            </Text>
+            <View style={styles.roleRow}>
+              <Ionicons name="mail" size={12} color="#64748b" />
+              <Text style={styles.empEmail} numberOfLines={1}>
+                {user.email || "No email provided"}
               </Text>
             </View>
           </View>
+          {!isDeleted && (
+            <TouchableOpacity
+              onPress={() => handleSoftDelete(item._id)}
+              style={styles.deleteIconButton}
+            >
+              <Ionicons name="trash-outline" size={20} color="#ef4444" />
+            </TouchableOpacity>
+          )}
         </View>
 
-        <View style={styles.rightCol}>
-          <Text style={styles.salaryText}>{formatVND(item.salary)}</Text>
-          <Text style={styles.commissionText}>
-            Hoa hồng: {Number(item.commission_rate ?? 0)}%
-          </Text>
-
-          <View style={styles.actionRow}>
-            {!isDeleted ? (
-              <TouchableOpacity
-                style={[styles.actionBtn, styles.actionDelete]}
-                onPress={() =>
-                  Alert.alert(
-                    "Xoá nhân viên",
-                    "Bạn chắc chắn muốn xoá mềm nhân viên này?",
-                    [
-                      { text: "Huỷ", style: "cancel" },
-                      {
-                        text: "Xoá",
-                        style: "destructive",
-                        onPress: () => handleSoftDelete(item._id),
-                      },
-                    ]
-                  )
-                }
-                activeOpacity={0.85}
-              >
-                <Ionicons name="trash-outline" size={16} color="#b91c1c" />
-                <Text style={styles.actionDeleteText}>Xoá</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={[styles.actionBtn, styles.actionRestore]}
-                onPress={() =>
-                  Alert.alert(
-                    "Khôi phục nhân viên",
-                    "Bạn muốn khôi phục nhân viên này?",
-                    [
-                      { text: "Huỷ", style: "cancel" },
-                      {
-                        text: "Khôi phục",
-                        style: "default",
-                        onPress: () => handleRestore(item._id),
-                      },
-                    ]
-                  )
-                }
-                activeOpacity={0.85}
-              >
-                <Ionicons name="refresh-outline" size={16} color="#15803d" />
-                <Text style={styles.actionRestoreText}>Khôi phục</Text>
-              </TouchableOpacity>
-            )}
+        <View style={styles.cardBody}>
+          <View style={styles.bodyRow}>
+            <View style={styles.infoCol}>
+              <Text style={styles.infoLabel}>LIÊN HỆ</Text>
+              <View style={styles.infoValueRow}>
+                <Ionicons name="call" size={14} color="#10b981" />
+                <Text style={styles.infoValue}>{phone ? formatPhone(phone) : "—"}</Text>
+              </View>
+            </View>
+            <View style={[styles.infoCol, { alignItems: "flex-end" }]}>
+              <Text style={styles.infoLabel}>CA LÀM VIÊC</Text>
+              <View style={styles.infoValueRow}>
+                <Ionicons name="time" size={14} color="#f59e0b" />
+                <Text style={styles.infoValue}>{item.shift || "N/A"}</Text>
+              </View>
+            </View>
           </View>
+
+          <LinearGradient
+            colors={["#f8fafc", "#f1f5f9"]}
+            style={styles.financialStats}
+          >
+            <View style={styles.financeItem}>
+              <Text style={styles.financeLabel}>Lương cơ bản</Text>
+              <Text style={styles.financeValue}>{formatVND(item.salary)}</Text>
+            </View>
+            <View style={styles.financeDivider} />
+            <View style={styles.financeItem}>
+              <Text style={styles.financeLabel}>Hoa hồng</Text>
+              <Text style={styles.financeValue}>{Number(item.commission_rate ?? 0)}%</Text>
+            </View>
+          </LinearGradient>
         </View>
+
+        {isDeleted && (
+          <TouchableOpacity
+            style={styles.restoreButton}
+            onPress={() => handleRestore(item._id)}
+          >
+            <Ionicons name="refresh-outline" size={18} color="#fff" />
+            <Text style={styles.restoreButtonText}>Khôi phục nhân viên</Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   };
@@ -599,43 +640,41 @@ const EmployeesScreen: React.FC = () => {
                 ? (item.user_id as EmployeeUser)
                 : ({} as EmployeeUser);
 
-            const permCount = Array.isArray(user.menu) ? user.menu.length : 0;
-
             return (
               <TouchableOpacity
                 onPress={() => handleSelectStaff(item)}
-                activeOpacity={0.85}
-                style={[styles.staffChip, isActive && styles.staffChipActive]}
+                style={[
+                  styles.staffAvatarBtn,
+                  isActive && styles.staffAvatarBtnActive,
+                ]}
               >
-                <View style={styles.staffChipAvatar}>
-                  <Ionicons
-                    name="person-circle"
-                    size={40}
-                    color={isActive ? "#2563eb" : "#9ca3af"}
-                  />
-                  <View style={styles.staffChipBadge}>
-                    <Text style={styles.staffChipBadgeText}>{permCount}</Text>
-                  </View>
-                </View>
-
+                <LinearGradient
+                  colors={
+                    isActive
+                      ? ["#3b82f6", "#2563eb"]
+                      : ["#f1f5f9", "#e2e8f0"]
+                  }
+                  style={styles.staffAvatarCircle}
+                >
+                  <Text
+                    style={[
+                      styles.staffInitial,
+                      isActive && styles.staffInitialActive,
+                    ]}
+                  >
+                    {(item.fullName || user.username || "?")
+                      .charAt(0)
+                      .toUpperCase()}
+                  </Text>
+                </LinearGradient>
                 <Text
                   style={[
-                    styles.staffChipName,
-                    isActive && styles.staffChipNameActive,
+                    styles.staffNameLabel,
+                    isActive && styles.staffNameLabelActive,
                   ]}
                   numberOfLines={1}
                 >
-                  {item.fullName || user.username || "—"}
-                </Text>
-
-                <Text
-                  style={[
-                    styles.staffChipSub,
-                    isActive && styles.staffChipSubActive,
-                  ]}
-                  numberOfLines={1}
-                >
-                  {user.email || user.username || "—"}
+                  {item.fullName || user.username || "Staff"}
                 </Text>
               </TouchableOpacity>
             );
@@ -780,14 +819,21 @@ const EmployeesScreen: React.FC = () => {
 
     return (
       <View style={{ flex: 1 }}>
-        <FlatList
+        <Animated.FlatList
           style={{ flex: 1 }}
           data={groupData}
           keyExtractor={(g) => g.key}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingBottom: 16 }}
+          contentContainerStyle={{
+            paddingBottom: 160,
+            paddingTop: HEADER_HEIGHT + 10,
+          }}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+            { useNativeDriver: true }
+          )}
+          scrollEventThrottle={16}
           ListHeaderComponent={<Header />}
-          ListFooterComponent={<Footer />}
           ListEmptyComponent={
             selectedStaff && !permissionLoading && groupData.length === 0 ? (
               <View
@@ -905,6 +951,9 @@ const EmployeesScreen: React.FC = () => {
             );
           }}
         />
+        <View style={styles.stickyFooter}>
+          <Footer />
+        </View>
       </View>
     );
   };
@@ -920,329 +969,419 @@ const EmployeesScreen: React.FC = () => {
     );
   }
 
-  // ====== MAIN RENDER ======
+  const activeCount = useMemo(
+    () => activeEmployees.length,
+    [activeEmployees]
+  );
+
   return (
-    <SafeAreaView style={styles.root} edges={["top"]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Ionicons name="people-circle-outline" size={32} color="#2563eb" />
-          <View style={{ marginLeft: 10, flex: 1 }}>
-            <Text style={styles.headerTitle}>Nhân viên cửa hàng</Text>
-            <Text style={styles.headerSub}>
-              {(currentStore as any)?.name || "—"}
+    <View style={styles.container}>
+      {/* Animated Collapsible Header */}
+      <Animated.View
+        style={[
+          styles.collapsibleHeader,
+          {
+            height: HEADER_HEIGHT,
+            transform: [{ translateY: headerTranslate }],
+            paddingTop: insets.top,
+          },
+        ]}
+      >
+        <LinearGradient
+          colors={["#3b82f6", "#10b981"]}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.headerTopRow}>
+          <View>
+            <Text style={styles.headerTitle}>Nhân viên</Text>
+            <Text style={styles.headerSubtitle}>
+              Quản lý {activeEmployees.length} nhân sự cửa hàng
             </Text>
           </View>
         </View>
-      </View>
 
-      {/* Search */}
-      <View style={styles.searchWrap}>
-        <Ionicons name="search-outline" size={18} color="#9ca3af" />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Tìm theo tên, username, email..."
-          value={searchText}
-          onChangeText={setSearchText}
-          autoCorrect={false}
-          autoCapitalize="none"
-          returnKeyType="search"
-        />
-        {searchText ? (
+        {/* Tab Navigation */}
+        <View style={styles.modeTabs}>
           <TouchableOpacity
-            onPress={() => setSearchText("")}
-            activeOpacity={0.8}
+            onPress={() => handleTabChange("active")}
+            style={[
+              styles.modeTab,
+              tabKey === "active" && styles.modeTabActive,
+            ]}
           >
-            <Ionicons name="close-circle" size={18} color="#9ca3af" />
-          </TouchableOpacity>
-        ) : null}
-      </View>
-
-      {/* Tabs */}
-      <View style={styles.tabRow}>
-        {(
-          [
-            { key: "active", label: "Đang làm" },
-            { key: "deleted", label: "Đã xoá" },
-            { key: "permissions", label: "Phân quyền" },
-          ] as const
-        ).map((t) => {
-          const active = tabKey === t.key;
-          return (
-            <TouchableOpacity
-              key={t.key}
-              style={[styles.tabBtn, active && styles.tabBtnActive]}
-              onPress={() => handleTabChange(t.key)}
-              activeOpacity={0.85}
+            <Text
+              style={[
+                styles.modeTabText,
+                tabKey === "active" && styles.modeTabTextActive,
+              ]}
             >
-              <Text style={[styles.tabText, active && styles.tabTextActive]}>
-                {t.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+              Đang làm
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => handleTabChange("deleted")}
+            style={[
+              styles.modeTab,
+              tabKey === "deleted" && styles.modeTabActive,
+            ]}
+          >
+            <Text
+              style={[
+                styles.modeTabText,
+                tabKey === "deleted" && styles.modeTabTextActive,
+              ]}
+            >
+              Đã nghỉ
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => handleTabChange("permissions")}
+            style={[
+              styles.modeTab,
+              tabKey === "permissions" && styles.modeTabActive,
+            ]}
+          >
+            <Text
+              style={[
+                styles.modeTabText,
+                tabKey === "permissions" && styles.modeTabTextActive,
+              ]}
+            >
+              Phân quyền
+            </Text>
+          </TouchableOpacity>
+        </View>
 
-      {/* Body */}
+        {/* Stats Row */}
+        <View style={styles.statsInline}>
+          <View style={styles.statMini}>
+            <Text style={styles.statMiniValue}>{activeEmployees.length}</Text>
+            <Text style={styles.statMiniLabel}>Hoạt động</Text>
+          </View>
+          <View style={styles.statMiniDivider} />
+          <View style={styles.statMini}>
+            <Text style={styles.statMiniValue}>{deletedEmployees.length}</Text>
+            <Text style={styles.statMiniLabel}>Đã nghỉ</Text>
+          </View>
+        </View>
+      </Animated.View>
+
+      {/* Sticky Search Bar (Only for lists) */}
+      {(tabKey === "active" || tabKey === "deleted") && (
+        <Animated.View
+          style={[
+            styles.stickySearch,
+            {
+              top: HEADER_HEIGHT - 30,
+              transform: [{ translateY: headerTranslate }],
+            },
+          ]}
+        >
+          <View style={styles.searchBox}>
+            <Ionicons name="search" size={20} color="#94a3b8" />
+            <TextInput
+              style={styles.searchInput}
+              value={searchText}
+              onChangeText={setSearchText}
+              placeholder="Tìm theo tên, email, SĐT..."
+              placeholderTextColor="#94a3b8"
+            />
+            {!!searchText && (
+              <TouchableOpacity onPress={() => setSearchText("")}>
+                <Ionicons name="close-circle" size={20} color="#cbd5e1" />
+              </TouchableOpacity>
+            )}
+          </View>
+        </Animated.View>
+      )}
+
+      {/* Main Content */}
       {tabKey === "permissions" ? (
         renderPermissionsTab()
       ) : (
-        <FlatList
-          style={{ flex: 1 }}
+        <Animated.FlatList
           data={tabKey === "deleted" ? filteredDeleted : filteredActive}
           keyExtractor={(item) => item._id!}
           renderItem={renderEmployeeItem}
-          contentContainerStyle={
-            (tabKey === "deleted" ? filteredDeleted : filteredActive).length ===
-            0
-              ? { padding: 16, flexGrow: 1, justifyContent: "center" }
-              : { padding: 16 }
-          }
-          ListEmptyComponent={
-            <View style={styles.emptyBox}>
-              <Ionicons
-                name={tabKey === "deleted" ? "trash-outline" : "people-outline"}
-                size={40}
-                color="#d1d5db"
-              />
-              <Text style={styles.emptyText}>
-                {tabKey === "deleted"
-                  ? "Chưa có nhân viên bị xoá."
-                  : "Chưa có nhân viên trong cửa hàng."}
-              </Text>
-            </View>
-          }
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingTop: HEADER_HEIGHT + 35 },
+          ]}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+            { useNativeDriver: true }
+          )}
+          scrollEventThrottle={16}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              colors={Platform.OS === "android" ? ["#2563eb"] : undefined}
-              tintColor={Platform.OS === "ios" ? "#2563eb" : undefined}
+              colors={["#3b82f6"]}
+              progressViewOffset={HEADER_HEIGHT}
             />
           }
-          ListFooterComponent={<View style={{ height: 16 }} />}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <View style={styles.emptyIconCircle}>
+                <Ionicons name="people-outline" size={60} color="#e2e8f0" />
+              </View>
+              <Text style={styles.emptyTitle}>Chưa có nhân viên nào</Text>
+              <Text style={styles.emptySubtitle}>
+                Bắt đầu quản lý đội ngũ nhân sự của bạn tại đây
+              </Text>
+            </View>
+          }
         />
       )}
-
-      {loading && !refreshing && tabKey !== "permissions" && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="small" color="#2563eb" />
-        </View>
-      )}
-    </SafeAreaView>
+    </View>
   );
 };
 
 export default EmployeesScreen;
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#f9fafb" },
+  container: { flex: 1, backgroundColor: "#f8fafc" },
 
-  header: {
-    paddingTop: 12,
-    paddingBottom: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
-    backgroundColor: "#ffffff",
+  // Collapsible Header
+  collapsibleHeader: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    overflow: "hidden",
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
   },
-  headerLeft: { flexDirection: "row", alignItems: "center" },
-  headerTitle: { fontSize: 18, fontWeight: "800", color: "#111827" },
-  headerSub: { marginTop: 2, fontSize: 13, color: "#6b7280" },
-
-  searchWrap: {
+  headerTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 24,
+    marginTop: 15,
+  },
+  headerTitle: { fontSize: 28, fontWeight: "900", color: "#fff" },
+  headerSubtitle: {
+    fontSize: 13,
+    color: "rgba(255,255,255,0.85)",
+    marginTop: 4,
+  },
+  modeTabs: {
+    flexDirection: "row",
+    marginHorizontal: 20,
+    marginTop: 20,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    borderRadius: 14,
+    padding: 3,
+  },
+  modeTab: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: "center",
+    borderRadius: 12,
+  },
+  modeTabActive: { backgroundColor: "#fff" },
+  modeTabText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.9)",
+  },
+  modeTabTextActive: { color: "#3b82f6" },
+  statsInline: {
     flexDirection: "row",
     alignItems: "center",
-    marginHorizontal: 16,
-    marginVertical: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: "#f3f4f6",
+    justifyContent: "center",
+    marginTop: 15,
+    paddingBottom: 20,
+    gap: 20,
+  },
+  statMini: { alignItems: "center" },
+  statMiniValue: { fontSize: 18, fontWeight: "800", color: "#fff" },
+  statMiniLabel: {
+    fontSize: 10,
+    color: "rgba(255,255,255,0.8)",
+    fontWeight: "600",
+  },
+  statMiniDivider: {
+    width: 1,
+    height: 20,
+    backgroundColor: "rgba(255,255,255,0.2)",
+  },
+
+  // Sticky Search
+  stickySearch: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    zIndex: 20,
+    paddingHorizontal: 20,
+  },
+  searchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    height: 56,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 15,
+    elevation: 8,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    gap: 8,
+    borderColor: "#f1f5f9",
   },
   searchInput: {
     flex: 1,
     fontSize: 14,
     color: "#111827",
     paddingVertical: Platform.OS === "ios" ? 4 : 0,
-  },
-
-  tabRow: {
-    flexDirection: "row",
-    marginHorizontal: 16,
-    marginBottom: 8,
-    borderRadius: 999,
-    backgroundColor: "#e5e7eb",
-    padding: 2,
-  },
-  tabBtn: {
-    flex: 1,
-    paddingVertical: 8,
-    borderRadius: 999,
-    alignItems: "center",
-  },
-  tabBtnActive: { backgroundColor: "#ffffff" },
-  tabText: { fontSize: 13, fontWeight: "800", color: "#4b5563" },
-  tabTextActive: { color: "#2563eb" },
-
-  rowCard: {
-    flexDirection: "row",
-    padding: 12,
-    borderRadius: 14,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    marginBottom: 10,
-  },
-  empName: { fontSize: 15, fontWeight: "800", color: "#111827" },
-  empEmail: { fontSize: 12, color: "#6b7280", marginTop: 2 },
-  empMetaRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 },
-  metaChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: "#eff6ff",
-  },
-  metaChipText: { fontSize: 11, fontWeight: "700", color: "#1d4ed8" },
-  rightCol: {
     marginLeft: 10,
-    alignItems: "flex-end",
-    justifyContent: "space-between",
   },
-  salaryText: { fontSize: 13, fontWeight: "800", color: "#111827" },
-  commissionText: { fontSize: 11, color: "#6b7280", marginTop: 2 },
 
-  actionRow: { flexDirection: "row", gap: 6, marginTop: 10 },
-  actionBtn: {
+  // Employee Card
+  listContent: { paddingHorizontal: 20, paddingBottom: 40 },
+  employeeCard: {
+    backgroundColor: "#fff",
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
+  },
+  cardHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
+    gap: 14,
+    marginBottom: 16,
   },
-  actionDelete: { borderColor: "#fecaca", backgroundColor: "#fef2f2" },
-  actionDeleteText: { fontSize: 11, fontWeight: "800", color: "#b91c1c" },
-  actionRestore: { borderColor: "#bbf7d0", backgroundColor: "#ecfdf5" },
-  actionRestoreText: { fontSize: 11, fontWeight: "800", color: "#15803d" },
-
-  center: {
-    flex: 1,
+  avatarCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
-    padding: 24,
-    backgroundColor: "#f9fafb",
   },
-  centerTitle: {
-    marginTop: 12,
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#111827",
-  },
-  centerSub: { marginTop: 4, fontSize: 14, color: "#6b7280" },
-
-  emptyBox: {
+  avatarInitial: { fontSize: 24, fontWeight: "800", color: "#fff" },
+  headerText: { flex: 1 },
+  empName: { fontSize: 18, fontWeight: "800", color: "#0f172a" },
+  roleRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
+  empEmail: { fontSize: 13, color: "#64748b", fontWeight: "500" },
+  deleteIconButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "#fef2f2",
     alignItems: "center",
-    paddingVertical: 32,
+    justifyContent: "center",
+  },
+  cardBody: { gap: 16 },
+  bodyRow: { flexDirection: "row", justifyContent: "space-between" },
+  infoCol: { gap: 4 },
+  infoLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#94a3b8",
+    letterSpacing: 0.5,
+  },
+  infoValueRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  infoValue: { fontSize: 14, fontWeight: "700", color: "#334155" },
+  financialStats: {
+    flexDirection: "row",
+    padding: 12,
     borderRadius: 16,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
   },
-  emptyText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: "#6b7280",
-    fontWeight: "700",
+  financeItem: { flex: 1, alignItems: "center" },
+  financeLabel: {
+    fontSize: 11,
+    color: "#64748b",
+    marginBottom: 2,
+    fontWeight: "600",
   },
-
-  loadingOverlay: {
-    position: "absolute",
-    bottom: 12,
-    alignSelf: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.9)",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-  },
-
-  // Permissions
-  permissionHint: {
+  financeValue: { fontSize: 16, fontWeight: "800", color: "#0f172a" },
+  financeDivider: { width: 1, height: 24, backgroundColor: "#e2e8f0" },
+  restoreButton: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#10b981",
+    height: 48,
+    borderRadius: 14,
+    marginTop: 12,
     gap: 8,
-    marginTop: 10,
-    marginHorizontal: 16,
-    padding: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#bfdbfe",
+  },
+  restoreButtonText: { color: "#fff", fontWeight: "700" },
+
+  // Permission Tab Custom
+  permissionHint: {
+    flexDirection: "row",
     backgroundColor: "#eff6ff",
+    padding: 12,
+    marginHorizontal: 16,
+    borderRadius: 12,
+    gap: 8,
+    marginBottom: 20,
   },
   permissionHintText: {
     flex: 1,
-    color: "#1e40af",
-    fontWeight: "700",
     fontSize: 13,
+    color: "#1d4ed8",
+    lineHeight: 18,
+    fontWeight: "500",
   },
-
   sectionTitle: {
-    marginTop: 12,
-    marginBottom: 6,
-    marginHorizontal: 16,
-    fontSize: 14,
-    fontWeight: "900",
-    color: "#111827",
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#0f172a",
+    marginLeft: 16,
+    marginBottom: 12,
   },
+  staffAvatarBtn: { alignItems: "center", gap: 8, width: 80 },
+  staffAvatarBtnActive: { opacity: 1 },
+  staffAvatarCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  staffInitial: { fontSize: 22, fontWeight: "800", color: "#64748b" },
+  staffInitialActive: { color: "#fff" },
+  staffNameLabel: { fontSize: 12, color: "#64748b", fontWeight: "700" },
+  staffNameLabelActive: { color: "#3b82f6" },
 
-  staffChip: {
-    width: 150,
-    padding: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: "#ffffff",
-  },
-  staffChipActive: { borderColor: "#2563eb", backgroundColor: "#eff6ff" },
-  staffChipAvatar: {
-    marginBottom: 8,
+  // Empty State
+  emptyContainer: {
     alignItems: "center",
     justifyContent: "center",
+    paddingVertical: 100,
   },
-  staffChipBadge: {
-    position: "absolute",
-    top: -4,
-    right: 10,
-    minWidth: 20,
-    height: 20,
-    paddingHorizontal: 5,
-    borderRadius: 10,
+  emptyIconCircle: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: "#f8fafc",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#2563eb",
+    marginBottom: 20,
   },
-  staffChipBadgeText: { fontSize: 10, color: "#ffffff", fontWeight: "900" },
-  staffChipName: { fontWeight: "900", color: "#111827", fontSize: 14 },
-  staffChipNameActive: { color: "#1d4ed8" },
-  staffChipSub: {
-    marginTop: 4,
-    color: "#6b7280",
-    fontWeight: "700",
-    fontSize: 12,
+  emptyTitle: { fontSize: 18, fontWeight: "700", color: "#1e293b", marginBottom: 8 },
+  emptySubtitle: {
+    fontSize: 14,
+    color: "#64748b",
+    textAlign: "center",
+    paddingHorizontal: 40,
+    lineHeight: 20,
   },
-  staffChipSubActive: { color: "#1e40af" },
 
   loadingLabel: { marginTop: 10, textAlign: "center", color: "#6b7280" },
-
   selectedStaffCard: {
     marginHorizontal: 16,
     marginTop: 10,
@@ -1262,14 +1401,17 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   selectedStaffStat: { alignItems: "flex-end" },
-  selectedStaffStatLabel: { fontSize: 11, color: "#6b7280", fontWeight: "800" },
+  selectedStaffStatLabel: {
+    fontSize: 11,
+    color: "#6b7280",
+    fontWeight: "800",
+  },
   selectedStaffStatValue: {
     fontSize: 13,
     color: "#111827",
     fontWeight: "900",
     marginTop: 2,
   },
-
   permissionActionRow: {
     flexDirection: "row",
     gap: 10,
@@ -1361,7 +1503,6 @@ const styles = StyleSheet.create({
   },
   permItemChecked: { borderColor: "#bfdbfe", backgroundColor: "#eff6ff" },
 
-  // wrap để không tràn + vẫn cuộn được
   permText: {
     flex: 1,
     fontSize: 12,
@@ -1372,21 +1513,29 @@ const styles = StyleSheet.create({
   },
   permTextChecked: { fontSize: 12, fontWeight: "900", color: "#22c55e" },
 
-  // Save bar (nằm cuối danh sách)
   saveBar: {
-    marginTop: 12,
-    marginHorizontal: 16,
-    paddingHorizontal: 14,
-    paddingTop: 10,
-    paddingBottom: 12,
-    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 16,
     backgroundColor: "#111827",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  stickyFooter: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 100,
   },
   saveBarLeft: { flex: 1, minWidth: 0 },
   saveBarTitle: { color: "#ffffff", fontWeight: "900", fontSize: 13 },
@@ -1406,4 +1555,34 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   saveBtnText: { color: "#ffffff", fontWeight: "900", fontSize: 13 },
+
+  center: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+    backgroundColor: "#f9fafb",
+  },
+  centerTitle: {
+    marginTop: 12,
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#111827",
+  },
+  centerSub: { marginTop: 4, fontSize: 14, color: "#6b7280" },
+
+  emptyBox: {
+    alignItems: "center",
+    paddingVertical: 32,
+    borderRadius: 16,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+  },
+  emptyText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: "#6b7280",
+    fontWeight: "700",
+  },
 });

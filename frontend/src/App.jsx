@@ -286,21 +286,21 @@ function App() {
         <Route path="/stores/:storeId/employees" element={<ProtectedRoute><EmployeesPage /></ProtectedRoute>} />
 
         {/* ==================== Products & Suppliers ==================== */}
-        <Route path="/suppliers" element={<ProtectedRoute allowedPermissions="supplier:view"><SupplierListPage /></ProtectedRoute>} />
-        <Route path="/products" element={<ProtectedRoute allowedPermissions="products:get"><ProductListPage /></ProtectedRoute>} />
-        <Route path="/product-groups" element={<ProtectedRoute allowedPermissions="products:view"><ProductGroupsPage /></ProtectedRoute>} />
+        <Route path="/suppliers" element={<ProtectedRoute allowedPermissions="suppliers:view"><SupplierListPage /></ProtectedRoute>} />
+        <Route path="/products" element={<ProtectedRoute allowedPermissions="products:view"><ProductListPage /></ProtectedRoute>} />
+        <Route path="/product-groups" element={<ProtectedRoute allowedPermissions="product-groups:view"><ProductGroupsPage /></ProtectedRoute>} />
         <Route path="/inventory-vouchers" element={<ProtectedRoute allowedPermissions="inventory:voucher:view"><InventoryVoucherPage /></ProtectedRoute>} />
         <Route path="/warehouses" element={<ProtectedRoute allowedPermissions="warehouses:view"><WarehousePage /></ProtectedRoute>} />
 
         {/* ==================== Customers ==================== */}
         <Route path="/customers-list" element={<ProtectedRoute allowedPermissions="customers:search"><CustomerListPage /></ProtectedRoute>} />
-        <Route path="/customers/top-customers" element={<ProtectedRoute allowedPermissions="customers:search"><TopCustomer /></ProtectedRoute>} />
+        <Route path="/customers/top-customers" element={<ProtectedRoute allowedPermissions="customers:top-customers"><TopCustomer /></ProtectedRoute>} />
 
         {/* ==================== Loyalty ==================== */}
         <Route path="/loyalty/config" element={<ProtectedRoute allowedRoles={["MANAGER", "STAFF"]}><LoyaltySetting /></ProtectedRoute>} />
 
         {/* ==================== Reports ==================== */}
-        <Route path="/reports/dashboard" element={<ProtectedRoute allowedPermissions="reports:financial:view"><ReportDashboard /></ProtectedRoute>} />
+        <Route path="/reports/dashboard" element={<ProtectedRoute allowedPermissions="reports:revenue:view"><ReportDashboard /></ProtectedRoute>} />
         <Route path="/reports/revenue" element={<ProtectedRoute allowedPermissions="reports:revenue:view"><RevenueReport /></ProtectedRoute>} />
         <Route path="/reports/top-products" element={<ProtectedRoute allowedPermissions="reports:top-products"><TopProductsReport /></ProtectedRoute>} />
         <Route path="/reports/inventory-reports" element={<ProtectedRoute allowedPermissions="inventory:stock-check:view"><InventoryReport /></ProtectedRoute>} />
@@ -309,10 +309,10 @@ function App() {
         <Route path="/settings/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         <Route path="/settings/notification" element={<ProtectedRoute><Notification /></ProtectedRoute>} />
         <Route path="/settings/activity-log" element={<ProtectedRoute allowedPermissions="settings:activity-log"><ActivityLog /></ProtectedRoute>} />
-        <Route path="/settings/file" element={<ProtectedRoute allowedPermissions="file:view"><FileManager /></ProtectedRoute>} />
+        <Route path="/settings/file" element={<ProtectedRoute allowedPermissions="files:view"><FileManager /></ProtectedRoute>} />
         <Route path="/settings/subscription/pricing" element={<ProtectedRoute allowedPermissions="subscription:view"><PricingPage /></ProtectedRoute>} />
         <Route path="/settings/subscription" element={<ProtectedRoute allowedPermissions="subscription:view"><SubscriptionPage /></ProtectedRoute>} />
-        <Route path="/settings/export-data" element={<ProtectedRoute allowedRoles={["MANAGER"]}><DataExportPage /></ProtectedRoute>} />
+        <Route path="/settings/export-data" element={<ProtectedRoute allowedPermissions="reports:revenue:export"><DataExportPage /></ProtectedRoute>} />
         <Route path="/terms" element={<ProtectedRoute><Term /></ProtectedRoute>} />
         <Route path="/privacy" element={<ProtectedRoute><Privacy /></ProtectedRoute>} />
         <Route path="/settings/payment-method" element={<ProtectedRoute allowedPermissions="settings:payment-method"><PaymentGatewaySettingsPage /></ProtectedRoute>} />

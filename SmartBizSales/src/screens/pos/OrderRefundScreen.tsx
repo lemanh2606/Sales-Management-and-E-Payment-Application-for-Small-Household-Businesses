@@ -49,14 +49,18 @@ type Product = {
   price?: MongoDecimal;
 };
 
-type RefundOrder = {
+type OrderRefundDoc = {
   _id: string;
-  storeId: Store;
-  employeeId: Employee;
-  customer?: Customer;
-  totalAmount: MongoDecimal;
-  status: "refunded" | "partially_refunded";
-  refundId: string;
+  orderId: {
+    _id: string;
+    totalAmount: MongoDecimal;
+    customer?: Customer;
+    storeId: Store;
+    status: string;
+    employeeId?: Employee; // Original salesperson (populated)
+  };
+  refundAmount: MongoDecimal;
+  refundedBy: Employee; // Who performed the refund
   createdAt: string;
   updatedAt: string;
 };
@@ -68,6 +72,7 @@ type PaidOrder = {
   customer?: Customer;
   totalAmount: MongoDecimal;
   paymentMethod: string; // cash | qr ...
+  status: string; // paid | partially_refunded | refunded
   createdAt: string;
   updatedAt: string;
 };
@@ -114,15 +119,29 @@ type OrderItem = {
   quantity: number;
   priceAtTime: MongoDecimal;
   subtotal: MongoDecimal;
+  refundedQuantity?: number;
+  maxRefundableQuantity?: number;
   createdAt: string;
   updatedAt: string;
 };
 
+type RefundSummary = {
+  totalOrderAmount: MongoDecimal;
+  totalRefundedAmount: number;
+  totalRefundedQty: number;
+  totalOrderQty: number;
+  remainingRefundableQty: number;
+  refundCount: number;
+  orderStatus: string;
+};
+
 type OrderRefundDetailResponse = {
   message: string;
-  order: RefundOrder;
+  order: PaidOrder;
   refundDetail: RefundDetail;
+  refundRecords: RefundDetail[];
   orderItems: OrderItem[];
+  summary: RefundSummary;
 };
 
 type SelectedProductItem = { productId: string; quantity: number };
@@ -226,10 +245,19 @@ const OrderRefundScreen: React.FC = () => {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(
     null
   );
+  const [selectedSalespersonId, setSelectedSalespersonId] = useState<string | null>(
+    null
+  );
+
+  // modal filters
+  const [modalSearchText, setModalSearchText] = useState("");
+  const [modalSelectedEmployeeId, setModalSelectedEmployeeId] = useState<string | null>(
+    null
+  );
 
   // data
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [refundOrders, setRefundOrders] = useState<RefundOrder[]>([]);
+  const [refundOrders, setRefundOrders] = useState<OrderRefundDoc[]>([]);
   const [paidOrders, setPaidOrders] = useState<PaidOrder[]>([]);
 
   // detail
@@ -403,17 +431,53 @@ const OrderRefundScreen: React.FC = () => {
   const filteredRefundOrders = useMemo(() => {
     const q = searchText.trim().toLowerCase();
     return refundOrders.filter((o) => {
+      const orderData = o.orderId;
+      const matchSearch = !q
+        ? true
+        : o._id?.toLowerCase().includes(q) ||
+          orderData?._id?.toLowerCase().includes(q) ||
+          (orderData?.customer?.name || "").toLowerCase().includes(q) ||
+          (orderData?.customer?.phone || "").includes(searchText.trim());
+
+      // Filter theo người thực hiện hoàn
+      let matchEmp = true;
+      if (selectedEmployeeId === "owner") {
+        matchEmp = !o.refundedBy || !o.refundedBy._id;
+      } else if (selectedEmployeeId) {
+        matchEmp = o.refundedBy?._id === selectedEmployeeId;
+      }
+
+      // Filter theo nhân viên bán hàng gốc
+      let matchSales = true;
+      if (selectedSalespersonId === "owner") {
+        matchSales = !orderData?.employeeId || !orderData?.employeeId._id;
+      } else if (selectedSalespersonId) {
+        matchSales = orderData?.employeeId?._id === selectedSalespersonId;
+      }
+
+      return matchSearch && matchEmp && matchSales;
+    });
+  }, [refundOrders, searchText, selectedEmployeeId, selectedSalespersonId]);
+
+  const filteredPaidOrders = useMemo(() => {
+    const q = modalSearchText.trim().toLowerCase();
+    return paidOrders.filter((o) => {
       const matchSearch = !q
         ? true
         : o._id?.toLowerCase().includes(q) ||
           (o.customer?.name || "").toLowerCase().includes(q) ||
-          (o.customer?.phone || "").includes(searchText.trim());
-      const matchEmp = selectedEmployeeId
-        ? o.employeeId?._id === selectedEmployeeId
-        : true;
+          (o.customer?.phone || "").includes(modalSearchText.trim());
+
+      let matchEmp = true;
+      if (modalSelectedEmployeeId === "owner") {
+        matchEmp = !o.employeeId || !o.employeeId._id;
+      } else if (modalSelectedEmployeeId) {
+        matchEmp = o.employeeId?._id === modalSelectedEmployeeId;
+      }
+
       return matchSearch && matchEmp;
     });
-  }, [refundOrders, searchText, selectedEmployeeId]);
+  }, [paidOrders, modalSearchText, modalSelectedEmployeeId]);
 
   const openPaidOrdersModal = useCallback(async () => {
     await loadPaidOrders();
@@ -531,10 +595,7 @@ const OrderRefundScreen: React.FC = () => {
       Alert.alert("Thiếu đơn", "Chưa chọn đơn cần hoàn.");
       return;
     }
-    if (!refundEmployeeId) {
-      Alert.alert("Thiếu nhân viên", "Vui lòng chọn nhân viên xử lý hoàn trả.");
-      return;
-    }
+    // Không bắt buộc chọn nhân viên - backend sẽ tự lấy từ người đăng nhập
     const reason = refundReason.trim();
     if (!reason) {
       Alert.alert("Thiếu lý do", "Vui lòng nhập lý do hoàn trả.");
@@ -560,7 +621,7 @@ const OrderRefundScreen: React.FC = () => {
     setLoadingList(true);
     try {
       const formData: any = new FormData();
-      formData.append("employeeId", refundEmployeeId);
+      // Không gửi employeeId - backend sẽ tự lấy từ người đăng nhập
       formData.append("refundReason", reason);
       formData.append("items", JSON.stringify(items));
 
@@ -596,7 +657,6 @@ const OrderRefundScreen: React.FC = () => {
     selectedPaidOrder?._id,
     selectedProducts,
     refundQtyByProduct,
-    refundEmployeeId,
     refundReason,
     evidenceMedia,
     authHeaders,
@@ -651,10 +711,16 @@ const OrderRefundScreen: React.FC = () => {
             style={{ marginTop: 10 }}
           >
             <View style={{ flexDirection: "row", gap: 10 }}>
+              <Text style={[styles.muted, { alignSelf: "center", marginRight: 5 }]}>NV Hoàn:</Text>
               <PillBtn
-                text="Tất cả NV"
+                text="Tất cả"
                 active={!selectedEmployeeId}
                 onPress={() => setSelectedEmployeeId(null)}
+              />
+              <PillBtn
+                text="Chủ cửa hàng"
+                active={selectedEmployeeId === "owner"}
+                onPress={() => setSelectedEmployeeId("owner")}
               />
               {employees.map((e) => (
                 <PillBtn
@@ -662,6 +728,34 @@ const OrderRefundScreen: React.FC = () => {
                   text={e.fullName}
                   active={selectedEmployeeId === e._id}
                   onPress={() => setSelectedEmployeeId(e._id)}
+                />
+              ))}
+            </View>
+          </ScrollView>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={{ marginTop: 10 }}
+          >
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <Text style={[styles.muted, { alignSelf: "center", marginRight: 5 }]}>NV Bán:</Text>
+              <PillBtn
+                text="Tất cả"
+                active={!selectedSalespersonId}
+                onPress={() => setSelectedSalespersonId(null)}
+              />
+              <PillBtn
+                text="Chủ cửa hàng"
+                active={selectedSalespersonId === "owner"}
+                onPress={() => setSelectedSalespersonId("owner")}
+              />
+              {employees.map((e) => (
+                <PillBtn
+                  key={e._id}
+                  text={e.fullName}
+                  active={selectedSalespersonId === e._id}
+                  onPress={() => setSelectedSalespersonId(e._id)}
                 />
               ))}
             </View>
@@ -702,28 +796,31 @@ const OrderRefundScreen: React.FC = () => {
                             #{item._id.slice(-8)}
                           </Text>
                           <Text style={styles.orderMeta} numberOfLines={1}>
-                            Khách: {item.customer?.name || "Trống"} •{" "}
-                            {item.customer?.phone || "---"}
+                            Khách: {item.orderId?.customer?.name || "Khách vãng lai"} •{" "}
+                            {item.orderId?.customer?.phone || "---"}
                           </Text>
                           <Text style={styles.orderMeta} numberOfLines={1}>
-                            NV: {item.employeeId?.fullName || "---"} •{" "}
-                            {formatDateTime(item.updatedAt)}
+                            NV bán: {item.orderId?.employeeId?.fullName || "Chủ cửa hàng"}
+                          </Text>
+                          <Text style={styles.orderMeta} numberOfLines={1}>
+                            NV hoàn: {item.refundedBy?.fullName || "Chủ cửa hàng"} •{" "}
+                            {formatDateTime(item.createdAt)}
                           </Text>
                         </View>
 
                         <View style={{ alignItems: "flex-end" }}>
                           <Text style={styles.money}>
-                            {formatCurrency(item.totalAmount)}
+                            {formatCurrency(item.refundAmount)}
                           </Text>
                           <Text
                             style={[
                               styles.badge,
-                              item.status === "refunded"
+                              item.orderId?.status === "refunded"
                                 ? styles.badgeDanger
                                 : styles.badgeWarn,
                             ]}
                           >
-                            {item.status === "refunded"
+                            {item.orderId?.status === "refunded"
                               ? "Hoàn toàn bộ"
                               : "Hoàn 1 phần"}
                           </Text>
@@ -759,9 +856,9 @@ const OrderRefundScreen: React.FC = () => {
                 <Text style={styles.v}>{refundDetail.order.storeId?.name}</Text>
               </View>
               <View style={styles.kvRow}>
-                <Text style={styles.k}>Nhân viên</Text>
+                <Text style={styles.k}>Nhân viên bán</Text>
                 <Text style={styles.v}>
-                  {refundDetail.order.employeeId?.fullName}
+                  {refundDetail.order.employeeId?.fullName || "Chủ cửa hàng"}
                 </Text>
               </View>
               <View style={styles.kvRow}>
@@ -806,9 +903,11 @@ const OrderRefundScreen: React.FC = () => {
                 Chi tiết hoàn
               </Text>
               <View style={styles.kvRow}>
-                <Text style={styles.k}>Nhân viên xử lý</Text>
+                <Text style={styles.k}>Người xử lý</Text>
                 <Text style={styles.v}>
-                  {refundDetail.refundDetail?.refundedBy?.fullName || "---"}
+                  {(refundDetail.refundDetail as any)?.refundedByName ||
+                    refundDetail.refundDetail?.refundedBy?.fullName ||
+                    "Chủ cửa hàng"}
                 </Text>
               </View>
               <View style={styles.kvRow}>
@@ -869,41 +968,82 @@ const OrderRefundScreen: React.FC = () => {
                 <Text style={styles.muted}>Đang tải...</Text>
               </View>
             ) : (
-              <ScrollView
-                style={{ maxHeight: 520 }}
-                keyboardShouldPersistTaps="always"
-              >
-                {paidOrders.map((o) => (
-                  <Pressable
-                    key={o._id}
-                    onPress={() => handleOpenRefundModal(o)}
-                    style={({ pressed }) => [
-                      styles.modalRowItem,
-                      pressed && { opacity: 0.92 },
-                    ]}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.orderId}>#{o._id.slice(-8)}</Text>
-                      <Text style={styles.orderMeta} numberOfLines={1}>
-                        Khách: {o.customer?.name || "Trống"} •{" "}
-                        {o.customer?.phone || "---"}
-                      </Text>
-                      <Text style={styles.orderMeta} numberOfLines={1}>
-                        NV: {o.employeeId?.fullName || "---"} •{" "}
-                        {formatDateTime(o.createdAt)}
-                      </Text>
-                    </View>
-                    <View style={{ alignItems: "flex-end" }}>
-                      <Text style={styles.money}>
-                        {formatCurrency(o.totalAmount)}
-                      </Text>
-                      <Text style={[styles.badge, styles.badgeInfo]}>
-                        {o.paymentMethod === "cash" ? "Tiền mặt" : "QR"}
-                      </Text>
-                    </View>
-                  </Pressable>
-                ))}
-              </ScrollView>
+              <View style={{ flex: 1 }}>
+                <TextInput
+                  value={modalSearchText}
+                  onChangeText={setModalSearchText}
+                  placeholder="Tìm mã đơn / tên khách..."
+                  placeholderTextColor="#94a3b8"
+                  style={[styles.input, { marginBottom: 10 }]}
+                />
+                
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={{ marginBottom: 10 }}
+                >
+                  <View style={{ flexDirection: "row", gap: 10 }}>
+                    <PillBtn
+                      text="Tất cả NV"
+                      active={!modalSelectedEmployeeId}
+                      onPress={() => setModalSelectedEmployeeId(null)}
+                    />
+                    <PillBtn
+                      text="Chủ cửa hàng"
+                      active={modalSelectedEmployeeId === "owner"}
+                      onPress={() => setModalSelectedEmployeeId("owner")}
+                    />
+                    {employees.map((e) => (
+                      <PillBtn
+                        key={e._id}
+                        text={e.fullName}
+                        active={modalSelectedEmployeeId === e._id}
+                        onPress={() => setModalSelectedEmployeeId(e._id)}
+                      />
+                    ))}
+                  </View>
+                </ScrollView>
+
+                <ScrollView
+                  style={{ maxHeight: 400 }}
+                  keyboardShouldPersistTaps="always"
+                >
+                  {filteredPaidOrders.length === 0 ? (
+                    <Text style={[styles.muted, { textAlign: "center", marginTop: 20 }]}>Không tìm thấy đơn phù hợp</Text>
+                  ) : (
+                    filteredPaidOrders.map((o) => (
+                      <Pressable
+                        key={o._id}
+                        onPress={() => handleOpenRefundModal(o)}
+                        style={({ pressed }) => [
+                          styles.modalRowItem,
+                          pressed && { opacity: 0.92 },
+                        ]}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.orderId}>#{o._id.slice(-8)}</Text>
+                          <Text style={styles.orderMeta} numberOfLines={1}>
+                            Khách: {o.customer?.name || "Trống"} •{" "}
+                            {o.customer?.phone || "---"}
+                          </Text>
+                          <Text style={styles.orderMeta} numberOfLines={1}>
+                            Bán bởi: {o.employeeId?.fullName || "Chủ cửa hàng"} •{" "}
+                            {formatDateTime(o.createdAt)}
+                          </Text>
+                        </View>
+                        <View style={{ alignItems: "flex-end" }}>
+                          <Text style={styles.money}>
+                            {formatCurrency(o.totalAmount)}
+                          </Text>
+                          <Text style={[styles.badge, styles.badgeInfo]}>
+                            {o.paymentMethod === "cash" ? "Tiền mặt" : "QR"}
+                          </Text>
+                        </View>
+                      </Pressable>
+                    ))
+                  )}
+                </ScrollView>
+              </View>
             )}
 
             <Pressable
@@ -941,19 +1081,7 @@ const OrderRefundScreen: React.FC = () => {
               style={{ marginTop: 10 }}
               keyboardShouldPersistTaps="always"
             >
-              <Text style={styles.label}>Nhân viên xử lý</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View style={{ flexDirection: "row", gap: 10 }}>
-                  {employees.map((e) => (
-                    <PillBtn
-                      key={e._id}
-                      text={e.fullName}
-                      active={refundEmployeeId === e._id}
-                      onPress={() => setRefundEmployeeId(e._id)}
-                    />
-                  ))}
-                </View>
-              </ScrollView>
+              {/* Người xử lý sẽ được lấy tự động từ backend */}
 
               <Text style={[styles.label, { marginTop: 12 }]}>
                 Lý do hoàn trả
@@ -1003,9 +1131,28 @@ const OrderRefundScreen: React.FC = () => {
                 const pid = it.productId?._id;
                 if (!pid) return null;
 
+                // Sử dụng maxRefundableQuantity từ API nếu có
+                const maxQty = it.maxRefundableQuantity ?? (it.quantity - (it.refundedQuantity || 0));
+                const alreadyRefunded = it.refundedQuantity || 0;
+                const isFullyRefunded = maxQty <= 0;
                 const checked = !!selectedProducts[pid];
-                const maxQty = it.quantity || 1;
                 const qty = refundQtyByProduct[pid] || 1;
+
+                // Item đã hoàn hết thì hiển thị mờ
+                if (isFullyRefunded) {
+                  return (
+                    <View key={it._id} style={[styles.refundItemRow, { opacity: 0.5 }]}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.lineTitle, { color: "#9ca3af" }]}>
+                          {it.productId?.name} (Đã hoàn hết)
+                        </Text>
+                        <Text style={styles.lineSub}>
+                          SKU: {it.productId?.sku} • Đã hoàn: {alreadyRefunded}/{it.quantity}
+                        </Text>
+                      </View>
+                    </View>
+                  );
+                }
 
                 return (
                   <View key={it._id} style={styles.refundItemRow}>
@@ -1028,9 +1175,14 @@ const OrderRefundScreen: React.FC = () => {
                           {it.productId?.name}
                         </Text>
                         <Text style={styles.lineSub}>
-                          SKU: {it.productId?.sku} • Đã mua: {maxQty} • Đơn giá:{" "}
+                          SKU: {it.productId?.sku} • Đã mua: {it.quantity} • Đơn giá:{" "}
                           {formatCurrency(it.priceAtTime)}
                         </Text>
+                        {alreadyRefunded > 0 && (
+                          <Text style={[styles.lineSub, { color: "#ef4444" }]}>
+                            Đã hoàn: {alreadyRefunded} | Còn lại: {maxQty}
+                          </Text>
+                        )}
                       </View>
                     </Pressable>
 

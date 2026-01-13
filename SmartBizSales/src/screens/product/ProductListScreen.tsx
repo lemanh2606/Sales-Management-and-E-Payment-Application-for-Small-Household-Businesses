@@ -539,70 +539,110 @@ const ProductListScreen: React.FC = () => {
       else if (diff <= 30) expiryColor = "#ff9800";
     }
 
+    const now = new Date();
+    const expiredBatchesCount = batches.filter(b => b.expiry_date && new Date(b.expiry_date) < now).length;
+    const validBatchesCount = batches.filter(b => !b.expiry_date || new Date(b.expiry_date) >= now).length;
+
+    // Xác định xem item này có đang bị hết hạn không (dùng cho Split mode hoặc để báo highlight)
+    const isExpired = (item as any).isBatch && (item as any).expiry_date && new Date((item as any).expiry_date) < now;
+
     return (
-      <View style={styles.productCard}>
+      <View style={[styles.productCard, isExpired && { borderColor: "#f44336", borderWidth: 1, backgroundColor: "#fff1f0" }]}>
         <View style={styles.productHeader}>
           <View style={styles.productInfo}>
-            <Text style={styles.productName}>{item.name}</Text>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <Text style={styles.productSKU}>SKU: {item.sku}</Text>
-              {item.unit && <Text style={styles.productUnit}>({item.unit})</Text>}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+               <View style={{ flex: 1 }}>
+                  <Text style={[styles.productName, isExpired && { color: "#d32f2f" }]}>{item.name}</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Text style={styles.productSKU}>SKU: {item.sku}</Text>
+                    {item.unit && <Text style={styles.productUnit}>({item.unit})</Text>}
+                  </View>
+               </View>
+               {/* Badge Hết hạn nổi bật nếu ở chế độ tách lô */}
+               {isExpired && (
+                  <View style={{ backgroundColor: '#f44336', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                     <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>HẾT HẠN</Text>
+                  </View>
+               )}
             </View>
+
             <View style={styles.productMeta}>
               <View>
-                <Text style={styles.productPrice}>
-                  {productApi.formatPrice(item.price)}
+                <Text style={[styles.productPrice, isExpired && { color: "#d32f2f" }]}>
+                  Giá: {productApi.formatPrice((item as any).selling_price || item.price)}
                 </Text>
                 <Text style={styles.productCostPrice}>
                   Vốn: {productApi.formatPrice(item.cost_price)}
                 </Text>
               </View>
               <View style={{ alignItems: "flex-end" }}>
-                <Text style={styles.productStock}>
+                <Text style={[styles.productStock, isExpired && { color: "#d32f2f" }]}>
                   Tồn: {item.stock_quantity} {item.unit || ""}
                 </Text>
-                {validBatches.length > 0 && (
-                  <Text style={styles.batchCount}>{validBatches.length} lô</Text>
+                {! (item as any).isBatch && validBatches.length > 0 && (
+                  <Text style={styles.batchCount}>{validBatches.length} lô còn hàng</Text>
                 )}
               </View>
             </View>
+
             <View style={styles.productDetails}>
               <View
                 style={[
                   styles.statusBadge,
-                  { backgroundColor: getStatusColor(item.status) },
+                  { backgroundColor: isExpired ? "#d32f2f" : getStatusColor(item.status) },
                 ]}
               >
-                <Text style={styles.statusText}>{item.status}</Text>
+                <Text style={styles.statusText}>{isExpired ? "Hết hạn" : item.status}</Text>
               </View>
+              
               {item.group && (
                 <Text style={styles.productGroup}>{item.group.name}</Text>
               )}
+
               {/* Hiển thị số lô khi ở chế độ split */}
               {(item as any).batch_no && (
                 <View style={[styles.expiryBadge, { backgroundColor: "#1976d2" }]}>
                   <Text style={styles.expiryText}>Lô: {(item as any).batch_no}</Text>
                 </View>
               )}
+
               {productApi.isLowStock(item) && (
                 <View style={styles.lowStockBadge}>
                   <Text style={styles.lowStockText}>Tồn kho thấp</Text>
                 </View>
               )}
-              {/* Hiển thị HSD: ở chế độ split lấy từ item.expiry_date, ở merge lấy nearestExpiry */}
-              {((item as any).expiry_date || nearestExpiry) && (
-                <View style={[styles.expiryBadge, { backgroundColor: expiryColor }]}>
-                  <Text style={styles.expiryText}>
-                    HSD: {(item as any).expiry_date 
-                      ? new Date((item as any).expiry_date).toLocaleDateString("vi-VN")
-                      : nearestExpiry?.toLocaleDateString("vi-VN")}
-                  </Text>
+
+              {/* Hiển thị HSD Gộp hoặc Tách */}
+              {viewMode === "split" ? (
+                (item as any).expiry_date && (
+                  <View style={[styles.expiryBadge, { backgroundColor: expiryColor }]}>
+                    <Text style={styles.expiryText}>
+                      HSD: {new Date((item as any).expiry_date).toLocaleDateString("vi-VN")}
+                    </Text>
+                  </View>
+                )
+              ) : (
+                // Chế độ gộp: Đếm số lô còn hạn/hết hạn
+                <View style={{ flexDirection: 'row', gap: 4 }}>
+                   {validBatchesCount > 0 && (
+                      <View style={[styles.expiryBadge, { backgroundColor: "#4caf50" }]}>
+                         <Text style={styles.expiryText}>{validBatchesCount} lô còn hạn</Text>
+                      </View>
+                   )}
+                   {expiredBatchesCount > 0 && (
+                      <View style={[styles.expiryBadge, { backgroundColor: "#f44336" }]}>
+                         <Text style={styles.expiryText}>{expiredBatchesCount} lô hết hạn</Text>
+                      </View>
+                   )}
+                   {validBatchesCount === 0 && expiredBatchesCount === 0 && (
+                      <Text style={{ fontSize: 11, color: '#999', fontStyle: 'italic' }}>Không có HSD</Text>
+                   )}
                 </View>
               )}
             </View>
           </View>
           <TouchableOpacity
-            style={styles.editButton}
+            style={[styles.editButton, isExpired && { backgroundColor: '#d32f2f' }]}
             onPress={() => setEditingProduct(item)}
           >
             <Ionicons name="create-outline" size={18} color="#fff" />

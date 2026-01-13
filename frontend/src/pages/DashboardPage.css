@@ -32,12 +32,41 @@
   animation: pulse-dashboard 2s ease-in-out infinite;
 }
 
+/* Modern Dashboard Header */
+.dashboard-header {
+  transition: all 0.3s ease;
+}
+
+.dashboard-header:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+/* Icon hover effects */
+.dashboard-header .anticon {
+  transition: all 0.2s ease;
+}
+
+.dashboard-header .anticon:hover {
+  transform: scale(1.1);
+  color: #52c41a !important;
+}
+
+/* User dropdown styling */
+.dashboard-header .ant-dropdown-trigger {
+  transition: all 0.2s ease;
+}
+
+.dashboard-header .ant-dropdown-trigger:hover {
+  background: linear-gradient(135deg, #f6ffed 0%, #e6fffb 100%) !important;
+}
+
 /* ResponsiveStyles */
 @media (max-width: 768px) {
   .dashboard-header {
-    flex-direction: column !important;
-    align-items: stretch !important;
-    padding: 12px !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    padding: 12px 16px !important;
+    justify-content: flex-end !important;
   }
 
   .dashboard-body {
@@ -105,3 +134,38 @@
     font-size: 13px !important;
   }
 }
+
+/* Modern Card Hover Effects */
+.ant-card.ant-card-hoverable {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.ant-card.ant-card-hoverable:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12) !important;
+}
+
+/* Smooth button transitions */
+.ant-btn {
+  transition: all 0.2s ease !important;
+}
+
+.ant-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(82, 196, 26, 0.4);
+}
+
+/* Gradient text effect */
+.gradient-text {
+  background: linear-gradient(135deg, #52c41a 0%, #237804 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Stat cards hover */
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1) !important;
+}
+

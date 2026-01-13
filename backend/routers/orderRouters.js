@@ -212,7 +212,7 @@ router.delete(
   verifyToken,
   checkSubscriptionExpiry,
   checkStoreAccess,
-  requirePermission("orders:view"),
+  requirePermission("orders:delete"),
   deletePendingOrder
 );
 //xem chi tiết 1 order chung

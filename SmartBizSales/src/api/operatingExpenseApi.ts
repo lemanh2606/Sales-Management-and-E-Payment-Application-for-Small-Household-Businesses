@@ -60,6 +60,16 @@ export const executeAllocation = async (data: {
   return response.data;
 };
 
+export const upsertOperatingExpense = async (data: {
+  storeId: string;
+  periodType: string;
+  periodKey: string;
+  items: Array<{ amount: number; note: string; isSaved: boolean }>;
+}): Promise<any> => {
+  const response = await apiClient.post("/operating-expenses/upsert", data);
+  return response.data;
+};
+
 export default {
     getOperatingExpenses,
     getOperatingExpenseByPeriod,
@@ -69,4 +79,5 @@ export default {
     deleteItemWithCheckbox: deleteMultipleExpenseItems,
     suggestAllocation,
     executeAllocation,
+    upsertOperatingExpense,
 };

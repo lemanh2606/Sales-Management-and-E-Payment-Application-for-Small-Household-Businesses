@@ -217,7 +217,7 @@ const MENU_TREE: readonly MenuSection[] = [
         key: "Suppliers",
         label: "Nhà cung cấp",
         icon: "people-outline",
-        permission: "supplier:view",
+        permission: "suppliers:view",
       },
       {
         key: "ProductGroups",
@@ -271,7 +271,7 @@ const MENU_TREE: readonly MenuSection[] = [
         key: "Employees",
         label: "Danh sách nhân viên",
         icon: "id-card-outline",
-        permission: "employees:view",
+        permission: "store:employee:view",
       },
     ],
   },
@@ -349,25 +349,25 @@ const MENU_TREE: readonly MenuSection[] = [
         key: "ProfileScreen",
         label: "Hồ sơ cá nhân",
         icon: "person-outline",
-        permission: "users:view",
+        permission: undefined,
       },
       {
         key: "NotificationSettings",
         label: "Thông báo",
         icon: "notifications-outline",
-        permission: "notifications:view",
+        permission: undefined,
       },
       {
         key: "ExportData",
         label: "Xuất dữ liệu",
         icon: "download-outline",
-        permission: "data:export",
+        permission: "reports:financial:export",
       },
       {
         key: "FileManager",
         label: "Quản lý file",
         icon: "folder-open-outline",
-        permission: "file:view",
+        permission: "files:view",
       },
     ],
   },
@@ -796,7 +796,7 @@ const AppNavigator: FC = (): JSX.Element => {
       />
       <Drawer.Screen
         name="Suppliers"
-        component={withPermission(SupplierListScreen, "supplier:view")}
+        component={withPermission(SupplierListScreen, "suppliers:view")}
         options={{ title: "Nhà cung cấp" }}
       />
       <Drawer.Screen
@@ -832,7 +832,7 @@ const AppNavigator: FC = (): JSX.Element => {
       />
       <Drawer.Screen
         name="Employees"
-        component={withPermission(EmployeesScreen, "employees:view")}
+        component={withPermission(EmployeesScreen, "store:employee:view")}
         options={{ title: "Nhân viên" }}
       />
       <Drawer.Screen
@@ -868,7 +868,7 @@ const AppNavigator: FC = (): JSX.Element => {
       />
       <Drawer.Screen
         name="ProfileScreen"
-        component={withPermission(ProfileScreen, "users:view")}
+        component={withPermission(ProfileScreen)}
         options={{ title: "Hồ sơ" }}
       />
       <Drawer.Screen
@@ -896,17 +896,17 @@ const AppNavigator: FC = (): JSX.Element => {
       />
       <Drawer.Screen
         name="NotificationSettings"
-        component={withPermission(NotificationScreen, "notifications:view")}
+        component={withPermission(NotificationScreen)}
         options={{ title: "Thông báo" }}
       />
       <Drawer.Screen
         name="ExportData"
-        component={withPermission(ExportDataScreen, "")}
+        component={withPermission(ExportDataScreen, "reports:financial:export")}
         options={{ title: "Xuất Dữ Liệu" }}
       />
       <Drawer.Screen
         name="FileManager"
-        component={withPermission(FileManagerScreen, "file:view")}
+        component={withPermission(FileManagerScreen, "files:view")}
         options={{ title: "Quản lý file" }}
       />
       {/* New screens */}

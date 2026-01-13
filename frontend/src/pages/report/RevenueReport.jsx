@@ -8,6 +8,8 @@ import dayjs from "dayjs";
 import quarterOfYear from "dayjs/plugin/quarterOfYear";
 import "dayjs/locale/vi";
 import Layout from "../../components/Layout";
+import { useAuth } from "../../context/AuthContext";
+import { useLocation } from "react-router-dom";
 
 dayjs.extend(quarterOfYear);
 dayjs.locale("vi");
@@ -26,6 +28,11 @@ const REPORT_TYPES = {
 };
 
 const RevenueReport = () => {
+  const { currentStore: authStore } = useAuth();
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const urlStoreId = queryParams.get("storeId");
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [summary, setSummary] = useState(null);
@@ -34,8 +41,8 @@ const RevenueReport = () => {
   const [pagination, setPagination] = useState({ current: 1, pageSize: 10, total: 0 });
   const [reportPagination, setReportPagination] = useState({ current: 1, pageSize: 10 });
 
-  // Lấy từ localStorage
-  const currentStore = JSON.parse(localStorage.getItem("currentStore") || "{}");
+  // Ưu tiên store từ AuthContext, sau đó đến URL, cuối cùng là localStorage fallback
+  const currentStore = authStore || (urlStoreId ? { _id: urlStoreId } : JSON.parse(localStorage.getItem("currentStore") || "{}"));
 
   // Filter
   const [reportType, setReportType] = useState(REPORT_TYPES.MONTHLY_SUMMARY);

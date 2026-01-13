@@ -1,193 +1,257 @@
-import React, { useState, useEffect, useRef } from "react";
-import toast from "react-hot-toast";
-import Button from "../Button";
+// src/components/productGroup/ProductGroupForm.jsx
+import React, { useState, useEffect } from "react";
+import {
+  Form,
+  Input,
+  Button,
+  Typography,
+  Space,
+  Card,
+  Divider,
+  notification,
+} from "antd";
+import {
+  AppstoreAddOutlined,
+  EditOutlined,
+  SaveOutlined,
+  CloseOutlined,
+  TagOutlined,
+  FileTextOutlined,
+  CheckCircleOutlined,
+} from "@ant-design/icons";
 import { createProductGroup, updateProductGroup } from "../../api/productGroupApi";
 
-export default function ProductGroupForm({ storeId, group, onSuccess, onCancel }) {
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [isAnimating, setIsAnimating] = useState(false);
+const { Title, Text } = Typography;
+const { TextArea } = Input;
 
-  const formContainerRef = useRef();
+export default function ProductGroupForm({ storeId, group, onSuccess, onCancel }) {
+  const [form] = Form.useForm();
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Animation khi mở form
-    setIsAnimating(true);
-
     if (group) {
-      setName(group.name || "");
-      setDescription(group.description || "");
+      form.setFieldsValue({
+        name: group.name || "",
+        description: group.description || "",
+      });
+    } else {
+      form.resetFields();
     }
-  }, [group]);
+  }, [group, form]);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!name.trim()) return toast.error("Tên nhóm sản phẩm là bắt buộc");
+  const handleSubmit = async (values) => {
+    const { name, description } = values;
+    if (!name.trim()) {
+      notification.error({
+        message: "Lỗi",
+        description: "Tên nhóm sản phẩm là bắt buộc",
+        placement: "topRight",
+      });
+      return;
+    }
 
     try {
       setLoading(true);
       if (group) {
         await updateProductGroup(group._id, { name, description });
-        toast.success("✅ Cập nhật nhóm sản phẩm thành công");
+        notification.success({
+          message: "✅ Cập nhật thành công",
+          description: `Đã cập nhật nhóm "${name}"`,
+          placement: "topRight",
+          icon: <CheckCircleOutlined style={{ color: "#52c41a" }} />,
+        });
       } else {
         await createProductGroup(storeId, { name, description });
-        toast.success("✅ Tạo nhóm sản phẩm thành công");
+        notification.success({
+          message: "✅ Tạo mới thành công",
+          description: `Đã tạo nhóm "${name}"`,
+          placement: "topRight",
+          icon: <CheckCircleOutlined style={{ color: "#52c41a" }} />,
+        });
       }
       onSuccess && onSuccess();
     } catch (err) {
-      toast.error(err?.response?.data?.message || "❌ Có lỗi xảy ra");
+      notification.error({
+        message: "❌ Có lỗi xảy ra",
+        description: err?.response?.data?.message || "Không thể thực hiện thao tác",
+        placement: "topRight",
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCancel = () => {
-    setIsAnimating(false);
-    setTimeout(() => {
-      onCancel();
-    }, 200);
-  };
-
   return (
-    <div className="fixed inset-0 flex justify-center items-center z-50 p-4">
-      {/* Overlay với animation fade in */}
+    <Card
+      style={{
+        borderRadius: 16,
+        overflow: "hidden",
+        boxShadow: "0 8px 32px rgba(0, 0, 0, 0.08)",
+        border: "none",
+      }}
+      styles={{ body: { padding: 0 } }}
+    >
+      {/* Header với gradient */}
       <div
-        className={`absolute inset-0 transition-opacity duration-300 ${isAnimating ? "opacity-50" : "opacity-0"}`}
-        onClick={handleCancel}
-      ></div>
-
-      {/* Form container với animation scale */}
-      <div
-        ref={formContainerRef}
-        className={`relative bg-white rounded-2xl w-full max-w-lg shadow-2xl z-50 transform transition-all duration-300 ${
-          isAnimating ? "scale-100 opacity-100" : "scale-95 opacity-0"
-        }`}
+        style={{
+          background: "linear-gradient(135deg, #52c41a 0%, #237804 100%)",
+          padding: "28px 32px",
+          position: "relative",
+          overflow: "hidden",
+        }}
       >
-        {/* Header với gradient background */}
-        <div className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-t-2xl px-6 py-5">
-          <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+        {/* Decorative circles */}
+        <div
+          style={{
+            position: "absolute",
+            top: -30,
+            right: -30,
+            width: 100,
+            height: 100,
+            borderRadius: "50%",
+            background: "rgba(255,255,255,0.1)",
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            bottom: -40,
+            left: -20,
+            width: 80,
+            height: 80,
+            borderRadius: "50%",
+            background: "rgba(255,255,255,0.08)",
+          }}
+        />
+        
+        <Space align="center" size={16}>
+          <div
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: 16,
+              background: "rgba(255,255,255,0.2)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              backdropFilter: "blur(10px)",
+            }}
+          >
             {group ? (
-              <>
-                <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                  />
-                </svg>
-                Chỉnh sửa nhóm sản phẩm
-              </>
+              <EditOutlined style={{ fontSize: 28, color: "#fff" }} />
             ) : (
-              <>
-                <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-                Tạo nhóm sản phẩm mới
-              </>
+              <AppstoreAddOutlined style={{ fontSize: 28, color: "#fff" }} />
             )}
-          </h2>
-          <p className="text-green-50 text-sm mt-1">{group ? "Cập nhật thông tin nhóm sản phẩm" : "Thêm một nhóm sản phẩm mới vào hệ thống"}</p>
-        </div>
-
-        {/* Form body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          {/* Tên nhóm */}
-          <div>
-            <label className="block mb-2 font-semibold text-gray-700 flex items-center gap-2">
-              <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"
-                />
-              </svg>
-              Tên nhóm <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="border-2 border-gray-300 rounded-xl w-full px-4 py-3 outline-none focus:border-green-500 focus:ring-4 focus:ring-green-100 transition-all duration-200 text-gray-700"
-              placeholder="Ví dụ: Đồ uống có cồn"
-              required
-            />
           </div>
-
-          {/* Mô tả */}
           <div>
-            <label className="block mb-2 font-semibold text-gray-700 flex items-center gap-2">
-              <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
-              </svg>
-              Mô tả
-            </label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="border-2 border-gray-300 rounded-xl w-full px-4 py-3 outline-none focus:border-green-500 focus:ring-4 focus:ring-green-100 transition-all duration-200 resize-none text-gray-700"
-              rows={4}
+            <Title level={3} style={{ color: "#fff", margin: 0, fontWeight: 700 }}>
+              {group ? "Chỉnh sửa nhóm sản phẩm" : "Tạo nhóm sản phẩm mới"}
+            </Title>
+            <Text style={{ color: "rgba(255,255,255,0.9)", fontSize: 14, marginTop: 4, display: "block" }}>
+              {group ? "Cập nhật thông tin nhóm sản phẩm" : "Thêm một nhóm sản phẩm mới vào hệ thống"}
+            </Text>
+          </div>
+        </Space>
+      </div>
+
+      {/* Form Body */}
+      <div style={{ padding: "32px" }}>
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={handleSubmit}
+          requiredMark="optional"
+        >
+          <Form.Item
+            name="name"
+            label={
+              <Space size={8}>
+                <TagOutlined style={{ color: "#52c41a" }} />
+                <Text strong style={{ fontSize: 15 }}>Tên nhóm sản phẩm</Text>
+              </Space>
+            }
+            rules={[
+              { required: true, message: "Vui lòng nhập tên nhóm sản phẩm!" },
+              { min: 2, message: "Tên nhóm phải có ít nhất 2 ký tự" },
+              { max: 100, message: "Tên nhóm không được quá 100 ký tự" },
+            ]}
+          >
+            <Input
+              placeholder="Ví dụ: Đồ uống, Thực phẩm khô, Gia vị..."
+              size="large"
+              style={{
+                borderRadius: 12,
+                fontSize: 15,
+                padding: "12px 16px",
+              }}
+              prefix={<TagOutlined style={{ color: "#bfbfbf" }} />}
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="description"
+            label={
+              <Space size={8}>
+                <FileTextOutlined style={{ color: "#52c41a" }} />
+                <Text strong style={{ fontSize: 15 }}>Mô tả</Text>
+              </Space>
+            }
+            rules={[
+              { max: 500, message: "Mô tả không được quá 500 ký tự" },
+            ]}
+          >
+            <TextArea
               placeholder="Thêm mô tả chi tiết về nhóm sản phẩm này..."
+              rows={4}
+              style={{
+                borderRadius: 12,
+                fontSize: 15,
+                padding: "12px 16px",
+                resize: "none",
+              }}
+              showCount
+              maxLength={500}
             />
-          </div>
+          </Form.Item>
+
+          <Divider style={{ margin: "24px 0" }} />
 
           {/* Buttons */}
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 12 }}>
             <Button
-              type="button"
-              variant="outline"
-              onClick={handleCancel}
-              className="px-6 py-2.5 rounded-xl border-2 border-gray-300 text-gray-700 font-semibold hover:bg-gray-50 hover:border-gray-400 transition-all duration-200"
+              size="large"
+              icon={<CloseOutlined />}
+              onClick={onCancel}
+              style={{
+                borderRadius: 12,
+                height: 48,
+                paddingInline: 24,
+                fontWeight: 600,
+              }}
             >
-              <span className="flex items-center gap-2">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-                Hủy
-              </span>
+              Hủy bỏ
             </Button>
             <Button
-              type="submit"
-              className={`px-6 py-2.5 rounded-xl font-semibold text-white transition-all duration-200 flex items-center gap-2 ${
-                loading
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 shadow-lg hover:shadow-xl transform hover:scale-105"
-              }`}
-              disabled={loading}
+              type="primary"
+              size="large"
+              icon={<SaveOutlined />}
+              htmlType="submit"
+              loading={loading}
+              style={{
+                borderRadius: 12,
+                height: 48,
+                paddingInline: 32,
+                fontWeight: 600,
+                background: "linear-gradient(135deg, #52c41a 0%, #237804 100%)",
+                border: "none",
+                boxShadow: "0 4px 16px rgba(82, 196, 26, 0.4)",
+              }}
             >
-              {loading ? (
-                <>
-                  <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                  </svg>
-                  Đang xử lý...
-                </>
-              ) : group ? (
-                <>
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  Lưu thay đổi
-                </>
-              ) : (
-                <>
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  Tạo nhóm
-                </>
-              )}
+              {group ? "Lưu thay đổi" : "Tạo nhóm"}
             </Button>
           </div>
-        </form>
+        </Form>
       </div>
-    </div>
+    </Card>
   );
 }

@@ -35,7 +35,7 @@ router.post(
   "/upload",
   verifyToken,
   checkStoreAccess,
-  requirePermission("file:view"),
+  requirePermission("files:upload"),
   (req, res, next) => {
     upload.single("file")(req, res, function (err) {
       if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
@@ -55,21 +55,21 @@ router.get(
   "/store/:storeId",
   verifyToken,
   checkStoreAccess,
-  requirePermission("file:view"),
+  requirePermission("files:view"),
   getFilesByStore
 );
 router.get(
   "/:id",
   verifyToken,
   checkStoreAccess,
-  requirePermission("file:view"),
+  requirePermission("files:view"),
   getFileById
 );
 router.delete(
   "/:id",
   verifyToken,
   checkStoreAccess,
-  requirePermission("file:view"),
+  requirePermission("files:delete"),
   deleteFile
 );
 

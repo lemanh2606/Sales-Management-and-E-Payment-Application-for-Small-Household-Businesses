@@ -110,9 +110,27 @@ router.post("/logout", verifyToken, logout);
 
 // ==================== MANAGER ROUTES ====================
 
-router.post("/staff/soft-delete", verifyToken, softDeleteUser);
-router.post("/staff/restore", verifyToken, restoreUser);
-router.get("/permissions/catalog", verifyToken, getPermissionCatalog);
+router.post(
+  "/staff/soft-delete",
+  verifyToken,
+  checkStoreAccess,
+  requirePermission("users:delete"),
+  softDeleteUser
+);
+router.post(
+  "/staff/restore",
+  verifyToken,
+  checkStoreAccess,
+  requirePermission("users:update"),
+  restoreUser
+);
+router.get(
+  "/permissions/catalog",
+  verifyToken,
+  checkStoreAccess,
+  requirePermission("users:view"),
+  getPermissionCatalog
+);
 
 // ==================== ADMIN / MANAGER UPDATE USER ====================
 

@@ -80,14 +80,14 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
     {
       $match: {
         storeId: objectStoreId,
-        status: { $in: ["paid", "partially_refunded"] }, // ✅ KHÔNG tính "refunded"
+        status: { $in: ["paid", "partially_refunded", "refunded"] }, // ✅ Bao gồm cả refunded để lấy gross ban đầu
         createdAt: { $gte: start, $lte: end },
       },
     },
     {
       $group: {
         _id: null,
-        grossRevenue: { $sum: "$totalAmount" },
+        grossRevenue: { $sum: { $toDecimal: "$totalAmount" } },
         totalOrders: { $sum: 1 },
         paidOrders: {
           $sum: { $cond: [{ $eq: ["$status", "paid"] }, 1, 0] },
@@ -106,7 +106,6 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
     partiallyRefundedOrders: 0,
   };
 
-  //// ✅ ĐẾM SỐ ĐƠN HOÀN TOÀN BỘ (KHÔNG TÍNH VÀO DOANH THU)
   const fullyRefundedCount = await Order.countDocuments({
     storeId: objectStoreId,
     status: "refunded",
@@ -114,7 +113,7 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
   });
 
   // ================================================================
-  // 2️⃣ TỔNG TIỀN HOÀN TRẢ (Chỉ từ đơn partially_refunded)
+  // 2️⃣ TỔNG TIỀN HOÀN TRẢ (Tính theo ngày hoàn hàng - RefundedAt)
   // ================================================================
   const refundAgg = await OrderRefund.aggregate([
     {
@@ -127,19 +126,15 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
         from: "orders",
         localField: "orderId",
         foreignField: "_id",
-        as: "order",
+        as: "orderInfo",
       },
     },
-    {
-      $match: {
-        "order.storeId": objectStoreId,
-        "order.status": { $in: ["partially_refunded"] }, // ✅ CHỈ tính hoàn một phần
-      },
-    },
+    { $unwind: "$orderInfo" },
+    { $match: { "orderInfo.storeId": objectStoreId } },
     {
       $group: {
         _id: null,
-        totalRefundAmount: { $sum: "$refundAmount" },
+        totalRefundAmount: { $sum: { $toDecimal: "$refundAmount" } },
         totalRefundCount: { $sum: 1 },
       },
     },
@@ -150,7 +145,7 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
     totalRefundCount: 0,
   };
 
-  // ✅ DOANH THU THỰC = Tổng đã thanh toán - Hoàn một phần
+  // ✅ DOANH THU THỰC = Tổng đã thanh toán (phát sinh trong kỳ) - Hoàn trả (phát sinh trong kỳ)
   let grossRevenue = toNumber(revenueData.grossRevenue);
   let totalRefundAmount = toNumber(refundData.totalRefundAmount);
   let totalRevenue = grossRevenue - totalRefundAmount;
@@ -162,7 +157,7 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
     {
       $match: {
         storeId: objectStoreId,
-        status: { $in: ["paid", "partially_refunded"] },
+        status: { $in: ["paid", "partially_refunded", "refunded"] },
         createdAt: { $gte: start, $lte: end },
       },
     },
@@ -176,7 +171,7 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
   // Lấy danh sách orderId của đơn paid & partially_refunded
   const validOrders = await Order.find({
     storeId: objectStoreId,
-    status: { $in: ["paid", "partially_refunded"] },
+    status: { $in: ["paid", "partially_refunded", "refunded"] },
     createdAt: { $gte: start, $lte: end },
   }).select("_id");
 
@@ -208,13 +203,13 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
   let totalCOGS = toNumber(cogsAgg[0]?.totalCOGS);
 
   // ✅ TRỪ ĐI COGS CỦA HÀNG HOÀN (Chỉ từ đơn partially_refunded)
-  const partiallyRefundedOrders = await Order.find({
+  const refundedOrders = await Order.find({
     storeId: objectStoreId,
-    status: "partially_refunded",
+    status: { $in: ["partially_refunded", "refunded"] },
     createdAt: { $gte: start, $lte: end },
   }).select("_id");
 
-  const partiallyRefundedOrderIds = partiallyRefundedOrders.map((o) => o._id);
+  const refundedOrderIds = refundedOrders.map((o) => o._id);
 
   const refundCogsAgg = await InventoryVoucher.aggregate([
     {
@@ -223,7 +218,6 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
         type: "IN",
         status: "POSTED",
         ref_type: "ORDER_REFUND",
-        ref_id: { $in: partiallyRefundedOrderIds }, // ✅ CHỈ hoàn một phần
         voucher_date: { $gte: start, $lte: end },
       },
     },
@@ -241,13 +235,16 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
   ]);
   let totalRefundCOGS = toNumber(refundCogsAgg[0]?.totalRefundCOGS);
 
-  // COGS thực = COGS bán - COGS hoàn
-  totalCOGS = totalCOGS - totalRefundCOGS;
+  // COGS thực = COGS bán - COGS hoàn (không âm)
+  totalCOGS = Math.max(0, totalCOGS - totalRefundCOGS);
 
   // ================================================================
   // 5️⃣ LỢI NHUẬN GỘP
   // ================================================================
-  let grossProfit = totalRevenue - totalCOGS;
+  // Doanh thu thực không thể âm
+  totalRevenue = Math.max(0, totalRevenue);
+  
+  let grossProfit = Math.max(0, totalRevenue - totalCOGS);
 
   // 5️⃣ Chi phí vận hành (Operating Cost)
   // Tính lương nhân viên và hoa hồng (Dành cho hộ kinh doanh có thuê staff)
@@ -411,7 +408,7 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
               $expr: {
                 $and: [
                   { $eq: ["$order.storeId", objectStoreId] },
-                  { $in: ["$order.status", ["paid", "partially_refunded"]] }, // ✅ Không tính refunded
+                  { $in: ["$order.status", ["paid", "partially_refunded", "refunded"]] }, // ✅ Bao gồm cả refunded
                   { $gte: ["$order.printDate", start] },
                   { $lte: ["$order.printDate", end] },
                 ],

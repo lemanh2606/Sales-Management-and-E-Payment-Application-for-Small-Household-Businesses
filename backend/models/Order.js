@@ -21,7 +21,9 @@ const orderSchema = new Schema(
       default: "pending",
     }, // Trạng thái
 
-    refundId: { type: Schema.Types.ObjectId, ref: "OrderRefund", default: null }, // Hoàn trả
+    refundId: { type: Schema.Types.ObjectId, ref: "OrderRefund", default: null }, // Hoàn trả (Phiếu hoàn cuối cùng)
+    refundedAmount: { type: Schema.Types.Decimal128, default: "0" }, // Tổng tiền đã hoàn
+    totalRefundedQuantity: { type: Number, default: 0 }, // Tổng số lượng đã hoàn
 
     printDate: { type: Date, default: null }, // Ngày in bill
     printCount: { type: Number, default: 0 }, // Số lần in bill

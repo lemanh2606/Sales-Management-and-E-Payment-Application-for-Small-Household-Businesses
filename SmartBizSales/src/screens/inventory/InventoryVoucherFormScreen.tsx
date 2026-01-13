@@ -128,6 +128,14 @@ const InventoryVoucherFormScreen: React.FC = () => {
     }
     return parseFloat(val || 0);
   };
+
+  const getAvailableStock = (product: any) => {
+    if (!product.batches || product.batches.length === 0) return product.stock_quantity || 0;
+    return product.batches.reduce((sum: number, b: any) => {
+      const isExpired = !!(b.expiry_date && new Date(b.expiry_date) < new Date());
+      return isExpired ? sum : sum + (b.quantity || 0);
+    }, 0);
+  };
   
   const addItem = (product: any) => {
     const existing = items.find(it => it.productId === product._id);
@@ -350,6 +358,17 @@ const InventoryVoucherFormScreen: React.FC = () => {
       }
       if (item.unit_cost < 0) {
         errors.push(`• Dòng ${idx + 1}: Giá vốn không hợp lệ`);
+      }
+
+      // Kiểm tra tồn kho khả dụng nếu là phiếu XUẤT
+      if (type === "OUT") {
+        const prod = allProducts.find(p => p._id === item.productId);
+        if (prod) {
+          const avail = getAvailableStock(prod);
+          if (item.quantity > avail) {
+            errors.push(`• Dòng ${idx + 1}: "${item.name}" vượt tồn kho khả dụng (Tối đa: ${avail})`);
+          }
+        }
       }
     });
     
@@ -801,15 +820,18 @@ const InventoryVoucherFormScreen: React.FC = () => {
                         <Text style={styles.productResultUnit}>{item.unit || "Cái"}</Text>
                       </View>
                       <View style={styles.productResultStock}>
-                         <View style={[styles.stockBadge, { backgroundColor: (item.stock_quantity || 0) > 0 ? "#ecfdf5" : "#fff1f2" }]}>
-                           <Text style={[styles.stockBadgeText, { color: (item.stock_quantity || 0) > 0 ? "#059669" : "#e11d48" }]}>
-                             Tồn: {item.stock_quantity ?? 0}
+                         <View style={[styles.stockBadge, { backgroundColor: (getAvailableStock(item)) > 0 ? "#ecfdf5" : "#fff1f2" }]}>
+                           <Text style={[styles.stockBadgeText, { color: (getAvailableStock(item)) > 0 ? "#059669" : "#e11d48" }]}>
+                             {getAvailableStock(item) > 0 ? `Khả dụng: ${getAvailableStock(item)}` : "Hết hàng khả dụng"}
                            </Text>
                          </View>
-                         <Text style={styles.productResultPrice}>
-                           {new Intl.NumberFormat('vi-VN').format(type === "IN" ? (item.cost_price?.$numberDecimal || item.cost_price || 0) : (item.price?.$numberDecimal || item.price || 0))} ₫
-                         </Text>
+                         {item.stock_quantity > getAvailableStock(item) && (
+                           <Text style={{ fontSize: 10, color: '#ef4444', marginLeft: 8 }}>(-{item.stock_quantity - getAvailableStock(item)} hết hạn)</Text>
+                         )}
                       </View>
+                      <Text style={styles.productResultPrice}>
+                         {new Intl.NumberFormat('vi-VN').format(type === "IN" ? (extractNumber(item.cost_price)) : (extractNumber(item.price)))} ₫
+                      </Text>
                     </View>
                     <View style={styles.addBtnCircle}>
                       <Ionicons name="add" size={20} color="#fff" />
@@ -878,16 +900,24 @@ const InventoryVoucherFormScreen: React.FC = () => {
                     <FlatList
                         data={availableBatches}
                         keyExtractor={(item, index) => item.batch_no || index.toString()}
-                        renderItem={({ item }) => (
-                            <TouchableOpacity style={styles.searchItem} onPress={() => handleSelectBatch(item)}>
+                        renderItem={({ item }) => {
+                          const bExp = item.expiry_date && new Date(item.expiry_date) < new Date();
+                          return (
+                            <TouchableOpacity 
+                              style={[styles.searchItem, bExp && { opacity: 0.6, backgroundColor: '#fff1f2' }]} 
+                              onPress={() => handleSelectBatch(item)}
+                            >
                                 <View style={{flex: 1}}>
                                     <View style={{flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap'}}>
-                                       <Ionicons name="cube-outline" size={16} color="#4f46e5" style={{marginRight: 6}} />
-                                       <Text style={[styles.searchItemName, {flex: 1, marginRight: 8}]} numberOfLines={2}>{item.batch_no}</Text>
+                                       <Ionicons name="cube-outline" size={16} color={bExp ? "#ef4444" : "#4f46e5"} style={{marginRight: 6}} />
+                                       <Text style={[styles.searchItemName, {flex: 1, marginRight: 8}, bExp && { textDecorationLine: 'line-through', color: '#64748b' }]} numberOfLines={2}>{item.batch_no}</Text>
                                     </View>
                                     <View style={{marginTop: 4}}>
                                         <Text style={styles.searchItemSku}>SL: {item.quantity}</Text>
-                                        <Text style={styles.searchItemSku}>HSD: {item.expiry_date ? (new Date(item.expiry_date).toISOString().split('T')[0]) : '---'}</Text>
+                                        <Text style={[styles.searchItemSku, bExp && { color: '#ef4444', fontWeight: 'bold' }]}>
+                                          HSD: {item.expiry_date ? (new Date(item.expiry_date).toISOString().split('T')[0]) : '---'}
+                                          {bExp ? " (HẾT HẠN)" : ""}
+                                        </Text>
                                     </View>
                                 </View>
                                 <View style={{alignItems: 'flex-end', justifyContent: 'center'}}>
@@ -895,7 +925,8 @@ const InventoryVoucherFormScreen: React.FC = () => {
                                    {item.selling_price && <Text style={[styles.searchItemSku, {color: '#059669'}]}>Bán: {new Intl.NumberFormat('vi-VN').format(extractNumber(item.selling_price))}đ</Text>}
                                 </View>
                             </TouchableOpacity>
-                        )}
+                          );
+                        }}
                         contentContainerStyle={{ padding: 16 }}
                     />
                 ) : (

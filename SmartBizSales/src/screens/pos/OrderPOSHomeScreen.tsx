@@ -16,7 +16,6 @@ import {
   Modal,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -26,6 +25,7 @@ import {
   Share,
   TouchableOpacity,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import apiClient from "../../api/apiClient";
@@ -186,6 +186,14 @@ const Badge: React.FC<{ value: number | string }> = ({ value }) => (
 type PaymentMethod = "cash" | "qr";
 type SaleType = "NORMAL" | "AT_COST" | "VIP" | "CLEARANCE" | "FREE";
 
+type ProductBatch = {
+  batch_no: string;
+  expiry_date: string | null;
+  cost_price: any;
+  selling_price?: any;
+  quantity: number;
+};
+
 type Product = {
   _id: string;
   name: string;
@@ -195,6 +203,7 @@ type Product = {
   stock_quantity: number;
   unit: string;
   image?: { url: string };
+  batches?: ProductBatch[];
 };
 
 type Customer = {
@@ -828,11 +837,32 @@ const OrderPOSHomeScreen: React.FC = () => {
   const selectingCustomerRef = useRef(false);
   const selectingProductRef = useRef(false);
 
+  // Tính toán tồn kho khả dụng (trừ đi các lô đã hết hạn)
+  const getAvailableStock = (product: Product) => {
+    if (!product.batches || product.batches.length === 0) return product.stock_quantity;
+    
+    // Tổng số lượng trong các lô chưa hết hạn
+    const available = product.batches.reduce((sum: number, b: ProductBatch) => {
+      const isExpired = !!(b.expiry_date && new Date(b.expiry_date) < new Date());
+      return isExpired ? sum : sum + (b.quantity || 0);
+    }, 0);
+    
+    return available;
+  };
+
   const addToCart = useCallback(
     (product: Product) => {
-      // Check if product is out of stock
-      if (product.stock_quantity <= 0) {
-        Alert.alert("Hết hàng", `Sản phẩm "${product.name}" đã hết hàng trong kho.`);
+      const availableStock = getAvailableStock(product);
+
+      // Check if product is out of stock or expired
+      if (availableStock <= 0) {
+        const hasExpired = product.batches && product.batches.some(b => b.expiry_date && new Date(b.expiry_date) < new Date());
+        Alert.alert(
+          hasExpired ? "Hàng hết hạn" : "Hết hàng", 
+          hasExpired 
+            ? `Sản phẩm "${product.name}" hiện chỉ còn các lô đã hết hạn sử dụng, không thể bán.`
+            : `Sản phẩm "${product.name}" đã hết hàng trong kho.`
+        );
         return;
       }
       
@@ -846,11 +876,11 @@ const OrderPOSHomeScreen: React.FC = () => {
         if (existing) {
           const newQty = existing.quantity + 1;
           
-          // Check if new quantity exceeds stock
-          if (newQty > product.stock_quantity) {
+          // Check if new quantity exceeds available stock
+          if (newQty > availableStock) {
             Alert.alert(
-              "Vượt tồn kho", 
-              `Sản phẩm "${product.name}" chỉ còn ${product.stock_quantity} đơn vị trong kho. Bạn đã có ${existing.quantity} trong giỏ.`
+              "Vượt tồn kho khả dụng", 
+              `Sản phẩm "${product.name}" chỉ còn ${availableStock} có thể bán (không tính hàng hết hạn). Bạn đã có ${existing.quantity} trong giỏ.`
             );
             return;
           }
@@ -879,7 +909,7 @@ const OrderPOSHomeScreen: React.FC = () => {
               overridePrice: null,
               saleType: "NORMAL",
               subtotal: priceNum.toFixed(2),
-              stock_quantity: product.stock_quantity, // Store stock for later validation
+              stock_quantity: availableStock, // Store available stock
             },
           ];
         }
@@ -1694,19 +1724,6 @@ const OrderPOSHomeScreen: React.FC = () => {
     [openPriceModal, removeItem, updateQuantity]
   );
 
-  // ===== render loading =====
-  if (loadingInit) {
-    return (
-      <SafeAreaView style={styles.safe}>
-        <StatusBar barStyle="dark-content" backgroundColor={COLORS.surface} />
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.mutedText}>Đang tải...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
   // ===== UI: Buttons State =====
   const canOpenBill = useMemo(() => {
     return !!currentTab.pendingOrderId;
@@ -1739,6 +1756,19 @@ const OrderPOSHomeScreen: React.FC = () => {
     // Cho phép update kể cả khi đã có pendingOrderId
     return true;
   }, [currentTab.cart, currentTab.pendingOrderId]);
+
+  // ===== render loading =====
+  if (loadingInit) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <StatusBar barStyle="dark-content" backgroundColor={COLORS.surface} />
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.mutedText}>Đang tải...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -1934,52 +1964,67 @@ const OrderPOSHomeScreen: React.FC = () => {
                     keyboardShouldPersistTaps="always"
                     showsVerticalScrollIndicator={false}
                   >
-                    {suggestedProducts.map((p) => (
-                      <Pressable
-                        key={p._id}
-                        onPressIn={() => (selectingProductRef.current = true)}
-                        onPressOut={() => (selectingProductRef.current = false)}
-                        onPress={() => addToCart(p)}
-                        style={({ pressed }) => [
-                          styles.productCard,
-                          pressed && styles.productCardPressed,
-                        ]}
-                      >
-                        {/* Product Image */}
-                        {p.image?.url ? (
-                          <Image source={{ uri: p.image.url }} style={styles.productThumb} />
-                        ) : (
-                          <View style={[styles.productThumb, styles.productThumbEmpty]}>
-                            <Ionicons name="cube" size={20} color={COLORS.muted} />
-                          </View>
-                        )}
-                        
-                        {/* Product Info */}
-                        <View style={styles.productInfo}>
-                          <Text style={styles.productName} numberOfLines={1}>
-                            {p.name}
-                          </Text>
-                          <View style={styles.productMeta}>
-                            <Text style={styles.productSku}>{p.sku}</Text>
-                            <View style={styles.stockBadge}>
-                              <Text style={styles.stockText}>
-                                Tồn: {p.stock_quantity}
-                              </Text>
+                    {suggestedProducts.map((p) => {
+                      const avail = getAvailableStock(p);
+                      const isOut = avail <= 0;
+                      const hasBatches = p.batches && p.batches.length > 0;
+
+                      return (
+                        <Pressable
+                          key={p._id}
+                          onPressIn={() => (selectingProductRef.current = true)}
+                          onPressOut={() => (selectingProductRef.current = false)}
+                          onPress={() => !isOut && addToCart(p)}
+                          style={({ pressed }) => [
+                            styles.productCard,
+                            pressed && !isOut && styles.productCardPressed,
+                            isOut && { opacity: 0.6 }
+                          ]}
+                        >
+                          <View style={{ width: '100%' }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                              {/* Product Image */}
+                              {p.image?.url ? (
+                                <Image source={{ uri: p.image.url }} style={styles.productThumb} />
+                              ) : (
+                                <View style={[styles.productThumb, styles.productThumbEmpty]}>
+                                  <Ionicons name="cube" size={20} color={COLORS.muted} />
+                                </View>
+                              )}
+                              
+                              {/* Product Info */}
+                              <View style={styles.productInfo}>
+                                <Text style={[styles.productName, isOut && { color: COLORS.muted }]} numberOfLines={1}>
+                                  {p.name}
+                                </Text>
+                                <View style={styles.productMeta}>
+                                  <Text style={styles.productSku}>{p.sku}</Text>
+                                  <View style={[styles.stockBadge, isOut && { backgroundColor: '#fee2e2' }]}>
+                                    <Text style={[styles.stockText, isOut && { color: COLORS.danger }]}>
+                                      {isOut ? "Hết hàng có thể bán" : `Tồn: ${avail}`}
+                                    </Text>
+                                  </View>
+                                </View>
+                              </View>
+                              
+                              {/* Price & Add Button */}
+                              <View style={styles.productRight}>
+                                <Text style={[styles.productPrice, isOut && { color: COLORS.muted }]}>
+                                  {formatPrice(p.price)}
+                                </Text>
+                                {!isOut && (
+                                  <View style={styles.addBtnMini}>
+                                    <Ionicons name="add" size={16} color={COLORS.white} />
+                                  </View>
+                                )}
+                              </View>
                             </View>
+
+                            {/* Đã ẩn chi tiết lô hàng để tối ưu giao diện theo yêu cầu */}
                           </View>
-                        </View>
-                        
-                        {/* Price & Add Button */}
-                        <View style={styles.productRight}>
-                          <Text style={styles.productPrice}>
-                            {formatPrice(p.price)}
-                          </Text>
-                          <View style={styles.addBtnMini}>
-                            <Ionicons name="add" size={16} color={COLORS.white} />
-                          </View>
-                        </View>
-                      </Pressable>
-                    ))}
+                        </Pressable>
+                      );
+                    })}
                   </ScrollView>
                 )}
               </View>

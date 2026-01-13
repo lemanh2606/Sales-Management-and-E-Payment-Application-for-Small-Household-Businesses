@@ -286,32 +286,38 @@ const login = async (req, res) => {
         console.log(`✅ Đã restore full menu cho MANAGER ${user.username}`);
       }
     } else if (user.role === "STAFF") {
-      // STAFF: Chỉ bổ sung các quyền mặc định nếu thiếu, GIỮ NGUYÊN quyền thừa
+      // STAFF: Cập nhật quyền mặc định và LOẠI BỎ các quyền bị cấm
       const currentMenu = user.menu || [];
 
-      // Tìm các quyền mặc định bị thiếu
+      // Danh sách các quyền cấm đối với STAFF theo yêu cầu mới
+      const prohibitedPatterns = [
+        "store:employee:",
+        "employees:",
+        "reports:",
+        "settings:activity-log",
+        "settings:payment-method",
+        "inventory:stock-check",
+        "users:",
+      ];
+
+      // 1. Loại bỏ các quyền bị cấm nếu lỡ có trong DB
+      const filteredMenu = currentMenu.filter((perm) => {
+        return !prohibitedPatterns.some((pattern) => perm.startsWith(pattern));
+      });
+
+      // 2. Tìm các quyền mặc định bị thiếu
       const missingDefaultPermissions = STAFF_DEFAULT_MENU.filter(
-        (perm) => !currentMenu.includes(perm)
+        (perm) => !filteredMenu.includes(perm)
       );
 
-      if (missingDefaultPermissions.length > 0) {
-        console.log(
-          `⚠️ STAFF ${user.username}: thiếu ${missingDefaultPermissions.length}/${STAFF_DEFAULT_MENU.length} quyền mặc định`
-        );
-        console.log(`   Các quyền thiếu:`, missingDefaultPermissions);
-
-        // Bổ sung thêm các quyền thiếu, GIỮ NGUYÊN quyền cũ
-        user.menu = [
-          ...new Set([...currentMenu, ...missingDefaultPermissions]),
-        ];
+      // Nếu có sự thay đổi (loại bỏ hoặc bổ sung) -> Cập nhật DB
+      if (
+        missingDefaultPermissions.length > 0 ||
+        filteredMenu.length !== currentMenu.length
+      ) {
+        user.menu = [...new Set([...filteredMenu, ...missingDefaultPermissions])];
         menuUpdated = true;
-
-        console.log(
-          `✅ Đã bổ sung ${missingDefaultPermissions.length} quyền cho STAFF ${user.username}`
-        );
-        console.log(
-          `   Menu hiện tại có ${user.menu.length} quyền (bao gồm cả custom)`
-        );
+        console.log(`✅ Đã đồng bộ lại menu cho STAFF ${user.username} (Lọc bỏ quyền cấm & Bổ sung mặc định)`);
       }
     }
     // ========== 👆 END SYNC LOGIC 👆 ==========
@@ -1250,11 +1256,14 @@ const softDeleteUser = async (req, res) => {
       return res.status(400).json({ message: "Thiếu targetUserId" });
     }
 
-    const manager = await User.findById(userId);
-    if (!manager || manager.role !== "MANAGER") {
-      return res
-        .status(403)
-        .json({ message: "Chỉ manager mới được xóa nhân viên" });
+    const requester = await User.findById(userId);
+    if (!requester) {
+      return res.status(404).json({ message: "Người dùng không tồn tại" });
+    }
+
+    const store = req.store;
+    if (!store) {
+      return res.status(400).json({ message: "Không xác định được cửa hàng" });
     }
 
     const targetUser = await User.findById(targetUserId);
@@ -1268,10 +1277,12 @@ const softDeleteUser = async (req, res) => {
         .json({ message: "Tài khoản nhân viên này đã bị xoá trước đó rồi!" });
     }
 
-    if (String(manager.current_store) !== String(targetUser.current_store)) {
-      return res
-        .status(403)
-        .json({ message: "Bạn chỉ xóa được nhân viên ở cửa hàng hiện tại" });
+    // Kiểm tra xem targetUser có thuộc store này không
+    const isMember = targetUser.stores.some(s => String(s) === String(store._id)) || 
+                     String(targetUser.current_store) === String(store._id);
+    
+    if (!isMember) {
+      return res.status(403).json({ message: "Nhân viên không thuộc cửa hàng này" });
     }
 
     targetUser.isDeleted = true;
@@ -1285,18 +1296,18 @@ const softDeleteUser = async (req, res) => {
     }
 
     await logActivity({
-      user: manager,
-      store: { _id: manager.current_store },
+      user: requester,
+      store: { _id: store._id },
       action: "delete",
       entity: "User",
       entityId: targetUser._id,
       entityName: targetUser.username,
       req,
-      description: `Manager ${manager.username} đã xóa mềm nhân viên ${targetUser.username} tại cửa hàng ${manager.current_store}`,
+      description: `${requester.username} đã xóa mềm nhân viên ${targetUser.username} tại cửa hàng ${store.name}`,
     });
 
     console.log(
-      `Manager ${manager.username} xóa mềm nhân viên ${targetUser.username} ở store ${manager.current_store}`
+      `${requester.username} xóa mềm nhân viên ${targetUser.username} ở store ${store._id}`
     );
     res.json({ message: "Xóa mềm nhân viên thành công" });
   } catch (err) {
@@ -1314,11 +1325,14 @@ const restoreUser = async (req, res) => {
       return res.status(400).json({ message: "Thiếu targetUserId" });
     }
 
-    const manager = await User.findById(userId);
-    if (!manager || manager.role !== "MANAGER") {
-      return res
-        .status(403)
-        .json({ message: "Chỉ manager mới được khôi phục nhân viên" });
+    const requester = await User.findById(userId);
+    if (!requester) {
+      return res.status(404).json({ message: "Người dùng không tồn tại" });
+    }
+
+    const store = req.store;
+    if (!store) {
+      return res.status(400).json({ message: "Không xác định được cửa hàng" });
     }
 
     const targetUser = await User.findById(targetUserId);
@@ -1330,10 +1344,12 @@ const restoreUser = async (req, res) => {
       return res.status(400).json({ message: "Nhân viên chưa bị xóa mềm" });
     }
 
-    if (String(manager.current_store) !== String(targetUser.current_store)) {
-      return res.status(403).json({
-        message: "Bạn chỉ khôi phục được nhân viên ở cửa hàng hiện tại",
-      });
+    // Kiểm tra xem targetUser có thuộc store này không
+    const isMember = targetUser.stores.some(s => String(s) === String(store._id)) || 
+                     String(targetUser.current_store) === String(store._id);
+    
+    if (!isMember) {
+      return res.status(403).json({ message: "Nhân viên không thuộc cửa hàng này" });
     }
 
     targetUser.isDeleted = false;
@@ -1347,18 +1363,18 @@ const restoreUser = async (req, res) => {
     }
 
     await logActivity({
-      user: manager,
-      store: { _id: manager.current_store },
+      user: requester,
+      store: { _id: store._id },
       action: "restore",
       entity: "User",
       entityId: targetUser._id,
       entityName: targetUser.username,
       req,
-      description: `Manager ${manager.username} đã khôi phục nhân viên ${targetUser.username} tại cửa hàng ${manager.current_store}`,
+      description: `${requester.username} đã khôi phục nhân viên ${targetUser.username} tại cửa hàng ${store.name}`,
     });
 
     console.log(
-      `Manager ${manager.username} khôi phục nhân viên ${targetUser.username} ở store ${manager.current_store}`
+      `${requester.username} khôi phục nhân viên ${targetUser.username} ở store ${store._id}`
     );
     res.json({ message: "Khôi phục nhân viên thành công" });
   } catch (err) {

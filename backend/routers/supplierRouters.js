@@ -25,7 +25,7 @@ router.post(
   verifyToken,
   checkStoreAccess,
 
-  requirePermission("supplier:create"),
+  requirePermission("suppliers:create"),
   createSupplier
 );
 
@@ -34,7 +34,7 @@ router.get(
   "/stores/:storeId",
   verifyToken,
   checkStoreAccess,
-  requirePermission("supplier:view"),
+  requirePermission("suppliers:view"),
   getSuppliersByStore
 );
 
@@ -43,7 +43,7 @@ router.get(
   "/stores/:storeId/export",
   verifyToken,
   checkStoreAccess,
-  requirePermission("supplier:export"),
+  requirePermission("suppliers:export"),
   exportSuppliersByStore
 );
 
@@ -52,7 +52,7 @@ router.get(
 router.put(
   "/:id/restore",
   verifyToken,
-  requirePermission("supplier:restore"),
+  requirePermission("suppliers:restore"),
   restoreSupplier
 );
 
@@ -60,7 +60,7 @@ router.put(
 router.get(
   "/:supplierId",
   verifyToken,
-  requirePermission("supplier:view"),
+  requirePermission("suppliers:view"),
   getSupplierById
 );
 
@@ -69,7 +69,7 @@ router.put(
   "/:supplierId",
   verifyToken,
 
-  requirePermission("supplier:update"),
+  requirePermission("suppliers:update"),
   updateSupplier
 );
 
@@ -78,7 +78,7 @@ router.delete(
   "/:supplierId",
   verifyToken,
 
-  requirePermission("supplier:delete"),
+  requirePermission("suppliers:delete"),
   deleteSupplier
 );
 

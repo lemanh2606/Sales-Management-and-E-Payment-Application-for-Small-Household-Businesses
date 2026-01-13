@@ -20,6 +20,7 @@ import DateTimePicker, {
 import dayjs from "dayjs";
 import quarterOfYear from "dayjs/plugin/quarterOfYear";
 import "dayjs/locale/vi";
+import { BarChart } from "react-native-gifted-charts";
 
 import { useAuth } from "../../context/AuthContext";
 import apiClient from "../../api/apiClient";
@@ -110,9 +111,6 @@ function PeriodTypePill({
   );
 }
 
-/**
- * Field button: hiển thị rõ “Giá trị chính” + “Mã kỳ”.
- */
 function DateFieldButton({
   label,
   valueText,
@@ -200,11 +198,11 @@ const RevenueReportScreen: React.FC = () => {
     value: number | { $numberDecimal: string } | undefined | null
   ): number => {
     if (value === null || value === undefined) return 0;
-    if (typeof value === "object") {
+    if (typeof value === "object" && "$numberDecimal" in value) {
       const n = parseFloat(value.$numberDecimal);
       return Number.isFinite(n) ? n : 0;
     }
-    return Number.isFinite(value) ? value : 0;
+    return typeof value === "number" && Number.isFinite(value) ? value : 0;
   };
 
   const formatVND = (
@@ -313,7 +311,6 @@ const RevenueReportScreen: React.FC = () => {
         );
         setEmployeeData(empRes.data.data || []);
 
-        // Chỉ thu gọn khi user bấm “Xem báo cáo” hoặc dùng “Chọn nhanh”
         if (collapseOnSuccess) setIsFilterExpanded(false);
       } catch (err: any) {
         const errorMessage =
@@ -353,15 +350,11 @@ const RevenueReportScreen: React.FC = () => {
     setSelectedMonth(now.month() + 1);
     setSelectedQuarter(now.quarter());
 
-    // Không auto fetch, không auto collapse
     setSummary(null);
     setEmployeeData([]);
     setError(null);
   }, []);
 
-  /**
-   * Chọn nhanh: tự tải + tự thu gọn (đúng yêu cầu).
-   */
   const applyPreset = useCallback(
     async (preset: QuickPreset) => {
       const now = dayjs();
@@ -387,23 +380,17 @@ const RevenueReportScreen: React.FC = () => {
         nextType = "year";
       }
 
-      // Update UI state trước (để pill/label hiển thị đúng)
       setPeriodType(nextType);
       setSelectedYear(y);
       setSelectedMonth(m);
       setSelectedQuarter(q);
 
       const key = buildPeriodKey(nextType, y, m, q);
-
-      // Tải ngay + thu gọn sau khi tải OK
       await fetchReport({ type: nextType, key, collapseOnSuccess: true });
     },
     [buildPeriodKey, fetchReport]
   );
 
-  /**
-   * Điều hướng kỳ trước/sau: chỉ đổi selection, không fetch, không collapse.
-   */
   const shiftPeriod = useCallback(
     (direction: -1 | 1) => {
       setActivePreset(null);
@@ -438,9 +425,6 @@ const RevenueReportScreen: React.FC = () => {
     [periodType, selectedMonth, selectedQuarter, selectedYear]
   );
 
-  // =====================
-  // PICKER logic
-  // =====================
   const openPicker = useCallback(
     (target: PickerTarget) => {
       setActivePreset(null);
@@ -500,8 +484,6 @@ const RevenueReportScreen: React.FC = () => {
         setShowDatePicker(false);
         return;
       }
-
-      // iOS: update tempDate live
       if (date) setTempDate(date);
     },
     [applyPickedDate, pickerTarget, tempDate]
@@ -526,14 +508,13 @@ const RevenueReportScreen: React.FC = () => {
   };
 
   const sortedEmployeeData = useMemo((): EmployeeRevenue[] => {
-    const sorted = [...employeeData].sort((a, b) => {
+    return [...employeeData].sort((a, b) => {
       const aValue =
         sortBy === "orders" ? a.countOrders : toNumber(a.totalRevenue);
       const bValue =
         sortBy === "orders" ? b.countOrders : toNumber(b.totalRevenue);
       return sortOrder === "asc" ? aValue - bValue : bValue - aValue;
     });
-    return sorted;
   }, [employeeData, sortBy, sortOrder]);
 
   // =====================
@@ -546,8 +527,10 @@ const RevenueReportScreen: React.FC = () => {
     item: EmployeeRevenue;
     index: number;
   }): JSX.Element => {
-    const rankColors = ["#fbbf24", "#d1d5db", "#f97316"];
-    const rankColor = index < 3 ? rankColors[index] : "#6b7280";
+    const rankColors = ["#fbbf24", "#94a3b8", "#d97706"];
+    const rankColor = index < 3 ? rankColors[index] : "#cbd5e1";
+    const maxRevenue = Math.max(...employeeData.map(e => toNumber(e.totalRevenue)), 1);
+    const progress = (toNumber(item.totalRevenue) / maxRevenue) * 100;
 
     return (
       <View style={styles.employeeCard}>
@@ -557,40 +540,33 @@ const RevenueReportScreen: React.FC = () => {
 
         <View style={styles.employeeInfo}>
           <View style={styles.employeeHeader}>
-            <Ionicons name="person-circle" size={24} color="#1890ff" />
             <View style={{ flex: 1 }}>
-              <Text style={styles.employeeName}>
-                {item.employeeInfo.fullName}
-              </Text>
-              <Text style={styles.employeeUsername}>
-                @{item.employeeInfo.username}
-              </Text>
+              <Text style={styles.employeeName}>{item.employeeInfo.fullName}</Text>
+              <Text style={styles.employeeUsername}>@{item.employeeInfo.username}</Text>
             </View>
           </View>
 
           <View style={styles.statsRow}>
             <View style={styles.statBox}>
-              <Ionicons name="receipt-outline" size={20} color="#52c41a" />
-              <Text style={styles.statLabel}>Số hoá đơn</Text>
+              <Text style={styles.statLabel}>Hoá đơn</Text>
               <Text style={styles.statValue}>{item.countOrders}</Text>
             </View>
-
             <View style={styles.statBox}>
-              <Ionicons name="cash-outline" size={20} color="#1890ff" />
               <Text style={styles.statLabel}>Doanh thu</Text>
               <Text style={[styles.statValue, { color: "#1890ff" }]}>
                 {formatVND(item.totalRevenue)}
               </Text>
             </View>
           </View>
+          
+          <View style={styles.progressBarBackground}>
+              <View style={[styles.progressBarFill, { width: `${progress}%` }]} />
+          </View>
         </View>
       </View>
     );
   };
 
-  // =====================
-  // GUARD: NO STORE
-  // =====================
   if (!storeId) {
     return (
       <View style={styles.errorContainer}>
@@ -601,9 +577,6 @@ const RevenueReportScreen: React.FC = () => {
     );
   }
 
-  // =====================
-  // RENDER
-  // =====================
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -612,12 +585,11 @@ const RevenueReportScreen: React.FC = () => {
           <Ionicons name="trending-up" size={32} color="#1890ff" />
         </View>
         <View style={styles.headerTextContainer}>
-          <Text style={styles.headerTitle}>Báo cáo doanh thu</Text>
-          <Text style={styles.headerSubtitle}>{storeName}</Text>
+          <Text style={styles.headerTitle}>D.Thu Nhân viên</Text>
+          <Text style={styles.headerSubtitle} numberOfLines={1}>{storeName}</Text>
         </View>
       </View>
 
-      {/* Filter */}
       <View style={styles.filterSection}>
         <TouchableOpacity
           style={styles.filterToggle}
@@ -625,986 +597,254 @@ const RevenueReportScreen: React.FC = () => {
           activeOpacity={0.7}
         >
           <View style={styles.filterToggleLeft}>
-            <Ionicons name="funnel" size={20} color="#1890ff" />
+            <Ionicons name="funnel" size={18} color="#1890ff" />
             <View style={{ flex: 1 }}>
               <Text style={styles.filterToggleText}>
-                {isFilterExpanded ? "Thu gọn bộ lọc" : "Mở rộng bộ lọc"}
+                {isFilterExpanded ? "Thu gọn bộ lọc" : "Bộ lọc thời gian"}
               </Text>
               {!isFilterExpanded && periodType && (
-                <Text style={styles.filterTogglePeriod}>
-                  {periodDisplayText}
-                </Text>
+                <Text style={styles.filterTogglePeriod}>{periodDisplayText}</Text>
               )}
             </View>
           </View>
-
           <Ionicons
             name={isFilterExpanded ? "chevron-up" : "chevron-down"}
-            size={20}
+            size={18}
             color="#1890ff"
           />
         </TouchableOpacity>
 
         {isFilterExpanded && (
           <View style={styles.filterContent}>
-            {/* Quick presets */}
             <Text style={styles.filterLabel}>Chọn nhanh</Text>
             <View style={styles.presetRow}>
-              <PresetChip
-                label="Tháng này"
-                icon="calendar"
-                active={activePreset === "thisMonth"}
-                onPress={() => applyPreset("thisMonth")}
-              />
-              <PresetChip
-                label="Tháng trước"
-                icon="time"
-                active={activePreset === "lastMonth"}
-                onPress={() => applyPreset("lastMonth")}
-              />
-              <PresetChip
-                label="Quý này"
-                icon="albums"
-                active={activePreset === "thisQuarter"}
-                onPress={() => applyPreset("thisQuarter")}
-              />
-              <PresetChip
-                label="Năm nay"
-                icon="flag"
-                active={activePreset === "thisYear"}
-                onPress={() => applyPreset("thisYear")}
-              />
+              <PresetChip label="Tháng này" icon="calendar" active={activePreset === "thisMonth"} onPress={() => applyPreset("thisMonth")} />
+              <PresetChip label="Tháng trước" icon="time" active={activePreset === "lastMonth"} onPress={() => applyPreset("lastMonth")} />
+              <PresetChip label="Quý này" icon="albums" active={activePreset === "thisQuarter"} onPress={() => applyPreset("thisQuarter")} />
+              <PresetChip label="Năm nay" icon="flag" active={activePreset === "thisYear"} onPress={() => applyPreset("thisYear")} />
             </View>
 
-            {/* Period type */}
             <Text style={styles.filterLabel}>Kỳ báo cáo</Text>
             <View style={styles.typeRow}>
-              <PeriodTypePill
-                label="Tháng"
-                active={periodType === "month"}
-                onPress={() => changePeriodType("month")}
-              />
-              <PeriodTypePill
-                label="Quý"
-                active={periodType === "quarter"}
-                onPress={() => changePeriodType("quarter")}
-              />
-              <PeriodTypePill
-                label="Năm"
-                active={periodType === "year"}
-                onPress={() => changePeriodType("year")}
-              />
+              <PeriodTypePill label="Tháng" active={periodType === "month"} onPress={() => changePeriodType("month")} />
+              <PeriodTypePill label="Quý" active={periodType === "quarter"} onPress={() => changePeriodType("quarter")} />
+              <PeriodTypePill label="Năm" active={periodType === "year"} onPress={() => changePeriodType("year")} />
             </View>
 
             {!!periodType && (
-              <>
-                <Text style={styles.filterLabel}>Chọn thời gian</Text>
-                <Text style={styles.helperText}>
-                  Chọn xong bấm “Xem báo cáo” để tải dữ liệu và thu gọn bộ lọc.
-                </Text>
-
-                {periodType === "month" && (
-                  <DateFieldButton
-                    label="Tháng báo cáo"
-                    valueText={`Tháng ${selectedMonth}/${selectedYear}`}
-                    subText={`Mã kỳ: ${periodKey}`}
-                    onPress={() => openPicker("month")}
-                    icon="calendar"
-                  />
-                )}
-
-                {periodType === "quarter" && (
-                  <>
-                    <DateFieldButton
-                      label="Quý báo cáo"
-                      valueText={`Quý ${selectedQuarter}/${selectedYear}`}
-                      subText={`Mã kỳ: ${periodKey}`}
-                      onPress={() => openPicker("quarter")}
-                      icon="albums"
-                    />
-
-                    <View style={styles.quarterQuickRow}>
-                      {[1, 2, 3, 4].map((q) => {
-                        const active = q === selectedQuarter;
-                        return (
-                          <TouchableOpacity
-                            key={q}
-                            style={[
-                              styles.quarterPill,
-                              active && styles.quarterPillActive,
-                            ]}
-                            onPress={() => {
-                              setActivePreset(null);
-                              setSelectedQuarter(q);
-                            }}
-                            activeOpacity={0.9}
-                          >
-                            <Text
-                              style={[
-                                styles.quarterPillText,
-                                active && styles.quarterPillTextActive,
-                              ]}
-                            >
-                              Quý {q}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-
-                    <DateFieldButton
-                      label="Năm áp dụng cho quý"
-                      valueText={`Năm ${selectedYear}`}
-                      subText={`Mã kỳ: ${selectedYear}`}
-                      onPress={() => openPicker("year")}
-                      icon="flag"
-                    />
-                  </>
-                )}
-
-                {periodType === "year" && (
-                  <DateFieldButton
-                    label="Năm báo cáo"
-                    valueText={`Năm ${selectedYear}`}
-                    subText={`Mã kỳ: ${periodKey}`}
-                    onPress={() => openPicker("year")}
-                    icon="flag"
-                  />
-                )}
-
-                {/* Prev/Next navigation */}
+              <View style={{ marginTop: 12 }}>
                 <View style={styles.navRow}>
-                  <TouchableOpacity
-                    style={styles.navBtn}
-                    onPress={() => shiftPeriod(-1)}
-                    activeOpacity={0.85}
-                  >
-                    <Ionicons name="chevron-back" size={18} color="#1890ff" />
+                  <TouchableOpacity style={styles.navBtn} onPress={() => shiftPeriod(-1)}>
+                    <Ionicons name="chevron-back" size={16} color="#1890ff" />
                     <Text style={styles.navBtnText}>Trước</Text>
                   </TouchableOpacity>
-
                   <View style={styles.navCenter}>
-                    <Text style={styles.navCenterText}>
-                      {periodDisplayText}
-                    </Text>
+                    <Text style={styles.navCenterText}>{periodDisplayText}</Text>
                     <Text style={styles.navCenterSub}>{periodKey}</Text>
                   </View>
-
-                  <TouchableOpacity
-                    style={styles.navBtn}
-                    onPress={() => shiftPeriod(1)}
-                    activeOpacity={0.85}
-                  >
+                  <TouchableOpacity style={styles.navBtn} onPress={() => shiftPeriod(1)}>
                     <Text style={styles.navBtnText}>Sau</Text>
-                    <Ionicons
-                      name="chevron-forward"
-                      size={18}
-                      color="#1890ff"
-                    />
+                    <Ionicons name="chevron-forward" size={16} color="#1890ff" />
                   </TouchableOpacity>
                 </View>
-              </>
+                
+                <TouchableOpacity style={styles.actionBtn} onPress={() => fetchCurrent({ collapseOnSuccess: true })} disabled={!canFetch}>
+                  <LinearGradient colors={["#1890ff", "#096dd9"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.actionBtnGradient}>
+                    {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.actionBtnText}>Áp dụng bộ lọc</Text>}
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
             )}
-
-            {/* Action Button: chỉ khi bấm mới fetch & mới collapse */}
-            <TouchableOpacity
-              style={[styles.actionBtn, !canFetch && styles.actionBtnDisabled]}
-              onPress={() => fetchCurrent({ collapseOnSuccess: true })}
-              disabled={!canFetch}
-              activeOpacity={0.85}
-            >
-              <LinearGradient
-                colors={["#1890ff", "#096dd9"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.actionBtnGradient}
-              >
-                {loading ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <>
-                    <Ionicons name="search" size={18} color="#fff" />
-                    <Text style={styles.actionBtnText}>Xem báo cáo</Text>
-                  </>
-                )}
-              </LinearGradient>
-            </TouchableOpacity>
           </View>
         )}
       </View>
 
-      {/* Android picker */}
-      {showDatePicker && Platform.OS === "android" && (
-        <DateTimePicker
-          value={tempDate}
-          mode="date"
-          display="default"
-          onChange={onPickerChange}
-        />
-      )}
-
-      {/* iOS modal picker (chữ rõ + preview + set themeVariant/textColor) */}
-      <Modal
-        visible={showDatePicker && Platform.OS === "ios"}
-        transparent
-        animationType="slide"
-        onRequestClose={closePickerIOS}
-      >
-        <View style={styles.pickerModalBackdrop}>
-          <View style={styles.pickerModalCard}>
-            <View style={styles.pickerModalHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.pickerModalTitle}>
-                  {pickerTarget === "month"
-                    ? "Chọn tháng"
-                    : pickerTarget === "quarter"
-                      ? "Chọn quý"
-                      : "Chọn năm"}
-                </Text>
-                <Text style={styles.pickerModalDesc}>
-                  {pickerTarget === "quarter"
-                    ? "Chọn một ngày bất kỳ trong quý mong muốn (hệ thống sẽ tự suy ra quý)."
-                    : "Chọn một ngày bất kỳ trong kỳ mong muốn (hệ thống sẽ tự lấy tháng/năm)."}
-                </Text>
-              </View>
-
-              <View style={styles.previewPill}>
-                <Text style={styles.previewPillText}>{pickerPreview}</Text>
-              </View>
-            </View>
-
-            <Text style={styles.previewSub}>{pickerSubPreview}</Text>
-
-            <View style={styles.pickerInlineWrap}>
-              <DateTimePicker
-                value={tempDate}
-                mode="date"
-                display="spinner"
-                onChange={onPickerChange}
-                locale="vi-VN"
-                // Làm rõ chữ trên iOS spinner (tránh mờ/khó nhìn) [web:77]
-                {...(Platform.OS === "ios"
-                  ? { themeVariant: "light" as const, textColor: "#111827" }
-                  : {})}
-              />
-            </View>
-
-            <View style={styles.pickerModalFooter}>
-              <TouchableOpacity
-                style={styles.modalBtn}
-                onPress={closePickerIOS}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.modalBtnText}>Huỷ</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalBtn, styles.modalBtnPrimary]}
-                onPress={confirmPickerIOS}
-                activeOpacity={0.85}
-              >
-                <Text style={[styles.modalBtnText, styles.modalBtnTextPrimary]}>
-                  Chọn
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Content */}
       <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            // Refresh không tự thu gọn bộ lọc
-            onRefresh={() =>
-              fetchCurrent({ isRefresh: true, collapseOnSuccess: false })
-            }
-            colors={["#1890ff"]}
-          />
+          <RefreshControl refreshing={refreshing} onRefresh={() => fetchCurrent({ isRefresh: true })} colors={["#1890ff"]} />
         }
       >
-        {/* Error Alert */}
-        {error && (
-          <View style={styles.errorAlert}>
-            <Ionicons name="alert-circle" size={20} color="#ef4444" />
-            <Text style={styles.errorAlertText}>{error}</Text>
-            <TouchableOpacity
-              onPress={() => setError(null)}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="close-circle" size={20} color="#ef4444" />
+        {summary && (
+          <View style={styles.summaryContainer}>
+            <LinearGradient colors={["#1890ff", "#096dd9"]} style={styles.summaryCard}>
+              <View style={styles.summaryHeader}>
+                <Text style={styles.summaryTitle}>Tổng doanh thu kỳ này</Text>
+                <View style={styles.summaryBadge}><Text style={styles.summaryBadgeText}>{periodDisplayText}</Text></View>
+              </View>
+              <Text style={styles.summaryValue}>{formatVND(summary.totalRevenue)}</Text>
+              <View style={styles.summaryFooter}>
+                <Ionicons name="receipt-outline" size={16} color="#fff" opacity={0.8} />
+                <Text style={styles.summarySubValue}>{summary.countOrders} vận đơn thành công</Text>
+              </View>
+            </LinearGradient>
+          </View>
+        )}
+
+        {!loading && sortedEmployeeData.length > 0 && (
+          <View style={styles.chartCard}>
+            <Text style={styles.chartTitle}>Top Doanh Thu (Top 5)</Text>
+            <View style={{ marginTop: 16 }}>
+              <BarChart
+                data={sortedEmployeeData.slice(0, 5).map(e => ({
+                  value: toNumber(e.totalRevenue),
+                  label: e.employeeInfo.fullName.split(" ").pop() || "NV",
+                  frontColor: "#1890ff",
+                  topLabelComponent: () => <Text style={{ fontSize: 9, color: "#64748b" }}>{Math.round(toNumber(e.totalRevenue)/1000000)}M</Text>
+                }))}
+                barWidth={32} barBorderRadius={6} height={150} yAxisTextStyle={{ fontSize: 10 }} xAxisLabelTextStyle={{ fontSize: 10 }} noOfSections={3} hideRules isAnimated
+              />
+            </View>
+          </View>
+        )}
+
+        <View style={styles.sortBar}>
+          <Text style={styles.sortTitle}>Chi tiết nhân viên</Text>
+          <View style={styles.sortButtons}>
+            <TouchableOpacity style={[styles.sortBtn, sortBy === "orders" && styles.sortBtnActive]} onPress={() => toggleSort("orders")}>
+              <Text style={[styles.sortBtnText, sortBy === "orders" && styles.sortBtnTextActive]}>HĐ</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.sortBtn, sortBy === "revenue" && styles.sortBtnActive]} onPress={() => toggleSort("revenue")}>
+              <Text style={[styles.sortBtnText, sortBy === "revenue" && styles.sortBtnTextActive]}>D.Thu</Text>
             </TouchableOpacity>
           </View>
-        )}
+        </View>
 
-        {/* Loading */}
-        {loading && !refreshing && (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#1890ff" />
-            <Text style={styles.loadingText}>Đang tải báo cáo...</Text>
+        {loading && !refreshing && <ActivityIndicator style={{ marginTop: 20 }} color="#1890ff" />}
+        
+        <FlatList
+          data={sortedEmployeeData}
+          keyExtractor={(item) => item._id}
+          renderItem={renderEmployeeItem}
+          scrollEnabled={false}
+          contentContainerStyle={styles.listContent}
+        />
+
+        {sortedEmployeeData.length === 0 && !loading && (
+          <View style={styles.emptyBox}>
+            <Ionicons name="people-outline" size={48} color="#cbd5e1" />
+            <Text style={styles.emptyText}>Chưa có dữ liệu giao dịch</Text>
           </View>
         )}
-
-        {/* Info Alert */}
-        {!periodType && !loading && (
-          <View style={styles.infoAlert}>
-            <Ionicons name="information-circle" size={24} color="#1890ff" />
-            <Text style={styles.infoAlertText}>
-              Vui lòng chọn kỳ báo cáo (hoặc dùng “Chọn nhanh”) để xem dữ liệu
-            </Text>
-          </View>
-        )}
-
-        {/* Summary */}
-        {summary && (
-          <>
-            <View style={styles.summaryGrid}>
-              <LinearGradient
-                colors={["#1890ff", "#096dd9"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.summaryCard}
-              >
-                <Ionicons name="cash" size={32} color="#fff" />
-                <Text style={styles.summaryLabel}>Tổng doanh thu</Text>
-                <Text style={styles.summaryValue}>
-                  {formatVND(summary.totalRevenue)}
-                </Text>
-              </LinearGradient>
-
-              <LinearGradient
-                colors={["#52c41a", "#389e0d"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.summaryCard}
-              >
-                <Ionicons name="receipt" size={32} color="#fff" />
-                <Text style={styles.summaryLabel}>Số hoá đơn</Text>
-                <Text style={styles.summaryValue}>{summary.countOrders}</Text>
-              </LinearGradient>
-            </View>
-
-            {/* Employee Revenue */}
-            <View style={styles.employeeSection}>
-              <View style={styles.employeeSectionHeader}>
-                <Text style={styles.employeeSectionTitle}>
-                  Doanh thu theo nhân viên
-                </Text>
-                <Text style={styles.employeeCount}>
-                  {employeeData.length} nhân viên
-                </Text>
-              </View>
-
-              {/* Sort */}
-              <View style={styles.sortRow}>
-                <TouchableOpacity
-                  style={[
-                    styles.sortBtn,
-                    sortBy === "orders" && styles.sortBtnActive,
-                  ]}
-                  onPress={() => toggleSort("orders")}
-                  activeOpacity={0.85}
-                >
-                  <Text
-                    style={[
-                      styles.sortBtnText,
-                      sortBy === "orders" && styles.sortBtnTextActive,
-                    ]}
-                  >
-                    Số hoá đơn
-                  </Text>
-
-                  {sortBy === "orders" && (
-                    <Ionicons
-                      name={sortOrder === "asc" ? "arrow-up" : "arrow-down"}
-                      size={16}
-                      color="#1890ff"
-                    />
-                  )}
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.sortBtn,
-                    sortBy === "revenue" && styles.sortBtnActive,
-                  ]}
-                  onPress={() => toggleSort("revenue")}
-                  activeOpacity={0.85}
-                >
-                  <Text
-                    style={[
-                      styles.sortBtnText,
-                      sortBy === "revenue" && styles.sortBtnTextActive,
-                    ]}
-                  >
-                    Doanh thu
-                  </Text>
-
-                  {sortBy === "revenue" && (
-                    <Ionicons
-                      name={sortOrder === "asc" ? "arrow-up" : "arrow-down"}
-                      size={16}
-                      color="#1890ff"
-                    />
-                  )}
-                </TouchableOpacity>
-              </View>
-
-              {/* List */}
-              {employeeData.length > 0 ? (
-                <FlatList
-                  data={sortedEmployeeData}
-                  renderItem={renderEmployeeItem}
-                  keyExtractor={(item) => item._id}
-                  scrollEnabled={false}
-                  contentContainerStyle={styles.employeeList}
-                />
-              ) : (
-                <View style={styles.emptyContainer}>
-                  <Ionicons name="people-outline" size={64} color="#d1d5db" />
-                  <Text style={styles.emptyText}>
-                    Không có dữ liệu nhân viên
-                  </Text>
-                </View>
-              )}
-            </View>
-          </>
-        )}
-
-        <View style={styles.bottomSpacer} />
+        
+        <View style={{ height: 40 }} />
       </ScrollView>
+
+      {showDatePicker && Platform.OS === "ios" && (
+        <Modal transparent visible animationType="fade">
+            <View style={styles.pickerModalBackdrop}>
+                <View style={styles.pickerModalCard}>
+                    <DateTimePicker value={tempDate} mode="date" display="spinner" onChange={onPickerChange} />
+                    <View style={styles.pickerModalFooter}>
+                        <TouchableOpacity style={styles.modalBtn} onPress={closePickerIOS}><Text style={styles.modalBtnText}>Huỷ</Text></TouchableOpacity>
+                        <TouchableOpacity style={[styles.modalBtn, styles.modalBtnPrimary]} onPress={confirmPickerIOS}><Text style={[styles.modalBtnText, styles.modalBtnTextPrimary]}>Chọn</Text></TouchableOpacity>
+                    </View>
+                </View>
+            </View>
+        </Modal>
+      )}
     </View>
   );
 };
 
 export default RevenueReportScreen;
 
-// =====================
-// STYLES
-// =====================
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f8fafc" },
-  scrollView: { flex: 1 },
-
-  // Error (no store)
-  errorContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#f8fafc",
-    padding: 32,
-  },
-  errorTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#111827",
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  errorText: { fontSize: 14, color: "#6b7280", textAlign: "center" },
-
-  // Header
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#fff",
-    padding: 20,
-    paddingTop: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
-    gap: 14,
-  },
-  headerIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: "#e6f4ff",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  header: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", padding: 16, borderBottomWidth: 1, borderBottomColor: "#f1f5f9", gap: 12 },
+  headerIcon: { width: 48, height: 48, borderRadius: 12, backgroundColor: "#eff6ff", alignItems: "center", justifyContent: "center" },
   headerTextContainer: { flex: 1 },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#111827",
-    marginBottom: 4,
-  },
-  headerSubtitle: { fontSize: 13, color: "#6b7280" },
-
-  // Filter card
-  filterSection: {
-    backgroundColor: "#fff",
-    marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    elevation: 3,
-  },
-  filterToggle: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 16,
-  },
-  filterToggleLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    flex: 1,
-  },
-  filterToggleText: { fontSize: 16, fontWeight: "700", color: "#1890ff" },
-  filterTogglePeriod: { fontSize: 12, color: "#6b7280", marginTop: 4 },
-  filterContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-    borderTopWidth: 1,
-    borderTopColor: "#f3f4f6",
-  },
-  filterLabel: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#374151",
-    marginBottom: 8,
-    marginTop: 12,
-  },
-  helperText: { marginTop: -2, fontSize: 12, color: "#6b7280", lineHeight: 18 },
-
-  // Presets
-  presetRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  presetChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    backgroundColor: "#f9fafb",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-  },
-  presetChipActive: { backgroundColor: "#e6f4ff", borderColor: "#1890ff" },
-  presetChipText: { fontSize: 13, fontWeight: "700", color: "#6b7280" },
+  headerTitle: { fontSize: 18, fontWeight: "900", color: "#1e293b" },
+  headerSubtitle: { fontSize: 12, color: "#64748b" },
+  
+  filterSection: { backgroundColor: "#fff", margin: 16, borderRadius: 16, elevation: 2, shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 10 },
+  filterToggle: { flexDirection: "row", alignItems: "center", padding: 14 },
+  filterToggleLeft: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1 },
+  filterToggleText: { fontSize: 14, fontWeight: "800", color: "#1e293b" },
+  filterTogglePeriod: { fontSize: 11, color: "#1890ff", marginTop: 2, fontWeight: "700" },
+  filterContent: { padding: 14, paddingTop: 0, borderTopWidth: 1, borderTopColor: "#f1f5f9" },
+  filterLabel: { fontSize: 12, fontWeight: "800", color: "#64748b", marginVertical: 8, textTransform: "uppercase" },
+  
+  presetRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  presetChip: { flexDirection: "row", alignItems: "center", gap: 4, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8, backgroundColor: "#f8fafc", borderWidth: 1, borderColor: "#e2e8f0" },
+  presetChipActive: { backgroundColor: "#eff6ff", borderColor: "#1890ff" },
+  presetChipText: { fontSize: 12, fontWeight: "700", color: "#64748b" },
   presetChipTextActive: { color: "#1890ff" },
-
-  // Type pills
-  typeRow: { flexDirection: "row", gap: 10 },
-  typePill: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: "#f9fafb",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    alignItems: "center",
-  },
-  typePillActive: { backgroundColor: "#e6f4ff", borderColor: "#1890ff" },
-  typePillText: { fontSize: 14, fontWeight: "800", color: "#6b7280" },
+  
+  typeRow: { flexDirection: "row", gap: 8 },
+  typePill: { flex: 1, paddingVertical: 8, alignItems: "center", borderRadius: 8, backgroundColor: "#f8fafc", borderWidth: 1, borderColor: "#e2e8f0" },
+  typePillActive: { backgroundColor: "#eff6ff", borderColor: "#1890ff" },
+  typePillText: { fontSize: 12, fontWeight: "800", color: "#64748b" },
   typePillTextActive: { color: "#1890ff" },
+  
+  navRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
+  navBtn: { flexDirection: "row", alignItems: "center", gap: 4, padding: 8, borderRadius: 8, backgroundColor: "#f8fafc", borderWidth: 1, borderColor: "#e2e8f0" },
+  navBtnText: { fontSize: 12, fontWeight: "800", color: "#1890ff" },
+  navCenter: { flex: 1, alignItems: "center" },
+  navCenterText: { fontSize: 13, fontWeight: "800", color: "#1e293b" },
+  navCenterSub: { fontSize: 10, color: "#64748b", fontWeight: "700" },
+  
+  actionBtn: { borderRadius: 10, overflow: "hidden" },
+  actionBtnGradient: { paddingVertical: 12, alignItems: "center", justifyContent: "center" },
+  actionBtnText: { color: "#fff", fontSize: 14, fontWeight: "900" },
+  
+  scrollView: { flex: 1 },
+  summaryContainer: { marginHorizontal: 16, marginTop: 8 },
+  summaryCard: { padding: 16, borderRadius: 16, elevation: 4, shadowColor: "#1890ff", shadowOpacity: 0.15, shadowRadius: 10 },
+  summaryHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  summaryTitle: { fontSize: 12, color: "#fff", opacity: 0.9, fontWeight: "700" },
+  summaryBadge: { backgroundColor: "rgba(255,255,255,0.2)", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
+  summaryBadgeText: { fontSize: 10, color: "#fff", fontWeight: "800" },
+  summaryValue: { fontSize: 24, fontWeight: "900", color: "#fff", marginVertical: 8 },
+  summaryFooter: { flexDirection: "row", alignItems: "center", gap: 6, paddingTop: 10, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.2)" },
+  summarySubValue: { fontSize: 12, color: "#fff", fontWeight: "600" },
+  
+  chartCard: { backgroundColor: "#fff", margin: 16, padding: 16, borderRadius: 16, elevation: 2, shadowColor: "#000", shadowOpacity: 0.05 },
+  chartTitle: { fontSize: 14, fontWeight: "900", color: "#1e293b" },
+  
+  sortBar: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginHorizontal: 16, marginBottom: 12 },
+  sortTitle: { fontSize: 15, fontWeight: "900", color: "#1e293b" },
+  sortButtons: { flexDirection: "row", backgroundColor: "#f1f5f9", borderRadius: 8, padding: 2 },
+  sortBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
+  sortBtnActive: { backgroundColor: "#fff", elevation: 1 },
+  sortBtnText: { fontSize: 11, fontWeight: "800", color: "#64748b" },
+  sortBtnTextActive: { color: "#1890ff" },
+  
+  listContent: { paddingHorizontal: 16, gap: 10 },
+  employeeCard: { backgroundColor: "#fff", borderRadius: 16, padding: 14, flexDirection: "row", alignItems: "flex-start", borderWidth: 1, borderColor: "#f1f5f9" },
+  rankBadge: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", marginRight: 12 },
+  rankText: { fontSize: 11, color: "#fff", fontWeight: "900" },
+  employeeInfo: { flex: 1 },
+  employeeHeader: { marginBottom: 10 },
+  employeeName: { fontSize: 15, fontWeight: "800", color: "#1e293b" },
+  employeeUsername: { fontSize: 11, color: "#64748b", fontWeight: "600" },
+  statsRow: { flexDirection: "row", gap: 16 },
+  statBox: { flex: 1 },
+  statLabel: { fontSize: 10, color: "#94a3b8", fontWeight: "800", marginBottom: 2 },
+  statValue: { fontSize: 14, fontWeight: "900", color: "#1e293b" },
+  progressBarBackground: { height: 4, backgroundColor: "#f1f5f9", borderRadius: 2, marginTop: 12, overflow: "hidden" },
+  progressBarFill: { height: "100%", backgroundColor: "#1890ff" },
+  
+  errorContainer: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32 },
+  errorTitle: { fontSize: 18, fontWeight: "900", color: "#1e293b", marginTop: 16 },
+  errorText: { fontSize: 14, color: "#64748b", textAlign: "center", marginTop: 8 },
+  
+  emptyBox: { alignItems: "center", padding: 48 },
+  emptyText: { fontSize: 14, fontWeight: "700", color: "#64748b", marginTop: 12 },
+  
+  pickerModalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", padding: 16 },
+  pickerModalCard: { backgroundColor: "#fff", borderRadius: 20, padding: 16 },
+  pickerModalFooter: { flexDirection: "row", gap: 12, marginTop: 16 },
+  modalBtn: { flex: 1, paddingVertical: 12, alignItems: "center", borderRadius: 12, backgroundColor: "#f1f5f9" },
+  modalBtnPrimary: { backgroundColor: "#1890ff" },
+  modalBtnText: { fontSize: 14, fontWeight: "800", color: "#1e293b" },
+  modalBtnTextPrimary: { color: "#fff" },
 
-  // Date-field button (clearer text)
-  dateFieldBtn: {
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    borderRadius: 14,
-    padding: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: 10,
-  },
-  dateFieldLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    flex: 1,
-  },
-  dateFieldIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: "#e6f4ff",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  dateFieldLabel: { fontSize: 12, color: "#6b7280", fontWeight: "800" },
-  dateFieldValue: {
-    marginTop: 3,
-    fontSize: 16,
-    color: "#111827",
-    fontWeight: "900",
-  },
-  dateFieldSub: {
-    marginTop: 4,
-    fontSize: 12,
-    color: "#6b7280",
-    fontWeight: "700",
-  },
-
-  // Quick quarter
-  quarterQuickRow: { flexDirection: "row", gap: 10, marginTop: 10 },
-  quarterPill: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: "#f9fafb",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    alignItems: "center",
-  },
-  quarterPillActive: { backgroundColor: "#e6f4ff", borderColor: "#1890ff" },
-  quarterPillText: { fontSize: 13, fontWeight: "900", color: "#6b7280" },
-  quarterPillTextActive: { color: "#1890ff" },
-
-  // Prev/Next nav
-  navRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 12,
-    alignItems: "center",
-  },
-  navBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    backgroundColor: "#f9fafb",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-  },
-  navBtnText: { fontSize: 13, fontWeight: "800", color: "#1890ff" },
-  navCenter: { flex: 1, alignItems: "center", paddingVertical: 6 },
-  navCenterText: { fontSize: 13, fontWeight: "900", color: "#111827" },
-  navCenterSub: {
-    marginTop: 2,
-    fontSize: 12,
-    color: "#6b7280",
-    fontWeight: "700",
-  },
-
-  // Date picker modal (iOS) - clearer typography
-  pickerModalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
-    justifyContent: "flex-end",
-  },
-  pickerModalCard: {
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    padding: 16,
-  },
-  pickerModalHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-  },
-  pickerModalTitle: { fontSize: 18, fontWeight: "900", color: "#111827" },
-  pickerModalDesc: {
-    marginTop: 6,
-    fontSize: 12,
-    color: "#6b7280",
-    lineHeight: 18,
-    fontWeight: "600",
-  },
-
-  previewPill: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    backgroundColor: "#e6f4ff",
-    borderWidth: 1,
-    borderColor: "#1890ff",
-  },
-  previewPillText: { fontSize: 12, fontWeight: "900", color: "#1890ff" },
-  previewSub: {
-    marginTop: 10,
-    fontSize: 12,
-    color: "#374151",
-    fontWeight: "800",
-  },
-
-  pickerInlineWrap: {
-    marginTop: 10,
-    borderRadius: 12,
-    overflow: "hidden",
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-  },
-  pickerModalFooter: { flexDirection: "row", gap: 12, marginTop: 12 },
-  modalBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: "#f9fafb",
-    alignItems: "center",
-  },
-  modalBtnPrimary: { borderColor: "#1890ff", backgroundColor: "#e6f4ff" },
-  modalBtnText: { fontSize: 14, fontWeight: "900", color: "#374151" },
-  modalBtnTextPrimary: { color: "#1890ff" },
-
-  // Action button
-  actionBtn: {
-    borderRadius: 12,
-    overflow: "hidden",
-    marginTop: 20,
-    shadowColor: "#1890ff",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  actionBtnDisabled: { opacity: 0.6 },
-  actionBtnGradient: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 14,
-    gap: 8,
-  },
-  actionBtnText: { color: "#fff", fontSize: 15, fontWeight: "800" },
-
-  // Alerts
-  errorAlert: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#fef2f2",
-    marginHorizontal: 16,
-    marginTop: 16,
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#fecaca",
-    gap: 10,
-  },
-  errorAlertText: {
-    flex: 1,
-    fontSize: 13,
-    color: "#991b1b",
-    fontWeight: "700",
-  },
-
-  infoAlert: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#eff6ff",
-    marginHorizontal: 16,
-    marginTop: 16,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#bfdbfe",
-    gap: 12,
-  },
-  infoAlertText: {
-    flex: 1,
-    fontSize: 14,
-    color: "#1e40af",
-    lineHeight: 20,
-    fontWeight: "600",
-  },
-
-  // Loading
-  loadingContainer: {
-    alignItems: "center",
-    paddingVertical: 40,
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: "#6b7280",
-    fontWeight: "600",
-  },
-
-  // Summary
-  summaryGrid: {
-    flexDirection: "row",
-    gap: 12,
-    paddingHorizontal: 16,
-    marginTop: 16,
-  },
-  summaryCard: {
-    flex: 1,
-    padding: 20,
-    borderRadius: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  summaryLabel: {
-    fontSize: 13,
-    color: "#fff",
-    marginTop: 12,
-    marginBottom: 8,
-    opacity: 0.9,
-    fontWeight: "700",
-  },
-  summaryValue: {
-    fontSize: 20,
-    fontWeight: "900",
-    color: "#fff",
-  },
-
-  // Employee section
-  employeeSection: {
-    backgroundColor: "#fff",
-    marginHorizontal: 16,
-    marginTop: 16,
-    padding: 20,
-    borderRadius: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    elevation: 3,
-  },
-  employeeSectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
-  },
-  employeeSectionTitle: {
-    fontSize: 18,
-    fontWeight: "900",
-    color: "#111827",
-  },
-  employeeCount: {
-    fontSize: 13,
-    color: "#6b7280",
-    fontWeight: "700",
-  },
-
-  // Sort
-  sortRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginBottom: 16,
-  },
-  sortBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    backgroundColor: "#f9fafb",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-  },
-  sortBtnActive: {
-    backgroundColor: "#e6f4ff",
-    borderColor: "#1890ff",
-  },
-  sortBtnText: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#6b7280",
-  },
-  sortBtnTextActive: {
-    color: "#1890ff",
-  },
-
-  // Employee cards
-  employeeList: {
-    gap: 12,
-  },
-  employeeCard: {
-    backgroundColor: "#f9fafb",
-    borderRadius: 12,
-    padding: 16,
-    position: "relative",
-  },
-  rankBadge: {
-    position: "absolute",
-    top: 12,
-    right: 12,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  rankText: {
-    fontSize: 12,
-    fontWeight: "900",
-    color: "#fff",
-  },
-  employeeInfo: {
-    paddingRight: 40,
-  },
-  employeeHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 12,
-  },
-  employeeName: {
-    fontSize: 16,
-    fontWeight: "900",
-    color: "#111827",
-  },
-  employeeUsername: {
-    fontSize: 12,
-    color: "#6b7280",
-    marginTop: 2,
-    fontWeight: "700",
-  },
-  statsRow: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  statBox: {
-    flex: 1,
-    backgroundColor: "#fff",
-    padding: 12,
-    borderRadius: 10,
-    alignItems: "center",
-  },
-  statLabel: {
-    fontSize: 11,
-    color: "#6b7280",
-    marginTop: 6,
-    marginBottom: 4,
-    fontWeight: "700",
-  },
-  statValue: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: "#111827",
-  },
-
-  // Empty
-  emptyContainer: {
-    alignItems: "center",
-    paddingVertical: 40,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: "#6b7280",
-    marginTop: 12,
-    fontWeight: "700",
-  },
-
-  bottomSpacer: {
-    height: 40,
-  },
+  dateFieldBtn: { backgroundColor: "#fff", padding: 12, borderRadius: 12, borderWidth: 1, borderColor: "#e2e8f0", flexDirection: "row", alignItems: "center", marginTop: 8 },
+  dateFieldLeft: { flex: 1, flexDirection: "row", alignItems: "center", gap: 12 },
+  dateFieldIconWrap: { width: 36, height: 36, borderRadius: 10, backgroundColor: "#eff6ff", alignItems: "center", justifyContent: "center" },
+  dateFieldLabel: { fontSize: 10, color: "#64748b", fontWeight: "800" },
+  dateFieldValue: { fontSize: 14, fontWeight: "800", color: "#1e293b" },
+  dateFieldSub: { fontSize: 10, color: "#94a3b8" },
 });

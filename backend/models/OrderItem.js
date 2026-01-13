@@ -13,6 +13,7 @@ const orderItemSchema = new mongoose.Schema(
       default: "NORMAL",
     }, // Loại bán hàng
     subtotal: { type: mongoose.Schema.Types.Decimal128, required: true }, // Tiền từng món
+    refundedQuantity: { type: Number, default: 0 }, // Số lượng đã hoàn trả
   },
   {
     timestamps: true,

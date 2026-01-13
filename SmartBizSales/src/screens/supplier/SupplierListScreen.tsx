@@ -1,22 +1,23 @@
 // src/screens/supplier/SupplierListScreen.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TextInput,
-  TouchableOpacity,
   ActivityIndicator,
   Alert,
-  RefreshControl,
-  Modal,
-  ScrollView,
   Animated,
   Dimensions,
+  FlatList,
+  Modal,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import Ionicons from "@expo/vector-icons/Ionicons";
+import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import * as supplierApi from "../../api/supplierApi";
@@ -58,41 +59,16 @@ const StatCard: React.FC<StatCardProps> = ({
   value,
   icon,
   gradient,
-  trend,
 }) => {
   return (
     <LinearGradient colors={gradient} style={styles.statCard}>
-      <View style={styles.statHeader}>
-        <View style={styles.statIconCircle}>
-          <Ionicons name={icon} size={20} color="#fff" />
-        </View>
-
-        {trend !== undefined && (
-          <View
-            style={[
-              styles.trendBadge,
-              { backgroundColor: trend >= 0 ? "#10b98120" : "#ef444420" },
-            ]}
-          >
-            <Ionicons
-              name={trend >= 0 ? "trending-up" : "trending-down"}
-              size={12}
-              color={trend >= 0 ? "#10b981" : "#ef4444"}
-            />
-            <Text
-              style={[
-                styles.trendText,
-                { color: trend >= 0 ? "#10b981" : "#ef4444" },
-              ]}
-            >
-              {Math.abs(trend).toFixed(1)}%
-            </Text>
-          </View>
-        )}
+      <View style={styles.statIconCircle}>
+        <Ionicons name={icon} size={18} color="#fff" />
       </View>
-
-      <Text style={styles.statValue}>{value.toLocaleString("vi-VN")}</Text>
-      <Text style={styles.statTitle}>{title}</Text>
+      <View>
+        <Text style={styles.statValue}>{value.toLocaleString("vi-VN")}</Text>
+        <Text style={styles.statTitle}>{title}</Text>
+      </View>
     </LinearGradient>
   );
 };
@@ -106,142 +82,78 @@ const SupplierCard: React.FC<{
   onView: () => void;
 }> = ({ supplier, mode, onEdit, onDelete, onRestore, onView }) => {
   const isActive = supplier.status === "đang hoạt động";
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-
-  const handlePressIn = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 0.98,
-      useNativeDriver: true,
-    }).start();
-  };
-  const handlePressOut = () => {
-    Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true }).start();
-  };
 
   return (
-    <Animated.View
-      style={[styles.supplierCard, { transform: [{ scale: scaleAnim }] }]}
+    <TouchableOpacity
+      onPress={onView}
+      activeOpacity={0.7}
+      style={styles.supplierCard}
     >
-      <TouchableOpacity
-        onPress={onView}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        activeOpacity={0.9}
-      >
-        <View style={styles.supplierHeader}>
-          <View style={styles.supplierInfoMain}>
-            <View style={styles.supplierAvatar}>
-              <LinearGradient
-                colors={
-                  isActive ? ["#10b981", "#059669"] : ["#6b7280", "#4b5563"]
-                }
-                style={styles.avatarGradient}
-              >
-                <Text style={styles.avatarText}>
-                  {supplier.name?.charAt(0)?.toUpperCase() || "N"}
-                </Text>
-              </LinearGradient>
-            </View>
+      <View style={styles.cardMain}>
+        <LinearGradient
+          colors={isActive ? ["#3b82f6", "#2563eb"] : ["#94a3b8", "#64748b"]}
+          style={styles.supplierAvatar}
+        >
+          <Text style={styles.avatarText}>
+            {supplier.name?.charAt(0)?.toUpperCase()}
+          </Text>
+        </LinearGradient>
 
-            <View style={styles.supplierDetails}>
-              <Text style={styles.supplierName} numberOfLines={1}>
-                {supplier.name}
-              </Text>
-
-              <View style={styles.supplierMeta}>
-                <View
-                  style={[
-                    styles.statusBadge,
-                    isActive ? styles.statusActive : styles.statusInactive,
-                  ]}
-                >
-                  <Ionicons
-                    name={isActive ? "checkmark-circle" : "close-circle"}
-                    size={12}
-                    color="#fff"
-                  />
-                  <Text style={styles.statusText}>
-                    {isActive ? "Hoạt động" : "Ngừng"}
-                  </Text>
-                </View>
-
-                {!!supplier.phone && (
-                  <Text style={styles.phoneText}>{supplier.phone}</Text>
-                )}
+        <View style={styles.cardContent}>
+          <View style={styles.cardHeaderRow}>
+            <Text style={styles.supplierName} numberOfLines={1}>
+              {supplier.name}
+            </Text>
+            {isActive ? (
+              <View style={styles.activeTag}>
+                <Text style={styles.activeTagText}>Active</Text>
               </View>
-            </View>
+            ) : (
+              <View style={styles.inactiveTag}>
+                <Text style={styles.inactiveTagText}>Ngừng</Text>
+              </View>
+            )}
           </View>
 
-          <TouchableOpacity style={styles.menuBtn} onPress={onView}>
-            <Ionicons name="ellipsis-vertical" size={18} color="#9ca3af" />
-          </TouchableOpacity>
+          <View style={styles.infoRow}>
+            <Ionicons name="call" size={14} color="#64748b" />
+            <Text style={styles.infoText}>{supplier.phone || "—"}</Text>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Ionicons name="location" size={14} color="#64748b" />
+            <Text style={styles.infoText} numberOfLines={1}>
+              {supplier.address || "—"}
+            </Text>
+          </View>
         </View>
 
-        <View style={styles.supplierExtraInfo}>
-          {!!supplier.email && (
-            <View style={styles.infoRow}>
-              <Ionicons name="mail-outline" size={14} color="#6b7280" />
-              <Text style={styles.infoText} numberOfLines={1}>
-                {supplier.email}
-              </Text>
-            </View>
-          )}
+        <TouchableOpacity onPress={onView} style={styles.viewMoreBtn}>
+          <Ionicons name="chevron-forward" size={20} color="#cbd5e1" />
+        </TouchableOpacity>
+      </View>
 
-          {!!supplier.address && (
-            <View style={styles.infoRow}>
-              <Ionicons name="location-outline" size={14} color="#6b7280" />
-              <Text style={styles.infoText} numberOfLines={2}>
-                {supplier.address}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        <View style={styles.supplierActions}>
-          <TouchableOpacity
-            style={[styles.actionBtn, styles.viewBtn]}
-            onPress={onView}
-          >
-            <Ionicons name="eye-outline" size={16} color="#3b82f6" />
-            <Text style={[styles.actionText, { color: "#3b82f6" }]}>Xem</Text>
-          </TouchableOpacity>
-
-          {mode === "active" ? (
-            <>
-              <TouchableOpacity
-                style={[styles.actionBtn, styles.editBtn]}
-                onPress={onEdit}
-              >
-                <Ionicons name="create-outline" size={16} color="#f59e0b" />
-                <Text style={[styles.actionText, { color: "#f59e0b" }]}>
-                  Sửa
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.actionBtn, styles.deleteBtn]}
-                onPress={onDelete}
-              >
-                <Ionicons name="trash-outline" size={16} color="#ef4444" />
-                <Text style={[styles.actionText, { color: "#ef4444" }]}>
-                  Xóa
-                </Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <TouchableOpacity
-              style={[styles.actionBtn, styles.restoreBtn]}
-              onPress={onRestore}
-            >
-              <Ionicons name="refresh-outline" size={16} color="#10b981" />
-              <Text style={[styles.actionText, { color: "#10b981" }]}>
-                Khôi phục
-              </Text>
+      <View style={styles.cardActions}>
+        {mode === "active" ? (
+          <>
+            <TouchableOpacity style={styles.actionItem} onPress={onEdit}>
+              <Ionicons name="create-outline" size={16} color="#3b82f6" />
+              <Text style={[styles.actionLabel, { color: "#3b82f6" }]}>Sửa</Text>
             </TouchableOpacity>
-          )}
-        </View>
-      </TouchableOpacity>
-    </Animated.View>
+            <View style={styles.actionSeparator} />
+            <TouchableOpacity style={styles.actionItem} onPress={onDelete}>
+              <Ionicons name="trash-outline" size={16} color="#ef4444" />
+              <Text style={[styles.actionLabel, { color: "#ef4444" }]}>Xóa</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <TouchableOpacity style={[styles.actionItem, { flex: 1 }]} onPress={onRestore}>
+            <Ionicons name="refresh-outline" size={16} color="#10b981" />
+            <Text style={[styles.actionLabel, { color: "#10b981" }]}>Khôi phục nhà cung cấp</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </TouchableOpacity>
   );
 };
 
@@ -259,177 +171,75 @@ const DetailModal: React.FC<{
   const isActive = supplier.status === "đang hoạt động";
 
   return (
-    <Modal visible={visible} animationType="fade" transparent>
-      <View style={styles.detailModalOverlay}>
-        <View style={styles.detailModalContent}>
-          <LinearGradient
-            colors={isActive ? ["#10b981", "#059669"] : ["#6b7280", "#4b5563"]}
-            style={styles.detailHeader}
-          >
-            <View style={styles.detailHeaderTop}>
-              <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-                <Ionicons name="close" size={24} color="#fff" />
+    <Modal visible={visible} animationType="slide" transparent>
+      <View style={styles.detailOverlay}>
+        <View style={styles.detailContent}>
+          <View style={styles.detailHeader}>
+            <View style={styles.detailTitleBox}>
+              <Text style={styles.detailTitle}>Chi tiết đối tác</Text>
+              <TouchableOpacity onPress={onClose} style={styles.detailCloseBtn}>
+                <Ionicons name="close" size={24} color="#94a3b8" />
               </TouchableOpacity>
-
-              <Text style={styles.detailTitle}>Chi tiết NCC</Text>
-
-              <View style={styles.detailActions}>
-                {mode === "active" ? (
-                  <>
-                    <TouchableOpacity
-                      onPress={onEdit}
-                      style={styles.detailActionBtn}
-                    >
-                      <Ionicons name="create-outline" size={20} color="#fff" />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={onDelete}
-                      style={styles.detailActionBtn}
-                    >
-                      <Ionicons name="trash-outline" size={20} color="#fff" />
-                    </TouchableOpacity>
-                  </>
-                ) : (
-                  <TouchableOpacity
-                    onPress={onRestore}
-                    style={styles.detailActionBtn}
-                  >
-                    <Ionicons name="refresh-outline" size={20} color="#fff" />
-                  </TouchableOpacity>
-                )}
-              </View>
             </View>
+          </View>
 
-            <View style={styles.supplierHero}>
-              <View style={styles.detailAvatar}>
-                <Text style={styles.detailAvatarText}>
-                  {supplier.name?.charAt(0)?.toUpperCase() || "N"}
-                </Text>
-              </View>
-              <Text style={styles.detailName}>{supplier.name}</Text>
-
-              <View
-                style={[
-                  styles.detailStatus,
-                  isActive
-                    ? styles.detailStatusActive
-                    : styles.detailStatusInactive,
-                ]}
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <View style={styles.detailHero}>
+              <LinearGradient
+                colors={isActive ? ["#3b82f6", "#2563eb"] : ["#94a3b8", "#64748b"]}
+                style={styles.heroAvatar}
               >
-                <Ionicons
-                  name={isActive ? "checkmark-circle" : "close-circle"}
-                  size={16}
-                  color="#fff"
-                />
-                <Text style={styles.detailStatusText}>
-                  {supplier.status || "-"}
+                <Text style={styles.heroAvatarText}>
+                  {supplier.name?.charAt(0)?.toUpperCase()}
+                </Text>
+              </LinearGradient>
+              <Text style={styles.heroName}>{supplier.name}</Text>
+              <View style={isActive ? styles.heroTagActive : styles.heroTagInactive}>
+                <Text style={isActive ? styles.heroTagTextActive : styles.heroTagTextInactive}>
+                  {isActive ? "Đang hoạt động" : "Ngừng giao dịch"}
                 </Text>
               </View>
             </View>
-          </LinearGradient>
 
-          <ScrollView
-            style={styles.detailContent}
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.detailSection}>
-              <Text style={styles.detailSectionTitle}>Thông tin liên hệ</Text>
-
-              {!!supplier.phone && (
-                <View style={styles.detailItem}>
-                  <View style={styles.detailItemIcon}>
-                    <Ionicons name="call-outline" size={20} color="#3b82f6" />
-                  </View>
-                  <View style={styles.detailItemContent}>
-                    <Text style={styles.detailItemLabel}>Số điện thoại</Text>
-                    <Text style={styles.detailItemValue}>{supplier.phone}</Text>
-                  </View>
-                </View>
-              )}
-
-              {!!supplier.email && (
-                <View style={styles.detailItem}>
-                  <View style={styles.detailItemIcon}>
-                    <Ionicons name="mail-outline" size={20} color="#ef4444" />
-                  </View>
-                  <View style={styles.detailItemContent}>
-                    <Text style={styles.detailItemLabel}>Email</Text>
-                    <Text style={styles.detailItemValue}>{supplier.email}</Text>
-                  </View>
-                </View>
-              )}
+            <View style={styles.detailInfoList}>
+              <InfoItem icon="call-outline" label="Số điện thoại" value={supplier.phone || "Chưa cập nhật"} color="#3b82f6" />
+              <InfoItem icon="mail-outline" label="Email" value={supplier.email || "Chưa cập nhật"} color="#6366f1" />
+              <InfoItem icon="location-outline" label="Địa chỉ" value={supplier.address || "Chưa cập nhật"} color="#10b981" />
+              <InfoItem icon="document-text-outline" label="Mã số thuế" value={supplier.taxcode || "Chưa cập nhật"} color="#f59e0b" />
+              <InfoItem icon="chatbubble-outline" label="Ghi chú" value={supplier.notes || "Không có ghi chú"} color="#64748b" />
             </View>
-
-            {!!supplier.address && (
-              <View style={styles.detailSection}>
-                <Text style={styles.detailSectionTitle}>Địa chỉ</Text>
-                <View style={styles.detailItem}>
-                  <View style={styles.detailItemIcon}>
-                    <Ionicons
-                      name="location-outline"
-                      size={20}
-                      color="#10b981"
-                    />
-                  </View>
-                  <View style={styles.detailItemContent}>
-                    <Text style={styles.detailItemValue}>
-                      {supplier.address}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            )}
-
-            {(supplier.taxcode || supplier.notes) && (
-              <View style={styles.detailSection}>
-                <Text style={styles.detailSectionTitle}>Thông tin khác</Text>
-
-                {!!supplier.taxcode && (
-                  <View style={styles.detailItem}>
-                    <View style={styles.detailItemIcon}>
-                      <Ionicons
-                        name="document-text-outline"
-                        size={20}
-                        color="#f59e0b"
-                      />
-                    </View>
-                    <View style={styles.detailItemContent}>
-                      <Text style={styles.detailItemLabel}>Mã số thuế</Text>
-                      <Text style={styles.detailItemValue}>
-                        {supplier.taxcode}
-                      </Text>
-                    </View>
-                  </View>
-                )}
-
-                {!!supplier.notes && (
-                  <View style={styles.detailItem}>
-                    <View style={styles.detailItemIcon}>
-                      <Ionicons
-                        name="chatbox-ellipses-outline"
-                        size={20}
-                        color="#6b7280"
-                      />
-                    </View>
-                    <View style={styles.detailItemContent}>
-                      <Text style={styles.detailItemLabel}>Ghi chú</Text>
-                      <Text style={styles.detailItemValue}>
-                        {supplier.notes}
-                      </Text>
-                    </View>
-                  </View>
-                )}
-              </View>
-            )}
           </ScrollView>
+
+          <View style={styles.detailFooter}>
+            <TouchableOpacity
+              style={[styles.footerBtn, styles.editBtnActive]}
+              onPress={() => { onClose(); onEdit(); }}
+            >
+              <Ionicons name="create" size={20} color="#fff" />
+              <Text style={styles.footerBtnText}>Chỉnh sửa</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </Modal>
   );
 };
 
+const InfoItem = ({ icon, label, value, color }: any) => (
+  <View style={styles.detailInfoItem}>
+    <View style={[styles.infoIconBox, { backgroundColor: color + "15" }]}>
+      <Ionicons name={icon} size={20} color={color} />
+    </View>
+    <View style={styles.infoMeta}>
+      <Text style={styles.infoLabel}>{label}</Text>
+      <Text style={styles.infoValue}>{value}</Text>
+    </View>
+  </View>
+);
+
 // ---------- main ----------
 const SupplierListScreen: React.FC = () => {
+  const insets = useSafeAreaInsets();
   const [mode, setMode] = useState<"active" | "deleted">("active");
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -437,6 +247,53 @@ const SupplierListScreen: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [search, setSearch] = useState<string>("");
+
+  // Animation values for Collapsible Header
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const lastScrollY = useRef(0);
+  const headerTranslate = useRef(new Animated.Value(0)).current;
+  const [headerVisible, setHeaderVisible] = useState(true);
+
+  const HEADER_HEIGHT = 180 + insets.top;
+
+  useEffect(() => {
+    const listener = scrollY.addListener(({ value }: { value: number }) => {
+      const diff = value - lastScrollY.current;
+      lastScrollY.current = value;
+
+      if (value < 50) {
+        Animated.timing(headerTranslate, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }).start();
+        setHeaderVisible(true);
+        return;
+      }
+
+      if (diff > 5) {
+        if (headerVisible) {
+          Animated.timing(headerTranslate, {
+            toValue: -HEADER_HEIGHT,
+            duration: 250,
+            useNativeDriver: true,
+          }).start();
+          setHeaderVisible(false);
+        }
+      } else if (diff < -5) {
+        if (!headerVisible) {
+          Animated.timing(headerTranslate, {
+            toValue: 0,
+            duration: 200,
+            useNativeDriver: true,
+          }).start();
+          setHeaderVisible(true);
+        }
+      }
+    });
+
+    return () => scrollY.removeListener(listener);
+  }, [headerVisible, HEADER_HEIGHT]);
 
   // modal states
   const [formModalVisible, setFormModalVisible] = useState<boolean>(false);
@@ -454,16 +311,8 @@ const SupplierListScreen: React.FC = () => {
   });
   const [saving, setSaving] = useState<boolean>(false);
 
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-
   useEffect(() => {
     fetchSuppliers(true);
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 600,
-      useNativeDriver: true,
-    }).start();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
   useEffect(() => {
@@ -680,12 +529,8 @@ const SupplierListScreen: React.FC = () => {
   };
 
   const activeCount = useMemo(
-    () => filteredSuppliers.filter((s) => s.status === "đang hoạt động").length,
-    [filteredSuppliers]
-  );
-  const inactiveCount = useMemo(
-    () => filteredSuppliers.length - activeCount,
-    [filteredSuppliers]
+    () => suppliers.filter((s) => s.status === "đang hoạt động").length,
+    [suppliers]
   );
 
   const renderItem = ({ item }: { item: Supplier }) => (
@@ -714,171 +559,120 @@ const SupplierListScreen: React.FC = () => {
   }
 
   return (
-    <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
-      {/* Header */}
-      <LinearGradient colors={["#10b981", "#667eea"]} style={styles.header}>
-        <View style={styles.headerContent}>
-          <View style={styles.headerTop}>
-            <View>
-              <Text style={styles.headerSubtitle}>Quản lý theo cửa hàng</Text>
-            </View>
-
-            <TouchableOpacity
-              style={styles.notificationBtn}
-              onPress={() => fetchSuppliers(false)}
-            >
-              <Ionicons name="refresh" size={22} color="#fff" />
-            </TouchableOpacity>
+    <View style={styles.container}>
+      {/* Animated Collapsible Header */}
+      <Animated.View
+        style={[
+          styles.collapsibleHeader,
+          {
+            height: HEADER_HEIGHT,
+            transform: [{ translateY: headerTranslate }],
+            paddingTop: insets.top,
+          },
+        ]}
+      >
+        <LinearGradient
+          colors={["#10b981", "#3b82f6"]}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.headerTopRow}>
+          <View>
+            <Text style={styles.headerTitle}>Nhà cung cấp</Text>
+            <Text style={styles.headerSubtitle}>
+              Quản lý {suppliers.length} đối tác cung ứng
+            </Text>
           </View>
-
-          {/* Tabs Active/Deleted */}
-          <View style={styles.segmentWrap}>
-            <TouchableOpacity
-              onPress={() => setMode("active")}
-              style={[
-                styles.segmentBtn,
-                mode === "active" && styles.segmentBtnActive,
-              ]}
-            >
-              <Ionicons
-                name="checkmark-circle"
-                size={16}
-                color={mode === "active" ? "#fff" : "#e5e7eb"}
-              />
-              <Text
-                style={[
-                  styles.segmentText,
-                  mode === "active" && styles.segmentTextActive,
-                ]}
-              >
-                Đang hoạt động
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => setMode("deleted")}
-              style={[
-                styles.segmentBtn,
-                mode === "deleted" && styles.segmentBtnActive,
-              ]}
-            >
-              <Ionicons
-                name="trash"
-                size={16}
-                color={mode === "deleted" ? "#fff" : "#e5e7eb"}
-              />
-              <Text
-                style={[
-                  styles.segmentText,
-                  mode === "deleted" && styles.segmentTextActive,
-                ]}
-              >
-                Đã xóa
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Stats */}
-          <View style={styles.statsContainer}>
-            <StatCard
-              title="Tổng số"
-              value={filteredSuppliers.length}
-              icon="business"
-              gradient={["#667eea", "#764ba2"]}
-              trend={5.2}
-            />
-            <StatCard
-              title="Hoạt động"
-              value={activeCount}
-              icon="checkmark-circle"
-              gradient={["#43e97b", "#38f9d7"]}
-              trend={12.5}
-            />
-            <StatCard
-              title="Ngừng"
-              value={inactiveCount}
-              icon="close-circle"
-              gradient={["#f093fb", "#f5576c"]}
-              trend={-2.1}
-            />
-          </View>
+          <TouchableOpacity style={styles.headerAddBtn} onPress={handleAdd}>
+            <Ionicons name="add" size={28} color="#10b981" />
+          </TouchableOpacity>
         </View>
-      </LinearGradient>
 
-      {/* Search + Add */}
-      <View style={styles.actionBar}>
-        <View style={styles.searchContainer}>
-          <Ionicons name="search" size={20} color="#6b7280" />
+        {/* Mode Tabs */}
+        <View style={styles.modeTabs}>
+          <TouchableOpacity
+            onPress={() => setMode("active")}
+            style={[styles.modeTab, mode === "active" && styles.modeTabActive]}
+          >
+            <Text style={[styles.modeTabText, mode === "active" && styles.modeTabTextActive]}>Đang hoạt động</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setMode("deleted")}
+            style={[styles.modeTab, mode === "deleted" && styles.modeTabActive]}
+          >
+            <Text style={[styles.modeTabText, mode === "deleted" && styles.modeTabTextActive]}>Đã xóa</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Stats Row */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.statsScroll}
+        >
+          <StatCard title="Tổng số" value={suppliers.length} icon="business" gradient={["rgba(255,255,255,0.2)", "rgba(255,255,255,0.1)"]} />
+          <StatCard title="Hoạt động" value={activeCount} icon="checkmark-circle" gradient={["rgba(255,255,255,0.2)", "rgba(255,255,255,0.1)"]} />
+          <StatCard title="Đã xóa" value={suppliers.length - activeCount} icon="trash" gradient={["rgba(255,255,255,0.2)", "rgba(255,255,255,0.1)"]} />
+        </ScrollView>
+      </Animated.View>
+
+      {/* Sticky Search Bar */}
+      <Animated.View style={[
+        styles.stickySearch,
+        {
+          top: HEADER_HEIGHT - 30,
+          transform: [{ translateY: headerTranslate }],
+        }
+      ]}>
+        <View style={styles.searchBox}>
+          <Ionicons name="search" size={20} color="#94a3b8" />
           <TextInput
             style={styles.searchInput}
             value={search}
             onChangeText={setSearch}
-            placeholder="Tìm kiếm nhà cung cấp..."
-            placeholderTextColor="#9ca3af"
+            placeholder="Tìm theo tên, SĐT, địa chỉ..."
+            placeholderTextColor="#94a3b8"
           />
-          {search.length > 0 && (
+          {!!search && (
             <TouchableOpacity onPress={() => setSearch("")}>
-              <Ionicons name="close-circle" size={20} color="#9ca3af" />
+              <Ionicons name="close-circle" size={20} color="#cbd5e1" />
             </TouchableOpacity>
           )}
         </View>
+      </Animated.View>
 
-        {/* Chỉ cho thêm ở tab active */}
-        {mode === "active" && (
-          <TouchableOpacity style={styles.addBtn} onPress={handleAdd}>
-            <LinearGradient
-              colors={["#10b981", "#059669"]}
-              style={styles.addBtnGradient}
-            >
-              <Ionicons name="add" size={24} color="#fff" />
-            </LinearGradient>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* List */}
-      <FlatList
+      {/* Main List */}
+      <Animated.FlatList
         data={filteredSuppliers}
         keyExtractor={(item) => item._id}
         renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingTop: HEADER_HEIGHT + 35 }
+        ]}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true }
+        )}
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={["#667eea"]}
-            tintColor="#667eea"
+            colors={["#10b981"]}
+            progressViewOffset={HEADER_HEIGHT}
           />
         }
-        showsVerticalScrollIndicator={false}
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <LinearGradient
-              colors={["#f8fafc", "#e2e8f0"]}
-              style={styles.emptyIcon}
-            >
-              <Ionicons name="business-outline" size={48} color="#9ca3af" />
-            </LinearGradient>
-            <Text style={styles.emptyTitle}>
-              {search
-                ? "Không tìm thấy nhà cung cấp"
-                : mode === "active"
-                  ? "Chưa có nhà cung cấp"
-                  : "Chưa có nhà cung cấp đã xóa"}
-            </Text>
-            <Text style={styles.emptySubtitle}>
-              {search
-                ? "Thử tìm kiếm với từ khóa khác"
-                : mode === "active"
-                  ? "Thêm nhà cung cấp đầu tiên của bạn"
-                  : "Xóa mềm để có thể khôi phục tại đây"}
-            </Text>
-
-            {!search && mode === "active" && (
-              <TouchableOpacity style={styles.emptyBtn} onPress={handleAdd}>
-                <Text style={styles.emptyBtnText}>Thêm nhà cung cấp</Text>
-              </TouchableOpacity>
-            )}
+          <View style={styles.emptyContainer}>
+            <View style={styles.emptyIconCircle}>
+              <Ionicons name="business-outline" size={60} color="#e2e8f0" />
+            </View>
+            <Text style={styles.emptyTitle}>Chưa có nhà cung cấp nào</Text>
+            <Text style={styles.emptySubtitle}>Bắt đầu bằng cách thêm nhà cung cấp mới vào hệ thống của bạn</Text>
+            <TouchableOpacity style={styles.emptyAddBtn} onPress={handleAdd}>
+              <Ionicons name="add" size={20} color="#fff" style={{ marginRight: 6 }} />
+              <Text style={styles.emptyAddBtnText}>Thêm NCC</Text>
+            </TouchableOpacity>
           </View>
         }
       />
@@ -1105,7 +899,7 @@ const SupplierListScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
-    </Animated.View>
+    </View>
   );
 };
 
@@ -1114,375 +908,162 @@ export default SupplierListScreen;
 // ---------- styles ----------
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f8fafc" },
+  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
+  loadingCircle: { width: 60, height: 60, borderRadius: 30, justifyContent: "center", alignItems: "center" },
+  loadingText: { marginTop: 12, fontSize: 14, color: "#64748b", fontWeight: "600" },
 
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#ffffff",
-  },
-  loadingCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
-    shadowColor: "#667eea",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  loadingText: { fontSize: 16, color: "#6b7280", fontWeight: "600" },
-
-  header: {
-    backgroundColor: "#10b981",
-    paddingTop: 5,
-    paddingBottom: 10,
+  // Collapsible Header
+  collapsibleHeader: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    overflow: "hidden",
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
   },
-  headerContent: { paddingHorizontal: 20 },
-  headerTop: {
+  headerTopRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 1,
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: "800",
-    color: "#fff",
-    marginBottom: 4,
-  },
-  headerSubtitle: { fontSize: 16, color: "rgba(255,255,255,0.9)" },
-  notificationBtn: { padding: 8 },
-
-  segmentWrap: { flexDirection: "row", gap: 10, marginBottom: 14 },
-  segmentBtn: {
-    flex: 1,
-    flexDirection: "row",
-    gap: 8,
     alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.35)",
-    backgroundColor: "rgba(255,255,255,0.12)",
-  },
-  segmentBtnActive: {
-    backgroundColor: "rgba(0,0,0,0.18)",
-    borderColor: "rgba(255,255,255,0.55)",
-  },
-  segmentText: { color: "#e5e7eb", fontWeight: "700", fontSize: 13 },
-  segmentTextActive: { color: "#fff" },
-
-  statsContainer: { flexDirection: "row", gap: 12 },
-  statCard: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  statHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 12,
-  },
-  statIconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  trendBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 8,
-    gap: 2,
-  },
-  trendText: { fontSize: 10, fontWeight: "700" },
-  statValue: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: "#fff",
-    marginBottom: 4,
-  },
-  statTitle: { fontSize: 12, color: "#fff", fontWeight: "600", opacity: 0.9 },
-
-  actionBar: {
-    flexDirection: "row",
     paddingHorizontal: 20,
-    paddingVertical: 16,
-    gap: 12,
+    marginTop: 15,
+  },
+  headerTitle: { fontSize: 26, fontWeight: "800", color: "#fff" },
+  headerSubtitle: { fontSize: 13, color: "rgba(255,255,255,0.8)", marginTop: 4 },
+  headerAddBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
     backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9",
-  },
-  searchContainer: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f8fafc",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-  },
-  searchInput: { flex: 1, marginLeft: 10, fontSize: 16, color: "#1e293b" },
-
-  addBtn: {
-    width: 52,
-    height: 52,
-    borderRadius: 12,
-    shadowColor: "#10b981",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 6,
-    overflow: "hidden",
-  },
-  addBtnGradient: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
+  modeTabs: {
+    flexDirection: "row",
+    marginHorizontal: 20,
+    marginTop: 20,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderRadius: 12,
+    padding: 3,
+  },
+  modeTab: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: "center",
+    borderRadius: 10,
+  },
+  modeTabActive: { backgroundColor: "#fff" },
+  modeTabText: { fontSize: 13, fontWeight: "700", color: "rgba(255,255,255,0.8)" },
+  modeTabTextActive: { color: "#10b981" },
+  statsScroll: { paddingHorizontal: 20, paddingTop: 15, gap: 10 },
+  statCard: {
+    minWidth: 120,
+    padding: 12,
+    borderRadius: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.15)",
+  },
+  statIconCircle: { width: 32, height: 32, borderRadius: 10, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center" },
+  statValue: { fontSize: 16, fontWeight: "800", color: "#fff" },
+  statTitle: { fontSize: 10, color: "rgba(255,255,255,0.9)", fontWeight: "600" },
 
-  listContent: { padding: 20, paddingTop: 16 },
-
-  supplierCard: {
+  // Sticky Search
+  stickySearch: { position: "absolute", left: 0, right: 0, zIndex: 20, paddingHorizontal: 20 },
+  searchBox: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "#fff",
     borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
+    paddingHorizontal: 16,
+    height: 56,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 15,
+    elevation: 8,
     borderWidth: 1,
     borderColor: "#f1f5f9",
   },
-  supplierHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 12,
-  },
-  supplierInfoMain: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    flex: 1,
-    gap: 12,
-  },
-  supplierAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    overflow: "hidden",
-  },
-  avatarGradient: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: { fontSize: 18, fontWeight: "800", color: "#fff" },
-  supplierDetails: { flex: 1 },
-  supplierName: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: "#1e293b",
-    marginBottom: 6,
-  },
-  supplierMeta: { flexDirection: "row", alignItems: "center", gap: 8 },
-  statusBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    gap: 4,
-  },
-  statusActive: { backgroundColor: "#10b981" },
-  statusInactive: { backgroundColor: "#ef4444" },
-  statusText: { fontSize: 11, color: "#fff", fontWeight: "700" },
-  phoneText: { fontSize: 12, color: "#6b7280", fontWeight: "500" },
-  menuBtn: { padding: 4 },
+  searchInput: { flex: 1, fontSize: 15, color: "#1e293b", fontWeight: "500", marginLeft: 10 },
 
-  supplierExtraInfo: { gap: 6, marginBottom: 12, paddingLeft: 56 },
-  infoRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  infoText: { fontSize: 13, color: "#6b7280", flex: 1 },
-
-  supplierActions: {
-    flexDirection: "row",
-    gap: 8,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#f1f5f9",
-  },
-  actionBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: "#f8fafc",
-  },
-  actionText: { fontSize: 12, fontWeight: "600" },
-  viewBtn: { backgroundColor: "#eff6ff" },
-  editBtn: { backgroundColor: "#fff7ed" },
-  deleteBtn: { backgroundColor: "#fff1f2" },
-  restoreBtn: { backgroundColor: "#ecfdf5" },
-
-  empty: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 60,
-  },
-  emptyIcon: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 20,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#374151",
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    color: "#6b7280",
-    textAlign: "center",
-    marginBottom: 20,
-    paddingHorizontal: 16,
-  },
-  emptyBtn: {
-    backgroundColor: "#10b981",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  emptyBtnText: { color: "#fff", fontSize: 14, fontWeight: "600" },
-
-  // Detail modal
-  detailModalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.7)",
-    justifyContent: "flex-end",
-  },
-  detailModalContent: {
+  // List
+  listContent: { paddingHorizontal: 20, paddingBottom: 40 },
+  supplierCard: {
     backgroundColor: "#fff",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: "90%",
-  },
-  detailHeader: {
-    paddingTop: 20,
-    paddingBottom: 24,
-    paddingHorizontal: 20,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-  },
-  detailHeaderTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  closeBtn: { padding: 4 },
-  detailTitle: { fontSize: 18, fontWeight: "700", color: "#fff" },
-  detailActions: { flexDirection: "row", gap: 8 },
-  detailActionBtn: { padding: 8 },
-  supplierHero: { alignItems: "center" },
-  detailAvatar: {
-    width: 80,
-    height: 80,
     borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 12,
-    borderWidth: 3,
-    borderColor: "rgba(255,255,255,0.3)",
-  },
-  detailAvatarText: { fontSize: 32, fontWeight: "800", color: "#fff" },
-  detailName: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: "#fff",
-    marginBottom: 8,
-    textAlign: "center",
-  },
-  detailStatus: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    gap: 6,
-  },
-  detailStatusActive: { backgroundColor: "rgba(16,185,129,0.9)" },
-  detailStatusInactive: { backgroundColor: "rgba(239,68,68,0.9)" },
-  detailStatusText: { fontSize: 12, fontWeight: "700", color: "#fff" },
-  detailContent: { padding: 20 },
-  detailSection: { marginBottom: 24 },
-  detailSectionTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#1e293b",
+    padding: 16,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 3,
   },
-  detailItem: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: 16,
-    gap: 12,
-  },
-  detailItemIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: "#f8fafc",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  detailItemContent: { flex: 1 },
-  detailItemLabel: {
-    fontSize: 12,
-    color: "#6b7280",
-    marginBottom: 4,
-    fontWeight: "600",
-  },
-  detailItemValue: { fontSize: 15, color: "#1e293b", fontWeight: "500" },
+  cardMain: { flexDirection: "row", alignItems: "center", gap: 12 },
+  supplierAvatar: { width: 52, height: 52, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+  avatarText: { fontSize: 20, fontWeight: "800", color: "#fff" },
+  cardContent: { flex: 1 },
+  cardHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 },
+  supplierName: { fontSize: 16, fontWeight: "700", color: "#0f172a", flex: 1 },
+  activeTag: { backgroundColor: "#ecfdf5", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
+  activeTagText: { fontSize: 10, fontWeight: "700", color: "#10b981" },
+  inactiveTag: { backgroundColor: "#fef2f2", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
+  inactiveTagText: { fontSize: 10, fontWeight: "700", color: "#ef4444" },
+  infoRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 },
+  infoText: { fontSize: 13, color: "#64748b", fontWeight: "500" },
+  viewMoreBtn: { padding: 4 },
+  cardActions: { flexDirection: "row", alignItems: "center", marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: "#f1f5f9" },
+  actionItem: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
+  actionLabel: { fontSize: 13, fontWeight: "700" },
+  actionSeparator: { width: 1, height: 16, backgroundColor: "#f1f5f9" },
 
-  // Form modal
+  // Detail Modal
+  detailOverlay: { flex: 1, backgroundColor: "rgba(15, 23, 42, 0.6)", justifyContent: "flex-end" },
+  detailContent: { backgroundColor: "#fff", borderTopLeftRadius: 32, borderTopRightRadius: 32, paddingBottom: 30, maxHeight: "90%" },
+  detailHeader: { padding: 24, borderBottomWidth: 1, borderBottomColor: "#f1f5f9" },
+  detailTitleBox: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  detailTitle: { fontSize: 20, fontWeight: "800", color: "#0f172a" },
+  detailCloseBtn: { padding: 4 },
+  detailHero: { alignItems: "center", paddingVertical: 30 },
+  heroAvatar: { width: 100, height: 100, borderRadius: 32, alignItems: "center", justifyContent: "center", marginBottom: 16 },
+  heroAvatarText: { fontSize: 40, fontWeight: "800", color: "#fff" },
+  heroName: { fontSize: 22, fontWeight: "800", color: "#0f172a", marginBottom: 8 },
+  heroTagActive: { backgroundColor: "#ecfdf5", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
+  heroTagTextActive: { color: "#10b981", fontWeight: "700", fontSize: 13 },
+  heroTagInactive: { backgroundColor: "#fef2f2", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
+  heroTagTextInactive: { color: "#ef4444", fontWeight: "700", fontSize: 13 },
+  detailInfoList: { paddingHorizontal: 24 },
+  detailInfoItem: { flexDirection: "row", alignItems: "center", gap: 16, marginBottom: 20 },
+  infoIconBox: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  infoMeta: { flex: 1 },
+  infoLabel: { fontSize: 12, color: "#94a3b8", fontWeight: "600", marginBottom: 2 },
+  infoValue: { fontSize: 15, color: "#1e293b", fontWeight: "600" },
+  detailFooter: { padding: 24, paddingTop: 10 },
+  footerBtn: { height: 56, borderRadius: 16, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 },
+  editBtnActive: { backgroundColor: "#3b82f6" },
+  footerBtnText: { color: "#fff", fontSize: 16, fontWeight: "800" },
+
+  // Empty state
+  emptyContainer: { alignItems: "center", justifyContent: "center", paddingVertical: 80 },
+  emptyIconCircle: { width: 120, height: 120, borderRadius: 60, backgroundColor: "#f8fafc", alignItems: "center", justifyContent: "center", marginBottom: 20 },
+  emptyTitle: { fontSize: 18, fontWeight: "700", color: "#1e293b", marginBottom: 8 },
+  emptySubtitle: { fontSize: 14, color: "#64748b", textAlign: "center", paddingHorizontal: 40, lineHeight: 20, marginBottom: 24 },
+  emptyAddBtn: { flexDirection: "row", alignItems: "center", backgroundColor: "#10b981", paddingHorizontal: 20, paddingVertical: 12, borderRadius: 14 },
+  emptyAddBtnText: { color: "#fff", fontSize: 15, fontWeight: "700" },
+
+  // Form (if any - keeping compatible)
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",

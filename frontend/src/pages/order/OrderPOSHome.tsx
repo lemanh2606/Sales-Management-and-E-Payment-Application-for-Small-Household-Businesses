@@ -51,6 +51,14 @@ const apiUrl = import.meta.env.VITE_API_URL;
 const API_BASE = `${apiUrl}`;
 const SOCKET_URL = `${apiUrl}`;
 
+interface ProductBatch {
+  batch_no: string;
+  expiry_date: string | null;
+  cost_price: any;
+  selling_price?: any;
+  quantity: number;
+}
+
 interface Product {
   _id: string;
   name: string;
@@ -60,6 +68,7 @@ interface Product {
   stock_quantity: number;
   unit: string;
   image?: { url: string };
+  batches?: ProductBatch[];
 }
 
 interface Customer {
@@ -497,14 +506,32 @@ const OrderPOSHome: React.FC = () => {
     searchProductDebounced(searchProduct);
   }, [searchProduct]);
 
+  // Tính toán tồn kho khả dụng (trừ đi các lô đã hết hạn)
+  const getAvailableStock = (product: Product) => {
+    if (!product.batches || product.batches.length === 0) return product.stock_quantity;
+    
+    // Tổng số lượng trong các lô chưa hết hạn
+    const available = (product.batches as ProductBatch[]).reduce((sum: number, b: ProductBatch) => {
+      const isExpired = !!(b.expiry_date && new Date(b.expiry_date) < new Date());
+      return isExpired ? sum : sum + (b.quantity || 0);
+    }, 0);
+    
+    return available;
+  };
+
   // Thêm sản phẩm vào giỏ hàng
   const addToCart = (product: Product) => {
+    const availableStock = getAvailableStock(product);
+    
     // Don't add products with no stock
-    if (product.stock_quantity <= 0) {
+    if (availableStock <= 0) {
+      const hasExpired = product.batches && product.batches.some(b => b.expiry_date && new Date(b.expiry_date) < new Date());
       Swal.fire({
         icon: "warning",
-        title: "Hết hàng",
-        text: `Sản phẩm "${product.name}" đã hết hàng trong kho.`,
+        title: hasExpired ? "Hàng hết hạn" : "Hết hàng",
+        text: hasExpired 
+          ? `Sản phẩm "${product.name}" hiện chỉ còn các lô đã hết hạn sử dụng, không thể bán.`
+          : `Sản phẩm "${product.name}" đã hết hàng trong kho.`,
         confirmButtonText: "OK",
       });
       return;
@@ -514,13 +541,13 @@ const OrderPOSHome: React.FC = () => {
     updateOrderTab((tab) => {
       const existing = tab.cart.find((item) => item.productId === product._id);
       if (existing) {
-        // Check if adding more would exceed stock
+        // Check if adding more would exceed available stock
         const newQty = existing.quantity + 1;
-        if (newQty > product.stock_quantity) {
+        if (newQty > availableStock) {
           Swal.fire({
             icon: "warning",
-            title: "Vượt tồn kho",
-            text: `Chỉ còn ${product.stock_quantity} sản phẩm trong kho.`,
+            title: "Vượt tồn kho khả dụng",
+            text: `Chỉ còn ${availableStock} sản phẩm có thể bán (không tính hàng hết hạn).`,
             confirmButtonText: "OK",
           });
           return;
@@ -549,7 +576,7 @@ const OrderPOSHome: React.FC = () => {
             overridePrice: undefined,
             saleType: "NORMAL",
             subtotal: priceNum.toFixed(2),
-            stock_quantity: product.stock_quantity, // Store stock for validation
+            stock_quantity: availableStock, // Lưu tồn kho KHẢ DỤNG để validate sau này
           },
         ];
       }
@@ -567,26 +594,26 @@ const OrderPOSHome: React.FC = () => {
       if (qty <= 0) {
         tab.cart = tab.cart.filter((i) => i.productId !== id);
       } else {
-        // Check max stock - find from cart item or searchedProducts
-        const maxStock = (item as any).stock_quantity ?? 
-                         searchedProducts.find(p => p._id === id)?.stock_quantity ?? 9999;
-        const cappedQty = Math.min(qty, maxStock);
+        // Lấy tồn kho khả dụng từ CartItem (đã lưu khi addToCart)
+        const availableStock = (item as any).stock_quantity ?? 9999;
         
-        if (qty > maxStock) {
+        if (qty > availableStock) {
           Swal.fire({
             icon: "warning",
-            title: "Vượt tồn kho",
-            text: `Sản phẩm chỉ còn ${maxStock} đơn vị trong kho.`,
+            title: "Vượt tồn kho khả dụng",
+            text: `Chỉ còn ${availableStock} sản phẩm có thể bán (không tính hàng hết hạn).`,
             confirmButtonText: "OK",
           });
+          // Giới hạn lại số lượng bằng tồn kho khả dụng
+          qty = availableStock;
         }
         
         tab.cart = tab.cart.map((i) =>
           i.productId === id
             ? {
                 ...i,
-                quantity: cappedQty,
-                subtotal: (getItemUnitPrice(i) * cappedQty).toFixed(2),
+                quantity: qty,
+                subtotal: (getItemUnitPrice(i) * qty).toFixed(2),
               }
             : i
         );
@@ -952,32 +979,8 @@ const OrderPOSHome: React.FC = () => {
             }}
             autoFocus
           />
-          
-          {/* Voice Search Button */}
-          <Button
-            type="text"
-            icon={<span style={{ fontSize: 20 }}>🎤</span>}
-            onClick={() => {
-              const query = window.prompt("🎤 Tìm kiếm sản phẩm\nNhập tên sản phẩm cần tìm:");
-              if (query && query.trim()) {
-                setSearchProduct(query.trim());
-              }
-            }}
-            style={{
-              height: 42,
-              width: 42,
-              borderRadius: '50%',
-              background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
-              border: 'none'
-            }}
-            title="Tìm kiếm bằng giọng nói / nhập nhanh"
-          />
-        </div>
-
+        
+</div>
         <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
            <Badge count={currentTab.cart.length} offset={[-2, 2]}>
               <Button ghost icon={<PlusOutlined />} onClick={addNewOrderTab}>Tạo đơn mới</Button>
@@ -1008,51 +1011,74 @@ const OrderPOSHome: React.FC = () => {
             pointerEvents: searchedProducts.length > 0 ? "auto" : "none",
           }}
         >
-          {searchedProducts.filter(p => p.stock_quantity > 0).map((p) => (
-            <div
-              key={p._id}
-              onClick={() => addToCart(p)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "16px",
-                padding: "12px",
-                cursor: "pointer",
-                borderRadius: "12px",
-                marginBottom: "4px",
-                transition: "all 0.2s",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = "rgba(99, 102, 241, 0.1)";
-                e.currentTarget.style.paddingLeft = "20px";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = "transparent";
-                e.currentTarget.style.paddingLeft = "12px";
-              }}
-            >
-              <div style={{ width: 50, height: 50, borderRadius: 8, overflow: 'hidden', background: '#f0f2f5', flexShrink: 0 }}>
-                {p.image?.url ? (
-                  <img src={p.image.url} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                ) : (
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-                     <ShopOutlined style={{ fontSize: 20, color: '#d9d9d9' }} />
+          {searchedProducts.map((p) => {
+            const avail = getAvailableStock(p);
+            const isOut = avail <= 0;
+            const hasBatches = p.batches && p.batches.length > 0;
+
+            return (
+              <div
+                key={p._id}
+                onClick={() => !isOut && addToCart(p)}
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  padding: "12px",
+                  cursor: isOut ? "not-allowed" : "pointer",
+                  borderRadius: "12px",
+                  marginBottom: "8px",
+                  transition: "all 0.2s",
+                  border: "1px solid transparent",
+                  opacity: isOut ? 0.6 : 1,
+                  background: isOut ? "#fafafa" : "transparent"
+                }}
+                onMouseEnter={(e) => {
+                  if (!isOut) {
+                    e.currentTarget.style.background = "rgba(99, 102, 241, 0.05)";
+                    e.currentTarget.style.borderColor = "rgba(99, 102, 241, 0.2)";
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isOut) {
+                    e.currentTarget.style.background = "transparent";
+                    e.currentTarget.style.borderColor = "transparent";
+                  }
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "16px", width: "100%" }}>
+                  <div style={{ width: 50, height: 50, borderRadius: 8, overflow: 'hidden', background: '#f0f2f5', flexShrink: 0 }}>
+                    {p.image?.url ? (
+                      <img src={p.image.url} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                        <ShopOutlined style={{ fontSize: 20, color: '#d9d9d9' }} />
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600, fontSize: "15px" }}>{p.name}</div>
-                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                  <Tag color="blue" style={{ margin: 0, borderRadius: 4, fontSize: 10 }}>{p.sku}</Tag>
-                  <Text type="secondary" style={{ fontSize: 13 }}>Tồn: {p.stock_quantity}</Text>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600, fontSize: "15px", color: isOut ? "#999" : "#1f2937" }}>{p.name}</div>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 2 }}>
+                      <Tag color="blue" style={{ margin: 0, borderRadius: 4, fontSize: 10, border: 'none' }}>{p.sku}</Tag>
+                      <Text type={isOut ? "danger" : "secondary"} style={{ fontSize: 12 }}>
+                        {isOut ? "Hết hàng có thể bán" : `Tồn khả dụng: ${avail}`}
+                      </Text>
+                      {p.stock_quantity > avail && (
+                        <Tooltip title="Đã trừ hàng hết hạn">
+                          <Tag color="error" style={{ fontSize: 9, margin: 0 }}>-{p.stock_quantity - avail} hết hạn</Tag>
+                        </Tooltip>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <Text strong style={{ color: isOut ? "#999" : "#6366f1", fontSize: "16px" }}>{formatPrice(p.price)}</Text>
+                    <div style={{ fontSize: 11, color: '#94a3b8' }}>{p.unit}</div>
+                  </div>
                 </div>
+
+                {/* Đã ẩn chi tiết lô hàng theo yêu cầu người dùng để giao diện gọn hơn */}
               </div>
-              <div style={{ textAlign: "right" }}>
-                <Text strong style={{ color: "#6366f1", fontSize: "16px" }}>{formatPrice(p.price)}</Text>
-                <div style={{ fontSize: 11, color: '#94a3b8' }}>{p.unit}</div>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
       {/* BODY - 2 CỘT (GRID 24 CỘT) */}

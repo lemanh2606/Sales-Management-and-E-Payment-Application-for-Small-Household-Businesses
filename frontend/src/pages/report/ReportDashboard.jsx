@@ -48,10 +48,12 @@ import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Toolti
 import axios from "axios";
 import dayjs from "dayjs";
 import "../../premium.css";
+import { useNavigate, useLocation } from "react-router-dom";
 import localizedFormat from "dayjs/plugin/localizedFormat";
 import quarterOfYear from "dayjs/plugin/quarterOfYear";
 import Swal from "sweetalert2";
 import Layout from "../../components/Layout";
+import { useAuth } from "../../context/AuthContext";
 import operatingExpenseService from "../../services/operatingExpenseService";
 import "dayjs/locale/vi"; // ✅ LOCALE VI
 
@@ -96,10 +98,17 @@ const getProfitColorByValue = (value) => {
 };
 
 const ReportDashboard = () => {
+  const { currentStore: authStore, user } = useAuth();
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const urlStoreId = queryParams.get("storeId");
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [data, setData] = useState(null);
-  const currentStore = JSON.parse(localStorage.getItem("currentStore") || "{}"); // Lấy từ localStorage
+
+  // Ưu tiên store từ AuthContext, sau đó đến URL, cuối cùng là localStorage fallback
+  const currentStore = authStore || (urlStoreId ? { _id: urlStoreId } : JSON.parse(localStorage.getItem("currentStore") || "{}"));
   const [groupPagination, setGroupPagination] = useState({
     current: 1,
     pageSize: 10,

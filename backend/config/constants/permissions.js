@@ -13,15 +13,16 @@ const ALL_PERMISSIONS = [
   "store:employee:delete",
   "store:employee:softDelete",
   "store:employee:restore",
-  "store:employee:view_deleted", // 👈 THÊM: xem nhân viên đã xóa
+  "store:employee:view_deleted",
 
   // ========== CUSTOMERS ==========
   "customers:create",
+  "customers:view",
   "customers:search",
   "customers:update",
   "customers:delete",
   "customers:top-customers",
-  "customers:view", // 👈 THÊM: xem khách hàng
+  "customers:export",
 
   // ========== LOYALTY ==========
   "loyalty:view",
@@ -33,6 +34,7 @@ const ALL_PERMISSIONS = [
   "orders:print",
   "orders:view",
   "orders:refund",
+  "orders:delete",
 
   // ========== REPORTS ==========
   "reports:top-products",
@@ -42,6 +44,8 @@ const ALL_PERMISSIONS = [
   "reports:financial:view",
   "reports:financial:export",
   "reports:financial:list",
+  "reports:activity-log:view",
+  "reports:endofday:view",
 
   // ========== PRODUCTS ==========
   "products:create",
@@ -53,7 +57,6 @@ const ALL_PERMISSIONS = [
   "products:search",
   "products:low-stock",
   "products:export",
-  "products:get", // 👈 THÊM: lấy sản phẩm (dùng cho API nội bộ)
 
   // ========== PRODUCT GROUPS ==========
   "product-groups:create",
@@ -101,47 +104,41 @@ const ALL_PERMISSIONS = [
   "warehouses:set-default",
 
   // ========== SUPPLIERS ==========
-  "supplier:create",
-  "supplier:view",
-  "supplier:update",
-  "supplier:delete",
-  "supplier:restore",
-  "supplier:export",
+  "suppliers:create",
+  "suppliers:view",
+  "suppliers:update",
+  "suppliers:delete",
+  "suppliers:restore",
+  "suppliers:export",
 
-  // ========== TAX ==========
-  "tax:preview",
-  "tax:create",
-  "tax:update",
-  "tax:clone",
-  "tax:delete",
-  "tax:list",
-  "tax:export",
-  "tax:view", // 👈 THÊM: xem thuế
+  // ========== TAXES ==========
+  "taxes:view",
+  "taxes:preview",
+  "taxes:create",
+  "taxes:update",
+  "taxes:clone",
+  "taxes:delete",
+  "taxes:list",
+  "taxes:export",
 
   // ========== USER MANAGEMENT ==========
   "users:view",
+  "users:create",
+  "users:update",
+  "users:delete",
   "users:manage",
   "users:role:update",
   "users:menu:update",
-  "users:update",
-  "users:create", // 👈 THÊM: tạo user
-  "users:delete", // 👈 THÊM: xóa user
-
-  // ========== REPORTS & EXPORTS ==========
-  "reports:export",
-  "reports:activity-log:view",
-  "reports:endofday:view",
-  "data:export",
 
   // ========== SETTINGS ==========
+  "settings:view",
+  "settings:update",
   "settings:activity-log",
   "settings:payment-method",
-  "settings:view", // 👈 THÊM: xem settings
-  "settings:update", // 👈 THÊM: cập nhật settings
 
   // ========== NOTIFICATIONS ==========
   "notifications:view",
-  "notifications:manage", // 👈 THÊM: quản lý thông báo
+  "notifications:manage",
 
   // ========== SUBSCRIPTION ==========
   "subscription:view",
@@ -152,78 +149,42 @@ const ALL_PERMISSIONS = [
 
   // ========== EMPLOYEES (GLOBAL) ==========
   "employees:view",
+  "employees:manage",
   "employees:assign",
-  "employees:manage", // 👈 THÊM: quản lý nhân viên toàn hệ thống
 
-  // ========== FILE MANAGEMENT ==========
-  "file:view",
-  "file:upload", // 👈 THÊM: upload file
-  "file:delete", // 👈 THÊM: xóa file
+  // ========== FILES ==========
+  "files:view",
+  "files:upload",
+  "files:delete",
 
   // ========== WILDCARDS ==========
-  "*", // 👈 Toàn quyền
-  "*:*", // 👈 Toàn quyền (alternate format)
-  "all", // 👈 Toàn quyền (simple)
-  "store:*", // 👈 Toàn quyền store
-  "products:*", // 👈 Toàn quyền products
-  "orders:*", // 👈 Toàn quyền orders
-  "customers:*", // 👈 Toàn quyền customers
-  "reports:*", // 👈 Toàn quyền reports
-  "inventory:*", // 👈 Toàn quyền inventory
-  "tax:*", // 👈 Toàn quyền tax
-  "users:*", // 👈 Toàn quyền users
-
-  // ========== SCOPE-SPECIFIC PATTERNS ==========
-  // Các pattern này sẽ được generate động khi cần
-  // Ví dụ: "store:68f8a0d08f156b744e9e4bb9:employee:view"
-  // Pattern: "store:<storeId>:<resource>:<action>"
+  "*",
+  "*:*",
+  "all",
+  "store:*",
+  "products:*",
+  "orders:*",
+  "customers:*",
+  "reports:*",
+  "inventory:*",
+  "taxes:*",
+  "users:*",
 ];
 
 const STAFF_DEFAULT_MENU = [
-  // Store
-  "store:employee:view", // 👈 THÊM: staff có thể xem nhân viên cùng store
-
-  // Orders
   "orders:create",
   "orders:pay",
   "orders:print",
   "orders:view",
-  "orders:refund",
-
-  // Customers
   "customers:create",
   "customers:search",
-  "customers:update",
-  "customers:view", // 👈 THÊM
-
-  // Loyalty
+  "customers:view",
   "loyalty:view",
-
-  // Products
   "products:view",
   "products:search",
-
-  // Inventory
-  "inventory:stock-check:view",
-  "inventory:stock-check:detail",
-  "inventory:stock-check:update",
-
-  // Suppliers
-  "supplier:view",
-
-  // Users (chỉ xem)
-  "users:view",
-
-  // Reports
-  "reports:revenue:view",
-
-  // Notifications
+  "suppliers:view",
   "notifications:view",
-
-  // File
-  "file:view",
-
-  // Product groups
+  "files:view",
   "product-groups:view",
 ];
 

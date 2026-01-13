@@ -21,6 +21,7 @@ const {
   deleteProductImage,
   getProductById,
   getLowStockProducts,
+  getExpiringProducts,
   importProducts,
   downloadProductTemplate,
   exportProducts,
@@ -146,7 +147,7 @@ router.get(
   verifyToken,
   checkSubscriptionExpiry,
   // checkStoreAccess,
-  requirePermission("products:get"),
+  requirePermission("products:view"),
   getProductsByStore
 );
 
@@ -207,6 +208,19 @@ router.delete(
   checkStoreAccess,
   requirePermission("products:delete"),
   deleteProduct
+);
+
+/*
+  ROUTE: GET /api/products/expiring
+  - Lấy danh sách sản phẩm sắp hết hạn sử dụng
+  - Query params: storeId, days (số ngày tới khi hết hạn, mặc định 30)
+  - Middleware: verifyToken -> checkSubscriptionExpiry
+*/
+router.get(
+  "/expiring",
+  verifyToken,
+  checkSubscriptionExpiry,
+  getExpiringProducts
 );
 
 /*

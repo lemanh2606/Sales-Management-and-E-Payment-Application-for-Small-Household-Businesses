@@ -1020,7 +1020,7 @@ const postInventoryVoucher = async (req, res) => {
 
     const productMap = new Map(products.map((p) => [String(p._id), p]));
 
-    // ===== Nếu OUT: check tồn kho =====
+    // ===== Nếu OUT: check tồn kho khả dụng (không tính hàng hết hạn) =====
     if (String(doc.type || "").toUpperCase() === "OUT") {
       for (const it of doc.items) {
         const pid = it.product_id;
@@ -1034,10 +1034,8 @@ const postInventoryVoucher = async (req, res) => {
           });
         }
 
-        const currentQty = Number(p.stock_quantity || 0); // ✅ FIX
-        const outQty = Number(it.qty_actual || 0);
-
-        if (!Number.isFinite(outQty) || outQty <= 0) {
+        const qtyToExport = Number(it.qty_actual || 0);
+        if (!Number.isFinite(qtyToExport) || qtyToExport <= 0) {
           await session.abortTransaction();
           session.endSession();
           return res.status(400).json({
@@ -1045,11 +1043,22 @@ const postInventoryVoucher = async (req, res) => {
           });
         }
 
-        if (currentQty < outQty) {
+        // Tính tồn kho khả dụng (batches không hết hạn)
+        const availableQty = (p.batches || []).reduce((sum, b) => {
+          const isExpired = b.expiry_date && new Date(b.expiry_date) < new Date();
+          return isExpired ? sum : sum + (b.quantity || 0);
+        }, 0);
+
+        if (availableQty < qtyToExport) {
+          const totalQty = Number(p.stock_quantity || 0);
+          const expiredQty = totalQty - availableQty;
+          
           await session.abortTransaction();
           session.endSession();
           return res.status(400).json({
-            message: `Không đủ tồn kho cho sản phẩm ${p.name}. Tồn: ${currentQty}, xuất: ${outQty}`,
+            message: `Sản phẩm "${p.name}" không đủ tồn kho khả dụng để xuất. ` + 
+                     `Tổng tồn: ${totalQty}, Hết hạn: ${expiredQty}, Khả dụng: ${availableQty}. ` +
+                     `Cần xuất: ${qtyToExport}.`,
           });
         }
       }
@@ -1123,7 +1132,11 @@ const postInventoryVoucher = async (req, res) => {
           for (const batch of product.batches) {
             if (remainingToDeduct <= 0) break;
             if (batch.quantity <= 0) continue;
-            // Skip batch nếu nó chính là batch đã trừ ở bước 1 (để tránh trừ 2 lần nếu logic trên chưa clean? Không, quantity đã giảm rồi, nên safe)
+
+            // Kiểm tra hạn sử dụng: Bỏ qua lô hết hạn khi xuất kho (OUT) thông thường
+            if (batch.expiry_date && new Date(batch.expiry_date) < new Date()) {
+                continue;
+            }
             
             if (batch.quantity >= remainingToDeduct) {
               batch.quantity -= remainingToDeduct;

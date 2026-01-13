@@ -129,7 +129,7 @@ router.get(
   "/preview",
   verifyToken,
   taxStoreAccess,
-  requirePermission("tax:preview"),
+  requirePermission("taxes:preview"),
   previewSystemRevenue
 );
 
@@ -137,7 +137,7 @@ router.get(
   "/",
   verifyToken,
   taxStoreAccess,
-  requirePermission("tax:list"),
+  requirePermission("taxes:list"),
   listDeclarations
 );
 
@@ -145,7 +145,7 @@ router.post(
   "/",
   verifyToken,
   taxStoreAccess,
-  requirePermission("tax:create"),
+  requirePermission("taxes:create"),
   createTaxDeclaration
 );
 
@@ -155,7 +155,7 @@ router.post(
   verifyToken,
   validateObjectId,
   taxStoreAccess,
-  requirePermission("tax:clone"),
+  requirePermission("taxes:clone"),
   cloneTaxDeclaration
 );
 
@@ -165,7 +165,7 @@ router.post(
   validateObjectId,
   taxStoreAccess,
 
-  requirePermission("tax:approve"),
+  requirePermission("taxes:approve"),
   approveRejectDeclaration
 );
 
@@ -174,7 +174,7 @@ router.get(
   verifyToken,
   validateObjectId,
   taxStoreAccess,
-  requirePermission("tax:export"),
+  requirePermission("taxes:export"),
   exportDeclaration
 );
 
@@ -185,7 +185,7 @@ router.put(
   verifyToken,
   validateObjectId,
   taxStoreAccess,
-  requirePermission("tax:update"),
+  requirePermission("taxes:update"),
   (req, res, next) => {
     console.log(
       `   🟢 [ROUTE MATCHED] PUT /:id - Calling updateTaxDeclaration`
@@ -201,7 +201,7 @@ router.delete(
   validateObjectId,
   taxStoreAccess,
 
-  requirePermission("tax:delete"),
+  requirePermission("taxes:delete"),
   deleteTaxDeclaration
 );
 

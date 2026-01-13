@@ -631,31 +631,7 @@ export default function DashboardScreen() {
             </View>
           </View>
 
-          {/* Search Bar */}
-          <View style={styles.searchContainer}>
-            <View style={styles.searchBox}>
-              <Ionicons name="search-outline" size={20} color={COLORS.muted} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Tìm đơn hàng, sản phẩm, khách hàng..."
-                placeholderTextColor={COLORS.placeholder}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                returnKeyType="search"
-                onSubmitEditing={() => {
-                   if(searchQuery.trim()){
-                      navigation.navigate("OrderList", { query: searchQuery });
-                      setSearchQuery("");
-                   }
-                }}
-              />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchQuery("")}>
-                  <Ionicons name="close-circle" size={20} color={COLORS.muted} />
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
+        
 
           {/* Navigation Tabs */}
           <View style={styles.tabContainer}>

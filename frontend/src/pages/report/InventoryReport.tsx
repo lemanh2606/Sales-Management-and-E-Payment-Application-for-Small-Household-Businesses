@@ -23,6 +23,8 @@ import axios from "axios";
 import * as XLSX from "xlsx";
 import Layout from "../../components/Layout";
 import Swal from "sweetalert2";
+import { useAuth } from "../../context/AuthContext";
+import { useLocation } from "react-router-dom";
 
 const apiUrl = import.meta.env.VITE_API_URL;
 const { Title, Text } = Typography;
@@ -106,8 +108,14 @@ interface VarianceResponse {
 
 // ===== COMPONENT =====
 const InventoryReport: React.FC = () => {
-  const currentStore = JSON.parse(localStorage.getItem("currentStore") || "{}");
-  const storeId = currentStore._id;
+  const { currentStore: authStore } = useAuth();
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const urlStoreId = queryParams.get("storeId");
+
+  // Ưu tiên store từ AuthContext, sau đó đến URL, cuối cùng là localStorage fallback
+  const currentStore = authStore || (urlStoreId ? { _id: urlStoreId } : JSON.parse(localStorage.getItem("currentStore") || "{}"));
+  const storeId = currentStore?._id;
   const token = localStorage.getItem("token");
   const headers = { Authorization: `Bearer ${token}` };
 

@@ -41,6 +41,8 @@ import Swal from "sweetalert2";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 import "../../premium.css";
+import { useAuth } from "../../context/AuthContext";
+import { useLocation } from "react-router-dom";
 
 // Khởi tạo plugin
 dayjs.extend(utc); // ✅ THÊM
@@ -144,8 +146,14 @@ const PERIOD_LABELS: Record<string, string> = {
 };
 
 const EndOfDayReport: React.FC = () => {
-  const currentStore = JSON.parse(localStorage.getItem("currentStore") || "{}");
-  const storeId = currentStore._id;
+  const { currentStore: authStore } = useAuth();
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const urlStoreId = queryParams.get("storeId");
+
+  // Ưu tiên store từ AuthContext, sau đó đến URL, cuối cùng là localStorage fallback
+  const currentStore = authStore || (urlStoreId ? { _id: urlStoreId } : JSON.parse(localStorage.getItem("currentStore") || "{}"));
+  const storeId = currentStore?._id;
   const token = localStorage.getItem("token");
   const headers = { Authorization: `Bearer ${token}` };
 

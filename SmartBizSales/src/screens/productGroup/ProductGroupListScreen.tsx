@@ -1,19 +1,23 @@
 // src/screens/productGroup/ProductGroupListScreen.tsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TextInput,
-  TouchableOpacity,
   ActivityIndicator,
   Alert,
-  RefreshControl,
+  Animated,
+  Dimensions,
+  FlatList,
   Modal,
+  RefreshControl,
   ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import * as productGroupApi from "../../api/productGroupApi";
@@ -41,71 +45,58 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color }) => {
 
 const GroupCard: React.FC<{
   group: ProductGroup;
-  maxProducts: number;
   onEdit: () => void;
   onDelete: () => void;
-}> = ({ group, maxProducts, onEdit, onDelete }) => {
+}> = ({ group, onEdit, onDelete }) => {
   const productCount = group.productCount || 0;
-  const progress = maxProducts > 0 ? (productCount / maxProducts) * 100 : 0;
   const createdDate = group.createdAt
     ? new Date(group.createdAt).toLocaleDateString("vi-VN")
     : "N/A";
 
   return (
     <View style={styles.groupCard}>
-      <View style={styles.groupHeader}>
-        <View style={styles.groupIconCircle}>
-          <Ionicons name="apps" size={28} color="#fff" />
-        </View>
-        <View style={styles.groupBadge}>
-          <Text style={styles.groupBadgeText}>{productCount}</Text>
-        </View>
-      </View>
+      <View style={styles.groupMainRow}>
+        <LinearGradient
+          colors={["#10b981", "#059669"]}
+          style={styles.groupIconCircle}
+        >
+          <Ionicons name="layers" size={24} color="#fff" />
+        </LinearGradient>
 
-      <Text style={styles.groupLabel}>TÊN NHÓM</Text>
-      <Text style={styles.groupName} numberOfLines={2}>
-        {group.name}
-      </Text>
+        <View style={styles.groupContent}>
+          <View style={styles.groupTitleRow}>
+            <Text style={styles.groupName} numberOfLines={1}>
+              {group.name}
+            </Text>
+            <View style={styles.countBadge}>
+              <Text style={styles.countBadgeText}>{productCount} SP</Text>
+            </View>
+          </View>
 
-      <Text style={styles.groupLabel}>MÔ TẢ</Text>
-      <Text style={styles.groupDesc} numberOfLines={3}>
-        {group.description || "Không có mô tả"}
-      </Text>
-
-      <View style={styles.progressContainer}>
-        <View style={styles.progressHeader}>
-          <Text style={styles.progressLabel}>Số lượng SP</Text>
-          <Text style={styles.progressValue}>{productCount} SP</Text>
-        </View>
-        <View style={styles.progressBar}>
-          <View style={[styles.progressFill, { width: `${progress}%` }]} />
-        </View>
-      </View>
-
-      <View style={styles.groupMeta}>
-        <View style={styles.metaRow}>
-          <Ionicons name="calendar-outline" size={14} color="#9ca3af" />
-          <Text style={styles.metaText}>Tạo: {createdDate}</Text>
-        </View>
-        <View style={styles.metaRow}>
-          <Ionicons
-            name="information-circle-outline"
-            size={14}
-            color="#9ca3af"
-          />
-          <Text style={styles.metaText} numberOfLines={1}>
-            ID: {group._id.slice(-8)}
+          <Text style={styles.groupDesc} numberOfLines={2}>
+            {group.description || "Không có mô tả cho nhóm này"}
           </Text>
+
+          <View style={styles.groupFooter}>
+            <View style={styles.metaInfo}>
+              <Ionicons name="calendar-outline" size={12} color="#94a3b8" />
+              <Text style={styles.metaText}>{createdDate}</Text>
+            </View>
+            <View style={styles.metaDivider} />
+            <Text style={styles.metaText}>ID: {group._id.slice(-6).toUpperCase()}</Text>
+          </View>
         </View>
       </View>
 
-      <View style={styles.groupActions}>
-        <TouchableOpacity style={styles.editBtn} onPress={onEdit}>
-          <Ionicons name="create-outline" size={18} color="#10b981" />
-          <Text style={styles.editBtnText}>Sửa</Text>
+      <View style={styles.groupActionRow}>
+        <TouchableOpacity style={styles.actionBtn} onPress={onEdit}>
+          <Ionicons name="create-outline" size={18} color="#2563eb" />
+          <Text style={[styles.actionBtnText, { color: "#2563eb" }]}>Chỉnh sửa</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.deleteBtn} onPress={onDelete}>
+        <View style={styles.actionDivider} />
+        <TouchableOpacity style={styles.actionBtn} onPress={onDelete}>
           <Ionicons name="trash-outline" size={18} color="#ef4444" />
+          <Text style={[styles.actionBtnText, { color: "#ef4444" }]}>Xóa nhóm</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -114,10 +105,61 @@ const GroupCard: React.FC<{
 
 // ========== MAIN COMPONENT ==========
 const ProductGroupListScreen: React.FC = () => {
+  const insets = useSafeAreaInsets();
   const [groups, setGroups] = useState<ProductGroup[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [search, setSearch] = useState<string>("");
+
+  // Animation values for Collapsible Header
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const lastScrollY = useRef(0);
+  const headerTranslate = useRef(new Animated.Value(0)).current;
+  const [headerVisible, setHeaderVisible] = useState(true);
+
+  const HEADER_HEIGHT = 160 + insets.top;
+
+  useEffect(() => {
+    const listener = scrollY.addListener(({ value }: { value: number }) => {
+      const diff = value - lastScrollY.current;
+      lastScrollY.current = value;
+
+      if (value < 50) {
+        // Show header when near top
+        Animated.timing(headerTranslate, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }).start();
+        setHeaderVisible(true);
+        return;
+      }
+
+      if (diff > 5) {
+        // Scroll down - hide header
+        if (headerVisible) {
+          Animated.timing(headerTranslate, {
+            toValue: -HEADER_HEIGHT,
+            duration: 250,
+            useNativeDriver: true,
+          }).start();
+          setHeaderVisible(false);
+        }
+      } else if (diff < -5) {
+        // Scroll up - show header
+        if (!headerVisible) {
+          Animated.timing(headerTranslate, {
+            toValue: 0,
+            duration: 200,
+            useNativeDriver: true,
+          }).start();
+          setHeaderVisible(true);
+        }
+      }
+    });
+
+    return () => scrollY.removeListener(listener);
+  }, [headerVisible, HEADER_HEIGHT]);
 
   // Modal states
   const [formModalVisible, setFormModalVisible] = useState<boolean>(false);
@@ -293,7 +335,6 @@ const ProductGroupListScreen: React.FC = () => {
   const renderItem = ({ item }: { item: ProductGroup }) => (
     <GroupCard
       group={item}
-      maxProducts={maxProducts}
       onEdit={() => handleEdit(item)}
       onDelete={() => handleDelete(item)}
     />
@@ -310,91 +351,107 @@ const ProductGroupListScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.headerGradient}>
-        <Text style={styles.headerTitle}> Nhóm sản phẩm</Text>
-        <Text style={styles.headerSubtitle}>
-          Tổ chức và phân loại sản phẩm dễ dàng
-        </Text>
-      </View>
-
-      {/* Stats */}
-      {groups.length > 0 && (
-        <View style={styles.statsContainer}>
-          <StatCard
-            title="Tổng nhóm"
-            value={groups.length}
-            icon="apps"
-            color="#10b981"
-          />
-          <StatCard
-            title="Tổng SP"
-            value={totalProducts}
-            icon="cube"
-            color="#3b82f6"
-          />
-          <StatCard
-            title="TB SP/nhóm"
-            value={avgProducts}
-            icon="bar-chart"
-            color="#f59e0b"
-          />
-          <StatCard
-            title="Max SP"
-            value={maxProducts}
-            icon="trophy"
-            color="#ef4444"
-          />
+      {/* Animated Collapsible Header */}
+      <Animated.View
+        style={[
+          styles.collapsibleHeader,
+          {
+            height: HEADER_HEIGHT,
+            transform: [{ translateY: headerTranslate }],
+            paddingTop: insets.top,
+          },
+        ]}
+      >
+        <LinearGradient
+          colors={["#10b981", "#059669"]}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.headerTop}>
+          <View>
+            <Text style={styles.headerTitle}>Nhóm hàng hóa</Text>
+            <Text style={styles.headerSubtitle}>
+              Quản lý {groups.length} nhóm và {totalProducts} sản phẩm
+            </Text>
+          </View>
+          <TouchableOpacity style={styles.headerAddBtn} onPress={handleAdd}>
+            <Ionicons name="add" size={28} color="#10b981" />
+          </TouchableOpacity>
         </View>
-      )}
 
-      {/* Search & Add */}
-      <View style={styles.actionBar}>
-        <View style={styles.searchWrapper}>
-          <Ionicons name="search" size={20} color="#6b7280" />
+        {/* Stats Row */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.statsScroll}
+        >
+          <StatCard title="TB SP" value={avgProducts} icon="stats-chart" color="rgba(255,255,255,0.2)" />
+          <StatCard title="Max SP" value={maxProducts} icon="trophy" color="rgba(255,255,255,0.2)" />
+          <StatCard title="Tổng nhóm" value={groups.length} icon="apps" color="rgba(255,255,255,0.2)" />
+        </ScrollView>
+      </Animated.View>
+
+      {/* Floating Action Bar (Search) - Remains sticky but moves with header if desired, or stay fixed */}
+      <Animated.View style={[
+        styles.stickySearch,
+        {
+          top: HEADER_HEIGHT - 30, // Positioned overlapping the header bottom
+          transform: [{ translateY: headerTranslate }],
+        }
+      ]}>
+        <View style={styles.searchBox}>
+          <Ionicons name="search" size={20} color="#94a3b8" style={{ marginRight: 10 }} />
           <TextInput
             style={styles.searchInput}
             value={search}
             onChangeText={setSearch}
-            placeholder="Tìm kiếm nhóm..."
-            placeholderTextColor="#9ca3af"
+            placeholder="Tìm theo tên hoặc mô tả..."
+            placeholderTextColor="#94a3b8"
           />
-          {search.length > 0 && (
+          {!!search && (
             <TouchableOpacity onPress={() => setSearch("")}>
-              <Ionicons name="close-circle" size={20} color="#9ca3af" />
+              <Ionicons name="close-circle" size={20} color="#cbd5e1" />
             </TouchableOpacity>
           )}
         </View>
-        <TouchableOpacity style={styles.addBtn} onPress={handleAdd}>
-          <Ionicons name="add" size={24} color="#fff" />
-        </TouchableOpacity>
-      </View>
+      </Animated.View>
 
       {/* List */}
-      <FlatList
+      <Animated.FlatList
         data={filteredGroups}
         keyExtractor={(item) => item._id}
         renderItem={renderItem}
-        numColumns={2}
-        columnWrapperStyle={styles.columnWrapper}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingTop: HEADER_HEIGHT + 35 } // offset for header + search
+        ]}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true }
+        )}
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
             colors={["#10b981"]}
+            progressViewOffset={HEADER_HEIGHT}
           />
         }
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <Ionicons name="apps-outline" size={64} color="#e5e7eb" />
-            <Text style={styles.emptyText}>
-              {search ? "Không tìm thấy nhóm" : "Chưa có nhóm sản phẩm"}
+          <View style={styles.emptyContainer}>
+            <View style={styles.emptyIconCircle}>
+              <Ionicons name="file-tray-outline" size={60} color="#e2e8f0" />
+            </View>
+            <Text style={styles.emptyTitle}>
+              {search ? "Không tìm thấy kết quả" : "Chưa có nhóm hàng hóa"}
+            </Text>
+            <Text style={styles.emptySubtitle}>
+              {search ? "Thử tìm kiếm với từ khóa khác" : "Bắt đầu bằng cách tạo nhóm hàng hóa đầu tiên của bạn"}
             </Text>
             {!search && (
-              <TouchableOpacity style={styles.emptyBtn} onPress={handleAdd}>
-                <Ionicons name="add-circle" size={20} color="#fff" />
-                <Text style={styles.emptyBtnText}>Tạo nhóm đầu tiên</Text>
+              <TouchableOpacity style={styles.emptyAddBtn} onPress={handleAdd}>
+                <Ionicons name="add" size={20} color="#fff" style={{ marginRight: 6 }} />
+                <Text style={styles.emptyAddBtnText}>Tạo nhóm mới</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -481,286 +538,330 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#f8fafc",
+    backgroundColor: "#fff",
   },
-  loadingText: { marginTop: 12, fontSize: 14, color: "#64748b" },
-  headerGradient: {
-    backgroundColor: "#10b981",
-    padding: 24,
-    paddingTop: 20,
+  loadingText: { marginTop: 12, fontSize: 14, color: "#64748b", fontWeight: "600" },
+
+  // Collapsible Header
+  collapsibleHeader: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    overflow: "hidden",
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
-    shadowColor: "#10b981",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 10,
   },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: "800",
-    color: "#fff",
-    marginBottom: 6,
-  },
-  headerSubtitle: { fontSize: 14, color: "rgba(255,255,255,0.9)" },
-  statsContainer: { flexDirection: "row", padding: 16, gap: 10 },
-  statCard: {
-    flex: 1,
-    padding: 14,
-    borderRadius: 14,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 4,
-  },
-  statIconCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: "rgba(255,255,255,0.25)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 10,
-  },
-  statValue: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: "#fff",
-    marginBottom: 3,
-  },
-  statTitle: { fontSize: 11, color: "#fff", fontWeight: "600", opacity: 0.9 },
-  actionBar: {
-    flexDirection: "row",
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-    gap: 12,
-  },
-  searchWrapper: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-  },
-  searchInput: { flex: 1, marginLeft: 10, fontSize: 15, color: "#111827" },
-  addBtn: {
-    width: 52,
-    height: 52,
-    borderRadius: 12,
-    backgroundColor: "#10b981",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#10b981",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  listContent: { padding: 8, paddingBottom: 24 },
-  columnWrapper: { gap: 12, paddingHorizontal: 8 },
-  groupCard: {
-    flex: 1,
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  groupHeader: {
+  headerTop: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 14,
+    paddingHorizontal: 20,
+    marginTop: 15,
   },
-  groupIconCircle: {
+  headerTitle: {
+    fontSize: 26,
+    fontWeight: "800",
+    color: "#fff",
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    color: "rgba(255,255,255,0.8)",
+    marginTop: 4,
+  },
+  headerAddBtn: {
     width: 48,
     height: 48,
-    borderRadius: 12,
-    backgroundColor: "#10b981",
+    borderRadius: 14,
+    backgroundColor: "#fff",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#10b981",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 4,
   },
-  groupBadge: {
-    backgroundColor: "#10b981",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-    shadowColor: "#10b981",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
+  statsScroll: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    gap: 12,
+  },
+  statCard: {
+    minWidth: 110,
+    padding: 12,
+    borderRadius: 16,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.15)",
+  },
+  statIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#fff",
+  },
+  statTitle: {
+    fontSize: 11,
+    color: "rgba(255,255,255,0.9)",
+    fontWeight: "600",
+    marginTop: 2,
+  },
+
+  // Sticky Search
+  stickySearch: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    zIndex: 20,
+    paddingHorizontal: 20,
+  },
+  searchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    height: 56,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 15,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: "#1e293b",
+    fontWeight: "500",
+  },
+
+  // List
+  listContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 40,
+  },
+  groupCard: {
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
     elevation: 3,
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
   },
-  groupBadgeText: { color: "#fff", fontSize: 14, fontWeight: "700" },
-  groupLabel: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#9ca3af",
-    marginBottom: 5,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+  groupMainRow: {
+    flexDirection: "row",
+    gap: 16,
   },
-  groupName: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#111827",
-    marginBottom: 12,
-    minHeight: 40,
+  groupIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  groupDesc: {
-    fontSize: 13,
-    color: "#6b7280",
-    marginBottom: 14,
-    minHeight: 54,
-    lineHeight: 18,
+  groupContent: {
+    flex: 1,
   },
-  progressContainer: { marginBottom: 14 },
-  progressHeader: {
+  groupTitleRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: 6,
   },
-  progressLabel: { fontSize: 11, fontWeight: "600", color: "#9ca3af" },
-  progressValue: { fontSize: 13, fontWeight: "700", color: "#10b981" },
-  progressBar: {
-    height: 8,
-    backgroundColor: "#e5e7eb",
-    borderRadius: 4,
-    overflow: "hidden",
+  groupName: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#0f172a",
+    flex: 1,
+    marginRight: 8,
   },
-  progressFill: { height: "100%", backgroundColor: "#10b981", borderRadius: 4 },
-  groupMeta: {
-    backgroundColor: "#f9fafb",
+  countBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 10,
-    padding: 10,
-    marginBottom: 14,
-    gap: 6,
+    backgroundColor: "#ecfdf5",
   },
-  metaRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  metaText: { fontSize: 12, color: "#6b7280", flex: 1 },
-  groupActions: { flexDirection: "row", gap: 10 },
-  editBtn: {
+  countBadgeText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#10b981",
+  },
+  groupDesc: {
+    fontSize: 14,
+    color: "#64748b",
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  groupFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  metaInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  metaText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#94a3b8",
+  },
+  metaDivider: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#cbd5e1",
+  },
+  groupActionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#f1f5f9",
+  },
+  actionBtn: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: "#10b981",
-    backgroundColor: "#ecfdf5",
+    gap: 8,
+    paddingVertical: 4,
   },
-  editBtnText: { fontSize: 14, fontWeight: "700", color: "#10b981" },
-  deleteBtn: {
-    width: 44,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 10,
-    backgroundColor: "#fef2f2",
-    borderWidth: 1.5,
-    borderColor: "#ef4444",
+  actionBtnText: {
+    fontSize: 14,
+    fontWeight: "700",
   },
-  empty: {
+  actionDivider: {
+    width: 1,
+    height: 20,
+    backgroundColor: "#f1f5f9",
+  },
+
+  // Empty state
+  emptyContainer: {
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 60,
-    paddingHorizontal: 24,
   },
-  emptyText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: "#6b7280",
+  emptyIconCircle: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: "#f8fafc",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 20,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1e293b",
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: "#64748b",
+    textAlign: "center",
+    paddingHorizontal: 40,
+    lineHeight: 20,
     marginBottom: 24,
   },
-  emptyBtn: {
+  emptyAddBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
     backgroundColor: "#10b981",
     paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderRadius: 12,
+    paddingVertical: 12,
+    borderRadius: 14,
     shadowColor: "#10b981",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.2,
     shadowRadius: 10,
-    elevation: 6,
+    elevation: 4,
   },
-  emptyBtnText: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  emptyAddBtnText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+
+  // Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(15, 23, 42, 0.6)",
     justifyContent: "flex-end",
   },
   modalContent: {
     backgroundColor: "#fff",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingBottom: 32,
-    maxHeight: "75%",
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingBottom: 40,
+    maxHeight: "85%",
   },
   modalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: 20,
+    padding: 24,
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
+    borderBottomColor: "#f1f5f9",
   },
-  modalTitle: { fontSize: 20, fontWeight: "700", color: "#111827" },
-  formContainer: { padding: 20 },
+  modalTitle: { fontSize: 22, fontWeight: "800", color: "#0f172a" },
+  formContainer: { padding: 24 },
   formLabel: {
     fontSize: 14,
-    fontWeight: "600",
-    color: "#374151",
+    fontWeight: "700",
+    color: "#334155",
     marginBottom: 8,
+    marginTop: 16,
   },
   required: { color: "#ef4444" },
   formInput: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f9fafb",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 16,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1.5,
+    borderColor: "#e2e8f0",
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    height: 56,
   },
-  formInputText: { flex: 1, marginLeft: 10, fontSize: 15, color: "#111827" },
-  formTextArea: { paddingTop: 12, minHeight: 120 },
+  formInputText: { flex: 1, marginLeft: 12, fontSize: 16, color: "#0f172a", fontWeight: "500" },
+  formTextArea: { height: 120, paddingTop: 16, alignItems: "flex-start" },
   saveBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#10b981",
-    marginHorizontal: 20,
-    paddingVertical: 16,
-    borderRadius: 12,
-    gap: 8,
+    marginHorizontal: 24,
+    height: 56,
+    borderRadius: 16,
+    gap: 10,
     shadowColor: "#10b981",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 15,
     elevation: 6,
   },
-  saveBtnDisabled: { backgroundColor: "#9ca3af" },
-  saveBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  saveBtnDisabled: { backgroundColor: "#cbd5e1" },
+  saveBtnText: { color: "#fff", fontSize: 16, fontWeight: "800" },
 });

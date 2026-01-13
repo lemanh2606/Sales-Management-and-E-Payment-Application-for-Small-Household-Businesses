@@ -183,7 +183,16 @@ async function checkStoreAccess(req, res, next) {
         req.storeRole = "OWNER";
         return next();
       } else {
-        // Nếu manager không phải owner thì không cho phép
+        // Nếu manager không phải owner nhưng có thể được gán quyền qua store_roles (trong tương lai)
+        const roleMapping = (userData.store_roles || []).find(
+          (r) => String(r.store) === String(store._id)
+        );
+        if (roleMapping) {
+          req.store = store;
+          req.storeRole = roleMapping.role;
+          return next();
+        }
+        
         console.log("MANAGER TRUY CẬP STORE KHÔNG PHẢI OWNER");
         return res.status(403).json({
           message: "Manager không sở hữu cửa hàng này",
@@ -199,13 +208,14 @@ async function checkStoreAccess(req, res, next) {
           (r) => String(r.store) === String(store._id)
         ) || null;
 
-      if (roleMapping) {
-        // Nếu có mapping thì cho phép và gán req.storeRole theo mapping
-        console.log("STAFF ĐƯỢC GÁN STORE → ALLOW");
+      if (roleMapping || String(userData.current_store) === String(store._id)) {
+        // Nếu có mapping hoặc đây là store hiện tại của nhân viên
+        console.log("STAFF ĐƯỢC PHÉP TRUY CẬP STORE → ALLOW");
         req.store = store;
-        req.storeRole = roleMapping.role; // có thể là OWNER hoặc STAFF theo schema bạn dùng
+        req.storeRole = roleMapping ? roleMapping.role : "STAFF"; 
         return next();
       }
+      
       // Nếu không có mapping cho store này thì deny
       console.log("STAFF TRUY CẬP STORE KHÔNG ĐƯỢC GÁN");
       return res.status(403).json({
