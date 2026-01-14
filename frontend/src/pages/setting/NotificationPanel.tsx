@@ -406,26 +406,23 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({
                 {/* Icon 3 chấm */}
                 <Dropdown
                   trigger={["click"]}
-                  overlay={
-                    <Menu
-                      style={{
-                        borderRadius: 8,
-                        boxShadow: "0 3px 12px rgba(0,0,0,0.12)",
-                      }}
-                    >
-                      <Menu.Item
-                        key="toggle"
-                        onClick={(e: any) => {
-                          e.domEvent.stopPropagation();
+                  menu={{
+                    items: [
+                      {
+                        key: "toggle",
+                        icon: <CheckOutlined />,
+                        label: notif.read ? "Đánh dấu chưa đọc" : "Đánh dấu đã đọc",
+                        onClick: (info) => {
+                          info.domEvent.stopPropagation();
                           markAsRead(notif._id, !notif.read);
-                        }}
-                        icon={<CheckOutlined />}
-                        style={{ padding: "8px 16px" }}
-                      >
-                        {notif.read ? "Đánh dấu chưa đọc" : "Đánh dấu đã đọc"}
-                      </Menu.Item>
-                    </Menu>
-                  }
+                        },
+                      },
+                    ],
+                    style: {
+                      borderRadius: 8,
+                      boxShadow: "0 3px 12px rgba(0,0,0,0.12)",
+                    },
+                  }}
                 >
                   <div
                     onClick={(e) => e.stopPropagation()}

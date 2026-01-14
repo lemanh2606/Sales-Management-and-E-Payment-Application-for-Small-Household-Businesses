@@ -672,9 +672,25 @@ const setPaidCash = async (req, res) => {
 
           // Kiểm tra hạn sử dụng: Nếu đã hết hạn thì không cho bán
           if (batch.expiry_date && new Date(batch.expiry_date) < new Date()) {
-             // Bỏ qua lô hết hạn hoặc throw lỗi? 
-             // Theo yêu cầu "không cho bán", ta nên throw lỗi nếu đơn hàng này nhắm vào lô đó, 
-             // nhưng đây là logic tự động trừ (FIFO), nên ta bỏ qua lô hết hạn.
+             // Phát hiện lô hết hạn trong quá trình bán -> Tạo thông báo nếu chưa cảnh báo
+             const startOfDay = new Date(); startOfDay.setHours(0,0,0,0);
+             const alreadyNotified = await Notification.findOne({
+               storeId: order.storeId,
+               type: "inventory",
+               title: "Cảnh báo hàng HẾT HẠN",
+               message: new RegExp(prod.name, "i"),
+               createdAt: { $gte: startOfDay }
+             }).session(session);
+
+             if (!alreadyNotified) {
+               await Notification.create([{
+                 storeId: order.storeId,
+                 userId: req.user?.id || req.user?._id,
+                 type: "inventory",
+                 title: "Cảnh báo hàng HẾT HẠN",
+                 message: `Phát hiện sản phẩm "${prod.name}" có lô "${batch.batch_no || 'N/A'}" đã hết hạn sử dụng (${new Date(batch.expiry_date).toLocaleDateString('vi-VN')}).`
+               }], { session });
+             }
              continue; 
           }
 
@@ -686,15 +702,16 @@ const setPaidCash = async (req, res) => {
           if (batch.quantity <= 10 && batch.quantity > 0) {
             await Notification.create([{
               storeId: order.storeId,
+              userId: req.user?.id || req.user?._id,
               type: "inventory",
               title: "Cảnh báo lô hàng sắp hết",
-              message: `Lô "${batch.batch_no}" của sản phẩm "${prod.name}" chỉ còn ${batch.quantity} ${prod.unit || 'đơn vị'}.`,
+              message: `Lô "${batch.batch_no || 'N/A'}" của sản phẩm "${prod.name}" chỉ còn ${batch.quantity} ${prod.unit || 'đơn vị'}.`,
             }], { session });
           }
         }
 
         if (remainingToDeduct > 0) {
-          throw new Error(`Sản phẩm "${prod.name}" không đủ tồn kho khả dụng (tính cả lô hàng chưa hết hạn)`);
+          throw new Error(`Sản phẩm "${prod.name}" không đủ tồn kho khả dụng (đã loại bỏ hàng hết hạn)`);
         }
 
         // Cập nhật tổng tồn kho
@@ -704,6 +721,7 @@ const setPaidCash = async (req, res) => {
         if (prod.stock_quantity <= prod.min_stock && !prod.lowStockAlerted) {
           await Notification.create([{
             storeId: order.storeId,
+            userId: req.user?.id || req.user?._id,
             type: "inventory",
             title: "Cảnh báo tồn kho thấp",
             message: `Sản phẩm "${prod.name}" đạt ngưỡng tồn kho thấp (${prod.stock_quantity} <= ${prod.min_stock}).`,
@@ -855,26 +873,95 @@ const printBill = async (req, res) => {
     }
 
     // Nếu là Pending (thường là QR), auto set Paid theo tuỳ nghiệp vụ
-    if (order.status === "pending" && order.paymentMethod === "qr") {
+    if (order.status === "pending" && (order.paymentMethod === "qr" || order.paymentMethod === "cash")) {
       // ✅ THÊM LOGIC TRỪ KHO + TẠO PHIẾU OUT
       const orderItems = await OrderItem.find({ orderId: order._id });
       const voucherItems = [];
 
+      // 2. Trừ kho (Dùng logic Batch FIFO đồng nhất với setPaidCash)
       for (const it of orderItems) {
         const prod = await Product.findById(it.productId);
         if (!prod) continue;
 
-        const stockQty = Number(prod.stock_quantity || 0);
         const quantity = Number(it.quantity || 0);
 
-        if (stockQty < quantity) {
-          throw new Error(
-            `Sản phẩm ${prod.name} không đủ tồn kho. Còn ${stockQty}, cần ${quantity}`
-          );
+        // a. Kiểm tra tổng tồn kho
+        if (prod.stock_quantity < quantity) {
+          throw new Error(`Sản phẩm "${prod.name}" không đủ tồn kho. Còn ${prod.stock_quantity}, cần ${quantity}`);
         }
 
-        // Trừ kho
-        prod.stock_quantity = stockQty - quantity;
+        // b. Logic trừ theo lô (Batch FIFO)
+        let remainingToDeduct = quantity;
+        const sortedBatches = (prod.batches || []).sort((a, b) => {
+          if (!a.expiry_date && b.expiry_date) return 1;
+          if (a.expiry_date && !b.expiry_date) return -1;
+          if (a.expiry_date && b.expiry_date) return new Date(a.expiry_date) - new Date(b.expiry_date);
+          return new Date(a.created_at) - new Date(b.created_at);
+        });
+
+        for (const batch of sortedBatches) {
+          if (remainingToDeduct <= 0) break;
+          if (batch.quantity <= 0) continue;
+
+          // Bỏ qua lô hết hạn
+          if (batch.expiry_date && new Date(batch.expiry_date) < new Date()) {
+             // Cảnh báo hết hạn (nếu cần)
+             const startOfDay = new Date(); startOfDay.setHours(0,0,0,0);
+             const alreadyNotified = await Notification.findOne({
+               storeId: order.storeId._id || order.storeId,
+               type: "inventory",
+               title: "Cảnh báo hàng HẾT HẠN",
+               message: new RegExp(prod.name, "i"),
+               createdAt: { $gte: startOfDay }
+             });
+
+             if (!alreadyNotified) {
+               await Notification.create({
+                 storeId: order.storeId._id || order.storeId,
+                 userId: req.user?.id || req.user?._id || order.employeeId?._id,
+                 type: "inventory",
+                 title: "Cảnh báo hàng HẾT HẠN",
+                 message: `Phát hiện sản phẩm "${prod.name}" có lô "${batch.batch_no || 'N/A'}" đã hết hạn sử dụng.`
+               });
+             }
+             continue; 
+          }
+
+          const deduct = Math.min(batch.quantity, remainingToDeduct);
+          batch.quantity -= deduct;
+          remainingToDeduct -= deduct;
+
+          // Cảnh báo số lượng lô thấp
+          if (batch.quantity <= 10 && batch.quantity > 0) {
+            await Notification.create({
+              storeId: order.storeId._id || order.storeId,
+              userId: req.user?.id || req.user?._id || order.employeeId?._id,
+              type: "inventory",
+              title: "Cảnh báo lô hàng sắp hết",
+              message: `Lô "${batch.batch_no || 'N/A'}" của "${prod.name}" chỉ còn ${batch.quantity} ${prod.unit || 'đơn vị'}.`,
+            });
+          }
+        }
+
+        if (remainingToDeduct > 0) {
+          throw new Error(`Sản phẩm "${prod.name}" không đủ tồn kho khả dụng (đã loại bỏ hàng hết hạn)`);
+        }
+
+        // Cập nhật tổng tồn kho
+        prod.stock_quantity -= quantity;
+
+        // Cảnh báo tồn kho thấp tổng thể
+        if (prod.stock_quantity <= prod.min_stock && !prod.lowStockAlerted) {
+          await Notification.create({
+            storeId: order.storeId._id || order.storeId,
+            userId: req.user?.id || req.user?._id || order.employeeId?._id,
+            type: "inventory",
+            title: "Cảnh báo tồn kho thấp",
+            message: `Sản phẩm "${prod.name}" đạt ngưỡng tồn kho thấp (${prod.stock_quantity} <= ${prod.min_stock}).`,
+          });
+          prod.lowStockAlerted = true;
+        }
+
         await prod.save();
 
         voucherItems.push({

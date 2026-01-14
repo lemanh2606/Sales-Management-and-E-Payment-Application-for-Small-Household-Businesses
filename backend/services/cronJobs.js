@@ -254,7 +254,7 @@ cron.schedule("30 8 * * *", async () => {
             await Notification.create({
               storeId: p.store_id,
               userId: manager._id,
-              type: "system",
+              type: "inventory",
               title: "Cảnh báo hàng sắp hết hạn",
               message: `Sản phẩm "${p.name}" (${p.sku}) có ${expiringBatches.length} lô sắp hết hạn trong 30 ngày tới. Vui lòng kiểm tra kho!`
             });
@@ -286,7 +286,7 @@ cron.schedule("30 8 * * *", async () => {
               await Notification.create({
                 storeId: p.store_id,
                 userId: manager._id,
-                type: "system",
+                type: "inventory",
                 title: "Cảnh báo hàng HẾT HẠN",
                 message: `CẢNH BÁO: Sản phẩm "${p.name}" có ${expiredCount} lô ĐÃ HẾT HẠN sử dụng. Hệ thống đã tự động loại bỏ khỏi tồn kho khả dụng.`
               });

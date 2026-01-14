@@ -14,7 +14,25 @@ export const listNotifications = async (req, res) => {
     if (!storeId) return res.status(400).json({ message: "Thiếu thông tin cửa hàng" });
 
     const filter = { storeId };
-    if (type) filter.type = type;
+    
+    // PHÂN QUYỀN:
+    // - MANAGER: được xem tất cả thông báo thuộc storeId (bao gồm cả inventory)
+    // - Các role khác: chỉ xem thông báo của chính mình (userId) và KHÔNG được xem inventory
+    if (req.user?.role !== "MANAGER") {
+      filter.userId = req.user?._id;
+      filter.type = { $ne: "inventory" };
+    }
+
+    if (type) {
+      // Nếu user lọc theo type, ta vẫn phải tôn trọng logic phân quyền ở trên
+      if (req.user?.role !== "MANAGER" && type === "inventory") {
+        // Staff cố tình lọc inventory -> Không trả về gì hoặc ép $ne
+        filter.type = "none"; 
+      } else {
+        filter.type = type;
+      }
+    }
+
     if (read === "true") filter.read = true;
     if (read === "false") filter.read = false;
 
@@ -73,10 +91,13 @@ export const markNotificationRead = async (req, res) => {
  */
 export const markAllRead = async (req, res) => {
   try {
-    const storeId = req.store?._id || req.storeId;
-    if (!storeId) return res.status(400).json({ message: "Thiếu thông tin cửa hàng" });
+    const filter = { storeId };
+    if (req.user?.role !== "MANAGER") {
+      filter.userId = req.user?._id;
+      filter.type = { $ne: "inventory" };
+    }
 
-    const result = await Notification.updateMany({ storeId }, { $set: { read: true } });
+    const result = await Notification.updateMany(filter, { $set: { read: true } });
 
     return res.json({
       message: "Đã đánh dấu tất cả thông báo là đã đọc",

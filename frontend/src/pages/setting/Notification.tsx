@@ -26,7 +26,7 @@ interface NotificationItem {
   _id: string;
   storeId: string;
   userId: UserInfo;
-  type: "order" | "payment" | "service" | "system";
+  type: "order" | "payment" | "service" | "system" | "inventory";
   title: string;
   message: string;
   read: boolean;
@@ -59,6 +59,7 @@ const NOTIFICATION_TYPES = {
   payment: { label: "Thanh toán", color: "green" },
   service: { label: "Dịch vụ", color: "orange" },
   system: { label: "Hệ thống", color: "purple" },
+  inventory: { label: "Kho hàng", color: "volcano" },
 };
 
 const READ_STATUS = {
@@ -89,6 +90,7 @@ const Notification: React.FC = () => {
   const currentStore = JSON.parse(localStorage.getItem("currentStore") || "{}");
   const storeId = currentStore?._id;
   const headers = { Authorization: `Bearer ${token}` };
+  const userRole = JSON.parse(localStorage.getItem("user") || "{}")?.role;
 
   // ===== FETCH NOTIFICATIONS =====
   const fetchNotifications = useCallback(
@@ -352,7 +354,10 @@ const Notification: React.FC = () => {
       dataIndex: "type",
       key: "type",
       width: 120,
-      render: (type: keyof typeof NOTIFICATION_TYPES) => <Tag color={NOTIFICATION_TYPES[type].color}>{NOTIFICATION_TYPES[type].label}</Tag>,
+      render: (type: keyof typeof NOTIFICATION_TYPES) => {
+        const typeInfo = NOTIFICATION_TYPES[type] || { label: type, color: "default" };
+        return <Tag color={typeInfo.color}>{typeInfo.label}</Tag>;
+      },
     },
     {
       title: "Thông báo",
@@ -408,17 +413,26 @@ const Notification: React.FC = () => {
       fixed: "right",
       render: (_, record: NotificationItem) => (
         <Dropdown
-          overlay={
-            <Menu>
-              <Menu.Item key="toggle" icon={<CheckOutlined />} onClick={() => markAsRead(record._id, !record.read)}>
-                {record.read ? "Đánh dấu chưa đọc" : "Đánh dấu đã đọc"}
-              </Menu.Item>
-              <Menu.Divider />
-              <Menu.Item key="delete" icon={<DeleteOutlined />} danger onClick={() => deleteNotification(record._id)}>
-                Xóa
-              </Menu.Item>
-            </Menu>
-          }
+          menu={{
+            items: [
+              {
+                key: "toggle",
+                icon: <CheckOutlined />,
+                label: record.read ? "Đánh dấu chưa đọc" : "Đánh dấu đã đọc",
+                onClick: () => markAsRead(record._id, !record.read),
+              },
+              {
+                type: "divider",
+              },
+              {
+                key: "delete",
+                icon: <DeleteOutlined />,
+                label: "Xóa",
+                danger: true,
+                onClick: () => deleteNotification(record._id),
+              },
+            ],
+          }}
           trigger={["click"]}
         >
           <Button type="text" icon={<MoreOutlined />} />
@@ -489,11 +503,16 @@ const Notification: React.FC = () => {
               placeholder="Loại thông báo"
             >
               <Option value="all">Tất cả loại</Option>
-              {Object.entries(NOTIFICATION_TYPES).map(([key, val]) => (
-                <Option key={key} value={key}>
-                  <Tag color={val.color}>{val.label}</Tag>
-                </Option>
-              ))}
+              {Object.entries(NOTIFICATION_TYPES)
+                .filter(([key]) => {
+                  if (key === "inventory" && userRole !== "MANAGER") return false;
+                  return true;
+                })
+                .map(([key, val]) => (
+                  <Option key={key} value={key}>
+                    <Tag color={val.color}>{val.label}</Tag>
+                  </Option>
+                ))}
             </Select>
 
             <Select

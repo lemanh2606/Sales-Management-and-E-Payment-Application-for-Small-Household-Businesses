@@ -452,66 +452,89 @@ export default function DashboardPage() {
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           {/* Icon hỏi chấm - có dropdown */}
           <Dropdown
-            overlay={
-              <Menu style={{ width: "100%", maxWidth: 300, padding: "16px" }}>
-                <Menu.Item key="help" icon={<QuestionCircleOutlined />}>
-                  <Link to="/help" style={{ color: "inherit", textDecoration: "none" }}>
-                    Trung tâm trợ giúp
-                  </Link>
-                </Menu.Item>
-                <Menu.Item key="devices" icon={<LaptopOutlined />}>
-                  <Link to="/devices" style={{ color: "inherit", textDecoration: "none" }}>
-                    Thiết bị bán hàng
-                  </Link>
-                </Menu.Item>
-                <Menu.Item key="feedback" icon={<MessageOutlined />}>
-                  <Link to="/feedback" style={{ color: "inherit", textDecoration: "none" }}>
-                    Đóng góp ý kiến
-                  </Link>
-                </Menu.Item>
-                <Menu.Item key="newbie" icon={<BulbOutlined />}>
-                  Dành cho khách hàng mới: cùng SmartRetail làm quen phần mềm qua các bước đơn giản
-                  <div style={{ marginTop: 8 }}>
-                    <Link to="/product-groups" style={{ fontSize: 14, color: "#1890ff" }}>
-                      Tạo nhóm hàng hoá
+            menu={{
+              items: [
+                {
+                  key: "help",
+                  icon: <QuestionCircleOutlined />,
+                  label: (
+                    <Link to="/help" style={{ color: "inherit", textDecoration: "none" }}>
+                      Trung tâm trợ giúp
                     </Link>
-                  </div>
-                </Menu.Item>
-
-                <Menu.Divider />
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    padding: "8px 16px",
-                    background: "#f5f5f5",
-                    borderRadius: "4px",
-                    margin: "8px 0 0 0",
-                    flexWrap: "wrap",
-                    gap: 8,
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <PhoneOutlined style={{ color: "#52c41a", fontSize: 16 }} />
-                    <span style={{ fontWeight: 500 }}>1900 8386</span>
-                  </div>
-                  <Link
-                    to="/support"
-                    style={{
-                      color: "#1890ff",
-                      fontSize: 14,
-                      textDecoration: "none",
-                      transition: "all 0.2s",
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
-                    onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
-                  >
-                    <CustomerServiceOutlined style={{ marginRight: 4 }} /> Gửi hỗ trợ
-                  </Link>
-                </div>
-              </Menu>
-            }
+                  ),
+                },
+                {
+                  key: "devices",
+                  icon: <LaptopOutlined />,
+                  label: (
+                    <Link to="/devices" style={{ color: "inherit", textDecoration: "none" }}>
+                      Thiết bị bán hàng
+                    </Link>
+                  ),
+                },
+                {
+                  key: "feedback",
+                  icon: <MessageOutlined />,
+                  label: (
+                    <Link to="/feedback" style={{ color: "inherit", textDecoration: "none" }}>
+                      Đóng góp ý kiến
+                    </Link>
+                  ),
+                },
+                {
+                  key: "newbie",
+                  icon: <BulbOutlined />,
+                  label: (
+                    <>
+                      Dành cho khách hàng mới: cùng SmartRetail làm quen phần mềm qua các bước đơn giản
+                      <div style={{ marginTop: 8 }}>
+                        <Link to="/product-groups" style={{ fontSize: 14, color: "#1890ff" }}>
+                          Tạo nhóm hàng hoá
+                        </Link>
+                      </div>
+                    </>
+                  ),
+                },
+                {
+                  type: "divider",
+                },
+                {
+                  key: "support-info",
+                  label: (
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        padding: "8px 16px",
+                        background: "#f5f5f5",
+                        borderRadius: "4px",
+                        margin: "0",
+                        flexWrap: "wrap",
+                        gap: 8,
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <PhoneOutlined style={{ color: "#52c41a", fontSize: 16 }} />
+                        <span style={{ fontWeight: 500 }}>1900 8386</span>
+                      </div>
+                      <Link
+                        to="/support"
+                        style={{
+                          color: "#1890ff",
+                          fontSize: 14,
+                          textDecoration: "none",
+                          transition: "all 0.2s",
+                        }}
+                      >
+                        <CustomerServiceOutlined style={{ marginRight: 4 }} /> Gửi hỗ trợ
+                      </Link>
+                    </div>
+                  ),
+                },
+              ],
+              style: { width: "100%", maxWidth: 320, padding: "8px" },
+            }}
             trigger={["click"]}
             placement="bottomRight"
           >
@@ -528,31 +551,50 @@ export default function DashboardPage() {
           <Dropdown
             placement="bottomRight"
             trigger={["click"]}
-            overlay={
-              <Menu style={{ width: 220 }}>
-                <Menu.Item key="profile" icon={<UserOutlined />}>
-                  <Link to="/settings/profile" style={{ color: "inherit", textDecoration: "none" }}>
-                    Tài khoản của bạn
-                  </Link>
-                </Menu.Item>
-                <Menu.Item key="package" icon={<CreditCardOutlined />}>
-                  <Link to="/settings/subscription" style={{ color: "inherit", textDecoration: "none" }}>
-                    Thông tin gói dịch vụ
-                  </Link>
-                </Menu.Item>
-                <Menu.Divider />
-                <Menu.Item key="terms" icon={<FileTextOutlined />}>
-                  <Link to="/terms" style={{ color: "inherit", textDecoration: "none" }}>
-                    Điều khoản dịch vụ
-                  </Link>
-                </Menu.Item>
-                <Menu.Item key="privacy" icon={<LockOutlined />}>
-                  <Link to="/privacy" style={{ color: "inherit", textDecoration: "none" }}>
-                    Chính sách bảo mật
-                  </Link>
-                </Menu.Item>
-              </Menu>
-            }
+            menu={{
+              items: [
+                {
+                  key: "profile",
+                  icon: <UserOutlined />,
+                  label: (
+                    <Link to="/settings/profile" style={{ color: "inherit", textDecoration: "none" }}>
+                      Tài khoản của bạn
+                    </Link>
+                  ),
+                },
+                {
+                  key: "package",
+                  icon: <CreditCardOutlined />,
+                  label: (
+                    <Link to="/settings/subscription" style={{ color: "inherit", textDecoration: "none" }}>
+                      Thông tin gói dịch vụ
+                    </Link>
+                  ),
+                },
+                {
+                  type: "divider",
+                },
+                {
+                  key: "terms",
+                  icon: <FileTextOutlined />,
+                  label: (
+                    <Link to="/terms" style={{ color: "inherit", textDecoration: "none" }}>
+                      Điều khoản dịch vụ
+                    </Link>
+                  ),
+                },
+                {
+                  key: "privacy",
+                  icon: <LockOutlined />,
+                  label: (
+                    <Link to="/privacy" style={{ color: "inherit", textDecoration: "none" }}>
+                      Chính sách bảo mật
+                    </Link>
+                  ),
+                },
+              ],
+              style: { width: 220 },
+            }}
           >
             <div
               style={{

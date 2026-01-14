@@ -9,7 +9,7 @@ const notificationSchema = new Schema(
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     type: {
       type: String,
-      enum: ["order", "payment", "service", "system"],
+      enum: ["order", "payment", "service", "system", "inventory"],
       default: "system",
       index: true, // lọc nhanh theo type
     },
