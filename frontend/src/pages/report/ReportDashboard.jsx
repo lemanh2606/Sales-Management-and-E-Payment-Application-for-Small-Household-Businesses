@@ -1228,6 +1228,41 @@ const ReportDashboard = () => {
                         <Tooltip formatter={formatVND} />
                       </PieChart>
                     </ResponsiveContainer>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "center",
+                        gap: 16,
+                        marginTop: 12,
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span
+                          style={{
+                            width: 10,
+                            height: 10,
+                            borderRadius: "50%",
+                            backgroundColor: COLORS.revenue,
+                            display: "inline-block",
+                          }}
+                        />
+                        <Text style={{ fontSize: 13 }}>Doanh thu</Text>
+                      </div>
+
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span
+                          style={{
+                            width: 10,
+                            height: 10,
+                            borderRadius: "50%",
+                            backgroundColor: COLORS.stockValue,
+                            display: "inline-block",
+                          }}
+                        />
+                        <Text style={{ fontSize: 13 }}>Hàng tồn kho</Text>
+                      </div>
+                    </div>
+
                     <div style={{ marginTop: 20 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
                         <Text strong color="primary">
@@ -1257,7 +1292,18 @@ const ReportDashboard = () => {
                   dataSource={data.groupStats || []}
                   rowKey="_id"
                   className="premium-table"
-                  pagination={{ pageSize: 5 }}
+                  pagination={{
+                    pageSize: 5,
+                    showTotal: (total, range) => (
+                      <div style={{ fontSize: 14, color: "#595959" }}>
+                        Đang xem{" "}
+                        <span style={{ color: "#1677ff", fontWeight: 600 }}>
+                          {range[0]} – {range[1]}
+                        </span>{" "}
+                        trên tổng số <span style={{ color: "#fa541c", fontWeight: 600 }}>{total}</span> nhóm hàng
+                      </div>
+                    ),
+                  }}
                   columns={[
                     {
                       title: "Nhóm hàng",
