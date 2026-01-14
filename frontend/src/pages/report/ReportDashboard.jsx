@@ -26,6 +26,7 @@ import {
   Checkbox,
   Dropdown,
   Menu,
+  Empty,
 } from "antd";
 import {
   InfoCircleOutlined,
@@ -128,6 +129,10 @@ const ReportDashboard = () => {
   const [allocationSuggestion, setAllocationSuggestion] = useState(null); // suggestion từ API
   const [unsavedChanges, setUnsavedChanges] = useState(false);
   const [prevPeriodKey, setPrevPeriodKey] = useState(""); // Track period key trước đó
+
+  // Drill-down modal: Chi tiết giá vốn theo sản phẩm
+  const [selectedGroup, setSelectedGroup] = useState(null); // Track nhóm được chọn
+  const [detailModalVisible, setDetailModalVisible] = useState(false); // Toggle modal
 
   // Form input
   const [newExpenseAmount, setNewExpenseAmount] = useState(null);
@@ -1329,12 +1334,12 @@ const ReportDashboard = () => {
                       title: "Số lượng bán",
                       dataIndex: "quantitySold",
                       align: "center",
-                      render: (val) => <Badge count={val} overflowCount={999999} color="#6366f1" />,
+                      render: (val) => <Badge count={val} showZero overflowCount={999999} color={val === 0 ? "#d9d9d9" : "#6366f1"} />,
                     },
                     {
                       title: (
                         <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 6 }}>
-                          <span>Tồn kho</span>
+                          <span>Tồn kho(theo giá vốn)</span>
 
                           <AntTooltip title="Giá trị được tính theo giá vốn: Tồn kho = Số lượng tồn × Giá vốn">
                             <InfoCircleOutlined
@@ -1349,7 +1354,24 @@ const ReportDashboard = () => {
                       ),
                       dataIndex: "stockValueCost",
                       align: "right",
-                      render: (val) => formatVND(val),
+                      render: (val, record) => (
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+                          <Text strong color="primary">
+                            {formatVND(val)}
+                          </Text>
+                          <Button
+                            type="link"
+                            size="small"
+                            onClick={() => {
+                              setSelectedGroup(record);
+                              setDetailModalVisible(true);
+                            }}
+                            style={{ padding: 0, height: "auto", fontSize: 12 }}
+                          >
+                            Xem chi tiết
+                          </Button>
+                        </div>
+                      ),
                     },
                     {
                       title: (
@@ -1414,6 +1436,74 @@ const ReportDashboard = () => {
           )}
         </Space>
       </div>
+
+      {/* ========== MODAL DRILL-DOWN: CHI TIẾT GIÁA VỐN ==========  */}
+      <Modal
+        title={`Chi tiết giá vốn - Nhóm: ${selectedGroup?.groupName || ""}`}
+        open={detailModalVisible}
+        onCancel={() => setDetailModalVisible(false)}
+        footer={null}
+        width={700}
+      >
+        {selectedGroup && selectedGroup.productDetails && selectedGroup.productDetails.length > 0 ? (
+          <Table
+            dataSource={selectedGroup.productDetails}
+            rowKey="_id"
+            pagination={false}
+            size="small"
+            columns={[
+              {
+                title: "Sản phẩm",
+                dataIndex: "name",
+                render: (text, record) => (
+                  <div>
+                    <Text strong>{text}</Text>
+                    {record.code && <div style={{ fontSize: 12, color: "#999" }}>{record.code}</div>}
+                  </div>
+                ),
+              },
+              {
+                title: "Giá vốn",
+                dataIndex: "cost_price",
+                align: "right",
+                render: (val) => formatVND(val),
+              },
+              {
+                title: "SL tồn",
+                dataIndex: "stock_quantity",
+                align: "center",
+              },
+              {
+                title: "Tổng giá vốn",
+                dataIndex: "stockValueCost",
+                align: "right",
+                render: (val) => (
+                  <Text strong color="primary">
+                    {formatVND(val)}
+                  </Text>
+                ),
+              },
+            ]}
+            summary={(pageData) => {
+              const total = pageData.reduce((sum, record) => sum + record.stockValueCost, 0);
+              return (
+                <Table.Summary.Row style={{ fontWeight: "bold" }}>
+                  <Table.Summary.Cell colSpan={3} align="right">
+                    <Text strong>Tổng cộng:</Text>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell align="right">
+                    <Text strong color="primary">
+                      {formatVND(total)}
+                    </Text>
+                  </Table.Summary.Cell>
+                </Table.Summary.Row>
+              );
+            }}
+          />
+        ) : (
+          <Empty description="Không có sản phẩm trong nhóm này" />
+        )}
+      </Modal>
     </Layout>
   );
 };

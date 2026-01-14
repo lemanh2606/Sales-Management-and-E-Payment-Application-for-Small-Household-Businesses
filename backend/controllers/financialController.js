@@ -243,7 +243,7 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
   // ================================================================
   // Doanh thu thực không thể âm
   totalRevenue = Math.max(0, totalRevenue);
-  
+
   let grossProfit = Math.max(0, totalRevenue - totalCOGS);
 
   // 5️⃣ Chi phí vận hành (Operating Cost)
@@ -286,7 +286,7 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
     const quarterMonths = months.slice((q - 1) * 3, q * 3).map((m) => `${year}-${m}`);
     opExpFilter.$or = [
       { periodType: "quarter", periodKey: periodKey },
-      { periodType: "month", periodKey: { $in: quarterMonths } }
+      { periodType: "month", periodKey: { $in: quarterMonths } },
     ];
   } else if (periodType === "year") {
     const year = periodKey;
@@ -295,7 +295,7 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
     opExpFilter.$or = [
       { periodType: "year", periodKey: periodKey },
       { periodType: "quarter", periodKey: { $in: quarters } },
-      { periodType: "month", periodKey: { $in: months } }
+      { periodType: "month", periodKey: { $in: months } },
     ];
   }
 
@@ -423,12 +423,31 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
       $project: {
         groupName: "$name",
         productCount: { $size: "$products" },
+        // ========== Danh sách sản phẩm chi tiết cho drill-down ==========
+        productDetails: {
+          $map: {
+            input: "$products",
+            as: "p",
+            in: {
+              _id: "$$p._id",
+              name: "$$p.name",
+              code: "$$p.code",
+              cost_price: { $toDecimal: "$$p.cost_price" },
+              stock_quantity: "$$p.stock_quantity",
+              stockValueCost: {
+                $multiply: ["$$p.stock_quantity", { $toDecimal: "$$p.cost_price" }],
+              },
+            },
+          },
+        },
         stockValueCost: {
           $sum: {
             $map: {
               input: "$products",
               as: "p",
-              in: { $multiply: ["$$p.stock_quantity", "$$p.cost_price"] },
+              in: {
+                $multiply: ["$$p.stock_quantity", { $toDecimal: "$$p.cost_price" }],
+              },
             },
           },
         },
@@ -480,6 +499,15 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
     potentialProfit: toNumber(g.potentialProfit),
     stockToRevenueRatio: g.stockToRevenueRatio,
     productCount: g.productCount || 0,
+    // ========== Danh sách sản phẩm chi tiết ==========
+    productDetails: (g.productDetails || []).map((p) => ({
+      _id: p._id,
+      name: p.name,
+      code: p.code,
+      cost_price: toNumber(p.cost_price),
+      stock_quantity: p.stock_quantity || 0,
+      stockValueCost: toNumber(p.stockValueCost),
+    })),
   }));
 
   // ================================================================
@@ -525,7 +553,7 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
 const getFinancialSummary = async (req, res) => {
   try {
     const currentData = await calcFinancialSummary(req.query);
-    
+
     // Tính thêm dữ liệu kỳ trước để so sánh nếu có
     const { periodType, periodKey, storeId } = req.query;
     const prevKey = getPreviousPeriodKey(periodType, periodKey);
@@ -534,11 +562,11 @@ const getFinancialSummary = async (req, res) => {
     if (prevKey) {
       try {
         const prevData = await calcFinancialSummary({ storeId, periodType, periodKey: prevKey });
-        
+
         // Tính % thay đổi cho các chỉ số chính
         const calculateChange = (cur, prev) => {
           if (!prev || prev === 0) return cur > 0 ? 100 : 0;
-          return Number(((cur - prev) / prev * 100).toFixed(1));
+          return Number((((cur - prev) / prev) * 100).toFixed(1));
         };
 
         comparison = {
@@ -553,9 +581,9 @@ const getFinancialSummary = async (req, res) => {
       }
     }
 
-    res.json({ 
-      message: "Báo cáo tài chính thành công", 
-      data: { ...currentData, comparison } 
+    res.json({
+      message: "Báo cáo tài chính thành công",
+      data: { ...currentData, comparison },
     });
   } catch (err) {
     console.error("Lỗi báo cáo tài chính:", err);
@@ -631,15 +659,18 @@ const exportFinancial = async (req, res) => {
       worksheet.getRow(headerRow).values = ["STT", "Chỉ số tài chính", "Giá trị", "Đơn vị", "Ghi chú"];
       worksheet.getRow(headerRow).font = { bold: true };
       worksheet.getRow(headerRow).alignment = { horizontal: "center", vertical: "middle" };
-      
-      ["A", "B", "C", "D", "E"].forEach(col => {
+
+      ["A", "B", "C", "D", "E"].forEach((col) => {
         worksheet.getCell(`${col}${headerRow}`).fill = {
           type: "pattern",
           pattern: "solid",
           fgColor: { argb: "FFE0E0E0" },
         };
         worksheet.getCell(`${col}${headerRow}`).border = {
-          top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" }
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
         };
       });
 
@@ -649,11 +680,14 @@ const exportFinancial = async (req, res) => {
         r.getCell(1).alignment = { horizontal: "center" };
         r.getCell(3).numFmt = "#,##0";
         r.getCell(4).alignment = { horizontal: "center" };
-        
+
         // Add borders to each cell in the row
         for (let i = 1; i <= 5; i++) {
           r.getCell(i).border = {
-            top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" }
+            top: { style: "thin" },
+            left: { style: "thin" },
+            bottom: { style: "thin" },
+            right: { style: "thin" },
           };
         }
       });
@@ -685,7 +719,7 @@ const exportFinancial = async (req, res) => {
 
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
       res.setHeader("Content-Disposition", `attachment; filename=financial_report_${req.query.periodKey}.xlsx`);
-      
+
       await workbook.xlsx.write(res);
       return res.end();
     }
@@ -693,7 +727,7 @@ const exportFinancial = async (req, res) => {
     if (format === "pdf") {
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename=financial_report_${req.query.periodKey}.pdf`);
-      
+
       const doc = new PDFDocument({ margin: 50, size: "A4" });
       doc.pipe(res);
 
@@ -708,24 +742,30 @@ const exportFinancial = async (req, res) => {
       doc.registerFont("Roboto-Italic", italicFont);
 
       // 1. Legal Header
-      doc.font("Roboto-Bold").fontSize(10).text((req.store?.name || "Cửa hàng phụ tùng").toUpperCase(), { align: "left" });
+      doc
+        .font("Roboto-Bold")
+        .fontSize(10)
+        .text((req.store?.name || "Cửa hàng phụ tùng").toUpperCase(), { align: "left" });
       doc.moveUp();
       doc.text("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", { align: "right" });
       doc.font("Roboto-Bold").text("Độc lập - Tự do - Hạnh phúc", { align: "right" });
       doc.fontSize(9).font("Roboto-Italic").text("-----------------", { align: "right" });
-      
+
       doc.moveDown(2);
 
       // 2. Title
       doc.font("Roboto-Bold").fontSize(18).text("BÁO CÁO TỔNG HỢP TÌNH HÌNH TÀI CHÍNH", { align: "center" });
       doc.font("Roboto-Italic").fontSize(11).text(`Kỳ báo cáo: ${req.query.periodKey}`, { align: "center" });
-      
+
       doc.moveDown(2);
 
       // 3. User Info
-      doc.font("Roboto-Regular").fontSize(10).text(`Người xuất báo cáo: ${req.user?.fullname || "Hệ thống"}`);
+      doc
+        .font("Roboto-Regular")
+        .fontSize(10)
+        .text(`Người xuất báo cáo: ${req.user?.fullname || "Hệ thống"}`);
       doc.text(`Ngày xuất: ${new Date().toLocaleDateString("vi-VN")} ${new Date().toLocaleTimeString("vi-VN")}`);
-      
+
       doc.moveDown(1);
       doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
       doc.moveDown(1);
@@ -747,7 +787,7 @@ const exportFinancial = async (req, res) => {
       doc.font("Roboto-Bold").text("Người lập biểu", 50, startY, { width: 150, align: "center" });
       doc.font("Roboto-Bold").text("Kế toán trưởng", 220, startY, { width: 150, align: "center" });
       doc.font("Roboto-Bold").text("Chủ hộ kinh doanh", 390, startY, { width: 150, align: "center" });
-      
+
       doc.font("Roboto-Italic").fontSize(9).text("(Ký, họ tên)", 50, doc.y, { width: 150, align: "center" });
       doc.moveUp();
       doc.text("(Ký, họ tên)", 220, doc.y, { width: 150, align: "center" });
@@ -965,13 +1005,9 @@ const generateEndOfDayReport = async (req, res) => {
           // Tính riêng tiền hoàn tiền mặt
           cashRefundAmount: {
             $sum: {
-              $cond: [
-                { $eq: ["$order.paymentMethod", "cash"] },
-                { $toDecimal: "$refundAmount" },
-                0
-              ]
-            }
-          }
+              $cond: [{ $eq: ["$order.paymentMethod", "cash"] }, { $toDecimal: "$refundAmount" }, 0],
+            },
+          },
         },
       },
     ]);
@@ -1002,11 +1038,8 @@ const generateEndOfDayReport = async (req, res) => {
         $project: {
           _id: 0,
           refundedBy: "$refundedBy",
-          name: { 
-            $ifNull: [
-              { $arrayElemAt: ["$employee.fullName", 0] }, 
-              "Chủ cửa hàng (Admin)"
-            ]
+          name: {
+            $ifNull: [{ $arrayElemAt: ["$employee.fullName", 0] }, "Chủ cửa hàng (Admin)"],
           },
           refundAmount: 1,
           refundedAt: 1,
@@ -1031,18 +1064,18 @@ const generateEndOfDayReport = async (req, res) => {
     ]);
 
     const storeInfo = await Store.findById(storeId).select("name address phone");
-    
+
     // ✅ TÍNH TOÁN ĐÚNG: Trừ giá trị hoàn
     const grossRevenue = toNumber(orderSummary.totalRevenue);
     const totalRefundAmount = toNumber(refundSummary.refundAmount);
     const cashRefundAmount = toNumber(refundSummary.cashRefundAmount);
     const grossCashInDrawer = toNumber(orderSummary.cashInDrawer);
-    
+
     // Doanh thu thực = Doanh thu gộp - Tiền hoàn
     const netRevenue = Math.max(0, grossRevenue - totalRefundAmount);
     // Tiền mặt thực = Tiền mặt thu - Tiền mặt hoàn
     const netCashInDrawer = Math.max(0, grossCashInDrawer - cashRefundAmount);
-    
+
     // Tổng hợp báo cáo
     const report = {
       date: format(end, "dd/MM/yyyy"),
@@ -1061,12 +1094,12 @@ const generateEndOfDayReport = async (req, res) => {
         grossRevenue: grossRevenue, // Tổng doanh thu trước hoàn
         totalRefundAmount: totalRefundAmount, // Tiền hoàn
         totalRevenue: netRevenue, // Doanh thu thực (đã trừ hoàn)
-        
+
         // ✅ Tiền mặt
         grossCashInDrawer: grossCashInDrawer, // Tiền mặt trước hoàn
         cashRefundAmount: cashRefundAmount, // Tiền mặt hoàn
         cashInDrawer: netCashInDrawer, // Tiền mặt thực (đã trừ hoàn)
-        
+
         // ✅ Thống kê khác
         totalOrders: toNumber(orderSummary.totalOrders),
         vatTotal: toNumber(orderSummary.totalVAT),
@@ -1075,21 +1108,21 @@ const generateEndOfDayReport = async (req, res) => {
         totalLoyaltyUsed: toNumber(orderSummary.totalLoyaltyUsed),
         totalLoyaltyEarned: toNumber(orderSummary.totalLoyaltyEarned),
       },
-      byPayment: byPayment.map(p => ({
+      byPayment: byPayment.map((p) => ({
         ...p,
         revenue: toNumber(p.revenue),
       })),
-      byEmployee: byEmployee.map(e => ({
+      byEmployee: byEmployee.map((e) => ({
         ...e,
         revenue: toNumber(e.revenue),
         avgOrderValue: toNumber(e.avgOrderValue),
       })),
-      byProduct: byProduct.map(p => ({
+      byProduct: byProduct.map((p) => ({
         ...p,
         revenue: toNumber(p.revenue),
       })),
       stockSnapshot,
-      refundsByEmployee: refundsByEmployee.map(r => ({
+      refundsByEmployee: refundsByEmployee.map((r) => ({
         ...r,
         refundAmount: toNumber(r.refundAmount),
       })),
@@ -1165,7 +1198,15 @@ const exportEndOfDayReport = async (req, res) => {
         },
       },
     ]);
-    const orderSummary = ordersAgg[0] || { totalOrders: 0, totalRevenue: 0, totalVAT: 0, totalDiscount: 0, totalLoyaltyUsed: 0, totalLoyaltyEarned: 0, cashInDrawer: 0 };
+    const orderSummary = ordersAgg[0] || {
+      totalOrders: 0,
+      totalRevenue: 0,
+      totalVAT: 0,
+      totalDiscount: 0,
+      totalLoyaltyUsed: 0,
+      totalLoyaltyEarned: 0,
+      cashInDrawer: 0,
+    };
 
     // 2. Phân loại theo phương thức thanh toán
     const byPayment = await Order.aggregate([
@@ -1181,7 +1222,13 @@ const exportEndOfDayReport = async (req, res) => {
       {
         $project: {
           _id: "$_id",
-          name: { $cond: { if: { $eq: ["$_id", null] }, then: "Chủ cửa hàng (Admin)", else: { $ifNull: [{ $arrayElemAt: ["$employee.fullName", 0] }, "Nhân viên đã xóa"] } } },
+          name: {
+            $cond: {
+              if: { $eq: ["$_id", null] },
+              then: "Chủ cửa hàng (Admin)",
+              else: { $ifNull: [{ $arrayElemAt: ["$employee.fullName", 0] }, "Nhân viên đã xóa"] },
+            },
+          },
           revenue: 1,
           orders: 1,
           avgOrderValue: { $divide: ["$revenue", "$orders"] },
@@ -1283,10 +1330,15 @@ const exportEndOfDayReport = async (req, res) => {
       ws.getRow(headerRow).values = ["STT", "Chỉ số", "Giá trị", "Đơn vị"];
       ws.getRow(headerRow).font = { bold: true };
       ws.getRow(headerRow).alignment = { horizontal: "center", vertical: "middle" };
-      ["A", "B", "C", "D"].forEach(col => {
+      ["A", "B", "C", "D"].forEach((col) => {
         ws.getCell(`${col}${headerRow}`).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1890FF" } };
         ws.getCell(`${col}${headerRow}`).font = { bold: true, color: { argb: "FFFFFFFF" } };
-        ws.getCell(`${col}${headerRow}`).border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
+        ws.getCell(`${col}${headerRow}`).border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
       });
 
       // Data rows
@@ -1310,7 +1362,7 @@ const exportEndOfDayReport = async (req, res) => {
       ws2.addRow(["Phương thức", "Doanh thu (VND)", "Số đơn"]);
       ws2.getRow(1).font = { bold: true };
       const paymentNames = { cash: "Tiền mặt", qr: "QR Code / Chuyển khoản" };
-      byPayment.forEach(p => {
+      byPayment.forEach((p) => {
         ws2.addRow([paymentNames[p._id] || p._id, toNumber(p.revenue), p.count]);
       });
 
@@ -1318,7 +1370,7 @@ const exportEndOfDayReport = async (req, res) => {
       const ws3 = workbook.addWorksheet("Theo nhân viên");
       ws3.addRow(["Nhân viên", "Doanh thu (VND)", "Số đơn", "TB/đơn (VND)"]);
       ws3.getRow(1).font = { bold: true };
-      byEmployee.forEach(e => {
+      byEmployee.forEach((e) => {
         ws3.addRow([e.name, toNumber(e.revenue), e.orders, Math.round(toNumber(e.avgOrderValue))]);
       });
 
@@ -1402,8 +1454,11 @@ const exportEndOfDayReport = async (req, res) => {
         doc.font("Roboto-Bold").fontSize(12).text("THEO PHƯƠNG THỨC THANH TOÁN");
         doc.moveDown(0.5);
         const paymentNames = { cash: "Tiền mặt", qr: "QR Code / Chuyển khoản" };
-        byPayment.forEach(p => {
-          doc.font("Roboto-Regular").fontSize(10).text(`• ${paymentNames[p._id] || p._id}: ${toNumber(p.revenue).toLocaleString("vi-VN")} VND (${p.count} đơn)`);
+        byPayment.forEach((p) => {
+          doc
+            .font("Roboto-Regular")
+            .fontSize(10)
+            .text(`• ${paymentNames[p._id] || p._id}: ${toNumber(p.revenue).toLocaleString("vi-VN")} VND (${p.count} đơn)`);
         });
         doc.moveDown(1);
       }
@@ -1412,8 +1467,11 @@ const exportEndOfDayReport = async (req, res) => {
       if (byEmployee.length > 0) {
         doc.font("Roboto-Bold").fontSize(12).text("THEO NHÂN VIÊN");
         doc.moveDown(0.5);
-        byEmployee.forEach(e => {
-          doc.font("Roboto-Regular").fontSize(10).text(`• ${e.name}: ${toNumber(e.revenue).toLocaleString("vi-VN")} VND (${e.orders} đơn)`);
+        byEmployee.forEach((e) => {
+          doc
+            .font("Roboto-Regular")
+            .fontSize(10)
+            .text(`• ${e.name}: ${toNumber(e.revenue).toLocaleString("vi-VN")} VND (${e.orders} đơn)`);
         });
         doc.moveDown(1);
       }
