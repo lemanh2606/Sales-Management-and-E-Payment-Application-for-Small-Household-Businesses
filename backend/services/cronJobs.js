@@ -234,51 +234,70 @@ cron.schedule("30 8 * * *", async () => {
     const productsWithExpiringBatches = await Product.find({
       "batches.expiry_date": { $lte: thirtyDaysFromNow, $gt: now },
       status: "Đang kinh doanh",
+      isDeleted: false
     });
 
     for (const p of productsWithExpiringBatches) {
-      const expiringBatches = p.batches.filter(b => b.expiry_date && new Date(b.expiry_date) <= thirtyDaysFromNow && new Date(b.expiry_date) > now);
-      if (expiringBatches.length > 0) {
-        const manager = await User.findOne({ role: "MANAGER", stores: p.store_id });
-        if (manager) {
-          // Check xem hôm nay đã có thông báo tương tự chưa để tránh spam
-          const startOfDay = new Date(); startOfDay.setHours(0,0,0,0);
-          const alreadyNotified = await Notification.findOne({
-            storeId: p.store_id,
-            title: "Cảnh báo hàng sắp hết hạn",
-            message: new RegExp(p.name, "i"),
-            createdAt: { $gte: startOfDay }
+      try {
+        const expiringBatches = p.batches.filter(b => b.expiry_date && new Date(b.expiry_date) <= thirtyDaysFromNow && new Date(b.expiry_date) > now && b.quantity > 0);
+        if (expiringBatches.length > 0) {
+          // Lấy manager/owner của cửa hàng
+          const manager = await User.findOne({ 
+            stores: p.store_id,
+            role: "MANAGER",
+            isDeleted: false 
           });
 
-          if (!alreadyNotified) {
-            await Notification.create({
-              storeId: p.store_id,
-              userId: manager._id,
-              type: "inventory",
-              title: "Cảnh báo hàng sắp hết hạn",
-              message: `Sản phẩm "${p.name}" (${p.sku}) có ${expiringBatches.length} lô sắp hết hạn trong 30 ngày tới. Vui lòng kiểm tra kho!`
-            });
-          }
-        }
-      }
-    }
-
-    // BƯỚC 2: QUÉT HÀNG ĐÃ HẾT HẠN (Nếu chưa thông báo)
-    const productsWithExpiredBatches = await Product.find({
-      "batches.expiry_date": { $lte: now },
-      status: "Đang kinh doanh",
-    });
-
-    for (const p of productsWithExpiredBatches) {
-      const expiredCount = p.batches.filter(b => b.expiry_date && new Date(b.expiry_date) <= now).length;
-      if (expiredCount > 0) {
-         const manager = await User.findOne({ role: "MANAGER", stores: p.store_id });
-         if (manager) {
+          if (manager) {
             const startOfDay = new Date(); startOfDay.setHours(0,0,0,0);
             const alreadyNotified = await Notification.findOne({
               storeId: p.store_id,
+              userId: manager._id,
+              title: "Cảnh báo hàng sắp hết hạn",
+              message: { $regex: p.name, $options: "i" },
+              createdAt: { $gte: startOfDay }
+            });
+
+            if (!alreadyNotified) {
+              await Notification.create({
+                storeId: p.store_id,
+                userId: manager._id,
+                type: "inventory",
+                title: "Cảnh báo hàng sắp hết hạn",
+                message: `Sản phẩm "${p.name}" (${p.sku}) có ${expiringBatches.length} lô sắp hết hạn trong 30 ngày tới. Vui lòng kiểm tra kho!`
+              });
+            }
+          }
+        }
+      } catch (prodErr) {
+        console.error(`❌ Lỗi xử lý thông báo sắp hết hạn cho SP ${p._id}:`, prodErr.message);
+      }
+    }
+
+    // BƯỚC 2: QUÉT HÀNG ĐÃ HẾT HẠN
+    const productsWithExpiredBatches = await Product.find({
+      "batches.expiry_date": { $lte: now },
+      status: "Đang kinh doanh",
+      isDeleted: false
+    });
+
+    for (const p of productsWithExpiredBatches) {
+      try {
+        const expiredCount = p.batches.filter(b => b.expiry_date && new Date(b.expiry_date) <= now && b.quantity > 0).length;
+        if (expiredCount > 0) {
+          const manager = await User.findOne({ 
+            stores: p.store_id, 
+            role: "MANAGER",
+            isDeleted: false
+          });
+
+          if (manager) {
+            const startOfDay = new Date(); startOfDay.setHours(0,0,0,0);
+            const alreadyNotified = await Notification.findOne({
+              storeId: p.store_id,
+              userId: manager._id,
               title: "Cảnh báo hàng HẾT HẠN",
-              message: new RegExp(p.name, "i"),
+              message: { $regex: p.name, $options: "i" },
               createdAt: { $gte: startOfDay }
             });
 
@@ -288,10 +307,13 @@ cron.schedule("30 8 * * *", async () => {
                 userId: manager._id,
                 type: "inventory",
                 title: "Cảnh báo hàng HẾT HẠN",
-                message: `CẢNH BÁO: Sản phẩm "${p.name}" có ${expiredCount} lô ĐÃ HẾT HẠN sử dụng. Hệ thống đã tự động loại bỏ khỏi tồn kho khả dụng.`
+                message: `CẢNH BÁO: Sản phẩm "${p.name}" có ${expiredCount} lô ĐÃ HẾT HẠN sử dụng. Vui lòng kiểm tra và xử lý hủy hàng!`
               });
             }
-         }
+          }
+        }
+      } catch (prodErr) {
+        console.error(`❌ Lỗi xử lý thông báo đã hết hạn cho SP ${p._id}:`, prodErr.message);
       }
     }
 

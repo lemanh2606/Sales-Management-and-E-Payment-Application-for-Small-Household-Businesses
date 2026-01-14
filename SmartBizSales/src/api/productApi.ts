@@ -125,6 +125,38 @@ export const updateProductPrice = async (
     return response.data;
 };
 
+/**
+ * Cập nhật thông tin lô hàng (Batch)
+ */
+export const updateProductBatch = async (
+    productId: string,
+    batchIndex: number,
+    data: {
+        batch_no?: string;
+        old_batch_no?: string;
+        expiry_date?: string | null;
+        quantity?: number;
+        cost_price?: number;
+        selling_price?: number;
+        warehouse_id?: string;
+        deliverer_name?: string;
+        deliverer_phone?: string;
+        receiver_name?: string;
+        receiver_phone?: string;
+        note?: string;
+    }
+): Promise<any> => {
+    if (!productId) {
+        throw new Error("Thiếu productId khi cập nhật lô hàng");
+    }
+
+    const response = await apiClient.put<any>(
+        `/products/${productId}/batch`,
+        { batchIndex, ...data }
+    );
+    return response.data;
+};
+
 // --------------------- SEARCH & FILTER ---------------------
 
 /**

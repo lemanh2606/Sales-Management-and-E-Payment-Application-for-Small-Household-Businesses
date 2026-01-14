@@ -1,5 +1,6 @@
-//backend/controllers/notificationController.js
 import Notification from "../models/Notification.js";
+import Product from "../models/Product.js";
+import User from "../models/User.js";
 
 /**
  * Lấy danh sách thông báo (phân trang, lọc)
@@ -91,6 +92,9 @@ export const markNotificationRead = async (req, res) => {
  */
 export const markAllRead = async (req, res) => {
   try {
+    const storeId = req.store?._id || req.storeId || req.query.storeId;
+    if (!storeId) return res.status(400).json({ message: "Thiếu thông tin cửa hàng" });
+    
     const filter = { storeId };
     if (req.user?.role !== "MANAGER") {
       filter.userId = req.user?._id;
@@ -124,5 +128,75 @@ export const deleteNotification = async (req, res) => {
   } catch (err) {
     console.error("⚠️ Lỗi khi xóa thông báo:", err);
     return res.status(500).json({ message: "Lỗi xóa thông báo" });
+  }
+};
+/**
+ * Quét thủ công hàng hết hạn/sắp hết hạn để tạo thông báo cho store hiện tại
+ */
+export const scanExpiryNotifications = async (req, res) => {
+  try {
+    const storeId = req.store?._id || req.storeId;
+    if (!storeId) return res.status(400).json({ message: "Thiếu thông tin cửa hàng" });
+
+    // Chỉ manager mới được chạy quét
+    if (req.user?.role !== "MANAGER") {
+      return res.status(403).json({ message: "Bạn không có quyền thực hiện thao tác này" });
+    }
+
+    const now = new Date();
+    const thirtyDaysFromNow = new Date();
+    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+
+    // 1. Quét sản phẩm sắp/đã hết hạn (có tồn kho)
+    const products = await Product.find({
+      store_id: storeId,
+      status: "Đang kinh doanh",
+      isDeleted: false,
+      "batches.expiry_date": { $lte: thirtyDaysFromNow },
+      "batches.quantity": { $gt: 0 }
+    });
+
+    let createdCount = 0;
+    const startOfDay = new Date(); startOfDay.setHours(0,0,0,0);
+
+    for (const p of products) {
+      const expiringBatches = p.batches.filter(b => b.expiry_date && new Date(b.expiry_date) <= thirtyDaysFromNow && b.quantity > 0);
+      const expiredBatches = expiringBatches.filter(b => new Date(b.expiry_date) <= now);
+      
+      if (expiringBatches.length > 0) {
+        const title = expiredBatches.length > 0 ? "Cảnh báo hàng HẾT HẠN" : "Cảnh báo hàng sắp hết hạn";
+        const message = expiredBatches.length > 0 
+          ? `Sản phẩm "${p.name}" có ${expiredBatches.length} lô ĐÃ HẾT HẠN. Vui lòng xử lý!` 
+          : `Sản phẩm "${p.name}" có ${expiringBatches.length} lô sắp hết hạn trong 30 ngày tới.`;
+
+        // Check trùng trong ngày
+        const existing = await Notification.findOne({
+          storeId,
+          userId: req.user._id,
+          title,
+          message: { $regex: p.name, $options: "i" },
+          createdAt: { $gte: startOfDay }
+        });
+
+        if (!existing) {
+          await Notification.create({
+            storeId,
+            userId: req.user._id,
+            type: "inventory",
+            title,
+            message
+          });
+          createdCount++;
+        }
+      }
+    }
+
+    return res.json({ 
+      message: `Quét hoàn tất. Đã tạo thêm ${createdCount} thông báo mới.`,
+      foundProducts: products.length 
+    });
+  } catch (err) {
+    console.error("⚠️ Lỗi khi quét thông báo hết hạn:", err);
+    return res.status(500).json({ message: "Lỗi khi quét thông báo" });
   }
 };

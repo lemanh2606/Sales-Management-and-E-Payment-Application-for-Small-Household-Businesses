@@ -1498,6 +1498,138 @@ const reverseInventoryVoucher = async (req, res) => {
   }
 };
 
+// ============= PROCESS EXPIRED GOODS (Hủy hoặc Trả hàng hết hạn) =============
+/**
+ * Nghiệp vụ xử lý hàng hết hạn:
+ * 1. Hủy hàng (DISPOSE): Xuất kho tiêu hủy, tính vào chi phí.
+ * 2. Trả hàng (RETURN): Xuất trả nhà cung cấp.
+ */
+const processExpiredGoods = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    requireManager(req);
+    const userId = req.user?.id || req.user?._id;
+    const storeId = toObjectId(req.params.storeId);
+    
+    const { 
+      mode = "DISPOSE", // DISPOSE | RETURN
+      items = [], 
+      warehouse_id,
+      notes = "",
+      partner_name = "",
+      supplier_id, // Accept supplier_id
+      deliverer_name = "",
+      receiver_name = ""
+    } = req.body;
+
+    if (!items.length) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({ message: "Danh sách xử lý trống" });
+    }
+
+    // 1. Resolve Warehouse
+    let warehouse = null;
+    if (warehouse_id) {
+      warehouse = await Warehouse.findOne({ _id: toObjectId(warehouse_id), store_id: storeId, isDeleted: false }).session(session);
+    }
+
+    // 2. Load and Validate Products/Batches
+    const productIds = items.map(it => toObjectId(it.product_id));
+    const products = await Product.find({ _id: { $in: productIds }, store_id: storeId, isDeleted: false }).session(session);
+    const productMap = new Map(products.map(p => [String(p._id), p]));
+
+    const voucherItems = [];
+    const now = new Date();
+
+    for (const it of items) {
+      const p = productMap.get(String(it.product_id));
+      if (!p) throw new Error(`Sản phẩm ${it.product_id} không tồn tại`);
+
+      const batch = (p.batches || []).find(b => 
+        b.batch_no === it.batch_no && 
+        (!warehouse_id || String(b.warehouse_id) === String(warehouse_id))
+      );
+
+      if (!batch) throw new Error(`Không tìm thấy lô ${it.batch_no} của sản phẩm ${p.name}`);
+      
+      const qtyToProcess = Number(it.quantity);
+      if (batch.quantity < qtyToProcess) {
+        throw new Error(`Số lượng tồn trong lô ${it.batch_no} (${batch.quantity}) không đủ để xử lý (${qtyToProcess})`);
+      }
+
+      // Update Batch & Total Stock
+      batch.quantity -= qtyToProcess;
+      p.stock_quantity = (p.stock_quantity || 0) - qtyToProcess;
+      await p.save({ session });
+
+      voucherItems.push({
+        product_id: p._id,
+        sku_snapshot: p.sku || "",
+        name_snapshot: p.name || "",
+        unit_snapshot: p.unit || "",
+        batch_no: it.batch_no,
+        expiry_date: batch.expiry_date,
+        qty_actual: qtyToProcess,
+        unit_cost: toDecimal128(batch.cost_price || 0),
+        note: it.note || notes || (mode === "DISPOSE" ? "Hủy hàng hết hạn" : "Trả hàng hết hạn")
+      });
+    }
+
+    // 3. Create Inventory Voucher (Automatic Posted)
+    const reason = mode === "DISPOSE" ? `Tiêu hủy hàng hết hạn theo quy định. ${notes}` : `Xuất trả hàng hết hạn cho nhà cung cấp/đối tác. ${notes}`;
+    const voucher_code = `XH-${Date.now()}`;
+
+    const voucher = new InventoryVoucher({
+      store_id: storeId,
+      type: "OUT",
+      status: "POSTED", // Auto-posted because stock is already adjusted above
+      voucher_code,
+      voucher_date: now,
+      reason,
+      warehouse_id: warehouse?._id || null,
+      warehouse_name: warehouse?.name || "Kho tổng",
+      ref_type: mode === "DISPOSE" ? "EXPIRY_DISPOSAL" : "EXPIRY_RETURN",
+      items: voucherItems,
+      created_by: userId,
+      posted_by: userId,
+      posted_at: now,
+      partner_name: partner_name || (mode === "RETURN" ? "Nhà cung cấp" : ""),
+      supplier_id: supplier_id || null, // Create link to Supplier
+      deliverer_name: deliverer_name || req.user?.fullname || "",
+      receiver_name: receiver_name || "Hội đồng tiêu hủy/Đối tác"
+    });
+
+    await voucher.save({ session });
+
+    await logActivity?.({
+      user: req.user,
+      store: { _id: storeId },
+      action: "post",
+      entity: "InventoryVoucher",
+      entityId: voucher._id,
+      entityName: `Phiếu xuất hủy ${voucher_code}`,
+      req,
+      description: `${reason}. Tổng số mặt hàng: ${voucherItems.length}`
+    });
+
+    await session.commitTransaction();
+    session.endSession();
+
+    return res.status(200).json({
+      message: mode === "DISPOSE" ? "Xử lý tiêu hủy thành công" : "Xử lý trả hàng thành công",
+      voucher
+    });
+
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    return res.status(400).json({ message: error.message || "Lỗi xử lý hàng hết hạn" });
+  }
+};
+
 module.exports = {
   createInventoryVoucher,
   getInventoryVouchers,
@@ -1508,4 +1640,5 @@ module.exports = {
   postInventoryVoucher,
   cancelInventoryVoucher,
   reverseInventoryVoucher,
+  processExpiredGoods,
 };

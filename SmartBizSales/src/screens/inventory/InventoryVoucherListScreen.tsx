@@ -334,6 +334,13 @@ const InventoryVoucherListScreen: React.FC = () => {
       </Modal>
 
       <TouchableOpacity
+        style={styles.fabSecondary}
+        onPress={() => navigation.navigate("ProcessExpired")}
+      >
+        <Ionicons name="alert-circle" size={24} color="#ef4444" />
+      </TouchableOpacity>
+
+      <TouchableOpacity
         style={styles.fab}
         onPress={() => navigation.navigate("InventoryVoucherForm", { onRefresh: fetchVouchers })}
       >
@@ -455,11 +462,31 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    elevation: 10,
-    shadowColor: "#10b981",
+    elevation: 8,
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.15,
     shadowRadius: 12,
+    zIndex: 10,
+  },
+  fabSecondary: {
+    position: "absolute",
+    bottom: 100,
+    right: 32,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    elevation: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    zIndex: 10,
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#ef4444",
   },
   fabGradient: {
     width: "100%",

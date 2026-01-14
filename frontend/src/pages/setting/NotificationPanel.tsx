@@ -10,7 +10,7 @@ import {
   Menu,
   Badge,
 } from "antd";
-import { CheckOutlined, MoreOutlined, BellOutlined } from "@ant-design/icons";
+import { CheckOutlined, MoreOutlined, BellOutlined, InboxOutlined, WarningOutlined, ShoppingCartOutlined, CreditCardOutlined } from "@ant-design/icons";
 import axios from "axios";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
@@ -23,11 +23,29 @@ dayjs.locale("vi");
 const apiUrl = import.meta.env.VITE_API_URL;
 interface Notification {
   _id: string;
+  type: "order" | "payment" | "service" | "system" | "inventory";
   title: string;
   message: string;
   read: boolean;
   createdAt: string;
 }
+
+interface Notification {
+  _id: string;
+  type: "order" | "payment" | "service" | "system" | "inventory";
+  title: string;
+  message: string;
+  read: boolean;
+  createdAt: string;
+}
+
+const NOTIFICATION_CONFIG = {
+  order: { icon: <ShoppingCartOutlined />, color: "#1890ff" },
+  payment: { icon: <CreditCardOutlined />, color: "#52c41a" },
+  service: { icon: <BellOutlined />, color: "#722ed1" },
+  system: { icon: <WarningOutlined />, color: "#faad14" },
+  inventory: { icon: <InboxOutlined />, color: "#ff4d4f" },
+};
 
 interface NotificationPanelProps {
   storeId: string;
@@ -348,20 +366,26 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({
                     width: 40,
                     height: 40,
                     borderRadius: "50%",
-                    background: notif.read ? "#f0f0f0" : "#1890ff",
+                    background: notif.read 
+                      ? "#f0f0f0" 
+                      : (NOTIFICATION_CONFIG[notif.type]?.color || "#1890ff"),
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
                     flexShrink: 0,
                     transition: "all 0.2s ease",
+                    boxShadow: notif.read ? "none" : "0 2px 8px rgba(0,0,0,0.15)"
                   }}
                 >
-                  <BellOutlined
-                    style={{
-                      fontSize: 18,
-                      color: notif.read ? "#8c8c8c" : "#fff",
-                    }}
-                  />
+                  {React.cloneElement(
+                    (NOTIFICATION_CONFIG[notif.type]?.icon || <BellOutlined />),
+                    {
+                      style: {
+                        fontSize: 18,
+                        color: notif.read ? "#8c8c8c" : "#fff",
+                      }
+                    }
+                  )}
                 </div>
 
                 {/* Nội dung thông báo */}

@@ -1,5 +1,6 @@
 //frontend/src/pages/inventory/InventoryVoucherPage.jsx
 import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Alert,
   Button,
@@ -207,6 +208,7 @@ const S = {
 };
 
 export default function InventoryVoucherPage() {
+  const navigate = useNavigate();
   const [api, notificationContextHolder] = notification.useNotification();
   const [modal, modalContextHolder] = Modal.useModal();
   // Warehouses
@@ -1252,6 +1254,15 @@ export default function InventoryVoucherPage() {
                   }}
                 >
                   Tạo phiếu
+                </Button>
+
+                <Button
+                  size="medium"
+                  danger
+                  icon={<ExclamationCircleOutlined />}
+                  onClick={() => navigate("/inventory/process-expired")}
+                >
+                  Xử lý hàng hết hạn
                 </Button>
 
                 <Tooltip title="Tải lại danh sách nhà cung cấp">

@@ -1,7 +1,7 @@
 // src/pages/setting/Notification.tsx
 import React, { useState, useEffect, useCallback } from "react";
 import { Card, Table, Input, Select, Button, Space, Tag, Dropdown, Menu, Empty, Badge, DatePicker, Tooltip, Modal } from "antd";
-import { SearchOutlined, BellOutlined, CheckOutlined, DeleteOutlined, MoreOutlined, ReloadOutlined, CloseCircleOutlined } from "@ant-design/icons";
+import { SearchOutlined, BellOutlined, CheckOutlined, DeleteOutlined, MoreOutlined, ReloadOutlined, CloseCircleOutlined, InboxOutlined } from "@ant-design/icons";
 import type { ColumnsType, TablePaginationConfig } from "antd/es/table";
 import axios from "axios";
 import dayjs, { Dayjs } from "dayjs";
@@ -170,6 +170,31 @@ const Notification: React.FC = () => {
   // ===== ACTIONS =====
   const handleTableChange = (newPagination: TablePaginationConfig) => {
     fetchNotifications(newPagination.current, newPagination.pageSize);
+  };
+
+  // ===== SCAN EXPIRY =====
+  const scanExpiry = async () => {
+    if (userRole !== "MANAGER") return;
+    setLoading(true);
+    try {
+      const res = await axios.post(`${apiUrl}/notifications/scan-expiry`, {}, { headers });
+      Swal.fire({
+        icon: "success",
+        title: "Quét hoàn tất",
+        text: res.data.message,
+        timer: 3000,
+      });
+      fetchNotifications(1, 10);
+    } catch (err: any) {
+      console.error("Scan error:", err);
+      Swal.fire({
+        icon: "error",
+        title: "Lỗi khi quét",
+        text: err.response?.data?.message || "Không thể thực hiện quét lúc này",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   //Hàm đánh dấu đã đọc/chưa đọc
@@ -472,6 +497,11 @@ const Notification: React.FC = () => {
         }
         extra={
           <Space>
+            {userRole === "MANAGER" && (
+              <Button icon={<InboxOutlined />} onClick={scanExpiry} loading={loading}>
+                Quét hàng hết hạn
+              </Button>
+            )}
             <Button icon={<ReloadOutlined />} onClick={() => fetchNotifications(1, 10)}>
               Làm mới
             </Button>

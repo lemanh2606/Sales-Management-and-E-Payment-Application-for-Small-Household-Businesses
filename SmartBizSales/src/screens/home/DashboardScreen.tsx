@@ -66,6 +66,17 @@ interface TopProduct {
   category?: string;
 }
 
+interface ExpiringItem {
+  _id: string;
+  name: string;
+  sku: string;
+  unit: string;
+  batch_no: string;
+  expiry_date: string;
+  quantity: number;
+  status: "expired" | "expiring_soon";
+}
+
 type DecimalLike =
   | number
   | { $numberDecimal?: string }
@@ -210,6 +221,8 @@ export default function DashboardScreen() {
   const [activeTab, setActiveTab] = useState<
     "overview" | "analytics" | "products"
   >("overview");
+  const [expiringItems, setExpiringItems] = useState<ExpiringItem[]>([]);
+  const [loadingExpiring, setLoadingExpiring] = useState<boolean>(false);
 
   // Animation values
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -254,6 +267,7 @@ export default function DashboardScreen() {
         fetchTopProducts(),
         fetchRevenueChart(),
         fetchCategoryData(),
+        fetchExpiringItems(),
       ]);
 
       Animated.parallel([
@@ -455,6 +469,21 @@ export default function DashboardScreen() {
       },
     ];
     setCategoryData(mockCategoryData);
+  };
+
+  const fetchExpiringItems = async (): Promise<void> => {
+    if (!storeId) return;
+    setLoadingExpiring(true);
+    try {
+      const res = await apiClient.get("/products/expiring", {
+        params: { storeId, days: 30 },
+      });
+      setExpiringItems((res.data as any).data || []);
+    } catch (error) {
+      console.error("❌ Expiring items error:", error);
+    } finally {
+      setLoadingExpiring(false);
+    }
   };
 
   // ==================== REFRESH ====================
@@ -691,6 +720,71 @@ export default function DashboardScreen() {
           {/* Overview Tab */}
           {activeTab === "overview" && (
             <>
+              {/* Expiry Alerts */}
+              {expiringItems.length > 0 && (
+                <View style={styles.expiryAlertContainer}>
+                  <LinearGradient
+                    colors={expiringItems.some(i => i.status === 'expired') ? ["#fff1f0", "#ffccc7"] : ["#fffbe6", "#fff1b8"]}
+                    style={styles.expiryAlert}
+                  >
+                    <View style={styles.expiryAlertHeader}>
+                      <Ionicons 
+                        name={expiringItems.some(i => i.status === 'expired') ? "alert-circle" : "warning"} 
+                        size={20} 
+                        color={expiringItems.some(i => i.status === 'expired') ? "#ff4d4f" : "#faad14"} 
+                      />
+                      <Text style={[
+                        styles.expiryAlertTitle, 
+                        { color: expiringItems.some(i => i.status === 'expired') ? "#a8071a" : "#874d00" }
+                      ]}>
+                        Cảnh báo: {expiringItems.some(i => i.status === 'expired') ? "Phát hiện hàng ĐÃ HẾT HẠN" : `${expiringItems.length} lô sắp hết hạn`}
+                      </Text>
+                      <TouchableOpacity onPress={() => setExpiringItems([])}>
+                        <Ionicons name="close" size={18} color="#999" />
+                      </TouchableOpacity>
+                    </View>
+                    <View style={styles.expiryList}>
+                      {expiringItems.slice(0, 3).map((item, idx) => {
+                        const isExp = item.status === 'expired';
+                        return (
+                          <View key={idx} style={styles.expiryLine}>
+                            <Text style={[styles.bullet, { color: isExp ? "#ff4d4f" : "#faad14" }]}>•</Text>
+                            <Text style={styles.expiryText} numberOfLines={1}>
+                              <Text style={[styles.boldText, isExp && { textDecorationLine: 'line-through', color: '#ff4d4f' }]}>{item.name}</Text>
+                              {` - Lô: ${item.batch_no} - `}
+                              <Text style={{ color: isExp ? "#ff4d4f" : "#d46b08", fontWeight: 'bold' }}>
+                                {dayjs(item.expiry_date).format("DD/MM")}
+                              </Text>
+                              <Text style={{ fontSize: 10, color: isExp ? "#ff4d4f" : "#faad14" }}>
+                                {isExp ? " [HẾT HẠN]" : " [SẮP HẾT]"}
+                              </Text>
+                            </Text>
+                          </View>
+                        );
+                      })}
+                      {expiringItems.length > 3 && (
+                        <Text style={styles.moreText}>
+                          ... và {expiringItems.length - 3} lô hàng khác.
+                        </Text>
+                      )}
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.manageBtn, { borderColor: expiringItems.some(i => i.status === 'expired') ? "#ff4d4f" : "#10b981" }]}
+                      onPress={() => navigation.navigate("ProcessExpired")}
+                    >
+                      <Text style={[styles.manageBtnText, { color: expiringItems.some(i => i.status === 'expired') ? "#ff4d4f" : "#10b981" }]}>
+                        {expiringItems.some(i => i.status === 'expired') ? "Xử lý hàng hết hạn ngay" : "Xem chi tiết kho"}
+                      </Text>
+                      <Ionicons
+                        name="chevron-forward"
+                        size={14}
+                        color={expiringItems.some(i => i.status === 'expired') ? "#ff4d4f" : "#10b981"}
+                      />
+                    </TouchableOpacity>
+                  </LinearGradient>
+                </View>
+              )}
+
               {/* Key Metrics Grid */}
               <View style={styles.statsGrid}>
                 <StatCard
@@ -1284,5 +1378,51 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
     marginLeft: 10,
+  },
+  expiryAlertContainer: { marginBottom: 16 },
+  expiryAlert: {
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#ffe58f",
+  },
+  expiryAlertHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+    gap: 8,
+  },
+  expiryAlertTitle: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#856404",
+  },
+  expiryList: { marginBottom: 10, paddingLeft: 4 },
+  expiryLine: { flexDirection: "row", marginBottom: 4, alignItems: "center" },
+  bullet: { marginRight: 6, color: "#faad14", fontSize: 16 },
+  expiryText: { flex: 1, fontSize: 12, color: "#595959", lineHeight: 18 },
+  boldText: { fontWeight: "700", color: "#262626" },
+  dangerText: { color: "#ef4444", fontWeight: "700" },
+  moreText: {
+    fontSize: 12,
+    fontStyle: "italic",
+    color: "#8c8c8c",
+    marginLeft: 14,
+  },
+  manageBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(16, 185, 129, 0.1)",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    gap: 4,
+  },
+  manageBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#10b981",
   },
 });

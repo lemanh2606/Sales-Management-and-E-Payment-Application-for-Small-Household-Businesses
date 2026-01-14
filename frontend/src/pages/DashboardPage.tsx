@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import Layout from "../components/Layout";
-import { Table, Space, Card, Typography, Progress, Collapse, Dropdown, Tooltip, Button, Spin, Alert, Input, Menu, Badge, Popover } from "antd";
+import { Table, Space, Card, Typography, Progress, Collapse, Dropdown, Tooltip, Button, Spin, Alert, Input, Menu, Badge, Popover, Tag } from "antd";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
 import { Tooltip as RechartsTooltip } from "recharts";
 import {
@@ -767,26 +767,63 @@ export default function DashboardPage() {
         {expiringProducts.length > 0 && (
           <div style={{ marginBottom: 24 }}>
             <Alert
-              message={<Text strong style={{ color: "#d46b08" }}>Cảnh báo: Có {expiringProducts.length} lô hàng sắp hết hạn trong 30 ngày tới</Text>}
+              message={
+                <Text strong style={{ fontSize: 16 }}>
+                  🔔 Cảnh báo kho hàng: {expiringProducts.some((p: any) => p.status === "expired") 
+                    ? "Phát hiện lô hàng ĐÃ HẾT HẠN" 
+                    : "Lô hàng sắp hết hạn"}
+                </Text>
+              }
               description={
                 <div style={{ marginTop: 8 }}>
-                  <div style={{ marginBottom: 8 }}>
-                    {expiringProducts.slice(0, 3).map((p: any, i: number) => (
-                      <div key={i} style={{ marginBottom: 4 }}>
-                        • <b>{p.name}</b> <Text type="secondary" style={{ fontSize: 11 }}>(SKU: {p.sku})</Text> - Lô: <b>{p.batch_no}</b> - HSD: <Text style={{ color: "#f5222d", fontWeight: 600 }}>{dayjs(p.expiry_date).format("DD/MM/YYYY")}</Text> (SL: {p.quantity})
+                  <div style={{ marginBottom: 12 }}>
+                    {expiringProducts.slice(0, 5).map((p: any, i: number) => {
+                      const isExp = p.status === "expired";
+                      return (
+                        <div key={i} style={{ 
+                          marginBottom: 6, 
+                          padding: "4px 8px", 
+                          borderRadius: 6, 
+                          background: isExp ? "#fff1f0" : "transparent",
+                          borderLeft: `4px solid ${isExp ? "#ff4d4f" : "#faad14"}` 
+                        }}>
+                          <Badge status={isExp ? "error" : "warning"} />
+                          <Text strong={isExp} delete={isExp}> {p.name} </Text>
+                          <Text type="secondary" style={{ fontSize: 11 }}>(SKU: {p.sku})</Text>
+                          {" - Lô: "}<b>{p.batch_no}</b>
+                          {" - HSD: "}
+                          <Text style={{ color: isExp ? "#f5222d" : "#d46b08", fontWeight: 600 }}>
+                            {dayjs(p.expiry_date).format("DD/MM/YYYY")}
+                          </Text>
+                          {isExp && <Tag color="error" style={{ marginLeft: 8 }}>Đã hết hạn</Tag>}
+                          {!isExp && <Tag color="warning" style={{ marginLeft: 8 }}>Sắp hết hạn</Tag>}
+                          <Text style={{ marginLeft: 8 }}>| SL: <b>{p.quantity}</b></Text>
+                        </div>
+                      );
+                    })}
+                    {expiringProducts.length > 5 && (
+                      <div style={{ fontStyle: "italic", marginLeft: 12, marginTop: 4 }}>
+                        ... và {expiringProducts.length - 5} lô hàng khác.
                       </div>
-                    ))}
-                    {expiringProducts.length > 3 && <div style={{ fontStyle: "italic", marginLeft: 12 }}>... và {expiringProducts.length - 3} lô hàng khác.</div>}
+                    )}
                   </div>
-                  <Button type="primary" size="small" onClick={() => navigate("/products/list")} ghost>
-                    Quản lý kho hàng
-                  </Button>
+                  <Space>
+                    <Button type="primary" size="small" onClick={() => navigate("/inventory/process-expired")} danger={expiringProducts.some((p: any) => p.status === "expired")}>
+                      Xử lý ngay
+                    </Button>
+                    <Button size="small" onClick={() => setExpiringProducts([])} type="text">
+                      Để sau
+                    </Button>
+                  </Space>
                 </div>
               }
-              type="warning"
+              type={expiringProducts.some((p: any) => p.status === "expired") ? "error" : "warning"}
               showIcon
-              closable
-              style={{ borderRadius: 12, border: "1px solid #ffe58f", background: "#fffbe6" }}
+              style={{ 
+                borderRadius: 12, 
+                boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
+                border: "1px solid #ffccc7"
+              }}
             />
           </div>
         )}

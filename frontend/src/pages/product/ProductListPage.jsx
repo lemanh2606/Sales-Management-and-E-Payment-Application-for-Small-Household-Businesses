@@ -8,6 +8,7 @@ import {
   Typography,
   Card,
   Input,
+  InputNumber,
   Tag,
   Tooltip,
   notification,
@@ -23,6 +24,8 @@ import {
   AutoComplete,
   Alert,
   Select,
+  Form,
+  DatePicker,
 } from "antd";
 import {
   PlusOutlined,
@@ -47,7 +50,9 @@ import {
 import Layout from "../../components/Layout";
 import ProductForm from "../../components/product/ProductForm";
 import { getProductsByStore, importProductsByExcel, exportProducts } from "../../api/productApi";
+import { getWarehouses } from "../../api/warehouseApi"; // ✅ NEW
 import * as XLSX from "xlsx";
+import dayjs from "dayjs";
 
 const { Title, Text } = Typography;
 const apiUrl = import.meta.env.VITE_API_URL;
@@ -57,6 +62,7 @@ export default function ProductListPage() {
 
   const storeObj = JSON.parse(localStorage.getItem("currentStore") || "null") || {};
   const storeId = storeObj._id || storeObj.id || null;
+  const userObj = JSON.parse(localStorage.getItem("user") || "null") || {}; // ✅ NEW
   const token = localStorage.getItem("token");
 
   const [allProducts, setAllProducts] = useState([]);
@@ -70,6 +76,10 @@ export default function ProductListPage() {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [isMobile, setIsMobile] = useState(typeof window !== "undefined" ? window.innerWidth < 768 : false);
+  const [expandedRowKeys, setExpandedRowKeys] = useState([]);
+  const [editingBatch, setEditingBatch] = useState(null); // State cho việc edit lô hàng
+  const [batchModalOpen, setBatchModalOpen] = useState(false);
+  const [warehouses, setWarehouses] = useState([]); // ✅ NEW: Dân sách kho hàng
 
   // ✅ thêm warehouse
   const allColumns = [
@@ -200,13 +210,26 @@ export default function ProductListPage() {
     }
   };
 
+  const fetchWarehouses = async () => {
+    if (!storeId) return;
+    try {
+      const data = await getWarehouses(storeId);
+      setWarehouses(data?.warehouses || []);
+    } catch (err) {
+      console.error("Lỗi tải danh sách kho:", err);
+    }
+  };
+
   useEffect(() => {
-    if (storeId) fetchProducts();
+    if (storeId) {
+      fetchProducts();
+      fetchWarehouses();
+    }
   }, [storeId]);
 
   const [viewMode, setViewMode] = useState("merge"); // "merge" | "split"
 
-  // Logic làm phẳng (flatten) sản phẩm theo lô
+  // Logic làm phẳng (flatten) sản phẩm theo lô - PHẢI ĐỊNH NGHĨA TRƯỚC handleViewModeChange
   const flattenProducts = useMemo(() => {
     return allProducts.reduce((acc, product) => {
       const batches = product.batches && product.batches.length > 0
@@ -236,6 +259,33 @@ export default function ProductListPage() {
       return acc;
     }, []);
   }, [allProducts]);
+
+  // Xử lý chuyển chế độ xem - reset dữ liệu bảng để render lại đúng
+  const handleViewModeChange = useCallback((newMode) => {
+    // 1. Reset state trước
+    setExpandedRowKeys([]);
+    setFilteredProducts([]); // Clear table data để tránh hiển thị sai
+    setCurrentPage(1);
+    
+    // 2. Đổi viewMode - dùng setTimeout để đảm bảo render lại hoàn toàn
+    setTimeout(() => {
+      setViewMode(newMode);
+      // 3. Set lại dữ liệu dựa trên mode mới
+      const newData = newMode === "split" ? flattenProducts : allProducts;
+      if (!searchValue.trim()) {
+        setFilteredProducts(newData);
+      } else {
+        const searchLower = searchValue.toLowerCase().trim();
+        const filtered = newData.filter((product) => {
+          const name = (product.name || "").toLowerCase();
+          const sku = (product.sku || "").toLowerCase();
+          const batchNo = (product.batch_no || "").toLowerCase();
+          return name.includes(searchLower) || sku.includes(searchLower) || batchNo.includes(searchLower);
+        });
+        setFilteredProducts(filtered);
+      }
+    }, 50); // Delay nhỏ để React render lại table trống trước
+  }, [allProducts, flattenProducts, searchValue]);
 
   // ✅ SEARCH & FILTER
   useEffect(() => {
@@ -412,6 +462,31 @@ export default function ProductListPage() {
     });
   };
 
+  // Mở modal chỉnh sửa lô hàng
+  const openEditBatch = (product, batch) => {
+    // Debug log
+    console.log("openEditBatch called with:", { 
+      product_id: product._id, 
+      product_name: product.name, 
+      batch_no: batch.batch_no,
+      product_full: product 
+    });
+    // Tạo object chứa thông tin product + batch để edit
+    setEditingBatch({ product, batch });
+    setBatchModalOpen(true);
+    api.info({
+      message: `✏️ Chỉnh sửa lô hàng`,
+      description: `Lô: ${batch.batch_no} - ${product.name}`,
+      placement: "topRight",
+      duration: 2,
+    });
+  };
+
+  const closeBatchModal = () => {
+    setBatchModalOpen(false);
+    setEditingBatch(null);
+  };
+
   const closeModal = () => {
     setIsModalOpen(false);
     setModalProduct(null);
@@ -530,13 +605,57 @@ export default function ProductListPage() {
         ),
         dataIndex: "price",
         key: "price",
-        width: isMobile ? 110 : 130,
-        align: "right",
-        render: (value) => (
-          <Text strong style={{ color: "#52c41a", fontSize: "clamp(11px, 2.5vw, 13px)" }}>
-            {value ? Number(value).toLocaleString() : "Trống"}
-          </Text>
-        ),
+        width: isMobile ? 150 : 180,
+        align: "center",
+        render: (value, record) => {
+          const batches = record.batches || [];
+          // Nếu không có batches hoặc đang ở chế độ split mode
+          if (batches.length === 0 || record.isBatch) {
+            return (
+              <Text strong style={{ color: "#52c41a", fontSize: "clamp(11px, 2.5vw, 13px)" }}>
+                {value ? Number(value).toLocaleString() : "Trống"}
+              </Text>
+            );
+          }
+          // Group batches by selling_price (use product price as fallback)
+          const priceGroups = {};
+          batches.forEach(b => {
+            const price = b.selling_price || Number(value) || 0;
+            if (!priceGroups[price]) priceGroups[price] = 0;
+            priceGroups[price] += 1;
+          });
+          const entries = Object.entries(priceGroups).sort((a, b) => Number(b[0]) - Number(a[0])); // Sort descending
+          // Nếu tất cả lô cùng giá bán, hiển thị đơn giản
+          if (entries.length === 1) {
+            return (
+              <Text strong style={{ color: "#52c41a", fontSize: "clamp(11px, 2.5vw, 13px)" }}>
+                {Number(entries[0][0]).toLocaleString()}
+              </Text>
+            );
+          }
+          // Hiển thị chi tiết theo từng mức giá bán
+          return (
+            <Tooltip title={
+              <div style={{ padding: 4 }}>
+                <div style={{ marginBottom: 4, borderBottom: '1px solid rgba(255,255,255,0.2)', paddingBottom: 4 }}>CHI TIẾT GIÁ BÁN THEO LÔ</div>
+                {entries.map(([price, count]) => (
+                  <div key={price} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                    <span>{count} lô:</span>
+                    <span style={{ fontWeight: 600 }}>{Number(price).toLocaleString()}đ</span>
+                  </div>
+                ))}
+              </div>
+            }>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center', cursor: 'pointer' }}>
+                {entries.map(([price, count]) => (
+                  <Tag key={price} color="green" style={{ margin: 0, fontSize: 10 }}>
+                    {count} lô: {Number(price).toLocaleString()}
+                  </Tag>
+                ))}
+              </div>
+            </Tooltip>
+          );
+        },
       },
       stock_quantity: {
         title: (
@@ -623,9 +742,49 @@ export default function ProductListPage() {
         title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Giá vốn</span>,
         dataIndex: "cost_price",
         key: "cost_price",
-        width: isMobile ? 110 : 100,
+        width: isMobile ? 150 : 180,
         align: "center",
-        render: (value) => (value ? <Tag color="lime">{Number(value).toLocaleString()}</Tag> : "Trống"),
+        render: (value, record) => {
+          const batches = record.batches || [];
+          // Nếu không có batches hoặc đang ở chế độ split mode
+          if (batches.length === 0 || record.isBatch) {
+            return value ? <Tag color="lime">{Number(value).toLocaleString()}</Tag> : "Trống";
+          }
+          // Group batches by cost_price
+          const priceGroups = {};
+          batches.forEach(b => {
+            const price = b.cost_price || 0;
+            if (!priceGroups[price]) priceGroups[price] = 0;
+            priceGroups[price] += 1;
+          });
+          const entries = Object.entries(priceGroups).sort((a, b) => Number(a[0]) - Number(b[0]));
+          // Nếu tất cả lô cùng giá vốn, hiển thị đơn giản
+          if (entries.length === 1) {
+            return <Tag color="lime">{Number(entries[0][0]).toLocaleString()}</Tag>;
+          }
+          // Hiển thị chi tiết theo từng mức giá vốn
+          return (
+            <Tooltip title={
+              <div style={{ padding: 4 }}>
+                <div style={{ marginBottom: 4, borderBottom: '1px solid rgba(255,255,255,0.2)', paddingBottom: 4 }}>CHI TIẾT GIÁ VỐN THEO LÔ</div>
+                {entries.map(([price, count]) => (
+                  <div key={price} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                    <span>{count} lô:</span>
+                    <span style={{ fontWeight: 600 }}>{Number(price).toLocaleString()}đ</span>
+                  </div>
+                ))}
+              </div>
+            }>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center', cursor: 'pointer' }}>
+                {entries.map(([price, count]) => (
+                  <Tag key={price} color="lime" style={{ margin: 0, fontSize: 10 }}>
+                    {count} lô: {Number(price).toLocaleString()}
+                  </Tag>
+                ))}
+              </div>
+            </Tooltip>
+          );
+        },
       },
       supplier: {
         title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Nhà cung cấp</span>,
@@ -791,20 +950,68 @@ export default function ProductListPage() {
       width: isMobile ? 80 : 120,
       align: "center",
       fixed: "right",
-      render: (_, record) => (
-        <Tooltip title="Chỉnh sửa">
-          <Button
-            type="primary"
-            icon={<EditOutlined />}
-            size={isMobile ? "small" : "middle"}
-            onClick={() => openEditModal(record)}
-            style={{
-              background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-              border: "none",
-            }}
-          />
-        </Tooltip>
-      ),
+      render: (_, record) => {
+        // Chế độ Split (Chi tiết lô) - cho phép edit từng lô
+        if (viewMode === "split" && record.isBatch) {
+          return (
+            <Tooltip title="Chỉnh sửa lô này">
+              <Button
+                type="primary"
+                icon={<EditOutlined />}
+                size={isMobile ? "small" : "middle"}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // Tìm batch tương ứng trong product gốc
+                  const batch = {
+                    batch_no: record.batch_no,
+                    expiry_date: record.expiry_date,
+                    cost_price: record.cost_price,
+                    selling_price: record.selling_price || record.price,
+                    quantity: record.stock_quantity,
+                    warehouse_id: record.warehouse?._id || record.warehouse,
+                  };
+                  openEditBatch(record, batch);
+                }}
+                style={{
+                  background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                  border: "none",
+                }}
+              />
+            </Tooltip>
+          );
+        }
+        
+        // Chế độ Merge (Gộp theo SP) - chỉ cho xem chi tiết, không edit trực tiếp
+        if (viewMode === "merge") {
+          const hasBatches = record.batches && record.batches.length > 0;
+          return (
+            <Tooltip title={hasBatches ? "Click hàng để xem chi tiết lô" : "Sản phẩm chưa có lô"}>
+              <Button
+                type={hasBatches ? "default" : "dashed"}
+                icon={<EyeOutlined />}
+                size={isMobile ? "small" : "middle"}
+                disabled={!hasBatches}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (hasBatches) {
+                    const key = record._id || record.id;
+                    setExpandedRowKeys(prev => 
+                      prev.includes(key) 
+                        ? prev.filter(k => k !== key) 
+                        : [...prev, key]
+                    );
+                  }
+                }}
+                style={hasBatches ? { borderColor: "#1890ff", color: "#1890ff" } : {}}
+              >
+                {!isMobile && (hasBatches ? "Xem lô" : "Không có lô")}
+              </Button>
+            </Tooltip>
+          );
+        }
+        
+        return null;
+      },
     });
 
     return cols;
@@ -1118,7 +1325,7 @@ export default function ProductListPage() {
                 <Text strong>Chế độ xem:</Text>
                 <Select
                   value={viewMode}
-                  onChange={setViewMode}
+                  onChange={handleViewModeChange}
                   style={{ width: 140 }}
                   options={[
                     { value: "merge", label: "Gộp theo SP" },
@@ -1183,24 +1390,40 @@ export default function ProductListPage() {
                   }
 
                   const batchColumns = [
-                    { title: "Số lô", dataIndex: "batch_no", key: "batch_no" },
+                    { 
+                      title: "Số lô", 
+                      dataIndex: "batch_no", 
+                      key: "batch_no",
+                      render: (val) => <Tag color="blue">{val || "N/A"}</Tag>
+                    },
                     {
                       title: "Hạn sử dụng",
                       dataIndex: "expiry_date",
                       key: "expiry_date",
-                      render: (val) => val ? new Date(val).toLocaleDateString("vi-VN") : "Không có hạn"
+                      render: (val) => {
+                        if (!val) return <Tag>Không có hạn</Tag>;
+                        const expiryDate = new Date(val);
+                        const now = new Date();
+                        const diffDays = Math.ceil((expiryDate - now) / (1000 * 60 * 60 * 24));
+                        let color = "green";
+                        let prefix = "";
+                        if (diffDays < 0) { color = "red"; prefix = "Hết hạn: "; }
+                        else if (diffDays <= 30) { color = "orange"; prefix = "⚠️ "; }
+                        else if (diffDays <= 90) color = "blue";
+                        return <Tag color={color}>{prefix}{expiryDate.toLocaleDateString("vi-VN")}</Tag>;
+                      }
                     },
                     {
-                      title: "Giá vốn",
+                      title: "Giá nhập",
                       dataIndex: "cost_price",
                       key: "cost_price",
-                      render: (val) => <Text style={{ fontSize: 12 }}>{val ? val.toLocaleString() : 0}</Text>
+                      render: (val) => <Tag color="purple" style={{ fontWeight: 500 }}>{val ? Number(val).toLocaleString() : 0}đ</Tag>
                     },
                     {
                       title: "Giá bán",
                       dataIndex: "selling_price",
                       key: "selling_price",
-                      render: (val, b) => <Text strong style={{ color: "#52c41a", fontSize: 12 }}>{val ? val.toLocaleString() : record.price?.toLocaleString() || 0}</Text>
+                      render: (val, b) => <Tag color="green" style={{ fontWeight: 600 }}>{val ? Number(val).toLocaleString() : (record.price ? Number(record.price).toLocaleString() : 0)}đ</Tag>
                     },
                     {
                       title: "Số lượng",
@@ -1212,7 +1435,30 @@ export default function ProductListPage() {
                       title: "Ngày nhập",
                       dataIndex: "created_at",
                       key: "created_at",
-                      render: (val) => <span style={{ fontSize: 11, color: '#8c8c8c' }}>{new Date(val).toLocaleDateString("vi-VN")}</span>
+                      render: (val) => <span style={{ fontSize: 11, color: '#8c8c8c' }}>{val ? new Date(val).toLocaleDateString("vi-VN") : "N/A"}</span>
+                    },
+                    {
+                      title: "Thao tác",
+                      key: "action",
+                      width: 80,
+                      align: "center",
+                      render: (_, batch) => (
+                        <Tooltip title="Chỉnh sửa lô này">
+                          <Button
+                            type="primary"
+                            icon={<EditOutlined />}
+                            size="small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openEditBatch(record, batch);
+                            }}
+                            style={{
+                              background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                              border: "none",
+                            }}
+                          />
+                        </Tooltip>
+                      )
                     }
                   ];
 
@@ -1239,7 +1485,32 @@ export default function ProductListPage() {
                   );
                 },
                 rowExpandable: (record) => record.batches && record.batches.length > 0,
+                expandedRowKeys: expandedRowKeys,
+                onExpand: (expanded, record) => {
+                  const key = record._id || record.id;
+                  if (expanded) {
+                    setExpandedRowKeys(prev => [...prev, key]);
+                  } else {
+                    setExpandedRowKeys(prev => prev.filter(k => k !== key));
+                  }
+                },
               } : undefined}
+              onRow={(record) => ({
+                onClick: () => {
+                  // Chỉ xử lý click để expand khi ở chế độ merge và có batches
+                  if (viewMode === "merge" && record.batches && record.batches.length > 0) {
+                    const key = record._id || record.id;
+                    setExpandedRowKeys(prev => 
+                      prev.includes(key) 
+                        ? prev.filter(k => k !== key) 
+                        : [...prev, key]
+                    );
+                  }
+                },
+                style: viewMode === "merge" && record.batches && record.batches.length > 0 
+                  ? { cursor: 'pointer' } 
+                  : {}
+              })}
             />
           </div>
         </Card>
@@ -1316,6 +1587,209 @@ export default function ProductListPage() {
               !previewError && <Alert type="info" message="Chưa có file nào được chọn" description="Chọn file Excel/CSV theo template để xem trước dữ liệu trước khi import." showIcon />
             )}
           </Space>
+        </Modal>
+
+        {/* Modal chỉnh sửa lô hàng */}
+        <Modal
+          title={
+            <Space>
+              <EditOutlined style={{ color: "#764ba2" }} />
+              <span style={{ fontSize: "clamp(14px, 3.5vw, 16px)" }}>
+                Chỉnh sửa lô hàng: {editingBatch?.batch?.batch_no}
+              </span>
+            </Space>
+          }
+          open={batchModalOpen}
+          onCancel={closeBatchModal}
+          footer={null}
+          width={isMobile ? "100%" : 600}
+          styles={{ body: { padding: isMobile ? 16 : 24 } }}
+        >
+          {editingBatch && (
+            <Form
+              key={`${editingBatch.product._id}-${editingBatch.batch.batch_no}`}
+              layout="vertical"
+              initialValues={{
+                batch_no: editingBatch.batch.batch_no,
+                expiry_date: editingBatch.batch.expiry_date ? dayjs(editingBatch.batch.expiry_date) : null,
+                cost_price: editingBatch.batch.cost_price || 0,
+                selling_price: editingBatch.batch.selling_price || (editingBatch.product.price?.$numberDecimal ? Number(editingBatch.product.price.$numberDecimal) : editingBatch.product.price) || 0,
+                quantity: editingBatch.batch.quantity || 0,
+                warehouse_id: editingBatch.batch.warehouse_id || (editingBatch.product.default_warehouse_id?._id || editingBatch.product.default_warehouse_id),
+                // ✅ Tự động điền thông tin
+                deliverer_name:  editingBatch.product.supplier?.contact_person || editingBatch.product.supplier?.name || "",
+                deliverer_phone: editingBatch.product.supplier_id?.phone || editingBatch.product.supplier?.phone || "",
+                receiver_name: userObj.fullname || userObj.name || userObj.userName || "",
+                receiver_phone: userObj.phone || "",
+              }}
+              onFinish={async (values) => {
+                try {
+                  // Gọi API update batch thông qua update product
+                  let productId = editingBatch.product._id || editingBatch.product.id;
+                  // Đảm bảo productId là string
+                  if (typeof productId === 'object') {
+                    productId = productId.toString ? productId.toString() : String(productId);
+                  }
+                  console.log("Submitting batch update:", { 
+                    productId, 
+                    values 
+                  });
+                  const response = await fetch(`${apiUrl}/products/${productId}/batch`, {
+                    method: "PUT",
+                    headers: {
+                      "Content-Type": "application/json",
+                      Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({
+                      old_batch_no: editingBatch.batch.batch_no,
+                      new_batch_no: values.batch_no,
+                      expiry_date: values.expiry_date ? values.expiry_date.toISOString() : null,
+                      cost_price: values.cost_price,
+                      selling_price: values.selling_price,
+                      quantity: values.quantity,
+                      warehouse_id: values.warehouse_id,
+                      deliverer_name: values.deliverer_name,
+                      deliverer_phone: values.deliverer_phone,
+                      receiver_name: values.receiver_name,
+                      receiver_phone: values.receiver_phone,
+                    }),
+                  });
+
+                  if (!response.ok) {
+                    throw new Error("Cập nhật lô hàng thất bại");
+                  }
+
+                  const result = await response.json();
+                  
+                  // Hiển thị thông báo với thông tin phiếu kho
+                  let description = `Lô ${values.batch_no} đã được cập nhật`;
+                  if (result.voucher) {
+                    description += `\nĐã tạo phiếu ${result.voucher.type === "IN" ? "nhập" : "xuất"} kho: ${result.voucher.code}`;
+                  }
+
+                  api.success({
+                    message: "✅ Cập nhật lô hàng thành công!",
+                    description,
+                    placement: "topRight",
+                    duration: 5,
+                  });
+                  closeBatchModal();
+                  fetchProducts(false); // Refresh data
+                } catch (err) {
+                  api.error({
+                    message: "❌ Lỗi cập nhật lô hàng",
+                    description: err.message,
+                    placement: "topRight",
+                  });
+                }
+              }}
+            >
+              <Row gutter={16}>
+                <Col span={8}>
+                  <Form.Item label="Số lô" name="batch_no" rules={[{ required: true, message: "Vui lòng nhập số lô" }]}>
+                    <Input placeholder="VD: LOT-001" />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item label="Hạn sử dụng" name="expiry_date">
+                    <DatePicker format="DD/MM/YYYY" style={{ width: "100%" }} placeholder="Chọn ngày hết hạn" />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item label="Kho lưu trữ" name="warehouse_id" rules={[{ required: true, message: "Vui lòng chọn kho" }]}>
+                    <Select
+                      placeholder="Chọn kho hàng"
+                      options={warehouses.map(w => ({ label: w.name, value: w._id }))}
+                      showSearch
+                      optionFilterProp="label"
+                    />
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <Row gutter={16}>
+                <Col span={8}>
+                  <Form.Item label="Giá nhập" name="cost_price" rules={[{ required: true, message: "Nhập giá vốn" }]}>
+                    <InputNumber
+                      style={{ width: "100%" }}
+                      min={0}
+                      formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
+                      parser={(value) => value.replace(/\$\s?|(,*)/g, "")}
+                      addonAfter="đ"
+                    />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item label="Giá bán" name="selling_price" rules={[{ required: true, message: "Nhập giá bán" }]}>
+                    <InputNumber
+                      style={{ width: "100%" }}
+                      min={0}
+                      formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
+                      parser={(value) => value.replace(/\$\s?|(,*)/g, "")}
+                      addonAfter="đ"
+                    />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item label="Số lượng" name="quantity" rules={[{ required: true, message: "Nhập số lượng" }]}>
+                    <InputNumber style={{ width: "100%" }} min={0} />
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <Divider orientation="left" style={{ margin: "12px 0" }}>
+                <Space><EnvironmentOutlined /> <Text type="secondary">Thông tin giao nhận (Tùy chọn)</Text></Space>
+              </Divider>
+
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Item label="Người giao" name="deliverer_name">
+                    <Input placeholder="Tên người giao hàng" />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item label="SĐT người giao" name="deliverer_phone">
+                    <Input placeholder="Số điện thoại" />
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Item label="Người nhận" name="receiver_name">
+                    <Input placeholder="Tên người nhận (thủ kho/NV)" />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item label="SĐT người nhận" name="receiver_phone">
+                    <Input placeholder="Số điện thoại" />
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <div style={{ marginTop: 16, display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                <Button onClick={closeBatchModal}>Hủy</Button>
+                <Button
+                  type="primary"
+                  htmlType="submit"
+                  style={{
+                    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                    border: "none",
+                  }}
+                >
+                  Lưu thay đổi
+                </Button>
+              </div>
+
+              <Alert
+                style={{ marginTop: 16 }}
+                type="info"
+                message="Lưu ý"
+                description="Thay đổi giá nhập/giá bán của lô sẽ ảnh hưởng đến báo cáo lợi nhuận. Vui lòng kiểm tra kỹ trước khi lưu."
+                showIcon
+              />
+            </Form>
+          )}
         </Modal>
 
         <style>{`

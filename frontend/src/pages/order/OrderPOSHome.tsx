@@ -1089,6 +1089,20 @@ const OrderPOSHome: React.FC = () => {
             const isOut = avail <= 0;
             const hasBatches = p.batches && p.batches.length > 0;
 
+            // 🎯 Tìm lô hàng cũ nhất còn hạn (FIFO) để gợi ý bán trước
+            let oldestValidBatch = null;
+            if (hasBatches) {
+              const validBatches = [...(p.batches || [])]
+                .filter(b => (b.quantity || 0) > 0 && (!b.expiry_date || new Date(b.expiry_date) >= new Date()))
+                .sort((a, b) => {
+                  if (!a.expiry_date && b.expiry_date) return 1;
+                  if (a.expiry_date && !b.expiry_date) return -1;
+                  if (a.expiry_date && b.expiry_date) return new Date(a.expiry_date).getTime() - new Date(b.expiry_date).getTime();
+                  return 0;
+                });
+              if (validBatches.length > 0) oldestValidBatch = validBatches[0];
+            }
+
             return (
               <div
                 key={p._id}
@@ -1130,7 +1144,7 @@ const OrderPOSHome: React.FC = () => {
                   </div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 600, fontSize: "15px", color: isOut ? "#999" : "#1f2937" }}>{p.name}</div>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 2 }}>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 2, flexWrap: 'wrap' }}>
                       <Tag color="blue" style={{ margin: 0, borderRadius: 4, fontSize: 10, border: 'none' }}>{p.sku}</Tag>
                       <Text type={isOut ? "danger" : "secondary"} style={{ fontSize: 12 }}>
                         {isOut ? "Hết hàng có thể bán" : `Tồn khả dụng: ${avail}`}
@@ -1140,6 +1154,14 @@ const OrderPOSHome: React.FC = () => {
                           <Tag color="error" style={{ fontSize: 9, margin: 0 }}>-{p.stock_quantity - avail} hết hạn</Tag>
                         </Tooltip>
                       )}
+                      
+                      {/* Hiển thị lô ưu tiên bán trước */}
+                      {oldestValidBatch && (
+                        <Tag color="orange" icon={<InfoCircleOutlined />} style={{ borderRadius: 4, fontSize: 10, margin: 0 }}>
+                          Ưu tiên lô: <Text strong style={{ fontSize: 10 }}>{oldestValidBatch.batch_no}</Text> 
+                          {oldestValidBatch.expiry_date && ` (HSD: ${new Date(oldestValidBatch.expiry_date).toLocaleDateString('vi-VN')})`}
+                        </Tag>
+                      )}
                     </div>
                   </div>
                   <div style={{ textAlign: "right" }}>
@@ -1147,8 +1169,6 @@ const OrderPOSHome: React.FC = () => {
                     <div style={{ fontSize: 11, color: '#94a3b8' }}>{p.unit}</div>
                   </div>
                 </div>
-
-                {/* Đã ẩn chi tiết lô hàng theo yêu cầu người dùng để giao diện gọn hơn */}
               </div>
             );
           })}

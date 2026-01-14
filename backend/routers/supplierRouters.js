@@ -56,7 +56,7 @@ router.get(
 // ✅ Khôi phục nhà cung cấp đã bị xóa (soft delete restore)
 // Lưu ý: đặt trước "/:supplierId" để không bị route param bắt nhầm. [web:52][web:53]
 router.put(
-  "/:id/restore",
+  "/:supplierId/restore",
   verifyToken,
   checkSubscriptionExpiry,
   requirePermission("suppliers:restore"),

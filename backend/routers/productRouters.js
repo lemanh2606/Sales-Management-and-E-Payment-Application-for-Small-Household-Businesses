@@ -15,6 +15,7 @@ const {
   createProduct,
   getProductsByStore,
   updateProductPrice,
+  updateProductBatch, // NEW
   searchProducts,
   updateProduct,
   deleteProduct,
@@ -177,6 +178,19 @@ router.put(
   // checkStoreAccess,
   requirePermission("products:price"),
   updateProductPrice
+);
+
+/*
+  ROUTE: PUT /api/products/:productId/batch
+  - Cập nhật thông tin lô hàng trong sản phẩm
+  - Middleware: verifyToken -> checkSubscriptionExpiry -> requirePermission("products:update")
+*/
+router.put(
+  "/:productId/batch",
+  verifyToken,
+  checkSubscriptionExpiry,
+  requirePermission("products:update"),
+  updateProductBatch
 );
 
 /*

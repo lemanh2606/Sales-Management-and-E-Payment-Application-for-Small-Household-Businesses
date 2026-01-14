@@ -25,6 +25,7 @@ import ProductFormModal from "../../components/product/ProductFormModal";
 import ProductGroupFormModal from "../../components/product/ProductGroupFormModal";
 import { ProductExportButton } from "../../components/product/ProductExportButton";
 import { TemplateDownloadButton } from "../../components/product/TemplateDownloadButton";
+import ProductBatchModal from "../../components/product/ProductBatchModal";
 
 // Định nghĩa interface cho nhóm sản phẩm
 interface ProductGroup {
@@ -82,6 +83,10 @@ const ProductListScreen: React.FC = () => {
 
   // View mode: "merge" = gộp lô, "split" = tách từng lô (giống web)
   const [viewMode, setViewMode] = useState<"merge" | "split">("merge");
+
+  // State quản lý điều chỉnh lô
+  const [editingBatchProduct, setEditingBatchProduct] = useState<Product | null>(null);
+  const [editingBatchIndex, setEditingBatchIndex] = useState<number | null>(null);
 
   // ================= HÀM LẤY DANH SÁCH NHÓM SẢN PHẨM =================
   const fetchProductGroups = useCallback(async () => {
@@ -153,6 +158,8 @@ const ProductListScreen: React.FC = () => {
             warehouse: batch.warehouse_id || product.default_warehouse_id,
             createdAt: batch.created_at || product.createdAt,
             batches: [batch],
+            batchIndex: index, // Lưu lại index thật để update
+            originalProduct: product // Lưu ref tới product gốc
           });
         });
       }
@@ -546,6 +553,15 @@ const ProductListScreen: React.FC = () => {
     // Xác định xem item này có đang bị hết hạn không (dùng cho Split mode hoặc để báo highlight)
     const isExpired = (item as any).isBatch && (item as any).expiry_date && new Date((item as any).expiry_date) < now;
 
+    const handleEditPress = () => {
+      if ((item as any).isBatch) {
+        setEditingBatchProduct((item as any).originalProduct);
+        setEditingBatchIndex((item as any).batchIndex);
+      } else {
+        setEditingProduct(item);
+      }
+    };
+
     return (
       <View style={[styles.productCard, isExpired && { borderColor: "#f44336", borderWidth: 1, backgroundColor: "#fff1f0" }]}>
         <View style={styles.productHeader}>
@@ -599,6 +615,15 @@ const ProductListScreen: React.FC = () => {
                 <Text style={styles.productGroup}>{item.group.name}</Text>
               )}
 
+              {item.supplier && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, flex: 1 }}>
+                   <Ionicons name="business-outline" size={12} color="#666" />
+                   <Text style={{ fontSize: 11, color: '#666', marginLeft: 4 }} numberOfLines={1}>
+                      {item.supplier.name} {item.supplier.phone ? `(${item.supplier.phone})` : ''}
+                   </Text>
+                </View>
+              )}
+
               {/* Hiển thị số lô khi ở chế độ split */}
               {(item as any).batch_no && (
                 <View style={[styles.expiryBadge, { backgroundColor: "#1976d2" }]}>
@@ -643,7 +668,7 @@ const ProductListScreen: React.FC = () => {
           </View>
           <TouchableOpacity
             style={[styles.editButton, isExpired && { backgroundColor: '#d32f2f' }]}
-            onPress={() => setEditingProduct(item)}
+            onPress={handleEditPress}
           >
             <Ionicons name="create-outline" size={18} color="#fff" />
           </TouchableOpacity>
@@ -1061,6 +1086,24 @@ const ProductListScreen: React.FC = () => {
           onSaved={() => {
             setEditingProduct(null);
             setShowProductModal(false);
+            fetchProducts();
+          }}
+        />
+      )}
+
+      {/* Modal chỉnh sửa lô hàng */}
+      {editingBatchProduct && editingBatchIndex !== null && (
+        <ProductBatchModal
+          product={editingBatchProduct}
+          batchIndex={editingBatchIndex}
+          open={!!editingBatchProduct}
+          onClose={() => {
+            setEditingBatchProduct(null);
+            setEditingBatchIndex(null);
+          }}
+          onSaved={() => {
+            setEditingBatchProduct(null);
+            setEditingBatchIndex(null);
             fetchProducts();
           }}
         />

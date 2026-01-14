@@ -62,6 +62,7 @@ import InventoryVoucherListScreen from "../screens/inventory/InventoryVoucherLis
 import WarehouseFormScreen from "../screens/inventory/WarehouseFormScreen";
 import InventoryVoucherFormScreen from "../screens/inventory/InventoryVoucherFormScreen";
 import InventoryVoucherDetailScreen from "../screens/inventory/InventoryVoucherDetailScreen";
+import ProcessExpiredScreen from "../screens/inventory/ProcessExpiredScreen";
 
 // ========== TYPES ==========
 export type RootDrawerParamList = {
@@ -96,6 +97,7 @@ export type RootDrawerParamList = {
   WarehouseForm: { warehouse?: any; onRefresh?: () => void };
   InventoryVoucherForm: { onRefresh?: () => void };
   InventoryVoucherDetail: { voucherId: string };
+  ProcessExpired: undefined;
 };
 
 interface MenuItem {
@@ -942,6 +944,14 @@ const AppNavigator: FC = (): JSX.Element => {
       <Drawer.Screen
         name="InventoryVoucherDetail"
         component={withPermission(InventoryVoucherDetailScreen, "inventory:voucher:view")}
+        options={{
+          headerShown: false,
+          drawerItemStyle: { display: "none" },
+        }}
+      />
+      <Drawer.Screen
+        name="ProcessExpired"
+        component={withPermission(ProcessExpiredScreen, "inventory:voucher:create")}
         options={{
           headerShown: false,
           drawerItemStyle: { display: "none" },

@@ -39,7 +39,7 @@ interface NotificationItem {
   _id: string;
   storeId: string;
   userId: UserInfo;
-  type: "order" | "payment" | "service" | "system";
+  type: "order" | "payment" | "service" | "system" | "inventory";
   title: string;
   message: string;
   read: boolean;
@@ -59,18 +59,19 @@ interface NotificationResponse {
   meta: NotificationMeta;
 }
 
-type NotificationType = "all" | "order" | "payment" | "service" | "system";
+type NotificationType = "all" | "order" | "payment" | "service" | "system" | "inventory";
 type ReadStatus = "all" | "true" | "false";
 
 // ========== CONSTANTS ==========
 const NOTIFICATION_TYPES: Record<
-  "order" | "payment" | "service" | "system",
+  "order" | "payment" | "service" | "system" | "inventory",
   { label: string; color: string; icon: string }
 > = {
   order: { label: "Đơn hàng", color: "#1890ff", icon: "receipt" },
   payment: { label: "Thanh toán", color: "#52c41a", icon: "card" },
   service: { label: "Dịch vụ", color: "#faad14", icon: "construct" },
   system: { label: "Hệ thống", color: "#722ed1", icon: "settings" },
+  inventory: { label: "Kho hàng", color: "#ff4d4f", icon: "cube" },
 };
 
 // ========== SMALL HELPERS ==========
@@ -373,6 +374,21 @@ const NotificationScreen: React.FC = () => {
     setFilteredNotifications(filtered);
   }, [notifications, searchText, fromDate, toDate]);
 
+  // ========== SCAN EXPIRY ==========
+  const scanExpiry = async (): Promise<void> => {
+    try {
+      setLoading(true);
+      const res = await apiClient.post(`/notifications/scan-expiry`, {});
+      Alert.alert("Thành công", (res.data as any).message);
+      fetchNotifications(1, false);
+    } catch (err: any) {
+      console.error("❌ Lỗi quét:", err);
+      Alert.alert("Lỗi", "Không thể thực hiện quét lúc này");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // ========== MARK AS READ ==========
   const markAsRead = async (id: string, read: boolean): Promise<void> => {
     try {
@@ -612,6 +628,7 @@ const NotificationScreen: React.FC = () => {
     { label: "Thanh toán", value: "payment" },
     { label: "Dịch vụ", value: "service" },
     { label: "Hệ thống", value: "system" },
+    { label: "Kho hàng", value: "inventory" },
   ];
 
   const readOptions: SelectOption<ReadStatus>[] = [
@@ -752,6 +769,13 @@ const NotificationScreen: React.FC = () => {
         </View>
 
         <View style={{ flexDirection: "row", gap: 10 }}>
+          <TouchableOpacity
+            style={styles.headerActionBtn}
+            onPress={scanExpiry}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="cube-outline" size={20} color="#ff4d4f" />
+          </TouchableOpacity>
           <TouchableOpacity
             style={styles.headerActionBtn}
             onPress={openFilterSheet}

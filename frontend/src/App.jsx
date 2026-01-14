@@ -58,6 +58,7 @@ import Notification from "./pages/setting/Notification";
 import Term from "./pages/setting/Term";
 import Privacy from "./pages/setting/Privacy";
 import PaymentGatewaySettingsPage from "./pages/setting/PaymentGatewaySettingsPage";
+import ProcessExpiredPage from "./pages/inventory/ProcessExpiredPage";
 
 //Điều hướng thanh toán
 import SubscriptionSuccess from "./pages/SubscriptionSuccess";
@@ -290,6 +291,7 @@ function App() {
         <Route path="/products" element={<ProtectedRoute allowedPermissions="products:create"><ProductListPage /></ProtectedRoute>} />
         <Route path="/product-groups" element={<ProtectedRoute allowedPermissions="product-groups:create"><ProductGroupsPage /></ProtectedRoute>} />
         <Route path="/inventory-vouchers" element={<ProtectedRoute allowedPermissions="inventory:voucher:create"><InventoryVoucherPage /></ProtectedRoute>} />
+        <Route path="/inventory/process-expired" element={<ProtectedRoute allowedRoles={["MANAGER"]} allowedPermissions="inventory:voucher:create"><ProcessExpiredPage /></ProtectedRoute>} />
         <Route path="/warehouses" element={<ProtectedRoute allowedPermissions="warehouses:view"><WarehousePage /></ProtectedRoute>} />
 
         {/* ==================== Customers ==================== */}

@@ -1061,7 +1061,7 @@ const getProductsByStore = async (req, res) => {
     const [total, products] = await Promise.all([
       Product.countDocuments(filter),
       Product.find(filter)
-        .populate("supplier_id", "name")
+        .populate("supplier_id", "name phone")
         .populate("store_id", "name")
         .populate("group_id", "name")
         .populate("default_warehouse_id", "name")
@@ -1338,21 +1338,24 @@ const getExpiringProducts = async (req, res) => {
       status: "Đang kinh doanh",
       batches: {
         $elemMatch: {
-          expiry_date: { $lte: thresholdDate, $gt: new Date() },
+          expiry_date: { $lte: thresholdDate },
           quantity: { $gt: 0 }
         }
       }
     };
 
     const products = await Product.find(query)
-      .select("name sku unit batches")
+      .select("name sku unit batches supplier_id")
+      .populate("supplier_id", "name contact_person phone address")
       .lean();
 
+    const now = new Date();
     // Flatten batches for UI if needed, or just return products
     const expiringItems = [];
     products.forEach(p => {
       p.batches.forEach(b => {
-        if (b.expiry_date && b.expiry_date <= thresholdDate && b.expiry_date > new Date() && b.quantity > 0) {
+        if (b.expiry_date && b.expiry_date <= thresholdDate && b.quantity > 0) {
+          const isExpired = new Date(b.expiry_date) <= now;
           expiringItems.push({
             _id: p._id,
             name: p.name,
@@ -1361,7 +1364,15 @@ const getExpiringProducts = async (req, res) => {
             batch_no: b.batch_no,
             expiry_date: b.expiry_date,
             quantity: b.quantity,
-            warehouse_id: b.warehouse_id
+            cost_price: b.cost_price,
+            selling_price: b.selling_price,
+            warehouse_id: b.warehouse_id,
+            status: isExpired ? "expired" : "expiring_soon",
+            supplier_id: p.supplier_id?._id,
+            supplier_name: p.supplier_id?.name,
+            supplier_contact: p.supplier_id?.contact_person,
+            supplier_phone: p.supplier_id?.phone,
+            supplier_address: p.supplier_id?.address
           });
         }
       });
@@ -1369,7 +1380,7 @@ const getExpiringProducts = async (req, res) => {
 
     res.json({
       message: "Lấy danh sách sản phẩm sắp hết hạn thành công",
-      data: expiringItems,
+      data: expiringItems.sort((a,b) => new Date(a.expiry_date) - new Date(b.expiry_date)),
     });
   } catch (err) {
     console.error("Lỗi query expiring products:", err.message);
@@ -1923,17 +1934,23 @@ const importProducts = async (req, res) => {
           if (batchNo || expiryDate) {
             // Check if batch already exists
             const currentProduct = await Product.findById(product._id).session(session);
+            const entrySellingPrice = priceInput > 0 ? priceInput : Number(product.price?.toString() || 0);
+            
+            // NEW: Also check cost_price and selling_price when matching batch
+            // This ensures batches with different prices are tracked separately
             const existingBatchIndex = (currentProduct.batches || []).findIndex(
               (b) =>
                 b.batch_no === batchNo &&
                 (expiryDate
                   ? b.expiry_date && new Date(b.expiry_date).getTime() === new Date(expiryDate).getTime()
                   : !b.expiry_date) &&
-                String(b.warehouse_id || "") === String(warehouseIdForRow || "")
+                String(b.warehouse_id || "") === String(warehouseIdForRow || "") &&
+                b.cost_price === entryCost &&
+                b.selling_price === entrySellingPrice
             );
 
             if (existingBatchIndex >= 0) {
-              // Increment existing batch
+              // Increment existing batch (only if all criteria match including prices)
               await Product.updateOne(
                 { _id: product._id },
                 {
@@ -1944,9 +1961,9 @@ const importProducts = async (req, res) => {
                 },
                 { session }
               );
-              console.log(`📦 Updated existing batch: ${batchNo}`);
+              console.log(`📦 Updated existing batch: ${batchNo} (cost: ${entryCost}, selling: ${entrySellingPrice})`);
             } else {
-              // Push new batch
+              // Push new batch with selling_price
               await Product.updateOne(
                 { _id: product._id },
                 {
@@ -1956,6 +1973,7 @@ const importProducts = async (req, res) => {
                       batch_no: batchNo,
                       expiry_date: expiryDate,
                       cost_price: entryCost,
+                      selling_price: entrySellingPrice, // NEW: Add selling_price to batch
                       quantity: openingQty,
                       warehouse_id: warehouseIdForRow,
                       created_at: entryDate,
@@ -1964,7 +1982,7 @@ const importProducts = async (req, res) => {
                 },
                 { session }
               );
-              console.log(`📦 Added new batch: ${batchNo}`);
+              console.log(`📦 Added new batch: ${batchNo} (cost: ${entryCost}, selling: ${entrySellingPrice})`);
             }
           } else {
             // No batch info, just update stock
@@ -2399,6 +2417,308 @@ const getAllProducts = async (req, res) => {
   }
 };
 
+// ============= UPDATE BATCH - Cập nhật thông tin lô hàng =============
+const updateProductBatch = async (req, res) => {
+  let session = null;
+  
+  try {
+    const { productId } = req.params;
+    const { 
+      old_batch_no, 
+      new_batch_no, 
+      expiry_date, 
+      cost_price, 
+      selling_price, 
+      quantity, 
+      warehouse_id,
+      deliverer_name,
+      deliverer_phone,
+      receiver_name,
+      receiver_phone
+    } = req.body;
+    const userId = req.user?._id || req.user?.id;
+
+    console.log(`📦 Updating batch ${old_batch_no} for product ${productId}`);
+
+    // 1. Chuyển đổi ID cực kỳ cẩn thận
+    let objectId;
+    try {
+      if (mongoose.Types.ObjectId.isValid(productId)) {
+        objectId = new mongoose.Types.ObjectId(productId);
+      } else {
+        throw new Error("Invalid format");
+      }
+    } catch (err) {
+      return res.status(400).json({ message: "ID sản phẩm không hợp lệ" });
+    }
+
+    // 2. Tìm sản phẩm - Ghi đè điều kiện isDeleted để tránh bị middleware lọc mất
+    // Ta tìm theo store_id nếu có thể, nhưng quan trọng nhất là ID
+    let product = await Product.findOne({ 
+      _id: objectId,
+      $or: [{ isDeleted: false }, { isDeleted: true }, { isDeleted: { $exists: false } }]
+    }).populate("supplier_id", "name phone");
+    
+    if (!product) {
+      console.log(`❌ Product truly not found even with raw query: ${productId}`);
+      return res.status(404).json({ message: "Sản phẩm không tồn tại trên hệ thống" });
+    }
+
+    // Nếu tìm thấy bằng findOne thô, ta đảm bảo nó là Mongoose Document
+    if (!(product instanceof mongoose.Document)) {
+        product = await Product.findById(product._id).populate("supplier_id").setOptions({ skipMiddleware: true });
+    }
+
+    console.log(`✅ Product found: ${product.name}, batches count: ${product.batches?.length || 0}`);
+    console.log(`📋 Batches in DB:`, product.batches?.map(b => b.batch_no));
+
+    // Tìm index của lô hàng cũ
+    const batchIndex = product.batches.findIndex(b => b.batch_no === old_batch_no);
+    if (batchIndex === -1) {
+      console.log(`❌ Batch not found: ${old_batch_no}`);
+      return res.status(404).json({ message: `Không tìm thấy lô ${old_batch_no}` });
+    }
+
+    // Lấy thông tin batch cũ để tính toán chênh lệch
+    const oldBatch = { ...product.batches[batchIndex].toObject() };
+    const newQuantity = quantity !== undefined ? quantity : oldBatch.quantity;
+    const quantityDiff = newQuantity - (oldBatch.quantity || 0);
+    
+    // So sánh giá cũ và mới
+    const oldCostPrice = oldBatch.cost_price || 0;
+    const oldSellingPrice = oldBatch.selling_price || 0;
+    const newCostPrice = cost_price !== undefined ? cost_price : oldCostPrice;
+    const newSellingPrice = selling_price !== undefined ? selling_price : oldSellingPrice;
+    const priceChanged = oldCostPrice !== newCostPrice || oldSellingPrice !== newSellingPrice;
+
+    // 3. Cập nhật thông tin batch
+    product.batches[batchIndex].batch_no = new_batch_no || old_batch_no;
+    product.batches[batchIndex].expiry_date = expiry_date ? new Date(expiry_date) : oldBatch.expiry_date;
+    product.batches[batchIndex].cost_price = newCostPrice;
+    product.batches[batchIndex].selling_price = newSellingPrice;
+    product.batches[batchIndex].quantity = newQuantity;
+    product.batches[batchIndex].warehouse_id = warehouse_id || oldBatch.warehouse_id;
+
+    // Cập nhật stock_quantity của product (tổng số lượng tất cả các lô)
+    product.stock_quantity = product.batches.reduce((sum, b) => sum + (b.quantity || 0), 0);
+
+    // Đồng bộ lại giá vốn và giá bán chính của sản phẩm (phục vụ báo cáo Biến thiên tồn kho/COGS)
+    product.cost_price = newCostPrice;
+    product.price = newSellingPrice;
+
+    // Bắt đầu transaction khi cần save
+    session = await mongoose.startSession();
+    session.startTransaction();
+
+    await product.save({ session });
+
+    // So sánh kho cũ và mới
+    const warehouseChanged = warehouse_id && String(oldBatch.warehouse_id || "") !== String(warehouse_id || "");
+
+    // ===== TẠO PHIẾU NHẬP/XUẤT KHO NẾU CÓ THAY ĐỔI SỐ LƯỢNG, GIÁ HOẶC KHO =====
+    let createdVouchers = [];
+    
+    if (quantityDiff !== 0 || priceChanged || warehouseChanged) {
+      // 📝 Thu thập thông tin chung
+      const timestamp = Date.now().toString(36).toUpperCase();
+      
+      // Lấy thông tin warehouse nếu có
+      let warehouseName = "";
+      if (oldBatch.warehouse_id || warehouse_id) {
+        const warehouseDoc = await Warehouse.findById(oldBatch.warehouse_id || warehouse_id);
+        warehouseName = warehouseDoc?.name || "";
+      }
+
+      // 🏢 LẤY THÔNG TIN NHÀ CUNG CẤP (NGƯỜI GIAO)
+      let supplierId = product.supplier_id?._id || product.supplier_id;
+      let finalDelivererName = deliverer_name || product.supplier_id?.name || "";
+      let finalDelivererPhone = deliverer_phone || product.supplier_id?.phone || "";
+
+      // 👤 TỰ ĐỘNG LẤY THÔNG TIN NGƯỜI LƯU (NGƯỜI NHẬN)
+      let finalReceiverName = receiver_name;
+      let finalReceiverPhone = receiver_phone;
+      if (!finalReceiverName && userId) {
+        const currentUser = await User.findById(userId);
+        if (currentUser) {
+          finalReceiverName = currentUser.fullname || currentUser.username;
+          finalReceiverPhone = currentUser.phone || "";
+        }
+      }
+
+      // 🛠️ LOGIC TẠO PHIẾU
+      const voucherBase = {
+        store_id: product.store_id,
+        voucher_date: new Date(),
+        status: "POSTED",
+        warehouse_id: oldBatch.warehouse_id || warehouse_id || null,
+        warehouse_name: warehouseName,
+        deliverer_name: finalDelivererName || "",
+        deliverer_phone: finalDelivererPhone || "",
+        receiver_name: finalReceiverName || "",
+        receiver_phone: finalReceiverPhone || "",
+        supplier_id: supplierId || null,
+        supplier_name_snapshot: finalDelivererName || "",
+        ref_type: "BATCH_ADJUSTMENT",
+        ref_no: old_batch_no,
+        created_by: userId,
+        posted_by: userId,
+        posted_at: new Date(),
+      };
+
+      if (priceChanged || warehouseChanged) {
+        // TRƯỜNG HỢP 1: CÓ THAY ĐỔI GIÁ HOẶC THAY ĐỔI KHO -> "XUẤT CŨ - NHẬP MỚI"
+        console.log("🔄 Price or Warehouse changed, creating OUT and IN vouchers");
+
+        // 1. Phiếu Xuất (Xóa trạng thái cũ)
+        if (oldBatch.quantity > 0) {
+          const pxQty = Number(oldBatch.quantity || 0);
+          const pxUnitCost = Number(oldCostPrice || 0);
+          const pxLineCost = pxQty * pxUnitCost;
+          const pxTotalAmount = pxQty * Number(oldSellingPrice || 0);
+
+          const pxData = {
+            ...voucherBase,
+            type: "OUT",
+            voucher_code: `PX-ADJ-${timestamp}-OLD`,
+            reason: `Điều chỉnh giá (Xuất giá cũ): ${old_batch_no} - ${product.name}`,
+            total_qty: pxQty,
+            total_cost: mongoose.Types.Decimal128.fromString(String(pxLineCost)),
+            total_amount: mongoose.Types.Decimal128.fromString(String(pxTotalAmount)),
+            items: [{
+              product_id: product._id,
+              sku_snapshot: product.sku || "",
+              name_snapshot: product.name,
+              unit_snapshot: product.unit || "cái",
+              warehouse_id: voucherBase.warehouse_id,
+              warehouse_name: warehouseName,
+              batch_no: old_batch_no,
+              expiry_date: oldBatch.expiry_date,
+              qty_document: pxQty,
+              qty_actual: pxQty,
+              unit_cost: mongoose.Types.Decimal128.fromString(String(pxUnitCost)),
+              line_cost: mongoose.Types.Decimal128.fromString(String(pxLineCost)),
+              selling_price: mongoose.Types.Decimal128.fromString(String(oldSellingPrice || 0)),
+              note: `Xuất kho để cập nhật giá mới (Giá cũ: ${pxUnitCost.toLocaleString()})`,
+              supplier_id: supplierId || null,
+              supplier_name_snapshot: finalDelivererName || "",
+            }]
+          };
+          const px = await InventoryVoucher.create([pxData], { session });
+          createdVouchers.push(px[0]);
+        }
+
+        // 2. Phiếu Nhập (Ghi nhận trạng thái mới)
+        if (newQuantity > 0) {
+          const pnQty = Number(newQuantity || 0);
+          const pnUnitCost = Number(newCostPrice || 0);
+          const pnUnitSelling = Number(newSellingPrice || 0);
+          const pnLineCost = pnQty * pnUnitCost;
+          const pnTotalAmount = pnQty * pnUnitSelling;
+
+          const pnData = {
+            ...voucherBase,
+            type: "IN",
+            voucher_code: `PN-ADJ-${timestamp}-NEW`,
+            reason: `Điều chỉnh giá (Nhập giá mới): ${new_batch_no || old_batch_no} - ${product.name}`,
+            total_qty: pnQty,
+            total_cost: mongoose.Types.Decimal128.fromString(String(pnLineCost)),
+            total_amount: mongoose.Types.Decimal128.fromString(String(pnTotalAmount)),
+            items: [{
+              product_id: product._id,
+              sku_snapshot: product.sku || "",
+              name_snapshot: product.name,
+              unit_snapshot: product.unit || "cái",
+              warehouse_id: voucherBase.warehouse_id,
+              warehouse_name: warehouseName,
+              batch_no: new_batch_no || old_batch_no,
+              expiry_date: expiry_date ? new Date(expiry_date) : oldBatch.expiry_date,
+              qty_document: pnQty,
+              qty_actual: pnQty,
+              unit_cost: mongoose.Types.Decimal128.fromString(String(pnUnitCost)),
+              line_cost: mongoose.Types.Decimal128.fromString(String(pnLineCost)),
+              selling_price: mongoose.Types.Decimal128.fromString(String(pnUnitSelling)),
+              note: `Nhập kho với giá mới (${pnUnitCost.toLocaleString()})${quantityDiff !== 0 ? ` và sl mới (${pnQty})` : ""}`,
+              supplier_id: supplierId || null,
+              supplier_name_snapshot: finalDelivererName || "",
+            }]
+          };
+          const pn = await InventoryVoucher.create([pnData], { session });
+          createdVouchers.push(pn[0]);
+        }
+      } else {
+        // TRƯỜNG HỢP 2: CHỈ THAY ĐỔI SỐ LƯỢNG (GIÁ GIỮ NGUYÊN) -> DÙNG DELTA
+        console.log("📉 Only quantity changed, creating a single delta voucher");
+        
+        const voucherType = quantityDiff >= 0 ? "IN" : "OUT";
+        const prefix = voucherType === "IN" ? "PN" : "PX";
+        const vQty = Math.abs(quantityDiff);
+        const vUnitCost = Number(newCostPrice || 0);
+        const vLineCost = vQty * vUnitCost;
+        const vTotalAmount = vQty * Number(newSellingPrice || 0);
+
+        const vData = {
+          ...voucherBase,
+          type: voucherType,
+          voucher_code: `${prefix}-ADJ-${timestamp}`,
+          reason: `Điều chỉnh số lượng lô hàng ${old_batch_no} - ${product.name}`,
+          total_qty: vQty,
+          total_cost: mongoose.Types.Decimal128.fromString(String(vLineCost)),
+          total_amount: mongoose.Types.Decimal128.fromString(String(vTotalAmount)),
+          items: [{
+            product_id: product._id,
+            sku_snapshot: product.sku || "",
+            name_snapshot: product.name,
+            unit_snapshot: product.unit || "cái",
+            warehouse_id: voucherBase.warehouse_id,
+            warehouse_name: warehouseName,
+            batch_no: new_batch_no || old_batch_no,
+            expiry_date: expiry_date ? new Date(expiry_date) : oldBatch.expiry_date,
+            qty_document: vQty,
+            qty_actual: vQty,
+            unit_cost: mongoose.Types.Decimal128.fromString(String(vUnitCost)),
+            line_cost: mongoose.Types.Decimal128.fromString(String(vLineCost)),
+            selling_price: mongoose.Types.Decimal128.fromString(String(newSellingPrice || 0)),
+            note: `Điều chỉnh số lượng: ${oldBatch.quantity || 0} → ${newQuantity} (${quantityDiff > 0 ? '+' : ''}${quantityDiff})`,
+            supplier_id: supplierId || null,
+            supplier_name_snapshot: finalDelivererName || "",
+          }]
+        };
+        const v = await InventoryVoucher.create([vData], { session });
+        createdVouchers.push(v[0]);
+      }
+    }
+
+    await session.commitTransaction();
+    session.endSession();
+
+    console.log(`✅ Batch ${new_batch_no || old_batch_no} updated successfully`);
+    
+    res.json({
+      message: "Cập nhật lô hàng thành công",
+      batch: product.batches[batchIndex],
+      stock_quantity: product.stock_quantity,
+      vouchers: createdVouchers.map(v => ({
+        code: v.voucher_code,
+        type: v.type,
+      })),
+      // Giữ 'voucher' cho frontend cũ (lấy cái nhập mới nếu có 2 cái)
+      voucher: createdVouchers.length > 0 ? {
+        code: createdVouchers[createdVouchers.length - 1].voucher_code,
+        type: createdVouchers[createdVouchers.length - 1].type,
+        quantityDiff,
+        priceChanged,
+      } : null,
+    });
+  } catch (error) {
+    if (session && session.inTransaction()) {
+      await session.abortTransaction();
+    }
+    if (session) session.endSession();
+    console.error("❌ Lỗi updateProductBatch:", error);
+    res.status(500).json({ message: "Lỗi server", error: error.message });
+  }
+};
+
 module.exports = {
   // CUD
   createProduct,
@@ -2412,6 +2732,7 @@ module.exports = {
   getAllProducts,
   // Updates
   updateProductPrice,
+  updateProductBatch, // NEW
   // thông báo, cảnh báo
   getLowStockProducts,
   getExpiringProducts,
