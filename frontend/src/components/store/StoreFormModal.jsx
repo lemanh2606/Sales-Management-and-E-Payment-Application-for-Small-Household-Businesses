@@ -69,6 +69,7 @@ export default function StoreFormModal({
 
   // 👉 SỬA LỖI: Thêm state riêng cho address để force re-render
   const [addressValue, setAddressValue] = useState("");
+  const geocodeTimerRef = useRef(null); // 👈 Timer cho debounce geocode
 
   // Load VN provinces on mount
   useEffect(() => {
@@ -95,6 +96,7 @@ export default function StoreFormModal({
   useEffect(() => {
     if (!open) return;
 
+    // Chỉ reset form khi lần đầu mở hoặc formData thực sự thay đổi từ bên ngoài (không phải do gõ phím)
     const normalized = {
       ...formData,
       openingHours: formData.openingHours || { open: "", close: "" },
@@ -106,9 +108,8 @@ export default function StoreFormModal({
           : [],
     };
 
-    console.log("📋 Form data from DB:", normalized);
+    console.log("📋 Initializing form data:", normalized);
 
-    // 👉 SỬA LỖI: Set address value riêng
     const initialAddress = normalized.address || "";
     setAddressValue(initialAddress);
 
@@ -129,10 +130,8 @@ export default function StoreFormModal({
     setCascaderValue(undefined);
     setCascaderVisible(false);
 
-    setTimeout(() => calcScrollHint(), 0);
-    setTimeout(() => calcScrollHint(), 100);
     setTimeout(() => calcScrollHint(), 300);
-  }, [open, formData, form]);
+  }, [open]); // 👈 CHỈ CHẠY KHI MỞ MODAL (Tránh mất data khi formData prop thay đổi sau đó)
 
   // Scroll hint visibility
   const calcScrollHint = () => {
@@ -205,6 +204,7 @@ export default function StoreFormModal({
       reader.onload = (e) => {
         const dataUrl = e.target.result;
         form.setFieldsValue({ imageUrl: dataUrl });
+        // Cập nhật imageUrl cho formData của parent (để khi SAVE nó có data)
         setForm((prev) => ({ ...prev, imageUrl: dataUrl }));
         setImagePreviewError(false);
         setUploading(false);
@@ -292,19 +292,22 @@ export default function StoreFormModal({
 
     // Tự động lấy tọa độ
     try {
+      setFetchingCoords(true); // 👈 Hiển thị loading khi đang lấy tọa độ
       const geo = await fetchLatLngFromAddress(newAddress);
       if (geo && geo.lat && geo.lng) {
         form.setFieldsValue({
           lat: geo.lat,
           lng: geo.lng,
         });
-        message.success("✅ Đã cập nhật địa chỉ và tọa độ");
+        message.success("✅ Đã cập nhật xong địa chỉ và tọa độ");
       } else {
-        message.success("✅ Đã cập nhật địa chỉ");
+        message.success("✅ Đã cập nhật xong địa chỉ");
       }
     } catch (e) {
       console.warn("Không lấy được tọa độ tự động", e);
-      message.success("✅ Đã cập nhật địa chỉ");
+      message.success("✅ Đã cập nhật xong địa chỉ");
+    } finally {
+      setFetchingCoords(false);
     }
   };
 
@@ -324,8 +327,8 @@ export default function StoreFormModal({
   // ========== 👆 END 👆 ==========
 
   // ========== 👇 HÀM LẤY TỌA ĐỘ 👇 ==========
-  const handleFetchCoordinates = async () => {
-    const address = addressValue || form.getFieldValue("address");
+  const handleFetchCoordinates = async (forcedAddress = null) => {
+    const address = forcedAddress || addressValue || form.getFieldValue("address");
 
     if (!address || address.trim().length < 5) {
       message.warning("Vui lòng nhập địa chỉ trước khi lấy tọa độ");
@@ -337,10 +340,15 @@ export default function StoreFormModal({
       const geo = await fetchLatLngFromAddress(address);
 
       if (geo && geo.lat && geo.lng) {
+        // Cập nhật cả UI form
         form.setFieldsValue({
           lat: geo.lat,
           lng: geo.lng,
         });
+        // Và đảm bảo state addressValue khớp với nội dung đang có
+        if (!addressValue) {
+          setAddressValue(address);
+        }
         message.success(`Đã lấy tọa độ: ${geo.lat.toFixed(6)}, ${geo.lng.toFixed(6)}`);
       } else {
         message.warning("Không tìm thấy tọa độ cho địa chỉ này");
@@ -386,12 +394,15 @@ export default function StoreFormModal({
         close: values.closeTime ? values.closeTime.format("HH:mm") : "",
       },
       location: {
-        lat: values.lat !== undefined && values.lat !== null && values.lat !== "" ? Number(values.lat) : null,
-        lng: values.lng !== undefined && values.lng !== null && values.lng !== "" ? Number(values.lng) : null,
+        lat: (values.lat !== undefined && values.lat !== null && values.lat !== "") ? Number(values.lat) : null,
+        lng: (values.lng !== undefined && values.lng !== null && values.lng !== "") ? Number(values.lng) : null,
       },
     };
 
-    setForm((prev) => ({ ...prev, ...normalized }));
+    console.log("🚀 Payload chuẩn bị gửi lên server:", normalized);
+
+    // QUAN TRỌNG: Phải update parent state trước khi gọi onSave để đảm bảo sync
+    setForm(normalized);
 
     try {
       if (typeof onSave === "function") {
@@ -460,11 +471,13 @@ export default function StoreFormModal({
         body: {
           maxHeight: "calc(100vh - 200px)",
           overflowY: "auto",
-          scrollbarWidth: "none",
-          msOverflowStyle: "none",
+          scrollbarWidth: "thin",
           position: "relative",
+          padding: "24px",
+          background: "#fdfdfd"
         },
       }}
+      maskClosable={false}
       destroyOnHidden
       afterOpenChange={(visible) => {
         if (visible) {
@@ -524,6 +537,14 @@ export default function StoreFormModal({
                         const newValue = e.target.value;
                         setAddressValue(newValue);
                         form.setFieldsValue({ address: newValue });
+
+                        // DEBOUNCE: Tự động geocode sau 1.5s ngừng gõ
+                        if (geocodeTimerRef.current) clearTimeout(geocodeTimerRef.current);
+                        if (newValue && newValue.length > 10) {
+                          geocodeTimerRef.current = setTimeout(() => {
+                            handleFetchCoordinates(newValue);
+                          }, 1500);
+                        }
                       }}
                     />
                     <Popover

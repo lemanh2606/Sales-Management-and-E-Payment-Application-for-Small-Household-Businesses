@@ -456,6 +456,8 @@ const OrderPOSHomeScreen: React.FC = () => {
   const [loyaltySetting, setLoyaltySetting] = useState<LoyaltyConfig | null>(
     null
   );
+  const [isStoreEmpty, setIsStoreEmpty] = useState(false);
+  const [hasCheckedEmpty, setHasCheckedEmpty] = useState(false);
 
   // ===== tabs =====
   const [orders, setOrders] = useState<OrderTab[]>([makeEmptyTab("1", null)]);
@@ -650,11 +652,44 @@ const OrderPOSHomeScreen: React.FC = () => {
     }
   }, [storeId, authHeaders]);
 
+  const checkStoreProducts = useCallback(async () => {
+    if (!storeId) return;
+    try {
+      const res: any = await apiClient.get(`/products/store/${storeId}`, {
+        params: { limit: 1 },
+        headers: authHeaders,
+      });
+      const products = res?.data?.products || [];
+      const isEmpty = products.length === 0;
+      setIsStoreEmpty(isEmpty);
+      setHasCheckedEmpty(true);
+
+      if (isEmpty) {
+        showEmptyStoreAlert();
+      }
+    } catch (err) {
+      console.error("Lỗi kiểm tra danh mục sản phẩm:", err);
+    }
+  }, [storeId, authHeaders]);
+
+  const showEmptyStoreAlert = () => {
+    const isOwner = loggedInUser?.role === "OWNER" || loggedInUser?.role === "MANAGER";
+    
+    Alert.alert(
+      "Kho hàng trống!",
+      isOwner 
+        ? "Cửa hàng của bạn chưa có sản phẩm nào. Vui lòng nhập hàng hóa vào hệ thống để bắt đầu bán hàng."
+        : "Cửa hàng chưa có sản phẩm nào. Vui lòng báo chủ cửa hàng nhập hàng hóa vào kho.",
+      [{ text: "Tôi đã hiểu" }]
+    );
+  };
+
   useEffect(() => {
     if (!storeId) return;
     loadEmployees();
     loadLoyaltySetting();
-  }, [storeId, loadEmployees, loadLoyaltySetting]);
+    checkStoreProducts();
+  }, [storeId, loadEmployees, loadLoyaltySetting, checkStoreProducts]);
 
   // ===== CART PERSISTENCE - AsyncStorage =====
   // Include userId in key to separate carts for different users on same device
@@ -816,7 +851,12 @@ const OrderPOSHomeScreen: React.FC = () => {
             headers,
           });
           const list = res?.data?.products || [];
-          setSearchedProducts(Array.isArray(list) ? list : []);
+          const products = Array.isArray(list) ? list : [];
+          setSearchedProducts(products);
+
+          if (products.length === 0 && hasCheckedEmpty && isStoreEmpty) {
+            showEmptyStoreAlert();
+          }
         } catch (e: any) {
           setSearchedProducts([]);
           setProductSearchError(

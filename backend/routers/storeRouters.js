@@ -36,6 +36,9 @@ const { verifyToken, checkStoreAccess, requirePermission } = auth;
 // Đảm bảo người dùng có store hiện hành (manager tự động vào store đầu tiên nếu có)
 router.post("/ensure-store", verifyToken, checkSubscriptionExpiry, requirePermission("store:dashboard:view"), storeController.ensureStore);
 
+// Proxy Geocode (Lấy tọa độ từ địa chỉ) - Đặt trước :storeId để không bị trùng
+router.get("/utils/geocode", verifyToken, storeController.proxyGeocode);
+
 // Tạo cửa hàng mới (chỉ Manager)
 router.post("/", verifyToken, checkSubscriptionExpiry, requirePermission("store:create"), storeController.createStore);
 

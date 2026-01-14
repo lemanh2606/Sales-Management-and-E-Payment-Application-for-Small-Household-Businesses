@@ -8,6 +8,7 @@ const bcrypt = require("bcryptjs");
 const { STAFF_DEFAULT_MENU } = require("../../config/constants/permissions");
 const XLSX = require("xlsx");
 const dayjs = require("dayjs");
+const axios = require("axios");
 
 // Helper function để validate (có thể đặt ở đầu file hoặc utils riêng)
 const validateEmployeeData = (data, isCreate = false) => {
@@ -1352,6 +1353,16 @@ const softDeleteEmployee = async (req, res) => {
 };
 
 // PUT /api/stores/:storeId/employees/:id/restore - Khôi phục nhân viên bị xóa mềm
+const { 
+  sendEmptyNotificationWorkbook, 
+  createWorkbook, 
+  sendWorkbook, 
+  styleDataRow, 
+  toDateString, 
+  formatCurrency, 
+  formatNumber 
+} = require("../../utils/excelExport");
+
 const restoreEmployee = async (req, res) => {
   try {
     const { id, storeId } = req.params;
@@ -1413,22 +1424,35 @@ const exportEmployeesToExcel = async (req, res) => {
   try {
     const { storeId } = req.params;
 
-    // Kiểm tra store tồn tại và user có quyền
     const store = await Store.findById(storeId);
     if (!store)
       return res.status(404).json({ message: "Cửa hàng không tồn tại" });
 
-    // Lấy danh sách nhân viên (chỉ những người chưa xóa mềm)
     const employees = await Employee.find({
       store_id: storeId,
       isDeleted: false,
     })
-      .populate("user_id", "name email phone")
+      .populate("user_id", "name email phone role")
       .lean();
 
     if (!employees || employees.length === 0) {
-      return res.status(404).json({ message: "Không có nhân viên để xuất" });
+      return await sendEmptyNotificationWorkbook(res, "nhân viên", store, "Danh_Sach_Nhan_Vien");
     }
+
+    const columns = [
+      { header: "STT", key: "index", width: 6 },
+      { header: "Họ và tên", key: "name", width: 25 },
+      { header: "Số điện thoại", key: "phone", width: 18 },
+      { header: "Email", key: "email", width: 25 },
+      { header: "Vai trò", key: "role", width: 15 },
+      { header: "Lương cơ bản", key: "salary", width: 18 },
+      { header: "Tỷ lệ hoa hồng (%)", key: "commission", width: 18 },
+      { header: "Ca làm việc", key: "shift", width: 12 },
+      { header: "Ngày tuyển dụng", key: "hiredDate", width: 18 },
+      { header: "Trạng thái", key: "status", width: 15 },
+    ];
+
+    const { workbook, worksheet } = createWorkbook("Danh sách nhân viên", columns);
 
     const toNumber = (val) => {
       if (!val) return 0;
@@ -1438,74 +1462,31 @@ const exportEmployeesToExcel = async (req, res) => {
       return Number.isFinite(n) ? n : 0;
     };
 
-    const data = employees.map((emp) => ({
-      "Họ và tên": emp.fullName || "",
-      "Số điện thoại": emp.user_id?.phone || emp.phone || "",
-      Email: emp.user_id?.email || "",
-      "Lương cơ bản": toNumber(emp.salary),
-      "Ca làm việc": emp.shift || "",
-      "Tỷ lệ hoa hồng (%)": toNumber(emp.commission_rate),
-      "Ngày tuyển dụng": emp.hired_date
-        ? dayjs(emp.hired_date).format("DD/MM/YYYY")
-        : "",
-      "Trạng thái": "Đang làm việc",
-    }));
+    employees.forEach((emp, idx) => {
+      const row = worksheet.addRow({
+        index: idx + 1,
+        name: emp.fullName || "",
+        phone: emp.user_id?.phone || emp.phone || "",
+        email: emp.user_id?.email || "",
+        role: emp.user_id?.role === "OWNER" ? "Chủ cửa hàng" : (emp.user_id?.role === "MANAGER" ? "Quản lý" : "Nhân viên"),
+        salary: formatCurrency(toNumber(emp.salary)),
+        commission: emp.commission_rate ? `${toNumber(emp.commission_rate)}%` : "-",
+        shift: emp.shift || "",
+        hiredDate: toDateString(emp.hired_date),
+        status: "Đang làm việc",
+      });
+      styleDataRow(row);
+    });
 
-    // Tạo workbook
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(data);
+    const datePart = new Date().toISOString().split("T")[0];
+    const filename = `Danh_Sach_Nhan_Vien_${store.name}_${datePart}`;
 
-    // Tự động điều chỉnh độ rộng cột
-    ws["!cols"] = [
-      { wch: 20 }, // Họ và tên
-      { wch: 15 }, // SĐT
-      { wch: 25 }, // Email
-      { wch: 15 }, // Lương
-      { wch: 12 }, // Ca
-      { wch: 15 }, // Hoa hồng
-      { wch: 15 }, // Ngày tuyển
-      { wch: 12 }, // Trạng thái
-    ];
-
-    XLSX.utils.book_append_sheet(wb, ws, "NhanVien");
-
-    // Xuất buffer
-    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
-
-    // ====== FIX Content-Disposition (tránh ERR_INVALID_CHAR) ======
-    const dateStr = dayjs().format("DD-MM-YYYY");
-
-    // Tên file gốc (có thể có dấu) -> dùng cho filename* (UTF-8)
-    const rawFileName = `Danh_Sach_Nhan_Vien_${store.name}_${dateStr}.xlsx`;
-
-    // Tên file fallback ASCII -> dùng cho filename=""
-    // 1) bỏ dấu 2) thay ký tự không hợp lệ 3) thay space thành _
-    const asciiStoreName = String(store.name || "Cua_hang")
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "") // bỏ dấu
-      .replace(/[\/\\:*?"<>|]/g, "_")
-      .replace(/\s+/g, "_");
-
-    const fallbackFileName = `Danh_Sach_Nhan_Vien_${asciiStoreName}_${dateStr}.xlsx`;
-
-    // Set header đúng: filename (ASCII) + filename* (UTF-8 percent-encoded)
-    // Cách này tránh đưa Unicode trực tiếp vào header nên không văng ERR_INVALID_CHAR. [web:4][web:10]
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="${fallbackFileName}"; filename*=UTF-8''${encodeURIComponent(
-        rawFileName
-      )}`
-    );
-
-    res.setHeader(
-      "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    );
-
-    res.send(buffer);
+    await sendWorkbook(res, workbook, filename);
   } catch (error) {
     console.error("Lỗi export nhân viên:", error);
-    res.status(500).json({ message: "Lỗi server khi xuất Excel" });
+    if (!res.headersSent) {
+      res.status(500).json({ message: "Lỗi server khi xuất Excel" });
+    }
   }
 };
 
@@ -1604,4 +1585,35 @@ module.exports = {
   softDeleteEmployee,
   restoreEmployee,
   exportEmployeesToExcel,
+  proxyGeocode: async (req, res) => {
+    try {
+      const { q } = req.query;
+      if (!q) {
+        return res.status(400).json({ message: "Thiếu tham số truy vấn q" });
+      }
+
+      console.log(`🌐 Proxy Geocode: ${q}`);
+      
+      const response = await axios.get("https://nominatim.openstreetmap.org/search", {
+        params: {
+          q,
+          format: "json",
+          limit: 1,
+          addressdetails: 1,
+        },
+        headers: {
+          "Accept-Language": "vi",
+          "User-Agent": "SmallBizSales-App/1.0" // Nominatim requires a User-Agent
+        },
+      });
+
+      res.json(response.data);
+    } catch (error) {
+      console.error("❌ Geocode Proxy Error:", error.message);
+      res.status(500).json({ 
+        message: "Lỗi khi lấy tọa độ từ OpenStreetMap", 
+        error: error.message 
+      });
+    }
+  },
 };

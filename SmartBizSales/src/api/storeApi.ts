@@ -172,6 +172,28 @@ export const deleteEmployee = async (storeId: string, employeeId: string): Promi
     return res.data;
 };
 
+export const fetchLatLngFromAddress = async (address: string): Promise<any> => {
+    if (!address?.trim()) return null;
+    try {
+        const response = await apiClient.get('/stores/utils/geocode', {
+            params: { q: address },
+        });
+        const data = response.data;
+        const first = Array.isArray(data) ? data[0] : null;
+
+        if (!first) return null;
+
+        return {
+            lat: first.lat ? Number(first.lat) : null,
+            lng: first.lon ? Number(first.lon) : null,
+            raw: first,
+        };
+    } catch (error) {
+        console.error('❌ Error fetching coordinates via proxy:', error);
+        return null;
+    }
+};
+
 /* =========================
    Default export
    ========================= */
@@ -192,4 +214,5 @@ export default {
     deleteEmployee,
     setLocalCurrentStore,
     getLocalCurrentStore,
+    fetchLatLngFromAddress,
 };

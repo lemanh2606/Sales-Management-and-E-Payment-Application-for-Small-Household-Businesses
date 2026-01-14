@@ -10,6 +10,7 @@ const path = require("path");
 const { parseExcelToJSON, validateRequiredFields, sanitizeData } = require("../../utils/fileImport");
 const excelJS = require("exceljs");
 const fs = require("fs");
+const { sendEmptyNotificationWorkbook } = require("../../utils/excelExport");
 
 function resolveStoreId(req) {
   const candidate =
@@ -576,7 +577,8 @@ const exportCustomers = async (req, res) => {
     const customers = await Customer.find({ storeId, isDeleted: false }).sort({ createdAt: -1 }).lean();
 
     if (!customers || customers.length === 0) {
-      return res.status(404).json({ message: "Không có dữ liệu khách hàng để xuất" });
+      const store = await Store.findById(storeId).select("name").lean();
+      return await sendEmptyNotificationWorkbook(res, "khách hàng", store, "Danh_Sach_Khach_Hang");
     }
 
     // Tạo workbook

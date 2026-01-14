@@ -62,11 +62,27 @@ export const exportSuppliers = async (storeId) => {
     responseType: "blob",
   });
 
+  // Lấy tên file từ header Content-Disposition nếu có
+  let fileName = "suppliers.xlsx";
+  const disposition = res.headers["content-disposition"];
+  if (disposition && disposition.indexOf("filename=") !== -1) {
+    const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+    const matches = filenameRegex.exec(disposition);
+    if (matches != null && matches[1]) {
+      fileName = matches[1].replace(/['"]/g, "");
+      // Giải mã percent-encoding nếu có (cho UTF-8)
+      if (fileName.startsWith("UTF-8''")) {
+        fileName = decodeURIComponent(fileName.substring(7));
+      }
+    }
+  }
+
   const url = window.URL.createObjectURL(new Blob([res.data]));
   const link = document.createElement("a");
   link.href = url;
-  link.setAttribute("download", "suppliers.xlsx");
+  link.setAttribute("download", fileName);
   document.body.appendChild(link);
   link.click();
   link.remove();
+  window.URL.revokeObjectURL(url);
 };

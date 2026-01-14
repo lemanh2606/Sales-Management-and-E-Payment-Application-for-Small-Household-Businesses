@@ -11,6 +11,8 @@ const XLSX = require("xlsx-js-style");
 const dayjs = require("dayjs");
 require("dayjs/locale/vi");
 dayjs.locale("vi");
+const { sendEmptyNotificationWorkbook } = require("../utils/excelExport");
+const Store = require("../models/Store");
 
 // Các trạng thái đơn hàng được tính vào doanh thu.
 // Lưu ý: `partially_refunded` vẫn tính doanh thu theo `totalAmount/subtotal` hiện có trong DB.
@@ -544,7 +546,7 @@ const exportRevenue = async (req, res) => {
       }
 
       if (!totalData?.length && !empData?.length) {
-        return res.status(404).json({ message: "Không có dữ liệu để xuất" });
+      return await sendEmptyNotificationWorkbook(res, "dữ liệu báo cáo", req.store, "Bao_Cao_Doanh_Thu");
       }
 
       const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
@@ -1811,7 +1813,7 @@ const exportMonthlyRevenueSummary = async (req, res) => {
     if (year) {
       const rows = payload?.data;
       if (!Array.isArray(rows) || !rows.length) {
-        return res.status(404).json({ message: "Không có dữ liệu để xuất" });
+      return await sendEmptyNotificationWorkbook(res, "dữ liệu báo cáo", req.store, "Bao_Cao_Doanh_Thu");
       }
       const sheetData = rows.map((r) => ({
         Tháng: r.monthLabel,
@@ -1842,7 +1844,7 @@ const exportMonthlyRevenueSummary = async (req, res) => {
     } else {
       const row = payload?.data;
       if (!row) {
-        return res.status(404).json({ message: "Không có dữ liệu để xuất" });
+      return await sendEmptyNotificationWorkbook(res, "dữ liệu báo cáo", req.store, "Bao_Cao_Doanh_Thu");
       }
       const sheetData = [
         {

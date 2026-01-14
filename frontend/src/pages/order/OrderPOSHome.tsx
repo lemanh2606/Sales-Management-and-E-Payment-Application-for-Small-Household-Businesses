@@ -232,6 +232,8 @@ const OrderPOSHome: React.FC = () => {
   const [isPrinting, setIsPrinting] = useState(false);
   // Thêm state để lưu employee hiện tại của user đang login
   const [currentUserEmployee, setCurrentUserEmployee] = useState<Seller | null>(null);
+  const [isStoreEmpty, setIsStoreEmpty] = useState(false);
+  const [hasCheckedEmpty, setHasCheckedEmpty] = useState(false);
 
   // Helper - Lấy giá trị số từ price
   const getPriceNumber = (price: any): number => {
@@ -387,6 +389,7 @@ const OrderPOSHome: React.FC = () => {
     if (storeId) {
       loadEmployees();
       loadLoyaltySetting();
+      checkStoreProducts();
     }
   }, [storeId]);
 
@@ -481,6 +484,39 @@ const OrderPOSHome: React.FC = () => {
     }
   };
 
+  // Kiểm tra xem cửa hàng có sản phẩm nào không
+  const checkStoreProducts = async () => {
+    if (!storeId) return;
+    try {
+      const res = await axios.get(`${API_BASE}/products/store/${storeId}?limit=1`, { headers });
+      const products = res.data.products || [];
+      const isEmpty = products.length === 0;
+      setIsStoreEmpty(isEmpty);
+      setHasCheckedEmpty(true);
+
+      if (isEmpty) {
+        showEmptyStoreAlert();
+      }
+    } catch (err) {
+      console.error("Lỗi kiểm tra danh mục sản phẩm:", err);
+    }
+  };
+
+  const showEmptyStoreAlert = () => {
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+    const isOwner = user.role === "OWNER" || user.role === "MANAGER";
+    
+    Swal.fire({
+      title: "Kho hàng trống!",
+      text: isOwner 
+        ? "Cửa hàng của bạn chưa có sản phẩm nào. Vui lòng nhập hàng hóa vào hệ thống để bắt đầu bán hàng."
+        : "Cửa hàng chưa có sản phẩm nào. Vui lòng báo chủ cửa hàng nhập hàng hóa vào kho.",
+      icon: "warning",
+      confirmButtonText: "Tôi đã hiểu",
+      confirmButtonColor: "#faad14",
+    });
+  };
+
   // Tìm kiếm sản phẩm với debounce
   const searchProductDebounced = useCallback(
     debounce(async (query: string) => {
@@ -490,7 +526,12 @@ const OrderPOSHome: React.FC = () => {
       }
       try {
         const res = await axios.get(`${API_BASE}/products/search?query=${encodeURIComponent(query)}&storeId=${storeId}`, { headers });
-        setSearchedProducts(res.data.products || []);
+        const products = res.data.products || [];
+        setSearchedProducts(products);
+
+        if (products.length === 0 && hasCheckedEmpty && isStoreEmpty) {
+          showEmptyStoreAlert();
+        }
       } catch (err) {
         Swal.fire({
           title: "❌ Lỗi!",

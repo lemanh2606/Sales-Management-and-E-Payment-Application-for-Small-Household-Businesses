@@ -5,6 +5,13 @@ const Employee = require("../../models/Employee");
 const mongoose = require("mongoose");
 const logActivity = require("../../utils/logActivity");
 const XLSX = require("xlsx");
+const { 
+  createWorkbook, 
+  sendWorkbook, 
+  styleDataRow, 
+  toDateString,
+  sendEmptyNotificationWorkbook 
+} = require("../../utils/excelExport");
 
 // ============= CREATE - Tạo nhà cung cấp =============
 const createSupplier = async (req, res) => {
@@ -518,45 +525,52 @@ const exportSuppliersByStore = async (req, res) => {
     }).lean();
 
     if (!suppliers || suppliers.length === 0) {
-      return res.status(404).json({ message: "Không có nhà cung cấp để xuất" });
+      const store = await Store.findById(storeId).select("name").lean();
+      return await sendEmptyNotificationWorkbook(res, "nhà cung cấp", store, "Danh_Sach_Nha_Cung_Cap");
     }
 
-    const data = suppliers.map((s) => ({
-      "Tên NCC": s.name,
-      "Người liên hệ": s.contact_person || "",
-      SĐT: s.phone || "",
-      Email: s.email || "",
-      "Địa chỉ": s.address || "",
-      "Mã số thuế": s.taxcode || "",
-      "Ngân hàng": s.bank_name || "",
-      "Số TK": s.bank_account_no || "",
-      "Chủ TK": s.bank_account_name || "",
-      "Ghi chú": s.notes || "",
-      "Trạng thái": s.status,
-      "Ngày tạo": s.createdAt
-        ? new Date(s.createdAt).toLocaleDateString("vi-VN")
-        : "",
-      "Ngày cập nhật": s.updatedAt
-        ? new Date(s.updatedAt).toLocaleDateString("vi-VN")
-        : "",
-    }));
+    const columns = [
+      { header: "STT", key: "index", width: 6 },
+      { header: "Tên nhà cung cấp", key: "name", width: 30 },
+      { header: "Người liên hệ", key: "contact", width: 20 },
+      { header: "Số điện thoại", key: "phone", width: 18 },
+      { header: "Email", key: "email", width: 25 },
+      { header: "Địa chỉ", key: "address", width: 40 },
+      { header: "Mã số thuế", key: "tax", width: 15 },
+      { header: "Ngân hàng", key: "bankName", width: 25 },
+      { header: "Số tài khoản", key: "bankNo", width: 20 },
+      { header: "Chủ tài khoản", key: "bankOwner", width: 25 },
+      { header: "Trạng thái", key: "status", width: 18 },
+      { header: "Ghi chú", key: "notes", width: 30 },
+      { header: "Ngày tạo", key: "createdAt", width: 15 },
+    ];
 
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(data);
-    XLSX.utils.book_append_sheet(wb, ws, "NhaCungCap");
+    const { workbook, worksheet } = createWorkbook("Danh sách nhà cung cấp", columns);
 
-    const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+    suppliers.forEach((s, idx) => {
+      const row = worksheet.addRow({
+        index: idx + 1,
+        name: s.name,
+        contact: s.contact_person || "",
+        phone: s.phone || "",
+        email: s.email || "",
+        address: s.address || "",
+        tax: s.taxcode || "",
+        bankName: s.bank_name || "",
+        bankNo: s.bank_account_no || "",
+        bankOwner: s.bank_account_name || "",
+        status: s.status,
+        notes: s.notes || "",
+        createdAt: toDateString(s.createdAt),
+      });
+      styleDataRow(row);
+    });
 
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="nha-cung-cap-${storeId}.xlsx"`
-    );
-    res.setHeader(
-      "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    );
+    const store = await Store.findById(storeId).select("name").lean();
+    const datePart = new Date().toISOString().split("T")[0];
+    const filename = `Danh_sach_Nha_cung_cap_${store?.name || "Store"}_${datePart}`;
 
-    return res.send(buf);
+    await sendWorkbook(res, workbook, filename);
   } catch (error) {
     console.error("Lỗi exportSuppliersByStore:", error);
     return res

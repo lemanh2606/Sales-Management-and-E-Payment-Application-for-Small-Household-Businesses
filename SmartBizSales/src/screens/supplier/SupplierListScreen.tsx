@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import * as supplierApi from "../../api/supplierApi";
+import { SupplierExportButton } from "../../components/supplier/SupplierExportButton";
 import type {
   Supplier,
   CreateSupplierData,
@@ -247,6 +248,7 @@ const SupplierListScreen: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [search, setSearch] = useState<string>("");
+  const [storeId, setStoreId] = useState<string>("");
 
   // Animation values for Collapsible Header
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -344,6 +346,7 @@ const SupplierListScreen: React.FC = () => {
       const storeStr = await AsyncStorage.getItem("currentStore");
       const store = storeStr ? JSON.parse(storeStr) : null;
       const storeId: string | undefined = store?._id || store?.id;
+      setStoreId(storeId || "");
 
       if (!storeId) {
         Alert.alert("Lỗi", "Không tìm thấy ID cửa hàng");
@@ -582,9 +585,12 @@ const SupplierListScreen: React.FC = () => {
               Quản lý {suppliers.length} đối tác cung ứng
             </Text>
           </View>
-          <TouchableOpacity style={styles.headerAddBtn} onPress={handleAdd}>
-            <Ionicons name="add" size={28} color="#10b981" />
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <SupplierExportButton storeId={storeId} />
+            <TouchableOpacity style={[styles.headerAddBtn, { marginLeft: 10 }]} onPress={handleAdd}>
+              <Ionicons name="add" size={28} color="#10b981" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Mode Tabs */}

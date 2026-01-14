@@ -115,6 +115,55 @@ const sendWorkbook = async (res, workbook, filename) => {
 };
 
 /**
+ * Gửi workbook thông báo không có dữ liệu
+ * @param {Object} res - Express response object
+ * @param {string} entityLabel - Tên đối tượng (ví dụ: "sản phẩm", "nhà cung cấp")
+ * @param {Object} store - Thông tin cửa hàng
+ * @param {string} filenamePrefix - Tiền tố tên file
+ */
+const sendEmptyNotificationWorkbook = async (res, entityLabel, store, filenamePrefix) => {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet("Thông báo");
+  
+  // Thông báo lớn
+  worksheet.mergeCells("A1:E1");
+  const titleCell = worksheet.getCell("A1");
+  titleCell.value = "THÔNG BÁO";
+  titleCell.font = { bold: true, size: 16, color: { argb: "FFFF0000" } };
+  titleCell.alignment = { horizontal: "center" };
+  
+  worksheet.mergeCells("A3:E3");
+  const msgCell = worksheet.getCell("A3");
+  msgCell.value = `Hiện tại chưa có dữ liệu ${entityLabel.toLowerCase()} nào.`;
+  msgCell.font = { size: 12 };
+  msgCell.alignment = { horizontal: "center" };
+  
+  worksheet.mergeCells("A5:E5");
+  const hintCell = worksheet.getCell("A5");
+  hintCell.value = "Vui lòng thêm dữ liệu trước khi xuất.";
+  hintCell.font = { size: 12, italic: true };
+  hintCell.alignment = { horizontal: "center" };
+
+  worksheet.mergeCells("A7:E7");
+  worksheet.getCell("A7").value = `Cửa hàng: ${store?.name || "Chưa đặt tên"}`;
+  
+  worksheet.mergeCells("A8:E8");
+  worksheet.getCell("A8").value = `Thời gian xuất: ${new Date().toLocaleString("vi-VN")}`;
+
+  // Set column widths
+  worksheet.getColumn(1).width = 15;
+  worksheet.getColumn(2).width = 25;
+  worksheet.getColumn(3).width = 25;
+  worksheet.getColumn(4).width = 20;
+  worksheet.getColumn(5).width = 15;
+  
+  const datePart = new Date().toISOString().split("T")[0];
+  const filename = `${filenamePrefix}_vong_du_lieu_${datePart}`;
+  
+  await sendWorkbook(res, workbook, filename);
+};
+
+/**
  * Apply style cho một dòng dữ liệu
  * @param {Object} row - ExcelJS row object
  * @param {Object} options - Style options
@@ -194,4 +243,5 @@ module.exports = {
   withExportErrorHandler,
   formatCurrency,
   formatNumber,
+  sendEmptyNotificationWorkbook,
 };

@@ -10,6 +10,7 @@ const logActivity = require("../../utils/logActivity");
 const InventoryVoucher = require("../../models/InventoryVoucher");
 const Warehouse = require("../../models/Warehouse"); // Imported logic
 const path = require("path");
+const { sendEmptyNotificationWorkbook } = require("../../utils/excelExport");
 const { cloudinary, deleteFromCloudinary } = require("../../utils/cloudinary");
 const {
   parseExcelToJSON,
@@ -2153,10 +2154,10 @@ const exportProducts = async (req, res) => {
 
     console.log(`📊 Found ${products.length} products for export`);
 
+    // Nếu không có sản phẩm, vẫn xuất file Excel với thông báo thay vì trả lỗi 404
     if (products.length === 0) {
-      return res.status(404).json({
-        message: "Không có sản phẩm nào để xuất",
-      });
+      console.log("📋 No products found, generating info Excel file");
+      return await sendEmptyNotificationWorkbook(res, "sản phẩm", store, "Danh_Sach_San_Pham");
     }
 
     // Chuẩn bị dữ liệu cho Excel (Cache Warehouse)

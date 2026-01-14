@@ -46,7 +46,7 @@ const allowedOrigins = [
   "http://smallbizsales.site",
   "https://smallbizsales.site",
   "https://editor.swagger.io", // ✅ Swagger Editor
-  "https://petstore.swagger.io", // ✅ Swagger Petstore
+  "https://petstore.swagger.io" // ✅ Swagger Petstore
 ];
 
 app.use((req, res, next) => {

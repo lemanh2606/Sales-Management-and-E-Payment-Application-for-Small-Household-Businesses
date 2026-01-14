@@ -22,6 +22,7 @@ const XLSX = require("xlsx");
 const dayjs = require("dayjs");
 const fs = require("fs");
 const path = require("path");
+const { sendEmptyNotificationWorkbook } = require("../../utils/excelExport");
 
 // helper tạo mã phiếu XK đơn giản (ít bảng, tránh counter)
 const genXKCode = () => {
@@ -1733,6 +1734,12 @@ const exportTopFrequentCustomers = async (req, res) => {
       },
     ]);
 
+    if (!data || data.length === 0) {
+      const Store = mongoose.model("Store");
+      const store = await Store.findById(storeId).select("name").lean();
+      return await sendEmptyNotificationWorkbook(res, "khách hàng", store, "Top_Khach_Hang");
+    }
+
     // export xlsx
     if (format === "xlsx") {
       const ws = XLSX.utils.json_to_sheet(data);
@@ -1983,9 +1990,9 @@ const exportTopSellingProducts = async (req, res) => {
     ]);
 
     if (!topProducts || topProducts.length === 0) {
-      return res
-        .status(404)
-        .json({ message: "Không có dữ liệu top sản phẩm trong kỳ này" });
+      const Store = mongoose.model("Store");
+      const store = await Store.findById(storeId).select("name").lean();
+      return await sendEmptyNotificationWorkbook(res, "sản phẩm bán chạy", store, "Top_Selling_Products");
     }
 
     // normalize lần nữa cho chắc (nếu data bẩn)
@@ -2641,7 +2648,9 @@ const exportAllOrdersToExcel = async (req, res) => {
       .lean();
 
     if (!orders || orders.length === 0) {
-      return res.status(404).json({ message: "Không có đơn hàng để xuất" });
+      const Store = mongoose.model("Store");
+      const store = await Store.findById(storeId).select("name").lean();
+      return await sendEmptyNotificationWorkbook(res, "đơn hàng", store, "Danh_Sach_Don_Hang");
     }
 
     const data = orders.map((order) => ({

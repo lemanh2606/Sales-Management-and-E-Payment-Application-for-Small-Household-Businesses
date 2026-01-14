@@ -38,9 +38,57 @@ const buildFilename = (store, key) => {
   return `${storeSlug}_${key}_${datePart}`;
 };
 
-const ensureHasRows = (res, rows) => {
+// Thay vì trả lỗi, tạo file Excel với thông báo khi không có dữ liệu
+const createEmptyDataNotification = async (res, store, entityLabel) => {
+  const ExcelJS = require("exceljs");
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet("Thông báo");
+  
+  // Thông báo lớn
+  worksheet.mergeCells("A1:E1");
+  worksheet.getCell("A1").value = "THÔNG BÁO";
+  worksheet.getCell("A1").font = { bold: true, size: 16, color: { argb: "FFFF0000" } };
+  worksheet.getCell("A1").alignment = { horizontal: "center" };
+  
+  worksheet.mergeCells("A3:E3");
+  worksheet.getCell("A3").value = `Hiện tại chưa có dữ liệu ${entityLabel.toLowerCase()} nào.`;
+  worksheet.getCell("A3").font = { size: 12 };
+  worksheet.getCell("A3").alignment = { horizontal: "center" };
+  
+  worksheet.mergeCells("A5:E5");
+  worksheet.getCell("A5").value = "Vui lòng thêm dữ liệu trước khi xuất.";
+  worksheet.getCell("A5").font = { size: 12, italic: true };
+  worksheet.getCell("A5").alignment = { horizontal: "center" };
+
+  worksheet.mergeCells("A7:E7");
+  worksheet.getCell("A7").value = `Cửa hàng: ${store?.name || "Chưa đặt tên"}`;
+  worksheet.getCell("A7").font = { size: 11 };
+  
+  worksheet.mergeCells("A8:E8");
+  worksheet.getCell("A8").value = `Thời gian xuất: ${new Date().toLocaleString("vi-VN")}`;
+  worksheet.getCell("A8").font = { size: 11 };
+
+  // Set column widths
+  worksheet.getColumn(1).width = 15;
+  worksheet.getColumn(2).width = 25;
+  worksheet.getColumn(3).width = 25;
+  worksheet.getColumn(4).width = 20;
+  worksheet.getColumn(5).width = 15;
+  
+  const storeSlug = sanitizeFilename(store?.name || "store");
+  const datePart = new Date().toISOString().split("T")[0];
+  const filename = `${storeSlug}_khong_co_du_lieu_${datePart}.xlsx`;
+  
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
+  
+  await workbook.xlsx.write(res);
+  res.end();
+};
+
+const ensureHasRows = async (res, rows, store, entityLabel = "dữ liệu") => {
   if (!Array.isArray(rows) || rows.length === 0) {
-    res.status(400).json({ message: "Không có dữ liệu để xuất" });
+    await createEmptyDataNotification(res, store, entityLabel);
     return false;
   }
   return true;
@@ -114,7 +162,7 @@ const exportProducts = async (req, res, definition) => {
     .sort({ name: 1 })
     .lean();
 
-  if (!ensureHasRows(res, products)) return;
+  if (!(await ensureHasRows(res, products, req.store, definition.label))) return;
 
   const columns = [
     { header: "STT", key: "index", width: 6 },
@@ -161,7 +209,7 @@ const exportCustomers = async (req, res, definition) => {
     .sort({ createdAt: -1 })
     .lean();
 
-  if (!ensureHasRows(res, customers)) return;
+  if (!(await ensureHasRows(res, customers, req.store, definition.label))) return;
 
   const columns = [
     { header: "STT", key: "index", width: 6 },
@@ -200,7 +248,7 @@ const exportSuppliers = async (req, res, definition) => {
     .sort({ name: 1 })
     .lean();
 
-  if (!ensureHasRows(res, suppliers)) return;
+  if (!(await ensureHasRows(res, suppliers, req.store, definition.label))) return;
 
   const columns = [
     { header: "STT", key: "index", width: 6 },
@@ -240,7 +288,7 @@ const exportEmployees = async (req, res, definition) => {
     .sort({ createdAt: -1 })
     .lean();
 
-  if (!ensureHasRows(res, employees)) return;
+  if (!(await ensureHasRows(res, employees, req.store, definition.label))) return;
 
   const columns = [
     { header: "STT", key: "index", width: 6 },
@@ -297,7 +345,7 @@ const exportOrders = async (req, res, definition) => {
     .sort({ createdAt: -1 })
     .lean();
 
-  if (!ensureHasRows(res, orders)) return;
+  if (!(await ensureHasRows(res, orders, req.store, definition.label))) return;
 
   const orderIds = orders.map((o) => o._id);
   const orderItemStats = await aggregateOrderItems(orderIds);
@@ -356,7 +404,7 @@ const exportPurchaseOrders = async (req, res, definition) => {
     .sort({ purchase_order_date: -1 })
     .lean();
 
-  if (!ensureHasRows(res, purchaseOrders)) return;
+  if (!(await ensureHasRows(res, purchaseOrders, req.store, definition.label))) return;
 
   const columns = [
     { header: "STT", key: "index", width: 6 },
@@ -408,7 +456,7 @@ const exportPurchaseReturns = async (req, res, definition) => {
     .sort({ return_date: -1 })
     .lean();
 
-  if (!ensureHasRows(res, purchaseReturns)) return;
+  if (!(await ensureHasRows(res, purchaseReturns, req.store, definition.label))) return;
 
   const columns = [
     { header: "STT", key: "index", width: 6 },
@@ -460,7 +508,7 @@ const exportStockChecks = async (req, res, definition) => {
     .sort({ check_date: -1 })
     .lean();
 
-  if (!ensureHasRows(res, stockChecks)) return;
+  if (!(await ensureHasRows(res, stockChecks, req.store, definition.label))) return;
 
   const columns = [
     { header: "STT", key: "index", width: 6 },
@@ -517,7 +565,7 @@ const exportStockDisposals = async (req, res, definition) => {
     .sort({ disposal_date: -1 })
     .lean();
 
-  if (!ensureHasRows(res, disposals)) return;
+  if (!(await ensureHasRows(res, disposals, req.store, definition.label))) return;
 
   const columns = [
     { header: "STT", key: "index", width: 6 },
@@ -566,7 +614,7 @@ const exportActivityLogs = async (req, res, definition) => {
     .sort({ createdAt: -1 })
     .lean();
 
-  if (!ensureHasRows(res, logs)) return;
+  if (!(await ensureHasRows(res, logs, req.store, definition.label))) return;
 
   const columns = [
     { header: "STT", key: "index", width: 6 },
