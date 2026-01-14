@@ -148,17 +148,19 @@ const ReportDashboard = () => {
     const isPositive = change > 0;
     const color = isPositive ? "#52c41a" : "#ff4d4f";
     const Icon = isPositive ? CaretUpOutlined : CaretDownOutlined;
-    
+
     return (
       <div style={{ fontSize: "12px", color: "#fff", display: "flex", alignItems: "center", gap: 4, marginTop: 4 }}>
-        <div style={{ 
-          background: "rgba(255, 255, 255, 0.2)", 
-          padding: "2px 6px", 
-          borderRadius: "4px",
-          display: "flex",
-          alignItems: "center",
-          gap: 2
-        }}>
+        <div
+          style={{
+            background: "rgba(255, 255, 255, 0.2)",
+            padding: "2px 6px",
+            borderRadius: "4px",
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+          }}
+        >
           <Icon />
           <span>{Math.abs(change)}%</span>
         </div>
@@ -174,7 +176,7 @@ const ReportDashboard = () => {
     }
     const token = localStorage.getItem("token");
     const url = `${apiUrl}/financials/export?storeId=${currentStore._id}&periodType=${periodType}&periodKey=${periodKey}&format=${format}&token=${token}`;
-    
+
     window.open(url, "_blank"); // Redirect to download URL
   };
 
@@ -803,7 +805,7 @@ const ReportDashboard = () => {
               </Col>
 
               <Col xs={24} lg={10} style={{ display: "flex", justifyContent: "flex-end", alignItems: "flex-end" }}>
-                <Dropdown overlay={exportMenu} trigger={['click']}>
+                <Dropdown overlay={exportMenu} trigger={["click"]}>
                   <Button type="primary" size="large" icon={<DownloadOutlined />} className="premium-btn">
                     Xuất báo cáo <CaretDownOutlined />
                   </Button>
@@ -967,7 +969,7 @@ const ReportDashboard = () => {
                         render: (val) => <span style={{ fontWeight: "bold", color: "#faad14", fontSize: 14 }}>{formatVND(val)}</span>,
                         width: "30%",
                       },
-                       {
+                      {
                         title: "Ghi Chú",
                         dataIndex: "note",
                         render: (text) => <span style={{ fontSize: 13 }}>{text || "—"}</span>,
@@ -976,7 +978,7 @@ const ReportDashboard = () => {
                       {
                         title: "Kỳ Gốc",
                         dataIndex: "originPeriod",
-                        render: (text) => text ? <Tag color="blue">{text}</Tag> : <Tag color="green">Hiện tại</Tag>,
+                        render: (text) => (text ? <Tag color="blue">{text}</Tag> : <Tag color="green">Hiện tại</Tag>),
                         width: 120,
                         hidden: periodType === "month",
                       },
@@ -1004,8 +1006,10 @@ const ReportDashboard = () => {
                         title: "Thao Tác",
                         width: 80,
                         align: "center",
-                         render: (_, record, idx) => (
-                          <AntTooltip title={record.originPeriod ? `Khoản chi này thuộc ${record.originPeriod}. Vui lòng chuyển sang kỳ đó để xoá.` : ""}>
+                        render: (_, record, idx) => (
+                          <AntTooltip
+                            title={record.originPeriod ? `Khoản chi này thuộc ${record.originPeriod}. Vui lòng chuyển sang kỳ đó để xoá.` : ""}
+                          >
                             <Button
                               type="text"
                               danger
@@ -1090,7 +1094,6 @@ const ReportDashboard = () => {
                       value={data.totalRevenue}
                       formatter={formatVND}
                       valueStyle={{ color: "#fff", fontWeight: 800, fontSize: "24px" }}
-                      prefix={<DollarOutlined />}
                     />
                     {renderComparison(data.comparison?.revenueChange)}
                   </div>
@@ -1103,7 +1106,6 @@ const ReportDashboard = () => {
                       value={data.grossProfit}
                       formatter={formatVND}
                       valueStyle={{ color: "#fff", fontWeight: 800, fontSize: "24px" }}
-                      prefix={<DollarOutlined />}
                     />
                     {renderComparison(data.comparison?.grossProfitChange)}
                   </div>
@@ -1117,7 +1119,6 @@ const ReportDashboard = () => {
                         value={data.operatingCost}
                         formatter={formatVND}
                         valueStyle={{ color: "#fff", fontWeight: 800, fontSize: "24px" }}
-                        prefix={<DollarOutlined />}
                       />
                     </AntTooltip>
                     {renderComparison(data.comparison?.operatingCostChange)}
@@ -1131,7 +1132,6 @@ const ReportDashboard = () => {
                       value={data.netProfit}
                       formatter={formatVND}
                       valueStyle={{ color: "#fff", fontWeight: 800, fontSize: "24px" }}
-                      prefix={<DollarOutlined />}
                     />
                     {renderComparison(data.comparison?.netProfitChange)}
                   </div>
@@ -1141,7 +1141,26 @@ const ReportDashboard = () => {
               {/* BIỂU ĐỒ & PHÂN TÍCH */}
               <Row gutter={[20, 20]}>
                 <Col xs={24} lg={16}>
-                  <Card className="glass-card" title={<Title level={4}>Cơ cấu tài chính tổng quan</Title>}>
+                  <Card
+                    className="glass-card"
+                    title={
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <Title level={4} style={{ margin: 0 }}>
+                          Cơ cấu tài chính tổng quan
+                        </Title>
+
+                        <AntTooltip title="Đơn vị tính là triệu đồng">
+                          <InfoCircleOutlined
+                            style={{
+                              color: "#1890ff",
+                              fontSize: 16,
+                              cursor: "pointer",
+                            }}
+                          />
+                        </AntTooltip>
+                      </div>
+                    }
+                  >
                     <ResponsiveContainer width="100%" height={380}>
                       <BarChart data={generateBarData()}>
                         <defs>
@@ -1152,7 +1171,7 @@ const ReportDashboard = () => {
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
                         <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#64748b" }} />
-                        <YAxis tickFormatter={(v) => `${(v / 1e6).toFixed(1)}M`} axisLine={false} tickLine={false} tick={{ fill: "#64748b" }} />
+                        <YAxis tickFormatter={(v) => `${(v / 1e6).toFixed(1)}tr`} axisLine={false} tickLine={false} tick={{ fill: "#64748b" }} />
                         <Tooltip
                           cursor={{ fill: "#f8fafc" }}
                           content={({ active, payload }) => {
@@ -1264,30 +1283,79 @@ const ReportDashboard = () => {
                       title: "Số lượng bán",
                       dataIndex: "quantitySold",
                       align: "center",
-                      render: (val) => <Badge count={val} color="#6366f1" />,
+                      render: (val) => <Badge count={val} overflowCount={999999} color="#6366f1" />,
                     },
                     {
-                      title: "Tồn kho (Giá vốn)",
+                      title: (
+                        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 6 }}>
+                          <span>Tồn kho</span>
+
+                          <AntTooltip title="Giá trị được tính theo giá vốn: Tồn kho = Số lượng tồn × Giá vốn">
+                            <InfoCircleOutlined
+                              style={{
+                                color: "#1890ff",
+                                fontSize: 14,
+                                cursor: "pointer",
+                              }}
+                            />
+                          </AntTooltip>
+                        </div>
+                      ),
                       dataIndex: "stockValueCost",
                       align: "right",
                       render: (val) => formatVND(val),
                     },
                     {
-                      title: "Tỷ lệ quay vòng",
+                      title: (
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "center",
+                            alignItems: "center",
+                            gap: 6,
+                            cursor: "pointer", // 👈 thêm dòng này
+                          }}
+                        >
+                          <span>Tỷ lệ quay vòng</span>
+
+                          <AntTooltip title="Tỷ lệ quay vòng = Doanh thu / Tồn kho">
+                            <InfoCircleOutlined
+                              style={{
+                                color: "#1890ff",
+                                fontSize: 14,
+                                cursor: "pointer", // 👈 icon cũng có pointer
+                              }}
+                            />
+                          </AntTooltip>
+                        </div>
+                      ),
                       dataIndex: "stockToRevenueRatio",
                       align: "center",
                       render: (val, record) => {
-                        if (record.revenue === 0) return <Tag color="default">Chưa bán</Tag>;
+                        if (record.revenue === 0)
+                          return (
+                            <AntTooltip title="Chưa phát sinh doanh thu trong kỳ">
+                              <Tag color="default" style={{ cursor: "help" }}>
+                                Chưa bán
+                              </Tag>
+                            </AntTooltip>
+                          );
+
                         if (val > 2)
                           return (
-                            <Tag color="error" className="premium-tag">
-                              Tồn cao
-                            </Tag>
+                            <AntTooltip title="Hàng tồn nhiều so với doanh thu → bán chậm">
+                              <Tag color="error" className="premium-tag" style={{ cursor: "help" }}>
+                                Tồn cao
+                              </Tag>
+                            </AntTooltip>
                           );
+
                         return (
-                          <Tag color="success" className="premium-tag">
-                            Ổn định
-                          </Tag>
+                          <AntTooltip title="Doanh thu và tồn kho ở mức hợp lý">
+                            <Tag color="success" className="premium-tag" style={{ cursor: "help" }}>
+                              Ổn định
+                            </Tag>
+                          </AntTooltip>
                         );
                       },
                     },
