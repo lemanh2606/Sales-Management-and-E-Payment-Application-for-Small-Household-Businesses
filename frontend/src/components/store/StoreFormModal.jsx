@@ -465,7 +465,7 @@ export default function StoreFormModal({
           position: "relative",
         },
       }}
-      destroyOnClose
+      destroyOnHidden
       afterOpenChange={(visible) => {
         if (visible) {
           setTimeout(() => calcScrollHint(), 100);

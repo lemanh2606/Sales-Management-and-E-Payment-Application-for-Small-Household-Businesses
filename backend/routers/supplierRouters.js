@@ -19,12 +19,16 @@ const {
   requirePermission,
 } = require("../middlewares/authMiddleware");
 
+const {
+  checkSubscriptionExpiry,
+} = require("../middlewares/subscriptionMiddleware");
+
 // Tạo nhà cung cấp mới cho cửa hàng
 router.post(
   "/stores/:storeId",
   verifyToken,
+  checkSubscriptionExpiry,
   checkStoreAccess,
-
   requirePermission("suppliers:create"),
   createSupplier
 );
@@ -33,6 +37,7 @@ router.post(
 router.get(
   "/stores/:storeId",
   verifyToken,
+  checkSubscriptionExpiry,
   checkStoreAccess,
   requirePermission("suppliers:view"),
   getSuppliersByStore
@@ -42,6 +47,7 @@ router.get(
 router.get(
   "/stores/:storeId/export",
   verifyToken,
+  checkSubscriptionExpiry,
   checkStoreAccess,
   requirePermission("suppliers:export"),
   exportSuppliersByStore
@@ -52,6 +58,7 @@ router.get(
 router.put(
   "/:id/restore",
   verifyToken,
+  checkSubscriptionExpiry,
   requirePermission("suppliers:restore"),
   restoreSupplier
 );
@@ -60,6 +67,7 @@ router.put(
 router.get(
   "/:supplierId",
   verifyToken,
+  checkSubscriptionExpiry,
   requirePermission("suppliers:view"),
   getSupplierById
 );
@@ -68,7 +76,7 @@ router.get(
 router.put(
   "/:supplierId",
   verifyToken,
-
+  checkSubscriptionExpiry,
   requirePermission("suppliers:update"),
   updateSupplier
 );
@@ -77,9 +85,10 @@ router.put(
 router.delete(
   "/:supplierId",
   verifyToken,
-
+  checkSubscriptionExpiry,
   requirePermission("suppliers:delete"),
   deleteSupplier
 );
 
 module.exports = router;
+

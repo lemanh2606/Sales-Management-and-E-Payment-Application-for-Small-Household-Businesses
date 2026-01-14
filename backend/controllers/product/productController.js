@@ -1477,7 +1477,8 @@ const importProducts = async (req, res) => {
     const { storeId } = req.params;
     const userId = req.user?.id || req.user?._id;
 
-    console.log("🚀 Starting import products for store:", storeId);
+    console.log("🚀 Starting import products for store:", storeId, "| userId:", userId);
+    console.log("📋 Request received - file:", req.file ? `${req.file.originalname} (${req.file.size} bytes)` : "NO FILE");
 
     if (!req.file) {
       return res.status(400).json({ message: "Vui lòng tải lên file" });
@@ -1588,48 +1589,84 @@ const importProducts = async (req, res) => {
           throw new Error("Tên sản phẩm là bắt buộc");
         }
 
-        // --- 1. SUPPLIER (Auto Create) ---
+        // --- 1. SUPPLIER (Auto Create or Use Existing) ---
         let supplierId = null;
         const supplierName = row["Nhà cung cấp"] ? row["Nhà cung cấp"].toString().trim() : "";
         if (supplierName) {
           const lowerName = supplierName.toLowerCase().trim();
+          
+          // Bước 1: Kiểm tra trong cache map
           if (supplierMap.has(lowerName)) {
             supplierId = supplierMap.get(lowerName)._id;
+            console.log(`📦 Using cached supplier: ${supplierName}`);
           } else {
-            const newSupplier = new Supplier({
-              name: supplierName,
+            // Bước 2: Fallback - Query DB trực tiếp để tránh tạo trùng
+            const existingSupplier = await Supplier.findOne({
               store_id: storeId,
-            });
-            await newSupplier.save({ session });
-            supplierId = newSupplier._id;
-            supplierMap.set(lowerName, newSupplier);
-            results.newlyCreated.suppliers++;
-            console.log(`✅ Created new supplier: ${supplierName}`);
+              isDeleted: false,
+              name: { $regex: new RegExp(`^${supplierName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+            }).session(session);
+            
+            if (existingSupplier) {
+              // Nhà cung cấp đã tồn tại trong DB - sử dụng và cập nhật cache
+              supplierId = existingSupplier._id;
+              supplierMap.set(lowerName, existingSupplier);
+              console.log(`📦 Found existing supplier in DB: ${existingSupplier.name}`);
+            } else {
+              // Bước 3: Tạo mới vì chưa tồn tại
+              const newSupplier = new Supplier({
+                name: supplierName,
+                store_id: storeId,
+              });
+              await newSupplier.save({ session });
+              supplierId = newSupplier._id;
+              supplierMap.set(lowerName, newSupplier.toObject());
+              results.newlyCreated.suppliers++;
+              console.log(`✅ Created new supplier: ${supplierName}`);
+            }
           }
         }
 
-        // --- 2. GROUP (Auto Create) ---
+        // --- 2. GROUP (Auto Create or Use Existing) ---
         let groupId = null;
         const groupName = row["Nhóm sản phẩm"] ? row["Nhóm sản phẩm"].toString().trim() : "";
         if (groupName) {
           const lowerName = groupName.toLowerCase().trim();
+          
+          // Bước 1: Kiểm tra trong cache map
           if (groupMap.has(lowerName)) {
             groupId = groupMap.get(lowerName)._id;
+            console.log(`📦 Using cached product group: ${groupName}`);
           } else {
-            const newGroup = new ProductGroup({
-              name: groupName,
+            // Bước 2: Fallback - Query DB trực tiếp để tránh tạo trùng
+            const existingGroup = await ProductGroup.findOne({
               storeId: storeId,
-              description: "Tự động tạo từ Import Excel",
-            });
-            await newGroup.save({ session });
-            groupId = newGroup._id;
-            groupMap.set(lowerName, newGroup);
-            results.newlyCreated.productGroups++;
-            console.log(`✅ Created new product group: ${groupName}`);
+              isDeleted: false,
+              name: { $regex: new RegExp(`^${groupName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+            }).session(session);
+            
+            if (existingGroup) {
+              // Nhóm sản phẩm đã tồn tại trong DB - sử dụng và cập nhật cache
+              groupId = existingGroup._id;
+              groupMap.set(lowerName, existingGroup);
+              console.log(`📦 Found existing product group in DB: ${existingGroup.name}`);
+            } else {
+              // Bước 3: Tạo mới vì chưa tồn tại
+              const newGroup = new ProductGroup({
+                name: groupName,
+                storeId: storeId,
+                description: "Tự động tạo từ Import Excel",
+              });
+              await newGroup.save({ session });
+              groupId = newGroup._id;
+              groupMap.set(lowerName, newGroup.toObject());
+              results.newlyCreated.productGroups++;
+              console.log(`✅ Created new product group: ${groupName}`);
+            }
           }
         }
 
-        // --- 3. WAREHOUSE (Auto Create) ---
+        // --- 3. WAREHOUSE (Auto Create or Use Existing) ---
         let warehouseIdForRow = defaultWarehouseId;
         let warehouseNameForRow = defaultWarehouseName;
         const rowWarehouseName = row["Tên kho"] ? row["Tên kho"].toString().trim() : "";
@@ -1639,35 +1676,53 @@ const importProducts = async (req, res) => {
 
         if (rowWarehouseName) {
           const lowerWName = rowWarehouseName.toLowerCase().trim();
+          
+          // Bước 1: Kiểm tra trong cache map
           if (warehouseMap.has(lowerWName)) {
             const wh = warehouseMap.get(lowerWName);
             warehouseIdForRow = wh._id;
             warehouseNameForRow = wh.name;
+            console.log(`📦 Using cached warehouse: ${wh.name} (ID: ${wh._id})`);
           } else {
-            // Generate a code for the new warehouse
-            const generatedWHCode = rowWarehouseName
-              .toUpperCase()
-              .normalize("NFD")
-              .replace(/[\u0300-\u036f]/g, "") // Remove accents
-              .replace(/\s+/g, "_")
-              .replace(/[^A-Z0-9_]/g, "")
-              .substring(0, 10) + "_" + Date.now().toString().slice(-4);
-
-            const newWh = new Warehouse({
-              code: generatedWHCode,
-              name: rowWarehouseName,
+            // Bước 2: Fallback - Query DB trực tiếp để tránh tạo trùng (case-insensitive)
+            const existingWarehouse = await Warehouse.findOne({
               store_id: storeId,
-              is_default: false,
-              address: rowWhAddress,
-              contact_person: rowWhContact,
-              phone: rowWhPhone,
-            });
-            await newWh.save({ session });
-            warehouseIdForRow = newWh._id;
-            warehouseNameForRow = newWh.name;
-            warehouseMap.set(lowerWName, newWh);
-            results.newlyCreated.warehouses++;
-            console.log(`✅ Created new warehouse: ${rowWarehouseName} (Code: ${generatedWHCode})`);
+              name: { $regex: new RegExp(`^${rowWarehouseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+            }).session(session);
+            
+            if (existingWarehouse) {
+              // Kho đã tồn tại trong DB - sử dụng và cập nhật cache
+              warehouseIdForRow = existingWarehouse._id;
+              warehouseNameForRow = existingWarehouse.name;
+              warehouseMap.set(lowerWName, existingWarehouse);
+              console.log(`📦 Found existing warehouse in DB: ${existingWarehouse.name} (ID: ${existingWarehouse._id})`);
+            } else {
+              // Bước 3: Tạo mới kho vì chưa tồn tại
+              const generatedWHCode = rowWarehouseName
+                .toUpperCase()
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "") // Remove accents
+                .replace(/\s+/g, "_")
+                .replace(/[^A-Z0-9_]/g, "")
+                .substring(0, 10) + "_" + Date.now().toString().slice(-4);
+
+              const newWh = new Warehouse({
+                code: generatedWHCode,
+                name: rowWarehouseName,
+                store_id: storeId,
+                is_default: false,
+                address: rowWhAddress,
+                contact_person: rowWhContact,
+                phone: rowWhPhone,
+              });
+              await newWh.save({ session });
+              warehouseIdForRow = newWh._id;
+              warehouseNameForRow = newWh.name;
+              // Thêm vào cache để các dòng tiếp theo có thể sử dụng
+              warehouseMap.set(lowerWName, newWh.toObject());
+              results.newlyCreated.warehouses++;
+              console.log(`✅ Created new warehouse: ${rowWarehouseName} (Code: ${generatedWHCode})`);
+            }
           }
         }
 
@@ -1806,14 +1861,20 @@ const importProducts = async (req, res) => {
             await voucher.save({ session });
             console.log(`📄 Appended item to session voucher: ${voucherCode}`);
           } else {
-            // Tạo mới: Kiểm tra trùng mã trong DB
+            // Tạo mới: Kiểm tra trùng mã trong DB (check cả store_id hiện tại VÀ null/legacy data)
             const existingVoucher = await InventoryVoucher.findOne({
-              store_id: storeId,
-              voucher_code: voucherCode
+              $or: [
+                { store_id: storeId, voucher_code: voucherCode },
+                { store_id: null, voucher_code: voucherCode },
+                { store_id: { $exists: false }, voucher_code: voucherCode }
+              ]
             }).session(session);
 
             if (existingVoucher) {
-              voucherCode = `${voucherCode}-${Date.now().toString().slice(-2)}`;
+              // Tạo mã mới unique: thêm timestamp + random để tránh trùng
+              const uniqueSuffix = `${Date.now().toString().slice(-6)}-${Math.random().toString(36).substring(2, 5)}`;
+              voucherCode = `${voucherCode}-${uniqueSuffix}`;
+              console.log(`⚠️ Voucher code conflict detected, using new code: ${voucherCode}`);
             }
 
             // --- Auto Query Recipient/Deliverer ---

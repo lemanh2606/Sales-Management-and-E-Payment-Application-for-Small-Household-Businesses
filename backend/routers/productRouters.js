@@ -63,6 +63,19 @@ const handleMulterError = (err, req, res, next) => {
 };
 
 /*
+  ROUTE: GET /api/products/expiring
+  - Lấy danh sách sản phẩm sắp hết hạn sử dụng
+  - Query params: storeId, days (số ngày tới khi hết hạn, mặc định 30)
+  - Middleware: verifyToken -> checkSubscriptionExpiry
+*/
+router.get(
+  "/expiring",
+  verifyToken,
+  checkSubscriptionExpiry,
+  getExpiringProducts
+);
+
+/*
   ROUTE: GET /api/products/template/download
   - Tải template import Excel/CSV
   - Query: ?format=excel hoặc ?format=csv
@@ -210,18 +223,6 @@ router.delete(
   deleteProduct
 );
 
-/*
-  ROUTE: GET /api/products/expiring
-  - Lấy danh sách sản phẩm sắp hết hạn sử dụng
-  - Query params: storeId, days (số ngày tới khi hết hạn, mặc định 30)
-  - Middleware: verifyToken -> checkSubscriptionExpiry
-*/
-router.get(
-  "/expiring",
-  verifyToken,
-  checkSubscriptionExpiry,
-  getExpiringProducts
-);
 
 /*
   ROUTE: GET /api/products/:productId
@@ -236,20 +237,6 @@ router.get(
   checkStoreAccess,
   requirePermission("products:view"),
   getProductById
-);
-
-/*
-  ROUTE: GET /api/products/store/:storeId/export
-  - Export danh sách sản phẩm ra Excel
-  - Middleware: verifyToken -> checkSubscriptionExpiry -> checkStoreAccess -> requirePermission("products:view")
-*/
-router.get(
-  "/store/:storeId/export",
-  verifyToken,
-  checkSubscriptionExpiry,
-  checkStoreAccess,
-  requirePermission("products:view"),
-  exportProducts // Cần implement hàm này trong controller
 );
 
 module.exports = router;

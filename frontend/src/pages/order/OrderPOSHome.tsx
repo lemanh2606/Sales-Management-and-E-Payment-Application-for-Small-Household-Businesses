@@ -150,6 +150,7 @@ interface OrderTab {
   orderCreatedAt: string;
   orderPrintCount: number;
   orderEarnedPoints: number;
+  isPaid: boolean; // ✅ Đánh dấu đơn hàng đã thanh toán (online)
 
   // Per-tab QR data
   qrImageUrl: string | null;
@@ -205,6 +206,7 @@ const OrderPOSHome: React.FC = () => {
       orderCreatedAt: "",
       orderPrintCount: 0,
       orderEarnedPoints: 0,
+      isPaid: false,
       qrImageUrl: null,
       qrPayload: null,
       qrExpiryTs: null,
@@ -288,6 +290,7 @@ const OrderPOSHome: React.FC = () => {
       tab.orderCreatedAt = "";
       tab.orderPrintCount = 0;
       tab.orderEarnedPoints = 0;
+      tab.isPaid = false; // ✅ Reset trạng thái đã thanh toán
       // Reset QR data
       tab.qrImageUrl = null;
       tab.qrPayload = null;
@@ -588,6 +591,21 @@ const OrderPOSHome: React.FC = () => {
 
   // Cập nhật số lượng sản phẩm trong giỏ
   const updateQuantity = (id: string, qty: number) => {
+    // Lưu lại pendingOrderId và isPaid trước khi update
+    const hasPendingOrder = currentTab.pendingOrderId !== null;
+    const isAlreadyPaid = currentTab.isPaid;
+    
+    // ✅ Ngăn chặn thay đổi số lượng khi đã thanh toán
+    if (isAlreadyPaid) {
+      Swal.fire({
+        icon: "warning",
+        title: "Không thể thay đổi",
+        text: "Đơn hàng đã được thanh toán. Vui lòng in hóa đơn để hoàn tất.",
+        confirmButtonText: "OK",
+      });
+      return;
+    }
+    
     updateOrderTab((tab) => {
       const item = tab.cart.find((i) => i.productId === id);
       if (!item) return;
@@ -619,6 +637,14 @@ const OrderPOSHome: React.FC = () => {
         );
       }
     });
+    
+    // ✅ Nếu đã có đơn hàng pending VÀ chưa thanh toán, tự động cập nhật đơn hàng
+    if (hasPendingOrder && !isAlreadyPaid) {
+      // Dùng setTimeout để đảm bảo state đã được cập nhật
+      setTimeout(() => {
+        createOrder();
+      }, 100);
+    }
   };
 
   // Tìm kiếm khách hàng với debounce
@@ -673,6 +699,7 @@ const OrderPOSHome: React.FC = () => {
         orderCreatedAt: "",
         orderPrintCount: 0,
         orderEarnedPoints: 0,
+        isPaid: false,
 
         // Thêm field QR
         qrImageUrl: null,
@@ -712,8 +739,8 @@ const OrderPOSHome: React.FC = () => {
   // Polling check QR Payment (Web Ver PayOS)
   useEffect(() => {
      const orderCode = currentTab?.qrPayload;
-     // Chỉ poll khi có QR và đang hiển thị (hoặc đơn đang pending chờ)
-     if (!orderCode || !currentTab.qrImageUrl || !currentTab.pendingOrderId) return;
+     // Chỉ poll khi có QR và đang hiển thị (hoặc đơn đang pending chờ) VÀ chưa thanh toán
+     if (!orderCode || !currentTab.qrImageUrl || !currentTab.pendingOrderId || currentTab.isPaid) return;
      
      // Cờ để tránh gọi liên tục nếu component unmount
      let isActive = true;
@@ -726,19 +753,24 @@ const OrderPOSHome: React.FC = () => {
                   // Stop polling
                   clearInterval(pollId);
                   
-                  // Show success
+                  // ✅ Đánh dấu đã thanh toán (KHÔNG tự động in)
+                  updateOrderTab((tab) => {
+                    tab.isPaid = true;
+                  });
+                  
+                  // Show success với nút in hóa đơn
                   Swal.fire({
                       icon: 'success',
-                      title: 'Đã nhận thanh toán!',
-                      text: 'Hệ thống PayOS xác nhận thành công.',
-                      timer: 2000,
-                      showConfirmButton: false
+                      title: '✅ Đã nhận thanh toán!',
+                      html: `
+                        <p>Hệ thống PayOS xác nhận thành công.</p>
+                        <p style="color: #1890ff; font-weight: bold; margin-top: 12px;">
+                          👉 Vui lòng ấn nút "In hóa đơn" bên dưới để hoàn tất đơn hàng.
+                        </p>
+                      `,
+                      confirmButtonText: 'Đã hiểu',
+                      confirmButtonColor: '#52c41a'
                   });
-
-                  // Trigger print bill (bao gồm set-paid)
-                  if (!isPrinting) {
-                     triggerPrint(currentTab.pendingOrderId!);
-                  }
              }
          } catch(e) {
              // ignore
@@ -750,7 +782,7 @@ const OrderPOSHome: React.FC = () => {
          isActive = false;
          clearInterval(pollId);
      };
-  }, [currentTab?.qrPayload, currentTab?.qrImageUrl, currentTab?.pendingOrderId]); // triggerPrint và isPrinting có thể cần check
+  }, [currentTab?.qrPayload, currentTab?.qrImageUrl, currentTab?.pendingOrderId, currentTab?.isPaid]);
 
   // Tạo đơn hàng
   const createOrder = async () => {
@@ -1990,52 +2022,82 @@ const OrderPOSHome: React.FC = () => {
       <Modal
         open={!!(currentTab.qrImageUrl || currentTab.qrPayload)}
         footer={
-          <div style={{ display: "flex", justifyContent: "center", gap: "12px" }}>
-            <Button
-              style={{ background: "#e7e4e4ff", borderColor: "#d9d9d9", color: "#595959" }}
-              key="cancel"
-              onClick={() => {
-                updateOrderTab((tab) => {
-                  tab.qrImageUrl = null;
-                  tab.qrPayload = null;
-                  tab.qrExpiryTs = null;
-                });
-              }}
-            >
-              Huỷ thanh toán
-            </Button>
-            <Button
-              key="print"
-              type="primary"
-              danger
-              onClick={() => {
-                if (currentTab.pendingOrderId) {
-                  // 🔴 Call API set-paid-QR + in bill trong 1 request
-                  (async () => {
-                    try {
-                      await axios.post(`${API_BASE}/orders/${currentTab.pendingOrderId}/print-bill`, {}, { headers });
-                      // Reset QR
-                      updateOrderTab((tab) => {
-                        tab.qrImageUrl = null;
-                        tab.qrPayload = null;
-                        tab.qrExpiryTs = null;
-                      });
-                      setBillModalOpen(true);
-                    } catch (err: any) {
-                      Swal.fire({
-                        icon: "error",
-                        title: "In hoá đơn thất bại",
-                        text: err.response?.data?.message || "Lỗi khi in hoá đơn",
-                        confirmButtonText: "OK",
-                      });
-                    }
-                  })();
-                }
-              }}
-              style={{ background: "#52c41a", borderColor: "#52c41a", color: "#fff" }}
-            >
-              In hoá đơn (Xác nhận thanh toán)
-            </Button>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
+            {/* ✅ Hiển thị trạng thái đã thanh toán */}
+            {currentTab.isPaid && (
+              <div style={{ 
+                background: "#f6ffed", 
+                border: "1px solid #b7eb8f", 
+                borderRadius: "8px", 
+                padding: "12px 24px",
+                marginBottom: "8px",
+                width: "100%",
+                textAlign: "center"
+              }}>
+                <Text strong style={{ color: "#52c41a", fontSize: "16px" }}>
+                  ✅ Đã nhận thanh toán thành công!
+                </Text>
+              </div>
+            )}
+            
+            <div style={{ display: "flex", justifyContent: "center", gap: "12px" }}>
+              {/* Chỉ hiện nút Huỷ khi CHƯA thanh toán */}
+              {!currentTab.isPaid && (
+                <Button
+                  style={{ background: "#e7e4e4ff", borderColor: "#d9d9d9", color: "#595959" }}
+                  key="cancel"
+                  onClick={() => {
+                    updateOrderTab((tab) => {
+                      tab.qrImageUrl = null;
+                      tab.qrPayload = null;
+                      tab.qrExpiryTs = null;
+                    });
+                  }}
+                >
+                  Huỷ thanh toán
+                </Button>
+              )}
+              <Button
+                key="print"
+                type="primary"
+                size="large"
+                onClick={() => {
+                  if (currentTab.pendingOrderId) {
+                    // 🔴 Call API set-paid-QR + in bill trong 1 request
+                    (async () => {
+                      try {
+                        await axios.post(`${API_BASE}/orders/${currentTab.pendingOrderId}/print-bill`, {}, { headers });
+                        // Reset QR
+                        updateOrderTab((tab) => {
+                          tab.qrImageUrl = null;
+                          tab.qrPayload = null;
+                          tab.qrExpiryTs = null;
+                        });
+                        setBillModalOpen(true);
+                      } catch (err: any) {
+                        Swal.fire({
+                          icon: "error",
+                          title: "In hoá đơn thất bại",
+                          text: err.response?.data?.message || "Lỗi khi in hoá đơn",
+                          confirmButtonText: "OK",
+                        });
+                      }
+                    })();
+                  }
+                }}
+                style={{ 
+                  background: currentTab.isPaid ? "#52c41a" : "#1890ff", 
+                  borderColor: currentTab.isPaid ? "#52c41a" : "#1890ff", 
+                  color: "#fff",
+                  minWidth: currentTab.isPaid ? "200px" : "auto",
+                  height: currentTab.isPaid ? "48px" : "auto",
+                  fontSize: currentTab.isPaid ? "16px" : "14px",
+                  fontWeight: currentTab.isPaid ? 600 : 400
+                }}
+              >
+                {currentTab.isPaid ? "🖨️ In hoá đơn" : "In hoá đơn (Xác nhận thanh toán)"}
+              </Button>
+            </div>
           </div>
         }
         onCancel={() => {

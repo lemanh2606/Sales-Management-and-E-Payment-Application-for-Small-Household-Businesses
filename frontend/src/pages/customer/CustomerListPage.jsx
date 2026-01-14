@@ -824,7 +824,7 @@ export default function CustomerListPage() {
       </Modal>
 
       {/* Custom CSS for table rows */}
-      <style jsx>{`
+      <style>{`
         :global(.table-row-light) {
           background-color: #ffffff;
         }

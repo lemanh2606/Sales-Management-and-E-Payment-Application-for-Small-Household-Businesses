@@ -617,7 +617,7 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
         </Form.Item>
       </Form>
 
-      <style jsx global>{`
+      <style>{`
         .ant-modal-body::-webkit-scrollbar {
           width: 8px;
         }

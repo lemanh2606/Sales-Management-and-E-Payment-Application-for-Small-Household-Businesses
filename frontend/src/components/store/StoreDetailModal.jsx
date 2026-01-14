@@ -534,7 +534,7 @@ export default function StoreDetailModal({ open, onClose, store, onEdit, onSelec
         </div>
       </div>
 
-      <style jsx global>{`
+      <style>{`
         .ant-modal-content {
           border-radius: 16px !important;
           overflow: hidden;

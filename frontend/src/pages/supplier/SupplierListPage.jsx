@@ -811,7 +811,7 @@ export default function SupplierListPage() {
           <SupplierDetailModal open={detailModalOpen} onOpenChange={setDetailModalOpen} supplierId={detailSupplierId} />
         </Card>
 
-        <style jsx>{`
+        <style>{`
           :global(.table-row-light) {
             background-color: #fafbfc;
           }

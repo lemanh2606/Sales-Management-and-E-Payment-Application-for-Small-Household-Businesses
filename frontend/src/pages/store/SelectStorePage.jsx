@@ -823,7 +823,9 @@ export default function SelectStorePage() {
           {/* Content Area */}
           {loading ? (
             <div style={{ textAlign: "center", padding: "100px 0" }}>
-              <Spin size="large" tip={<Text style={{ marginTop: 16, fontSize: 16, color: "#667eea" }}>Đang tải danh sách cửa hàng...</Text>} />
+              <Spin size="large" tip={<Text style={{ marginTop: 16, fontSize: 16, color: "#667eea" }}>Đang tải danh sách cửa hàng...</Text>}>
+                <div style={{ minHeight: 100 }} />
+              </Spin>
             </div>
           ) : filteredStores.length === 0 ? (
             <Card
@@ -837,7 +839,7 @@ export default function SelectStorePage() {
             >
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
-                imageStyle={{ height: 120 }}
+                styles={{ image: { height: 120 } }}
                 description={
                   <Space direction="vertical" size={16}>
                     <Title level={3} style={{ margin: 0, color: "#8c8c8c" }}>
@@ -1361,7 +1363,7 @@ export default function SelectStorePage() {
       />
 
       {/* Custom Styles */}
-      <style jsx global>{`
+      <style>{`
         .store-card-modern:hover {
           transform: translateY(-8px);
           box-shadow: 0 12px 40px rgba(102, 126, 234, 0.25) !important;

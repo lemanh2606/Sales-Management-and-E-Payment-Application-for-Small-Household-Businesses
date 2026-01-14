@@ -26,12 +26,14 @@ import {
   PercentageOutlined,
   UndoOutlined,
   FilePdfOutlined,
+  FileExcelOutlined,
   BarChartOutlined,
   UserOutlined,
   InfoCircleOutlined,
   InboxOutlined,
   WarningOutlined,
   CheckCircleOutlined,
+  DownloadOutlined,
 } from "@ant-design/icons";
 import axios from "axios";
 import dayjs, { Dayjs } from "dayjs";
@@ -60,12 +62,20 @@ const API_BASE = `${apiUrl}`;
 
 // Interface định nghĩa kiểu dữ liệu
 interface ReportSummary {
+  // Doanh thu
+  grossRevenue: number; // Doanh thu gộp (trước hoàn)
+  totalRefundAmount: number; // Tiền hoàn
+  totalRevenue: number; // Doanh thu thực (đã trừ hoàn)
+  
+  // Tiền mặt
+  grossCashInDrawer: number; // Tiền mặt trước hoàn
+  cashRefundAmount: number; // Tiền mặt hoàn
+  cashInDrawer: number; // Tiền mặt thực
+  
+  // Thống kê khác
   totalOrders: number;
-  totalRevenue: number;
   vatTotal: number;
-  totalRefunds: number;
-  refundAmount: number;
-  cashInDrawer: number;
+  totalRefunds: number; // Số lần hoàn
   totalDiscount: number;
   totalLoyaltyUsed: number;
   totalLoyaltyEarned: number;
@@ -275,9 +285,58 @@ const EndOfDayReport: React.FC = () => {
     return numValue.toLocaleString("vi-VN") + "₫";
   };
 
+  // Tạo periodKey cho export
+  const getPeriodKey = (): string => {
+    const vnDate = selectedDate.tz("Asia/Ho_Chi_Minh");
+    switch (periodType) {
+      case "day": return vnDate.format("YYYY-MM-DD");
+      case "month": return vnDate.format("YYYY-MM");
+      case "quarter": return `${vnDate.year()}-Q${Math.floor(vnDate.month() / 3 + 1)}`;
+      case "year": return vnDate.format("YYYY");
+      default: return vnDate.format("YYYY-MM-DD");
+    }
+  };
+
+  // Xuất Excel
+  const handleExportExcel = async () => {
+    try {
+      message.loading({ content: "Đang xuất Excel...", key: "export" });
+      const periodKey = getPeriodKey();
+      const res = await axios.get(`${API_BASE}/financials/end-of-day/${storeId}/export`, {
+        params: { periodType, periodKey, format: "xlsx" },
+        headers,
+        responseType: "blob",
+      });
+      const blob = new Blob([res.data], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const link = document.createElement("a");
+      link.href = window.URL.createObjectURL(blob);
+      link.download = `Bao_Cao_Cuoi_Ngay_${periodKey}.xlsx`;
+      link.click();
+      message.success({ content: "Xuất Excel thành công!", key: "export" });
+    } catch (err: any) {
+      message.error({ content: err.response?.data?.message || "Lỗi xuất Excel", key: "export" });
+    }
+  };
+
   // Xuất PDF
-  const handleExportPDF = () => {
-    message.info("Tính năng xuất PDF đang được phát triển...");
+  const handleExportPDF = async () => {
+    try {
+      message.loading({ content: "Đang xuất PDF...", key: "export" });
+      const periodKey = getPeriodKey();
+      const res = await axios.get(`${API_BASE}/financials/end-of-day/${storeId}/export`, {
+        params: { periodType, periodKey, format: "pdf" },
+        headers,
+        responseType: "blob",
+      });
+      const blob = new Blob([res.data], { type: "application/pdf" });
+      const link = document.createElement("a");
+      link.href = window.URL.createObjectURL(blob);
+      link.download = `Bao_Cao_Cuoi_Ngay_${periodKey}.pdf`;
+      link.click();
+      message.success({ content: "Xuất PDF thành công!", key: "export" });
+    } catch (err: any) {
+      message.error({ content: err.response?.data?.message || "Lỗi xuất PDF", key: "export" });
+    }
   };
 
   // Render loading
@@ -385,6 +444,15 @@ const EndOfDayReport: React.FC = () => {
                   Làm mới
                 </Button>
                 <Button 
+                  type="default" 
+                  size="large" 
+                  icon={<FileExcelOutlined />} 
+                  onClick={handleExportExcel}
+                  style={{ background: '#52c41a', borderColor: '#52c41a', color: '#fff' }}
+                >
+                  Xuất Excel
+                </Button>
+                <Button 
                   type="primary" 
                   size="large" 
                   icon={<FilePdfOutlined />} 
@@ -438,7 +506,7 @@ const EndOfDayReport: React.FC = () => {
             <div className="stat-card-inner gradient-error">
               <Statistic
                 title={<span style={{ color: 'rgba(255,255,255,0.8)' }}>Tiền hoàn hàng</span>}
-                value={reportData.summary.refundAmount}
+                value={reportData.summary.totalRefundAmount}
                 formatter={(v) => formatCurrency(Number(v))}
                 valueStyle={{ color: '#fff', fontWeight: 800, fontSize: '20px' }}
                 prefix={<UndoOutlined />}
@@ -712,7 +780,7 @@ const EndOfDayReport: React.FC = () => {
             <Text strong style={{ fontSize: 16, color: "#ff4d4f" }}>
               {`Trong ${PERIOD_LABELS[periodType] || "khoảng thời gian này"} có ${
                 reportData.summary.totalRefunds
-              } đơn hoàn, tổng giá trị: ${formatCurrency(reportData.summary.refundAmount)}`}
+              } đơn hoàn, tổng giá trị: ${formatCurrency(reportData.summary.totalRefundAmount)}`}
             </Text>
           </div>
           <Table

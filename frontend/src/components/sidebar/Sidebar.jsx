@@ -100,7 +100,7 @@ export default function Sidebar({ onCollapsedChange }) {
           {
             key: "/select-store",
             label: <span style={{ fontSize: 13.5 }}> Chọn cửa hàng khác</span>,
-            permission: "store:view",
+            permission: "store:create",
           },
           {
             key: "/update/store",
@@ -114,26 +114,26 @@ export default function Sidebar({ onCollapsedChange }) {
         label: "Quản lý kho",
         icon: <AppstoreOutlined style={{ fontSize: 18 }} />,
         children: [
-          { key: "/warehouses", label: <span style={{ fontSize: 13.5 }}>Kho hàng</span>, permission: "warehouses:view" },
+          { key: "/warehouses", label: <span style={{ fontSize: 13.5 }}>Kho hàng</span>, permission: "warehouses:create" },
           {
             key: "/inventory-vouchers",
             label: <span style={{ fontSize: 13.5 }}>Phiếu nhập/xuất kho</span>,
-            permission: "inventory:voucher:view",
+            permission: "inventory:voucher:create",
           },
           {
             key: "/products",
             label: <span style={{ fontSize: 13.5 }}>Danh sách hàng hóa</span>,
-            permission: "products:view",
+            permission: "products:create",
           },
           {
             key: "/suppliers",
             label: <span style={{ fontSize: 13.5 }}>Nhà cung cấp</span>,
-            permission: "suppliers:view",
+            permission: "suppliers:create",
           },
           {
             key: "/product-groups",
             label: <span style={{ fontSize: 13.5 }}>Nhóm hàng hoá</span>,
-            permission: "product-groups:view",
+            permission: "product-groups:create",
           },
         ],
       },
@@ -179,7 +179,7 @@ export default function Sidebar({ onCollapsedChange }) {
           {
             key: `/stores/${storeId}/employees`,
             label: <span style={{ fontSize: 13.5 }}>Danh sách nhân viên</span>,
-            permission: "store:employee:view",
+            permission: "store:employee:create",
           },
         ],
       },
@@ -494,6 +494,9 @@ export default function Sidebar({ onCollapsedChange }) {
               <div style={{ color: "#fff", fontSize: 14, fontWeight: 700, letterSpacing: 0.2 }}>
                 {user.fullname || user.username || user.name || "User"}
               </div>
+              <div style={{ color: "#fff", fontSize: 14, opacity: 0.88 }}>
+                {user.role === "MANAGER" ? "Quản lý" : "Nhân viên"}
+              </div>
             </div>
           )}
 
@@ -716,7 +719,7 @@ export default function Sidebar({ onCollapsedChange }) {
         </div>
       </Drawer>
 
-      <style jsx global>{`
+      <style>{`
         @media (max-width: 768px) {
           .desktop-sidebar {
             display: none !important;

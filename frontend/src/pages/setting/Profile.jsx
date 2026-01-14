@@ -324,7 +324,9 @@ export default function Profile() {
       >
         {loading ? (
           <div className="flex justify-center items-center h-64">
-            <Spin size="large" tip="Đang tải dữ liệu hồ sơ..." />
+            <Spin size="large" tip="Đang tải dữ liệu hồ sơ...">
+              <div style={{ minHeight: 80 }} />
+            </Spin>
           </div>
         ) : (
           <>

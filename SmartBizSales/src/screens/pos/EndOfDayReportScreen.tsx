@@ -21,6 +21,8 @@ import DateTimePicker, {
 } from "@react-native-community/datetimepicker";
 import dayjs from "dayjs";
 import apiClient from "../../api/apiClient";
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
 
 import Svg, { G, Path, Circle } from "react-native-svg";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -31,12 +33,20 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 type MongoDecimal = { $numberDecimal: string };
 
 type ReportSummary = {
+  // Doanh thu
+  grossRevenue: number; // Doanh thu gộp (trước hoàn)
+  totalRefundAmount: number; // Tiền hoàn
+  totalRevenue: number; // Doanh thu thực (đã trừ hoàn)
+  
+  // Tiền mặt
+  grossCashInDrawer: number; // Tiền mặt trước hoàn
+  cashRefundAmount: number; // Tiền mặt hoàn
+  cashInDrawer: number; // Tiền mặt thực
+  
+  // Thống kê khác
   totalOrders: number;
-  totalRevenue: number;
   vatTotal: number;
-  totalRefunds: number;
-  refundAmount: number;
-  cashInDrawer: number;
+  totalRefunds: number; // Số lần hoàn
   totalDiscount: number;
   totalLoyaltyUsed: number;
   totalLoyaltyEarned: number;
@@ -545,9 +555,53 @@ const EndOfDayReportScreen: React.FC = () => {
     [reportData, stockLimit]
   );
 
-  const onExportPDF = () => {
-    Alert.alert("Thông báo", "Tính năng xuất PDF đang được phát triển.");
+  // ===== EXPORT FUNCTIONS =====
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = async (format: "pdf" | "xlsx") => {
+    if (!storeId || exporting) return;
+    setExporting(true);
+    try {
+      const periodKey = periodKeyFromDate(selectedDate, periodType);
+      const filename = `Bao_Cao_Cuoi_Ngay_${periodKey.replace(/[/:]/g, "-")}.${format}`;
+      // Sử dụng type assertion để tránh lỗi TypeScript với expo-file-system
+      const fs = FileSystem as any;
+      const cacheDir = fs.cacheDirectory || fs.documentDirectory || "";
+      const fileUri = cacheDir + filename;
+
+      // Download file from API
+      const downloadRes = await fs.downloadAsync(
+        `${apiClient.defaults.baseURL}/financials/end-of-day/${storeId}/export?periodType=${periodType}&periodKey=${periodKey}&format=${format}`,
+        fileUri,
+        {
+          headers: authHeaders as Record<string, string>,
+        }
+      );
+
+      if (downloadRes.status !== 200) {
+        Alert.alert("Lỗi", "Không thể tải file. Vui lòng thử lại.");
+        return;
+      }
+
+      // Share file
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(downloadRes.uri, {
+          mimeType: format === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          dialogTitle: `Chia sẻ báo cáo ${format.toUpperCase()}`,
+        });
+      } else {
+        Alert.alert("Thành công", `Đã lưu file: ${filename}`);
+      }
+    } catch (err: any) {
+      console.error("Export error:", err);
+      Alert.alert("Lỗi", err?.message || "Không thể xuất báo cáo. Vui lòng thử lại.");
+    } finally {
+      setExporting(false);
+    }
   };
+
+  const onExportPDF = () => handleExport("pdf");
+  const onExportExcel = () => handleExport("xlsx");
 
   if (loadingInit) {
     return (
@@ -729,16 +783,33 @@ const EndOfDayReportScreen: React.FC = () => {
             title={headerTitle}
             subtitle={`Kỳ: ${PERIOD_LABELS[periodType]}`}
             right={
-              <Pressable
-                onPress={onExportPDF}
-                style={({ pressed }) => [
-                  styles.btnTiny,
-                  pressed && { opacity: 0.92 },
-                ]}
-              >
-                <Ionicons name="document-text-outline" size={16} color="#fff" />
-                <Text style={styles.btnTinyText}>PDF</Text>
-              </Pressable>
+              <View style={{ flexDirection: "row", gap: 6 }}>
+                <Pressable
+                  onPress={onExportExcel}
+                  disabled={exporting}
+                  style={({ pressed }) => [
+                    styles.btnTiny,
+                    { backgroundColor: COLORS.green },
+                    pressed && { opacity: 0.92 },
+                    exporting && { opacity: 0.5 },
+                  ]}
+                >
+                  <MaterialCommunityIcons name="file-excel-outline" size={16} color="#fff" />
+                  <Text style={styles.btnTinyText}>Excel</Text>
+                </Pressable>
+                <Pressable
+                  onPress={onExportPDF}
+                  disabled={exporting}
+                  style={({ pressed }) => [
+                    styles.btnTiny,
+                    pressed && { opacity: 0.92 },
+                    exporting && { opacity: 0.5 },
+                  ]}
+                >
+                  <Ionicons name="document-text-outline" size={16} color="#fff" />
+                  <Text style={styles.btnTinyText}>PDF</Text>
+                </Pressable>
+              </View>
             }
           />
 
@@ -875,7 +946,7 @@ const EndOfDayReportScreen: React.FC = () => {
           />
           <StatTile
             title="Hoàn hàng"
-            value={formatCurrency(reportData.summary.refundAmount)}
+            value={formatCurrency(reportData.summary.totalRefundAmount)}
             tone="danger"
             icon={
               <Ionicons
@@ -1094,7 +1165,7 @@ const EndOfDayReportScreen: React.FC = () => {
               <Ionicons name="alert-circle-outline" size={18} color="#be123c" />
               <Text style={styles.refundBannerText}>
                 Tổng giá trị hoàn:{" "}
-                {formatCurrency(reportData.summary.refundAmount)}
+                {formatCurrency(reportData.summary.totalRefundAmount)}
               </Text>
             </View>
 

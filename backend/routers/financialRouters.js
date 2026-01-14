@@ -1,6 +1,6 @@
 // routers/financialRouters.js
 const express = require("express");
-const { getFinancialSummary, exportFinancial, generateEndOfDayReport } = require("../controllers/financialController");
+const { getFinancialSummary, exportFinancial, generateEndOfDayReport, exportEndOfDayReport } = require("../controllers/financialController");
 const { verifyToken, checkStoreAccess, requirePermission } = require("../middlewares/authMiddleware");
 const router = express.Router();
 
@@ -12,5 +12,8 @@ router.get("/end-of-day/:storeId", verifyToken, checkStoreAccess, requirePermiss
 
 // GET /api/financial/export?storeId=...&periodType=...&format=pdf|csv
 router.get("/export", verifyToken, checkStoreAccess, requirePermission("reports:financial:export"), exportFinancial);
+
+// GET /api/financial/end-of-day/:storeId/export?periodType=...&periodKey=...&format=xlsx|pdf
+router.get("/end-of-day/:storeId/export", verifyToken, checkStoreAccess, requirePermission("reports:endofday:export"), exportEndOfDayReport);
 
 module.exports = router;

@@ -297,7 +297,7 @@ export default function SupplierDetailModal({ supplierId, open, onOpenChange }) 
         )}
       </Modal>
 
-      <style jsx global>{`
+      <style>{`
         .ant-modal-content {
           border-radius: 16px !important;
           overflow: hidden;

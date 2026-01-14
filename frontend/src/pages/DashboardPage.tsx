@@ -1057,7 +1057,9 @@ export default function DashboardPage() {
                   justifyContent: "center",
                 }}
               >
-                <Spin tip="Đang tải..." />
+                <Spin tip="Đang tải...">
+                  <div style={{ minHeight: 60 }} />
+                </Spin>
               </div>
             ) : errorRevenue ? (
               <Alert type="error" message={errorRevenue} />
@@ -1195,7 +1197,9 @@ export default function DashboardPage() {
                   justifyContent: "center",
                 }}
               >
-                <Spin tip="Đang tải..." />
+                <Spin tip="Đang tải...">
+                  <div style={{ minHeight: 60 }} />
+                </Spin>
               </div>
             ) : errorTopProducts ? (
               <Alert type="error" message={errorTopProducts} />

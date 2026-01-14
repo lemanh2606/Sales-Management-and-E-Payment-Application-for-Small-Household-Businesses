@@ -61,18 +61,18 @@ const PERMISSION_GROUP_ORDER = [
   "loyalty",
   "orders",
   "products",
-  "product-groups",
-  "purchase-orders",
+  // "product-groups",
+  // "purchase-orders",
   "purchase-returns",
   "inventory",
-  "suppliers",
-  "taxes",
+  // "suppliers",
+  // "taxes",
   "reports",
-  "employees",
+  // "employees",
   "users",
   "settings",
   "notifications",
-  "subscription",
+  // "subscription",
   "files",
 ];
 
@@ -83,17 +83,17 @@ const PERMISSION_CATEGORY_LABELS = {
   orders: "Đơn hàng",
   reports: "Báo cáo",
   products: "Sản phẩm",
-  "product-groups": "Nhóm sản phẩm",
-  "purchase-orders": "Đơn nhập hàng",
-  "purchase-returns": "Trả hàng nhập",
+  // "product-groups": "Nhóm sản phẩm",
+  // "purchase-orders": "Đơn nhập hàng",
+  "purchase-returns": "Trả hàng",
   inventory: "Kiểm kho & xử lý tồn",
-  suppliers: "Nhà cung cấp",
-  taxes: "Khai báo thuế",
-  employees: "Nhân sự toàn hệ thống",
+  // suppliers: "Nhà cung cấp",
+  // taxes: "Khai báo thuế",
+  // employees: "Nhân sự toàn hệ thống",
   users: "Người dùng & quyền",
   settings: "Thiết lập hệ thống",
   notifications: "Thông báo",
-  subscription: "Gói dịch vụ",
+  // subscription: "Gói dịch vụ",
   files: "Tệp & xuất liệu",
 };
 
@@ -107,7 +107,7 @@ const PERMISSION_LABELS = {
   "store:dashboard:view": "Xem bảng điều khiển",
   // "store:staff:assign": "Gán nhân viên vào cửa hàng",
   // "store:employee:create": "Tạo nhân viên",
-  "store:employee:view": "Xem danh sách nhân viên",
+  // "store:employee:view": "Xem danh sách nhân viên",
   // "store:employee:update": "Chỉnh sửa nhân viên",
   // "store:employee:delete": "Xóa nhân viên",
   // "store:employee:softDelete": "Xóa mềm nhân viên",
@@ -163,10 +163,10 @@ const PERMISSION_LABELS = {
   // "product-groups:delete": "Xóa nhóm sản phẩm",
 
   // ========== PURCHASE ORDER PERMISSIONS ==========
-  "purchase-orders:create": "Tạo đơn nhập hàng",
-  "purchase-orders:view": "Xem đơn nhập hàng",
-  "purchase-orders:update": "Cập nhật đơn nhập hàng",
-  "purchase-orders:delete": "Xóa đơn nhập hàng",
+  // "purchase-orders:create": "Tạo đơn nhập hàng",
+  // "purchase-orders:view": "Xem đơn nhập hàng",
+  // "purchase-orders:update": "Cập nhật đơn nhập hàng",
+  // "purchase-orders:delete": "Xóa đơn nhập hàng",
 
   // ========== PURCHASE RETURN PERMISSIONS ==========
   "purchase-returns:create": "Tạo phiếu trả hàng",
@@ -175,15 +175,15 @@ const PERMISSION_LABELS = {
   "purchase-returns:delete": "Xóa phiếu trả hàng",
 
   // ========== INVENTORY PERMISSIONS ==========
-  "inventory:stock-check:create": "Tạo phiếu kiểm kho",
+  // "inventory:stock-check:create": "Tạo phiếu kiểm kho",
   "inventory:stock-check:view": "Báo cáo tồn kho",
-  "inventory:stock-check:detail": "Xem chi tiết kiểm kho",
-  "inventory:stock-check:update": "Cập nhật phiếu kiểm kho",
-  "inventory:stock-check:delete": "Xóa phiếu kiểm kho",
-  "inventory:disposal:create": "Tạo phiếu xử lý hàng hỏng",
-  "inventory:disposal:view": "Xem phiếu xử lý hàng hỏng",
-  "inventory:disposal:update": "Cập nhật phiếu xử lý",
-  "inventory:disposal:delete": "Xóa phiếu xử lý",
+  // "inventory:stock-check:detail": "Xem chi tiết kiểm kho",
+  // "inventory:stock-check:update": "Cập nhật phiếu kiểm kho",
+  // "inventory:stock-check:delete": "Xóa phiếu kiểm kho",
+  // "inventory:disposal:create": "Tạo phiếu xử lý hàng hỏng",
+  // "inventory:disposal:view": "Xem phiếu xử lý hàng hỏng",
+  // "inventory:disposal:update": "Cập nhật phiếu xử lý",
+  // "inventory:disposal:delete": "Xóa phiếu xử lý",
 
   // ========== SUPPLIER PERMISSIONS ==========
   // "suppliers:create": "Thêm nhà cung cấp",
@@ -210,16 +210,16 @@ const PERMISSION_LABELS = {
 
   // ========== USER PERMISSIONS ==========
   "users:view": "Xem hồ sơ cá nhân",
-  "users:manage": "Quản trị người dùng",
+  // "users:manage": "Quản trị người dùng",
   "users:role:update": "Đổi vai trò người dùng",
-  "users:menu:update": "Cập nhật quyền menu",
+  // "users:menu:update": "Cập nhật quyền menu",
   "users:update": "Cập nhật thông tin người dùng",
-  "users:create": "Tạo người dùng",
+  // "users:create": "Tạo người dùng",
   "users:delete": "Xóa người dùng",
 
   // ========== SETTINGS PERMISSIONS ==========
-  "settings:activity-log": "Thiết lập nhật ký hoạt động",
-  "settings:payment-method": "Quản lý phương thức thanh toán",
+  // "settings:activity-log": "Thiết lập nhật ký hoạt động",
+  // "settings:payment-method": "Quản lý phương thức thanh toán",
   "settings:view": "Xem thiết lập",
   "settings:update": "Cập nhật thiết lập",
 
@@ -248,7 +248,7 @@ const PERMISSION_LABELS = {
   "orders:*": "Toàn quyền đơn hàng",
   "customers:*": "Toàn quyền khách hàng",
   "reports:*": "Toàn quyền báo cáo",
-  "inventory:*": "Toàn quyền kho",
+  // "inventory:*": "Toàn quyền kho",
   // "taxes:*": "Toàn quyền thuế",
   "users:*": "Toàn quyền người dùng",
 };

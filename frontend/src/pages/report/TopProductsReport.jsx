@@ -387,7 +387,9 @@ const TopProductsReport = () => {
         ) : loading ? (
           <Card style={{ border: "1px solid #8c8c8c" }}>
             <div style={{ textAlign: "center", padding: "80px 0" }}>
-              <Spin size="large" tip="Đang tải top sản phẩm..." />
+              <Spin size="large" tip="Đang tải top sản phẩm...">
+                <div style={{ minHeight: 80 }} />
+              </Spin>
             </div>
           </Card>
         ) : products.length === 0 ? (

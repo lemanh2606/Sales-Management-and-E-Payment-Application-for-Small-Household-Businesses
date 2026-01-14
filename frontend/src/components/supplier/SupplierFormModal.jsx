@@ -437,7 +437,7 @@ export default function SupplierFormModal({ open, onOpenChange, storeId, supplie
                 </Form>
             </Modal>
 
-            <style jsx>{`
+            <style>{`
         .ant-modal-content {
           border-radius: 16px !important;
           overflow: hidden;

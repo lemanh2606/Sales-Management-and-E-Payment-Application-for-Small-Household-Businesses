@@ -1318,7 +1318,7 @@ export default function ProductListPage() {
           </Space>
         </Modal>
 
-        <style jsx global>{`
+        <style>{`
           .ant-notification-notice {
             border-radius: 12px !important;
           }

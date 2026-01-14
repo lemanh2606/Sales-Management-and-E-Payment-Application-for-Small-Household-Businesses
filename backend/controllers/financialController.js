@@ -955,20 +955,41 @@ const generateEndOfDayReport = async (req, res) => {
           as: "order",
         },
       },
+      { $unwind: "$order" },
       { $match: { "order.storeId": new mongoose.Types.ObjectId(storeId) } },
       {
         $group: {
           _id: null,
           totalRefunds: { $sum: 1 },
-          refundAmount: { $sum: "$refundAmount" },
+          refundAmount: { $sum: { $toDecimal: "$refundAmount" } },
+          // Tính riêng tiền hoàn tiền mặt
+          cashRefundAmount: {
+            $sum: {
+              $cond: [
+                { $eq: ["$order.paymentMethod", "cash"] },
+                { $toDecimal: "$refundAmount" },
+                0
+              ]
+            }
+          }
         },
       },
     ]);
-    const refundSummary = refunds[0] || { totalRefunds: 0, refundAmount: 0 };
+    const refundSummary = refunds[0] || { totalRefunds: 0, refundAmount: 0, cashRefundAmount: 0 };
 
     //phân loại hoàn hàng theo nhân viên, ai tiếp khách để hoàn hàng
     const refundsByEmployee = await OrderRefund.aggregate([
       { $match: { refundedAt: { $gte: start, $lte: end } } },
+      {
+        $lookup: {
+          from: "orders",
+          localField: "orderId",
+          foreignField: "_id",
+          as: "order",
+        },
+      },
+      { $unwind: { path: "$order", preserveNullAndEmptyArrays: true } },
+      { $match: { "order.storeId": new mongoose.Types.ObjectId(storeId) } },
       {
         $lookup: {
           from: "employees",
@@ -981,16 +1002,22 @@ const generateEndOfDayReport = async (req, res) => {
         $project: {
           _id: 0,
           refundedBy: "$refundedBy",
-          name: { $arrayElemAt: ["$employee.fullName", 0] },
+          name: { 
+            $ifNull: [
+              { $arrayElemAt: ["$employee.fullName", 0] }, 
+              "Chủ cửa hàng (Admin)"
+            ]
+          },
           refundAmount: 1,
           refundedAt: 1,
+          refundReason: 1,
         },
       },
     ]);
 
     // 6. Tồn kho cuối ngày
     const stockSnapshot = await Product.aggregate([
-      { $match: { store_id: new mongoose.Types.ObjectId(storeId) } },
+      { $match: { store_id: new mongoose.Types.ObjectId(storeId), isDeleted: { $ne: true } } },
       {
         $project: {
           productId: "$_id",
@@ -999,32 +1026,73 @@ const generateEndOfDayReport = async (req, res) => {
           stock: "$stock_quantity",
         },
       },
+      { $sort: { stock: 1 } }, // Sắp xếp theo tồn kho thấp -> cao
+      { $limit: 50 }, // Giới hạn 50 sản phẩm
     ]);
 
-    const storeInfo = await Store.findById(storeId).select("name");
+    const storeInfo = await Store.findById(storeId).select("name address phone");
+    
+    // ✅ TÍNH TOÁN ĐÚNG: Trừ giá trị hoàn
+    const grossRevenue = toNumber(orderSummary.totalRevenue);
+    const totalRefundAmount = toNumber(refundSummary.refundAmount);
+    const cashRefundAmount = toNumber(refundSummary.cashRefundAmount);
+    const grossCashInDrawer = toNumber(orderSummary.cashInDrawer);
+    
+    // Doanh thu thực = Doanh thu gộp - Tiền hoàn
+    const netRevenue = Math.max(0, grossRevenue - totalRefundAmount);
+    // Tiền mặt thực = Tiền mặt thu - Tiền mặt hoàn
+    const netCashInDrawer = Math.max(0, grossCashInDrawer - cashRefundAmount);
+    
     // Tổng hợp báo cáo
     const report = {
       date: format(end, "dd/MM/yyyy"),
+      periodType,
+      periodKey,
+      periodStart: format(start, "dd/MM/yyyy HH:mm"),
+      periodEnd: format(end, "dd/MM/yyyy HH:mm"),
       store: {
         _id: storeId,
         name: storeInfo?.name || "Không xác định",
+        address: storeInfo?.address || "",
+        phone: storeInfo?.phone || "",
       },
       summary: {
+        // ✅ Doanh thu
+        grossRevenue: grossRevenue, // Tổng doanh thu trước hoàn
+        totalRefundAmount: totalRefundAmount, // Tiền hoàn
+        totalRevenue: netRevenue, // Doanh thu thực (đã trừ hoàn)
+        
+        // ✅ Tiền mặt
+        grossCashInDrawer: grossCashInDrawer, // Tiền mặt trước hoàn
+        cashRefundAmount: cashRefundAmount, // Tiền mặt hoàn
+        cashInDrawer: netCashInDrawer, // Tiền mặt thực (đã trừ hoàn)
+        
+        // ✅ Thống kê khác
         totalOrders: toNumber(orderSummary.totalOrders),
-        totalRevenue: toNumber(orderSummary.totalRevenue),
         vatTotal: toNumber(orderSummary.totalVAT),
         totalRefunds: toNumber(refundSummary.totalRefunds),
-        refundAmount: toNumber(refundSummary.refundAmount),
-        cashInDrawer: toNumber(orderSummary.cashInDrawer),
         totalDiscount: toNumber(orderSummary.totalDiscount),
         totalLoyaltyUsed: toNumber(orderSummary.totalLoyaltyUsed),
         totalLoyaltyEarned: toNumber(orderSummary.totalLoyaltyEarned),
       },
-      byPayment,
-      byEmployee,
-      byProduct,
+      byPayment: byPayment.map(p => ({
+        ...p,
+        revenue: toNumber(p.revenue),
+      })),
+      byEmployee: byEmployee.map(e => ({
+        ...e,
+        revenue: toNumber(e.revenue),
+        avgOrderValue: toNumber(e.avgOrderValue),
+      })),
+      byProduct: byProduct.map(p => ({
+        ...p,
+        revenue: toNumber(p.revenue),
+      })),
       stockSnapshot,
-      refundsByEmployee,
+      refundsByEmployee: refundsByEmployee.map(r => ({
+        ...r,
+        refundAmount: toNumber(r.refundAmount),
+      })),
     };
 
     res.json({ message: "Báo cáo cuối ngày thành công", report });
@@ -1034,8 +1102,349 @@ const generateEndOfDayReport = async (req, res) => {
   }
 };
 
+// =====================================================================
+// Export báo cáo cuối ngày ra Excel/PDF
+// =====================================================================
+const exportEndOfDayReport = async (req, res) => {
+  try {
+    const dayjs = require("dayjs");
+    const { storeId } = req.params;
+    const { periodType = "day", periodKey = new Date().toISOString().split("T")[0], format: exportFormat = "xlsx" } = req.query;
+
+    // Lấy khoảng thời gian
+    const { start, end } = periodToRange(periodType, periodKey);
+    const objectStoreId = new mongoose.Types.ObjectId(storeId);
+
+    // ===== Lấy dữ liệu (tái sử dụng logic từ generateEndOfDayReport) =====
+    // 1. Tổng doanh thu
+    const ordersAgg = await Order.aggregate([
+      {
+        $match: {
+          storeId: objectStoreId,
+          status: { $in: ["paid", "partially_refunded"] },
+          createdAt: { $gte: start, $lte: end },
+        },
+      },
+      {
+        $lookup: {
+          from: "loyalty_settings",
+          localField: "storeId",
+          foreignField: "storeId",
+          as: "loyalty",
+        },
+      },
+      {
+        $project: {
+          totalAmount: 1,
+          vatAmount: 1,
+          paymentMethod: 1,
+          usedPoints: 1,
+          earnedPoints: 1,
+          loyalty: { $arrayElemAt: ["$loyalty", 0] },
+        },
+      },
+      {
+        $addFields: {
+          discountFromPoints: {
+            $cond: [{ $and: ["$usedPoints", "$loyalty.vndPerPoint"] }, { $multiply: ["$usedPoints", "$loyalty.vndPerPoint"] }, 0],
+          },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalOrders: { $sum: 1 },
+          totalRevenue: { $sum: "$totalAmount" },
+          totalVAT: { $sum: "$vatAmount" },
+          totalDiscount: { $sum: "$discountFromPoints" },
+          totalLoyaltyUsed: { $sum: "$usedPoints" },
+          totalLoyaltyEarned: { $sum: "$earnedPoints" },
+          cashInDrawer: {
+            $sum: { $cond: [{ $eq: ["$paymentMethod", "cash"] }, "$totalAmount", 0] },
+          },
+        },
+      },
+    ]);
+    const orderSummary = ordersAgg[0] || { totalOrders: 0, totalRevenue: 0, totalVAT: 0, totalDiscount: 0, totalLoyaltyUsed: 0, totalLoyaltyEarned: 0, cashInDrawer: 0 };
+
+    // 2. Phân loại theo phương thức thanh toán
+    const byPayment = await Order.aggregate([
+      { $match: { storeId: objectStoreId, createdAt: { $gte: start, $lte: end }, status: { $in: ["paid", "partially_refunded"] } } },
+      { $group: { _id: "$paymentMethod", revenue: { $sum: "$totalAmount" }, count: { $sum: 1 } } },
+    ]);
+
+    // 3. Phân loại theo nhân viên
+    const byEmployee = await Order.aggregate([
+      { $match: { storeId: objectStoreId, createdAt: { $gte: start, $lte: end }, status: { $in: ["paid", "partially_refunded"] } } },
+      { $group: { _id: "$employeeId", revenue: { $sum: "$totalAmount" }, orders: { $sum: 1 } } },
+      { $lookup: { from: "employees", localField: "_id", foreignField: "_id", as: "employee" } },
+      {
+        $project: {
+          _id: "$_id",
+          name: { $cond: { if: { $eq: ["$_id", null] }, then: "Chủ cửa hàng (Admin)", else: { $ifNull: [{ $arrayElemAt: ["$employee.fullName", 0] }, "Nhân viên đã xóa"] } } },
+          revenue: 1,
+          orders: 1,
+          avgOrderValue: { $divide: ["$revenue", "$orders"] },
+        },
+      },
+    ]);
+
+    // 4. Hoàn trả
+    const refunds = await OrderRefund.aggregate([
+      { $match: { refundedAt: { $gte: start, $lte: end } } },
+      { $lookup: { from: "orders", localField: "orderId", foreignField: "_id", as: "order" } },
+      { $unwind: "$order" },
+      { $match: { "order.storeId": objectStoreId } },
+      {
+        $group: {
+          _id: null,
+          totalRefunds: { $sum: 1 },
+          refundAmount: { $sum: { $toDecimal: "$refundAmount" } },
+          cashRefundAmount: { $sum: { $cond: [{ $eq: ["$order.paymentMethod", "cash"] }, { $toDecimal: "$refundAmount" }, 0] } },
+        },
+      },
+    ]);
+    const refundSummary = refunds[0] || { totalRefunds: 0, refundAmount: 0, cashRefundAmount: 0 };
+
+    // Tính toán
+    const grossRevenue = toNumber(orderSummary.totalRevenue);
+    const totalRefundAmount = toNumber(refundSummary.refundAmount);
+    const cashRefundAmount = toNumber(refundSummary.cashRefundAmount);
+    const grossCashInDrawer = toNumber(orderSummary.cashInDrawer);
+    const netRevenue = Math.max(0, grossRevenue - totalRefundAmount);
+    const netCashInDrawer = Math.max(0, grossCashInDrawer - cashRefundAmount);
+
+    const storeInfo = await Store.findById(storeId).select("name address phone");
+    const storeName = storeInfo?.name || "Cửa hàng";
+    const storeAddress = storeInfo?.address || "";
+    const exporterName = req.user?.fullname || req.user?.email || "Người dùng";
+
+    // Các dòng dữ liệu chính
+    const summaryRows = [
+      { metric: "Tổng số đơn hàng", value: orderSummary.totalOrders, unit: "Đơn" },
+      { metric: "Doanh thu gộp (trước hoàn)", value: grossRevenue, unit: "VND" },
+      { metric: "Tiền hoàn trả khách", value: totalRefundAmount, unit: "VND" },
+      { metric: "DOANH THU THỰC (Đã trừ hoàn)", value: netRevenue, unit: "VND", highlight: true },
+      { metric: "Thuế VAT thu hộ", value: toNumber(orderSummary.totalVAT), unit: "VND" },
+      { metric: "Tiền mặt thu (trước hoàn)", value: grossCashInDrawer, unit: "VND" },
+      { metric: "Tiền mặt hoàn trả", value: cashRefundAmount, unit: "VND" },
+      { metric: "TIỀN MẶT THỰC (Đã trừ hoàn)", value: netCashInDrawer, unit: "VND", highlight: true },
+      { metric: "Số lần hoàn trả", value: toNumber(refundSummary.totalRefunds), unit: "Lượt" },
+      { metric: "Điểm tích lũy sử dụng", value: toNumber(orderSummary.totalLoyaltyUsed), unit: "Điểm" },
+      { metric: "Điểm tích lũy cộng thêm", value: toNumber(orderSummary.totalLoyaltyEarned), unit: "Điểm" },
+    ];
+
+    const periodLabel = periodType === "day" ? "Ngày" : periodType === "month" ? "Tháng" : periodType === "quarter" ? "Quý" : "Năm";
+    const reportTitle = `BÁO CÁO KẾT QUẢ BÁN HÀNG ${periodLabel.toUpperCase()}: ${periodKey}`;
+    const dateExport = dayjs().format("DD/MM/YYYY HH:mm");
+
+    // ===== EXPORT EXCEL =====
+    if (exportFormat === "xlsx") {
+      const workbook = new ExcelJS.Workbook();
+      const ws = workbook.addWorksheet("Báo cáo cuối ngày");
+
+      // Header legal
+      ws.mergeCells("A1:C1");
+      ws.getCell("A1").value = storeName.toUpperCase();
+      ws.getCell("A1").font = { bold: true, size: 12 };
+      if (storeAddress) {
+        ws.mergeCells("A2:C2");
+        ws.getCell("A2").value = storeAddress;
+        ws.getCell("A2").font = { size: 10, italic: true };
+      }
+
+      ws.mergeCells("E1:G1");
+      ws.getCell("E1").value = "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM";
+      ws.getCell("E1").alignment = { horizontal: "center" };
+      ws.getCell("E1").font = { bold: true, size: 11 };
+
+      ws.mergeCells("E2:G2");
+      ws.getCell("E2").value = "Độc lập - Tự do - Hạnh phúc";
+      ws.getCell("E2").alignment = { horizontal: "center" };
+      ws.getCell("E2").font = { bold: true, size: 10, italic: true };
+
+      ws.mergeCells("E3:G3");
+      ws.getCell("E3").value = "-----------------";
+      ws.getCell("E3").alignment = { horizontal: "center" };
+
+      // Title
+      ws.mergeCells("A5:G5");
+      ws.getCell("A5").value = reportTitle;
+      ws.getCell("A5").alignment = { horizontal: "center" };
+      ws.getCell("A5").font = { bold: true, size: 16, color: { argb: "FF1890FF" } };
+
+      ws.getCell("A7").value = "Người xuất:";
+      ws.getCell("B7").value = exporterName;
+      ws.getCell("A8").value = "Ngày xuất:";
+      ws.getCell("B8").value = dateExport;
+
+      // Data table header
+      const headerRow = 10;
+      ws.getRow(headerRow).values = ["STT", "Chỉ số", "Giá trị", "Đơn vị"];
+      ws.getRow(headerRow).font = { bold: true };
+      ws.getRow(headerRow).alignment = { horizontal: "center", vertical: "middle" };
+      ["A", "B", "C", "D"].forEach(col => {
+        ws.getCell(`${col}${headerRow}`).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1890FF" } };
+        ws.getCell(`${col}${headerRow}`).font = { bold: true, color: { argb: "FFFFFFFF" } };
+        ws.getCell(`${col}${headerRow}`).border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
+      });
+
+      // Data rows
+      summaryRows.forEach((row, idx) => {
+        const r = ws.addRow([idx + 1, row.metric, row.value, row.unit]);
+        r.getCell(1).alignment = { horizontal: "center" };
+        r.getCell(3).numFmt = "#,##0";
+        r.getCell(4).alignment = { horizontal: "center" };
+        if (row.highlight) {
+          r.font = { bold: true };
+          r.getCell(2).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE6F7FF" } };
+          r.getCell(3).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE6F7FF" } };
+        }
+        for (let i = 1; i <= 4; i++) {
+          r.getCell(i).border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
+        }
+      });
+
+      // Sheet 2: Phân loại theo phương thức thanh toán
+      const ws2 = workbook.addWorksheet("Theo phương thức TT");
+      ws2.addRow(["Phương thức", "Doanh thu (VND)", "Số đơn"]);
+      ws2.getRow(1).font = { bold: true };
+      const paymentNames = { cash: "Tiền mặt", qr: "QR Code / Chuyển khoản" };
+      byPayment.forEach(p => {
+        ws2.addRow([paymentNames[p._id] || p._id, toNumber(p.revenue), p.count]);
+      });
+
+      // Sheet 3: Phân loại theo nhân viên
+      const ws3 = workbook.addWorksheet("Theo nhân viên");
+      ws3.addRow(["Nhân viên", "Doanh thu (VND)", "Số đơn", "TB/đơn (VND)"]);
+      ws3.getRow(1).font = { bold: true };
+      byEmployee.forEach(e => {
+        ws3.addRow([e.name, toNumber(e.revenue), e.orders, Math.round(toNumber(e.avgOrderValue))]);
+      });
+
+      // Column widths
+      ws.getColumn(1).width = 6;
+      ws.getColumn(2).width = 40;
+      ws.getColumn(3).width = 22;
+      ws.getColumn(4).width = 12;
+
+      // Signatures
+      const lastRow = headerRow + summaryRows.length + 3;
+      ws.getCell(`A${lastRow}`).value = "Người lập biểu";
+      ws.getCell(`A${lastRow}`).font = { italic: true };
+      ws.getCell(`A${lastRow}`).alignment = { horizontal: "center" };
+      ws.getCell(`C${lastRow}`).value = "Kế toán trưởng";
+      ws.getCell(`C${lastRow}`).font = { italic: true };
+      ws.getCell(`C${lastRow}`).alignment = { horizontal: "center" };
+      ws.getCell(`F${lastRow}`).value = "Chủ hộ kinh doanh";
+      ws.getCell(`F${lastRow}`).font = { italic: true };
+      ws.getCell(`F${lastRow}`).alignment = { horizontal: "center" };
+      ws.getCell(`F${lastRow + 1}`).value = "(Ký, họ tên, đóng dấu)";
+      ws.getCell(`F${lastRow + 1}`).font = { size: 9, italic: true };
+      ws.getCell(`F${lastRow + 1}`).alignment = { horizontal: "center" };
+
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename=Bao_Cao_Cuoi_Ngay_${periodKey.replace(/[/:]/g, "-")}.xlsx`);
+      await workbook.xlsx.write(res);
+      return res.end();
+    }
+
+    // ===== EXPORT PDF =====
+    if (exportFormat === "pdf") {
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename=Bao_Cao_Cuoi_Ngay_${periodKey.replace(/[/:]/g, "-")}.pdf`);
+
+      const doc = new PDFDocument({ margin: 50, size: "A4" });
+      doc.pipe(res);
+
+      // Register fonts
+      const fontPath = path.join(__dirname, "..", "fonts", "Roboto", "static");
+      doc.registerFont("Roboto-Regular", path.join(fontPath, "Roboto-Regular.ttf"));
+      doc.registerFont("Roboto-Bold", path.join(fontPath, "Roboto-Bold.ttf"));
+      doc.registerFont("Roboto-Italic", path.join(fontPath, "Roboto-Italic.ttf"));
+
+      // Header
+      doc.font("Roboto-Bold").fontSize(11).text(storeName.toUpperCase(), { align: "left" });
+      if (storeAddress) doc.font("Roboto-Italic").fontSize(9).text(storeAddress, { align: "left" });
+      doc.moveUp(storeAddress ? 2 : 1);
+      doc.text("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", { align: "right" });
+      doc.font("Roboto-Bold").fontSize(10).text("Độc lập - Tự do - Hạnh phúc", { align: "right" });
+      doc.font("Roboto-Italic").fontSize(9).text("-----------------", { align: "right" });
+      doc.moveDown(2);
+
+      // Title
+      doc.font("Roboto-Bold").fontSize(16).fillColor("#1890ff").text(reportTitle, { align: "center" });
+      doc.fillColor("#000");
+      doc.moveDown(1);
+
+      // Info
+      doc.font("Roboto-Regular").fontSize(10).text(`Người xuất: ${exporterName}`);
+      doc.text(`Ngày xuất: ${dateExport}`);
+      doc.moveDown(1);
+      doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+      doc.moveDown(1);
+
+      // Summary
+      doc.font("Roboto-Bold").fontSize(12).text("TỔNG HỢP KẾT QUẢ");
+      doc.moveDown(0.5);
+      summaryRows.forEach((r, idx) => {
+        const isHighlight = r.highlight;
+        doc.font(isHighlight ? "Roboto-Bold" : "Roboto-Regular").fontSize(10);
+        doc.text(`${idx + 1}. ${r.metric}: ${r.value.toLocaleString("vi-VN")} ${r.unit}`);
+      });
+
+      doc.moveDown(1);
+      doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+      doc.moveDown(1);
+
+      // Theo phương thức thanh toán
+      if (byPayment.length > 0) {
+        doc.font("Roboto-Bold").fontSize(12).text("THEO PHƯƠNG THỨC THANH TOÁN");
+        doc.moveDown(0.5);
+        const paymentNames = { cash: "Tiền mặt", qr: "QR Code / Chuyển khoản" };
+        byPayment.forEach(p => {
+          doc.font("Roboto-Regular").fontSize(10).text(`• ${paymentNames[p._id] || p._id}: ${toNumber(p.revenue).toLocaleString("vi-VN")} VND (${p.count} đơn)`);
+        });
+        doc.moveDown(1);
+      }
+
+      // Theo nhân viên
+      if (byEmployee.length > 0) {
+        doc.font("Roboto-Bold").fontSize(12).text("THEO NHÂN VIÊN");
+        doc.moveDown(0.5);
+        byEmployee.forEach(e => {
+          doc.font("Roboto-Regular").fontSize(10).text(`• ${e.name}: ${toNumber(e.revenue).toLocaleString("vi-VN")} VND (${e.orders} đơn)`);
+        });
+        doc.moveDown(1);
+      }
+
+      doc.moveDown(2);
+
+      // Signatures
+      const startY = doc.y > 680 ? (doc.addPage(), 50) : doc.y;
+      doc.font("Roboto-Bold").fontSize(10).text("Người lập biểu", 50, startY, { width: 150, align: "center" });
+      doc.text("Kế toán trưởng", 220, startY, { width: 150, align: "center" });
+      doc.text("Chủ hộ kinh doanh", 390, startY, { width: 150, align: "center" });
+      doc.font("Roboto-Italic").fontSize(9).text("(Ký, họ tên)", 50, doc.y, { width: 150, align: "center" });
+      doc.moveUp();
+      doc.text("(Ký, họ tên)", 220, doc.y, { width: 150, align: "center" });
+      doc.moveUp();
+      doc.text("(Ký, họ tên, đóng dấu)", 390, doc.y, { width: 150, align: "center" });
+
+      doc.end();
+      return;
+    }
+
+    res.status(400).json({ message: "Format không hỗ trợ. Vui lòng chọn xlsx hoặc pdf." });
+  } catch (err) {
+    console.error("Lỗi export báo cáo cuối ngày:", err.message);
+    res.status(500).json({ message: "Lỗi server khi xuất báo cáo cuối ngày" });
+  }
+};
+
 module.exports = {
   getFinancialSummary,
   exportFinancial,
   generateEndOfDayReport,
+  exportEndOfDayReport,
 };

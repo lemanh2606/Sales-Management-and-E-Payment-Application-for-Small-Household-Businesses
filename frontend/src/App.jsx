@@ -281,15 +281,15 @@ function App() {
 
         {/* ==================== Dashboard & Store ==================== */}
         <Route path="/dashboard/:storeId" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-        <Route path="/select-store" element={<ProtectedRoute allowedPermissions="store:view"><SelectStorePage /></ProtectedRoute>} />
+        <Route path="/select-store" element={<ProtectedRoute allowedPermissions="store:create"><SelectStorePage /></ProtectedRoute>} />
         <Route path="/update/store" element={<ProtectedRoute><InformationStore /></ProtectedRoute>} />
-        <Route path="/stores/:storeId/employees" element={<ProtectedRoute><EmployeesPage /></ProtectedRoute>} />
+        <Route path="/stores/:storeId/employees" element={<ProtectedRoute allowedPermissions="store:employee:create"><EmployeesPage /></ProtectedRoute>} />
 
         {/* ==================== Products & Suppliers ==================== */}
-        <Route path="/suppliers" element={<ProtectedRoute allowedPermissions="suppliers:view"><SupplierListPage /></ProtectedRoute>} />
-        <Route path="/products" element={<ProtectedRoute allowedPermissions="products:view"><ProductListPage /></ProtectedRoute>} />
-        <Route path="/product-groups" element={<ProtectedRoute allowedPermissions="product-groups:view"><ProductGroupsPage /></ProtectedRoute>} />
-        <Route path="/inventory-vouchers" element={<ProtectedRoute allowedPermissions="inventory:voucher:view"><InventoryVoucherPage /></ProtectedRoute>} />
+        <Route path="/suppliers" element={<ProtectedRoute allowedPermissions="suppliers:create"><SupplierListPage /></ProtectedRoute>} />
+        <Route path="/products" element={<ProtectedRoute allowedPermissions="products:create"><ProductListPage /></ProtectedRoute>} />
+        <Route path="/product-groups" element={<ProtectedRoute allowedPermissions="product-groups:create"><ProductGroupsPage /></ProtectedRoute>} />
+        <Route path="/inventory-vouchers" element={<ProtectedRoute allowedPermissions="inventory:voucher:create"><InventoryVoucherPage /></ProtectedRoute>} />
         <Route path="/warehouses" element={<ProtectedRoute allowedPermissions="warehouses:view"><WarehousePage /></ProtectedRoute>} />
 
         {/* ==================== Customers ==================== */}

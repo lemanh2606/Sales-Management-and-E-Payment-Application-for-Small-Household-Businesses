@@ -38,6 +38,7 @@ subscriptionSchema.index({ pending_created_at: 1 });
 // Virtual: Kiểm tra còn trial không
 subscriptionSchema.virtual("is_trial_active").get(function () {
   if (this.status !== "TRIAL") return false;
+  if (!this.trial_ends_at) return false; // Handle null/undefined
   return new Date() < this.trial_ends_at;
 });
 
@@ -133,19 +134,30 @@ subscriptionSchema.methods.clearPendingPayment = function () {
   return this;
 };
 
-// Static: Tạo trial cho user mới
+// Static: Tạo trial cho user mới (sử dụng upsert để tránh race condition)
 subscriptionSchema.statics.createTrial = async function (userId) {
   const now = new Date();
   const trialEnds = new Date(now);
   trialEnds.setDate(trialEnds.getDate() + 14); // 14 ngày trial
   
-  const subscription = new this({
-    user_id: userId,
-    status: "TRIAL",
-    trial_started_at: now,
-    trial_ends_at: trialEnds,
-  });
-  await subscription.save();
+  // Sử dụng findOneAndUpdate với upsert để tránh race condition
+  // Nếu đã có subscription thì không tạo mới, return cái cũ
+  const subscription = await this.findOneAndUpdate(
+    { user_id: userId },
+    {
+      $setOnInsert: {
+        user_id: userId,
+        status: "TRIAL",
+        trial_started_at: now,
+        trial_ends_at: trialEnds,
+      }
+    },
+    { 
+      upsert: true, 
+      new: true,
+      setDefaultsOnInsert: true
+    }
+  );
   return subscription;
 };
 

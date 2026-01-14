@@ -611,7 +611,7 @@ export default function ProductGroupsPage() {
           >
             <Empty
               image={Empty.PRESENTED_IMAGE_SIMPLE}
-              imageStyle={{ height: 140 }}
+              styles={{ image: { height: 140 } }}
               description={
                 <Space direction="vertical" size={20}>
                   <Title level={4} style={{ color: "#595959", margin: 0 }}>
@@ -886,7 +886,7 @@ export default function ProductGroupsPage() {
           styles={{
             body: { padding: 0 },
           }}
-          destroyOnClose
+          destroyOnHidden
           centered
         >
           <ProductGroupForm
@@ -900,7 +900,7 @@ export default function ProductGroupsPage() {
         {deleteContextHolder}
       </div>
 
-      <style jsx global>{`
+      <style>{`
         .product-group-card:hover {
           box-shadow: 0 16px 48px rgba(82, 196, 26, 0.25) !important;
           transform: translateY(-6px);

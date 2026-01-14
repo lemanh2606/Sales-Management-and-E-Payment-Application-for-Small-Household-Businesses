@@ -291,13 +291,10 @@ const login = async (req, res) => {
 
       // Danh sách các quyền cấm đối với STAFF theo yêu cầu mới
       const prohibitedPatterns = [
-        "store:employee:",
         "employees:",
-        "reports:",
         "settings:activity-log",
         "settings:payment-method",
         "inventory:stock-check",
-        "users:",
       ];
 
       // 1. Loại bỏ các quyền bị cấm nếu lỡ có trong DB

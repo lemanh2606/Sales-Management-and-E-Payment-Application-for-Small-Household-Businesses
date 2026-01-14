@@ -1,5 +1,6 @@
 // middlewares/subscriptionMiddleware.js
 const Subscription = require("../models/Subscription");
+const User = require("../models/User");
 
 /**
  * Middleware kiểm tra subscription đã hết hạn chưa
@@ -11,6 +12,8 @@ const Subscription = require("../models/Subscription");
  */
 const checkSubscriptionExpiry = async (req, res, next) => {
   const user = req.user;
+  
+  console.log(`📋 [checkSubscriptionExpiry] ${req.method} ${req.originalUrl} | user: ${user?.role || 'NO_USER'} ${user?._id || ''}`);
   
   if (!user) {
     return res.status(401).json({ message: "Chưa đăng nhập" });
@@ -48,7 +51,9 @@ const checkSubscriptionExpiry = async (req, res, next) => {
     /^\/[^/]+$/.test(req.path || "") &&
     req.params?.storeId;
 
-  if (user.role === "MANAGER" && (isAlwaysAllowed || isReadOnlyStoreRequest || isStoreDetailsRequest)) {
+  // Whitelist: MANAGER & STAFF ĐƯỢC TRUY CẬP (Read-only) khi subscription expired
+  if ((user.role === "MANAGER" || user.role === "STAFF") &&
+      (isAlwaysAllowed || isReadOnlyStoreRequest || isStoreDetailsRequest)) {
     return next();
   }
 
@@ -58,13 +63,17 @@ const checkSubscriptionExpiry = async (req, res, next) => {
 
     // STAFF kế thừa subscription từ Manager của store
     if (user.role === "STAFF") {
-      // Tìm store hiện tại của STAFF
+      // Tìm storeId từ nhiều nguồn (giống checkStoreAccess)
+      const storeId = req.query.storeId || req.query.shopId || req.params.storeId || req.body?.storeId || user.current_store;
+      
       const Store = require("../models/Store");
-      const store = await Store.findById(user.current_store);
+      const store = await Store.findById(storeId);
       
       if (!store) {
+        // Nếu không xác định được store, nhưng route yêu cầu check sub => block
+        // Tuy nhiên nếu là GET request cơ bản thì đã pass ở whitelist trên
         return res.status(403).json({ 
-          message: "Không tìm thấy cửa hàng",
+          message: "Không xác định được cửa hàng để kiểm tra gói dịch vụ",
           subscription_required: true
         });
       }
@@ -73,8 +82,7 @@ const checkSubscriptionExpiry = async (req, res, next) => {
       managerId = store.owner_id;
       subscription = await Subscription.findActiveByUser(managerId);
 
-      if (!subscription || subscription.status === "EXPIRED" || 
-          (!subscription.is_trial_active && !subscription.is_premium_active)) {
+      if (!subscription || subscription.isExpired()) {
         return res.status(403).json({
           message: "Chủ cửa hàng đã hết hạn gói đăng ký. Vui lòng liên hệ quản lý để gia hạn.",
           subscription_status: "EXPIRED",
@@ -90,6 +98,7 @@ const checkSubscriptionExpiry = async (req, res, next) => {
 
     // MANAGER - Tìm subscription của chính mình
     subscription = await Subscription.findActiveByUser(user._id);
+    console.log("📋 findActiveByUser result for", user._id, ":", subscription ? `Found ${subscription.status}` : "Not found");
 
     // Auto-create trial CHỈ nếu CHƯA TỪNG có subscription (chỉ cho MANAGER)
     if (!subscription) {
@@ -102,11 +111,13 @@ const checkSubscriptionExpiry = async (req, res, next) => {
       
       // Kiểm tra xem có subscription cũ (EXPIRED/CANCELLED) không
       const anySubscription = await Subscription.findOne({ user_id: user._id });
+      console.log("📋 anySubscription result:", anySubscription ? `Found ${anySubscription.status}` : "Not found (creating trial)");
       
       if (!anySubscription) {
         // Chưa từng có → Tạo trial mới
         console.log("🎁 Auto-creating trial for MANAGER:", user._id);
         subscription = await Subscription.createTrial(user._id);
+        console.log("✅ Trial created:", subscription._id, "trial_ends_at:", subscription.trial_ends_at);
       } else {
         // Đã từng có → Dùng subscription cũ
         subscription = anySubscription;
@@ -115,14 +126,20 @@ const checkSubscriptionExpiry = async (req, res, next) => {
     }
 
     const now = new Date();
+    console.log("📋 Subscription status:", subscription.status, "| trial_ends_at:", subscription.trial_ends_at, "| now:", now);
 
     // Case 1: TRIAL
     if (subscription.status === "TRIAL") {
-      if (subscription.is_trial_active) {
+      const isActive = subscription.is_trial_active;
+      console.log("📋 TRIAL check - is_trial_active:", isActive, "| trial_ends_at:", subscription.trial_ends_at);
+      
+      if (isActive) {
         // Trial còn hạn → OK
+        console.log("✅ TRIAL active, allowing access");
         return next();
       } else {
         // Trial hết hạn
+        console.log("❌ TRIAL expired, blocking access");
         subscription.status = "EXPIRED";
         await subscription.save();
         
@@ -145,9 +162,8 @@ const checkSubscriptionExpiry = async (req, res, next) => {
         subscription.status = "EXPIRED";
         await subscription.save();
         
-        // Update user is_premium flag
-        user.is_premium = false;
-        await user.save();
+        // Update user is_premium flag - sử dụng findByIdAndUpdate vì user là lean object
+        await User.findByIdAndUpdate(user._id, { is_premium: false });
         
         return res.status(403).json({
           message: "Gói Premium đã hết hạn. Vui lòng gia hạn.",
