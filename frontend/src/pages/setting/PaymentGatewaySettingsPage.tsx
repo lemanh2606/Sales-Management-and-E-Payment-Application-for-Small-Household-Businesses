@@ -156,15 +156,6 @@ const PaymentGatewaySettingsPage: React.FC = () => {
 
       if (res.data?.success) {
         setBanks(res.data.data || []);
-
-        Swal.fire({
-          icon: "success",
-          title: "Thành công",
-          text: "Đã tải danh sách ngân hàng",
-          timer: 1200,
-          timerProgressBar: true,
-          showConfirmButton: false,
-        });
       }
     } catch (err: any) {
       console.error("fetchBanks error:", err);
@@ -436,7 +427,23 @@ const PaymentGatewaySettingsPage: React.FC = () => {
               </Space>
             </Col>
             <Col>
-              <Button icon={<ReloadOutlined />} onClick={fetchBanks} loading={loading}>
+              <Button
+                icon={<ReloadOutlined />}
+                onClick={async () => {
+                  await fetchBanks();
+                  if (!loading) {
+                    Swal.fire({
+                      icon: "success",
+                      title: "Thành công",
+                      text: "Đã tải danh sách ngân hàng",
+                      timer: 1200,
+                      timerProgressBar: true,
+                      showConfirmButton: false,
+                    });
+                  }
+                }}
+                loading={loading}
+              >
                 Làm mới dữ liệu
               </Button>
             </Col>
@@ -1278,12 +1285,12 @@ const PaymentGatewaySettingsPage: React.FC = () => {
                 onClick={async () => {
                   await axios.put(`${API_BASE}/${storeId}/webhook`, {}, { headers }); // body có thể rỗng
                   Swal.fire({
-                    toast: true,
                     icon: "success",
                     title: "Đã tắt PayOS",
-                    showConfirmButton: true,
-                    timer: 1500,
+                    text: "Tính năng tự động xác nhận thanh toán đã được tắt.",
+                    timer: 1200,
                     timerProgressBar: true,
+                    showConfirmButton: true,
                   });
 
                   setDisablePayOSModal(false);

@@ -41,15 +41,7 @@ import { fetchLatLngFromAddress } from "../../utils/geocodeNominatim";
 
 const { TextArea } = Input;
 
-export default function StoreFormModal({
-  open,
-  onClose,
-  form: formData = {},
-  setForm,
-  onSave,
-  busy,
-  title = "Cửa hàng",
-}) {
+export default function StoreFormModal({ open, onClose, form: formData = {}, setForm, onSave, busy, title = "Cửa hàng" }) {
   const [form] = Form.useForm();
   const [localTags, setLocalTags] = useState([]);
   const [tagInput, setTagInput] = useState("");
@@ -104,8 +96,11 @@ export default function StoreFormModal({
       tags: Array.isArray(formData.tags)
         ? formData.tags
         : formData.tagsCsv
-          ? formData.tagsCsv.split(",").map((t) => t.trim()).filter(Boolean)
-          : [],
+        ? formData.tagsCsv
+            .split(",")
+            .map((t) => t.trim())
+            .filter(Boolean)
+        : [],
     };
 
     console.log(" Initializing form data:", normalized);
@@ -318,9 +313,7 @@ export default function StoreFormModal({
     const firstPart = parts[0] || "";
     const adminKeywords = ["phường", "xã", "quận", "huyện", "thành phố", "tỉnh", "ward", "district"];
 
-    const hasAdminKeyword = adminKeywords.some((keyword) =>
-      firstPart.toLowerCase().includes(keyword)
-    );
+    const hasAdminKeyword = adminKeywords.some((keyword) => firstPart.toLowerCase().includes(keyword));
 
     return hasAdminKeyword ? "" : firstPart;
   };
@@ -394,8 +387,8 @@ export default function StoreFormModal({
         close: values.closeTime ? values.closeTime.format("HH:mm") : "",
       },
       location: {
-        lat: (values.lat !== undefined && values.lat !== null && values.lat !== "") ? Number(values.lat) : null,
-        lng: (values.lng !== undefined && values.lng !== null && values.lng !== "") ? Number(values.lng) : null,
+        lat: values.lat !== undefined && values.lat !== null && values.lat !== "" ? Number(values.lat) : null,
+        lng: values.lng !== undefined && values.lng !== null && values.lng !== "" ? Number(values.lng) : null,
       },
     };
 
@@ -428,10 +421,7 @@ export default function StoreFormModal({
         onChange={onVnAreaChange}
         changeOnSelect={false}
         showSearch={{
-          filter: (inputValue, path) =>
-            path.some((option) =>
-              (option.label || "").toLowerCase().includes(inputValue.toLowerCase())
-            ),
+          filter: (inputValue, path) => path.some((option) => (option.label || "").toLowerCase().includes(inputValue.toLowerCase())),
         }}
         style={{ width: "100%" }}
         size="large"
@@ -440,17 +430,13 @@ export default function StoreFormModal({
           vnLoading ? (
             <Spin size="small" />
           ) : (
-            <div style={{ padding: 12, textAlign: "center", color: "#999" }}>
-              {vnOptions.length === 0 ? "Đang tải dữ liệu..." : "Không tìm thấy"}
-            </div>
+            <div style={{ padding: 12, textAlign: "center", color: "#999" }}>{vnOptions.length === 0 ? "Đang tải dữ liệu..." : "Không tìm thấy"}</div>
           )
         }
         disabled={vnLoading || vnOptions.length === 0}
         expandTrigger="hover"
       />
-      <div style={{ marginTop: 8, fontSize: 12, color: "#999", textAlign: "center" }}>
-        💡 Chọn đủ Tỉnh → Quận → Phường để tự động điền
-      </div>
+      <div style={{ marginTop: 8, fontSize: 12, color: "#999", textAlign: "center" }}>💡 Chọn đủ Tỉnh → Quận → Phường để tự động điền</div>
     </div>
   );
   // ========== 👆 END POPOVER 👆 ==========
@@ -474,7 +460,7 @@ export default function StoreFormModal({
           scrollbarWidth: "thin",
           position: "relative",
           padding: "24px",
-          background: "#fdfdfd"
+          background: "#fdfdfd",
         },
       }}
       maskClosable={false}
@@ -580,7 +566,7 @@ export default function StoreFormModal({
                 {/* ========== 👆 END ĐỊA CHỈ 👆 ========== */}
 
                 {/* ========== 👇 TỌA ĐỘ VỚI NÚT LẤY TỌA ĐỘ 👇 ========== */}
-                <Row gutter={12}>
+                {/* <Row gutter={12}>
                   <Col span={10}>
                     <Form.Item
                       label={
@@ -637,7 +623,7 @@ export default function StoreFormModal({
                       </Tooltip>
                     </Form.Item>
                   </Col>
-                </Row>
+                </Row> */}
                 {/* ========== 👆 END TỌA ĐỘ 👆 ========== */}
 
                 {/* Phone */}
@@ -671,12 +657,7 @@ export default function StoreFormModal({
                       }
                       name="openTime"
                     >
-                      <TimePicker
-                        size="large"
-                        format="HH:mm"
-                        style={{ width: "100%", borderRadius: 8 }}
-                        placeholder="Chọn giờ mở"
-                      />
+                      <TimePicker size="large" format="HH:mm" style={{ width: "100%", borderRadius: 8 }} placeholder="Chọn giờ mở" />
                     </Form.Item>
                   </Col>
                   <Col span={12}>
@@ -689,12 +670,7 @@ export default function StoreFormModal({
                       }
                       name="closeTime"
                     >
-                      <TimePicker
-                        size="large"
-                        format="HH:mm"
-                        style={{ width: "100%", borderRadius: 8 }}
-                        placeholder="Chọn giờ đóng"
-                      />
+                      <TimePicker size="large" format="HH:mm" style={{ width: "100%", borderRadius: 8 }} placeholder="Chọn giờ đóng" />
                     </Form.Item>
                   </Col>
                 </Row>
@@ -833,9 +809,7 @@ export default function StoreFormModal({
                     </Button>
                   )}
 
-                  <div style={{ fontSize: 12, color: "#8c8c8c", textAlign: "center" }}>
-                    📌 Định dạng: JPG, PNG. Tối đa 8MB
-                  </div>
+                  <div style={{ fontSize: 12, color: "#8c8c8c", textAlign: "center" }}>📌 Định dạng: JPG, PNG. Tối đa 8MB</div>
                 </Space>
               </Card>
             </Col>
