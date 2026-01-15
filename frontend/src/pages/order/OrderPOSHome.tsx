@@ -134,7 +134,6 @@ interface CartItem {
   stock_quantity?: number; // Store original stock for validation
 }
 
-
 interface OrderTab {
   key: string;
   cart: CartItem[];
@@ -316,7 +315,7 @@ const OrderPOSHome: React.FC = () => {
     setTempPhone(""); // Clear temp phone
     setFoundCustomers([]); // Clear customer dropdown
     setShowCustomerDropdown(false); // Close dropdown
-    
+
     // 🗑️ Clear saved cart from localStorage after successful order
     try {
       const userInfo = JSON.parse(localStorage.getItem("user") || "{}");
@@ -345,7 +344,7 @@ const OrderPOSHome: React.FC = () => {
   const loggedInUser = JSON.parse(localStorage.getItem("user") || "{}");
   const userId = loggedInUser?.id || loggedInUser?._id || "anonymous";
   const CART_STORAGE_KEY = `pos_cart_${storeId}_${userId}`;
-  
+
   // Load cart from localStorage on mount
   useEffect(() => {
     if (!storeId || !userId) return;
@@ -368,7 +367,7 @@ const OrderPOSHome: React.FC = () => {
   useEffect(() => {
     if (!storeId || !userId) return;
     // Don't save if all carts are empty (initial state)
-    const hasItems = orders.some(tab => tab.cart.length > 0 || tab.customer || tab.pendingOrderId);
+    const hasItems = orders.some((tab) => tab.cart.length > 0 || tab.customer || tab.pendingOrderId);
     if (hasItems) {
       try {
         const dataToSave = {
@@ -393,7 +392,6 @@ const OrderPOSHome: React.FC = () => {
       console.error("Lỗi xóa cart:", err);
     }
   };
-
 
   useEffect(() => {
     if (storeId) {
@@ -466,7 +464,7 @@ const OrderPOSHome: React.FC = () => {
       }
     } catch (err) {
       Swal.fire({
-        title: " Lỗi!",
+        title: "Có lỗi xảy ra!",
         text: "Không tải được nhân viên",
         icon: "error",
         confirmButtonText: "OK",
@@ -515,14 +513,14 @@ const OrderPOSHome: React.FC = () => {
   const showEmptyStoreAlert = () => {
     const user = JSON.parse(localStorage.getItem("user") || "{}");
     const isOwner = user.role === "OWNER" || user.role === "MANAGER";
-    
+
     Swal.fire({
       title: "Kho hàng trống!",
-      text: isOwner 
+      text: isOwner
         ? "Cửa hàng của bạn chưa có sản phẩm nào. Vui lòng nhập hàng hóa vào hệ thống để bắt đầu bán hàng."
         : "Cửa hàng chưa có sản phẩm nào. Vui lòng báo chủ cửa hàng nhập hàng hóa vào kho.",
       icon: "warning",
-      confirmButtonText: "Tôi đã hiểu",
+      confirmButtonText: "Tôi đã hiểu!",
       confirmButtonColor: "#faad14",
     });
   };
@@ -544,7 +542,7 @@ const OrderPOSHome: React.FC = () => {
         }
       } catch (err) {
         Swal.fire({
-          title: " Lỗi!",
+          title: "Có lỗi xảy ra!",
           text: "Không tìm thấy sản phẩm",
           icon: "error",
           confirmButtonText: "OK",
@@ -563,34 +561,34 @@ const OrderPOSHome: React.FC = () => {
   // Tính toán tồn kho khả dụng (trừ đi các lô đã hết hạn)
   const getAvailableStock = (product: Product) => {
     if (!product.batches || product.batches.length === 0) return product.stock_quantity;
-    
+
     // Tổng số lượng trong các lô chưa hết hạn
     const available = (product.batches as ProductBatch[]).reduce((sum: number, b: ProductBatch) => {
       const isExpired = !!(b.expiry_date && new Date(b.expiry_date) < new Date());
       return isExpired ? sum : sum + (b.quantity || 0);
     }, 0);
-    
+
     return available;
   };
 
   // Thêm sản phẩm vào giỏ hàng
   const addToCart = (product: Product) => {
     const availableStock = getAvailableStock(product);
-    
+
     // Don't add products with no stock
     if (availableStock <= 0) {
-      const hasExpired = product.batches && product.batches.some(b => b.expiry_date && new Date(b.expiry_date) < new Date());
+      const hasExpired = product.batches && product.batches.some((b) => b.expiry_date && new Date(b.expiry_date) < new Date());
       Swal.fire({
         icon: "warning",
         title: hasExpired ? "Hàng hết hạn" : "Hết hàng",
-        text: hasExpired 
+        text: hasExpired
           ? `Sản phẩm "${product.name}" hiện chỉ còn các lô đã hết hạn sử dụng, không thể bán.`
           : `Sản phẩm "${product.name}" đã hết hàng trong kho.`,
         confirmButtonText: "OK",
       });
       return;
     }
-    
+
     const priceNum = getPriceNumber(product.price);
     updateOrderTab((tab) => {
       const existing = tab.cart.find((item) => item.productId === product._id);
@@ -646,7 +644,7 @@ const OrderPOSHome: React.FC = () => {
     // Lưu lại pendingOrderId và isPaid trước khi update
     const hasPendingOrder = currentTab.pendingOrderId !== null;
     const isAlreadyPaid = currentTab.isPaid;
-    
+
     // ✅ Ngăn chặn thay đổi số lượng khi đã thanh toán
     if (isAlreadyPaid) {
       Swal.fire({
@@ -657,7 +655,7 @@ const OrderPOSHome: React.FC = () => {
       });
       return;
     }
-    
+
     updateOrderTab((tab) => {
       const item = tab.cart.find((i) => i.productId === id);
       if (!item) return;
@@ -666,7 +664,7 @@ const OrderPOSHome: React.FC = () => {
       } else {
         // Lấy tồn kho khả dụng từ CartItem (đã lưu khi addToCart)
         const availableStock = (item as any).stock_quantity ?? 9999;
-        
+
         if (qty > availableStock) {
           Swal.fire({
             icon: "warning",
@@ -677,7 +675,7 @@ const OrderPOSHome: React.FC = () => {
           // Giới hạn lại số lượng bằng tồn kho khả dụng
           qty = availableStock;
         }
-        
+
         tab.cart = tab.cart.map((i) =>
           i.productId === id
             ? {
@@ -689,7 +687,7 @@ const OrderPOSHome: React.FC = () => {
         );
       }
     });
-    
+
     // ✅ Nếu đã có đơn hàng pending VÀ chưa thanh toán, tự động cập nhật đơn hàng
     if (hasPendingOrder && !isAlreadyPaid) {
       // Dùng setTimeout để đảm bảo state đã được cập nhật
@@ -787,7 +785,7 @@ const OrderPOSHome: React.FC = () => {
     [currentTab.usedPoints, currentTab.usedPointsEnabled, loyaltySetting?.vndPerPoint]
   );
   const beforeTax = Math.max(subtotal - discount, 0);
-  
+
   // Tính VAT dựa trên từng sản phẩm tự động
   const vatAmount = useMemo(() => {
     return currentTab.cart.reduce((sum, item) => {
@@ -800,53 +798,52 @@ const OrderPOSHome: React.FC = () => {
 
   const totalAmount = beforeTax + vatAmount;
   const changeAmount = Math.max(0, currentTab.cashReceived - totalAmount);
-  
+
   // Polling check QR Payment (Web Ver PayOS)
   useEffect(() => {
-     const orderCode = currentTab?.qrPayload;
-     // Chỉ poll khi có QR và đang hiển thị (hoặc đơn đang pending chờ) VÀ chưa thanh toán
-     if (!orderCode || !currentTab.qrImageUrl || !currentTab.pendingOrderId || currentTab.isPaid) return;
-     
-     // Cờ để tránh gọi liên tục nếu component unmount
-     let isActive = true;
+    const orderCode = currentTab?.qrPayload;
+    // Chỉ poll khi có QR và đang hiển thị (hoặc đơn đang pending chờ) VÀ chưa thanh toán
+    if (!orderCode || !currentTab.qrImageUrl || !currentTab.pendingOrderId || currentTab.isPaid) return;
 
-     const checkPayment = async () => {
-         try {
-             const res = await axios.get(`${API_BASE}/orders/pos/payment-status/${orderCode}?storeId=${storeId}`, { headers });
-             if (isActive && res.data.success && String(res.data.status).toUpperCase() === 'PAID') {
-                  
-                  // Stop polling
-                  clearInterval(pollId);
-                  
-                  // ✅ Đánh dấu đã thanh toán (KHÔNG tự động in)
-                  updateOrderTab((tab) => {
-                    tab.isPaid = true;
-                  });
-                  
-                  // Show success với nút in hóa đơn
-                  Swal.fire({
-                      icon: 'success',
-                      title: '✅ Đã nhận thanh toán!',
-                      html: `
+    // Cờ để tránh gọi liên tục nếu component unmount
+    let isActive = true;
+
+    const checkPayment = async () => {
+      try {
+        const res = await axios.get(`${API_BASE}/orders/pos/payment-status/${orderCode}?storeId=${storeId}`, { headers });
+        if (isActive && res.data.success && String(res.data.status).toUpperCase() === "PAID") {
+          // Stop polling
+          clearInterval(pollId);
+
+          // ✅ Đánh dấu đã thanh toán (KHÔNG tự động in)
+          updateOrderTab((tab) => {
+            tab.isPaid = true;
+          });
+
+          // Show success với nút in hóa đơn
+          Swal.fire({
+            icon: "success",
+            title: "✅ Đã nhận thanh toán!",
+            html: `
                         <p>Hệ thống PayOS xác nhận thành công.</p>
                         <p style="color: #1890ff; font-weight: bold; margin-top: 12px;">
                           👉 Vui lòng ấn nút "In hóa đơn" bên dưới để hoàn tất đơn hàng.
                         </p>
                       `,
-                      confirmButtonText: 'Đã hiểu',
-                      confirmButtonColor: '#52c41a'
-                  });
-             }
-         } catch(e) {
-             // ignore
-         }
-     };
+            confirmButtonText: "Đã hiểu",
+            confirmButtonColor: "#52c41a",
+          });
+        }
+      } catch (e) {
+        // ignore
+      }
+    };
 
-     const pollId = setInterval(checkPayment, 3000);
-     return () => {
-         isActive = false;
-         clearInterval(pollId);
-     };
+    const pollId = setInterval(checkPayment, 3000);
+    return () => {
+      isActive = false;
+      clearInterval(pollId);
+    };
   }, [currentTab?.qrPayload, currentTab?.qrImageUrl, currentTab?.pendingOrderId, currentTab?.isPaid]);
 
   // Tạo đơn hàng
@@ -1008,7 +1005,7 @@ const createOrder = async () => {
     } catch (err: any) {
       Swal.fire({
         icon: "error",
-        title: "Có lỗi!",
+        title: "Có lỗi xảy ra!",
         text: "In hóa đơn không thành công!",
         showConfirmButton: false,
         timer: 1500,
@@ -1085,39 +1082,40 @@ const createOrder = async () => {
             flex: 1,
           }}
         >
-          <div style={{ background: 'rgba(255,255,255,0.2)', padding: 10, borderRadius: 12, display: 'flex' }}>
+          <div style={{ background: "rgba(255,255,255,0.2)", padding: 10, borderRadius: 12, display: "flex" }}>
             <ShopOutlined style={{ fontSize: 24, color: "#fff" }} />
           </div>
           <div>
-            <Title level={4} className="premium-title" style={{ margin: 0, color: "#fff", background: 'none', WebkitTextFillColor: 'white' }}>
+            <Title level={4} className="premium-title" style={{ margin: 0, color: "#fff", background: "none", WebkitTextFillColor: "white" }}>
               {currentStore.name || "Cửa Hàng"}
             </Title>
             <Text style={{ color: "rgba(255,255,255,0.8)", fontSize: "12px", letterSpacing: 1 }}>POS TERMINAL v2.0</Text>
           </div>
         </div>
 
-        <div style={{ flex: 2, display: 'flex', gap: 8, alignItems: 'center', maxWidth: 550 }}>
+        <div style={{ flex: 2, display: "flex", gap: 8, alignItems: "center", maxWidth: 550 }}>
           <Input
             size="large"
             placeholder="Tìm sản phẩm (SKU/Tên)..."
-            prefix={<SearchOutlined style={{ color: '#6366f1' }} />}
+            prefix={<SearchOutlined style={{ color: "#6366f1" }} />}
             className="premium-cart-search"
             value={searchProduct}
             onChange={(e) => setSearchProduct(e.target.value)}
             style={{
               flex: 1,
               borderRadius: "12px",
-              border: 'none',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+              border: "none",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
             }}
             autoFocus
           />
-        
-</div>
-        <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
-           <Badge count={currentTab.cart.length} offset={[-2, 2]}>
-              <Button ghost icon={<PlusOutlined />} onClick={addNewOrderTab}>Tạo đơn mới</Button>
-           </Badge>
+        </div>
+        <div style={{ flex: 1, display: "flex", justifyContent: "flex-end", gap: 12 }}>
+          <Badge count={currentTab.cart.length} offset={[-2, 2]}>
+            <Button ghost icon={<PlusOutlined />} onClick={addNewOrderTab}>
+              Tạo đơn mới
+            </Button>
+          </Badge>
         </div>
       </div>
       {/* Dropdown sản phẩm tìm kiếm */}
@@ -1153,7 +1151,7 @@ const createOrder = async () => {
             let oldestValidBatch = null;
             if (hasBatches) {
               const validBatches = [...(p.batches || [])]
-                .filter(b => (b.quantity || 0) > 0 && (!b.expiry_date || new Date(b.expiry_date) >= new Date()))
+                .filter((b) => (b.quantity || 0) > 0 && (!b.expiry_date || new Date(b.expiry_date) >= new Date()))
                 .sort((a, b) => {
                   if (!a.expiry_date && b.expiry_date) return 1;
                   if (a.expiry_date && !b.expiry_date) return -1;
@@ -1177,7 +1175,7 @@ const createOrder = async () => {
                   transition: "all 0.2s",
                   border: "1px solid transparent",
                   opacity: isOut ? 0.6 : 1,
-                  background: isOut ? "#fafafa" : "transparent"
+                  background: isOut ? "#fafafa" : "transparent",
                 }}
                 onMouseEnter={(e) => {
                   if (!isOut) {
@@ -1193,40 +1191,49 @@ const createOrder = async () => {
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: "16px", width: "100%" }}>
-                  <div style={{ width: 50, height: 50, borderRadius: 8, overflow: 'hidden', background: '#f0f2f5', flexShrink: 0 }}>
+                  <div style={{ width: 50, height: 50, borderRadius: 8, overflow: "hidden", background: "#f0f2f5", flexShrink: 0 }}>
                     {p.image?.url ? (
-                      <img src={p.image.url} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      <img src={p.image.url} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                     ) : (
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-                        <ShopOutlined style={{ fontSize: 20, color: '#d9d9d9' }} />
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
+                        <ShopOutlined style={{ fontSize: 20, color: "#d9d9d9" }} />
                       </div>
                     )}
                   </div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 600, fontSize: "15px", color: isOut ? "#999" : "#1f2937" }}>{p.name}</div>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 2, flexWrap: 'wrap' }}>
-                      <Tag color="blue" style={{ margin: 0, borderRadius: 4, fontSize: 10, border: 'none' }}>{p.sku}</Tag>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 2, flexWrap: "wrap" }}>
+                      <Tag color="blue" style={{ margin: 0, borderRadius: 4, fontSize: 10, border: "none" }}>
+                        {p.sku}
+                      </Tag>
                       <Text type={isOut ? "danger" : "secondary"} style={{ fontSize: 12 }}>
                         {isOut ? "Hết hàng có thể bán" : `Tồn khả dụng: ${avail}`}
                       </Text>
                       {p.stock_quantity > avail && (
                         <Tooltip title="Đã trừ hàng hết hạn">
-                          <Tag color="error" style={{ fontSize: 9, margin: 0 }}>-{p.stock_quantity - avail} hết hạn</Tag>
+                          <Tag color="error" style={{ fontSize: 9, margin: 0 }}>
+                            -{p.stock_quantity - avail} hết hạn
+                          </Tag>
                         </Tooltip>
                       )}
-                      
+
                       {/* Hiển thị lô ưu tiên bán trước */}
                       {oldestValidBatch && (
                         <Tag color="orange" icon={<InfoCircleOutlined />} style={{ borderRadius: 4, fontSize: 10, margin: 0 }}>
-                          Ưu tiên lô: <Text strong style={{ fontSize: 10 }}>{oldestValidBatch.batch_no}</Text> 
-                          {oldestValidBatch.expiry_date && ` (HSD: ${new Date(oldestValidBatch.expiry_date).toLocaleDateString('vi-VN')})`}
+                          Ưu tiên lô:{" "}
+                          <Text strong style={{ fontSize: 10 }}>
+                            {oldestValidBatch.batch_no}
+                          </Text>
+                          {oldestValidBatch.expiry_date && ` (HSD: ${new Date(oldestValidBatch.expiry_date).toLocaleDateString("vi-VN")})`}
                         </Tag>
                       )}
                     </div>
                   </div>
                   <div style={{ textAlign: "right" }}>
-                    <Text strong style={{ color: isOut ? "#999" : "#6366f1", fontSize: "16px" }}>{formatPrice(p.price)}</Text>
-                    <div style={{ fontSize: 11, color: '#94a3b8' }}>{p.unit}</div>
+                    <Text strong style={{ color: isOut ? "#999" : "#6366f1", fontSize: "16px" }}>
+                      {formatPrice(p.price)}
+                    </Text>
+                    <div style={{ fontSize: 11, color: "#94a3b8" }}>{p.unit}</div>
                   </div>
                 </div>
               </div>
@@ -1404,7 +1411,7 @@ const createOrder = async () => {
                                 const rate = val !== undefined && val !== null ? Number(val) : 0;
                                 if (rate === -1) return <Tag color="default">Ko thuế</Tag>;
                                 return <Tag color="orange">{rate}%</Tag>;
-                              }
+                              },
                             },
                             {
                               title: "Thành tiền",
@@ -1514,7 +1521,7 @@ const createOrder = async () => {
               flexDirection: "column",
               height: "calc(100vh - 120px)",
               position: "sticky",
-              top: 20
+              top: 20,
             }}
             styles={{
               body: {
@@ -1742,7 +1749,7 @@ const createOrder = async () => {
                     <Text style={{ fontWeight: 500 }}>Giảm giá từ điểm tích lũy:</Text>
                   </Space>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <Switch
                       checked={!!currentTab.usedPointsEnabled}
                       disabled={!loyaltySetting?.isActive || !currentTab.customer}
@@ -1761,8 +1768,10 @@ const createOrder = async () => {
                   </div>
                 </div>
                 {discount > 0 && (
-                  <div style={{ textAlign: 'right', marginTop: 4 }}>
-                    <Text strong style={{ color: "#389e0d" }}>-{formatPrice(discount)}</Text>
+                  <div style={{ textAlign: "right", marginTop: 4 }}>
+                    <Text strong style={{ color: "#389e0d" }}>
+                      -{formatPrice(discount)}
+                    </Text>
                   </div>
                 )}
               </div>
@@ -1786,25 +1795,25 @@ const createOrder = async () => {
               </div>
 
               {currentTab.isVAT && (
-                <div style={{ background: '#f5f5f5', padding: 8, borderRadius: 8, marginTop: 4 }}>
-                  <Space direction="vertical" style={{ width: '100%' }} size={4}>
-                    <Input 
-                      placeholder="Tên công ty/đơn vị" 
+                <div style={{ background: "#f5f5f5", padding: 8, borderRadius: 8, marginTop: 4 }}>
+                  <Space direction="vertical" style={{ width: "100%" }} size={4}>
+                    <Input
+                      placeholder="Tên công ty/đơn vị"
                       size="small"
                       value={currentTab.companyName}
-                      onChange={e => updateOrderTab(t => t.companyName = e.target.value)}
+                      onChange={(e) => updateOrderTab((t) => (t.companyName = e.target.value))}
                     />
-                    <Input 
-                      placeholder="Mã số thuế" 
+                    <Input
+                      placeholder="Mã số thuế"
                       size="small"
                       value={currentTab.taxCode}
-                      onChange={e => updateOrderTab(t => t.taxCode = e.target.value)}
+                      onChange={(e) => updateOrderTab((t) => (t.taxCode = e.target.value))}
                     />
-                    <Input 
-                      placeholder="Địa chỉ đơn vị" 
+                    <Input
+                      placeholder="Địa chỉ đơn vị"
                       size="small"
                       value={currentTab.companyAddress}
-                      onChange={e => updateOrderTab(t => t.companyAddress = e.target.value)}
+                      onChange={(e) => updateOrderTab((t) => (t.companyAddress = e.target.value))}
                     />
                   </Space>
                 </div>
@@ -1881,7 +1890,7 @@ const createOrder = async () => {
                       min={0}
                       value={currentTab.cashReceived}
                       onChange={(v) => {
-                        const val = typeof v === 'string' ? parseFloat(v) : v;
+                        const val = typeof v === "string" ? parseFloat(v) : v;
                         updateOrderTab((t) => {
                           t.cashReceived = val || 0;
                         });
@@ -1999,7 +2008,7 @@ const createOrder = async () => {
                       setBillModalOpen(true);
                     } catch (err: any) {
                       Swal.fire({
-                        title: " Lỗi!",
+                        title: "Có lỗi xảy ra!",
                         text: "Lỗi xác nhận thanh toán",
                         icon: "error",
                         confirmButtonText: "OK",
@@ -2054,7 +2063,7 @@ const createOrder = async () => {
             setNewCustomerModal(false);
           } catch (err) {
             Swal.fire({
-              title: " Lỗi!",
+              title: "Có lỗi xảy ra!",
               text: "Lỗi tạo khách hàng",
               icon: "error",
               confirmButtonText: "OK",
@@ -2072,21 +2081,23 @@ const createOrder = async () => {
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
             {/* ✅ Hiển thị trạng thái đã thanh toán */}
             {currentTab.isPaid && (
-              <div style={{ 
-                background: "#f6ffed", 
-                border: "1px solid #b7eb8f", 
-                borderRadius: "8px", 
-                padding: "12px 24px",
-                marginBottom: "8px",
-                width: "100%",
-                textAlign: "center"
-              }}>
+              <div
+                style={{
+                  background: "#f6ffed",
+                  border: "1px solid #b7eb8f",
+                  borderRadius: "8px",
+                  padding: "12px 24px",
+                  marginBottom: "8px",
+                  width: "100%",
+                  textAlign: "center",
+                }}
+              >
                 <Text strong style={{ color: "#52c41a", fontSize: "16px" }}>
                   ✅ Đã nhận thanh toán thành công!
                 </Text>
               </div>
             )}
-            
+
             <div style={{ display: "flex", justifyContent: "center", gap: "12px" }}>
               {/* Chỉ hiện nút Huỷ khi CHƯA thanh toán */}
               {!currentTab.isPaid && (
@@ -2132,14 +2143,14 @@ const createOrder = async () => {
                     })();
                   }
                 }}
-                style={{ 
-                  background: currentTab.isPaid ? "#52c41a" : "#1890ff", 
-                  borderColor: currentTab.isPaid ? "#52c41a" : "#1890ff", 
+                style={{
+                  background: currentTab.isPaid ? "#52c41a" : "#1890ff",
+                  borderColor: currentTab.isPaid ? "#52c41a" : "#1890ff",
                   color: "#fff",
                   minWidth: currentTab.isPaid ? "200px" : "auto",
                   height: currentTab.isPaid ? "48px" : "auto",
                   fontSize: currentTab.isPaid ? "16px" : "14px",
-                  fontWeight: currentTab.isPaid ? 600 : 400
+                  fontWeight: currentTab.isPaid ? 600 : 400,
                 }}
               >
                 {currentTab.isPaid ? "🖨️ In hoá đơn" : "In hoá đơn (Xác nhận thanh toán)"}
@@ -2172,7 +2183,7 @@ const createOrder = async () => {
             {currentTab.qrImageUrl ? (
               <img src={currentTab.qrImageUrl} alt="QR code" style={{ width: 410, height: 410 }} />
             ) : currentTab.qrPayload ? (
-              <QRCode value={currentTab.qrPayload} size={410} />
+              <QRCode value={currentTab.qrPayload} size={410} title="Mã QR thanh toán đơn hàng" />
             ) : null}
           </div>
           {currentTab.qrExpiryTs && (
