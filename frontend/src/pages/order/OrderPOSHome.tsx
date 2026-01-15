@@ -850,112 +850,139 @@ const OrderPOSHome: React.FC = () => {
   }, [currentTab?.qrPayload, currentTab?.qrImageUrl, currentTab?.pendingOrderId, currentTab?.isPaid]);
 
   // Tạo đơn hàng
-  const createOrder = async () => {
-    if (currentTab.cart.length === 0)
-      return Swal.fire({
-        icon: "warning",
-        title: "Đơn hàng trống, hãy thêm sản phẩm vào ngay",
-        confirmButtonText: "OK",
-      });
+// Tạo đơn hàng
+const createOrder = async () => {
+  if (currentTab.cart.length === 0)
+    return Swal.fire({
+      icon: "warning",
+      title: "Đơn hàng trống, hãy thêm sản phẩm vào ngay",
+      confirmButtonText: "OK",
+    });
 
-    // Validate cash payment
-    if (currentTab.paymentMethod === "cash" && currentTab.cashReceived < totalAmount) {
-      return Swal.fire({
-        icon: "warning" ,
-        title: "Chưa đủ tiền thanh toán",
-        text: `Tổng tiền thanh toán là ${formatPrice(totalAmount)}. Vui lòng nhận đủ tiền từ khách.`,
-        confirmButtonText: "Kiểm tra lại",
-      });
+  // Validate cash payment
+  if (currentTab.paymentMethod === "cash" && currentTab.cashReceived < totalAmount) {
+    return Swal.fire({
+      icon: "warning",
+      title: "Chưa đủ tiền thanh toán",
+      text: `Tổng tiền thanh toán là ${formatPrice(totalAmount)}. Vui lòng nhận đủ tiền từ khách.`,
+      confirmButtonText: "Kiểm tra lại",
+    });
+  }
+
+  // === CHUYỂN VIRTUAL-OWNER VỀ NULL TRƯỚC KHI GỬI ===
+  const sendEmployeeId = currentTab.employeeId === "virtual-owner" ? null : currentTab.employeeId;
+
+  setLoading(true);
+  try {
+    const items = currentTab.cart.map((item) => ({
+      productId: item.productId,
+      quantity: item.quantity,
+      saleType: item.saleType ?? "NORMAL",
+      ...(item.overridePrice !== null &&
+        item.overridePrice !== undefined && {
+          customPrice: item.overridePrice,
+        }),
+    }));
+
+    // Build payload conditionally
+    const payload: any = {
+      storeId,
+      employeeId: sendEmployeeId,
+      items,
+      paymentMethod: currentTab.paymentMethod,
+      isVATInvoice: currentTab.isVAT,
+      orderId: currentTab.pendingOrderId || undefined,
+    };
+
+    // Nếu có customer được chọn thì gửi customerInfo
+    if (currentTab.customer) {
+      payload.customerInfo = {
+        phone: currentTab.customer.phone,
+        name: currentTab.customer.name,
+      };
     }
 
-    // if (!currentTab.employeeId)
-    //   return Swal.fire({
-    //     icon: "info",
-    //     title: "Thông báo",
-    //     text: "Đã tự động chọn bạn làm nhân viên bán hàng",
-    //     confirmButtonText: "OK",
-    //   });
-
-    // === CHUYỂN VIRTUAL-OWNER VỀ NULL TRƯỚC KHI GỬI ===
-    const sendEmployeeId = currentTab.employeeId === "virtual-owner" ? null : currentTab.employeeId;
-
-    setLoading(true);
-    try {
-      const items = currentTab.cart.map((item) => ({
-        productId: item.productId,
-        quantity: item.quantity,
-        saleType: item.saleType ?? "NORMAL",
-        ...(item.overridePrice !== null &&
-          item.overridePrice !== undefined && {
-            customPrice: item.overridePrice,
-          }),
-      }));
-
-      // Build payload conditionally
-      const payload: any = {
-        storeId,
-        employeeId: sendEmployeeId,
-        items,
-        paymentMethod: currentTab.paymentMethod,
-        isVATInvoice: currentTab.isVAT,
-        orderId: currentTab.pendingOrderId || undefined, // Gửi ID nếu đang có đơn pending
+    // Gửi thông tin hóa đơn VAT nếu có
+    if (currentTab.isVAT) {
+      payload.vatInfo = {
+        companyName: currentTab.companyName,
+        taxCode: currentTab.taxCode,
+        companyAddress: currentTab.companyAddress,
       };
+    }
 
-      // Nếu có customer được chọn thì gửi customerInfo, ko có thì thôi
-      if (currentTab.customer) {
-        payload.customerInfo = {
-          phone: currentTab.customer.phone,
-          name: currentTab.customer.name,
-        };
+    // Chỉ gửi usedPoints khi user bật tính năng và có điểm > 0
+    if (currentTab.usedPointsEnabled && currentTab.usedPoints && currentTab.usedPoints > 0) {
+      payload.usedPoints = currentTab.usedPoints;
+    }
+
+    const res = await axios.post<OrderResponse>(`${API_BASE}/orders`, payload, { headers });
+    const order = res.data.order;
+    const orderId = order._id;
+
+    // Set thông tin cho current tab
+    updateOrderTab((tab) => {
+      tab.pendingOrderId = orderId;
+      tab.orderCreatedAt = order.createdAt || "";
+      tab.orderPrintCount = typeof order.printCount === "number" ? order.printCount : 0;
+      tab.orderEarnedPoints = (order as any).earnedPoints ?? 0;
+      tab.orderCreatedPaymentMethod = currentTab.paymentMethod;
+
+      if (currentTab.paymentMethod === "qr" && res.data.qrDataURL) {
+        tab.qrImageUrl = res.data.qrDataURL;
+        tab.savedQrImageUrl = res.data.qrDataURL;
+        tab.qrPayload = (res.data.order as any)?.paymentRef;
+        
+        tab.qrExpiryTs = res.data.order?.qrExpiry ? new Date(res.data.order.qrExpiry).getTime() : null;
+        tab.savedQrExpiryTs = res.data.order?.qrExpiry ? new Date(res.data.order.qrExpiry).getTime() : null;
       }
+    });
+  } catch (err: any) {
+    // ✅ XỬ LÝ ĐẶC BIỆT CHO LỖI QR/PAYOS
+    const errorMessage = err.response?.data?.message || "";
+    const isQRPaymentError = 
+      currentTab.paymentMethod === "qr" || 
+      errorMessage.toLowerCase().includes("payos") ||
+      errorMessage.toLowerCase().includes("qr") ||
+      errorMessage.toLowerCase().includes("thanh toán") ||
+      errorMessage.toLowerCase().includes("payment");
 
-      // ✅ Gửi thông tin hóa đơn VAT nếu có
-      if (currentTab.isVAT) {
-        payload.vatInfo = {
-          companyName: currentTab.companyName,
-          taxCode: currentTab.taxCode,
-          companyAddress: currentTab.companyAddress,
-        };
-      }
-
-      // Chỉ gửi usedPoints khi user bật tính năng và có điểm > 0
-      if (currentTab.usedPointsEnabled && currentTab.usedPoints && currentTab.usedPoints > 0) {
-        payload.usedPoints = currentTab.usedPoints;
-      }
-
-      const res = await axios.post<OrderResponse>(`${API_BASE}/orders`, payload, { headers });
-      const order = res.data.order;
-      const orderId = order._id;
-
-      // Set thông tin cho current tab (per-tab, not global)
-      updateOrderTab((tab) => {
-        tab.pendingOrderId = orderId;
-        tab.orderCreatedAt = order.createdAt || "";
-        tab.orderPrintCount = typeof order.printCount === "number" ? order.printCount : 0;
-        tab.orderEarnedPoints = (order as any).earnedPoints ?? 0;
-        tab.orderCreatedPaymentMethod = currentTab.paymentMethod;
-
-        if (currentTab.paymentMethod === "qr" && res.data.qrDataURL) {
-          tab.qrImageUrl = res.data.qrDataURL;
-          tab.savedQrImageUrl = res.data.qrDataURL; // 🟢 Lưu giữ QR để restore lại
-          tab.qrPayload = (res.data.order as any)?.paymentRef; // Save code for polling
-          
-          tab.qrExpiryTs = res.data.order?.qrExpiry ? new Date(res.data.order.qrExpiry).getTime() : null;
-          tab.savedQrExpiryTs = res.data.order?.qrExpiry ? new Date(res.data.order.qrExpiry).getTime() : null; // 🟢 Lưu giữ
-        }
+    if (isQRPaymentError) {
+      const result = await Swal.fire({
+        icon: "info",
+        title: "⚠️ Chưa tích hợp thanh toán",
+        html: `
+          <p>Bạn chưa tích hợp ngân hàng VietQR tĩnh hoặc tích hợp check thanh toán QR tự động (PayOS).</p>
+          <p>Vui lòng cấu hình trong phần <strong>Cài đặt > Thiết lập cổng thanh toán</strong></p>
+        `,
+        showCancelButton: true,
+        confirmButtonText: "Đi tới cài đặt",
+        cancelButtonText: "Để sau",
+        confirmButtonColor: "#1890ff",
+        cancelButtonColor: "#d9d9d9",
       });
-    } catch (err: any) {
+
+      if (result.isConfirmed) {
+        // Navigate to settings page
+        window.location.href = "/settings/payment-method";
+        // Hoặc nếu dùng React Router:
+        // navigate("/settings/payment-method");
+      }
+    } else {
+      // Lỗi thông thường khác
       Swal.fire({
-        title: " Lỗi!",
-        text: err.response?.data?.message || "Lỗi tạo đơn",
+        title: "❌ Lỗi!",
+        text: errorMessage || "Lỗi tạo đơn",
         icon: "error",
         confirmButtonText: "OK",
         confirmButtonColor: "#ff4d4f",
       });
-    } finally {
-      setLoading(false);
     }
-  };
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   // Sửa hàm triggerPrint
   const triggerPrint = async (orderId: string) => {

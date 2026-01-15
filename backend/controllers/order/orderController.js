@@ -522,12 +522,17 @@ const createOrder = async (req, res) => {
 
     if (paymentMethod === "qr") {
       try {
+        const loyaltySetting = await mongoose.model("LoyaltySetting").findOne({ storeId: storeId }).session(session);
+        const vndPerPoint = loyaltySetting?.vndPerPoint || 0;
+        const discountValue = (usedPoints || 0) * vndPerPoint;
+
         // Lấy config PayOS của Store
         const paymentConfig = await StorePaymentConfig.findOne({
           store: storeId,
         }).session(session);
 
-        const amount = Math.round(total);
+        // Số tiền thực thu = (Tổng + Thuế) - Giảm giá
+        const amount = Math.max(0, Math.round(finalTotal - discountValue));
         const description = `DH ${order._id.toString().slice(-6)}`;
 
         let usedPayOS = false;
@@ -668,8 +673,9 @@ const setPaidCash = async (req, res) => {
           throw new Error(`Sản phẩm "${prod.name}" không đủ tồn kho (Còn: ${prod.stock_quantity}, Cần: ${quantity})`);
         }
 
-        // b. Logic trừ theo lô (Batch FIFO)
+        // b. Logic trừ theo lô (Batch FIFO) + Lấy đúng cost_price từng lô
         let remainingToDeduct = quantity;
+        const batchDeductions = []; // Ghi nhận từng lô đã trừ và cost_price tương ứng
         
         // Sắp xếp lô theo hạn dùng (sớm nhất trước) -> FIFO
         const sortedBatches = (prod.batches || []).sort((a, b) => {
@@ -711,6 +717,13 @@ const setPaidCash = async (req, res) => {
           batch.quantity -= deduct;
           remainingToDeduct -= deduct;
 
+          // ✅ GHI NHẬN: Lô đã trừ, số lượng, và cost_price của lô đó
+          batchDeductions.push({
+            batch_no: batch.batch_no || "N/A",
+            qty: deduct,
+            cost_price: batch.cost_price || Number(prod.cost_price) || 0,
+          });
+
           // Tạo thông báo nếu lô sắp hết (ví dụ < 10)
           if (batch.quantity <= 10 && batch.quantity > 0) {
             await Notification.create([{
@@ -744,19 +757,22 @@ const setPaidCash = async (req, res) => {
 
         await prod.save({ session });
 
-        // Chuẩn bị data cho phiếu OUT
-        voucherItems.push({
-          product_id: prod._id,
-          sku_snapshot: it.sku_snapshot || prod.sku || "",
-          name_snapshot: it.name_snapshot || prod.name || "",
-          unit_snapshot: it.unit_snapshot || prod.unit || "",
-          qty_document: quantity,
-          qty_actual: quantity,
-          unit_cost: it.cost_price_snapshot || prod.cost_price || 0,
-          warehouse_id: it.warehouse_id || null,
-          warehouse_name: it.warehouse_name || "",
-          note: "Bán hàng (POS)",
-        });
+        // ✅ TẠO VOUCHER ITEMS THEO TỪNG LÔ ĐỂ COGS CHÍNH XÁC
+        for (const bd of batchDeductions) {
+          voucherItems.push({
+            product_id: prod._id,
+            sku_snapshot: it.sku_snapshot || prod.sku || "",
+            name_snapshot: it.name_snapshot || prod.name || "",
+            unit_snapshot: it.unit_snapshot || prod.unit || "",
+            qty_document: bd.qty,
+            qty_actual: bd.qty,
+            unit_cost: bd.cost_price, // ✅ GIÁ NHẬP ĐÚNG THEO LÔ
+            warehouse_id: it.warehouse_id || null,
+            warehouse_name: it.warehouse_name || "",
+            batch_no: bd.batch_no,
+            note: `Bán hàng (POS) - Lô ${bd.batch_no}`,
+          });
+        }
       }
 
       // 3. Tạo phiếu xuất OUT
@@ -903,8 +919,9 @@ const printBill = async (req, res) => {
           throw new Error(`Sản phẩm "${prod.name}" không đủ tồn kho. Còn ${prod.stock_quantity}, cần ${quantity}`);
         }
 
-        // b. Logic trừ theo lô (Batch FIFO)
+        // b. Logic trừ theo lô (Batch FIFO) + Lấy đúng cost_price từng lô
         let remainingToDeduct = quantity;
+        const batchDeductions = []; // Ghi nhận từng lô đã trừ và cost_price tương ứng
         const sortedBatches = (prod.batches || []).sort((a, b) => {
           if (!a.expiry_date && b.expiry_date) return 1;
           if (a.expiry_date && !b.expiry_date) return -1;
@@ -944,6 +961,13 @@ const printBill = async (req, res) => {
           batch.quantity -= deduct;
           remainingToDeduct -= deduct;
 
+          // ✅ GHI NHẬN: Lô đã trừ, số lượng, và cost_price của lô đó
+          batchDeductions.push({
+            batch_no: batch.batch_no || "N/A",
+            qty: deduct,
+            cost_price: batch.cost_price || Number(prod.cost_price) || 0,
+          });
+
           // Cảnh báo số lượng lô thấp
           if (batch.quantity <= 10 && batch.quantity > 0) {
             await Notification.create({
@@ -977,18 +1001,22 @@ const printBill = async (req, res) => {
 
         await prod.save();
 
-        voucherItems.push({
-          product_id: prod._id,
-          sku_snapshot: it.sku_snapshot || prod.sku || "",
-          name_snapshot: it.name_snapshot || prod.name || "",
-          unit_snapshot: it.unit_snapshot || prod.unit || "",
-          qty_document: quantity,
-          qty_actual: quantity,
-          unit_cost: it.cost_price_snapshot || prod.cost_price || 0,
-          warehouse_id: it.warehouse_id || null,
-          warehouse_name: it.warehouse_name || "",
-          note: "Bán hàng",
-        });
+        // ✅ TẠO VOUCHER ITEMS THEO TỪNG LÔ ĐỂ COGS CHÍNH XÁC
+        for (const bd of batchDeductions) {
+          voucherItems.push({
+            product_id: prod._id,
+            sku_snapshot: it.sku_snapshot || prod.sku || "",
+            name_snapshot: it.name_snapshot || prod.name || "",
+            unit_snapshot: it.unit_snapshot || prod.unit || "",
+            qty_document: bd.qty,
+            qty_actual: bd.qty,
+            unit_cost: bd.cost_price, // ✅ GIÁ NHẬP ĐÚNG THEO LÔ
+            warehouse_id: it.warehouse_id || null,
+            warehouse_name: it.warehouse_name || "",
+            batch_no: bd.batch_no,
+            note: `Bán hàng - Lô ${bd.batch_no}`,
+          });
+        }
       }
 
       // Tạo phiếu OUT
@@ -1341,6 +1369,7 @@ const refundOrder = async (req, res) => {
     );
 
     let refundTotal = 0;
+    let refundVATTotal = 0; // ✅ Tổng VAT hoàn
     const refundItems = [];
     const voucherItems = [];
 
@@ -1353,7 +1382,13 @@ const refundOrder = async (req, res) => {
       const unitPrice = Number(oi.priceAtTime);
       const subtotal = refundQty * unitPrice;
 
-      // ✅ LẤY GIÁ VỐN TỪ ORDERITEM
+      // ✅ TÍNH VAT HOÀN THEO TỶ LỆ SỐ LƯỢNG
+      const itemTotalQty = Number(oi.quantity);
+      const itemTotalVAT = Number(oi.vat_amount || 0);
+      const vatPerUnit = itemTotalQty > 0 ? itemTotalVAT / itemTotalQty : 0;
+      const refundVAT = vatPerUnit * refundQty;
+
+      // ✅ LẤY GIÁ VỐN TỪ ORDERITEM (hoặc từ batch nếu có)
       const unitCost = Number(
         oi.cost_price_snapshot || oi.productId.cost_price || 0
       );
@@ -1370,14 +1405,18 @@ const refundOrder = async (req, res) => {
       oi.refundedQuantity = alreadyRefunded + refundQty;
       await oi.save({ session });
 
+      // ✅ CỘNG DỒN: Tiền hoàn = Subtotal + VAT
       refundTotal += subtotal;
+      refundVATTotal += refundVAT;
 
-      // Data cho OrderRefund
+      // Data cho OrderRefund - BỔ SUNG VAT
       refundItems.push({
         productId: oi.productId._id,
         quantity: refundQty,
         priceAtTime: unitPrice,
         subtotal,
+        vatAmount: refundVAT, // ✅ MỚI: VAT của sản phẩm hoàn
+        unitCost, // ✅ MỚI: Giá vốn để tính COGS hoàn
       });
 
       // ✅ Data cho InventoryVoucher (Phiếu nhập hoàn)
@@ -1437,6 +1476,25 @@ const refundOrder = async (req, res) => {
 
     await refundVoucher.save({ session });
 
+    // ===== TÍNH TOÁN TIỀN HOÀN THỰC TẾ (NET REFUND) =====
+    // Nếu đơn hàng có giảm giá từ điểm, chúng ta chỉ hoàn lại số tiền thực tế khách đã trả
+    const orderTotalGross = Number(order.totalAmount || 0);
+    const usedPoints = Number(order.usedPoints || 0);
+    const loyaltySetting = await mongoose.model("LoyaltySetting").findOne({ storeId: order.storeId }).session(session);
+    const vndPerPoint = loyaltySetting?.vndPerPoint || 0;
+    const totalDiscountValue = usedPoints * vndPerPoint;
+
+    // Tổng tiền hàng hoàn (Gross)
+    const grossRefundAmount = refundTotal + refundVATTotal;
+    
+    // Tiền hoàn thực tế (Net) = (GrossRefund / GrossOrder) * (GrossOrder - Discount)
+    let netRefundAmount = grossRefundAmount;
+    if (orderTotalGross > 0) {
+      netRefundAmount = (grossRefundAmount / orderTotalGross) * (orderTotalGross - totalDiscountValue);
+    }
+    // Làm tròn
+    netRefundAmount = Math.round(netRefundAmount);
+
     // ===== SAVE REFUND RECORD =====
     console.log("💾 Save OrderRefund");
     const refundDoc = new OrderRefund({
@@ -1446,7 +1504,9 @@ const refundOrder = async (req, res) => {
       refundedByName,
       refundedAt: new Date(),
       refundReason: refundReason || "Hoàn hàng",
-      refundAmount: refundTotal,
+      refundAmount: netRefundAmount, // ✅ TIỀN HOÀN THỰC TẾ (ĐÃ TRỪ CHIẾT KHẤU TỈ LỆ)
+      refundVATAmount: refundVATTotal, // ✅ VAT của hàng hoàn
+      refundSubtotal: refundTotal, // ✅ Tiền hàng hoàn (chưa VAT)
       refundItems,
     });
 
@@ -1457,19 +1517,56 @@ const refundOrder = async (req, res) => {
     const totalOrderQty = allOrderItems.reduce((s, i) => s + i.quantity, 0);
     const totalRefundedQtyNow = allOrderItems.reduce((s, i) => s + (i.refundedQuantity || 0), 0);
 
-    // Update refundedAmount
+    // Update refundedAmount - BÂY GIỜ BAO GỒM VAT
     const prevRefundedAmount = Number(order.refundedAmount || 0);
-    order.refundedAmount = mongoose.Types.Decimal128.fromString((prevRefundedAmount + refundTotal).toFixed(2));
+    order.refundedAmount = mongoose.Types.Decimal128.fromString((prevRefundedAmount + netRefundAmount).toFixed(2));
     order.totalRefundedQuantity = totalRefundedQtyNow;
 
     // ✅ XÁC ĐỊNH STATUS MỚI
-    if (totalRefundedQtyNow >= totalOrderQty) {
+    const isFullRefund = totalRefundedQtyNow >= totalOrderQty;
+    if (isFullRefund) {
       order.status = "refunded";
     } else {
       order.status = "partially_refunded";
     }
 
     order.refundId = refundDoc._id;
+
+    // ===== HOÀN ĐIỂM TÍCH LŨY CHO KHÁCH (NẾU HOÀN TOÀN BỘ) =====
+    if (isFullRefund && order.customer) {
+      try {
+        const customer = await mongoose.model("Customer").findById(order.customer).session(session);
+        if (customer) {
+          // ✅ TRẢ LẠI ĐIỂM ĐÃ DÙNG (nếu có)
+          const usedPoints = Number(order.usedPoints || 0);
+          if (usedPoints > 0) {
+            customer.loyaltyPoints = (customer.loyaltyPoints || 0) + usedPoints;
+            console.log(`🔄 Hoàn ${usedPoints} điểm đã dùng cho khách ${customer.phone}`);
+          }
+
+          // ✅ TRỪ LẠI ĐIỂM ĐÃ CỘNG (nếu có) 
+          const earnedPoints = Number(order.earnedPoints || 0);
+          if (earnedPoints > 0) {
+            customer.loyaltyPoints = Math.max(0, (customer.loyaltyPoints || 0) - earnedPoints);
+            console.log(`🔄 Trừ ${earnedPoints} điểm đã cộng của khách ${customer.phone}`);
+          }
+
+          // ✅ TRỪ TỔNG CHI TIÊU
+          const orderTotal = Number(order.totalAmount || 0);
+          const prevSpent = Number(customer.totalSpent || 0);
+          customer.totalSpent = mongoose.Types.Decimal128.fromString(Math.max(0, prevSpent - orderTotal).toFixed(2));
+
+          // ✅ TRỪ SỐ ĐƠN
+          customer.totalOrders = Math.max(0, (customer.totalOrders || 0) - 1);
+
+          await customer.save({ session });
+          console.log(`✅ Đã hoàn điểm và cập nhật thống kê cho khách ${customer.phone}`);
+        }
+      } catch (custErr) {
+        console.error("⚠️ Lỗi hoàn điểm khách:", custErr.message);
+        // Không throw để không ảnh hưởng hoàn hàng chính
+      }
+    }
 
     await order.save({ session });
 

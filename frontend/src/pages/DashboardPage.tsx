@@ -52,6 +52,7 @@ interface OrderStats {
 interface FinancialData {
   totalRevenue: number;
   totalVAT: number;
+  netSales: number; // Doanh thu thuần = Doanh thu - VAT
   totalCOGS: number;
   grossProfit: number;
   operatingCost: number;
@@ -884,6 +885,47 @@ export default function DashboardPage() {
                   <InfoCircleOutlined
                     style={{
                       color: "#1890ff",
+                      fontSize: 16,
+                      cursor: "pointer",
+                      marginLeft: 8,
+                      flexShrink: 0,
+                    }}
+                  />
+                </div>
+              </Tooltip>
+
+              {/* Doanh thu thuần */}
+              <Tooltip title="Doanh thu thuần = Doanh thu thực - VAT thu hộ. Đây là doanh thu thực tế sau khi trừ thuế.">
+                <div className="p-4 bg-indigo-50 rounded-lg flex items-center justify-between col-span-1 sm:col-span-1 lg:col-span-4 cursor-pointer">
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <Text type="secondary" style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
+                      Doanh thu thuần
+                    </Text>
+                    <Title
+                      level={4}
+                      style={{
+                        margin: 0,
+                        color: "#6366f1",
+                        fontSize: "clamp(16px, 4vw, 20px)",
+                        wordBreak: "break-word",
+                      }}
+                    >
+                      {loadingFinancials ? (
+                        <Spin size="small" />
+                      ) : financials ? (
+                        new Intl.NumberFormat("vi-VN", {
+                          style: "currency",
+                          currency: "VND",
+                          minimumFractionDigits: 0,
+                        }).format(financials.netSales || 0)
+                      ) : (
+                        "₫0"
+                      )}
+                    </Title>
+                  </div>
+                  <InfoCircleOutlined
+                    style={{
+                      color: "#6366f1",
                       fontSize: 16,
                       cursor: "pointer",
                       marginLeft: 8,

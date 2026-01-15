@@ -2680,12 +2680,16 @@ const updateProductBatch = async (req, res) => {
           createdVouchers.push(pn[0]);
         }
       } else {
-        // TRƯỜNG HỢP 2: CHỈ THAY ĐỔI SỐ LƯỢNG (GIÁ GIỮ NGUYÊN) -> DÙNG DELTA
-        console.log("📉 Only quantity changed, creating a single delta voucher");
+        // TRƯỜNG HỢP 2: CHỈ THAY ĐỔI SỐ LƯỢNG (GIÁ GIỮ NGUYÊN) -> DÙNG PHIẾU NHẬP/XUẤT (Positive)
+        console.log("📉 Quantity changed, creating IN/OUT voucher adjustment");
+        
+        // Nếu quantityDiff > 0: Tăng số lượng -> Tạo phiếu NHẬP (IN)
+        // Nếu quantityDiff < 0: Giảm số lượng -> Tạo phiếu XUẤT (OUT)
         
         const voucherType = quantityDiff >= 0 ? "IN" : "OUT";
         const prefix = voucherType === "IN" ? "PN" : "PX";
-        const vQty = Math.abs(quantityDiff);
+        const vQty = Math.abs(quantityDiff); // Luôn dùng số dương
+        
         const vUnitCost = Number(newCostPrice || 0);
         const vLineCost = vQty * vUnitCost;
         const vTotalAmount = vQty * Number(newSellingPrice || 0);

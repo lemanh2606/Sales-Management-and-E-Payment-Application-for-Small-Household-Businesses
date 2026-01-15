@@ -54,6 +54,17 @@ router.get(
   inventoryVoucherController.getInventoryVouchers
 );
 
+// Xử lý hàng hết hạn chuyên dùng (Hủy/Trả hàng) - chỉ MANAGER
+router.post(
+  "/:storeId/inventory-vouchers/process-expired",
+  verifyToken,
+  checkSubscriptionExpiry,
+  checkStoreAccess,
+  requirePermission("inventory:voucher:post"),
+  requireRole("MANAGER"),
+  inventoryVoucherController.processExpiredGoods
+);
+
 // Get voucher by id
 router.get(
   "/:storeId/inventory-vouchers/:voucherId",
@@ -128,17 +139,6 @@ router.post(
   requirePermission("inventory:voucher:reverse"),
   requireRole("MANAGER"),
   inventoryVoucherController.reverseInventoryVoucher
-);
-
-// Xử lý hàng hết hạn chuyên dùng (Hủy/Trả hàng) - chỉ MANAGER
-router.post(
-  "/:storeId/inventory-vouchers/process-expired",
-  verifyToken,
-  checkSubscriptionExpiry,
-  checkStoreAccess,
-  requirePermission("inventory:voucher:post"),
-  requireRole("MANAGER"),
-  inventoryVoucherController.processExpiredGoods
 );
 
 module.exports = router;

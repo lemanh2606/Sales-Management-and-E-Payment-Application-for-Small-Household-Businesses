@@ -242,6 +242,7 @@ function sanitizeItems(itemsRaw) {
     qty_actual: toNumber(it.qty_actual, 0),
 
     unit_cost: it.unit_cost !== undefined ? toDecimal128(it.unit_cost) : undefined,
+    selling_price: it.selling_price !== undefined ? toDecimal128(it.selling_price) : undefined,
     note: String(it.note || "").trim(),
   }));
 }
@@ -1519,9 +1520,12 @@ const processExpiredGoods = async (req, res) => {
       warehouse_id,
       notes = "",
       partner_name = "",
+      partner_phone = "",
       supplier_id, // Accept supplier_id
       deliverer_name = "",
-      receiver_name = ""
+      receiver_name = "",
+      deliverer_phone = "",
+      receiver_phone = ""
     } = req.body;
 
     if (!items.length) {
@@ -1574,12 +1578,12 @@ const processExpiredGoods = async (req, res) => {
         expiry_date: batch.expiry_date,
         qty_actual: qtyToProcess,
         unit_cost: toDecimal128(batch.cost_price || 0),
-        note: it.note || notes || (mode === "DISPOSE" ? "Hủy hàng hết hạn" : "Trả hàng hết hạn")
+        note: it.note || notes || (mode === "DISPOSE" ? "Tiêu hủy hàng hết hạn" : "Trả hàng hết hạn")
       });
     }
 
     // 3. Create Inventory Voucher (Automatic Posted)
-    const reason = mode === "DISPOSE" ? `Tiêu hủy hàng hết hạn theo quy định. ${notes}` : `Xuất trả hàng hết hạn cho nhà cung cấp/đối tác. ${notes}`;
+    const reason = notes || (mode === "DISPOSE" ? "Tiêu hủy hàng hết hạn" : "Trả hàng hết hạn cho Nhà cung cấp");
     const voucher_code = `XH-${Date.now()}`;
 
     const voucher = new InventoryVoucher({
@@ -1597,9 +1601,12 @@ const processExpiredGoods = async (req, res) => {
       posted_by: userId,
       posted_at: now,
       partner_name: partner_name || (mode === "RETURN" ? "Nhà cung cấp" : ""),
+      partner_phone: partner_phone || "",
       supplier_id: supplier_id || null, // Create link to Supplier
       deliverer_name: deliverer_name || req.user?.fullname || "",
-      receiver_name: receiver_name || "Hội đồng tiêu hủy/Đối tác"
+      receiver_name: receiver_name || "Hội đồng tiêu hủy/Đối tác",
+      deliverer_phone: deliverer_phone || "",
+      receiver_phone: receiver_phone || ""
     });
 
     await voucher.save({ session });
@@ -1626,7 +1633,8 @@ const processExpiredGoods = async (req, res) => {
   } catch (error) {
     await session.abortTransaction();
     session.endSession();
-    return res.status(400).json({ message: error.message || "Lỗi xử lý hàng hết hạn" });
+    const status = error.status || 400;
+    return res.status(status).json({ message: error.message || "Lỗi xử lý hàng hết hạn" });
   }
 };
 

@@ -338,7 +338,11 @@ const getInventoryVarianceReport = async (req, res) => {
       const beginningStock = beginningImportQty - beginningExportQty;
 
       // 2. Nhập trong kỳ = tổng SL nhập (IN) trong kỳ
-      const periodImportAgg = await InventoryVoucher.aggregate([
+      // Logic mới: Nhập trong kỳ = (Tổng IN) - (Tổng OUT điều chỉnh giảm)
+      // Điều này giúp "giảm số lượng" được tính là "giảm nhập" thay vì "tăng xuất".
+
+      // 2a. Tổng IN
+      const periodInAgg = await InventoryVoucher.aggregate([
         {
           $match: {
             store_id: storeObjectId,
@@ -356,21 +360,21 @@ const getInventoryVarianceReport = async (req, res) => {
         {
           $group: {
             _id: null,
-            totalImport: { $sum: "$items.qty_actual" },
+            total: { $sum: "$items.qty_actual" },
           },
         },
       ]);
+      const totalInPeriod = periodInAgg[0]?.total || 0;
 
-      const importQty = periodImportAgg[0]?.totalImport || 0;
-
-      // 3. Xuất trong kỳ = tổng SL xuất (OUT) trong kỳ
-      const periodExportAgg = await InventoryVoucher.aggregate([
+      // 2b. Tổng OUT Điều chỉnh (có mã chứa "-ADJ-")
+      const periodAdjOutAgg = await InventoryVoucher.aggregate([
         {
           $match: {
             store_id: storeObjectId,
             type: "OUT",
             status: "POSTED",
             voucher_date: { $gte: from, $lte: to },
+            voucher_code: { $regex: /-ADJ-/ }, // Lọc phiếu điều chỉnh
           },
         },
         { $unwind: "$items" },
@@ -382,17 +386,48 @@ const getInventoryVarianceReport = async (req, res) => {
         {
           $group: {
             _id: null,
-            totalExport: { $sum: "$items.qty_actual" },
+            total: { $sum: "$items.qty_actual" },
+          },
+        },
+      ]);
+      const totalAdjOutPeriod = periodAdjOutAgg[0]?.total || 0;
+
+      // Tính Import Qty hiển thị
+      const importQty = totalInPeriod - totalAdjOutPeriod;
+
+      // 3. Xuất trong kỳ = tổng SL xuất (OUT) trong kỳ (TRỪ phiếu điều chỉnh)
+      const periodRegularOutAgg = await InventoryVoucher.aggregate([
+        {
+          $match: {
+            store_id: storeObjectId,
+            type: "OUT",
+            status: "POSTED",
+            voucher_date: { $gte: from, $lte: to },
+            voucher_code: { $not: { $regex: /-ADJ-/ } }, // Lọc phiếu KHÔNG PHẢI điều chỉnh
+          },
+        },
+        { $unwind: "$items" },
+        {
+          $match: {
+            "items.product_id": productId,
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: "$items.qty_actual" },
           },
         },
       ]);
 
-      const exportQty = periodExportAgg[0]?.totalExport || 0;
+      const exportQty = periodRegularOutAgg[0]?.total || 0;
 
       // 4. Tồn cuối kỳ = Tồn đầu kỳ + Nhập trong kỳ – Xuất trong kỳ
+      // (Beg + (In - AdjOut) - RegOut) = Beg + In - (AdjOut + RegOut) -> Chính xác về mặt toán học
       const endingStock = beginningStock + importQty - exportQty;
 
-      // Tính COGS (Cost of Good Sold) = Xuất trong kỳ * Cost Price
+      // Tính COGS (Cost of Good Sold) = Xuất trong kỳ * Cost Price 
+      // (chỉ tính trên xuất bán thực tế, không tính trên điều chỉnh kho)
       const periodCOGS = exportQty * costPrice;
 
       reportDetails.push({

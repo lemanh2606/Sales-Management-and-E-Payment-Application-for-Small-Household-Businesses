@@ -10,7 +10,9 @@ const orderRefundSchema = new mongoose.Schema(
     refundedByName: { type: String, default: "Chủ cửa hàng" }, // Snapshot tên để hiển thị
     refundTransactionId: { type: String, default: null }, // nếu có, mà chắc đéo có đâu
     refundReason: { type: String, maxlength: 500, required: true },
-    refundAmount: { type: mongoose.Schema.Types.Decimal128, required: true }, // tổng số tiền hoàn
+    refundAmount: { type: mongoose.Schema.Types.Decimal128, required: true }, // tổng số tiền hoàn (bao gồm VAT)
+    refundSubtotal: { type: mongoose.Schema.Types.Decimal128, default: "0" }, // Tiền hàng hoàn (chưa VAT)
+    refundVATAmount: { type: mongoose.Schema.Types.Decimal128, default: "0" }, // VAT hoàn
     refundItems: [
       //chi tiết từng mặt hàng được hoàn
       {
@@ -18,6 +20,8 @@ const orderRefundSchema = new mongoose.Schema(
         quantity: { type: Number, required: true },
         priceAtTime: { type: mongoose.Schema.Types.Decimal128, required: true },
         subtotal: { type: mongoose.Schema.Types.Decimal128, required: true },
+        vatAmount: { type: mongoose.Schema.Types.Decimal128, default: "0" }, // VAT của sản phẩm hoàn
+        unitCost: { type: mongoose.Schema.Types.Decimal128, default: "0" }, // Giá vốn để tính COGS hoàn
       },
     ],
     evidenceMedia: [

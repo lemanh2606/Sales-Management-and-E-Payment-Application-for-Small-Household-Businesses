@@ -10,7 +10,8 @@ import {
   MedicineBoxOutlined,
   UserOutlined,
   HomeOutlined,
-  PlusOutlined
+  PlusOutlined,
+  ArrowLeftOutlined
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -93,33 +94,28 @@ const ProcessExpiredPage = () => {
       }
 
       // 2. Auto-detect Supplier (Partner)
-      // Debug: console.log("Selected Rows for Supplier Detect:", selectedRows);
       const uniqueSupplierIds = [...new Set(selectedRows.map(it => it.supplier_id).filter(Boolean))];
 
       if (uniqueSupplierIds.length === 1) {
           const supId = uniqueSupplierIds[0];
-          // Use data directly from the item (it is now populated from backend)
-          // Find the first item that has this supplier_id to get details
           const representativeItem = selectedRows.find(it => it.supplier_id === supId);
           
           if (representativeItem) {
               const currentSupId = form.getFieldValue("supplier_id");
               if (currentSupId !== supId) {
+                const contactPerson = representativeItem.supplier_contact || representativeItem.contact_person || "";
+                const partnerName = representativeItem.supplier_name || "";
+                const phone = representativeItem.supplier_phone || "";
+                
                 form.setFieldsValue({ 
                     supplier_id: supId,
-                    partner_name: representativeItem.supplier_name,
-                    receiver_name: representativeItem.supplier_contact || representativeItem.supplier_name || ""
+                    partner_name: partnerName,
+                    partner_phone: phone,
+                    receiver_name: contactPerson,
+                    receiver_phone: phone
                 });
-                // Optional: message.success(`Đã chọn NCC: ${representativeItem.supplier_name}`);
               }
           }
-      } else if (uniqueSupplierIds.length === 0) {
-          // No common supplier detected (maybe items have no supplier)
-          // Do not clear if user manually entered?
-          // form.setFieldsValue({ supplier_id: null, partner_name: "" });
-      } else {
-         // Mixed suppliers
-         // message.warning("Các items thuộc nhiều NCC khác nhau.");
       }
   };
 
@@ -131,277 +127,226 @@ const ProcessExpiredPage = () => {
     setMode(selectedMode);
     setIsModalVisible(true);
     
-    // Pre-fill some defaults
+    // Pre-fill defaults
     const user = JSON.parse(localStorage.getItem("user") || "{}");
     const initialValues: any = {
-      deliverer_name: user.fullname || "",
+      deliverer_name: user.fullname || user.username || "",
+      deliverer_phone: user.phone || "",
     };
 
     if (selectedMode === "DISPOSE") {
-        initialValues.receiver_name = "Hội đồng tiêu hủy";
-    } else {
-        // Mode RETURN
-        // Check if we already have a receiver set from auto-detect (handleSelectItems)
-        const currentRec = form.getFieldValue("receiver_name");
-        // If empty, try to set from current partner if possible (though handleSelectItems should have done it)
-        if(!currentRec) {
-             // Fallback default
-             initialValues.receiver_name = ""; 
+        if (!form.getFieldValue("receiver_name")) {
+            initialValues.receiver_name = "Hội đồng tiêu hủy";
         }
+        initialValues.notes = "Tiêu hủy hàng hết hạn";
+    } else {
+        initialValues.notes = "Trả hàng hết hạn cho Nhà cung cấp";
     }
     form.setFieldsValue(initialValues);
   };
 
   const handleSubmit = async (values: any) => {
-      // Form content acts as confirmation. Direct submit.
+    try {
       setLoading(true);
-      try {
-        const payload = {
-          mode,
-          warehouse_id: values.warehouse_id,
-          notes: values.notes,
-          partner_name: values.partner_name,
-          deliverer_name: values.deliverer_name,
-          receiver_name: values.receiver_name,
-          items: selectedItems.map(it => ({
-            product_id: it._id,
-            batch_no: it.batch_no,
-            quantity: it.quantity,
-            note: values.notes
-          })),
-          supplier_id: values.supplier_id // Include supplier ID
-        };
 
-        const res = await axios.post(`${apiUrl}/stores/${storeId}/inventory-vouchers/process-expired`, payload, { headers });
+      const payload = {
+        store_id: storeId,
+        type: "OUT",// Inventory Voucher Type
+        reason: values.notes || (mode === "DISPOSE" ? "Tiêu hủy hàng hết hạn" : "Trả lại hàng hết hạn cho NCC"),
+        voucher_date: new Date().toISOString(),
+        warehouse_id: values.warehouse_id,
         
-        // Show success and close
-        Swal.fire({
-          icon: 'success',
-          title: 'Thành công',
-          text: res.data.message || (mode === "DISPOSE" ? 'Hàng hóa đã được lập phiếu tiêu hủy và trừ kho.' : 'Hàng hóa đã được lập phiếu trả hàng và trừ kho.'),
-          timer: 2000,
-          showConfirmButton: false
-        });
+        // Partner / Receiver info
+        partner_name: values.partner_name, 
+        partner_phone: values.partner_phone,
+        receiver_name: values.receiver_name,
+        receiver_phone: values.receiver_phone,
+        deliverer_name: values.deliverer_name,
+        deliverer_phone: values.deliverer_phone,
+        
+        supplier_id: mode === "RETURN" ? values.supplier_id : undefined,
 
-        // Refresh data
-        fetchExpiringProducts();
-        setSelectedItems([]);
-        setIsModalVisible(false);
-        form.resetFields();
-      } catch (err: any) {
-        console.error("Submit Error:", err);
-        message.error(err.response?.data?.message || err.message || "Lỗi xử lý hàng hóa");
-      } finally {
-        setLoading(false);
-      }
-  };
+        items: selectedItems.map(item => ({
+            product_id: item.product_id || item._id, 
+            quantity: item.quantity, // Send as quantity for backend process-expired
+            unit_cost: item.import_price || 0,
+            batch_no: item.batch_no,
+            expiry_date: item.expiry_date,
+            description: `Hết hạn ${dayjs(item.expiry_date).format("DD/MM/YYYY")}`
+        }))
+      };
 
-  const onFinishFailed = (errorInfo: any) => {
-      console.log('Failed:', errorInfo);
-      message.error("Vui lòng điền đầy đủ các trường bắt buộc (*)");
+      // Create Inventory Voucher (using dedicated process-expired endpoint)
+      // Corrected URL to match backend mount: /api/stores/:storeId/inventory-vouchers/process-expired
+      await axios.post(`${apiUrl}/stores/${storeId}/inventory-vouchers/process-expired`, payload, { headers });
+      
+      message.success("Đã tạo phiếu xử lý thành công!");
+      setIsModalVisible(false);
+      fetchExpiringProducts(); 
+      setSelectedItems([]);
+      form.resetFields();
+      
+    } catch (error: any) {
+      console.error(error);
+      message.error(error.response?.data?.message || "Lỗi khi tạo phiếu");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const columns = [
-    {
-      title: "Sản phẩm",
-      dataIndex: "name",
-      key: "name",
-      render: (text: string, record: any) => (
-        <Space direction="vertical" size={0}>
-          <Text strong>{text}</Text>
-          <Text type="secondary" style={{ fontSize: 12 }}>SKU: {record.sku}</Text>
-        </Space>
-      ),
-    },
-    {
-      title: "Lô hàng",
-      dataIndex: "batch_no",
-      key: "batch_no",
-      render: (text: string) => <Tag color="blue">{text}</Tag>,
-    },
-    {
-      title: "Hạn sử dụng",
-      dataIndex: "expiry_date",
-      key: "expiry_date",
-      render: (date: string) => {
-        const isExpired = dayjs(date).isBefore(dayjs());
-        return (
-          <Text delete={isExpired} style={{ color: isExpired ? "#f5222d" : "#faad14", fontWeight: 600 }}>
-            {dayjs(date).format("DD/MM/YYYY")}
-          </Text>
-        );
-      },
-    },
-    {
-      title: "Trạng thái",
-      dataIndex: "status",
-      key: "status",
-      render: (status: string) => (
-        <Tag color={status === "expired" ? "error" : "warning"}>
-          {status === "expired" ? "ĐÃ HẾT HẠN" : "SẮP HẾT HẠN"}
-        </Tag>
-      ),
-    },
-    {
-      title: "Nhà cung cấp",
-      dataIndex: "supplier_name",
-      key: "supplier_name",
-      render: (text: string) => <Text type="secondary" style={{fontSize: 12}}>{text || "-"}</Text>,
-    },
-    {
-      title: "Số lượng tồn",
-      dataIndex: "quantity",
-      key: "quantity",
-      align: 'right' as const,
-      render: (qty: number) => <Text strong>{qty}</Text>,
-    }
+      { title: 'Mã SP', dataIndex: 'sku', key: 'sku' },
+      { title: 'Tên sản phẩm', dataIndex: 'name', key: 'name' },
+      { title: 'Lô SX', dataIndex: 'batch_no', key: 'batch_no' },
+      { title: 'Hạn SD', dataIndex: 'expiry_date', key: 'expiry_date', render: (d: any) => d ? dayjs(d).format("DD/MM/YYYY") : "-" },
+      { title: 'SL Tồn', dataIndex: 'quantity', key: 'quantity', render: (v: number) => <Text strong>{v}</Text> },
+      { title: 'Giá nhập', dataIndex: 'import_price', key: 'import_price', render: (v: number) => v?.toLocaleString() },
+      { title: 'Kho', dataIndex: 'warehouse_name', key: 'warehouse_name' },
+      { title: 'NCC', dataIndex: 'supplier_name', key: 'supplier_name' },
+      { 
+        title: 'Trạng thái', 
+        key: 'status',
+        render: (_: any, r: any) => {
+           const days = dayjs(r.expiry_date).diff(dayjs(), 'day');
+           return days < 0 ? <Tag color="red">Hết hạn {Math.abs(days)} ngày</Tag> : <Tag color="orange">Còn {days} ngày</Tag>;
+        }
+      }
   ];
 
   return (
     <Layout>
-      <div style={{ padding: "0 24px" }}>
-        <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <Title level={2}>Xử lý hàng hết hạn / sắp hết hạn</Title>
-            <Paragraph type="secondary">
-              Theo quy định, hàng hóa hết hạn cần được tách biệt và lập biên bản tiêu hủy hoặc trả lại nhà cung cấp để đảm bảo an toàn vệ sinh và chất lượng.
-            </Paragraph>
-          </div>
-          <Button icon={<RollbackOutlined />} onClick={() => navigate(-1)}>Quay lại</Button>
-        </div>
-
-        <Space style={{ marginBottom: 16 }}>
-          <Button 
-            type="primary" 
-            danger 
-            icon={<DeleteOutlined />} 
-            disabled={selectedItems.length === 0}
-            onClick={() => handleProcessSelection("DISPOSE")}
-          >
-            Lập phiếu Tiêu hủy ({selectedItems.length})
-          </Button>
-          <Button 
-            type="primary" 
-            style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
-            icon={<RollbackOutlined />} 
-            disabled={selectedItems.length === 0}
-            onClick={() => handleProcessSelection("RETURN")}
-          >
-            Lập phiếu Trả hàng ({selectedItems.length})
-          </Button>
-        </Space>
-        <Card>
-          <Table
-            rowSelection={{
-              type: 'checkbox',
-              onChange: (_, selectedRows) => handleSelectItems(selectedRows),
-            }}
-            columns={columns}
-            dataSource={items}
-            loading={loading}
-            rowKey={(record) => `${record._id}-${record.batch_no}`}
-            pagination={{ pageSize: 15 }}
-            locale={{ emptyText: "Không phát hiện hàng hết hạn nào cần xử lý." }}
-          />
-        </Card>
-
-        {/* Modal Lập phiếu chuyên nghiệp */}
-        <Modal
-          title={
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              {mode === "DISPOSE" ? <MedicineBoxOutlined style={{ color: '#f5222d' }} /> : <RollbackOutlined style={{ color: '#52c41a' }} />}
-              <span>{mode === "DISPOSE" ? "Nghiệp vụ Tiêu hủy hàng hết hạn" : "Nghiệp vụ Trả hàng hết hạn"}</span>
-            </div>
+       <Card 
+          style={{ margin: 16 }}
+          title={<Space><ExclamationCircleOutlined style={{color: '#faad14'}} /> <span style={{fontWeight: 700}}>Danh sách hàng hết hạn / cận date (30 ngày)</span></Space>}
+          extra={
+              <Space>
+                  <Button 
+                    icon={<ArrowLeftOutlined />} 
+                    onClick={() => navigate("/inventory-vouchers")}
+                  >
+                      Quay lại
+                  </Button>
+                  <Button 
+                    type="primary" 
+                    danger 
+                    icon={<DeleteOutlined />} 
+                    disabled={selectedItems.length === 0}
+                    onClick={() => handleProcessSelection("DISPOSE")}
+                  >
+                      Tiêu hủy ({selectedItems.length})
+                  </Button>
+                  <Button 
+                    type="primary" 
+                    icon={<RollbackOutlined />} 
+                    className="warning-btn" // custom style if needed, or style inline
+                    style={{ background: "#d4b106", borderColor: "#d4b106", color: "#fff" }}
+                    disabled={selectedItems.length === 0}
+                    onClick={() => handleProcessSelection("RETURN")}
+                  >
+                      Trả hàng NCC ({selectedItems.length})
+                  </Button>
+              </Space>
           }
+       >
+          <Table 
+             dataSource={items}
+             columns={columns}
+             rowKey={(r) => r._id || r.id || Math.random().toString()}
+             rowSelection={{
+                 type: 'checkbox',
+                 onChange: (_, rows) => handleSelectItems(rows),
+                 selectedRowKeys: selectedItems.map(i => i._id || i.id)
+             }}
+             loading={loading}
+             pagination={{ pageSize: 10 }}
+             scroll={{ x: 1000 }}
+          />
+       </Card>
+
+       {/* Modal Process */}
+       <Modal
+          title={mode === "DISPOSE" ? "Tạo Phiếu Tiêu Hủy Hàng Hóa" : "Tạo Phiếu Trả Hàng Nhà Cung Cấp"}
           visible={isModalVisible}
-          onOk={() => form.submit()}
           onCancel={() => setIsModalVisible(false)}
-          width={700}
+          width={800}
+          onOk={form.submit}
           confirmLoading={loading}
-          okText={mode === "DISPOSE" ? "Xác nhận Tiêu hủy" : "Xác nhận Trả hàng"}
-          cancelText="Hủy"
-        >
-          <Form form={form} layout="vertical" onFinish={handleSubmit} onFinishFailed={onFinishFailed}>
-            <div style={{ background: '#f5f5f5', padding: 12, borderRadius: 8, marginBottom: 20 }}>
-              <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8}}>
-                 <Text strong>Danh sách items xử lý:</Text>
-                 <Tag color={mode === "DISPOSE" ? "red" : "green"}>
-                    {mode === "DISPOSE" ? "Tổng giá trị hủy: " : "Tổng giá trị trả: "}
-                    {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(selectedItems.reduce((acc, it) => acc + ((it.cost_price || 0) * it.quantity), 0))}
-                 </Tag>
-              </div>
-              <div style={{ maxHeight: 150, overflowY: 'auto', marginTop: 8 }}>
-                {selectedItems.map((it, idx) => {
-                  const whName = warehouses.find(w => w._id === it.warehouse_id)?.name || "Kho không xác định";
-                  return (
-                    <div key={idx} style={{ padding: '4px 0', borderBottom: '1px solid #e8e8e8', display: 'flex', justifyContent: 'space-between' }}>
-                      <Text>{it.name} <Text type="secondary" style={{ fontSize: 11 }}>(Lô: {it.batch_no} - {whName})</Text></Text>
-                      <Text strong>SL: {it.quantity}</Text>
-                    </div>
-                  );
-                })}
-              </div>
-              {/* Warning for mixed warehouses */}
-              {(() => {
-                const uniqueWarehouses = [...new Set(selectedItems.map(it => it.warehouse_id).filter(Boolean))];
-                if (uniqueWarehouses.length > 1) {
-                  return <Alert type="error" showIcon message="Cảnh báo: Các mục đã chọn thuộc nhiều kho khác nhau. Vui lòng xử lý từng kho riêng biệt." style={{ marginTop: 10 }} />;
-                }
-                return null;
-              })()}
-            </div>
+          okText="Xác nhận xử lý"
+          cancelText="Hủy bỏ"
+          destroyOnClose
+       >
+          <Form form={form} layout="vertical" onFinish={handleSubmit}>
+              <Space direction="vertical" style={{ width: '100%' }}>
+                  <Alert 
+                    message={`Bạn đang chọn: ${selectedItems.length} mặt hàng để ${mode === "DISPOSE" ? "TIÊU HỦY" : "TRẢ LẠI"}`} 
+                    description={
+                        <ul>
+                            {selectedItems.slice(0, 3).map((i, idx) => (
+                                <li key={idx}><b>{i.name}</b> - Lô: {i.batch_number} - SL: {i.quantity}</li>
+                            ))}
+                            {selectedItems.length > 3 && <li>... và {selectedItems.length - 3} mặt hàng khác ...</li>}
+                        </ul>
+                    }
+                    type="info" 
+                    showIcon 
+                    style={{marginBottom: 16}}
+                  />
 
-            <Space direction="vertical" style={{ width: '100%' }} size="middle">
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                   {/* Grid 2 columns matched with closing div at line 186 */}
+                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                      <Form.Item 
+                        name="warehouse_id" 
+                        label={<Space><HomeOutlined /><span>Kho xuất hàng</span></Space>}
+                        rules={[{ required: true, message: 'Vui lòng chọn kho' }]}
+                      >
+                         <Select placeholder="Chọn kho" disabled>
+                             {warehouses.map(w => <Option key={w._id} value={w._id}>{w.name}</Option>)}
+                         </Select>
+                      </Form.Item>
+  
                 <Form.Item 
-                  name="warehouse_id" 
-                  label={<Space><HomeOutlined /><span>Kho xuất</span></Space>}
-                  rules={[{ required: true, message: 'Vui lòng chọn kho' }]}
-                >
-                  <Select placeholder="Chọn kho hàng" disabled={selectedItems.length > 0}>
-                    {warehouses.map(w => <Option key={w._id} value={w._id}>{w.name}</Option>)}
-                  </Select>
-                </Form.Item>
-
-                <Form.Item name="supplier_id" hidden><Input /></Form.Item>
-                <Form.Item 
-                  name="partner_name" 
                   label={<Space><UserOutlined /><span>{mode === "RETURN" ? "Nhà cung cấp / Đối tác" : "Cơ quan/Bên nhận (nếu có)"}</span></Space>}
                 >
+                  <Form.Item name="supplier_id" hidden><Input /></Form.Item>
                   {mode === "RETURN" ? (
                     <Space.Compact style={{ width: '100%' }}>
-                      <Select
-                        showSearch
-                        allowClear
-                        placeholder="Chọn hoặc nhập tên nhà cung cấp"
-                        optionFilterProp="children"
-                        onChange={(val, option: any) => {
-                           // Find supplier by name (value) or stick to ID if we used ID.
-                           // Current Options: value=s.name, label=s.name. 
-                           // If we want to link structure, better use value=s.id but user might want custom name.
-                           // Current implement: value = s.name.
-                           // Reverse match:
-                           const sup = suppliers.find(s => s.name === val);
-                           if (sup) {
-                               form.setFieldsValue({ 
-                                   supplier_id: sup._id,
-                                   receiver_name: sup.contact_person || sup.name
-                               });
-                           } else {
-                               // Custom name or cleared
-                               form.setFieldsValue({ supplier_id: null });
-                           }
-                        }}
-                        filterOption={(input, option) =>
-                          (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-                        }
-                        options={suppliers.map(s => ({ value: s.name, label: s.name }))}
-                      />
+                      <Form.Item name="partner_name" noStyle>
+                        <Select
+                          showSearch
+                          allowClear
+                          placeholder="Chọn hoặc nhập tên nhà cung cấp"
+                          optionFilterProp="children"
+                          onChange={(val, option: any) => {
+                             const sup = suppliers.find(s => s.name === val);
+                             if (sup) {
+                                 form.setFieldsValue({ 
+                                     supplier_id: sup._id,
+                                     partner_phone: sup.phone || "",
+                                     receiver_name: sup.contact_person || "",
+                                     receiver_phone: sup.phone || "" 
+                                 });
+                             } else {
+                                 form.setFieldsValue({ supplier_id: null, partner_phone: "", receiver_name: "", receiver_phone: "" });
+                             }
+                          }}
+                          filterOption={(input, option) =>
+                            ((option?.label ?? '') as string).toLowerCase().includes(input.toLowerCase())
+                          }
+                          options={suppliers.map(s => ({ value: s.name, label: s.name }))}
+                        />
+                      </Form.Item>
                       <Button icon={<PlusOutlined />} onClick={() => setCreateSupplierModalVisible(true)} />
                     </Space.Compact>
                   ) : (
-                    <Input placeholder="Tên đơn vị tiếp nhận tiêu hủy" />
+                    <div style={{ display: 'flex', gap: 8 }}>
+                        <Form.Item name="partner_name" noStyle><Input placeholder="Tên đơn vị tiếp nhận tiêu hủy" /></Form.Item>
+                        {/* Hidden phone field for layout consistency in backend if needed, or explicit field */}
+                     </div>
                   )}
+                </Form.Item>
+                {/* Partner/Supplier Phone - visible mostly for RETURN or if user wants to input for DISPOSE */}
+                <Form.Item name="partner_phone" label="SĐT Đối tác / NCC">
+                    <Input placeholder="Số điện thoại..." />
                 </Form.Item>
               </div>
 
@@ -411,15 +356,29 @@ const ProcessExpiredPage = () => {
                   label="Người lập phiếu / Người giao"
                   rules={[{ required: true, message: 'Vui lòng nhập tên' }]}
                 >
-                  <Input />
+                  <Input placeholder="Tên người giao" />
                 </Form.Item>
+                <Form.Item 
+                    name="deliverer_phone" 
+                    label="SĐT Người giao"
+                >
+                    <Input placeholder="SĐT người giao" />
+                </Form.Item>
+              </div>
 
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                 <Form.Item 
                   name="receiver_name" 
                   label="Người nhận / Bên xác nhận"
                   rules={[{ required: true, message: 'Vui lòng nhập tên' }]}
                 >
-                  <Input />
+                  <Input placeholder="Tên người nhận" />
+                </Form.Item>
+                <Form.Item 
+                    name="receiver_phone" 
+                    label="SĐT Người nhận"
+                >
+                    <Input placeholder="SĐT người nhận" />
                 </Form.Item>
               </div>
 
@@ -441,49 +400,48 @@ const ProcessExpiredPage = () => {
         </Modal>
 
         {/* Create Supplier Modal */}
-            <Modal
-              title="Thêm nhanh Nhà cung cấp"
-              visible={createSupplierModalVisible}
-              onCancel={() => setCreateSupplierModalVisible(false)}
-              footer={null}
-            >
-               <div style={{ padding: 20 }}>
-                   <p style={{marginBottom: 10}}>Nhập tên nhà cung cấp mới:</p>
-                   <Space.Compact style={{ width: '100%' }}>
-                       <Input 
-                            id="newSupplierName" 
-                            placeholder="Tên nhà cung cấp..." 
-                            onPressEnter={(e) => {
-                                const val = (e.target as HTMLInputElement).value;
-                                if(val) {
-                                    setSuppliers(prev => [...prev, { _id: `new-${Date.now()}`, name: val }]);
-                                    form.setFieldsValue({ partner_name: val });
-                                    setCreateSupplierModalVisible(false);
-                                    message.success(`Đã thêm: ${val}`);
-                                }
-                            }}
-                       />
-                       <Button type="primary" onClick={() => {
-                            const input = document.getElementById('newSupplierName') as HTMLInputElement;
-                            const val = input?.value;
+        <Modal
+          title="Thêm nhanh Nhà cung cấp"
+          visible={createSupplierModalVisible}
+          onCancel={() => setCreateSupplierModalVisible(false)}
+          footer={null}
+        >
+           <div style={{ padding: 20 }}>
+               <p style={{marginBottom: 10}}>Nhập tên nhà cung cấp mới:</p>
+               <Space.Compact style={{ width: '100%' }}>
+                   <Input 
+                        id="newSupplierName" 
+                        placeholder="Tên nhà cung cấp..." 
+                        onPressEnter={(e) => {
+                            const val = (e.currentTarget as HTMLInputElement).value;
                             if(val) {
                                 setSuppliers(prev => [...prev, { _id: `new-${Date.now()}`, name: val }]);
                                 form.setFieldsValue({ partner_name: val });
                                 setCreateSupplierModalVisible(false);
                                 message.success(`Đã thêm: ${val}`);
-                            } else {
-                                message.warning("Vui lòng nhập tên");
                             }
-                       }}>Thêm</Button>
-                   </Space.Compact>
-                   <Divider />
-                   <Text type="secondary" style={{fontSize: 12}}>
-                       * Nhà cung cấp này sẽ được thêm tạm thời vào danh sách để xử lý phiếu.
-                   </Text>
-               </div>
-            </Modal>
-      </div>
-    </Layout>
+                        }}
+                   />
+                   <Button type="primary" onClick={() => {
+                        const input = document.getElementById('newSupplierName') as HTMLInputElement;
+                        const val = input?.value;
+                        if(val) {
+                            setSuppliers(prev => [...prev, { _id: `new-${Date.now()}`, name: val }]);
+                            form.setFieldsValue({ partner_name: val });
+                            setCreateSupplierModalVisible(false);
+                            message.success(`Đã thêm: ${val}`);
+                        } else {
+                            message.warning("Vui lòng nhập tên");
+                        }
+                   }}>Thêm</Button>
+               </Space.Compact>
+               <Divider />
+               <Text type="secondary" style={{fontSize: 12}}>
+                   * Nhà cung cấp này sẽ được thêm tạm thời vào danh sách để xử lý phiếu.
+               </Text>
+           </div>
+        </Modal>
+     </Layout>
   );
 };
 

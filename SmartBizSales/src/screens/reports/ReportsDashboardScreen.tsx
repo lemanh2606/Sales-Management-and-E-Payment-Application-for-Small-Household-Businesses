@@ -1151,7 +1151,7 @@ const ReportsDashboardScreen: React.FC = () => {
                   <Ionicons name="bulb-outline" size={18} color="#0f172a" />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.tipText}>
-                      Lợi nhuận gộp = Doanh thu - Giá vốn hàng bán
+                      Lợi nhuận gộp = Doanh thu thuần - Giá vốn hàng bán
                     </Text>
                     <Text style={styles.tipText}>
                       Lợi nhuận ròng = Lợi nhuận gộp - Chi phí vận hành - Thuế

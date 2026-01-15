@@ -1584,14 +1584,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   // Edit buttons
-  editButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#1b5e20",
-    justifyContent: "center",
-    alignItems: "center",
-  },
   editInfoButton: {
     width: 36,
     height: 36,

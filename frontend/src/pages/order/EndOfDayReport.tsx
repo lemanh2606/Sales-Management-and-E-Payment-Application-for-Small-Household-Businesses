@@ -66,6 +66,12 @@ interface ReportSummary {
   grossRevenue: number; // Doanh thu gộp (trước hoàn)
   totalRefundAmount: number; // Tiền hoàn
   totalRevenue: number; // Doanh thu thực (đã trừ hoàn)
+  vatTotal: number; // Thuế VAT
+  netSales: number; // Doanh thu thuần = Doanh thu thực - VAT
+
+  // Chi phí & Lợi nhuận
+  totalCOGS: number; // Giá vốn hàng bán
+  grossProfit: number; // Lợi nhuận gộp = Doanh thu thuần - COGS
   
   // Tiền mặt
   grossCashInDrawer: number; // Tiền mặt trước hoàn
@@ -74,7 +80,6 @@ interface ReportSummary {
   
   // Thống kê khác
   totalOrders: number;
-  vatTotal: number;
   totalRefunds: number; // Số lần hoàn
   totalDiscount: number;
   totalLoyaltyUsed: number;
@@ -467,12 +472,12 @@ const EndOfDayReport: React.FC = () => {
           </Row>
         </Card>
 
-        {/* SUMMARY STATS */}
+        {/* SUMMARY STATS - Hàng 1: Doanh thu & Tiền mặt */}
         <Row gutter={[20, 20]}>
-          <Col xs={24} sm={12} lg={4}>
+          <Col xs={24} sm={12} lg={6}>
             <div className="stat-card-inner gradient-info">
               <Statistic
-                title={<span style={{ color: 'rgba(255,255,255,0.8)' }}>Tổng doanh thu</span>}
+                title={<span style={{ color: 'rgba(255,255,255,0.8)' }}>Doanh thu thực</span>}
                 value={reportData.summary.totalRevenue}
                 formatter={(v) => formatCurrency(Number(v))}
                 valueStyle={{ color: '#fff', fontWeight: 800, fontSize: '20px' }}
@@ -480,8 +485,30 @@ const EndOfDayReport: React.FC = () => {
               />
             </div>
           </Col>
-          <Col xs={24} sm={12} lg={4}>
+          <Col xs={24} sm={12} lg={6}>
+            <div className="stat-card-inner gradient-primary">
+              <Statistic
+                title={<span style={{ color: 'rgba(255,255,255,0.8)' }}>Doanh thu thuần</span>}
+                value={reportData.summary.netSales || 0}
+                formatter={(v) => formatCurrency(Number(v))}
+                valueStyle={{ color: '#fff', fontWeight: 800, fontSize: '20px' }}
+                prefix={<DollarOutlined />}
+              />
+            </div>
+          </Col>
+          <Col xs={24} sm={12} lg={6}>
             <div className="stat-card-inner gradient-success">
+              <Statistic
+                title={<span style={{ color: 'rgba(255,255,255,0.8)' }}>Lợi nhuận gộp</span>}
+                value={reportData.summary.grossProfit || 0}
+                formatter={(v) => formatCurrency(Number(v))}
+                valueStyle={{ color: '#fff', fontWeight: 800, fontSize: '20px' }}
+                prefix={<DollarOutlined />}
+              />
+            </div>
+          </Col>
+          <Col xs={24} sm={12} lg={6}>
+            <div className="stat-card-inner" style={{ background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)' }}>
               <Statistic
                 title={<span style={{ color: 'rgba(255,255,255,0.8)' }}>Tiền mặt (Két)</span>}
                 value={reportData.summary.cashInDrawer}
@@ -491,6 +518,10 @@ const EndOfDayReport: React.FC = () => {
               />
             </div>
           </Col>
+        </Row>
+
+        {/* SUMMARY STATS - Hàng 2: Chi tiết khác */}
+        <Row gutter={[20, 20]} style={{ marginTop: 16 }}>
           <Col xs={24} sm={12} lg={4}>
             <div className="stat-card-inner gradient-warning">
               <Statistic
@@ -513,8 +544,19 @@ const EndOfDayReport: React.FC = () => {
               />
             </div>
           </Col>
-           <Col xs={24} sm={12} lg={4}>
-            <div className="stat-card-inner gradient-primary">
+          <Col xs={24} sm={12} lg={4}>
+            <div className="stat-card-inner" style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)' }}>
+              <Statistic
+                title={<span style={{ color: 'rgba(255,255,255,0.8)' }}>Giá vốn (COGS)</span>}
+                value={reportData.summary.totalCOGS || 0}
+                formatter={(v) => formatCurrency(Number(v))}
+                valueStyle={{ color: '#fff', fontWeight: 800, fontSize: '20px' }}
+                prefix={<BarChartOutlined />}
+              />
+            </div>
+          </Col>
+          <Col xs={24} sm={12} lg={4}>
+            <div className="stat-card-inner" style={{ background: 'linear-gradient(135deg, #f43f5e 0%, #be123c 100%)' }}>
               <Statistic
                 title={<span style={{ color: 'rgba(255,255,255,0.8)' }}>VAT Tổng</span>}
                 value={reportData.summary.vatTotal}
@@ -524,8 +566,8 @@ const EndOfDayReport: React.FC = () => {
               />
             </div>
           </Col>
-           <Col xs={24} sm={12} lg={4}>
-            <div className="stat-card-inner gradient-info" style={{ background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)' }}>
+          <Col xs={24} sm={12} lg={4}>
+            <div className="stat-card-inner" style={{ background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)' }}>
               <Statistic
                 title={<span style={{ color: 'rgba(255,255,255,0.8)' }}>Điểm tích lũy</span>}
                 value={reportData.summary.totalLoyaltyEarned}

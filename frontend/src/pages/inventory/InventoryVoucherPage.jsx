@@ -459,8 +459,11 @@ export default function InventoryVoucherPage() {
     const s = suppliers.find((x) => String(x?._id) === String(supplierId));
     if (!s) return;
 
-    // auto-fill: người giao + thông tin NCC
-    form.setFieldsValue({
+    const type = form.getFieldValue("type");
+    const isOut = type === "OUT" || type === "RETURN"; // Nếu bạn có loại RETURN riêng thì thêm vào
+    
+    // Base supplier info
+    const updates = {
       supplier_id: s._id,
       supplier_name_snapshot: s.name || "",
       supplier_phone_snapshot: s.phone || "",
@@ -468,14 +471,25 @@ export default function InventoryVoucherPage() {
       supplier_address_snapshot: s.address || "",
       supplier_taxcode_snapshot: s.taxcode || "",
       supplier_contact_person_snapshot: s.contact_person || "",
+    };
 
-      deliverer_name: s.contact_person || s.name || "",
-      deliverer_phone: s.phone || "",
+    if (isOut) {
+      // Xuất trả: Cửa hàng giao -> NCC nhận
+      updates.deliverer_name = form.getFieldValue("deliverer_name") || userDisplayName || "";
+      updates.deliverer_phone = form.getFieldValue("deliverer_phone") || userPhone || "";
 
-      // receiver: mặc định user
-      receiver_name: form.getFieldValue("receiver_name") || userDisplayName || "",
-      receiver_phone: form.getFieldValue("receiver_phone") || userPhone || "",
-    });
+      updates.receiver_name = s.contact_person || s.name || "";
+      updates.receiver_phone = s.phone || "";
+    } else {
+      // Nhập: NCC giao -> Cửa hàng nhận
+      updates.deliverer_name = s.contact_person || s.name || "";
+      updates.deliverer_phone = s.phone || "";
+
+      updates.receiver_name = form.getFieldValue("receiver_name") || userDisplayName || "";
+      updates.receiver_phone = form.getFieldValue("receiver_phone") || userPhone || "";
+    }
+
+    form.setFieldsValue(updates);
   };
   const warehouseOptions = useMemo(() => {
     return warehouses.map((w) => {

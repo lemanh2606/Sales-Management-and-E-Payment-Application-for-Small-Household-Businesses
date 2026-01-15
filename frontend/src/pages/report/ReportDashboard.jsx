@@ -1141,12 +1141,12 @@ const ReportDashboard = () => {
 
           {!loading && data && (
             <>
-              {/* CHỈ SỐ */}
+              {/* CHỈ SỐ - Hàng 1 */}
               <Row gutter={[20, 20]}>
                 <Col xs={24} sm={12} lg={6}>
                   <div className="stat-card-inner gradient-info">
                     <Statistic
-                      title={<span style={{ color: "rgba(255,255,255,0.8)" }}>Doanh thu</span>}
+                      title={<span style={{ color: "rgba(255,255,255,0.8)" }}>Doanh thu thực</span>}
                       value={data.totalRevenue}
                       formatter={formatVND}
                       valueStyle={{ color: "#fff", fontWeight: 800, fontSize: "24px" }}
@@ -1156,40 +1156,95 @@ const ReportDashboard = () => {
                 </Col>
 
                 <Col xs={24} sm={12} lg={6}>
-                  <div className="stat-card-inner gradient-success">
-                    <Statistic
-                      title={<span style={{ color: "rgba(255,255,255,0.8)" }}>Lợi nhuận gộp</span>}
-                      value={data.grossProfit}
-                      formatter={formatVND}
-                      valueStyle={{ color: "#fff", fontWeight: 800, fontSize: "24px" }}
-                    />
-                    {renderComparison(data.comparison?.grossProfitChange)}
-                  </div>
+                  <AntTooltip title="Doanh thu thuần = Doanh thu thực - VAT thu hộ">
+                    <div className="stat-card-inner" style={{ background: "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)" }}>
+                      <Statistic
+                        title={<span style={{ color: "rgba(255,255,255,0.8)" }}>Doanh thu thuần</span>}
+                        value={data.netSales || 0}
+                        formatter={formatVND}
+                        valueStyle={{ color: "#fff", fontWeight: 800, fontSize: "24px" }}
+                      />
+                    </div>
+                  </AntTooltip>
                 </Col>
 
                 <Col xs={24} sm={12} lg={6}>
-                  <div className="stat-card-inner gradient-warning">
-                    <AntTooltip title="Bao gồm: Lương nhân viên, Hoa hồng & Chi phí ngoài hệ thống">
+                  <AntTooltip title="Lợi nhuận gộp = Doanh thu thuần - Giá vốn hàng bán (COGS)">
+                    <div className="stat-card-inner gradient-success">
+                      <Statistic
+                        title={<span style={{ color: "rgba(255,255,255,0.8)" }}>Lợi nhuận gộp</span>}
+                        value={data.grossProfit}
+                        formatter={formatVND}
+                        valueStyle={{ color: "#fff", fontWeight: 800, fontSize: "24px" }}
+                      />
+                      {renderComparison(data.comparison?.grossProfitChange)}
+                    </div>
+                  </AntTooltip>
+                </Col>
+
+                <Col xs={24} sm={12} lg={6}>
+                  <AntTooltip title="Lợi nhuận ròng = Lợi nhuận gộp - Chi phí vận hành">
+                    <div className="stat-card-inner gradient-primary">
+                      <Statistic
+                        title={<span style={{ color: "rgba(255,255,255,0.8)" }}>Lợi nhuận ròng</span>}
+                        value={data.netProfit}
+                        formatter={formatVND}
+                        valueStyle={{ color: "#fff", fontWeight: 800, fontSize: "24px" }}
+                      />
+                      {renderComparison(data.comparison?.netProfitChange)}
+                    </div>
+                  </AntTooltip>
+                </Col>
+              </Row>
+
+              {/* CHỈ SỐ - Hàng 2: Chi phí */}
+              <Row gutter={[20, 20]} style={{ marginTop: 16 }}>
+                <Col xs={24} sm={12} lg={6}>
+                  <AntTooltip title="Giá vốn hàng bán = Tổng giá nhập của hàng đã bán trong kỳ">
+                    <div className="stat-card-inner" style={{ background: "linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)" }}>
+                      <Statistic
+                        title={<span style={{ color: "rgba(255,255,255,0.8)" }}>Giá vốn (COGS)</span>}
+                        value={data.totalCOGS || 0}
+                        formatter={formatVND}
+                        valueStyle={{ color: "#fff", fontWeight: 800, fontSize: "24px" }}
+                      />
+                    </div>
+                  </AntTooltip>
+                </Col>
+
+                <Col xs={24} sm={12} lg={6}>
+                  <AntTooltip title="Bao gồm: Lương nhân viên, Hoa hồng & Chi phí ngoài hệ thống">
+                    <div className="stat-card-inner gradient-warning">
                       <Statistic
                         title={<span style={{ color: "rgba(255,255,255,0.8)" }}>Chi phí vận hành</span>}
                         value={data.operatingCost}
                         formatter={formatVND}
                         valueStyle={{ color: "#fff", fontWeight: 800, fontSize: "24px" }}
                       />
-                    </AntTooltip>
-                    {renderComparison(data.comparison?.operatingCostChange)}
+                      {renderComparison(data.comparison?.operatingCostChange)}
+                    </div>
+                  </AntTooltip>
+                </Col>
+
+                <Col xs={24} sm={12} lg={6}>
+                  <div className="stat-card-inner" style={{ background: "linear-gradient(135deg, #f43f5e 0%, #be123c 100%)" }}>
+                    <Statistic
+                      title={<span style={{ color: "rgba(255,255,255,0.8)" }}>VAT thu hộ</span>}
+                      value={data.totalVAT || 0}
+                      formatter={formatVND}
+                      valueStyle={{ color: "#fff", fontWeight: 800, fontSize: "24px" }}
+                    />
                   </div>
                 </Col>
 
                 <Col xs={24} sm={12} lg={6}>
-                  <div className="stat-card-inner gradient-primary">
+                  <div className="stat-card-inner" style={{ background: "linear-gradient(135deg, #22c55e 0%, #16a34a 100%)" }}>
                     <Statistic
-                      title={<span style={{ color: "rgba(255,255,255,0.8)" }}>Lợi nhuận ròng</span>}
-                      value={data.netProfit}
+                      title={<span style={{ color: "rgba(255,255,255,0.8)" }}>Giá trị tồn kho</span>}
+                      value={data.stockValue || 0}
                       formatter={formatVND}
                       valueStyle={{ color: "#fff", fontWeight: 800, fontSize: "24px" }}
                     />
-                    {renderComparison(data.comparison?.netProfitChange)}
                   </div>
                 </Col>
               </Row>
