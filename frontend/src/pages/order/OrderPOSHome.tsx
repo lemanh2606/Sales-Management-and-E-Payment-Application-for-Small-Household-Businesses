@@ -1153,10 +1153,15 @@ const createOrder = async () => {
               const validBatches = [...(p.batches || [])]
                 .filter((b) => (b.quantity || 0) > 0 && (!b.expiry_date || new Date(b.expiry_date) >= new Date()))
                 .sort((a, b) => {
-                  if (!a.expiry_date && b.expiry_date) return 1;
+                  // 1. Ưu tiên lô có hạn dùng (Sắp hết hạn trước)
                   if (a.expiry_date && !b.expiry_date) return -1;
-                  if (a.expiry_date && b.expiry_date) return new Date(a.expiry_date).getTime() - new Date(b.expiry_date).getTime();
-                  return 0;
+                  if (!a.expiry_date && b.expiry_date) return 1;
+                  if (a.expiry_date && b.expiry_date) {
+                    const diff = new Date(a.expiry_date).getTime() - new Date(b.expiry_date).getTime();
+                    if (diff !== 0) return diff;
+                  }
+                  // 2. FIFO cho lô không hạn hoặc cùng hạn
+                  return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
                 });
               if (validBatches.length > 0) oldestValidBatch = validBatches[0];
             }
