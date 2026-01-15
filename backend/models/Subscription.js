@@ -49,7 +49,7 @@ subscriptionSchema.virtual("is_premium_active").get(function () {
   return new Date() < this.expires_at;
 });
 
-// Virtual: Số ngày còn lại
+// Virtual: Số ngày còn lại (Tính theo ngày lịch: NgàyHếtHạn - NgàyHiệnTại)
 subscriptionSchema.virtual("days_remaining").get(function () {
   let targetDate;
   if (this.status === "TRIAL") {
@@ -62,9 +62,46 @@ subscriptionSchema.virtual("days_remaining").get(function () {
 
   if (!targetDate) return 0;
 
+  const end = new Date(targetDate);
+  end.setHours(0, 0, 0, 0);
+  
   const now = new Date();
-  const diff = targetDate - now;
-  return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+  now.setHours(0, 0, 0, 0);
+  
+  const diff = end - now;
+  // Sử dụng Math.round để tránh sai lệch nhỏ về mili giây khi chia
+  return Math.max(0, Math.round(diff / (1000 * 60 * 60 * 24)));
+});
+
+// Virtual: Tổng số ngày của gói (dùng cho Progress Bar)
+subscriptionSchema.virtual("total_days").get(function () {
+  // Xác định xem đây là Trial hay Premium (dựa trên các mốc thời gian có sẵn)
+  const isTrialPeriod = this.trial_ends_at && (this.status === "TRIAL" || (this.status === "EXPIRED" && !this.expires_at));
+  
+  let start, end;
+  if (isTrialPeriod) {
+    if (this.trial_started_at && this.trial_ends_at) {
+      start = this.trial_started_at;
+      end = this.trial_ends_at;
+    } else {
+      return 14; // Mặc định trial 14 ngày
+    }
+  } else {
+    if (this.started_at && this.expires_at) {
+      start = this.started_at;
+      end = this.expires_at;
+    } else {
+      return 0;
+    }
+  }
+
+  const startDate = new Date(start);
+  startDate.setHours(0, 0, 0, 0);
+  const endDate = new Date(end);
+  endDate.setHours(0, 0, 0, 0);
+
+  const diff = endDate - startDate;
+  return Math.max(0, Math.round(diff / (1000 * 60 * 60 * 24)));
 });
 
 // Method: Kiểm tra đã hết hạn chưa

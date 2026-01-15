@@ -133,7 +133,7 @@ export default function PaymentWebViewScreen() {
           await subscriptionApi.clearPendingPayment(orderCode);
         }
       } catch (error) {
-        console.error("❌ Lỗi hủy:", error);
+        console.error(" Lỗi hủy:", error);
       } finally {
         // 6.3. HIỂN THỊ ALERT VÀ CHUYỂN HƯỚNG
         Alert.alert(
@@ -239,7 +239,7 @@ export default function PaymentWebViewScreen() {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.center}>
-          <Text style={styles.err}>❌ Không tìm thấy link thanh toán</Text>
+          <Text style={styles.err}> Không tìm thấy link thanh toán</Text>
           <Pressable onPress={() => navigation.goBack()} style={styles.btn}>
             <Text style={styles.btnText}>Quay lại</Text>
           </Pressable>

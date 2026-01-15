@@ -24,7 +24,7 @@ const TaxDeclaration = require("../models/TaxDeclaration");
 
 // ==================== LOGGING MIDDLEWARE ====================
 router.use((req, res, next) => {
-  console.log(`📋 [TAX] ${req.method} ${req.originalUrl}`);
+  console.log(` [TAX] ${req.method} ${req.originalUrl}`);
   console.log(`   Query:`, req.query);
   console.log(`   Params:`, req.params);
   console.log(
@@ -61,7 +61,7 @@ const taxStoreAccess = async (req, res, next) => {
 
       // Validate ObjectId trước khi query
       if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-        console.log(`   ❌ Invalid ObjectId: ${req.params.id}`);
+        console.log(`    Invalid ObjectId: ${req.params.id}`);
         return res.status(400).json({
           success: false,
           message: "ID không hợp lệ",
@@ -79,7 +79,7 @@ const taxStoreAccess = async (req, res, next) => {
           console.log(`   ⚠️ Declaration not found or no shopId`);
         }
       } catch (dbError) {
-        console.error(`   ❌ DB error getting declaration:`, dbError);
+        console.error(`    DB error getting declaration:`, dbError);
         return res.status(500).json({
           success: false,
           message: "Lỗi truy vấn tờ khai",
@@ -88,7 +88,7 @@ const taxStoreAccess = async (req, res, next) => {
     }
 
     if (!storeId) {
-      console.log(`   ❌ No storeId found in request`);
+      console.log(`    No storeId found in request`);
       return res.status(400).json({
         success: false,
         message: "Thiếu storeId (query/body/header/user/declaration)",
@@ -100,7 +100,7 @@ const taxStoreAccess = async (req, res, next) => {
     req.currentStoreId = storeId;
     next();
   } catch (error) {
-    console.error("❌ taxStoreAccess error:", error);
+    console.error(" taxStoreAccess error:", error);
     return res.status(500).json({
       success: false,
       message: "Lỗi kiểm tra store access",
@@ -112,7 +112,7 @@ const taxStoreAccess = async (req, res, next) => {
 // ==================== VALIDATE ID MIDDLEWARE ====================
 const validateObjectId = (req, res, next) => {
   if (req.params.id && !mongoose.Types.ObjectId.isValid(req.params.id)) {
-    console.log(`   ❌ Invalid ObjectId in params: ${req.params.id}`);
+    console.log(`    Invalid ObjectId in params: ${req.params.id}`);
     return res.status(400).json({
       success: false,
       message: `ID không hợp lệ: ${req.params.id}`,
@@ -221,7 +221,7 @@ router.get(
 
 // ==================== ERROR HANDLER ====================
 router.use((err, req, res, next) => {
-  console.error("❌ Tax route error:", err);
+  console.error(" Tax route error:", err);
   res.status(err.status || 500).json({
     success: false,
     message: err.message || "Lỗi server",

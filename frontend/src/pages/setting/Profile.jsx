@@ -131,7 +131,7 @@ export default function Profile() {
 
       message.success("Đã xóa ảnh đại diện!");
     } catch (err) {
-      console.error("❌ Remove image error:", err);
+      console.error(" Remove image error:", err);
       const errorMessage = normalizeError(err, "Không thể xóa ảnh đại diện, vui lòng thử lại.");
       message.error(errorMessage);
     }
@@ -173,7 +173,7 @@ export default function Profile() {
 
       setSelectedImage(null);
     } catch (err) {
-      console.error("❌ Update profile error:", err);
+      console.error(" Update profile error:", err);
       const errorMessage = normalizeError(err, "Lỗi cập nhật thông tin cá nhân.");
 
       setInfoError(errorMessage);
@@ -221,7 +221,7 @@ export default function Profile() {
         timer: 4000,
       });
     } catch (err) {
-      console.error("❌ Send OTP error:", err);
+      console.error(" Send OTP error:", err);
       const errorMessage = normalizeError(err, "Không thể gửi OTP, vui lòng thử lại sau.");
 
       setOtpSent(false);
@@ -282,7 +282,7 @@ export default function Profile() {
         timer: 3000,
       });
     } catch (err) {
-      console.error("❌ Change password error:", err);
+      console.error(" Change password error:", err);
       const errorMessage = normalizeError(err, "Lỗi đổi mật khẩu, vui lòng thử lại.");
 
       setPassError(errorMessage);

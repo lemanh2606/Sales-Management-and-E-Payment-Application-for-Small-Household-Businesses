@@ -67,7 +67,7 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
         setWarehouses(warehousesData?.warehouses || []);
       } catch (err) {
         Swal.fire({
-          title: "❌ Lỗi!",
+          title: " Lỗi!",
           text: "Không thể tải dữ liệu",
           icon: "error",
           confirmButtonText: "OK",
@@ -262,9 +262,12 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
     return e?.fileList || [];
   };
 
+  const isEditMode = !!product;
+
   return (
     <>
       <Form form={form} layout="vertical" onFinish={handleSubmit} autoComplete="off" size="large">
+        {/* ===== PHẦN THÔNG TIN CƠ BẢN ===== */}
         <Card
           bordered={false}
           style={{
@@ -277,8 +280,13 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
             <Space>
               <ShoppingOutlined style={{ color: "#1890ff", fontSize: "18px" }} />
               <span style={{ fontWeight: 600, fontSize: "16px", color: "#262626" }}>
-                Thông tin bắt buộc
+                {isEditMode ? "Thông tin sản phẩm" : "Thông tin bắt buộc"}
               </span>
+              {isEditMode && (
+                <span style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>
+                  (Một số trường không thể chỉnh sửa)
+                </span>
+              )}
             </Space>
           </div>
 
@@ -287,16 +295,17 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
               <Form.Item
                 name="name"
                 label={<span style={{ fontWeight: 600 }}>Tên sản phẩm</span>}
-                rules={[
+                rules={!isEditMode ? [
                   { required: true, message: "Vui lòng nhập tên sản phẩm!" },
                   { max: 200, message: "Tên không được quá 200 ký tự!" },
-                ]}
+                ] : []}
               >
                 <Input
                   prefix={<ShoppingOutlined style={{ color: "#1890ff" }} />}
                   placeholder="Nhập tên sản phẩm"
-                  autoFocus
+                  autoFocus={!isEditMode}
                   style={{ borderRadius: "8px" }}
+                  disabled={isEditMode}
                 />
               </Form.Item>
             </Col>
@@ -305,10 +314,10 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
               <Form.Item
                 name="cost_price"
                 label={<span style={{ fontWeight: 600 }}>Giá vốn (₫)</span>}
-                rules={[
+                rules={!isEditMode ? [
                   { required: true, message: "Vui lòng nhập giá vốn!" },
                   { type: "number", min: 0, message: "Giá vốn phải >= 0!" },
-                ]}
+                ] : []}
               >
                 <InputNumber
                   prefix={<DollarOutlined style={{ color: "#52c41a" }} />}
@@ -316,6 +325,7 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
                   style={{ width: "100%", borderRadius: "8px" }}
                   formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
                   parser={(value) => value.replace(/\$\s?|(,*)/g, "")}
+                  disabled={isEditMode}
                 />
               </Form.Item>
             </Col>
@@ -324,10 +334,10 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
               <Form.Item
                 name="price"
                 label={<span style={{ fontWeight: 600 }}>Giá bán (₫)</span>}
-                rules={[
+                rules={!isEditMode ? [
                   { required: true, message: "Vui lòng nhập giá bán!" },
                   { type: "number", min: 0, message: "Giá bán phải >= 0!" },
-                ]}
+                ] : []}
               >
                 <InputNumber
                   prefix={<DollarOutlined style={{ color: "#faad14" }} />}
@@ -335,6 +345,7 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
                   style={{ width: "100%", borderRadius: "8px" }}
                   formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
                   parser={(value) => value.replace(/\$\s?|(,*)/g, "")}
+                  disabled={isEditMode}
                 />
               </Form.Item>
             </Col>
@@ -343,26 +354,26 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
               <Form.Item
                 name="stock_quantity"
                 label={<span style={{ fontWeight: 600 }}>Số lượng tồn kho</span>}
-                rules={[
+                rules={!isEditMode ? [
                   { required: true, message: "Vui lòng nhập số lượng!" },
                   { type: "number", min: 0, message: "Số lượng phải >= 0!" },
-                ]}
+                ] : []}
               >
                 <InputNumber
                   prefix={<StockOutlined style={{ color: "#722ed1" }} />}
                   placeholder="Nhập số lượng"
                   style={{ width: "100%", borderRadius: "8px" }}
-                  disabled={!!product} // Không cho sửa tồn kho khi edit -> Phải dùng Import/Kiểm kê
+                  disabled={isEditMode}
                 />
               </Form.Item>
             </Col>
 
-            {/* ✅ KHO - SỬA NAME + FILL ĐÚNG */}
+            {/* KHO */}
             <Col xs={24} md={12}>
               <Form.Item
                 name="default_warehouse_id"
                 label={<span style={{ fontWeight: 600 }}>Kho mặc định</span>}
-                rules={[{ required: true, message: "Vui lòng chọn kho!" }]}
+                rules={!isEditMode ? [{ required: true, message: "Vui lòng chọn kho!" }] : []}
               >
                 <Select
                   placeholder="-- Chọn kho mặc định --"
@@ -373,6 +384,7 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
                     (option?.label ?? "").toLowerCase().includes(input.toLowerCase())
                   }
                   options={warehouseOptions}
+                  disabled={isEditMode}
                 />
               </Form.Item>
             </Col>
@@ -381,7 +393,7 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
               <Form.Item
                 name="supplier_id"
                 label={<span style={{ fontWeight: 600 }}>Nhà cung cấp</span>}
-                rules={[{ required: true, message: "Vui lòng chọn nhà cung cấp!" }]}
+                rules={!isEditMode ? [{ required: true, message: "Vui lòng chọn nhà cung cấp!" }] : []}
               >
                 <Select
                   placeholder="-- Chọn nhà cung cấp --"
@@ -392,14 +404,17 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
                     (option?.label ?? "").toLowerCase().includes(input.toLowerCase())
                   }
                   options={supplierOptions}
+                  disabled={isEditMode}
                 />
               </Form.Item>
             </Col>
           </Row>
         </Card>
 
+        {/* ===== PHẦN THÔNG TIN TÙY CHỌN / CÓ THỂ CHỈNH SỬA ===== */}
         <Collapse
           bordered={false}
+          defaultActiveKey={isEditMode ? ["1"] : []}
           expandIcon={({ isActive }) => (
             <CaretRightOutlined rotate={isActive ? 90 : 0} style={{ fontSize: "16px", color: "#1890ff" }} />
           )}
@@ -414,29 +429,38 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
             header={
               <Space>
                 <AppstoreOutlined style={{ color: "#1890ff", fontSize: "16px" }} />
-                <span style={{ fontWeight: 600, fontSize: "15px" }}>Thông tin tùy chọn</span>
+                <span style={{ fontWeight: 600, fontSize: "15px" }}>
+                  {isEditMode ? "Thông tin có thể chỉnh sửa" : "Thông tin tùy chọn"}
+                </span>
               </Space>
             }
             key="1"
           >
             <Row gutter={16}>
+              {/* SKU - Disable khi edit */}
               <Col xs={24} md={12}>
                 <Form.Item name="sku" label={<span style={{ fontWeight: 600 }}>SKU</span>}>
-                  <Input placeholder="Mã SKU" style={{ borderRadius: "8px" }} />
+                  <Input 
+                    placeholder="Mã SKU" 
+                    style={{ borderRadius: "8px" }} 
+                    disabled={isEditMode}
+                  />
                 </Form.Item>
               </Col>
 
+              {/* Đơn vị tính - CHO PHÉP SỬA */}
               <Col xs={24} md={12}>
                 <Form.Item name="unit" label={<span style={{ fontWeight: 600 }}>Đơn vị tính</span>}>
                   <Input placeholder="VD: cái, hộp, kg..." style={{ borderRadius: "8px" }} />
                 </Form.Item>
               </Col>
 
+              {/* Nhóm sản phẩm - CHO PHÉP SỬA */}
               <Col xs={24} md={12}>
                 <Form.Item
                   name="group_id"
                   label={<span style={{ fontWeight: 600 }}>Nhóm sản phẩm</span>}
-                  rules={[{ required: true, message: "Vui lòng chọn nhóm!" }]}
+                  rules={!isEditMode ? [{ required: true, message: "Vui lòng chọn nhóm!" }] : []}
                 >
                   <Select
                     placeholder="-- Chọn nhóm sản phẩm --"
@@ -451,6 +475,7 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
                 </Form.Item>
               </Col>
 
+              {/* TRẠNG THÁI - CHO PHÉP SỬA */}
               <Col xs={24} md={12}>
                 <Form.Item name="status" label={<span style={{ fontWeight: 600 }}>Trạng thái</span>}>
                   <Select
@@ -463,6 +488,7 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
                 </Form.Item>
               </Col>
 
+              {/* Tồn min/max - CHO PHÉP SỬA */}
               <Col xs={24} md={12}>
                 <Form.Item name="min_stock" label={<span style={{ fontWeight: 600 }}>Tồn tối thiểu</span>}>
                   <InputNumber placeholder="Số lượng tối thiểu" style={{ width: "100%", borderRadius: "8px" }} min={0} />
@@ -475,6 +501,7 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
                 </Form.Item>
               </Col>
 
+              {/* ===== THÔNG TIN PHÁP LÝ & BẢO HÀNH - HIỂN THỊ Ở CẢ 2 CHẾ ĐỘ ===== */}
               <Divider dashed style={{ margin: "10px 0", borderColor: "#e8e8e8" }} orientation="left" plain>
                 <span style={{ fontSize: 13, color: "#888" }}>Thông tin pháp lý & Bảo hành</span>
               </Divider>
@@ -512,6 +539,7 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
                 </Form.Item>
               </Col>
 
+              {/* ===== HÌNH ẢNH - HIỂN THỊ Ở CẢ 2 CHẾ ĐỘ ===== */}
               <Col xs={24}>
                 <Form.Item
                   label={<span style={{ fontWeight: 600 }}>Hình ảnh sản phẩm</span>}
@@ -567,6 +595,7 @@ export default function ProductForm({ storeId, product = null, onSuccess, onCanc
                 </Form.Item>
               </Col>
 
+              {/* ===== MÔ TẢ - HIỂN THỊ Ở CẢ 2 CHẾ ĐỘ ===== */}
               <Col xs={24}>
                 <Form.Item name="description" label={<span style={{ fontWeight: 600 }}>Mô tả</span>}>
                   <TextArea

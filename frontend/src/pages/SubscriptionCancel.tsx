@@ -39,7 +39,7 @@ const SubscriptionCancel = () => {
       await subscriptionApi.clearPendingPayment();
       console.log("✅ Đã hủy pending payment thành công.");
     } catch (error) {
-      console.error("❌ Lỗi khi hủy thanh toán:", error);
+      console.error(" Lỗi khi hủy thanh toán:", error);
     }
   };
 

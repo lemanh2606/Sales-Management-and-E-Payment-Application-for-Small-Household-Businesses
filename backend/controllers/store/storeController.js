@@ -130,6 +130,11 @@ const validateStoreData = (data, { isCreate } = { isCreate: false }) => {
     }
   }
 
+  // taxCode (optional)
+  if (!isStringOrEmpty(data.taxCode)) {
+    errors.push({ field: "taxCode", message: "Mã số thuế phải là chuỗi" });
+  }
+
   // tags (optional array<string>)
   if (data.tags !== undefined) {
     if (!Array.isArray(data.tags)) {
@@ -268,6 +273,7 @@ const createStore = async (req, res) => {
       location,
       openingHours,
       isDefault,
+      taxCode,
     } = req.body;
     const userId = req.user.id || req.user._id;
 
@@ -306,6 +312,7 @@ const createStore = async (req, res) => {
         location,
         openingHours,
         isDefault,
+        taxCode,
       },
       { isCreate: true }
     );
@@ -363,6 +370,7 @@ const createStore = async (req, res) => {
       location: location || { lat: null, lng: null },
       openingHours: openingHours || { open: "", close: "" },
       isDefault: isDefault === true,
+      taxCode: (taxCode || "").trim(),
       owner_id: userId,
       deleted: false,
     });
@@ -464,6 +472,7 @@ const updateStore = async (req, res) => {
       location,
       openingHours,
       isDefault,
+      taxCode,
     } = req.body;
     const userId = req.user.id || req.user._id;
 
@@ -479,6 +488,7 @@ const updateStore = async (req, res) => {
         location,
         openingHours,
         isDefault,
+        taxCode,
       },
       { isCreate: false }
     );
@@ -561,6 +571,7 @@ const updateStore = async (req, res) => {
     if (location !== undefined) store.location = location;
     if (openingHours !== undefined) store.openingHours = openingHours;
     if (isDefault !== undefined) store.isDefault = isDefault === true;
+    if (taxCode !== undefined) store.taxCode = String(taxCode || "").trim();
 
     await store.save();
 
@@ -1162,7 +1173,7 @@ const getEmployeesByStore = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("❌ Lỗi lấy danh sách nhân viên:", err.message);
+    console.error(" Lỗi lấy danh sách nhân viên:", err.message);
     console.error(err.stack);
     res.status(500).json({
       success: false,
@@ -1609,7 +1620,7 @@ module.exports = {
 
       res.json(response.data);
     } catch (error) {
-      console.error("❌ Geocode Proxy Error:", error.message);
+      console.error(" Geocode Proxy Error:", error.message);
       res.status(500).json({ 
         message: "Lỗi khi lấy tọa độ từ OpenStreetMap", 
         error: error.message 

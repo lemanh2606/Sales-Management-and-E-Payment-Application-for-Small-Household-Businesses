@@ -51,7 +51,7 @@ export const getInventoryVouchers = async (
     );
     return response.data; // { data: [], meta: { page, limit, total } }
   } catch (error) {
-    console.error("❌ Lỗi khi lấy danh sách phiếu kho:", error);
+    console.error(" Lỗi khi lấy danh sách phiếu kho:", error);
     throw error;
   }
 };

@@ -116,7 +116,7 @@ async function verifyPaymentWithPayOS(parsedWebhook) {
     console.log("So sánh 'Signature': nhận được", receivedSignature, "mong đợi", expectedSignature);
 
     if (receivedSignature !== expectedSignature) {
-      console.log("❌ Sai chữ ký webhook PayOS, từ chối cập nhật");
+      console.log(" Sai chữ ký webhook PayOS, từ chối cập nhật");
       return false;
     }
 

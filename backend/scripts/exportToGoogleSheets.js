@@ -48,7 +48,7 @@ async function initGoogleSheets() {
   );
 
   if (!fs.existsSync(credentialsPath)) {
-    throw new Error("❌ credentials.json not found! Path: " + credentialsPath);
+    throw new Error(" credentials.json not found! Path: " + credentialsPath);
   }
 
   const auth = new google.auth.GoogleAuth({
@@ -73,7 +73,7 @@ function parseTestResults() {
   );
 
   if (!fs.existsSync(jestOutputPath)) {
-    throw new Error("❌ jest-output.json not found!");
+    throw new Error(" jest-output.json not found!");
   }
 
   const jestOutput = JSON.parse(fs.readFileSync(jestOutputPath, "utf-8"));
@@ -121,7 +121,7 @@ function loadMetadata() {
   }
 
   const metadata = JSON.parse(fs.readFileSync(metadataPath, "utf-8"));
-  console.log("📋 Loaded metadata: " + metadata.length + " entries");
+  console.log(" Loaded metadata: " + metadata.length + " entries");
 
   return metadata;
 }
@@ -161,7 +161,7 @@ function mergeMetadata(testResults, metadata) {
  */
 async function updateAllSheets(sheets, testResults) {
   const spreadsheetId = process.env.GOOGLE_SHEET_ID;
-  if (!spreadsheetId) throw new Error("❌ GOOGLE_SHEET_ID not set in .env!");
+  if (!spreadsheetId) throw new Error(" GOOGLE_SHEET_ID not set in .env!");
 
   let updated = 0,
     failed = 0;
@@ -173,14 +173,14 @@ async function updateAllSheets(sheets, testResults) {
       updated++;
       await sleep(300);
     } catch (error) {
-      console.error("❌ Failed: " + funcName + " - " + error.message);
+      console.error(" Failed: " + funcName + " - " + error.message);
       failed++;
     }
   }
 
   console.log("\n📊 Summary:");
   console.log("  ✅ Updated: " + updated + " sheets");
-  console.log("  ❌ Failed: " + failed + " sheets");
+  console.log("   Failed: " + failed + " sheets");
 }
 
 /**
@@ -706,7 +706,7 @@ function sleep(ms) {
 // Run if called directly
 if (require.main === module) {
   exportToGoogleSheets().catch((error) => {
-    console.error("❌ Error:", error.message);
+    console.error(" Error:", error.message);
     console.error(error.stack);
     process.exit(1);
   });

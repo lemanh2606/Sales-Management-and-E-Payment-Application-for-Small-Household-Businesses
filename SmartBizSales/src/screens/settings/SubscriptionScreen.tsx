@@ -58,6 +58,7 @@ type PremiumInfo = {
 type SubscriptionData = {
   status: SubscriptionStatus;
   days_remaining?: number;
+  total_days?: number;
   expires_at?: string | null;
 
   trial?: TrialInfo | null;
@@ -244,11 +245,16 @@ const SubscriptionScreen: React.FC = () => {
     const isExpired = status === "EXPIRED" || !status;
 
     const daysRemaining = Number(subscription?.days_remaining || 0);
-    const totalDays = isTrial
-      ? 14
-      : Math.max(1, Number(subscription?.premium?.plan_duration || 1)) * 30;
+    const totalDays = Number(
+      subscription?.total_days ||
+        (isTrial
+          ? 14
+          : Math.max(1, Number(subscription?.premium?.plan_duration || 1)) * 30)
+    );
     const progressPercent =
-      totalDays > 0 ? Math.round((daysRemaining / totalDays) * 100) : 0;
+      totalDays > 0
+        ? Math.min(100, Math.round((daysRemaining / totalDays) * 100))
+        : 0;
 
     const pendingPayment = subscription?.pending_payment || null;
 

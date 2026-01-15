@@ -164,6 +164,27 @@ const ReportsDashboardScreen: React.FC = () => {
     return "#f97316";
   };
 
+  /**
+   * Check if a period is in the future
+   */
+  const isFuturePeriod = (type: PeriodType, year: number, monthOrQuarter: number): boolean => {
+    const now = dayjs();
+    if (type === "year") return year > now.year();
+    if (type === "month") {
+      if (year > now.year()) return true;
+      if (year === now.year() && monthOrQuarter > now.month() + 1) return true;
+      return false;
+    }
+    if (type === "quarter") {
+      const q = monthOrQuarter;
+      const currentQuarter = Math.floor(now.month() / 3) + 1;
+      if (year > now.year()) return true;
+      if (year === now.year() && q > currentQuarter) return true;
+      return false;
+    }
+    return false;
+  };
+
   // ========== PERIOD KEY ==========
   const periodKey = useMemo(() => {
     if (!applied.periodType) return "";
@@ -391,6 +412,12 @@ const ReportsDashboardScreen: React.FC = () => {
 
   // ========== EXPENSE MANAGEMENT ==========
   const addExpenseItem = (): void => {
+    // Block future periods
+    if (isFuturePeriod(dPeriodType, dYear, dPeriodType === "month" ? dMonth : dQuarter)) {
+      Alert.alert("Thông báo", "Không thể thêm chi phí cho thời gian ở tương lai", [{ text: "Đã hiểu" }]);
+      return;
+    }
+
     if (!newExpenseAmount || newExpenseAmount.trim() === "") {
       Alert.alert("Lỗi", "Vui lòng nhập số tiền");
       return;
@@ -438,6 +465,12 @@ const ReportsDashboardScreen: React.FC = () => {
   const saveOperatingExpense = async (): Promise<void> => {
     if (!storeId || !applied.periodType || !periodKey) {
       Alert.alert("Lỗi", "Thiếu thông tin kỳ báo cáo");
+      return;
+    }
+
+    // Block future periods
+    if (isFuturePeriod(applied.periodType, applied.year, applied.periodType === "month" ? applied.month : applied.quarter)) {
+      Alert.alert("Thông báo", "Không thể lưu chi phí cho thời gian ở tương lai", [{ text: "Đã hiểu" }]);
       return;
     }
 
@@ -1251,42 +1284,57 @@ const ReportsDashboardScreen: React.FC = () => {
                 )}
               </View>
 
-              <Text style={styles.blockTitle}>Chi phí vận hành (Điện, nước, mặt bằng...)</Text>
-
-              <View style={styles.expenseInputCard}>
-                <View style={styles.expenseInputRow}>
-                   <View style={styles.expenseInputWrap}>
-                    <Ionicons name="cash-outline" size={16} color="#334155" />
-                    <TextInput
-                      style={styles.expenseInput}
-                      value={formatNumber(newExpenseAmount)}
-                      onChangeText={(t) => setNewExpenseAmount(t.replace(/\./g, ""))}
-                      placeholder="Số tiền"
-                      keyboardType="numeric"
-                      placeholderTextColor="#94a3b8"
-                    />
-                  </View>
-                  <View style={[styles.expenseInputWrap, { flex: 1.5 }]}>
-                    <Ionicons name="create-outline" size={16} color="#334155" />
-                    <TextInput
-                      style={styles.expenseInput}
-                      value={newExpenseNote}
-                      onChangeText={setNewExpenseNote}
-                      placeholder="Ghi chú (VD: Tiền điện)"
-                      placeholderTextColor="#94a3b8"
-                    />
+              {/* HIDE INPUT IF FUTURE */}
+              {isFuturePeriod(dPeriodType, dYear, dPeriodType === "month" ? dMonth : dQuarter) ? (
+                <View style={[styles.suggestionAlert, { backgroundColor: '#fff7ed', borderColor: '#fed7aa', marginTop: 16 }]}>
+                  <Ionicons name="time-outline" size={20} color="#f97316" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.suggestionTitle, { color: '#9a3412' }]}>Thời gian ở tương lai</Text>
+                    <Text style={[styles.suggestionText, { color: '#9a3412' }]}>
+                      Kỳ báo cáo này chưa diễn ra. Bạn không thể ghi nhận chi phí hoạt động trước cho tương lai.
+                    </Text>
                   </View>
                 </View>
+              ) : (
+                <>
+                  <Text style={styles.blockTitle}>Chi phí vận hành (Điện, nước, mặt bằng...)</Text>
 
-                <TouchableOpacity
-                  style={[styles.addBtnLarge, (!newExpenseAmount || !newExpenseNote) && { opacity: 0.5 }]}
-                  onPress={addExpenseItem}
-                  disabled={!newExpenseAmount || !newExpenseNote}
-                >
-                  <Ionicons name="add-circle" size={20} color="#fff" />
-                  <Text style={styles.addBtnLargeText}>Thêm vào danh sách</Text>
-                </TouchableOpacity>
-              </View>
+                  <View style={styles.expenseInputCard}>
+                    <View style={styles.expenseInputRow}>
+                      <View style={styles.expenseInputWrap}>
+                        <Ionicons name="cash-outline" size={16} color="#334155" />
+                        <TextInput
+                          style={styles.expenseInput}
+                          value={formatNumber(newExpenseAmount)}
+                          onChangeText={(t) => setNewExpenseAmount(t.replace(/\./g, ""))}
+                          placeholder="Số tiền"
+                          keyboardType="numeric"
+                          placeholderTextColor="#94a3b8"
+                        />
+                      </View>
+                      <View style={[styles.expenseInputWrap, { flex: 1.5 }]}>
+                        <Ionicons name="create-outline" size={16} color="#334155" />
+                        <TextInput
+                          style={styles.expenseInput}
+                          value={newExpenseNote}
+                          onChangeText={setNewExpenseNote}
+                          placeholder="Ghi chú (VD: Tiền điện)"
+                          placeholderTextColor="#94a3b8"
+                        />
+                      </View>
+                    </View>
+
+                    <TouchableOpacity
+                      style={[styles.addBtnLarge, (!newExpenseAmount || !newExpenseNote) && { opacity: 0.5 }]}
+                      onPress={addExpenseItem}
+                      disabled={!newExpenseAmount || !newExpenseNote}
+                    >
+                      <Ionicons name="add-circle" size={20} color="#fff" />
+                      <Text style={styles.addBtnLargeText}>Thêm vào danh sách</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
 
               {/* NÚT LƯU CHI PHÍ - GIỐNG WEB */}
               {expenseItems.length > 0 && (

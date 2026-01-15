@@ -84,7 +84,7 @@ export const getProductsByStore = async (
         });
         return response.data;
     } catch (error) {
-        console.error("❌ Lỗi khi lấy sản phẩm:", error);
+        console.error(" Lỗi khi lấy sản phẩm:", error);
         throw error;
     }
 };
@@ -305,7 +305,7 @@ export const downloadProductTemplate = async (): Promise<Blob> => {
             type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         });
     } catch (error: any) {
-        console.error('❌ Lỗi downloadProductTemplate API:', error);
+        console.error(' Lỗi downloadProductTemplate API:', error);
         throw error;
     }
 };
@@ -344,7 +344,7 @@ export const exportProducts = async (storeId: string): Promise<Blob> => {
             type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         });
     } catch (error: any) {
-        console.error('❌ Lỗi exportProducts API:', error);
+        console.error(' Lỗi exportProducts API:', error);
         throw error;
     }
 };
@@ -363,7 +363,7 @@ export const getProductGroupsByStore = async (storeId: string): Promise<{ produc
         const response = await apiClient.get<{ productGroups: any[] }>(`/product-groups/store/${storeId}`);
         return response.data;
     } catch (error) {
-        console.error("❌ Lỗi khi lấy nhóm sản phẩm:", error);
+        console.error(" Lỗi khi lấy nhóm sản phẩm:", error);
         // Fallback: trả về mảng rỗng nếu API chưa có
         return { productGroups: [] };
     }
@@ -497,7 +497,7 @@ export const downloadBlobAsFile = async (
             onSuccess?.();
         }
     } catch (error) {
-        console.error('❌ Lỗi download file:', error);
+        console.error(' Lỗi download file:', error);
         onError?.(error);
         throw error;
     }

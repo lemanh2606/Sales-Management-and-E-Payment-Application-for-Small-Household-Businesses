@@ -212,7 +212,7 @@ const createStockCheck = async (req, res) => {
       stockCheck: formattedStockCheck,
     });
   } catch (error) {
-    console.error("❌ Lỗi createStockCheck:", error);
+    console.error(" Lỗi createStockCheck:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
@@ -300,7 +300,7 @@ const getStockChecksByStore = async (req, res) => {
       stockChecks: formattedStockChecks,
     });
   } catch (error) {
-    console.error("❌ Lỗi getStockChecksByStore:", error);
+    console.error(" Lỗi getStockChecksByStore:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
@@ -394,7 +394,7 @@ const getStockCheckById = async (req, res) => {
       stockCheck: formattedStockCheck,
     });
   } catch (error) {
-    console.error("❌ Lỗi getStockCheckById:", error);
+    console.error(" Lỗi getStockCheckById:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
@@ -576,7 +576,7 @@ const updateStockCheck = async (req, res) => {
       stockCheck: formattedStockCheck,
     });
   } catch (error) {
-    console.error("❌ Lỗi updateStockCheck:", error);
+    console.error(" Lỗi updateStockCheck:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
@@ -628,7 +628,7 @@ const deleteStockCheck = async (req, res) => {
       deletedCheckId: checkId,
     });
   } catch (error) {
-    console.error("❌ Lỗi deleteStockCheck:", error);
+    console.error(" Lỗi deleteStockCheck:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };

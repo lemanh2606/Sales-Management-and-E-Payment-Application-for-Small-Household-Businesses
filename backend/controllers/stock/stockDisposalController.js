@@ -176,7 +176,7 @@ const createStockDisposal = async (req, res) => {
       stockDisposal: formattedDisposal,
     });
   } catch (error) {
-    console.error("❌ Lỗi createStockDisposal:", error);
+    console.error(" Lỗi createStockDisposal:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
@@ -255,7 +255,7 @@ const getStockDisposalsByStore = async (req, res) => {
       stockDisposals: formattedDisposals,
     });
   } catch (error) {
-    console.error("❌ Lỗi getStockDisposalsByStore:", error);
+    console.error(" Lỗi getStockDisposalsByStore:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
@@ -339,7 +339,7 @@ const getStockDisposalById = async (req, res) => {
       stockDisposal: formattedDisposal,
     });
   } catch (error) {
-    console.error("❌ Lỗi getStockDisposalById:", error);
+    console.error(" Lỗi getStockDisposalById:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
@@ -485,7 +485,7 @@ const updateStockDisposal = async (req, res) => {
       stockDisposal: formattedDisposal,
     });
   } catch (error) {
-    console.error("❌ Lỗi updateStockDisposal:", error);
+    console.error(" Lỗi updateStockDisposal:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
@@ -537,7 +537,7 @@ const deleteStockDisposal = async (req, res) => {
       deletedDisposalId: disposalId,
     });
   } catch (error) {
-    console.error("❌ Lỗi deleteStockDisposal:", error);
+    console.error(" Lỗi deleteStockDisposal:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };

@@ -72,7 +72,7 @@ export default function ProductGroupForm({ storeId, group, onSuccess, onCancel }
       onSuccess && onSuccess();
     } catch (err) {
       notification.error({
-        message: "❌ Có lỗi xảy ra",
+        message: " Có lỗi xảy ra",
         description: err?.response?.data?.message || "Không thể thực hiện thao tác",
         placement: "topRight",
       });

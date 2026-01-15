@@ -90,7 +90,7 @@ const uploadToCloudinary = async (filePath, folder = "uploads", resource_type = 
 
     return uploadResult;
   } catch (err) {
-    console.error("❌ Upload Cloudinary fail:", err);
+    console.error(" Upload Cloudinary fail:", err);
     throw new Error("Lỗi upload Cloudinary");
   }
 };
@@ -109,7 +109,7 @@ const deleteFromCloudinary = async (public_id, resource_type = "raw") => {
     console.log("🧩 Kết quả xoá Cloudinary:", result);
     return result;
   } catch (err) {
-    console.error("❌ Xóa Cloudinary thất bại:", err);
+    console.error(" Xóa Cloudinary thất bại:", err);
     throw err;
   }
 };

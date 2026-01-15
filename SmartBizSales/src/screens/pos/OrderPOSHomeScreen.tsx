@@ -204,6 +204,7 @@ type Product = {
   unit: string;
   image?: { url: string };
   batches?: ProductBatch[];
+  tax_rate?: number;
 };
 
 type Customer = {
@@ -247,6 +248,7 @@ type CartItem = {
   saleType?: SaleType;
   quantity: number;
   subtotal: string; // giữ giống web: string .toFixed(2)
+  tax_rate?: number;
   stock_quantity?: number; // Store original stock for validation
 };
 
@@ -945,6 +947,7 @@ const OrderPOSHomeScreen: React.FC = () => {
               price: product.price,
               cost_price: product.cost_price,
               unit: product.unit,
+              tax_rate: product.tax_rate,
               quantity: 1,
               overridePrice: null,
               saleType: "NORMAL",
@@ -1139,7 +1142,17 @@ const OrderPOSHomeScreen: React.FC = () => {
   ]);
 
   const beforeTax = Math.max(subtotal - discount, 0);
-  const vatAmount = currentTab.isVAT ? beforeTax * 0.1 : 0;
+
+  // Tính VAT dựa trên từng sản phẩm tự động
+  const vatAmount = useMemo(() => {
+    return currentTab.cart.reduce((sum, item) => {
+      const itemPrice = getItemUnitPrice(item);
+      const itemTaxRate = item.tax_rate !== undefined && item.tax_rate !== null ? Number(item.tax_rate) : 0;
+      const effectiveRate = itemTaxRate === -1 ? 0 : itemTaxRate;
+      return sum + (itemPrice * item.quantity * effectiveRate) / 100;
+    }, 0);
+  }, [currentTab.cart]);
+
   const totalAmount = beforeTax + vatAmount;
 
   const changeAmount = useMemo(
@@ -1700,6 +1713,14 @@ const OrderPOSHomeScreen: React.FC = () => {
               <Text style={styles.cartSub}>
                 {item.sku} • {item.unit}
               </Text>
+              {item.tax_rate !== undefined && item.tax_rate !== 0 && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                  <Ionicons name="receipt-outline" size={12} color={COLORS.warn} />
+                  <Text style={{ fontSize: 11, color: COLORS.warn, marginLeft: 4, fontWeight: '700' }}>
+                    Thuế: {item.tax_rate === -1 ? "Ko thuế" : `${item.tax_rate}%`}
+                  </Text>
+                </View>
+              )}
               
               <TouchableOpacity
                 style={styles.priceTag}
@@ -2237,18 +2258,35 @@ const OrderPOSHomeScreen: React.FC = () => {
 
             <View style={[styles.rowBetween, { marginTop: 10 }]}>
               <Text style={styles.mutedInline}>Giảm từ điểm</Text>
-              <Text
-                style={[
-                  styles.valueText,
-                  { color: discount > 0 ? COLORS.good : COLORS.textStrong },
-                ]}
-              >
-                - {formatPrice(discount)}
+              <Text style={styles.valueText}>-{formatPrice(discount)}</Text>
+            </View>
+            {vatAmount > 0 && (
+              <View style={[styles.rowBetween, { marginTop: 10 }]}>
+                <Text style={[styles.mutedInline, { color: COLORS.warn }]}>
+                  Thuế GTGT (Tự động)
+                </Text>
+                <Text style={[styles.valueText, { color: COLORS.warn }]}>
+                   +{formatPrice(vatAmount)}
+                </Text>
+              </View>
+            )}
+
+            {discount > 0 && (
+               <View style={[styles.rowBetween, { marginTop: 10 }]}>
+                    <Text style={[styles.mutedInline, { color: COLORS.good }]}>Giảm từ điểm</Text>
+                    <Text style={[styles.valueText, { color: COLORS.good }]}>-{formatPrice(discount)}</Text>
+               </View>
+            )}
+
+            <View style={[styles.rowBetween, { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: COLORS.stroke }]}>
+              <Text style={[styles.mutedInline, { fontWeight: 'bold', color: COLORS.textStrong, fontSize: 16 }]}>KHÁCH PHẢI TRẢ</Text>
+              <Text style={[styles.valueText, { color: COLORS.primary, fontSize: 22, fontWeight: '900' }]}>
+                {formatPrice(totalAmount)}
               </Text>
             </View>
 
             <View style={[styles.rowBetween, { marginTop: 12 }]}>
-              <Text style={styles.mutedInline}>VAT 10%</Text>
+              <Text style={styles.mutedInline}>Cung cấp hoá đơn VAT</Text>
               <Pressable
                 onPress={() => updateOrderTab((t) => (t.isVAT = !t.isVAT))}
                 style={[styles.toggle, currentTab.isVAT && styles.toggleOn]}
@@ -2259,25 +2297,9 @@ const OrderPOSHomeScreen: React.FC = () => {
                     currentTab.isVAT && styles.toggleTextOn,
                   ]}
                 >
-                  {currentTab.isVAT ? "BẬT" : "TẮT"}
+                  {currentTab.isVAT ? "MỞ" : "TẮT"}
                 </Text>
               </Pressable>
-            </View>
-
-            {currentTab.isVAT ? (
-              <View style={[styles.rowBetween, { marginTop: 10 }]}>
-                <Text style={[styles.mutedInline, { color: COLORS.warn }]}>
-                  Tiền VAT
-                </Text>
-                <Text style={[styles.valueText, { color: COLORS.warn }]}>
-                  {formatPrice(vatAmount)}
-                </Text>
-              </View>
-            ) : null}
-
-            <View style={[styles.totalBox, { marginTop: 14 }]}>
-              <Text style={styles.totalLabel}>Khách phải trả</Text>
-              <Text style={styles.totalValue}>{formatPrice(totalAmount)}</Text>
             </View>
 
             <Text style={[styles.mutedInline, { marginTop: 14 }]}>

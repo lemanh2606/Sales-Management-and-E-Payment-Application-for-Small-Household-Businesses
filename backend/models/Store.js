@@ -6,6 +6,7 @@ const storeSchema = new mongoose.Schema(
     name: { type: String, required: true, trim: true },
     address: { type: String, default: "", trim: true },
     phone: { type: String, default: "", trim: true },
+    taxCode: { type: String, default: "", trim: true },
     // Chủ cửa hàng (người tạo / quản lý chính)
     owner_id: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     description: { type: String, default: "", trim: true },

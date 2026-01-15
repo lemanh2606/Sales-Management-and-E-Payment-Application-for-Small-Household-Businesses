@@ -233,7 +233,7 @@ const EndOfDayReport: React.FC = () => {
         setReportData(res.data.report);
       } catch (err: any) {
         Swal.fire({
-          title: "❌ Lỗi!",
+          title: " Lỗi!",
           text: err.response?.data?.message || "Lỗi tải báo cáo",
           icon: "error",
           confirmButtonText: "OK",

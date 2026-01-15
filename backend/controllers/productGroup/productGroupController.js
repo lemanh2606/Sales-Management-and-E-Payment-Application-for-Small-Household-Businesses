@@ -82,7 +82,7 @@ const createProductGroup = async (req, res) => {
       productGroup: formattedGroup,
     });
   } catch (error) {
-    console.error("❌ Lỗi createProductGroup:", error);
+    console.error(" Lỗi createProductGroup:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
@@ -124,7 +124,7 @@ const getProductGroupsByStore = async (req, res) => {
       productGroups: formattedGroups,
     });
   } catch (error) {
-    console.error("❌ Lỗi getProductGroupsByStore:", error);
+    console.error(" Lỗi getProductGroupsByStore:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
@@ -160,7 +160,7 @@ const getProductGroupById = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("❌ Lỗi getProductGroupById:", error);
+    console.error(" Lỗi getProductGroupById:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
@@ -237,7 +237,7 @@ const updateProductGroup = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("❌ Lỗi updateProductGroup:", error);
+    console.error(" Lỗi updateProductGroup:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
@@ -283,7 +283,7 @@ const deleteProductGroup = async (req, res) => {
       deletedGroupId: groupId,
     });
   } catch (error) {
-    console.error("❌ Lỗi deleteProductGroup:", error);
+    console.error(" Lỗi deleteProductGroup:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };

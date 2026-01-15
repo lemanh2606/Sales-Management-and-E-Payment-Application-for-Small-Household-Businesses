@@ -1383,7 +1383,7 @@ export default function InventoryVoucherPage() {
                   fontWeight: "bold",
                 }}
               >
-                {editingVoucher ? "✏️" : "📦"}
+                {editingVoucher ? "" : ""}
               </div>
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ fontSize: 20, fontWeight: 800, color: "#0f172a" }}>{editingVoucher ? "Cập nhật phiếu kho" : "Tạo phiếu kho mới"}</div>
@@ -1629,7 +1629,7 @@ export default function InventoryVoucherPage() {
                         gap: 8,
                       }}
                     >
-                      <span>🏢</span> Nhà cung cấp
+                      <span></span> Nhà cung cấp
                     </div>
 
                     <Row gutter={20}>
@@ -1792,7 +1792,7 @@ export default function InventoryVoucherPage() {
                   gap: 8,
                 }}
               >
-                <span>📋</span> Danh sách hàng hóa
+                <span></span> Danh sách hàng hóa
               </div>
 
               <Card

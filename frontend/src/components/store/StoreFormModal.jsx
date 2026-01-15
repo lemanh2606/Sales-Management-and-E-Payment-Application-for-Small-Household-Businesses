@@ -85,7 +85,7 @@ export default function StoreFormModal({
       console.log("✅ Loaded VN options:", options.length, "provinces");
       setVnOptions(options);
     } catch (e) {
-      console.error("❌ Load provinces error:", e);
+      console.error(" Load provinces error:", e);
       message.error("Không tải được danh sách tỉnh/thành");
     } finally {
       setVnLoading(false);
@@ -108,7 +108,7 @@ export default function StoreFormModal({
           : [],
     };
 
-    console.log("📋 Initializing form data:", normalized);
+    console.log(" Initializing form data:", normalized);
 
     const initialAddress = normalized.address || "";
     setAddressValue(initialAddress);

@@ -179,7 +179,7 @@ const PaymentSettingsScreen: React.FC = () => {
         setBanks(response.data.data || []);
       }
     } catch (err: any) {
-      console.error("❌ Lỗi tải banks:", err);
+      console.error(" Lỗi tải banks:", err);
       Alert.alert(
         "Lỗi",
         err?.response?.data?.message ||
@@ -200,7 +200,7 @@ const PaymentSettingsScreen: React.FC = () => {
         setFilteredBanks(response.data.data || []);
       }
     } catch (err: any) {
-      console.error("❌ Lỗi tải VietQR banks:", err);
+      console.error(" Lỗi tải VietQR banks:", err);
       Alert.alert("Lỗi", "Không thể tải danh sách ngân hàng VietQR");
     }
   }, []);
@@ -216,7 +216,7 @@ const PaymentSettingsScreen: React.FC = () => {
         setPayosConfig(response.data.data);
       }
     } catch (err: any) {
-      console.error("❌ Lỗi tải PayOS config:", err);
+      console.error(" Lỗi tải PayOS config:", err);
       // Silent fail - không hiển thị error cho config
     }
   }, [storeId]);
@@ -318,7 +318,7 @@ const PaymentSettingsScreen: React.FC = () => {
       resetBankForm();
       fetchBanks();
     } catch (err: any) {
-      console.error("❌ Lỗi lưu bank:", err);
+      console.error(" Lỗi lưu bank:", err);
       Alert.alert(
         "Lỗi",
         err?.response?.data?.message || "Không thể lưu ngân hàng"
@@ -356,7 +356,7 @@ const PaymentSettingsScreen: React.FC = () => {
       setBankToDelete(null);
       fetchBanks();
     } catch (err: any) {
-      console.error("❌ Lỗi xóa bank:", err);
+      console.error(" Lỗi xóa bank:", err);
       Alert.alert(
         "Lỗi",
         err?.response?.data?.message || "Không thể ngắt kết nối"
@@ -375,7 +375,7 @@ const PaymentSettingsScreen: React.FC = () => {
       Alert.alert("Thành công", "Đặt ngân hàng mặc định thành công!");
       fetchBanks();
     } catch (err: any) {
-      console.error("❌ Lỗi set default:", err);
+      console.error(" Lỗi set default:", err);
       Alert.alert(
         "Lỗi",
         err?.response?.data?.message || "Không thể đặt mặc định"
@@ -434,7 +434,7 @@ const PaymentSettingsScreen: React.FC = () => {
         Alert.alert("Thành công", "Tạo mã QR thành công!");
       }
     } catch (err: any) {
-      console.error("❌ Lỗi tạo QR:", err);
+      console.error(" Lỗi tạo QR:", err);
       Alert.alert("Lỗi", err?.response?.data?.message || "Không thể tạo mã QR");
     } finally {
       setLoading(false);
@@ -489,7 +489,7 @@ const PaymentSettingsScreen: React.FC = () => {
         );
       }
     } catch (err: any) {
-      console.error("❌ Lỗi kích hoạt PayOS:", err);
+      console.error(" Lỗi kích hoạt PayOS:", err);
       Alert.alert(
         "Lỗi",
         err?.response?.data?.message ||
@@ -526,7 +526,7 @@ const PaymentSettingsScreen: React.FC = () => {
               Alert.alert("Thành công", "Đã tắt PayOS tự động xác nhận");
               fetchPayOSConfig();
             } catch (err: any) {
-              console.error("❌ Lỗi tắt PayOS:", err);
+              console.error(" Lỗi tắt PayOS:", err);
               Alert.alert(
                 "Lỗi",
                 err?.response?.data?.message || "Không thể tắt PayOS"

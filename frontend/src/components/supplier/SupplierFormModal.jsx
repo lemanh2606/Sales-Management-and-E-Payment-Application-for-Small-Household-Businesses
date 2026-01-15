@@ -62,7 +62,7 @@ export default function SupplierFormModal({ open, onOpenChange, storeId, supplie
             } catch (err) {
                 console.error(err);
                 api.error({
-                    message: "❌ Lỗi tải dữ liệu",
+                    message: " Lỗi tải dữ liệu",
                     description: "Không thể tải thông tin nhà cung cấp. Vui lòng thử lại.",
                     placement: "topRight",
                     duration: 5,
@@ -127,7 +127,7 @@ export default function SupplierFormModal({ open, onOpenChange, storeId, supplie
         } catch (err) {
             console.error(err);
             api.error({
-                message: "❌ Đã xảy ra lỗi",
+                message: " Đã xảy ra lỗi",
                 description: err?.response?.data?.message || err?.message || "Không thể lưu thông tin.",
                 placement: "topRight",
                 duration: 5,
@@ -149,7 +149,7 @@ export default function SupplierFormModal({ open, onOpenChange, storeId, supplie
                 title={
                     <Space style={{ fontSize: 18, fontWeight: 600 }}>
                         <TeamOutlined style={{ color: "#1890ff" }} />
-                        <span>{supplierId ? "✏️ Cập nhật nhà cung cấp" : "🧾 Thêm nhà cung cấp mới"}</span>
+                        <span>{supplierId ? " Cập nhật nhà cung cấp" : "🧾 Thêm nhà cung cấp mới"}</span>
                     </Space>
                 }
                 open={open}

@@ -1,5 +1,5 @@
 // ======================================================
-// 📦 API EXPORT HUB — GOM TẤT CẢ API VỀ MỘT CHỖ
+//  API EXPORT HUB — GOM TẤT CẢ API VỀ MỘT CHỖ
 // ======================================================
 // Dễ dàng import ở nơi khác bằng:
 // import { apiClient, userApi, productApi } from "@/api";

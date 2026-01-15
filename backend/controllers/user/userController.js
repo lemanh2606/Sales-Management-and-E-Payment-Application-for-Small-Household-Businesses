@@ -888,7 +888,7 @@ const updateProfile = async (req, res) => {
     }
 
     if (!req.body && !req.file) {
-      console.error("❌ No data received");
+      console.error(" No data received");
       return res.status(400).json({
         message: "Không có dữ liệu để cập nhật",
       });
@@ -985,7 +985,7 @@ const updateProfile = async (req, res) => {
 
         console.log("✅ Avatar uploaded to Cloudinary:", result.secure_url);
       } catch (uploadError) {
-        console.error("❌ Avatar upload error:", uploadError);
+        console.error(" Avatar upload error:", uploadError);
         return res.status(500).json({
           message: "Lỗi xử lý file ảnh",
           error: uploadError.message,
@@ -1099,7 +1099,7 @@ const updateProfile = async (req, res) => {
       user: updatedUser,
     });
   } catch (err) {
-    console.error("❌ Lỗi cập nhật profile:", err);
+    console.error(" Lỗi cập nhật profile:", err);
     console.error("Error stack:", err.stack);
     res.status(500).json({
       message: "Lỗi server khi cập nhật profile",

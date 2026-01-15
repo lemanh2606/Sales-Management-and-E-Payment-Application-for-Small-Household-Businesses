@@ -99,7 +99,7 @@ class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    console.error("❌ TaxDeclaration Error:", error, errorInfo);
+    console.error(" TaxDeclaration Error:", error, errorInfo);
     this.setState({ errorInfo });
   }
 
@@ -329,7 +329,7 @@ const TaxDeclaration = () => {
         });
         return response;
       } catch (error) {
-        console.error("❌ API Error:", error.response?.data || error.message);
+        console.error(" API Error:", error.response?.data || error.message);
         throw error;
       }
     },
@@ -1064,7 +1064,7 @@ const TaxDeclaration = () => {
         throw new Error(response.data.message || "Lỗi khi thực hiện hành động");
       }
 
-      const successMsg = action === "approve" ? "✅ Đã duyệt tờ khai" : "❌ Đã từ chối tờ khai";
+      const successMsg = action === "approve" ? "✅ Đã duyệt tờ khai" : " Đã từ chối tờ khai";
       openNotification('success', response.data.message || successMsg);
       fetchDeclarations();
     } catch (err) {
@@ -1577,7 +1577,7 @@ const TaxDeclaration = () => {
                       onFinish={handleSubmit}
                       layout="vertical"
                       onFinishFailed={(errorInfo) => {
-                        console.log("❌ Form validation failed:", errorInfo);
+                        console.log(" Form validation failed:", errorInfo);
                         openNotification('error', 'Form chưa hợp lệ', 'Vui lòng kiểm tra lại các trường bắt buộc');
                       }}
                     >

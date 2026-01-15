@@ -127,12 +127,12 @@ function main() {
     }
 
     if (selectedIndices.length === 0) {
-      console.log("❌ Invalid selection. Please try again.");
+      console.log(" Invalid selection. Please try again.");
       rl.close();
       return;
     }
 
-    console.log("\n📋 Selected tests:");
+    console.log("\n Selected tests:");
     selectedIndices.forEach((i) => {
       console.log(`  ✓ ${availableTests[i].name}`);
     });

@@ -352,7 +352,7 @@ const getCustomersByStore = async (req, res) => {
       customers,
     });
   } catch (err) {
-    console.error("❌ Lỗi khi lấy danh sách khách hàng theo store:", err);
+    console.error(" Lỗi khi lấy danh sách khách hàng theo store:", err);
     res.status(500).json({ message: "Lỗi server khi lấy danh sách khách hàng" });
   }
 };

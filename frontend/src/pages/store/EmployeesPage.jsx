@@ -370,7 +370,7 @@ export default function EmployeesPage() {
       }));
     } catch (err) {
       Swal.fire({
-        title: "❌ Lỗi!",
+        title: " Lỗi!",
         text: `Không thể tải danh sách nhân viên ${deleted ? "đã xóa" : "đang làm"}!`,
         icon: "error",
         confirmButtonText: "OK",
@@ -388,7 +388,7 @@ export default function EmployeesPage() {
       loadEmployees(false);
     } else {
       Swal.fire({
-        title: "❌ Lỗi!",
+        title: " Lỗi!",
         text: "Không tìm thấy storeId! Vui lòng chọn cửa hàng.",
         icon: "error",
         confirmButtonText: "OK",
@@ -462,7 +462,7 @@ export default function EmployeesPage() {
       setOpen(false);
     } catch (err) {
       Swal.fire({
-        title: "❌ Lỗi!",
+        title: " Lỗi!",
         text: err.response?.data?.message,
         icon: "error",
         confirmButtonText: "OK",
@@ -491,7 +491,7 @@ export default function EmployeesPage() {
       if (loadedTabs.deleted) await loadEmployees(true, true);
     } catch (err) {
       Swal.fire({
-        title: "❌ Lỗi!",
+        title: " Lỗi!",
         text: "Lỗi khi xoá.",
         icon: "error",
         confirmButtonText: "OK",
@@ -519,7 +519,7 @@ export default function EmployeesPage() {
       if (loadedTabs.active) await loadEmployees(false, true);
     } catch (err) {
       Swal.fire({
-        title: "❌ Lỗi!",
+        title: " Lỗi!",
         text: "Lỗi khi khôi phục lại.",
         icon: "error",
         confirmButtonText: "OK",
@@ -561,7 +561,7 @@ export default function EmployeesPage() {
     } catch (err) {
       console.error(err);
       Swal.fire({
-        title: "❌ Lỗi!",
+        title: " Lỗi!",
         text: "Không thể tải quyền của nhân viên này.",
         icon: "error",
         confirmButtonText: "OK",
@@ -598,7 +598,7 @@ export default function EmployeesPage() {
     if (!selectedStaff) return;
     if (!currentStore?._id) {
       Swal.fire({
-        title: "❌ Lỗi!",
+        title: " Lỗi!",
         text: "Vui lòng chọn cửa hàng trước khi phân quyền nhân viên.",
         icon: "error",
         confirmButtonText: "OK",
@@ -635,7 +635,7 @@ export default function EmployeesPage() {
       });
     } catch (err) {
       Swal.fire({
-        title: "❌ Lỗi!",
+        title: " Lỗi!",
         text: err.response?.data?.message || "Không thể cập nhật quyền.",
         icon: "error",
         confirmButtonText: "OK",

@@ -67,7 +67,7 @@ export const AuthProvider = ({ children }) => {
                     setUser(parsedUser);
                     setToken(storedToken);
                 } catch (e) {
-                    console.error("❌ Failed to parse stored user:", e);
+                    console.error(" Failed to parse stored user:", e);
                     localStorage.removeItem("user");
                     localStorage.removeItem("token");
                 }
@@ -221,7 +221,7 @@ export const AuthProvider = ({ children }) => {
                         errorData.message?.toLowerCase().includes("authentication");
 
                     if (isTokenError) {
-                        console.error("❌ 403 Forbidden - Invalid/Expired token");
+                        console.error(" 403 Forbidden - Invalid/Expired token");
                         console.log("🔒 Auto logout: Token authentication error");
                         await logout();
                         return Promise.reject(error);
@@ -352,7 +352,7 @@ export const AuthProvider = ({ children }) => {
 
             navigate("/dashboard");
         } catch (error) {
-            console.error("❌ Login failed:", error);
+            console.error(" Login failed:", error);
             setUser(null);
             setToken(null);
             persist(null, null, null);

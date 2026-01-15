@@ -6,7 +6,7 @@ const OrderItem = mongoose.model("OrderItem");
 const OrderRefund = mongoose.model("OrderRefund");
 const Product = require("../models/Product");
 const InventoryVoucher = require("../models/InventoryVoucher");
-// ❌ DEPRECATED - Không còn sử dụng trong tính toán tài chính:
+//  DEPRECATED - Không còn sử dụng trong tính toán tài chính:
 const PurchaseOrder = require("../models/PurchaseOrder");
 const PurchaseReturn = require("../models/PurchaseReturn");
 const StockCheck = require("../models/StockCheck");
@@ -544,7 +544,7 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
     // ✅ Thống kê nhóm
     groupStats: formattedGroupStats,
 
-    // ❌ DEPRECATED
+    //  DEPRECATED
     stockAdjustmentValue: 0,
     stockDisposalCost: 0,
   };

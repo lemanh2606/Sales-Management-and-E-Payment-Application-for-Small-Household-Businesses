@@ -213,7 +213,7 @@ app.get("/", (req, res) => {
 });
 
 /* =====================================================
-   📋 API OVERVIEW
+    API OVERVIEW
 ===================================================== */
 app.get("/api", (req, res) => {
   const endpoints = listEndpoints(app);
@@ -237,7 +237,7 @@ app.get("/api", (req, res) => {
 });
 
 /* =====================================================
-   ❌ ERROR HANDLERS
+    ERROR HANDLERS
 ===================================================== */
 app.use(notFoundHandler);
 app.use(errorHandler);
@@ -253,11 +253,11 @@ async function bootstrap() {
   server.listen(PORT, () => {
     console.log(`🔥 Server running: http://localhost:${PORT}`);
     console.log("🔔 Socket.io đang hoạt động...");
-    console.log(`📋 API Overview: http://localhost:${PORT}/api`);
+    console.log(` API Overview: http://localhost:${PORT}/api`);
   });
 }
 
 bootstrap().catch((error) => {
-  console.error("❌ Không thể khởi động server:", error);
+  console.error(" Không thể khởi động server:", error);
   process.exit(1);
 });

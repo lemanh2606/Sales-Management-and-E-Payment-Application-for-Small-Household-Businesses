@@ -117,7 +117,7 @@ const CustomerListScreen: React.FC = () => {
         if (isDeleted) setTotalDeleted(res.total || res.customers.length);
         else setTotalActive(res.total || res.customers.length);
       } catch (e: any) {
-        console.error("❌ Lỗi load khách hàng:", e);
+        console.error(" Lỗi load khách hàng:", e);
         const errorMessage: string =
           e?.response?.data?.message ||
           e?.message ||

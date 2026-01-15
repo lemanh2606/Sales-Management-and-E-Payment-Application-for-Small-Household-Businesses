@@ -69,6 +69,7 @@ interface Product {
   unit: string;
   image?: { url: string };
   batches?: ProductBatch[];
+  tax_rate?: number;
 }
 
 interface Customer {
@@ -129,6 +130,7 @@ interface CartItem {
   unit: string;
   quantity: number;
   subtotal: string; // lưu chuỗi như hiện tại (format .toFixed(2))
+  tax_rate?: number;
   stock_quantity?: number; // Store original stock for validation
 }
 
@@ -159,6 +161,11 @@ interface OrderTab {
   savedQrImageUrl: string | null;
   savedQrPayload: string | null;
   savedQrExpiryTs: number | null;
+
+  // Invoice Info
+  companyName: string;
+  taxCode: string;
+  companyAddress: string;
 }
 
 interface OrderResponse {
@@ -213,6 +220,9 @@ const OrderPOSHome: React.FC = () => {
       savedQrImageUrl: null,
       savedQrPayload: null,
       savedQrExpiryTs: null,
+      companyName: "",
+      taxCode: "",
+      companyAddress: "",
     },
   ]);
   const [activeTab, setActiveTab] = useState("1");
@@ -456,7 +466,7 @@ const OrderPOSHome: React.FC = () => {
       }
     } catch (err) {
       Swal.fire({
-        title: "❌ Lỗi!",
+        title: " Lỗi!",
         text: "Không tải được nhân viên",
         icon: "error",
         confirmButtonText: "OK",
@@ -534,7 +544,7 @@ const OrderPOSHome: React.FC = () => {
         }
       } catch (err) {
         Swal.fire({
-          title: "❌ Lỗi!",
+          title: " Lỗi!",
           text: "Không tìm thấy sản phẩm",
           icon: "error",
           confirmButtonText: "OK",
@@ -616,6 +626,7 @@ const OrderPOSHome: React.FC = () => {
             price: product.price,
             cost_price: product.cost_price,
             unit: product.unit,
+            tax_rate: product.tax_rate,
             quantity: 1,
             overridePrice: undefined,
             saleType: "NORMAL",
@@ -749,6 +760,9 @@ const OrderPOSHome: React.FC = () => {
         savedQrImageUrl: null,
         savedQrPayload: null,
         savedQrExpiryTs: null,
+        companyName: "",
+        taxCode: "",
+        companyAddress: "",
       },
     ]);
     setActiveTab(newKey);
@@ -773,7 +787,17 @@ const OrderPOSHome: React.FC = () => {
     [currentTab.usedPoints, currentTab.usedPointsEnabled, loyaltySetting?.vndPerPoint]
   );
   const beforeTax = Math.max(subtotal - discount, 0);
-  const vatAmount = currentTab.isVAT ? beforeTax * 0.1 : 0;
+  
+  // Tính VAT dựa trên từng sản phẩm tự động
+  const vatAmount = useMemo(() => {
+    return currentTab.cart.reduce((sum, item) => {
+      const itemPrice = getItemUnitPrice(item);
+      const itemTaxRate = item.tax_rate !== undefined && item.tax_rate !== null ? Number(item.tax_rate) : 0;
+      const effectiveRate = itemTaxRate === -1 ? 0 : itemTaxRate;
+      return sum + (itemPrice * item.quantity * effectiveRate) / 100;
+    }, 0);
+  }, [currentTab.cart]);
+
   const totalAmount = beforeTax + vatAmount;
   const changeAmount = Math.max(0, currentTab.cashReceived - totalAmount);
   
@@ -885,6 +909,15 @@ const OrderPOSHome: React.FC = () => {
         };
       }
 
+      // ✅ Gửi thông tin hóa đơn VAT nếu có
+      if (currentTab.isVAT) {
+        payload.vatInfo = {
+          companyName: currentTab.companyName,
+          taxCode: currentTab.taxCode,
+          companyAddress: currentTab.companyAddress,
+        };
+      }
+
       // Chỉ gửi usedPoints khi user bật tính năng và có điểm > 0
       if (currentTab.usedPointsEnabled && currentTab.usedPoints && currentTab.usedPoints > 0) {
         payload.usedPoints = currentTab.usedPoints;
@@ -913,7 +946,7 @@ const OrderPOSHome: React.FC = () => {
       });
     } catch (err: any) {
       Swal.fire({
-        title: "❌ Lỗi!",
+        title: " Lỗi!",
         text: err.response?.data?.message || "Lỗi tạo đơn",
         icon: "error",
         confirmButtonText: "OK",
@@ -1331,9 +1364,20 @@ const OrderPOSHome: React.FC = () => {
                             {
                               title: "Đơn vị",
                               dataIndex: "unit",
-                              width: 100,
+                              width: 80,
                               align: "center",
                               render: (value: string) => (value && String(value).trim() ? value : "---"),
+                            },
+                            {
+                              title: "Thuế (%)",
+                              dataIndex: "tax_rate",
+                              width: 80,
+                              align: "center",
+                              render: (val) => {
+                                const rate = val !== undefined && val !== null ? Number(val) : 0;
+                                if (rate === -1) return <Tag color="default">Ko thuế</Tag>;
+                                return <Tag color="orange">{rate}%</Tag>;
+                              }
                             },
                             {
                               title: "Thành tiền",
@@ -1624,7 +1668,7 @@ const OrderPOSHome: React.FC = () => {
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <Text style={{ fontSize: "15px" }}>Tổng tiền hàng:</Text>
+                  <Text style={{ fontSize: "15px" }}>Tạm tính:</Text>
                   <Text type="secondary" style={{ fontSize: "13px" }}>
                     ({currentTab.cart.length} sản phẩm)
                   </Text>
@@ -1634,6 +1678,21 @@ const OrderPOSHome: React.FC = () => {
                 </Text>
               </div>
 
+              {vatAmount > 0 && (
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    color: "#fa8c16",
+                  }}
+                >
+                  <Text style={{ fontSize: "15px", color: "#fa8c16" }}>Tổng thuế GTGT (Tự động):</Text>
+                  <Text strong style={{ fontSize: "16px", color: "#fa8c16" }}>
+                    +{formatPrice(vatAmount)}
+                  </Text>
+                </div>
+              )}
+
               {/* Áp dụng điểm */}
               <div
                 style={{
@@ -1641,7 +1700,7 @@ const OrderPOSHome: React.FC = () => {
                   borderRadius: "8px",
                   padding: "12px",
                   border: "1px solid #ffd591",
-                  marginBottom: 12,
+                  margin: "4px 0",
                 }}
               >
                 <div
@@ -1653,34 +1712,16 @@ const OrderPOSHome: React.FC = () => {
                 >
                   <Space>
                     <GiftOutlined style={{ color: "#faad14" }} />
-                    <Text style={{ fontWeight: 500 }}>Áp dụng điểm giảm giá:</Text>
-                    {/* Thêm icon info + tooltip khi bị disable */}
-                    {!loyaltySetting?.isActive && (
-                      <Tooltip title="Chương trình tích điểm đang bị tắt trong cài đặt cửa hàng">
-                        <InfoCircleOutlined
-                          style={{
-                            color: "#faad14",
-                            fontSize: 14,
-                            cursor: "help",
-                          }}
-                        />
-                      </Tooltip>
-                    )}
+                    <Text style={{ fontWeight: 500 }}>Giảm giá từ điểm tích lũy:</Text>
                   </Space>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {currentTab.customer && (
-                       <Text type="secondary" style={{ fontSize: 13 }}>
-                         (Có sẵn: <Text strong style={{ color: '#faad14' }}>{currentTab.customer.loyaltyPoints || 0}</Text> điểm)
-                       </Text>
-                    )}
                     <Switch
                       checked={!!currentTab.usedPointsEnabled}
                       disabled={!loyaltySetting?.isActive || !currentTab.customer}
                       onChange={(checked) => {
                         updateOrderTab((t) => {
                           t.usedPointsEnabled = checked;
-                          // Tự động lấy điểm tích lũy ra dùng
                           if (checked) {
                             const maxPoints = t.customer?.loyaltyPoints || 0;
                             t.usedPoints = maxPoints;
@@ -1692,105 +1733,13 @@ const OrderPOSHome: React.FC = () => {
                     />
                   </div>
                 </div>
-
-                {/* Thêm dòng text nhỏ bên dưới khi bị tắt – rất rõ ràng */}
-                {!loyaltySetting?.isActive && (
-                  <div style={{ marginTop: 8 }}>
-                    <Text type="secondary" style={{ fontSize: 13 }}>
-                      <InfoCircleOutlined style={{ marginRight: 4, color: "#faad14" }} />
-                      Chương trình tích điểm hiện đang tắt
-                    </Text>
-                  </div>
-                )}
-                
-                {/* Khi chưa chọn khách hàng */}
-                {loyaltySetting?.isActive && !currentTab.customer && (
-                   <div style={{ marginTop: 8 }}>
-                    <Text type="secondary" style={{ fontSize: 13, fontStyle: 'italic' }}>
-                      Vui lòng chọn khách hàng để dùng điểm
-                    </Text>
-                  </div>
-                )}
-
-                {/* Ô nhập điểm (cho phép sửa nếu không muốn dùng hết) */}
-                {currentTab.usedPointsEnabled && currentTab.customer && (
-                  <div style={{ marginTop: 12 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                       <Text style={{ fontSize: 12, color: '#666' }}>Số điểm sử dụng:</Text>
-                       <Text style={{ fontSize: 12, color: '#1890ff', cursor: 'pointer' }} onClick={() => {
-                          updateOrderTab(t => {
-                             t.usedPoints = t.customer?.loyaltyPoints || 0;
-                          });
-                       }}>Dùng tối đa</Text>
-                    </div>
-                    <InputNumber
-                      min={0}
-                      max={currentTab.customer?.loyaltyPoints ?? 9999999}
-                      value={currentTab.usedPoints}
-                      onChange={(val) => {
-                        const n = Math.max(0, Math.floor((val as number) || 0));
-                        const maxAllowed = currentTab.customer?.loyaltyPoints ?? n;
-                        const clamped = Math.min(n, maxAllowed);
-                        updateOrderTab((t) => {
-                          t.usedPoints = clamped;
-                        });
-                      }}
-                      size="large"
-                      style={{ width: "100%" }}
-                      placeholder="Số điểm dùng"
-                      formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
-                      parser={(v) => parseInt((v || "0").toString().replace(/(,*)/g, ""), 10)}
-                      addonAfter="điểm"
-                    />
-
-                    {/* Gợi ý nhỏ bên dưới input */}
-                    {currentTab.customer && (
-                      <Text type="secondary" style={{ fontSize: 12 }}>
-                        {`Khách hiện có ${currentTab.customer.loyaltyPoints.toLocaleString()} điểm khả dụng`}
-                      </Text>
-                    )}
+                {discount > 0 && (
+                  <div style={{ textAlign: 'right', marginTop: 4 }}>
+                    <Text strong style={{ color: "#389e0d" }}>-{formatPrice(discount)}</Text>
                   </div>
                 )}
               </div>
 
-              {discount > 0 && (
-                <div
-                  style={{
-                    background: "#f6ffed",
-                    border: "1px solid #b7eb8f",
-                    borderRadius: 8,
-                    padding: "8px 12px",
-                    marginTop: 8,
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 4,
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                    }}
-                  >
-                    <Text style={{ color: "#389e0d" }}>Giảm giá từ điểm tích lũy:</Text>
-                    <Text strong style={{ color: "#389e0d", fontSize: 16 }}>
-                      -{formatPrice(discount)}
-                    </Text>
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 13,
-                      color: "#52c41a",
-                      textAlign: "right",
-                    }}
-                  >
-                    Tỷ lệ quy đổi: <Text strong>{loyaltySetting?.vndPerPoint?.toLocaleString()}đ</Text> / điểm
-                  </div>
-                </div>
-              )}
-
-              {/* VAT */}
               <div
                 style={{
                   display: "flex",
@@ -1798,7 +1747,7 @@ const OrderPOSHome: React.FC = () => {
                   alignItems: "center",
                 }}
               >
-                <Text>VAT 10%:</Text>
+                <Text>Cung cấp hoá đơn VAT:</Text>
                 <Switch
                   checked={currentTab.isVAT}
                   onChange={(c) =>
@@ -1810,17 +1759,27 @@ const OrderPOSHome: React.FC = () => {
               </div>
 
               {currentTab.isVAT && (
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    color: "#fa8c16",
-                  }}
-                >
-                  <Text style={{ color: "#fa8c16" }}>+ VAT:</Text>
-                  <Text strong style={{ color: "#fa8c16" }}>
-                    {formatPrice(vatAmount)}
-                  </Text>
+                <div style={{ background: '#f5f5f5', padding: 8, borderRadius: 8, marginTop: 4 }}>
+                  <Space direction="vertical" style={{ width: '100%' }} size={4}>
+                    <Input 
+                      placeholder="Tên công ty/đơn vị" 
+                      size="small"
+                      value={currentTab.companyName}
+                      onChange={e => updateOrderTab(t => t.companyName = e.target.value)}
+                    />
+                    <Input 
+                      placeholder="Mã số thuế" 
+                      size="small"
+                      value={currentTab.taxCode}
+                      onChange={e => updateOrderTab(t => t.taxCode = e.target.value)}
+                    />
+                    <Input 
+                      placeholder="Địa chỉ đơn vị" 
+                      size="small"
+                      value={currentTab.companyAddress}
+                      onChange={e => updateOrderTab(t => t.companyAddress = e.target.value)}
+                    />
+                  </Space>
                 </div>
               )}
 
@@ -1829,10 +1788,10 @@ const OrderPOSHome: React.FC = () => {
               {/* Khách phải trả */}
               <div
                 style={{
-                  background: "#e6f7ff",
+                  background: "#1890ff",
                   borderRadius: "8px",
-                  padding: "10px",
-                  border: "2px solid #1890ff",
+                  padding: "12px",
+                  boxShadow: "0 4px 12px rgba(24, 144, 255, 0.25)",
                 }}
               >
                 <div
@@ -1842,10 +1801,10 @@ const OrderPOSHome: React.FC = () => {
                     alignItems: "center",
                   }}
                 >
-                  <Text strong style={{ fontSize: "15px" }}>
-                    Khách phải trả:
+                  <Text strong style={{ fontSize: "16px", color: "#fff" }}>
+                    KHÁCH CẦN TRẢ:
                   </Text>
-                  <Text strong style={{ fontSize: "22px", color: "#1890ff" }}>
+                  <Text strong style={{ fontSize: "24px", color: "#fff" }}>
                     {formatPrice(totalAmount)}
                   </Text>
                 </div>
@@ -2013,7 +1972,7 @@ const OrderPOSHome: React.FC = () => {
                       setBillModalOpen(true);
                     } catch (err: any) {
                       Swal.fire({
-                        title: "❌ Lỗi!",
+                        title: " Lỗi!",
                         text: "Lỗi xác nhận thanh toán",
                         icon: "error",
                         confirmButtonText: "OK",
@@ -2068,7 +2027,7 @@ const OrderPOSHome: React.FC = () => {
             setNewCustomerModal(false);
           } catch (err) {
             Swal.fire({
-              title: "❌ Lỗi!",
+              title: " Lỗi!",
               text: "Lỗi tạo khách hàng",
               icon: "error",
               confirmButtonText: "OK",
@@ -2245,10 +2204,19 @@ const OrderPOSHome: React.FC = () => {
         totalAmount={totalAmount}
         storeName={currentStore.name || "Cửa hàng"}
         address={currentStore?.address || ""}
-        employeeName={currentEmployeeName}
+        storePhone={currentStore?.phone || ""}
+        storeTaxCode={currentStore?.taxCode || ""}
+        employeeName={currentTab.employeeId === null ? currentUserEmployee?.fullName : currentEmployeeName}
         customerName={currentCustomerName}
         customerPhone={currentCustomerPhone}
         paymentMethod={currentTab.paymentMethod}
+        isVAT={currentTab.isVAT}
+        companyName={currentTab.companyName}
+        taxCode={currentTab.taxCode}
+        companyAddress={currentTab.companyAddress}
+        vatAmount={vatAmount}
+        subtotal={subtotal}
+        discount={discount}
       />
 
       <Modal

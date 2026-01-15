@@ -390,11 +390,18 @@ const createOrder = async (req, res) => {
       const subtotal = price * qty;
       total += subtotal;
 
+      // VAT của từng item (nếu tax_rate = -1 thì coi như 0% để tính tiền)
+      const currentTaxRate = prod.tax_rate !== undefined && prod.tax_rate !== null ? Number(prod.tax_rate) : 0;
+      const effectiveTaxRate = currentTaxRate === -1 ? 0 : currentTaxRate;
+      const itemVatAmount = subtotal * (effectiveTaxRate / 100);
+
       orderItems.push({
         productId: prod._id,
         quantity: qty,
         priceAtTime: price.toFixed(2),
         subtotal: subtotal.toFixed(2),
+        tax_rate: currentTaxRate, // Lưu giá trị gốc (-1, 0, 5, 8, 10...)
+        vat_amount: itemVatAmount.toFixed(2),
         name_snapshot: prod.name,
         sku_snapshot: prod.sku,
         unit_snapshot: prod.unit,
@@ -417,15 +424,17 @@ const createOrder = async (req, res) => {
       });
     }
 
-    // ================= 4. VAT =================
-    let vatAmount = "0";
-    let beforeTax = total.toFixed(2);
+    // ================= 4. VAT TOTAL =================
+    // Tính tổng VAT từ từng item tự động (không phụ thuộc flag isVATInvoice)
+    const totalVatAmountTotal = orderItems.reduce((sum, it) => sum + Number(it.vat_amount), 0);
 
-    if (isVATInvoice) {
-      const vat = total * 0.1;
-      vatAmount = vat.toFixed(2);
-      beforeTax = (total - vat).toFixed(2);
-    }
+    let vatAmount = totalVatAmountTotal.toFixed(2);
+    let beforeTax = total.toFixed(2);
+    // total ban đầu chưa có thuế, giờ cộng thêm VAT vào (nếu là kiểu cộng thêm)
+    // Hoặc nếu giá bán đã bao gồm thuế? 
+    // Theo hiện tại của OrderPOSHome.tsx dòng 777: totalAmount = beforeTax + vatAmount;
+    // Nghĩa là vatAmount được CỘNG THÊM vào subtotal.
+
 
     // ================= 5. CUSTOMER =================
     let customer = null;
@@ -487,9 +496,13 @@ const createOrder = async (req, res) => {
     // Update/Set fields
     order.employeeId = finalEmployeeId;
     order.customer = customer?._id || null;
-    order.totalAmount = total.toFixed(2);
+    
+    // Tính tổng tiền cuối cùng (Giá trị trước thuế + Thuế)
+    const finalTotal = total + totalVatAmountTotal;
+    
+    order.totalAmount = finalTotal.toFixed(2);
     order.paymentMethod = paymentMethod;
-    order.isVATInvoice = isVATInvoice;
+    order.isVATInvoice = !!isVATInvoice;
     order.vatInfo = vatInfo;
     order.vatAmount = vatAmount;
     order.beforeTaxAmount = beforeTax;
@@ -1204,7 +1217,7 @@ const vietqrCancel = async (req, res) => {
     }`,
   });
 
-  console.log("❌ Người dùng hủy thanh toán hoặc lỗi");
+  console.log(" Người dùng hủy thanh toán hoặc lỗi");
   return res.status(400).json({
     message: "Thanh toán bị hủy hoặc không thành công.",
     query: req.query,
@@ -1313,7 +1326,7 @@ const refundOrder = async (req, res) => {
     console.log(`👤 Refund by: ${refundedByName} (empId: ${refundedByEmployeeId || "OWNER"})`);
 
     // ===== LOAD ORDER ITEMS =====
-    console.log("📦 Load OrderItems");
+    console.log(" Load OrderItems");
     const orderItems = await OrderItem.find({
       orderId,
       productId: { $in: items.map((i) => i.productId) },
@@ -1321,7 +1334,7 @@ const refundOrder = async (req, res) => {
       .populate("productId")
       .session(session);
 
-    console.log("📦 OrderItems found:", orderItems.length);
+    console.log(" OrderItems found:", orderItems.length);
 
     const orderItemMap = new Map(
       orderItems.map((oi) => [oi.productId._id.toString(), oi])
@@ -3059,7 +3072,7 @@ const deletePendingOrder = async (req, res) => {
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
-    console.error("❌ Hủy đơn pending lỗi:", err);
+    console.error(" Hủy đơn pending lỗi:", err);
     return res.status(500).json({
       message: err.message || "Lỗi server khi hủy đơn hàng",
     });

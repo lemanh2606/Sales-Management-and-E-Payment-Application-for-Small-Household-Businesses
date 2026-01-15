@@ -227,7 +227,7 @@ const StoreSettingsScreen: React.FC = () => {
         isActive: data.isActive !== undefined ? data.isActive : true,
       });
     } catch (error) {
-      console.error("❌ Fetch store error:", error);
+      console.error(" Fetch store error:", error);
       Alert.alert("Lỗi", "Không thể tải thông tin cửa hàng");
     } finally {
       setLoading(false);
@@ -313,7 +313,7 @@ const StoreSettingsScreen: React.FC = () => {
         },
       ]);
     } catch (error) {
-      console.error("❌ Save store error:", error);
+      console.error(" Save store error:", error);
       Alert.alert("Lỗi", "Không thể lưu thông tin cửa hàng");
     } finally {
       setSaving(false);

@@ -80,7 +80,7 @@ const uploadFile = async (req, res) => {
 
     res.status(201).json({ message: "Upload file thành công!", file: newFile });
   } catch (err) {
-    console.error("❌ Lỗi upload file:", err);
+    console.error(" Lỗi upload file:", err);
     res.status(500).json({ message: "Lỗi upload file", error: err.message });
   }
 };
@@ -91,7 +91,7 @@ const getFilesByStore = async (req, res) => {
     const files = await File.find({ storeId }).populate("uploadedBy", "username email").sort({ createdAt: -1 });
     res.json(files);
   } catch (err) {
-    console.error("❌ Lỗi getFilesByStore:", err);
+    console.error(" Lỗi getFilesByStore:", err);
     res.status(500).json({ message: "Lỗi lấy danh sách file", error: err.message });
   }
 };
@@ -102,7 +102,7 @@ const getFileById = async (req, res) => {
     if (!file) return res.status(404).json({ message: "Không tìm thấy file" });
     res.json(file);
   } catch (err) {
-    console.error("❌ Lỗi getFileById:", err);
+    console.error(" Lỗi getFileById:", err);
     res.status(500).json({ message: "Lỗi lấy file", error: err.message });
   }
 };
@@ -146,7 +146,7 @@ const deleteFile = async (req, res) => {
 
     res.json({ message: "Đã xóa file thành công" });
   } catch (err) {
-    console.error("❌ Lỗi xóa file:", err);
+    console.error(" Lỗi xóa file:", err);
     res.status(500).json({ message: "Lỗi xóa file", error: err.message });
   }
 };

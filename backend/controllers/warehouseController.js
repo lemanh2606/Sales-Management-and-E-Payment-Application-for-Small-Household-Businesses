@@ -59,7 +59,7 @@ const getWarehouses = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("❌ Lỗi getWarehouses:", error);
+    console.error(" Lỗi getWarehouses:", error);
     return res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
@@ -87,7 +87,7 @@ const getWarehouseById = async (req, res) => {
       warehouse,
     });
   } catch (error) {
-    console.error("❌ Lỗi getWarehouseById:", error);
+    console.error(" Lỗi getWarehouseById:", error);
     return res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
@@ -213,7 +213,7 @@ const createWarehouse = async (req, res) => {
       warehouse,
     });
   } catch (error) {
-    console.error("❌ Lỗi createWarehouse:", error);
+    console.error(" Lỗi createWarehouse:", error);
     return res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
@@ -277,7 +277,7 @@ const updateWarehouse = async (req, res) => {
       warehouse: updatedWarehouse,
     });
   } catch (error) {
-    console.error("❌ Lỗi updateWarehouse:", error);
+    console.error(" Lỗi updateWarehouse:", error);
     return res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
@@ -320,7 +320,7 @@ const deleteWarehouse = async (req, res) => {
       message: "Xóa kho thành công",
     });
   } catch (error) {
-    console.error("❌ Lỗi deleteWarehouse:", error);
+    console.error(" Lỗi deleteWarehouse:", error);
     return res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
@@ -357,7 +357,7 @@ const restoreWarehouse = async (req, res) => {
       message: "Khôi phục kho thành công",
     });
   } catch (error) {
-    console.error("❌ Lỗi restoreWarehouse:", error);
+    console.error(" Lỗi restoreWarehouse:", error);
     return res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
@@ -397,7 +397,7 @@ const setDefaultWarehouse = async (req, res) => {
       warehouse,
     });
   } catch (error) {
-    console.error("❌ Lỗi setDefaultWarehouse:", error);
+    console.error(" Lỗi setDefaultWarehouse:", error);
     return res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };

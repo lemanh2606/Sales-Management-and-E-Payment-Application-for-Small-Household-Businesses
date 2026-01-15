@@ -63,7 +63,7 @@ class FileService {
                 return await this.downloadFileMobile(blob, options);
             }
         } catch (error: any) {
-            // console.error('❌ Lỗi download file:', error);
+            // console.error(' Lỗi download file:', error);
             return {
                 success: false,
                 error: error.message || 'Download thất bại'
@@ -143,7 +143,7 @@ class FileService {
                 file
             };
         } catch (error: any) {
-            // console.error('❌ Mobile download failed:', error);
+            // console.error(' Mobile download failed:', error);
             throw new Error(`Mobile download failed: ${error.message}`);
         }
     }
@@ -182,7 +182,7 @@ class FileService {
             });
 
         } catch (error: any) {
-            // console.error('❌ Error reading blob data:', error);
+            // console.error(' Error reading blob data:', error);
             throw new Error(`Cannot read blob data: ${error.message}`);
         }
     }
@@ -211,7 +211,7 @@ class FileService {
 
             return arrayBuffer;
         } catch (error: any) {
-            // console.error('❌ Error reading React Native blob:', error);
+            // console.error(' Error reading React Native blob:', error);
 
             // Fallback: thử đọc trực tiếp từ _data nếu có
             if (blob._data && blob._data.size > 0) {

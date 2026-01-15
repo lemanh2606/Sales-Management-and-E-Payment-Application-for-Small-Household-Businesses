@@ -332,7 +332,7 @@ const NotificationScreen: React.FC = () => {
         setTotalNotifications(response.data.meta.total);
         setCurrentPage(response.data.meta.page);
       } catch (err: any) {
-        console.error("❌ Lỗi tải thông báo:", err);
+        console.error(" Lỗi tải thông báo:", err);
         Alert.alert(
           "Lỗi",
           err?.response?.data?.message || "Không thể tải thông báo"
@@ -382,7 +382,7 @@ const NotificationScreen: React.FC = () => {
       Alert.alert("Thành công", (res.data as any).message);
       fetchNotifications(1, false);
     } catch (err: any) {
-      console.error("❌ Lỗi quét:", err);
+      console.error(" Lỗi quét:", err);
       Alert.alert("Lỗi", "Không thể thực hiện quét lúc này");
     } finally {
       setLoading(false);
@@ -399,7 +399,7 @@ const NotificationScreen: React.FC = () => {
       );
       fetchNotifications(currentPage, false);
     } catch (err: any) {
-      console.error("❌ Lỗi cập nhật:", err);
+      console.error(" Lỗi cập nhật:", err);
       Alert.alert("Lỗi", err?.response?.data?.message || "Không thể cập nhật");
     }
   };
@@ -417,7 +417,7 @@ const NotificationScreen: React.FC = () => {
             Alert.alert("Thành công", "Đã đánh dấu tất cả là đã đọc");
             fetchNotifications(currentPage, false);
           } catch (err: any) {
-            console.error("❌ Lỗi:", err);
+            console.error(" Lỗi:", err);
             Alert.alert("Lỗi", "Không thể đánh dấu tất cả");
           } finally {
             setLoading(false);
@@ -440,7 +440,7 @@ const NotificationScreen: React.FC = () => {
             Alert.alert("Thành công", "Đã xóa thông báo");
             fetchNotifications(currentPage, false);
           } catch (err: any) {
-            console.error("❌ Lỗi xóa:", err);
+            console.error(" Lỗi xóa:", err);
             Alert.alert("Lỗi", "Không thể xóa thông báo");
           }
         },
@@ -476,7 +476,7 @@ const NotificationScreen: React.FC = () => {
               setIsSelectionMode(false);
               fetchNotifications(currentPage, false);
             } catch (err: any) {
-              console.error("❌ Lỗi xóa hàng loạt:", err);
+              console.error(" Lỗi xóa hàng loạt:", err);
               Alert.alert("Lỗi", "Không thể xóa thông báo");
             } finally {
               setLoading(false);

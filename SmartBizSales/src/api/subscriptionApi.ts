@@ -38,6 +38,7 @@ export interface SubscriptionPremium {
 export interface CurrentSubscription {
     status: SubscriptionStatus;
     days_remaining?: number;
+    total_days?: number;
 
     expires_at?: string;
     trial_ends_at?: string;

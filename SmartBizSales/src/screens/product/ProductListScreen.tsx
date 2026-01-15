@@ -396,7 +396,7 @@ const ProductListScreen: React.FC = () => {
             }
           } else {
             // Tất cả đều thất bại
-            title = "❌ Có lỗi xảy ra";
+            title = " Có lỗi xảy ra";
             message = `Không có sản phẩm nào được import thành công\n${failedCount} dòng thất bại`;
           }
 
@@ -451,7 +451,7 @@ const ProductListScreen: React.FC = () => {
           return; // Thoát khỏi hàm khi thành công
         } catch (error: any) {
           lastError = error;
-          console.log(`❌ Attempt ${attempt} failed:`, error.message);
+          console.log(` Attempt ${attempt} failed:`, error.message);
 
           // Nếu không phải lỗi timeout hoặc network, không retry
           if (!isRetryableError(error)) {
@@ -490,7 +490,7 @@ const ProductListScreen: React.FC = () => {
         userMessage =
           "📡 Không thể kết nối đến server. Vui lòng kiểm tra kết nối mạng.";
       } else {
-        userMessage = `❌ Lỗi: ${error.message || "Không xác định"}`;
+        userMessage = ` Lỗi: ${error.message || "Không xác định"}`;
       }
 
       Alert.alert("Thông báo", userMessage);
@@ -666,12 +666,27 @@ const ProductListScreen: React.FC = () => {
               )}
             </View>
           </View>
-          <TouchableOpacity
-            style={[styles.editButton, isExpired && { backgroundColor: '#d32f2f' }]}
-            onPress={handleEditPress}
-          >
-            <Ionicons name="create-outline" size={18} color="#fff" />
-          </TouchableOpacity>
+          {/* Action Buttons */}
+          <View style={{ flexDirection: 'column', gap: 6 }}>
+            {/* Nút sửa thông tin SP (chỉ hiển thị ở merge mode) */}
+            {!(item as any).isBatch && (
+              <TouchableOpacity
+                style={styles.editInfoButton}
+                onPress={() => setEditingProduct(item)}
+              >
+                <Ionicons name="settings-outline" size={16} color="#16a34a" />
+              </TouchableOpacity>
+            )}
+            {/* Nút edit lô (chỉ hiển thị ở split mode) */}
+            {(item as any).isBatch && (
+              <TouchableOpacity
+                style={[styles.editButton, isExpired && { backgroundColor: '#d32f2f' }]}
+                onPress={handleEditPress}
+              >
+                <Ionicons name="create-outline" size={18} color="#fff" />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </View>
     );
@@ -1567,5 +1582,24 @@ const styles = StyleSheet.create({
     color: "#999",
     textAlign: "center",
     lineHeight: 18,
+  },
+  // Edit buttons
+  editButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#1b5e20",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  editInfoButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#16a34a",
+    justifyContent: "center",
+    alignItems: "center",
   },
 });

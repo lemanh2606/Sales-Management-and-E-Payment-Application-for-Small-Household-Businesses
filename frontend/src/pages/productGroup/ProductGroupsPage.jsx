@@ -81,7 +81,7 @@ export default function ProductGroupsPage() {
     } catch (err) {
       console.error("Fetch groups error:", err);
       notification.error({
-        message: "❌ Lỗi tải dữ liệu",
+        message: " Lỗi tải dữ liệu",
         description: err?.response?.data?.message || "Không thể tải danh sách nhóm sản phẩm",
         placement: "topRight",
         duration: 4,
@@ -147,7 +147,7 @@ export default function ProductGroupsPage() {
           fetchGroups();
         } catch (err) {
           notification.error({
-            message: "❌ Lỗi xóa nhóm",
+            message: " Lỗi xóa nhóm",
             description: err?.response?.data?.message || "Không thể xóa nhóm sản phẩm",
             placement: "topRight",
           });

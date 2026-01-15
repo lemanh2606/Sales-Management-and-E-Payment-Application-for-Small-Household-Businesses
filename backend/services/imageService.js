@@ -61,7 +61,7 @@ class ImgBBService {
       };
     } catch (error) {
       console.error(
-        "❌ ImgBB Upload Failed:",
+        " ImgBB Upload Failed:",
         error.response?.data || error.message
       );
       return {
@@ -93,7 +93,7 @@ class ImgBBService {
       // Use the main upload method
       return await this.uploadImage(buffer, fileName);
     } catch (error) {
-      console.error("❌ Base64 upload failed:", error.message);
+      console.error(" Base64 upload failed:", error.message);
       return {
         success: false,
         error: error.message || "Base64 upload failed",
@@ -143,7 +143,7 @@ class ImgBBService {
 
       return { success: true };
     } catch (error) {
-      console.error("❌ Delete failed:", error.message);
+      console.error(" Delete failed:", error.message);
       return {
         success: false,
         error: error.message || "Delete failed",

@@ -199,6 +199,29 @@ const ReportDashboard = () => {
     </Menu>
   );
 
+  // Check xem kỳ đang chọn có phải tương lai không
+  const isFuturePeriod = () => {
+    if (!periodType || !periodKey) return false;
+    const now = dayjs();
+
+    if (periodType === "month") {
+      return dayjs(periodKey, "YYYY-MM").isAfter(now, "month");
+    }
+    if (periodType === "year") {
+      return dayjs(periodKey, "YYYY").isAfter(now, "year");
+    }
+    if (periodType === "quarter") {
+      const [year, qStr] = periodKey.split("-Q");
+      const q = parseInt(qStr);
+      const currentQuarter = Math.floor(now.month() / 3) + 1;
+      const currentYear = now.year();
+      if (parseInt(year) > currentYear) return true;
+      if (parseInt(year) === currentYear && q > currentQuarter) return true;
+      return false;
+    }
+    return false;
+  };
+
   // ====== HELPERS ======
   const getCurrentTotalExpense = () => expenseItems.reduce((sum, it) => sum + (Number(it.amount) || 0), 0);
   const getUnsavedItems = () => expenseItems.filter((it) => it && it.isSaved === false);
@@ -453,6 +476,15 @@ const ReportDashboard = () => {
       return;
     }
 
+    if (isFuturePeriod()) {
+      Swal.fire({
+        icon: "warning",
+        title: "Kỳ báo cáo không hợp lệ",
+        text: "Không thể lưu chi phí cho thời gian ở tương lai",
+      });
+      return;
+    }
+
     try {
       setLoading(true);
 
@@ -489,7 +521,7 @@ const ReportDashboard = () => {
       console.error("saveOperatingExpense error:", error);
       Swal.fire({
         icon: "error",
-        title: "❌ Lỗi khi lưu",
+        title: " Lỗi khi lưu",
         text: error.response?.data?.message || error.message,
       });
     } finally {
@@ -500,6 +532,15 @@ const ReportDashboard = () => {
   // ====== CHI PHÍ NGOÀI LỀ ======
   // Thêm 1 khoản chi phí
   const addExpenseItem = () => {
+    if (isFuturePeriod()) {
+      Swal.fire({
+        icon: "warning",
+        title: "Không thể thêm",
+        text: "Không thể thêm chi phí cho thời gian ở tương lai",
+      });
+      return;
+    }
+
     if (newExpenseAmount === null || newExpenseAmount === undefined || newExpenseAmount <= 0) {
       Swal.fire({
         icon: "warning",
@@ -821,7 +862,16 @@ const ReportDashboard = () => {
 
           {/* CHI PHÍ NGOÀI LỄ - RIÊNG */}
 
-          <Card style={{ border: "1px solid #8c8c8c" }}>
+          {isFuturePeriod() ? (
+            <Alert
+              type="warning"
+              showIcon
+              message="Thời gian ở tương lai"
+              description={`Kỳ báo cáo bạn chọn (${periodKey}) chưa diễn ra. Hệ thống không cho phép ghi nhận chi phí trước cho tương lai.`}
+              style={{ padding: "24px", borderRadius: "12px", border: "1px solid #ffe58f" }}
+            />
+          ) : (
+            <Card style={{ border: "1px solid #8c8c8c" }}>
             {/* Allocation Suggestion Alert */}
             {allocationSuggestion && allocationSuggestion.canAllocate && (
               <Alert
@@ -1080,6 +1130,7 @@ const ReportDashboard = () => {
               </Col>
             </Row>
           </Card>
+          )}
 
           {loading && <Spin tip="Đang tải..." style={{ width: "100%", margin: "20px 0" }} />}
           {error && <Alert message="Lỗi" description={error} type="error" showIcon style={{ marginBottom: 16 }} />}

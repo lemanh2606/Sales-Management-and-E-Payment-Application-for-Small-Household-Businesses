@@ -140,7 +140,7 @@ const getCurrentSubscription = async (req, res) => {
           subscription = await Subscription.createTrial(userId);
           console.log("✅ Trial subscription created:", subscription._id);
         } catch (trialErr) {
-          console.error("❌ Failed to create trial:", trialErr);
+          console.error(" Failed to create trial:", trialErr);
           return res.status(500).json({
             message: "Không thể tạo trial subscription",
             error: trialErr.message,
@@ -150,7 +150,7 @@ const getCurrentSubscription = async (req, res) => {
         // Đã từng có subscription → Trả về subscription cũ (EXPIRED/CANCELLED)
         subscription = anySubscription;
         console.log(
-          "📋 Found expired/cancelled subscription:",
+          " Found expired/cancelled subscription:",
           subscription._id,
           subscription.status
         );
@@ -163,6 +163,7 @@ const getCurrentSubscription = async (req, res) => {
       status: subscription.status,
       is_premium: user.is_premium,
       days_remaining: subscription.days_remaining,
+      total_days: subscription.total_days,
     };
 
     if (subscription.status === "TRIAL") {

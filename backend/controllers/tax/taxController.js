@@ -69,7 +69,7 @@ function validateRequiredFields(data, requiredFields) {
 
 // ✅ STANDARDIZED ERROR RESPONSE
 function errorResponse(res, status, message, details = {}) {
-  console.error(`❌ [${status}] ${message}`, JSON.stringify(details, null, 2));
+  console.error(` [${status}] ${message}`, JSON.stringify(details, null, 2));
   return res.status(status).json({
     success: false,
     message,
@@ -191,7 +191,7 @@ async function getTaxpayerInfo(storeId) {
       },
     };
   } catch (err) {
-    console.error("❌ getTaxpayerInfo error:", err);
+    console.error(" getTaxpayerInfo error:", err);
     return {};
   }
 }
@@ -268,7 +268,7 @@ function formatCurrency(amount) {
  * GET /api/taxs/preview?periodType=...&periodKey=...&storeId=...
  */
 const previewSystemRevenue = async (req, res) => {
-  console.log("\n📋 === PREVIEW SYSTEM REVENUE ===");
+  console.log("\n === PREVIEW SYSTEM REVENUE ===");
   console.log("Query params:", req.query);
 
   try {
@@ -425,7 +425,7 @@ const previewSystemRevenue = async (req, res) => {
       dateRange: { start, end },
     });
   } catch (err) {
-    console.error("❌ previewSystemRevenue error:", err);
+    console.error(" previewSystemRevenue error:", err);
     return errorResponse(res, 500, "Lỗi server khi tính doanh thu", {
       error: err.message,
       stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
@@ -438,7 +438,7 @@ const previewSystemRevenue = async (req, res) => {
  * POST /api/taxs
  */
 const createTaxDeclaration = async (req, res) => {
-  console.log("\n📋 === CREATE TAX DECLARATION (NO DUPLICATE CHECK) ===");
+  console.log("\n === CREATE TAX DECLARATION (NO DUPLICATE CHECK) ===");
   console.log("Request body keys:", Object.keys(req.body));
   console.log("Request body:", JSON.stringify(req.body, null, 2));
 
@@ -540,7 +540,7 @@ const createTaxDeclaration = async (req, res) => {
 
     console.log(`✅ Store found: ${store.name}`);
 
-    // ❌ BỎ CHECK TỒN TẠI - CHO PHÉP TẠO NHIỀU TỜ KHAI CÙNG KỲ
+    //  BỎ CHECK TỒN TẠI - CHO PHÉP TẠO NHIỀU TỜ KHAI CÙNG KỲ
     // Comment/Remove the existing duplicate check
     /*
     const existingOriginal = await TaxDeclaration.findOne({
@@ -674,7 +674,7 @@ const createTaxDeclaration = async (req, res) => {
       taxAmount: parseDecimal(item.taxAmount || 0),
     }));
 
-    console.log("📦 Creating declaration document...");
+    console.log(" Creating declaration document...");
 
     // ✅ Tạo document với tất cả các trường
     const docData = {
@@ -746,7 +746,7 @@ const createTaxDeclaration = async (req, res) => {
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
-    console.error("❌ createTaxDeclaration error:", err);
+    console.error(" createTaxDeclaration error:", err);
     return errorResponse(res, 500, "Lỗi server khi tạo tờ khai", {
       error: err.message,
       stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
@@ -758,7 +758,7 @@ const createTaxDeclaration = async (req, res) => {
  * PUT /api/taxs/:id
  */
 const updateTaxDeclaration = async (req, res) => {
-  console.log("\n📋 === UPDATE TAX DECLARATION ===");
+  console.log("\n === UPDATE TAX DECLARATION ===");
   console.log("ID:", req.params.id);
   console.log("Request body:", JSON.stringify(req.body, null, 2));
 
@@ -1045,7 +1045,7 @@ const updateTaxDeclaration = async (req, res) => {
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
-    console.error("❌ updateTaxDeclaration error:", err);
+    console.error(" updateTaxDeclaration error:", err);
     return errorResponse(res, 500, "Lỗi server khi cập nhật tờ khai", {
       error: err.message,
       stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
@@ -1058,7 +1058,7 @@ const updateTaxDeclaration = async (req, res) => {
  * POST /api/taxs/:id/clone
  */
 const cloneTaxDeclaration = async (req, res) => {
-  console.log("\n📋 === CLONE TAX DECLARATION ===");
+  console.log("\n === CLONE TAX DECLARATION ===");
   console.log("Source ID:", req.params.id);
 
   const session = await mongoose.startSession();
@@ -1094,7 +1094,7 @@ const cloneTaxDeclaration = async (req, res) => {
 
     const newVersion = maxVerDoc ? maxVerDoc.version + 1 : source.version + 1;
 
-    console.log(`📦 Creating clone with version ${newVersion}...`);
+    console.log(` Creating clone with version ${newVersion}...`);
 
     const cloneDoc = await TaxDeclaration.create(
       [
@@ -1153,7 +1153,7 @@ const cloneTaxDeclaration = async (req, res) => {
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
-    console.error("❌ cloneTaxDeclaration error:", err);
+    console.error(" cloneTaxDeclaration error:", err);
     return errorResponse(res, 500, "Lỗi server khi clone tờ khai", {
       error: err.message,
       stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
@@ -1166,7 +1166,7 @@ const cloneTaxDeclaration = async (req, res) => {
  * DELETE /api/taxs/:id
  */
 const deleteTaxDeclaration = async (req, res) => {
-  console.log("\n📋 === DELETE TAX DECLARATION ===");
+  console.log("\n === DELETE TAX DECLARATION ===");
   console.log("ID:", req.params.id);
 
   const session = await mongoose.startSession();
@@ -1257,7 +1257,7 @@ const deleteTaxDeclaration = async (req, res) => {
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
-    console.error("❌ deleteTaxDeclaration error:", err);
+    console.error(" deleteTaxDeclaration error:", err);
     return errorResponse(res, 500, "Lỗi server khi xóa tờ khai", {
       error: err.message,
       stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
@@ -1270,7 +1270,7 @@ const deleteTaxDeclaration = async (req, res) => {
  * GET /api/taxs?storeId=...&periodType=...&periodKey=...
  */
 const listDeclarations = async (req, res) => {
-  console.log("\n📋 === LIST TAX DECLARATIONS ===");
+  console.log("\n === LIST TAX DECLARATIONS ===");
   console.log("Query params:", req.query);
 
   try {
@@ -1354,7 +1354,7 @@ const listDeclarations = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("❌ listDeclarations error:", err);
+    console.error(" listDeclarations error:", err);
     return errorResponse(res, 500, "Lỗi server khi lấy danh sách tờ khai", {
       error: err.message,
       stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
@@ -1367,7 +1367,7 @@ const listDeclarations = async (req, res) => {
  * GET /api/taxs/:id
  */
 const getDeclaration = async (req, res) => {
-  console.log("\n📋 === GET TAX DECLARATION ===");
+  console.log("\n === GET TAX DECLARATION ===");
   console.log("ID:", req.params.id);
 
   try {
@@ -1421,7 +1421,7 @@ const getDeclaration = async (req, res) => {
       declaration: formatted,
     });
   } catch (err) {
-    console.error("❌ getDeclaration error:", err);
+    console.error(" getDeclaration error:", err);
     return errorResponse(res, 500, "Lỗi server khi lấy chi tiết tờ khai", {
       error: err.message,
       stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
@@ -1434,7 +1434,7 @@ const getDeclaration = async (req, res) => {
  * POST /api/taxs/:id/approve
  */
 const approveRejectDeclaration = async (req, res) => {
-  console.log("\n📋 === APPROVE/REJECT TAX DECLARATION ===");
+  console.log("\n === APPROVE/REJECT TAX DECLARATION ===");
   console.log("ID:", req.params.id);
   console.log("Action:", req.body.action);
 
@@ -1497,7 +1497,7 @@ const approveRejectDeclaration = async (req, res) => {
       doc.approvedAt = null;
       doc.approvedBy = null;
       console.log(
-        `❌ Rejecting declaration: ${rejectionReason || "No reason"}`
+        ` Rejecting declaration: ${rejectionReason || "No reason"}`
       );
     }
 
@@ -1527,7 +1527,7 @@ const approveRejectDeclaration = async (req, res) => {
       }
     );
   } catch (err) {
-    console.error("❌ approveRejectDeclaration error:", err);
+    console.error(" approveRejectDeclaration error:", err);
     return errorResponse(res, 500, "Lỗi server khi duyệt/từ chối tờ khai", {
       error: err.message,
       stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
@@ -1540,7 +1540,7 @@ const approveRejectDeclaration = async (req, res) => {
  * GET /api/taxs/:id/export?format=pdf|csv
  */
 const exportDeclaration = async (req, res) => {
-  console.log("\n📋 === EXPORT TAX DECLARATION ===");
+  console.log("\n === EXPORT TAX DECLARATION ===");
   console.log("ID:", req.params.id);
   console.log("Format:", req.query.format);
 
@@ -2287,7 +2287,7 @@ const exportDeclaration = async (req, res) => {
     console.log("✅ PDF export successful");
     pdf.end();
   } catch (err) {
-    console.error("❌ exportDeclaration error:", err);
+    console.error(" exportDeclaration error:", err);
     return errorResponse(res, 500, "Lỗi server khi export tờ khai", {
       error: err.message,
       stack: process.env.NODE_ENV === "development" ? err.stack : undefined,

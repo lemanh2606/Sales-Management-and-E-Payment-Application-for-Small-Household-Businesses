@@ -97,13 +97,42 @@ const ProductBatchModal: React.FC<ProductBatchModalProps> = ({
 
   const handleSave = async () => {
     if (!product._id) return;
+    
+    // Validation: Kiểm tra tồn kho tối đa
+    const newQty = Number(formData.quantity) || 0;
+    const oldQty = Number(batch?.quantity) || 0;
+    const qtyDelta = newQty - oldQty;
+    const currentStock = Number(product.stock_quantity) || 0;
+    const projectedStock = currentStock + qtyDelta;
+    
+    // Ép kiểu cho chắc chắn
+    const maxStock = product.max_stock !== undefined && product.max_stock !== null 
+      ? Number(product.max_stock) 
+      : 0;
+
+    console.log("Mobile Validate Max Stock:", { currentStock, oldQty, newQty, qtyDelta, projectedStock, maxStock });
+
+    if (maxStock > 0 && projectedStock > maxStock) {
+      Alert.alert(
+        "Lỗi: Vượt tồn kho tối đa",
+        `Tổng tồn kho dự kiến (${projectedStock}) vượt quá giới hạn tối đa của sản phẩm (${maxStock}).\n\nVui lòng điều chỉnh lại số lượng.`
+      );
+      return;
+    }
+
+    // Kiểm tra không âm
+    if (newQty < 0) {
+      Alert.alert("Lỗi", "Số lượng không được âm");
+      return;
+    }
+
     try {
       setLoading(true);
       await productApi.updateProductBatch(product._id.toString(), batchIndex, {
         batch_no: formData.batch_no,
         old_batch_no: batch?.batch_no,
         expiry_date: formData.expiry_date,
-        quantity: Number(formData.quantity),
+        quantity: newQty,
         cost_price: Number(formData.cost_price),
         selling_price: Number(formData.selling_price),
         warehouse_id: formData.warehouse_id,

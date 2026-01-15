@@ -21,14 +21,14 @@ module.exports = async (req, res) => {
       try {
         parsed = JSON.parse(req.body.toString());
       } catch (e) {
-        console.error("❌ Không parse được JSON từ raw body");
+        console.error(" Không parse được JSON từ raw body");
         return res.status(200).json({ message: "Invalid raw JSON" });
       }
     } else {
       parsed = req.body;
     }
   } catch (err) {
-    console.error("❌ Lỗi khi đọc body:", err);
+    console.error(" Lỗi khi đọc body:", err);
     return res.status(200).json({ message: "Invalid body" });
   }
 
@@ -39,13 +39,13 @@ module.exports = async (req, res) => {
   // ============================
   const checksumKey = process.env.PAYOS_CHECKSUM_KEY;
   if (!checksumKey) {
-    console.error("❌ Thiếu PAYOS_CHECKSUM_KEY trong môi trường");
+    console.error(" Thiếu PAYOS_CHECKSUM_KEY trong môi trường");
     return res.status(200).json({ message: "Server config error" });
   }
 
   const tx = parsed.data || {};
   if (!tx || !tx.orderCode) {
-    console.error("❌ Thiếu orderCode trong payload");
+    console.error(" Thiếu orderCode trong payload");
     return res.status(200).json({ message: "Missing orderCode" });
   }
 
@@ -62,7 +62,7 @@ module.exports = async (req, res) => {
   console.log("🔑 Chữ ký đúng :", expectedSignature);
 
   if (!receivedSignature || receivedSignature !== expectedSignature) {
-    console.warn("❌ Sai chữ ký – từ chối xử lý webhook");
+    console.warn(" Sai chữ ký – từ chối xử lý webhook");
     return res.status(200).json({ message: "Invalid signature" });
   }
 
@@ -134,7 +134,7 @@ module.exports = async (req, res) => {
     await subscription.save();
     console.log("💾 Subscription đã lưu:", subscription._id, "new status:", subscription.status);
   } catch (e) {
-    console.error("❌ Lỗi update subscription:", e);
+    console.error(" Lỗi update subscription:", e);
     return res.status(200).json({ message: "Update error" });
   }
 

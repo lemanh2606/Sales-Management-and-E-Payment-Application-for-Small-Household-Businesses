@@ -202,7 +202,7 @@ const InventoryReportScreen: React.FC = () => {
         setError(res.data.message || "Không thể tải báo cáo tồn kho");
       }
     } catch (err: any) {
-      console.error("❌ Lỗi tải tồn kho:", err);
+      console.error(" Lỗi tải tồn kho:", err);
       setError(err?.message || "Lỗi tải báo cáo");
     } finally {
       setLoading(false);
@@ -231,7 +231,7 @@ const InventoryReportScreen: React.FC = () => {
         setError(res.data.message || "Không thể tải biến thiên tồn kho");
       }
     } catch (err: any) {
-      console.error("❌ Lỗi tải biến thiên:", err);
+      console.error(" Lỗi tải biến thiên:", err);
       setError(err?.message || "Lỗi tải báo cáo");
     } finally {
       setLoading(false);

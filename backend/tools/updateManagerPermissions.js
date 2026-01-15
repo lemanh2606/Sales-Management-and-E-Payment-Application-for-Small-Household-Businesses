@@ -47,7 +47,7 @@ async function updateManagerPermissions() {
 
     console.log("🎉 Hoàn tất cập nhật tất cả MANAGER!");
   } catch (error) {
-    console.error("❌ Lỗi khi cập nhật:", error);
+    console.error(" Lỗi khi cập nhật:", error);
   } finally {
     await mongoose.disconnect();
     console.log("🔌 Đã ngắt kết nối MongoDB");

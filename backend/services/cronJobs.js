@@ -189,7 +189,7 @@ cron.schedule("0 3 * * *", async () => {
       if (user) {
         user.is_premium = false;
         await user.save();
-        console.log(`❌ Trial expired for user ${user.username}`);
+        console.log(` Trial expired for user ${user.username}`);
       }
     }
 
@@ -208,7 +208,7 @@ cron.schedule("0 3 * * *", async () => {
       if (user) {
         user.is_premium = false;
         await user.save();
-        console.log(`❌ Premium expired for user ${user.username}`);
+        console.log(` Premium expired for user ${user.username}`);
       }
     }
 
@@ -270,7 +270,7 @@ cron.schedule("30 8 * * *", async () => {
           }
         }
       } catch (prodErr) {
-        console.error(`❌ Lỗi xử lý thông báo sắp hết hạn cho SP ${p._id}:`, prodErr.message);
+        console.error(` Lỗi xử lý thông báo sắp hết hạn cho SP ${p._id}:`, prodErr.message);
       }
     }
 
@@ -313,13 +313,13 @@ cron.schedule("30 8 * * *", async () => {
           }
         }
       } catch (prodErr) {
-        console.error(`❌ Lỗi xử lý thông báo đã hết hạn cho SP ${p._id}:`, prodErr.message);
+        console.error(` Lỗi xử lý thông báo đã hết hạn cho SP ${p._id}:`, prodErr.message);
       }
     }
 
     console.log("✅ Hoàn thành cron tạo thông báo hệ thống");
   } catch (err) {
-    console.error("❌ Lỗi cron thông báo hết hạn:", err.message);
+    console.error(" Lỗi cron thông báo hết hạn:", err.message);
   }
 });
 

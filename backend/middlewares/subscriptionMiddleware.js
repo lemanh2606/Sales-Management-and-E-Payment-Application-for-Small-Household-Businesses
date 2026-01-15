@@ -13,7 +13,7 @@ const User = require("../models/User");
 const checkSubscriptionExpiry = async (req, res, next) => {
   const user = req.user;
   
-  console.log(`📋 [checkSubscriptionExpiry] ${req.method} ${req.originalUrl} | user: ${user?.role || 'NO_USER'} ${user?._id || ''}`);
+  console.log(` [checkSubscriptionExpiry] ${req.method} ${req.originalUrl} | user: ${user?.role || 'NO_USER'} ${user?._id || ''}`);
   
   if (!user) {
     return res.status(401).json({ message: "Chưa đăng nhập" });
@@ -98,7 +98,7 @@ const checkSubscriptionExpiry = async (req, res, next) => {
 
     // MANAGER - Tìm subscription của chính mình
     subscription = await Subscription.findActiveByUser(user._id);
-    console.log("📋 findActiveByUser result for", user._id, ":", subscription ? `Found ${subscription.status}` : "Not found");
+    console.log(" findActiveByUser result for", user._id, ":", subscription ? `Found ${subscription.status}` : "Not found");
 
     // Auto-create trial CHỈ nếu CHƯA TỪNG có subscription (chỉ cho MANAGER)
     if (!subscription) {
@@ -111,7 +111,7 @@ const checkSubscriptionExpiry = async (req, res, next) => {
       
       // Kiểm tra xem có subscription cũ (EXPIRED/CANCELLED) không
       const anySubscription = await Subscription.findOne({ user_id: user._id });
-      console.log("📋 anySubscription result:", anySubscription ? `Found ${anySubscription.status}` : "Not found (creating trial)");
+      console.log(" anySubscription result:", anySubscription ? `Found ${anySubscription.status}` : "Not found (creating trial)");
       
       if (!anySubscription) {
         // Chưa từng có → Tạo trial mới
@@ -121,17 +121,17 @@ const checkSubscriptionExpiry = async (req, res, next) => {
       } else {
         // Đã từng có → Dùng subscription cũ
         subscription = anySubscription;
-        console.log("📋 Using existing subscription:", subscription._id, subscription.status);
+        console.log(" Using existing subscription:", subscription._id, subscription.status);
       }
     }
 
     const now = new Date();
-    console.log("📋 Subscription status:", subscription.status, "| trial_ends_at:", subscription.trial_ends_at, "| now:", now);
+    console.log(" Subscription status:", subscription.status, "| trial_ends_at:", subscription.trial_ends_at, "| now:", now);
 
     // Case 1: TRIAL
     if (subscription.status === "TRIAL") {
       const isActive = subscription.is_trial_active;
-      console.log("📋 TRIAL check - is_trial_active:", isActive, "| trial_ends_at:", subscription.trial_ends_at);
+      console.log(" TRIAL check - is_trial_active:", isActive, "| trial_ends_at:", subscription.trial_ends_at);
       
       if (isActive) {
         // Trial còn hạn → OK
@@ -139,7 +139,7 @@ const checkSubscriptionExpiry = async (req, res, next) => {
         return next();
       } else {
         // Trial hết hạn
-        console.log("❌ TRIAL expired, blocking access");
+        console.log(" TRIAL expired, blocking access");
         subscription.status = "EXPIRED";
         await subscription.save();
         
@@ -254,23 +254,42 @@ const attachSubscriptionInfo = async (req, res, next) => {
   }
 
   try {
-    const subscription = await Subscription.findActiveByUser(user._id);
+    let subscription;
+    let managerId = user._id;
+
+    // STAFF kế thừa thông tin từ store hiện tại
+    if (user.role === "STAFF") {
+      const Store = require("../models/Store");
+      // Ưu tiên store đang active trong session/token
+      const storeId = req.query.storeId || req.query.shopId || req.params.storeId || req.body?.storeId || user.current_store;
+      
+      if (storeId) {
+        const store = await Store.findById(storeId);
+        if (store) {
+          managerId = store.owner_id;
+        }
+      }
+    }
+
+    subscription = await Subscription.findActiveByUser(managerId);
 
     // Attach subscription info
     req.subscription_info = {
       status: subscription?.status || "NONE",
-      is_premium: user.is_premium,
+      is_premium: user.is_premium || (subscription?.status === "ACTIVE" && subscription?.is_premium_active),
+      is_trial: subscription?.status === "TRIAL" && subscription?.is_trial_active,
     };
 
     // Add days remaining
     if (subscription) {
+      req.subscription_info.days_remaining = subscription.days_remaining;
+      req.subscription_info.total_days = subscription.total_days;
+
       if (subscription.status === "TRIAL" && subscription.trial_ends_at) {
-        req.subscription_info.trial_days_remaining = subscription.days_remaining;
         req.subscription_info.trial_ends_at = subscription.trial_ends_at;
       }
 
       if (subscription.status === "ACTIVE" && subscription.expires_at) {
-        req.subscription_info.premium_days_remaining = subscription.days_remaining;
         req.subscription_info.premium_expires_at = subscription.expires_at;
       }
     }

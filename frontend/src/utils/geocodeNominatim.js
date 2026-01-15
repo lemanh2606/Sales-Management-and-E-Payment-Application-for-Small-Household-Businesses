@@ -20,7 +20,7 @@ export async function fetchLatLngFromAddress(address) {
       raw: first,
     };
   } catch (error) {
-    console.error("❌ Error fetching coordinates via proxy:", error);
+    console.error(" Error fetching coordinates via proxy:", error);
     return null;
   }
 }

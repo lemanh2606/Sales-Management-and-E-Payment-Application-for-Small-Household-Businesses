@@ -111,7 +111,7 @@ export default function SelectStorePage() {
     } catch (e) {
       console.error(e);
       api.error({
-        message: "❌ Lỗi tải dữ liệu",
+        message: " Lỗi tải dữ liệu",
         description: e?.response?.data?.message || "Không lấy được danh sách cửa hàng",
         placement: "topRight",
       });
@@ -232,7 +232,7 @@ export default function SelectStorePage() {
     } catch (e) {
       console.error(e);
       api.error({
-        message: "❌ Lỗi chọn cửa hàng",
+        message: " Lỗi chọn cửa hàng",
         description: e?.response?.data?.message || e?.message,
         placement: "topRight",
       });
@@ -330,7 +330,7 @@ export default function SelectStorePage() {
     } catch (e) {
       console.error(e);
       api.error({
-        message: "❌ Lỗi lưu cửa hàng",
+        message: " Lỗi lưu cửa hàng",
         description: e?.response?.data?.message || "Không thể lưu cửa hàng",
         placement: "topRight",
       });
@@ -368,7 +368,7 @@ export default function SelectStorePage() {
       await loadStores();
     } catch (e) {
       api.error({
-        message: "❌ Lỗi xóa cửa hàng",
+        message: " Lỗi xóa cửa hàng",
         description: e?.response?.data?.message || "Không thể xóa cửa hàng",
         placement: "topRight",
       });
@@ -389,7 +389,7 @@ export default function SelectStorePage() {
       await loadStores();
     } catch (e) {
       api.error({
-        message: "❌ Lỗi khôi phục cửa hàng",
+        message: " Lỗi khôi phục cửa hàng",
         description: e?.response?.data?.message || "Không thể khôi phục cửa hàng",
         placement: "topRight",
       });

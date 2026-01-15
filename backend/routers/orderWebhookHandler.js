@@ -60,7 +60,7 @@ module.exports = async (req, res) => {
 
       return res.status(200).json({ message: "Webhook received" });
     } else {
-      console.log("❌ Webhook không hợp lệ hoặc sai chữ ký");
+      console.log(" Webhook không hợp lệ hoặc sai chữ ký");
       return res.status(400).json({ message: "Invalid webhook" });
     }
   } catch (err) {

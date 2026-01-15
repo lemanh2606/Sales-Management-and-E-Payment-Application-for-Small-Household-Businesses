@@ -60,6 +60,7 @@ interface StoreForm {
   owner_id?: string;
   staff_ids?: string[];
   isDefault?: boolean;
+  taxCode: string;
   deleted?: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -179,6 +180,7 @@ const InformationStore: React.FC = () => {
         open: values.openingHours?.open || "",
         close: values.openingHours?.close || "",
       },
+      taxCode: values.taxCode, // Added taxCode here
     };
 
     setSaving(true);
@@ -516,6 +518,42 @@ const InformationStore: React.FC = () => {
                         </div>
                       </div>
                     </div>
+                    {/* Tax Code */}
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 14,
+                        padding: "14px 16px",
+                        background: COLORS.lightGray,
+                        borderRadius: 12,
+                        borderLeft: `4px solid #1890ff`,
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: 10,
+                          background: COLORS.white,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <TagsOutlined style={{ color: "#1890ff", fontSize: 18 }} />
+                      </div>
+                      <div style={{ flex: 1, textAlign: "left" }}>
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          Mã số thuế
+                        </Text>
+                        <div>
+                          <Text strong style={{ fontSize: 15 }}>
+                            {store?.taxCode || "Chưa cập nhật"}
+                          </Text>
+                        </div>
+                      </div>
+                    </div>
                   </Space>
 
                   <Divider style={{ margin: "24px 0" }} />
@@ -728,14 +766,28 @@ const InformationStore: React.FC = () => {
                     </Col>
                   </Row>
 
-                  <Form.Item label="Địa chỉ" name="address">
-                    <Input
-                      placeholder="Nhập địa chỉ cửa hàng"
-                      prefix={<EnvironmentOutlined style={{ color: COLORS.secondary }} />}
-                      size="large"
-                      style={{ borderRadius: 8 }}
-                    />
-                  </Form.Item>
+                  <Row gutter={16}>
+                    <Col xs={24} sm={12}>
+                      <Form.Item label="Địa chỉ" name="address">
+                        <Input
+                          placeholder="Nhập địa chỉ cửa hàng"
+                          prefix={<EnvironmentOutlined style={{ color: COLORS.secondary }} />}
+                          size="large"
+                          style={{ borderRadius: 8 }}
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col xs={24} sm={12}>
+                      <Form.Item label="Mã số thuế" name="taxCode">
+                        <Input
+                          placeholder="Nhập mã số thuế"
+                          prefix={<TagsOutlined style={{ color: "#1890ff" }} />}
+                          size="large"
+                          style={{ borderRadius: 8 }}
+                        />
+                      </Form.Item>
+                    </Col>
+                  </Row>
 
                   <Form.Item label="Mô tả" name="description">
                     <TextArea rows={4} placeholder="Nhập mô tả về cửa hàng..." showCount maxLength={500} style={{ borderRadius: 8 }} />

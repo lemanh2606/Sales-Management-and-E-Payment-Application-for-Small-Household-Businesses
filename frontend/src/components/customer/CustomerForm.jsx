@@ -77,7 +77,7 @@ export default function CustomerForm({ customer, onSuccess, onCancel }) {
       console.error("Customer save error:", err);
       const errorMessage = err?.response?.data?.message || "Có lỗi xảy ra, vui lòng thử lại";
       Swal.fire({
-        title: "❌ Lỗi!",
+        title: " Lỗi!",
         text: errorMessage,
         icon: "error",
         confirmButtonText: "OK",

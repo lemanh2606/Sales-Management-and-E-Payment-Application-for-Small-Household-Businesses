@@ -420,7 +420,7 @@ const ActivityLog = () => {
               <Row justify="space-between" align="middle">
                 <Col>
                   <Text strong style={{ fontSize: 22, color: "#1890ff" }}>
-                    📋 Nhật ký hoạt động - {currentStore.name || "Đang tải..."}
+                     Nhật ký hoạt động - {currentStore.name || "Đang tải..."}
                   </Text>
                 </Col>
                 <Col>

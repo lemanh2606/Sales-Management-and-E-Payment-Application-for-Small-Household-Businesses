@@ -156,7 +156,7 @@ export default function ProductListPage() {
     } catch (err) {
       console.error("Download template failed", err);
       api.error({
-        message: "❌ Tải template thất bại",
+        message: " Tải template thất bại",
         description: err?.message || "Vui lòng thử lại sau.",
         placement: "topRight",
       });
@@ -200,7 +200,7 @@ export default function ProductListPage() {
     } catch (err) {
       console.error("Fetch error:", err);
       api.error({
-        message: "❌ Lỗi tải dữ liệu",
+        message: " Lỗi tải dữ liệu",
         description: err?.message || "Không thể tải danh sách sản phẩm. Vui lòng thử lại.",
         placement: "topRight",
         duration: 5,
@@ -404,7 +404,7 @@ export default function ProductListPage() {
     const isExcel = /\.(xlsx|xls|csv)$/i.test(file.name);
     if (!isExcel) {
       api.error({
-        message: "❌ Định dạng không hỗ trợ",
+        message: " Định dạng không hỗ trợ",
         description: "Vui lòng chọn file Excel (.xlsx, .xls) hoặc CSV",
         placement: "topRight",
       });
@@ -455,7 +455,7 @@ export default function ProductListPage() {
     setModalProduct(product);
     setIsModalOpen(true);
     api.info({
-      message: `✏️ Chỉnh sửa sản phẩm`,
+      message: ` Chỉnh sửa sản phẩm`,
       description: `Đang chỉnh sửa: ${product.name}`,
       placement: "topRight",
       duration: 2,
@@ -475,7 +475,7 @@ export default function ProductListPage() {
     setEditingBatch({ product, batch });
     setBatchModalOpen(true);
     api.info({
-      message: `✏️ Chỉnh sửa lô hàng`,
+      message: ` Chỉnh sửa lô hàng`,
       description: `Lô: ${batch.batch_no} - ${product.name}`,
       placement: "topRight",
       duration: 2,
@@ -947,7 +947,7 @@ export default function ProductListPage() {
     cols.push({
       title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Thao tác</span>,
       key: "action",
-      width: isMobile ? 80 : 120,
+      width: isMobile ? 100 : 150,
       align: "center",
       fixed: "right",
       render: (_, record) => {
@@ -981,32 +981,46 @@ export default function ProductListPage() {
           );
         }
         
-        // Chế độ Merge (Gộp theo SP) - chỉ cho xem chi tiết, không edit trực tiếp
+        // Chế độ Merge (Gộp theo SP) - sửa thông tin SP + xem chi tiết lô
         if (viewMode === "merge") {
           const hasBatches = record.batches && record.batches.length > 0;
           return (
-            <Tooltip title={hasBatches ? "Click hàng để xem chi tiết lô" : "Sản phẩm chưa có lô"}>
-              <Button
-                type={hasBatches ? "default" : "dashed"}
-                icon={<EyeOutlined />}
-                size={isMobile ? "small" : "middle"}
-                disabled={!hasBatches}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (hasBatches) {
-                    const key = record._id || record.id;
-                    setExpandedRowKeys(prev => 
-                      prev.includes(key) 
-                        ? prev.filter(k => k !== key) 
-                        : [...prev, key]
-                    );
-                  }
-                }}
-                style={hasBatches ? { borderColor: "#1890ff", color: "#1890ff" } : {}}
-              >
-                {!isMobile && (hasBatches ? "Xem lô" : "Không có lô")}
-              </Button>
-            </Tooltip>
+            <Space size="small">
+              <Tooltip title="Sửa thông tin sản phẩm">
+                <Button
+                  type="default"
+                  icon={<SettingOutlined />}
+                  size={isMobile ? "small" : "middle"}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openEditModal(record);
+                  }}
+                  style={{ borderColor: "#52c41a", color: "#52c41a" }}
+                />
+              </Tooltip>
+              <Tooltip title={hasBatches ? "Click hàng để xem chi tiết lô" : "Sản phẩm chưa có lô"}>
+                <Button
+                  type={hasBatches ? "default" : "dashed"}
+                  icon={<EyeOutlined />}
+                  size={isMobile ? "small" : "middle"}
+                  disabled={!hasBatches}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (hasBatches) {
+                      const key = record._id || record.id;
+                      setExpandedRowKeys(prev => 
+                        prev.includes(key) 
+                          ? prev.filter(k => k !== key) 
+                          : [...prev, key]
+                      );
+                    }
+                  }}
+                  style={hasBatches ? { borderColor: "#1890ff", color: "#1890ff" } : {}}
+                >
+                  {!isMobile && (hasBatches ? "Xem lô" : "Không có lô")}
+                </Button>
+              </Tooltip>
+            </Space>
           );
         }
         
@@ -1106,7 +1120,7 @@ export default function ProductListPage() {
     } catch (error) {
       console.error("Import products error:", error);
       api.error({
-        message: "❌ Nhập sản phẩm thất bại",
+        message: " Nhập sản phẩm thất bại",
         description: error?.response?.data?.message || error?.message || "Vui lòng kiểm tra file và thử lại",
         placement: "topRight",
         duration: 6,
@@ -1148,7 +1162,7 @@ export default function ProductListPage() {
     } catch (error) {
       console.error("Export Excel error:", error);
       api.error({
-        message: "❌ Xuất Excel thất bại",
+        message: " Xuất Excel thất bại",
         description: error?.message || "Không thể xuất file",
         placement: "topRight",
       });
@@ -1190,7 +1204,7 @@ export default function ProductListPage() {
                 color: "black",
               }}
             >
-              📦 Quản lý Sản phẩm
+               Quản lý Sản phẩm
             </Title>
             {!isMobile && (
               <Text type="secondary" style={{ fontSize: "clamp(12px, 3vw, 14px)" }}>
@@ -1624,6 +1638,44 @@ export default function ProductListPage() {
               }}
               onFinish={async (values) => {
                 try {
+                  // Validation: Kiểm tra tồn kho tối đa
+                  const newQty = Number(values.quantity) || 0;
+                  const oldQty = Number(editingBatch.batch.quantity) || 0;
+                  const qtyDelta = newQty - oldQty;
+                  
+                  // Lấy tồn kho hiện tại của sản phẩm
+                  const currentStock = Number(editingBatch.product.stock_quantity) || 0;
+                  const projectedStock = currentStock + qtyDelta;
+                  
+                  // Lấy max_stock của sản phẩm
+                  const maxStock = editingBatch.product.max_stock !== undefined && editingBatch.product.max_stock !== null 
+                    ? Number(editingBatch.product.max_stock) 
+                    : 0;
+
+                  console.log("Validate Max Stock:", { currentStock, oldQty, newQty, qtyDelta, projectedStock, maxStock });
+
+                  if (maxStock > 0 && projectedStock > maxStock) {
+                    Modal.warning({
+                      title: "Không thể lưu - Vượt tồn kho tối đa",
+                      content: (
+                        <div>
+                          <p>Tổng số lượng tồn kho dự kiến (<b>{projectedStock}</b>) vượt quá hạn mức tối đa cho phép (<b>{maxStock}</b>).</p>
+                          <div style={{ background: '#f5f5f5', padding: '10px', borderRadius: '4px', marginTop: '10px' }}>
+                            <p style={{ margin: 0 }}>Tồn kho hiện tại: {currentStock}</p>
+                            <p style={{ margin: 0 }}>Thay đổi: <span style={{ color: qtyDelta >= 0 ? 'green' : 'red' }}>{qtyDelta >= 0 ? '+' : ''}{qtyDelta}</span></p>
+                            <p style={{ margin: 0, fontWeight: 'bold' }}>Dự kiến sau sửa: {projectedStock}</p>
+                          </div>
+                        </div>
+                      ),
+                    });
+                    return;
+                  }
+
+                  if (newQty < 0) {
+                    Modal.error({ title: "Lỗi", content: "Số lượng không được âm" });
+                    return;
+                  }
+
                   // Gọi API update batch thông qua update product
                   let productId = editingBatch.product._id || editingBatch.product.id;
                   // Đảm bảo productId là string
@@ -1655,11 +1707,11 @@ export default function ProductListPage() {
                     }),
                   });
 
+                  const result = await response.json().catch(() => ({}));
+                  
                   if (!response.ok) {
-                    throw new Error("Cập nhật lô hàng thất bại");
+                    throw new Error(result.message || "Cập nhật lô hàng thất bại");
                   }
-
-                  const result = await response.json();
                   
                   // Hiển thị thông báo với thông tin phiếu kho
                   let description = `Lô ${values.batch_no} đã được cập nhật`;
@@ -1677,7 +1729,7 @@ export default function ProductListPage() {
                   fetchProducts(false); // Refresh data
                 } catch (err) {
                   api.error({
-                    message: "❌ Lỗi cập nhật lô hàng",
+                    message: " Lỗi cập nhật lô hàng",
                     description: err.message,
                     placement: "topRight",
                   });

@@ -36,7 +36,7 @@ export default function SupplierDetailModal({ supplierId, open, onOpenChange }) 
       } catch (err) {
         console.error(err);
         api.error({
-          message: "❌ Lỗi tải dữ liệu",
+          message: " Lỗi tải dữ liệu",
           description: "Không thể tải thông tin nhà cung cấp. Vui lòng thử lại.",
           placement: "topRight",
           duration: 5,

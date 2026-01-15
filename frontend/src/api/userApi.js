@@ -111,7 +111,7 @@ export const updateProfile = async (data, options = {}) => {
     console.log("✅ Profile updated:", response.data);
     return response.data;
   } catch (error) {
-    console.error("❌ Update profile error:", error);
+    console.error(" Update profile error:", error);
     console.error("Error response:", error.response?.data);
     throw error;
   }

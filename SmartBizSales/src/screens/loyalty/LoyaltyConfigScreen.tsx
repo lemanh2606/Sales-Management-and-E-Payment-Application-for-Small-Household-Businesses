@@ -93,7 +93,7 @@ const LoyaltyConfigScreen: React.FC = () => {
       console.log("✅ Lấy config tích điểm thành công:", apiConfig);
     } catch (err) {
       const axiosError = err as any;
-      console.error("❌ Lỗi lấy config:", axiosError);
+      console.error(" Lỗi lấy config:", axiosError);
 
       if (axiosError.response?.status === 404) {
         // 404: Chưa setup
@@ -150,7 +150,7 @@ const LoyaltyConfigScreen: React.FC = () => {
       );
     } catch (err) {
       const axiosError = err as any;
-      console.error("❌ Lỗi toggle:", axiosError);
+      console.error(" Lỗi toggle:", axiosError);
       setIsActive(!value); // Revert
 
       const errorMessage =
@@ -220,7 +220,7 @@ const LoyaltyConfigScreen: React.FC = () => {
       }
     } catch (err) {
       const axiosError = err as any;
-      console.error("❌ Lỗi lưu config:", axiosError);
+      console.error(" Lỗi lưu config:", axiosError);
 
       const errorMessage =
         axiosError.response?.data?.message ||

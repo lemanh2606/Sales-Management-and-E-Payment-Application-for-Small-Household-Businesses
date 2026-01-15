@@ -152,7 +152,7 @@ export default function SupplierListPage() {
       } catch (e) {
         console.error("Fetch active suppliers error:", e);
         api.error({
-          message: "❌ Lỗi tải dữ liệu",
+          message: " Lỗi tải dữ liệu",
           description: e?.response?.data?.message || "Không thể tải danh sách nhà cung cấp.",
           placement: "topRight",
           duration: 5,
@@ -191,7 +191,7 @@ export default function SupplierListPage() {
       } catch (e) {
         console.error("Fetch deleted suppliers error:", e);
         api.error({
-          message: "❌ Lỗi tải dữ liệu",
+          message: " Lỗi tải dữ liệu",
           description: "Không thể tải danh sách nhà cung cấp đã xóa.",
           placement: "topRight",
           duration: 5,
@@ -273,7 +273,7 @@ export default function SupplierListPage() {
 
   const handleSoftDelete = async (id, name) => {
     if (!id) {
-      api.error({ message: "❌ Lỗi dữ liệu", description: "Không tìm thấy ID NCC", placement: "topRight" });
+      api.error({ message: " Lỗi dữ liệu", description: "Không tìm thấy ID NCC", placement: "topRight" });
       return;
     }
 
@@ -289,7 +289,7 @@ export default function SupplierListPage() {
       await Promise.all([fetchActiveSuppliers(false), fetchDeletedSuppliers(false)]);
     } catch (e) {
       api.error({
-        message: "❌ Lỗi xóa",
+        message: " Lỗi xóa",
         description: e?.response?.data?.message || "Không thể xóa NCC.",
         placement: "topRight",
         duration: 5,
@@ -301,7 +301,7 @@ export default function SupplierListPage() {
 
   const handleRestore = async (id, name) => {
     if (!id) {
-      api.error({ message: "❌ Lỗi dữ liệu", description: "Không tìm thấy ID NCC", placement: "topRight" });
+      api.error({ message: " Lỗi dữ liệu", description: "Không tìm thấy ID NCC", placement: "topRight" });
       return;
     }
 
@@ -317,7 +317,7 @@ export default function SupplierListPage() {
       await Promise.all([fetchActiveSuppliers(false), fetchDeletedSuppliers(false)]);
     } catch (e) {
       api.error({
-        message: "❌ Lỗi khôi phục",
+        message: " Lỗi khôi phục",
         description: e?.response?.data?.message || "Không thể khôi phục NCC.",
         placement: "topRight",
         duration: 5,
@@ -338,7 +338,7 @@ export default function SupplierListPage() {
       await exportSuppliers(storeId);
     } catch (e) {
       api.error({
-        message: "❌ Xuất Excel thất bại",
+        message: " Xuất Excel thất bại",
         description: e?.message || "Vui lòng thử lại",
         placement: "topRight",
         duration: 5,
@@ -626,7 +626,7 @@ export default function SupplierListPage() {
                 fontWeight: 700,
               }}
             >
-              🏢 Quản lý Nhà cung cấp
+               Quản lý Nhà cung cấp
             </Title>
             <Text type="secondary">Quản lý NCC đầy đủ (MST, ngân hàng, liên hệ) theo cửa hàng</Text>
           </div>

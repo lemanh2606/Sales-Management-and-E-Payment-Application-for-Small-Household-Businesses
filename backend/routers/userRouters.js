@@ -65,7 +65,7 @@ const uploadAvatar = multer({
       return cb(null, true);
     }
 
-    console.log("❌ File type rejected");
+    console.log(" File type rejected");
     cb(new Error("Only images are allowed (jpeg, jpg, png, gif, webp)"));
   },
 });
@@ -168,7 +168,7 @@ router.get("/staff-dashboard", verifyToken, (req, res) => {
 
 router.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) {
-    console.error("❌ Multer Error:", err);
+    console.error(" Multer Error:", err);
 
     if (err.code === "LIMIT_FILE_SIZE") {
       return res.status(400).json({
@@ -184,7 +184,7 @@ router.use((err, req, res, next) => {
   }
 
   if (err.message && err.message.includes("Only images")) {
-    console.error("❌ File Filter Error:", err);
+    console.error(" File Filter Error:", err);
     return res.status(400).json({
       message: err.message,
     });

@@ -1,4 +1,4 @@
-<!-- # 📋 FIX SUMMARY - Báo Cáo Cuối Ngày & Cập Nhật Tên Nhân Viên
+<!-- #  FIX SUMMARY - Báo Cáo Cuối Ngày & Cập Nhật Tên Nhân Viên
 
 ## 🐛 Vấn Đề Gốc
 
@@ -13,7 +13,7 @@
 - **Kết quả**: Order có employeeId sai → Không tìm thấy Employee record → Không hiển thị tên
 
 ### Vấn Đề 3: Cập nhật tên STAFF → Chỉ cập nhật Users, không sync sang Employees
-- **Nguyên nhân**: 
+- **Nguyên nhân**:
   - `updateProfile` ở `userController.js` dòng 980 dùng `employee.fullname` (sai field name)
   - Model Employee dùng `fullName` (camelCase), User dùng `fullname` (camelCase)
 - **Kết quả**: Tên ở Employee không được cập nhật → Báo cáo hiển thị tên cũ
@@ -28,12 +28,12 @@
 
 #### Fix 1a: Dòng ~390 - `byEmployee` aggregation
 ```javascript
-// ❌ CŨ: Chỉ lấy employeeId != null
+//  CŨ: Chỉ lấy employeeId != null
 const byEmployee = await Order.aggregate([
   {
     $match: {
       storeId: new mongoose.Types.ObjectId(storeId),
-      employeeId: { $ne: null }, // ❌ Loại Manager
+      employeeId: { $ne: null }, //  Loại Manager
       createdAt: { $gte: start, $lte: end },
       status: { $in: ["paid", "partially_refunded"] },
     },
@@ -42,7 +42,7 @@ const byEmployee = await Order.aggregate([
   {
     $project: {
       _id: "$_id",
-      name: { $arrayElemAt: ["$employee.fullName", 0] }, // ❌ Null nếu không có employee
+      name: { $arrayElemAt: ["$employee.fullName", 0] }, //  Null nếu không có employee
       revenue: 1,
       orders: 1,
       avgOrderValue: { $divide: ["$revenue", "$orders"] },
@@ -149,9 +149,9 @@ const refundsByEmployee = await OrderRefund.aggregate([
 **Dòng ~980 - updateProfile() function**
 
 ```javascript
-// ❌ CŨ: Dùng fullname (sai field name ở Employee model)
+//  CŨ: Dùng fullname (sai field name ở Employee model)
 if (fullname && changedFields.includes("fullname")) {
-  employee.fullname = fullname.trim(); // ❌ Employee dùng fullName!
+  employee.fullname = fullname.trim(); //  Employee dùng fullName!
   employeeChanged = true;
 }
 
@@ -177,10 +177,10 @@ if (fullname && changedFields.includes("fullname")) {
 **Dòng ~315 - loadEmployees() function**
 
 ```javascript
-// ❌ CŨ: Tạo object từ user info, gán employeeId = user.id
+//  CŨ: Tạo object từ user info, gán employeeId = user.id
 if (loggedInUser.role === "STAFF") {
   const staffEmployee: Seller = {
-    _id: loggedInUser.id, // ❌ User ID!
+    _id: loggedInUser.id, //  User ID!
     fullName: loggedInUser.fullname || loggedInUser.username || "Nhân viên",
     user_id: { _id: loggedInUser.id, ... },
   };
@@ -188,11 +188,11 @@ if (loggedInUser.role === "STAFF") {
   setCurrentUserEmployee(staffEmployee);
   setEmployees([staffEmployee as Employee]);
 
-  // ❌ Gửi User ID thay vì Employee ID
+  //  Gửi User ID thay vì Employee ID
   setOrders((prev) =>
     prev.map((tab) => ({
       ...tab,
-      employeeId: loggedInUser.id, // ❌ SAI: Đây là User ID!
+      employeeId: loggedInUser.id, //  SAI: Đây là User ID!
     }))
   );
 
@@ -207,10 +207,10 @@ if (loggedInUser.role === "STAFF") {
     // ✅ Gọi API để lấy Employee record của STAFF này
     const res = await axios.get(`${API_BASE}/stores/${storeId}/employees?deleted=false`, { headers });
     const employeesList: Employee[] = res.data.employees || [];
-    
+
     // ✅ Tìm employee có user_id trùng với user đang login
     const currentStaffEmployee = employeesList.find((e) => e.user_id?._id === loggedInUser.id);
-    
+
     if (currentStaffEmployee) {
       // ✅ Tìm thấy → lưu Employee record với ID chính xác
       setCurrentUserEmployee(currentStaffEmployee);

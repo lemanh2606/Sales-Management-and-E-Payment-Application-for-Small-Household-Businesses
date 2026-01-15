@@ -69,7 +69,7 @@ const SubscriptionPage = () => {
     } catch (error) {
       console.error("Lỗi load subscription:", error);
       Swal.fire({
-        title: "❌ Lỗi!",
+        title: " Lỗi!",
         text: "Không thể tải thông tin gói đăng ký",
         icon: "error",
         confirmButtonText: "OK",
@@ -146,7 +146,7 @@ const SubscriptionPage = () => {
           fetchData();
         } catch (error) {
           Swal.fire({
-            title: "❌ Lỗi!",
+            title: " Lỗi!",
             text: "Không thể huỷ gia hạn gói!",
             icon: "error",
             confirmButtonText: "OK",
@@ -213,8 +213,8 @@ const SubscriptionPage = () => {
   const isPremium = subscription?.status === "ACTIVE";
   const isExpired = subscription?.status === "EXPIRED";
   const daysRemaining = subscription?.days_remaining || 0;
-  const totalDays = isTrial ? 14 : (subscription?.premium?.plan_duration || 1) * 30;
-  const progressPercent = totalDays > 0 ? Math.round((daysRemaining / totalDays) * 100) : 0;
+  const totalDays = subscription?.total_days || (isTrial ? 14 : (subscription?.premium?.plan_duration || 1) * 30);
+  const progressPercent = totalDays > 0 ? Math.min(100, Math.round((daysRemaining / totalDays) * 100)) : 0;
   const pendingPayment = subscription?.pending_payment;
 
   // Logic filter real-time cho lịch sử thanh toán

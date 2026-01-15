@@ -249,7 +249,7 @@ export default function DashboardScreen() {
         setStoreId(getStoreId(store));
       }
     } catch (error) {
-      console.error("❌ Load store error:", error);
+      console.error(" Load store error:", error);
     }
   };
 
@@ -283,7 +283,7 @@ export default function DashboardScreen() {
         }),
       ]).start();
     } catch (error) {
-      console.error("❌ Fetch data error:", error);
+      console.error(" Fetch data error:", error);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -298,7 +298,7 @@ export default function DashboardScreen() {
       });
       setUnreadNotifications(res?.data?.meta?.total || 0);
     } catch (e) {
-      console.error("❌ Notifications error:", e);
+      console.error(" Notifications error:", e);
     }
   };
 
@@ -338,7 +338,7 @@ export default function DashboardScreen() {
         totalRefundedItems,
       });
     } catch (error: any) {
-      console.error("❌ Order stats error:", error?.message || error);
+      console.error(" Order stats error:", error?.message || error);
     }
   };
 
@@ -357,7 +357,7 @@ export default function DashboardScreen() {
       const data = (res.data as { data: FinancialData })?.data;
       setFinancials(data || null);
     } catch (error: any) {
-      console.error("❌ Financials error:", error?.message || error);
+      console.error(" Financials error:", error?.message || error);
     }
   };
 
@@ -382,7 +382,7 @@ export default function DashboardScreen() {
       setTopProducts(data || []);
     } catch (error: any) {
       console.error(
-        "❌ Top products error:",
+        " Top products error:",
         error?.response?.status,
         error?.response?.data,
         error?.message
@@ -423,7 +423,7 @@ export default function DashboardScreen() {
 
       setRevenueData(fakeDaily);
     } catch (error: any) {
-      console.error("❌ Revenue chart error:", error?.message || error);
+      console.error(" Revenue chart error:", error?.message || error);
       setRevenueData([]);
     }
   };
@@ -480,7 +480,7 @@ export default function DashboardScreen() {
       });
       setExpiringItems((res.data as any).data || []);
     } catch (error) {
-      console.error("❌ Expiring items error:", error);
+      console.error(" Expiring items error:", error);
     } finally {
       setLoadingExpiring(false);
     }
@@ -667,7 +667,7 @@ export default function DashboardScreen() {
             {[
               { id: "overview", label: "Tổng quan", icon: "📊" },
               { id: "analytics", label: "Phân tích", icon: "📈" },
-              { id: "products", label: "Sản phẩm", icon: "📦" },
+              { id: "products", label: "Sản phẩm", icon: "" },
             ].map((tab) => (
               <TouchableOpacity
                 key={tab.id}
@@ -825,7 +825,7 @@ export default function DashboardScreen() {
                   title="GT tồn kho"
                   value={formatCurrency(financials?.stockValue || 0)}
                   subtitle="Tổng giá trị hàng tại kho"
-                  icon="📦"
+                  icon=""
                   color="#8b5cf6"
                   gradient={["#faf5ff", "#e9d5ff"]}
                 />
@@ -855,14 +855,14 @@ export default function DashboardScreen() {
                   value={orderStats.paid}
                   target={200}
                   color="#3b82f6"
-                  icon="📦"
+                  icon=""
                 />
                 <MetricProgress
                   label="Khách hàng mới"
                   value={45}
                   target={100}
                   color="#8b5cf6"
-                  icon="👥"
+                  icon=""
                 />
               </View>
 
@@ -1014,7 +1014,7 @@ export default function DashboardScreen() {
                   ))
                 ) : (
                   <View style={styles.emptyState}>
-                    <Text style={styles.emptyIcon}>📦</Text>
+                    <Text style={styles.emptyIcon}></Text>
                     <Text style={styles.emptyText}>
                       Chưa có dữ liệu sản phẩm
                     </Text>

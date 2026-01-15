@@ -31,7 +31,7 @@ export const getProductsByStore = async (storeId, { page = 1, limit = 10 } = {})
     });
     return response.data; // trả về object chứa total, page, limit, products
   } catch (error) {
-    console.error("❌ Lỗi khi lấy sản phẩm:", error);
+    console.error(" Lỗi khi lấy sản phẩm:", error);
     throw error;
   }
 };

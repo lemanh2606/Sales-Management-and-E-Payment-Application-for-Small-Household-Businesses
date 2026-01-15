@@ -255,7 +255,7 @@ const createPurchaseOrder = async (req, res) => {
       purchaseOrder: populatedOrder,
     });
   } catch (error) {
-    console.error("❌ Lỗi createPurchaseOrder:", error);
+    console.error(" Lỗi createPurchaseOrder:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
@@ -312,7 +312,7 @@ const getPurchaseOrdersByStore = async (req, res) => {
       purchaseOrders: purchaseOrders,
     });
   } catch (error) {
-    console.error("❌ Lỗi getPurchaseOrdersByStore:", error);
+    console.error(" Lỗi getPurchaseOrdersByStore:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
@@ -366,7 +366,7 @@ const getPurchaseOrderById = async (req, res) => {
       purchaseOrder: purchaseOrder,
     });
   } catch (error) {
-    console.error("❌ Lỗi getPurchaseOrderById:", error);
+    console.error(" Lỗi getPurchaseOrderById:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
@@ -551,7 +551,7 @@ const updatePurchaseOrder = async (req, res) => {
       purchaseOrder: updatedOrder,
     });
   } catch (error) {
-    console.error("❌ Lỗi updatePurchaseOrder:", error);
+    console.error(" Lỗi updatePurchaseOrder:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
@@ -609,7 +609,7 @@ const deletePurchaseOrder = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("❌ Lỗi deletePurchaseOrder:", error);
+    console.error(" Lỗi deletePurchaseOrder:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };

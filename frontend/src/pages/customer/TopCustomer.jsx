@@ -234,7 +234,7 @@ const TopCustomer = () => {
       });
     } catch (err) {
       Swal.fire({
-        title: "❌ Lỗi!",
+        title: " Lỗi!",
         text: err.response?.data?.message || "Lỗi xuất file",
         icon: "error",
         confirmButtonText: "OK",

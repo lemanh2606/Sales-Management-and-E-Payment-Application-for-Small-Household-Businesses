@@ -36,6 +36,32 @@ const periodTypeVN = (type) => {
   }
 };
 
+const isFuturePeriod = (type, key) => {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1; // 1-12
+  const currentQuarter = Math.floor(now.getMonth() / 3) + 1; // 1-4
+
+  if (type === "year") {
+    return parseInt(key) > currentYear;
+  }
+  if (type === "month") {
+    const [y, m] = key.split("-").map(Number);
+    if (y > currentYear) return true;
+    if (y === currentYear && m > currentMonth) return true;
+    return false;
+  }
+  if (type === "quarter") {
+    const [y, qStr] = key.split("-Q");
+    const yNum = parseInt(y);
+    const qNum = parseInt(qStr.replace("Q", ""), 10);
+    if (yNum > currentYear) return true;
+    if (yNum === currentYear && qNum > currentQuarter) return true;
+    return false;
+  }
+  return false;
+};
+
 // ========== CREATE: Thêm mới chi phí ngoài cho 1 kỳ báo cáo ==========
 const create = async (req, res) => {
   try {
@@ -65,6 +91,12 @@ const create = async (req, res) => {
     if (periodType === "year" && !/^\d{4}$/.test(periodKey)) {
       return res.status(400).json({
         message: "Định dạng periodKey theo năm phải là YYYY (ví dụ: 2025)",
+      });
+    }
+
+    if (isFuturePeriod(periodType, periodKey)) {
+      return res.status(400).json({
+        message: `Không thể lưu chi phí cho thời gian ở tương lai (${formatPeriodVN(periodType, periodKey)})`,
       });
     }
 
@@ -746,9 +778,22 @@ const executeAllocation = async (req, res) => {
           isSaved: true,
         });
 
-        quarterDoc.updatedBy = userId;
         await quarterDoc.save();
         createdRecords.push(quarterDoc);
+      }
+    }
+
+    // ========== VALIDATION: Block future periods in allocations ==========
+    for (const alloc of allocations) {
+      const { periodKey: toPeriodKey } = alloc;
+      let toPeriodType = "month";
+      if (toPeriodKey.includes("Q")) toPeriodType = "quarter";
+      if (/^\d{4}$/.test(toPeriodKey)) toPeriodType = "year";
+
+      if (isFuturePeriod(toPeriodType, toPeriodKey)) {
+        return res.status(400).json({
+          message: `Không thể phân bổ chi phí tới thời gian ở tương lai (${formatPeriodVN(toPeriodType, toPeriodKey)})`,
+        });
       }
     }
 

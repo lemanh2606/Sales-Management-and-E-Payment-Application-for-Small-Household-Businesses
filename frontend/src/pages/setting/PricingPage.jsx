@@ -33,7 +33,7 @@ const PricingPage = () => {
     } catch (error) {
       console.error("Lỗi load pricing:", error);
       Swal.fire({
-        title: "❌ Lỗi!",
+        title: " Lỗi!",
         text: "Không thể tải thông tin của gói",
         icon: "error",
         confirmButtonText: "OK",
@@ -80,8 +80,8 @@ const PricingPage = () => {
 
   const handleSelectPlan = async (duration) => {
     console.log("🎯 User clicked plan:", duration);
-    console.log("📦 Current subscription:", currentSub);
-    console.log("📋 Available plans:", plans);
+    console.log(" Current subscription:", currentSub);
+    console.log(" Available plans:", plans);
 
     // ✅ CHO PHÉP GIA HẠN KHI ĐÃ CÓ PREMIUM ACTIVE
     // Không chặn nữa, cho phép mua thêm để gia hạn
@@ -90,9 +90,9 @@ const PricingPage = () => {
     console.log("✅ Selected plan:", selectedPlan);
 
     if (!selectedPlan) {
-      console.error("❌ Plan not found!");
+      console.error(" Plan not found!");
       Swal.fire({
-        title: "❌ Lỗi!",
+        title: " Lỗi!",
         text: "Không tìm thấy gói đã chọn!",
         icon: "error",
         confirmButtonText: "OK",

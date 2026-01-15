@@ -336,7 +336,7 @@ const FileManagerScreen: React.FC = () => {
 
         setFiles(filesList);
       } catch (err: any) {
-        console.error("❌ Lỗi tải files:", err);
+        console.error(" Lỗi tải files:", err);
         Alert.alert(
           "Lỗi",
           err?.response?.data?.message || "Không thể tải files"
@@ -474,7 +474,7 @@ const FileManagerScreen: React.FC = () => {
       const uris = result.assets?.map((asset) => asset.uri) || [];
       if (uris.length > 0) await uploadFiles(uris);
     } catch (err: any) {
-      console.error("❌ Lỗi pick document:", err);
+      console.error(" Lỗi pick document:", err);
       Alert.alert("Lỗi", "Không thể chọn file");
     }
   };
@@ -548,7 +548,7 @@ const FileManagerScreen: React.FC = () => {
           }
         } catch (fileError: any) {
           console.error(
-            `❌ Lỗi upload file ${Paths.basename(uri)}:`,
+            ` Lỗi upload file ${Paths.basename(uri)}:`,
             fileError
           );
           errorCount++;
@@ -570,7 +570,7 @@ const FileManagerScreen: React.FC = () => {
         );
       }
     } catch (err: any) {
-      console.error("❌ Lỗi upload general:", err);
+      console.error(" Lỗi upload general:", err);
       Alert.alert("Lỗi", err?.message || "Không thể upload file");
     } finally {
       setUploading(false);
@@ -590,7 +590,7 @@ const FileManagerScreen: React.FC = () => {
             Alert.alert("Thành công", "Đã xóa file");
             setFiles((prev) => prev.filter((f) => f._id !== fileId));
           } catch (err: any) {
-            console.error("❌ Lỗi xóa:", err);
+            console.error(" Lỗi xóa:", err);
             Alert.alert("Lỗi", "Không thể xóa file");
           }
         },
@@ -620,7 +620,7 @@ const FileManagerScreen: React.FC = () => {
             setIsSelectionMode(false);
             fetchFiles(false);
           } catch (err: any) {
-            console.error("❌ Lỗi xóa hàng loạt:", err);
+            console.error(" Lỗi xóa hàng loạt:", err);
             Alert.alert("Lỗi", "Không thể xóa files");
           } finally {
             setLoading(false);
@@ -665,7 +665,7 @@ const FileManagerScreen: React.FC = () => {
         Alert.alert("Thành công", `File đã lưu tại: ${downloadedFile.uri}`);
       }
     } catch (err: any) {
-      console.error("❌ Lỗi download:", err);
+      console.error(" Lỗi download:", err);
       Alert.alert("Lỗi", "Không thể tải file");
     }
   };

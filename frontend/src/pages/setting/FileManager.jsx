@@ -163,7 +163,7 @@ const FileManager = () => {
       const currentStore = JSON.parse(localStorage.getItem("currentStore") || "{}");
       if (!currentStore?._id) {
         Swal.fire({
-          title: "❌ Lỗi!",
+          title: " Lỗi!",
           text: "Chưa chọn cửa hàng!",
           icon: "error",
           confirmButtonText: "OK",
@@ -214,7 +214,7 @@ const FileManager = () => {
         } else {
           // fallback nếu lỗi không từ backend
           Swal.fire({
-            title: "❌ Lỗi!",
+            title: " Lỗi!",
             text: `${file.name} upload failed!`,
             icon: "error",
             confirmButtonText: "OK",
@@ -279,7 +279,7 @@ const FileManager = () => {
         fetchFiles();
         setSelectedKeys([]);
       } catch (err) {
-        console.error("❌ Lỗi xoá hàng loạt:", err);
+        console.error(" Lỗi xoá hàng loạt:", err);
         Swal.fire("Lỗi!", "Không thể xoá file, thử lại sau.", "error");
       } finally {
         setLoading(false);
@@ -308,7 +308,7 @@ const FileManager = () => {
     } catch (err) {
       console.error("Lỗi tải file:", err);
       Swal.fire({
-        title: "❌ Lỗi!",
+        title: " Lỗi!",
         text: "Không tải được file ",
         icon: "error",
         confirmButtonText: "OK",
@@ -462,7 +462,7 @@ const FileManager = () => {
                 fetchFiles();
               } catch (err) {
                 Swal.fire({
-                  title: "❌ Lỗi!",
+                  title: " Lỗi!",
                   text: "Lỗi Xoá không xoá được",
                   icon: "error",
                   confirmButtonText: "OK",

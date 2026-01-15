@@ -24,7 +24,7 @@
 //   ensureDir(outDir);
 //   const jestOutputPath = path.join(outDir, "jest-output.json");
 //   if (!fs.existsSync(jestOutputPath)) {
-//     console.error("❌ Jest output file not found at:", jestOutputPath);
+//     console.error(" Jest output file not found at:", jestOutputPath);
 //     return;
 //   }
 //   processJestOutput(jestOutputPath, outDir);
@@ -90,13 +90,13 @@
 //   console.log("============================================================");
 //   console.log("📁 Simple:", simplePath);
 //   console.log("📁 Enhanced:", enhancedPath);
-//   console.log("📋 Functions:", Object.keys(simple).length);
-//   console.log("📋 Total tests:", total);
+//   console.log(" Functions:", Object.keys(simple).length);
+//   console.log(" Total tests:", total);
 //   console.log(
 //     `✅ Passed: ${passed} (${Math.round((passed / Math.max(1, total)) * 100)}%)`
 //   );
 //   console.log(
-//     `❌ Failed: ${failed} (${Math.round((failed / Math.max(1, total)) * 100)}%)`
+//     ` Failed: ${failed} (${Math.round((failed / Math.max(1, total)) * 100)}%)`
 //   );
 //   console.log("============================================================\n");
 // }
@@ -151,7 +151,7 @@
 //   const outDir = path.join(process.cwd(), "test-results");
 //   const jestOutputPath = path.join(outDir, "jest-output.json");
 //   if (!fs.existsSync(jestOutputPath)) {
-//     console.error("❌ No jest-output.json found. Run test:export first.");
+//     console.error(" No jest-output.json found. Run test:export first.");
 //     return;
 //   }
 //   processJestOutput(jestOutputPath, outDir);

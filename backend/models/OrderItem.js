@@ -12,7 +12,9 @@ const orderItemSchema = new mongoose.Schema(
       enum: ["NORMAL", "AT_COST", "VIP", "CLEARANCE", "FREE"], //bán đúng giá niêm yết, bán = giá vốn, Giá ưu đãi, lời ít, Xả kho kiểu hoàn vốn, miễn phí 0đồng
       default: "NORMAL",
     }, // Loại bán hàng
-    subtotal: { type: mongoose.Schema.Types.Decimal128, required: true }, // Tiền từng món
+    subtotal: { type: mongoose.Schema.Types.Decimal128, required: true }, // Tiền từng món (chưa bao gồm VAT riêng của dòng này nếu tính tách)
+    tax_rate: { type: Number, default: 0 }, // % thuế của sản phẩm tại thời điểm bán
+    vat_amount: { type: mongoose.Schema.Types.Decimal128, default: 0 }, // Tiền thuế của dòng này
     refundedQuantity: { type: Number, default: 0 }, // Số lượng đã hoàn trả
   },
   {

@@ -189,7 +189,7 @@ export const fetchLatLngFromAddress = async (address: string): Promise<any> => {
             raw: first,
         };
     } catch (error) {
-        console.error('❌ Error fetching coordinates via proxy:', error);
+        console.error(' Error fetching coordinates via proxy:', error);
         return null;
     }
 };

@@ -96,9 +96,13 @@ const TrialBanner = () => {
               <>
                 🎁 Bạn đang dùng thử miễn phí - Còn <strong>{daysRemaining} ngày</strong>
               </>
-            ) : (
+            ) : subscription.expires_at ? (
               <>
                 ⏰ Gói Premium đã hết hạn
+              </>
+            ) : (
+              <>
+                ⏰ Thời gian dùng thử đã hết
               </>
             )}
           </div>
