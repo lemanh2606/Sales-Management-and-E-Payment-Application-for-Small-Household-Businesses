@@ -502,7 +502,7 @@ const OrderPOSHomeScreen: React.FC = () => {
     setSearchProduct("");
     setSearchedProducts([]);
     setShowProductDropdown(false);
-    
+
     // 🗑️ Clear saved cart from AsyncStorage after successful order
     (async () => {
       try {
@@ -515,7 +515,6 @@ const OrderPOSHomeScreen: React.FC = () => {
       }
     })();
   }, [updateOrderTab, currentUserEmployee, storeId, loggedInUser]);
-
 
   const addNewOrderTab = () => {
     const maxKey = orders.reduce(
@@ -675,11 +674,12 @@ const OrderPOSHomeScreen: React.FC = () => {
   }, [storeId, authHeaders]);
 
   const showEmptyStoreAlert = () => {
-    const isOwner = loggedInUser?.role === "OWNER" || loggedInUser?.role === "MANAGER";
-    
+    const isOwner =
+      loggedInUser?.role === "OWNER" || loggedInUser?.role === "MANAGER";
+
     Alert.alert(
       "Kho hàng trống!",
-      isOwner 
+      isOwner
         ? "Cửa hàng của bạn chưa có sản phẩm nào. Vui lòng nhập hàng hóa vào hệ thống để bắt đầu bán hàng."
         : "Cửa hàng chưa có sản phẩm nào. Vui lòng báo chủ cửa hàng nhập hàng hóa vào kho.",
       [{ text: "Tôi đã hiểu" }]
@@ -697,20 +697,24 @@ const OrderPOSHomeScreen: React.FC = () => {
   // Include userId in key to separate carts for different users on same device
   const currentUserId = loggedInUser?.id || loggedInUser?._id || "anonymous";
   const CART_STORAGE_KEY = `pos_cart_${storeId}_${currentUserId}`;
-  
+
   // Load cart from AsyncStorage on mount (when storeId and userId are available)
   useEffect(() => {
     if (!storeId || !currentUserId) return;
-    
+
     (async () => {
       try {
         const savedData = await AsyncStorage.getItem(CART_STORAGE_KEY);
         if (savedData) {
           const parsed = JSON.parse(savedData);
-          if (parsed.orders && Array.isArray(parsed.orders) && parsed.orders.length > 0) {
+          if (
+            parsed.orders &&
+            Array.isArray(parsed.orders) &&
+            parsed.orders.length > 0
+          ) {
             setOrders(parsed.orders);
             if (parsed.activeTab) setActiveTab(parsed.activeTab);
-            console.log(`✅ Đã khôi phục giỏ hàng POS cho user ${currentUserId}`);
+            console.log(` Đã khôi phục giỏ hàng POS cho user ${currentUserId}`);
           }
         }
       } catch (err) {
@@ -722,9 +726,11 @@ const OrderPOSHomeScreen: React.FC = () => {
   // Save cart to AsyncStorage whenever orders change
   useEffect(() => {
     if (!storeId || !currentUserId) return;
-    
+
     // Don't save if all carts are empty (initial state)
-    const hasItems = orders.some(tab => tab.cart.length > 0 || tab.customer || tab.pendingOrderId);
+    const hasItems = orders.some(
+      (tab) => tab.cart.length > 0 || tab.customer || tab.pendingOrderId
+    );
     if (hasItems) {
       (async () => {
         try {
@@ -734,7 +740,10 @@ const OrderPOSHomeScreen: React.FC = () => {
             userId: currentUserId, // Store userId to verify ownership
             savedAt: new Date().toISOString(),
           };
-          await AsyncStorage.setItem(CART_STORAGE_KEY, JSON.stringify(dataToSave));
+          await AsyncStorage.setItem(
+            CART_STORAGE_KEY,
+            JSON.stringify(dataToSave)
+          );
         } catch (err) {
           console.error("Lỗi lưu cart vào AsyncStorage:", err);
         }
@@ -752,8 +761,6 @@ const OrderPOSHomeScreen: React.FC = () => {
     }
   }, [CART_STORAGE_KEY]);
 
-
-
   // ===== product search =====
   const [searchProduct, setSearchProduct] = useState("");
   const [searchedProducts, setSearchedProducts] = useState<Product[]>([]);
@@ -762,7 +769,7 @@ const OrderPOSHomeScreen: React.FC = () => {
   const [productSearchError, setProductSearchError] = useState<string | null>(
     null
   );
-  
+
   // ===== Voice Recognition (Expo Go Safe Mode) =====
   // Since native speech recognition requires dev build, we use a simpler approach
   const [isListening, setIsListening] = useState(false);
@@ -775,34 +782,34 @@ const OrderPOSHomeScreen: React.FC = () => {
         "🎤 Tìm kiếm bằng giọng nói",
         "Sử dụng biểu tượng Microphone trên bàn phím của bạn để nói.",
         [
-            { text: "Hủy", style: "cancel" },
-            { 
-              text: "Tìm kiếm", 
-              onPress: (text: string | undefined) => {
-                if (text && text.trim()) {
-                  setSearchProduct(text.trim());
-                  setShowProductDropdown(true);
-                }
+          { text: "Hủy", style: "cancel" },
+          {
+            text: "Tìm kiếm",
+            onPress: (text: string | undefined) => {
+              if (text && text.trim()) {
+                setSearchProduct(text.trim());
+                setShowProductDropdown(true);
               }
-            }
+            },
+          },
         ],
         "plain-text",
         searchProduct // Pre-fill with current search
       );
-    } 
+    }
     // ANDROID: Guide user to use Google Keyboard Voice
     else {
       Alert.alert(
         "🎤 Tìm kiếm bằng giọng nói",
         "Trên Android, hãy nhấn vào ô tìm kiếm và sử dụng biểu tượng Micro 🎤 trên bàn phím để nhập liệu bằng giọng nói.",
         [
-          { 
-            text: "Mở bàn phím", 
+          {
+            text: "Mở bàn phím",
             onPress: () => {
               // Focus search input to open keyboard
               // We need a ref to the TextInput, but for now just showing info is good
-            } 
-          }
+            },
+          },
         ]
       );
     }
@@ -812,12 +819,13 @@ const OrderPOSHomeScreen: React.FC = () => {
     setIsListening(false);
   };
 
-
   const suggestedProducts = useMemo(() => {
     const q = searchProduct.trim();
     // Filter out products with stock_quantity <= 0
-    const inStockProducts = searchedProducts.filter((p) => p.stock_quantity > 0);
-    
+    const inStockProducts = searchedProducts.filter(
+      (p) => p.stock_quantity > 0
+    );
+
     if (!q) return inStockProducts.slice(0, 30); // Hiển thị nhiều hơn
 
     return [...inStockProducts]
@@ -881,14 +889,17 @@ const OrderPOSHomeScreen: React.FC = () => {
 
   // Tính toán tồn kho khả dụng (trừ đi các lô đã hết hạn)
   const getAvailableStock = (product: Product) => {
-    if (!product.batches || product.batches.length === 0) return product.stock_quantity;
-    
+    if (!product.batches || product.batches.length === 0)
+      return product.stock_quantity;
+
     // Tổng số lượng trong các lô chưa hết hạn
     const available = product.batches.reduce((sum: number, b: ProductBatch) => {
-      const isExpired = !!(b.expiry_date && new Date(b.expiry_date) < new Date());
+      const isExpired = !!(
+        b.expiry_date && new Date(b.expiry_date) < new Date()
+      );
       return isExpired ? sum : sum + (b.quantity || 0);
     }, 0);
-    
+
     return available;
   };
 
@@ -898,16 +909,20 @@ const OrderPOSHomeScreen: React.FC = () => {
 
       // Check if product is out of stock or expired
       if (availableStock <= 0) {
-        const hasExpired = product.batches && product.batches.some(b => b.expiry_date && new Date(b.expiry_date) < new Date());
+        const hasExpired =
+          product.batches &&
+          product.batches.some(
+            (b) => b.expiry_date && new Date(b.expiry_date) < new Date()
+          );
         Alert.alert(
-          hasExpired ? "Hàng hết hạn" : "Hết hàng", 
-          hasExpired 
+          hasExpired ? "Hàng hết hạn" : "Hết hàng",
+          hasExpired
             ? `Sản phẩm "${product.name}" hiện chỉ còn các lô đã hết hạn sử dụng, không thể bán.`
             : `Sản phẩm "${product.name}" đã hết hàng trong kho.`
         );
         return;
       }
-      
+
       const priceNum = getPriceNumber(product.price);
 
       updateOrderTab((tab) => {
@@ -917,16 +932,16 @@ const OrderPOSHomeScreen: React.FC = () => {
 
         if (existing) {
           const newQty = existing.quantity + 1;
-          
+
           // Check if new quantity exceeds available stock
           if (newQty > availableStock) {
             Alert.alert(
-              "Vượt tồn kho khả dụng", 
+              "Vượt tồn kho khả dụng",
               `Sản phẩm "${product.name}" chỉ còn ${availableStock} có thể bán (không tính hàng hết hạn). Bạn đã có ${existing.quantity} trong giỏ.`
             );
             return;
           }
-          
+
           tab.cart = tab.cart.map((item) =>
             item.productId === product._id
               ? {
@@ -976,13 +991,14 @@ const OrderPOSHomeScreen: React.FC = () => {
         tab.cart = tab.cart.filter((i) => i.productId !== id);
       } else {
         // Get max stock from cart item (stored when added) or from search results
-        const maxStock = item.stock_quantity ?? 
-                         searchedProducts.find((p) => p._id === id)?.stock_quantity ?? 
-                         9999;
-        
+        const maxStock =
+          item.stock_quantity ??
+          searchedProducts.find((p) => p._id === id)?.stock_quantity ??
+          9999;
+
         if (qty > maxStock) {
           Alert.alert(
-            "Vượt tồn kho", 
+            "Vượt tồn kho",
             `Sản phẩm "${item.name}" chỉ còn ${maxStock} đơn vị trong kho.`
           );
           // Cap the quantity to max stock
@@ -998,7 +1014,7 @@ const OrderPOSHomeScreen: React.FC = () => {
           );
           return;
         }
-        
+
         tab.cart = tab.cart.map((i) =>
           i.productId === id
             ? {
@@ -1147,7 +1163,10 @@ const OrderPOSHomeScreen: React.FC = () => {
   const vatAmount = useMemo(() => {
     return currentTab.cart.reduce((sum, item) => {
       const itemPrice = getItemUnitPrice(item);
-      const itemTaxRate = item.tax_rate !== undefined && item.tax_rate !== null ? Number(item.tax_rate) : 0;
+      const itemTaxRate =
+        item.tax_rate !== undefined && item.tax_rate !== null
+          ? Number(item.tax_rate)
+          : 0;
       const effectiveRate = itemTaxRate === -1 ? 0 : itemTaxRate;
       return sum + (itemPrice * item.quantity * effectiveRate) / 100;
     }, 0);
@@ -1471,24 +1490,24 @@ const OrderPOSHomeScreen: React.FC = () => {
     const expiry = currentTab.qrExpiryTs;
 
     if (expiry) {
-        const tick = () => {
-          const diff = Math.max(0, Math.floor((expiry - Date.now()) / 1000));
-          setQrRemainingSec(diff);
+      const tick = () => {
+        const diff = Math.max(0, Math.floor((expiry - Date.now()) / 1000));
+        setQrRemainingSec(diff);
 
-          if (diff <= 0) {
-            updateOrderTab((t) => {
-              t.qrImageUrl = null;
-              t.qrPayload = null;
-              t.qrExpiryTs = null;
-            });
-            Alert.alert("Hết hạn", "QR đã hết hạn. Vui lòng tạo QR mới.");
-          }
-        };
+        if (diff <= 0) {
+          updateOrderTab((t) => {
+            t.qrImageUrl = null;
+            t.qrPayload = null;
+            t.qrExpiryTs = null;
+          });
+          Alert.alert("Hết hạn", "QR đã hết hạn. Vui lòng tạo QR mới.");
+        }
+      };
 
-        tick();
-        countdownId = setInterval(tick, 1000);
+      tick();
+      countdownId = setInterval(tick, 1000);
     } else {
-        setQrRemainingSec(null);
+      setQrRemainingSec(null);
     }
 
     // --- 2. Polling Logic for PayOS ---
@@ -1496,38 +1515,52 @@ const OrderPOSHomeScreen: React.FC = () => {
     const orderCode = currentTab.qrPayload;
 
     if (orderCode) {
-        const checkPayment = async () => {
-             try {
-                 const res: any = await apiClient.get(`/orders/pos/payment-status/${orderCode}?storeId=${storeId}`, {
-                     headers: authHeaders
-                 });
-                 // PayOS status: PENDING | PAID | CANCELLED
-                 if (res.data.success && String(res.data.status).toUpperCase() === 'PAID') {
-                      console.log("PayOS CONFIRMED PAID:", orderCode);
-                      // Dừng polling ngay
-                      if(pollId) clearInterval(pollId);
-                      closeQrModal(); // Close QR
-                      
-                      // Xác nhận đơn hàng thành công
-                      await confirmPaidCash(); 
-                      Alert.alert("Thanh toán thành công!", "PayOS đã xác nhận thanh toán.");
-                 }
-             } catch(e) {
-                 // ignore polling error
-             }
-        };
-        
-        // Check ngay lập tức 1 phát
-        // checkPayment();
-        // Sau đó loop 3s
-        pollId = setInterval(checkPayment, 3000);
+      const checkPayment = async () => {
+        try {
+          const res: any = await apiClient.get(
+            `/orders/pos/payment-status/${orderCode}?storeId=${storeId}`,
+            {
+              headers: authHeaders,
+            }
+          );
+          // PayOS status: PENDING | PAID | CANCELLED
+          if (
+            res.data.success &&
+            String(res.data.status).toUpperCase() === "PAID"
+          ) {
+            console.log("PayOS CONFIRMED PAID:", orderCode);
+            // Dừng polling ngay
+            if (pollId) clearInterval(pollId);
+            closeQrModal(); // Close QR
+
+            // Xác nhận đơn hàng thành công
+            await confirmPaidCash();
+            Alert.alert(
+              "Thanh toán thành công!",
+              "PayOS đã xác nhận thanh toán."
+            );
+          }
+        } catch (e) {
+          // ignore polling error
+        }
+      };
+
+      // Check ngay lập tức 1 phát
+      // checkPayment();
+      // Sau đó loop 3s
+      pollId = setInterval(checkPayment, 3000);
     }
 
     return () => {
-        if (countdownId) clearInterval(countdownId);
-        if (pollId) clearInterval(pollId);
+      if (countdownId) clearInterval(countdownId);
+      if (pollId) clearInterval(pollId);
     };
-  }, [qrModalOpen, currentTab.qrExpiryTs, currentTab.qrPayload, updateOrderTab]);
+  }, [
+    qrModalOpen,
+    currentTab.qrExpiryTs,
+    currentTab.qrPayload,
+    updateOrderTab,
+  ]);
 
   const closeQrModal = () => {
     setQrModalOpen(false);
@@ -1699,7 +1732,10 @@ const OrderPOSHomeScreen: React.FC = () => {
         <View style={styles.cartCard}>
           <View style={styles.cartMainRow}>
             {item.image?.url ? (
-              <Image source={{ uri: item.image.url }} style={styles.cartThumb} />
+              <Image
+                source={{ uri: item.image.url }}
+                style={styles.cartThumb}
+              />
             ) : (
               <View style={[styles.cartThumb, styles.cartThumbPlaceholder]}>
                 <Ionicons name="cube-outline" size={20} color={COLORS.muted} />
@@ -1714,14 +1750,32 @@ const OrderPOSHomeScreen: React.FC = () => {
                 {item.sku} • {item.unit}
               </Text>
               {item.tax_rate !== undefined && item.tax_rate !== 0 && (
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-                  <Ionicons name="receipt-outline" size={12} color={COLORS.warn} />
-                  <Text style={{ fontSize: 11, color: COLORS.warn, marginLeft: 4, fontWeight: '700' }}>
-                    Thuế: {item.tax_rate === -1 ? "Ko thuế" : `${item.tax_rate}%`}
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    marginTop: 2,
+                  }}
+                >
+                  <Ionicons
+                    name="receipt-outline"
+                    size={12}
+                    color={COLORS.warn}
+                  />
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      color: COLORS.warn,
+                      marginLeft: 4,
+                      fontWeight: "700",
+                    }}
+                  >
+                    Thuế:{" "}
+                    {item.tax_rate === -1 ? "Ko thuế" : `${item.tax_rate}%`}
                   </Text>
                 </View>
               )}
-              
+
               <TouchableOpacity
                 style={styles.priceTag}
                 onPress={() => openPriceModal(item)}
@@ -1730,22 +1784,31 @@ const OrderPOSHomeScreen: React.FC = () => {
                   {formatPrice(unitPrice)}
                   {isCustom && <Text style={{ color: COLORS.warn }}> *</Text>}
                 </Text>
-                <Ionicons name="create-outline" size={14} color={COLORS.muted} style={{ marginLeft: 4 }} />
+                <Ionicons
+                  name="create-outline"
+                  size={14}
+                  color={COLORS.muted}
+                  style={{ marginLeft: 4 }}
+                />
               </TouchableOpacity>
             </View>
 
             <View style={styles.cartQtyBox}>
               <TouchableOpacity
-                onPress={() => updateQuantity(item.productId, item.quantity - 1)}
+                onPress={() =>
+                  updateQuantity(item.productId, item.quantity - 1)
+                }
                 style={styles.qtyBtn}
               >
                 <Text style={styles.qtyBtnText}>-</Text>
               </TouchableOpacity>
-              
+
               <Text style={styles.qtyValue}>{item.quantity}</Text>
 
               <TouchableOpacity
-                onPress={() => updateQuantity(item.productId, item.quantity + 1)}
+                onPress={() =>
+                  updateQuantity(item.productId, item.quantity + 1)
+                }
                 style={styles.qtyBtn}
               >
                 <Text style={styles.qtyBtnText}>+</Text>
@@ -1765,7 +1828,7 @@ const OrderPOSHomeScreen: React.FC = () => {
                 </TouchableOpacity>
               ))}
             </View>
-            
+
             <View style={{ flex: 1 }} />
 
             <View style={styles.rowRight}>
@@ -1775,7 +1838,11 @@ const OrderPOSHomeScreen: React.FC = () => {
                 hitSlop={8}
                 style={styles.cartRemoveBtn}
               >
-                <Ionicons name="trash-outline" size={18} color={COLORS.danger} />
+                <Ionicons
+                  name="trash-outline"
+                  size={18}
+                  color={COLORS.danger}
+                />
               </TouchableOpacity>
             </View>
           </View>
@@ -1804,8 +1871,8 @@ const OrderPOSHomeScreen: React.FC = () => {
 
   const primaryActionText = useMemo(() => {
     if (currentTab.pendingOrderId) {
-        if (currentTab.paymentMethod === "qr") return "Cập nhật QR";
-        return "Cập nhật Đơn";
+      if (currentTab.paymentMethod === "qr") return "Cập nhật QR";
+      return "Cập nhật Đơn";
     }
     if (currentTab.paymentMethod === "qr") return "Tạo QR";
     return "Tạo Đơn Hàng";
@@ -1941,7 +2008,7 @@ const OrderPOSHomeScreen: React.FC = () => {
                 style={styles.searchInputEnhanced}
                 returnKeyType="search"
               />
-              
+
               {/* Voice Search Button - Real Speech Recognition */}
               <TouchableOpacity
                 onPress={() => {
@@ -1951,18 +2018,15 @@ const OrderPOSHomeScreen: React.FC = () => {
                     startVoiceSearch();
                   }
                 }}
-                style={[
-                  styles.voiceBtn,
-                  isListening && styles.voiceBtnActive
-                ]}
+                style={[styles.voiceBtn, isListening && styles.voiceBtnActive]}
               >
-                <Ionicons 
-                  name={isListening ? "mic" : "mic-outline"} 
-                  size={20} 
-                  color={isListening ? "#fff" : COLORS.primary} 
+                <Ionicons
+                  name={isListening ? "mic" : "mic-outline"}
+                  size={20}
+                  color={isListening ? "#fff" : COLORS.primary}
                 />
               </TouchableOpacity>
-              
+
               {/* Show listening indicator */}
               {isListening && (
                 <View style={styles.listeningBadge}>
@@ -1975,12 +2039,21 @@ const OrderPOSHomeScreen: React.FC = () => {
 
               {/* Barcode Scanner */}
               <TouchableOpacity
-                onPress={() => Alert.alert("📷 Quét mã vạch", "Chức năng quét mã đang được tích hợp.")}
+                onPress={() =>
+                  Alert.alert(
+                    "📷 Quét mã vạch",
+                    "Chức năng quét mã đang được tích hợp."
+                  )
+                }
                 style={styles.scanBtn}
               >
-                <Ionicons name="barcode-outline" size={20} color={COLORS.primary} />
+                <Ionicons
+                  name="barcode-outline"
+                  size={20}
+                  color={COLORS.primary}
+                />
               </TouchableOpacity>
-              
+
               {/* Clear Button */}
               {!!searchProduct && (
                 <Pressable
@@ -1992,7 +2065,11 @@ const OrderPOSHomeScreen: React.FC = () => {
                   hitSlop={10}
                   style={styles.clearBtn}
                 >
-                  <Ionicons name="close-circle" size={20} color={COLORS.muted} />
+                  <Ionicons
+                    name="close-circle"
+                    size={20}
+                    color={COLORS.muted}
+                  />
                 </Pressable>
               )}
             </View>
@@ -2007,16 +2084,28 @@ const OrderPOSHomeScreen: React.FC = () => {
                   </View>
                 ) : productSearchError ? (
                   <View style={styles.dropdownCenter}>
-                    <Ionicons name="alert-circle" size={24} color={COLORS.danger} />
-                    <Text style={[styles.dropdownHint, { color: COLORS.danger }]}>
+                    <Ionicons
+                      name="alert-circle"
+                      size={24}
+                      color={COLORS.danger}
+                    />
+                    <Text
+                      style={[styles.dropdownHint, { color: COLORS.danger }]}
+                    >
                       {productSearchError}
                     </Text>
                   </View>
                 ) : suggestedProducts.length === 0 ? (
                   <View style={styles.dropdownCenter}>
-                    <Ionicons name="cube-outline" size={32} color={COLORS.muted} />
+                    <Ionicons
+                      name="cube-outline"
+                      size={32}
+                      color={COLORS.muted}
+                    />
                     <Text style={styles.dropdownHint}>
-                      {searchProduct ? "Không tìm thấy sản phẩm" : "Nhập tên để tìm kiếm"}
+                      {searchProduct
+                        ? "Không tìm thấy sản phẩm"
+                        : "Nhập tên để tìm kiếm"}
                     </Text>
                   </View>
                 ) : (
@@ -2034,48 +2123,94 @@ const OrderPOSHomeScreen: React.FC = () => {
                         <Pressable
                           key={p._id}
                           onPressIn={() => (selectingProductRef.current = true)}
-                          onPressOut={() => (selectingProductRef.current = false)}
+                          onPressOut={() =>
+                            (selectingProductRef.current = false)
+                          }
                           onPress={() => !isOut && addToCart(p)}
                           style={({ pressed }) => [
                             styles.productCard,
                             pressed && !isOut && styles.productCardPressed,
-                            isOut && { opacity: 0.6 }
+                            isOut && { opacity: 0.6 },
                           ]}
                         >
-                          <View style={{ width: '100%' }}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <View style={{ width: "100%" }}>
+                            <View
+                              style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                              }}
+                            >
                               {/* Product Image */}
                               {p.image?.url ? (
-                                <Image source={{ uri: p.image.url }} style={styles.productThumb} />
+                                <Image
+                                  source={{ uri: p.image.url }}
+                                  style={styles.productThumb}
+                                />
                               ) : (
-                                <View style={[styles.productThumb, styles.productThumbEmpty]}>
-                                  <Ionicons name="cube" size={20} color={COLORS.muted} />
+                                <View
+                                  style={[
+                                    styles.productThumb,
+                                    styles.productThumbEmpty,
+                                  ]}
+                                >
+                                  <Ionicons
+                                    name="cube"
+                                    size={20}
+                                    color={COLORS.muted}
+                                  />
                                 </View>
                               )}
-                              
+
                               {/* Product Info */}
                               <View style={styles.productInfo}>
-                                <Text style={[styles.productName, isOut && { color: COLORS.muted }]} numberOfLines={1}>
+                                <Text
+                                  style={[
+                                    styles.productName,
+                                    isOut && { color: COLORS.muted },
+                                  ]}
+                                  numberOfLines={1}
+                                >
                                   {p.name}
                                 </Text>
                                 <View style={styles.productMeta}>
                                   <Text style={styles.productSku}>{p.sku}</Text>
-                                  <View style={[styles.stockBadge, isOut && { backgroundColor: '#fee2e2' }]}>
-                                    <Text style={[styles.stockText, isOut && { color: COLORS.danger }]}>
-                                      {isOut ? "Hết hàng có thể bán" : `Tồn: ${avail}`}
+                                  <View
+                                    style={[
+                                      styles.stockBadge,
+                                      isOut && { backgroundColor: "#fee2e2" },
+                                    ]}
+                                  >
+                                    <Text
+                                      style={[
+                                        styles.stockText,
+                                        isOut && { color: COLORS.danger },
+                                      ]}
+                                    >
+                                      {isOut
+                                        ? "Hết hàng có thể bán"
+                                        : `Tồn: ${avail}`}
                                     </Text>
                                   </View>
                                 </View>
                               </View>
-                              
+
                               {/* Price & Add Button */}
                               <View style={styles.productRight}>
-                                <Text style={[styles.productPrice, isOut && { color: COLORS.muted }]}>
+                                <Text
+                                  style={[
+                                    styles.productPrice,
+                                    isOut && { color: COLORS.muted },
+                                  ]}
+                                >
                                   {formatPrice(p.price)}
                                 </Text>
                                 {!isOut && (
                                   <View style={styles.addBtnMini}>
-                                    <Ionicons name="add" size={16} color={COLORS.white} />
+                                    <Ionicons
+                                      name="add"
+                                      size={16}
+                                      color={COLORS.white}
+                                    />
                                   </View>
                                 )}
                               </View>
@@ -2101,18 +2236,20 @@ const OrderPOSHomeScreen: React.FC = () => {
         >
           {/* Quick Info Bar - Employee & Customer inline */}
           <View style={styles.quickInfoBar}>
-            <Pressable 
+            <Pressable
               style={styles.quickInfoItem}
               onPress={() => setEmployeeModalOpen(true)}
             >
               <Text style={styles.quickInfoLabel}>NV bán</Text>
-              <Text style={styles.quickInfoValue} numberOfLines={1}>{employeeLabel}</Text>
+              <Text style={styles.quickInfoValue} numberOfLines={1}>
+                {employeeLabel}
+              </Text>
               <Ionicons name="chevron-down" size={16} color={COLORS.muted} />
             </Pressable>
-            
+
             <View style={styles.quickInfoDivider} />
-            
-            <Pressable 
+
+            <Pressable
               style={[styles.quickInfoItem, { flex: 1.2 }]}
               onPress={() => {
                 setNewCustomerName("");
@@ -2124,7 +2261,11 @@ const OrderPOSHomeScreen: React.FC = () => {
               <Text style={styles.quickInfoValue} numberOfLines={1}>
                 {currentTab.customer ? currentTab.customer.name : "Vãng lai"}
               </Text>
-              <Ionicons name="person-add-outline" size={16} color={COLORS.primary} />
+              <Ionicons
+                name="person-add-outline"
+                size={16}
+                color={COLORS.primary}
+              />
             </Pressable>
           </View>
 
@@ -2149,7 +2290,9 @@ const OrderPOSHomeScreen: React.FC = () => {
             {currentTab.customer && (
               <View style={styles.customerBadge}>
                 <Text style={styles.customerBadgeText}>
-                  {currentTab.customer.loyaltyPoints?.toLocaleString("vi-VN") || 0} điểm
+                  {currentTab.customer.loyaltyPoints?.toLocaleString("vi-VN") ||
+                    0}{" "}
+                  điểm
                 </Text>
               </View>
             )}
@@ -2157,7 +2300,10 @@ const OrderPOSHomeScreen: React.FC = () => {
 
           {showCustomerDropdown && foundCustomers.length > 0 && (
             <View style={[styles.dropdown, { marginTop: -8, marginBottom: 8 }]}>
-              <ScrollView style={{ maxHeight: 180 }} keyboardShouldPersistTaps="always">
+              <ScrollView
+                style={{ maxHeight: 180 }}
+                keyboardShouldPersistTaps="always"
+              >
                 {foundCustomers.map((c) => (
                   <Pressable
                     key={c._id}
@@ -2172,7 +2318,8 @@ const OrderPOSHomeScreen: React.FC = () => {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.dropdownTitle}>{c.name}</Text>
                       <Text style={styles.hint}>
-                        {c.phone} • {(c.loyaltyPoints || 0).toLocaleString("vi-VN")} đểm
+                        {c.phone} •{" "}
+                        {(c.loyaltyPoints || 0).toLocaleString("vi-VN")} đểm
                       </Text>
                     </View>
                     <Text style={styles.addHint}>Chọn</Text>
@@ -2182,46 +2329,74 @@ const OrderPOSHomeScreen: React.FC = () => {
             </View>
           )}
 
-
           {/* Loyalty Points - Compact */}
           {loyaltySetting?.isActive && currentTab.customer && (
             <View style={styles.pointsCompactBox}>
               <Ionicons name="gift" size={18} color={COLORS.warn} />
               <Text style={styles.pointsCompactText}>
-                Có {currentTab.customer.loyaltyPoints?.toLocaleString("vi-VN") || 0} điểm
+                Có{" "}
+                {currentTab.customer.loyaltyPoints?.toLocaleString("vi-VN") ||
+                  0}{" "}
+                điểm
               </Text>
               <Pressable
-                onPress={() => updateOrderTab((t) => {
+                onPress={() =>
+                  updateOrderTab((t) => {
                     const nextState = !t.usedPointsEnabled;
                     t.usedPointsEnabled = nextState;
                     if (nextState) {
-                        t.usedPoints = t.customer?.loyaltyPoints || 0;
+                      t.usedPoints = t.customer?.loyaltyPoints || 0;
                     } else {
-                        t.usedPoints = 0;
+                      t.usedPoints = 0;
                     }
-                })}
-                style={[styles.pointsToggle, currentTab.usedPointsEnabled && styles.pointsToggleOn]}
+                  })
+                }
+                style={[
+                  styles.pointsToggle,
+                  currentTab.usedPointsEnabled && styles.pointsToggleOn,
+                ]}
               >
-                <Text style={[styles.pointsToggleText, currentTab.usedPointsEnabled && styles.pointsToggleTextOn]}>
+                <Text
+                  style={[
+                    styles.pointsToggleText,
+                    currentTab.usedPointsEnabled && styles.pointsToggleTextOn,
+                  ]}
+                >
                   {currentTab.usedPointsEnabled ? "BẬT" : "TẮT"}
                 </Text>
               </Pressable>
               {currentTab.usedPointsEnabled && (
-                <View style={{flexDirection: 'row', alignItems: 'center', gap: 4}}>
-                    <TextInput
+                <View
+                  style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
+                >
+                  <TextInput
                     value={String(currentTab.usedPoints || 0)}
                     onChangeText={(txt) => {
-                        const max = currentTab.customer?.loyaltyPoints || 0;
-                        const n = clampInt(txt, 0, max);
-                        updateOrderTab((t) => (t.usedPoints = n));
+                      const max = currentTab.customer?.loyaltyPoints || 0;
+                      const n = clampInt(txt, 0, max);
+                      updateOrderTab((t) => (t.usedPoints = n));
                     }}
                     keyboardType="numeric"
                     style={styles.pointsInput}
                     placeholder="0"
-                    />
-                     <Pressable onPress={() => updateOrderTab(t => t.usedPoints = t.customer?.loyaltyPoints || 0)}>
-                        <Text style={{fontSize: 10, color: COLORS.primary, fontWeight: 'bold'}}>MAX</Text>
-                    </Pressable>
+                  />
+                  <Pressable
+                    onPress={() =>
+                      updateOrderTab(
+                        (t) => (t.usedPoints = t.customer?.loyaltyPoints || 0)
+                      )
+                    }
+                  >
+                    <Text
+                      style={{
+                        fontSize: 10,
+                        color: COLORS.primary,
+                        fontWeight: "bold",
+                      }}
+                    >
+                      MAX
+                    </Text>
+                  </Pressable>
                 </View>
               )}
             </View>
@@ -2256,29 +2431,58 @@ const OrderPOSHomeScreen: React.FC = () => {
               <Text style={styles.valueText}>{formatPrice(subtotal)}</Text>
             </View>
 
-
             {vatAmount > 0 && (
               <View style={[styles.rowBetween, { marginTop: 10 }]}>
                 <Text style={[styles.mutedInline, { color: COLORS.warn }]}>
                   Thuế GTGT (Tự động)
                 </Text>
                 <Text style={[styles.valueText, { color: COLORS.warn }]}>
-                   +{formatPrice(vatAmount)}
+                  +{formatPrice(vatAmount)}
                 </Text>
               </View>
             )}
-            
+
             {/* LƯU Ý: Đã có phần render discount ở trên hoặc gom vào đây */}
             {discount > 0 && (
-               <View style={[styles.rowBetween, { marginTop: 10 }]}>
-                    <Text style={[styles.mutedInline, { color: COLORS.good }]}>Giảm giá điểm</Text>
-                    <Text style={[styles.valueText, { color: COLORS.good }]}>-{formatPrice(discount)}</Text>
-               </View>
+              <View style={[styles.rowBetween, { marginTop: 10 }]}>
+                <Text style={[styles.mutedInline, { color: COLORS.good }]}>
+                  Giảm giá điểm
+                </Text>
+                <Text style={[styles.valueText, { color: COLORS.good }]}>
+                  -{formatPrice(discount)}
+                </Text>
+              </View>
             )}
 
-            <View style={[styles.rowBetween, { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: COLORS.stroke }]}>
-              <Text style={[styles.mutedInline, { fontWeight: 'bold', color: COLORS.textStrong, fontSize: 16 }]}>THANH TOÁN</Text>
-              <Text style={[styles.valueText, { color: COLORS.primary, fontSize: 22, fontWeight: '900' }]}>
+            <View
+              style={[
+                styles.rowBetween,
+                {
+                  marginTop: 12,
+                  paddingTop: 12,
+                  borderTopWidth: 1,
+                  borderTopColor: COLORS.stroke,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.mutedInline,
+                  {
+                    fontWeight: "bold",
+                    color: COLORS.textStrong,
+                    fontSize: 16,
+                  },
+                ]}
+              >
+                THANH TOÁN
+              </Text>
+              <Text
+                style={[
+                  styles.valueText,
+                  { color: COLORS.primary, fontSize: 22, fontWeight: "900" },
+                ]}
+              >
                 {formatPrice(totalAmount)}
               </Text>
             </View>
@@ -3491,8 +3695,17 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.sm,
   },
   quickInfoLabel: { fontSize: 11, fontWeight: "700", color: COLORS.muted },
-  quickInfoValue: { flex: 1, fontSize: 13, fontWeight: "800", color: COLORS.textStrong },
-  quickInfoDivider: { width: 1, backgroundColor: COLORS.stroke, marginVertical: 4 },
+  quickInfoValue: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "800",
+    color: COLORS.textStrong,
+  },
+  quickInfoDivider: {
+    width: 1,
+    backgroundColor: COLORS.stroke,
+    marginVertical: 4,
+  },
 
   // Customer Search - Compact
   customerSearchBox: {
@@ -3533,7 +3746,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
-  pointsCompactText: { flex: 1, fontSize: 13, fontWeight: "700", color: "#92400e" },
+  pointsCompactText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#92400e",
+  },
   pointsToggle: {
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -3599,15 +3817,15 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   listeningBadge: {
-    position: 'absolute',
+    position: "absolute",
     top: 55,
     left: 20,
     right: 20,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderRadius: 8,
     padding: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 10,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
@@ -3622,7 +3840,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     color: COLORS.primary,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   scanBtn: {
     width: 36,
@@ -3635,7 +3853,7 @@ const styles = StyleSheet.create({
   clearBtn: {
     padding: 4,
   },
-  
+
   // Product Dropdown
   productDropdown: {
     marginTop: 8,
@@ -3657,7 +3875,7 @@ const styles = StyleSheet.create({
     color: COLORS.muted,
     textAlign: "center",
   },
-  
+
   // Product Card in Dropdown
   productCard: {
     flexDirection: "row",

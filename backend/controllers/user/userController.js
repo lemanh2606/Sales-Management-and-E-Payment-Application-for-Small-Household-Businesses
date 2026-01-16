@@ -15,7 +15,7 @@ const {
   STAFF_DEFAULT_MENU,
 } = require("../../config/constants/permissions");
 
-// ✅ Dùng Cloudinary thay cho ImgBB cho avatar profile
+//  Dùng Cloudinary thay cho ImgBB cho avatar profile
 const {
   uploadToCloudinary,
   deleteFromCloudinary,
@@ -283,7 +283,7 @@ const login = async (req, res) => {
         user.menu = [...ALL_PERMISSIONS];
         menuUpdated = true;
 
-        console.log(`✅ Đã restore full menu cho MANAGER ${user.username}`);
+        console.log(` Đã restore full menu cho MANAGER ${user.username}`);
       }
     } else if (user.role === "STAFF") {
       // STAFF: Cập nhật quyền mặc định và LOẠI BỎ các quyền bị cấm
@@ -312,9 +312,13 @@ const login = async (req, res) => {
         missingDefaultPermissions.length > 0 ||
         filteredMenu.length !== currentMenu.length
       ) {
-        user.menu = [...new Set([...filteredMenu, ...missingDefaultPermissions])];
+        user.menu = [
+          ...new Set([...filteredMenu, ...missingDefaultPermissions]),
+        ];
         menuUpdated = true;
-        console.log(`✅ Đã đồng bộ lại menu cho STAFF ${user.username} (Lọc bỏ quyền cấm & Bổ sung mặc định)`);
+        console.log(
+          ` Đã đồng bộ lại menu cho STAFF ${user.username} (Lọc bỏ quyền cấm & Bổ sung mặc định)`
+        );
       }
     }
     // ========== 👆 END SYNC LOGIC 👆 ==========
@@ -901,7 +905,7 @@ const updateProfile = async (req, res) => {
       return res.status(404).json({ message: "Người dùng không tồn tại" });
     }
 
-    console.log("✅ Current user found:", {
+    console.log(" Current user found:", {
       id: user._id,
       username: user.username,
       email: user.email,
@@ -983,7 +987,7 @@ const updateProfile = async (req, res) => {
         changedFields.push("image");
         hasChanges = true;
 
-        console.log("✅ Avatar uploaded to Cloudinary:", result.secure_url);
+        console.log(" Avatar uploaded to Cloudinary:", result.secure_url);
       } catch (uploadError) {
         console.error(" Avatar upload error:", uploadError);
         return res.status(500).json({
@@ -1040,7 +1044,7 @@ const updateProfile = async (req, res) => {
     }
 
     await user.save();
-    console.log("✅ User updated successfully");
+    console.log(" User updated successfully");
 
     // Sync Employee nếu STAFF
     if (user.role === "STAFF") {
@@ -1068,7 +1072,7 @@ const updateProfile = async (req, res) => {
         if (employeeChanged) {
           await employee.save();
           console.log(
-            "✅ Employee data synced with fullName:",
+            " Employee data synced with fullName:",
             employee.fullName
           );
         }
@@ -1275,11 +1279,14 @@ const softDeleteUser = async (req, res) => {
     }
 
     // Kiểm tra xem targetUser có thuộc store này không
-    const isMember = targetUser.stores.some(s => String(s) === String(store._id)) || 
-                     String(targetUser.current_store) === String(store._id);
-    
+    const isMember =
+      targetUser.stores.some((s) => String(s) === String(store._id)) ||
+      String(targetUser.current_store) === String(store._id);
+
     if (!isMember) {
-      return res.status(403).json({ message: "Nhân viên không thuộc cửa hàng này" });
+      return res
+        .status(403)
+        .json({ message: "Nhân viên không thuộc cửa hàng này" });
     }
 
     targetUser.isDeleted = true;
@@ -1342,11 +1349,14 @@ const restoreUser = async (req, res) => {
     }
 
     // Kiểm tra xem targetUser có thuộc store này không
-    const isMember = targetUser.stores.some(s => String(s) === String(store._id)) || 
-                     String(targetUser.current_store) === String(store._id);
-    
+    const isMember =
+      targetUser.stores.some((s) => String(s) === String(store._id)) ||
+      String(targetUser.current_store) === String(store._id);
+
     if (!isMember) {
-      return res.status(403).json({ message: "Nhân viên không thuộc cửa hàng này" });
+      return res
+        .status(403)
+        .json({ message: "Nhân viên không thuộc cửa hàng này" });
     }
 
     targetUser.isDeleted = false;

@@ -24,8 +24,8 @@ const orderItemSchema = new mongoose.Schema(
     tax_rate: { type: Number, default: 0 }, // % thuế của sản phẩm tại thời điểm bán
     vat_amount: { type: mongoose.Schema.Types.Decimal128, default: 0 }, // Tiền thuế của dòng này
     refundedQuantity: { type: Number, default: 0 }, // Số lượng đã hoàn trả
-    cost_price_snapshot: { type: Number, default: 0 }, // ✅ MỚI: Giá vốn lúc bán để tính COGS
-    // ✅ MỚI: Chi tiết lô hàng đã xuất cho item này
+    cost_price_snapshot: { type: Number, default: 0 }, //  MỚI: Giá vốn lúc bán để tính COGS
+    //  MỚI: Chi tiết lô hàng đã xuất cho item này
     batch_details: [
       {
         batch_no: { type: String },

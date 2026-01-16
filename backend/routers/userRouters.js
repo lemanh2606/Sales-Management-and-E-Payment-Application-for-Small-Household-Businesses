@@ -61,7 +61,7 @@ const uploadAvatar = multer({
     );
 
     if (mimetypeOk && extnameOk) {
-      console.log("✅ File type accepted");
+      console.log(" File type accepted");
       return cb(null, true);
     }
 

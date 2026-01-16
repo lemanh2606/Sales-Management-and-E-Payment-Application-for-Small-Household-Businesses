@@ -44,9 +44,9 @@ import Layout from "../../components/Layout";
 import SupplierFormModal from "../../components/supplier/SupplierFormModal";
 import SupplierDetailModal from "../../components/supplier/SupplierDetailModal";
 import {
-  getSuppliers, // ✅ CHUYỂN SANG API MỚI
+  getSuppliers, //  CHUYỂN SANG API MỚI
   deleteSupplier,
-  exportSuppliers, // ✅ Đồng bộ tên
+  exportSuppliers, //  Đồng bộ tên
   restoreSupplier,
 } from "../../api/supplierApi";
 import { useAuth } from "../../context/AuthContext";
@@ -59,7 +59,8 @@ const { Option } = Select;
 const normalizeMongoId = (idLike) => {
   if (!idLike) return null;
   if (typeof idLike === "object" && idLike.$oid) return String(idLike.$oid);
-  if (typeof idLike === "object" && typeof idLike.toString === "function") return String(idLike.toString());
+  if (typeof idLike === "object" && typeof idLike.toString === "function")
+    return String(idLike.toString());
   if (typeof idLike === "string") return idLike;
   return String(idLike);
 };
@@ -112,8 +113,14 @@ export default function SupplierListPage() {
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [detailSupplierId, setDetailSupplierId] = useState(null);
 
-  const [paginationActive, setPaginationActive] = useState({ current: 1, pageSize: 10 });
-  const [paginationDeleted, setPaginationDeleted] = useState({ current: 1, pageSize: 10 });
+  const [paginationActive, setPaginationActive] = useState({
+    current: 1,
+    pageSize: 10,
+  });
+  const [paginationDeleted, setPaginationDeleted] = useState({
+    current: 1,
+    pageSize: 10,
+  });
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   // Responsive
@@ -153,7 +160,9 @@ export default function SupplierListPage() {
         console.error("Fetch active suppliers error:", e);
         api.error({
           message: " Lỗi tải dữ liệu",
-          description: e?.response?.data?.message || "Không thể tải danh sách nhà cung cấp.",
+          description:
+            e?.response?.data?.message ||
+            "Không thể tải danh sách nhà cung cấp.",
           placement: "topRight",
           duration: 5,
         });
@@ -246,7 +255,9 @@ export default function SupplierListPage() {
 
   const totalActive = activeSuppliers.length;
   const totalDeleted = deletedSuppliers.length;
-  const activeStatusCount = activeSuppliers.filter((s) => s.status === "đang hoạt động").length;
+  const activeStatusCount = activeSuppliers.filter(
+    (s) => s.status === "đang hoạt động"
+  ).length;
   const inactiveStatusCount = activeSuppliers.length - activeStatusCount;
 
   // Actions
@@ -273,7 +284,11 @@ export default function SupplierListPage() {
 
   const handleSoftDelete = async (id, name) => {
     if (!id) {
-      api.error({ message: " Lỗi dữ liệu", description: "Không tìm thấy ID NCC", placement: "topRight" });
+      api.error({
+        message: " Lỗi dữ liệu",
+        description: "Không tìm thấy ID NCC",
+        placement: "topRight",
+      });
       return;
     }
 
@@ -286,7 +301,10 @@ export default function SupplierListPage() {
         placement: "topRight",
         duration: 3,
       });
-      await Promise.all([fetchActiveSuppliers(false), fetchDeletedSuppliers(false)]);
+      await Promise.all([
+        fetchActiveSuppliers(false),
+        fetchDeletedSuppliers(false),
+      ]);
     } catch (e) {
       api.error({
         message: " Lỗi xóa",
@@ -301,7 +319,11 @@ export default function SupplierListPage() {
 
   const handleRestore = async (id, name) => {
     if (!id) {
-      api.error({ message: " Lỗi dữ liệu", description: "Không tìm thấy ID NCC", placement: "topRight" });
+      api.error({
+        message: " Lỗi dữ liệu",
+        description: "Không tìm thấy ID NCC",
+        placement: "topRight",
+      });
       return;
     }
 
@@ -309,12 +331,15 @@ export default function SupplierListPage() {
       setLoading(true);
       await restoreSupplier(id);
       api.success({
-        message: "✅ Khôi phục thành công!",
+        message: " Khôi phục thành công!",
         description: `Đã khôi phục NCC "${name}"`,
         placement: "topRight",
         duration: 3,
       });
-      await Promise.all([fetchActiveSuppliers(false), fetchDeletedSuppliers(false)]);
+      await Promise.all([
+        fetchActiveSuppliers(false),
+        fetchDeletedSuppliers(false),
+      ]);
     } catch (e) {
       api.error({
         message: " Lỗi khôi phục",
@@ -330,7 +355,10 @@ export default function SupplierListPage() {
   const handleRefresh = async () => {
     setSearchTerm("");
     setStatusFilter("all");
-    await Promise.all([fetchActiveSuppliers(false), fetchDeletedSuppliers(false)]);
+    await Promise.all([
+      fetchActiveSuppliers(false),
+      fetchDeletedSuppliers(false),
+    ]);
   };
 
   const handleExportSuppliersExcel = async () => {
@@ -348,9 +376,15 @@ export default function SupplierListPage() {
 
   const handleTableChange = (pagination, tab) => {
     if (tab === "active") {
-      setPaginationActive({ current: pagination.current, pageSize: pagination.pageSize });
+      setPaginationActive({
+        current: pagination.current,
+        pageSize: pagination.pageSize,
+      });
     } else {
-      setPaginationDeleted({ current: pagination.current, pageSize: pagination.pageSize });
+      setPaginationDeleted({
+        current: pagination.current,
+        pageSize: pagination.pageSize,
+      });
     }
   };
 
@@ -362,8 +396,14 @@ export default function SupplierListPage() {
       width: 50,
       align: "center",
       render: (_, __, index) => {
-        const pagination = tabKey === "active" ? paginationActive : paginationDeleted;
-        return <Badge count={(pagination.current - 1) * pagination.pageSize + index + 1} style={{ backgroundColor: "#52c41a" }} />;
+        const pagination =
+          tabKey === "active" ? paginationActive : paginationDeleted;
+        return (
+          <Badge
+            count={(pagination.current - 1) * pagination.pageSize + index + 1}
+            style={{ backgroundColor: "#52c41a" }}
+          />
+        );
       },
     },
     {
@@ -446,7 +486,11 @@ export default function SupplierListPage() {
       render: (text) =>
         text ? (
           <Tooltip title={text}>
-            <Text type="secondary" ellipsis style={{ maxWidth: 160, cursor: "pointer" }}>
+            <Text
+              type="secondary"
+              ellipsis
+              style={{ maxWidth: 160, cursor: "pointer" }}
+            >
               {text}
             </Text>
           </Tooltip>
@@ -473,7 +517,9 @@ export default function SupplierListPage() {
         return bankInfo.length ? (
           <Tooltip title={bankInfo.join(" | ")}>
             <Space direction="vertical" size={0} style={{ fontSize: 11 }}>
-              {record.bank_name && <Text type="secondary">{record.bank_name}</Text>}
+              {record.bank_name && (
+                <Text type="secondary">{record.bank_name}</Text>
+              )}
               {record.bank_account_no && (
                 <Text type="secondary" style={{ color: "#52c41a" }}>
                   TK: {record.bank_account_no}
@@ -516,7 +562,13 @@ export default function SupplierListPage() {
       align: "center",
       render: (status) => (
         <Tag
-          icon={status === "đang hoạt động" ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
+          icon={
+            status === "đang hoạt động" ? (
+              <CheckCircleOutlined />
+            ) : (
+              <CloseCircleOutlined />
+            )
+          }
           color={status === "đang hoạt động" ? "success" : "error"}
         >
           {status || "Không xác định"}
@@ -547,7 +599,12 @@ export default function SupplierListPage() {
         return (
           <Space size="small">
             <Tooltip title="Chi tiết">
-              <Button type="primary" icon={<EyeOutlined />} size="small" onClick={() => openDetail(supplierId)} />
+              <Button
+                type="primary"
+                icon={<EyeOutlined />}
+                size="small"
+                onClick={() => openDetail(supplierId)}
+              />
             </Tooltip>
             {!showRestore && (
               <Tooltip title="Sửa">
@@ -568,7 +625,11 @@ export default function SupplierListPage() {
                 cancelText="Hủy"
               >
                 <Tooltip title="Khôi phục">
-                  <Button icon={<UndoOutlined />} size="small" style={{ color: "#52c41a", borderColor: "#52c41a" }} />
+                  <Button
+                    icon={<UndoOutlined />}
+                    size="small"
+                    style={{ color: "#52c41a", borderColor: "#52c41a" }}
+                  />
                 </Tooltip>
               </Popconfirm>
             ) : (
@@ -598,7 +659,12 @@ export default function SupplierListPage() {
         <div style={{ padding: 24 }}>
           <Card style={{ margin: 24, borderRadius: 16 }}>
             <Title level={2}>Danh sách nhà cung cấp</Title>
-            <Alert message="⚠️ Không tìm thấy cửa hàng hiện hành" type="warning" showIcon style={{ marginTop: 16 }} />
+            <Alert
+              message="⚠️ Không tìm thấy cửa hàng hiện hành"
+              type="warning"
+              showIcon
+              style={{ marginTop: 16 }}
+            />
           </Card>
         </div>
       </Layout>
@@ -626,20 +692,30 @@ export default function SupplierListPage() {
                 fontWeight: 700,
               }}
             >
-               Quản lý Nhà cung cấp
+              Quản lý Nhà cung cấp
             </Title>
-            <Text type="secondary">Quản lý NCC đầy đủ (MST, ngân hàng, liên hệ) theo cửa hàng</Text>
+            <Text type="secondary">
+              Quản lý NCC đầy đủ (MST, ngân hàng, liên hệ) theo cửa hàng
+            </Text>
           </div>
 
           {/* Statistics */}
           <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
             <Col xs={24} sm={12} md={6}>
               <Tooltip title="Tổng NCC trong cửa hàng">
-                <Card style={{ background: "#2C5364", border: "none", borderRadius: 12, cursor: "pointer" }}>
+                <Card
+                  style={{
+                    background: "#2C5364",
+                    border: "none",
+                    borderRadius: 12,
+                    cursor: "pointer",
+                  }}
+                >
                   <Statistic
                     title={
                       <span style={{ color: "#fff" }}>
-                        Tổng NCC <InfoCircleOutlined style={{ color: "#1890ff" }} />
+                        Tổng NCC{" "}
+                        <InfoCircleOutlined style={{ color: "#1890ff" }} />
                       </span>
                     }
                     value={totalActive + totalDeleted}
@@ -650,7 +726,14 @@ export default function SupplierListPage() {
               </Tooltip>
             </Col>
             <Col xs={24} sm={12} md={6}>
-              <Card style={{ background: "#52c41a", border: "none", borderRadius: 12, cursor: "pointer" }}>
+              <Card
+                style={{
+                  background: "#52c41a",
+                  border: "none",
+                  borderRadius: 12,
+                  cursor: "pointer",
+                }}
+              >
                 <Statistic
                   title={<span style={{ color: "#fff" }}>Đang hoạt động</span>}
                   value={totalActive}
@@ -660,7 +743,14 @@ export default function SupplierListPage() {
               </Card>
             </Col>
             <Col xs={24} sm={12} md={6}>
-              <Card style={{ background: "#f5222d", border: "none", borderRadius: 12, cursor: "pointer" }}>
+              <Card
+                style={{
+                  background: "#f5222d",
+                  border: "none",
+                  borderRadius: 12,
+                  cursor: "pointer",
+                }}
+              >
                 <Statistic
                   title={<span style={{ color: "#fff" }}>Đã xóa</span>}
                   value={totalDeleted}
@@ -670,9 +760,18 @@ export default function SupplierListPage() {
               </Card>
             </Col>
             <Col xs={24} sm={12} md={6}>
-              <Card style={{ background: "#1890ff", border: "none", borderRadius: 12, cursor: "pointer" }}>
+              <Card
+                style={{
+                  background: "#1890ff",
+                  border: "none",
+                  borderRadius: 12,
+                  cursor: "pointer",
+                }}
+              >
                 <Statistic
-                  title={<span style={{ color: "#fff" }}>Trạng thái hoạt động</span>}
+                  title={
+                    <span style={{ color: "#fff" }}>Trạng thái hoạt động</span>
+                  }
                   value={`${activeStatusCount}/${inactiveStatusCount}`}
                   prefix={<CheckCircleOutlined />}
                   valueStyle={{ color: "#fff", fontWeight: "bold" }}
@@ -694,15 +793,33 @@ export default function SupplierListPage() {
               />
             </Col>
             <Col xs={24} md={16}>
-              <Space style={{ width: "100%", justifyContent: "flex-end", flexWrap: "wrap", gap: 8 }}>
+              <Space
+                style={{
+                  width: "100%",
+                  justifyContent: "flex-end",
+                  flexWrap: "wrap",
+                  gap: 8,
+                }}
+              >
                 {tabKey === "active" && (
-                  <Select value={statusFilter} onChange={setStatusFilter} style={{ width: 160 }} size="large" allowClear placeholder="Trạng thái">
+                  <Select
+                    value={statusFilter}
+                    onChange={setStatusFilter}
+                    style={{ width: 160 }}
+                    size="large"
+                    allowClear
+                    placeholder="Trạng thái"
+                  >
                     <Option value="all">Tất cả</Option>
                     <Option value="đang hoạt động">Đang hoạt động</Option>
                     <Option value="ngừng hoạt động">Ngừng hoạt động</Option>
                   </Select>
                 )}
-                <Button size="large" icon={<ReloadOutlined />} onClick={handleRefresh}>
+                <Button
+                  size="large"
+                  icon={<ReloadOutlined />}
+                  onClick={handleRefresh}
+                >
                   Làm mới
                 </Button>
                 <Button
@@ -720,7 +837,8 @@ export default function SupplierListPage() {
                     icon={<PlusOutlined />}
                     onClick={openCreate}
                     style={{
-                      background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                      background:
+                        "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
                       border: "none",
                       boxShadow: "0 4px 12px rgba(102, 126, 234, 0.4)",
                     }}
@@ -748,7 +866,9 @@ export default function SupplierListPage() {
                   <Table
                     columns={getColumns(false)}
                     dataSource={filteredSuppliers}
-                    rowKey={(record) => record?._id || `supplier-${Math.random()}`}
+                    rowKey={(record) =>
+                      record?._id || `supplier-${Math.random()}`
+                    }
                     loading={loading}
                     pagination={{
                       current: paginationActive.current,
@@ -765,7 +885,9 @@ export default function SupplierListPage() {
                     onChange={(pag) => handleTableChange(pag, "active")}
                     scroll={{ x: isMobile ? 1200 : "max-content" }}
                     size={isMobile ? "small" : "middle"}
-                    rowClassName={(_, index) => (index % 2 === 0 ? "table-row-light" : "table-row-dark")}
+                    rowClassName={(_, index) =>
+                      index % 2 === 0 ? "table-row-light" : "table-row-dark"
+                    }
                   />
                 ),
               },
@@ -776,7 +898,9 @@ export default function SupplierListPage() {
                   <Table
                     columns={getColumns(true)}
                     dataSource={filteredSuppliers}
-                    rowKey={(record) => record?._id || `supplier-${Math.random()}`}
+                    rowKey={(record) =>
+                      record?._id || `supplier-${Math.random()}`
+                    }
                     loading={loading}
                     pagination={{
                       current: paginationDeleted.current,
@@ -793,7 +917,9 @@ export default function SupplierListPage() {
                     onChange={(pag) => handleTableChange(pag, "deleted")}
                     scroll={{ x: isMobile ? 1200 : "max-content" }}
                     size={isMobile ? "small" : "middle"}
-                    rowClassName={(_, index) => (index % 2 === 0 ? "table-row-light" : "table-row-dark")}
+                    rowClassName={(_, index) =>
+                      index % 2 === 0 ? "table-row-light" : "table-row-dark"
+                    }
                   />
                 ),
               },
@@ -808,7 +934,11 @@ export default function SupplierListPage() {
             supplierId={editSupplierId}
             onSuccess={onFormSuccess}
           />
-          <SupplierDetailModal open={detailModalOpen} onOpenChange={setDetailModalOpen} supplierId={detailSupplierId} />
+          <SupplierDetailModal
+            open={detailModalOpen}
+            onOpenChange={setDetailModalOpen}
+            supplierId={detailSupplierId}
+          />
         </Card>
 
         <style>{`

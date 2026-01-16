@@ -22,7 +22,8 @@ const rawBody = `
   `;
 
 // ==== PASTE PAYOS_CHECKSUM_KEY (secret) từ .env ====
-const secret = "cb5fef9752968a4b5da4350bf9c0624a4aa42e9eee9dbfc4938ba30a3bf98b68";
+const secret =
+  "cb5fef9752968a4b5da4350bf9c0624a4aa42e9eee9dbfc4938ba30a3bf98b68";
 
 const parsed = JSON.parse(rawBody);
 const dataObj = parsed.data;
@@ -44,7 +45,11 @@ function buildKeyValueStringFromData(data) {
 // --- Tính chữ ký theo chuẩn PayOS ---
 function computePayOSSignatureFromData(data, secret) {
   const kvString = buildKeyValueStringFromData(data);
-  return crypto.createHmac("sha256", secret).update(kvString, "utf8").digest("hex").toUpperCase();
+  return crypto
+    .createHmac("sha256", secret)
+    .update(kvString, "utf8")
+    .digest("hex")
+    .toUpperCase();
 }
 
 // --- Debug ---
@@ -55,5 +60,5 @@ console.log("Raw body:", rawBody.slice(0, 100) + "...");
 console.log("KV preview:", buildKeyValueStringFromData(dataObj));
 console.log("Received signature:", received);
 console.log("Expected signature:", expectedSignature);
-console.log("✅ Hợp nhất không?", received === expectedSignature);
+console.log(" Hợp nhất không?", received === expectedSignature);
 console.log("----------------------------------------");

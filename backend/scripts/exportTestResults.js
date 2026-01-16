@@ -16,7 +16,7 @@
 //       encoding: "utf-8",
 //       stdio: "inherit",
 //     });
-//     console.log("\n✅ Tests completed!");
+//     console.log("\n Tests completed!");
 //   } catch (error) {
 //     console.log("\n⚠️ Some tests failed, continuing export...");
 //   }
@@ -93,7 +93,7 @@
 //   console.log(" Functions:", Object.keys(simple).length);
 //   console.log(" Total tests:", total);
 //   console.log(
-//     `✅ Passed: ${passed} (${Math.round((passed / Math.max(1, total)) * 100)}%)`
+//     ` Passed: ${passed} (${Math.round((passed / Math.max(1, total)) * 100)}%)`
 //   );
 //   console.log(
 //     ` Failed: ${failed} (${Math.round((failed / Math.max(1, total)) * 100)}%)`

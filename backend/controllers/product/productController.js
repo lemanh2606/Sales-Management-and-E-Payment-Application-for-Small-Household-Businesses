@@ -340,11 +340,11 @@ const createProduct = async (req, res) => {
       group_id: group_id || null,
       createdBy: userId,
 
-      // ✅ GẮN KHO MẶC ĐỊNH VÀO PRODUCT
+      //  GẮN KHO MẶC ĐỊNH VÀO PRODUCT
       default_warehouse_id: finalDefaultWarehouseId,
       default_warehouse_name: finalDefaultWarehouseName,
 
-      // ✅ LEGAL FIELDS
+      //  LEGAL FIELDS
       tax_rate: tax_rate !== undefined ? Number(tax_rate) : 0,
       origin: origin || "",
       brand: brand || "",
@@ -392,7 +392,7 @@ const createProduct = async (req, res) => {
         voucher_date: now,
         reason: "Tồn đầu kỳ khi tạo sản phẩm",
 
-        // ✅ GẮN KHO CHO PHIẾU (level header)
+        //  GẮN KHO CHO PHIẾU (level header)
         warehouse_id: finalDefaultWarehouseId || null,
         warehouse_name: finalDefaultWarehouseName || "",
 
@@ -410,7 +410,7 @@ const createProduct = async (req, res) => {
             name_snapshot: newProduct.name,
             unit_snapshot: newProduct.unit || "",
 
-            // ✅ GẮN KHO CHO TỪNG DÒNG ITEM
+            //  GẮN KHO CHO TỪNG DÒNG ITEM
             warehouse_id: finalDefaultWarehouseId || null,
             warehouse_name: finalDefaultWarehouseName || "",
 
@@ -501,7 +501,7 @@ const createProduct = async (req, res) => {
             type: createdVoucher.type,
             status: createdVoucher.status,
             voucher_date: createdVoucher.voucher_date,
-            // ✅ TRẢ VỀ THÔNG TIN KHO
+            //  TRẢ VỀ THÔNG TIN KHO
             warehouse_id: createdVoucher.warehouse_id,
             warehouse_name: createdVoucher.warehouse_name,
           }
@@ -754,7 +754,7 @@ const updateProduct = async (req, res) => {
       status,
       supplier_id,
       group_id,
-      // ✅ THÊM: Legal & Warranty fields
+      //  THÊM: Legal & Warranty fields
       tax_rate: tax_rate !== undefined ? Number(tax_rate) : undefined,
       origin: origin !== undefined ? origin : undefined,
       brand: brand !== undefined ? brand : undefined,
@@ -762,7 +762,7 @@ const updateProduct = async (req, res) => {
         warranty_period !== undefined ? warranty_period : undefined,
     };
 
-    // ✅ THÊM: Update kho mặc định nếu có thay đổi
+    //  THÊM: Update kho mặc định nếu có thay đổi
     if (default_warehouse_id !== undefined) {
       updateData.default_warehouse_id = finalDefaultWarehouseId;
       updateData.default_warehouse_name = finalDefaultWarehouseName;
@@ -839,7 +839,7 @@ const updateProduct = async (req, res) => {
           voucher_date: now,
           reason: "Điều chỉnh tồn kho khi cập nhật sản phẩm",
 
-          // ✅ GẮN KHO CHO PHIẾU (dùng kho mặc định của product)
+          //  GẮN KHO CHO PHIẾU (dùng kho mặc định của product)
           warehouse_id: finalDefaultWarehouseId || null,
           warehouse_name: finalDefaultWarehouseName || "",
 
@@ -857,7 +857,7 @@ const updateProduct = async (req, res) => {
               name_snapshot: name !== undefined ? name : product.name,
               unit_snapshot: unit !== undefined ? unit : product.unit || "",
 
-              // ✅ GẮN KHO CHO TỪNG DÒNG ITEM
+              //  GẮN KHO CHO TỪNG DÒNG ITEM
               warehouse_id: finalDefaultWarehouseId || null,
               warehouse_name: finalDefaultWarehouseName || "",
 
@@ -879,7 +879,7 @@ const updateProduct = async (req, res) => {
         // cập nhật tồn kho bằng $inc: SỬA field đúng stock_quantity (không phải stockquantity)
         await Product.updateOne(
           { _id: productId, store_id: productStoreId, isDeleted: false },
-          { $inc: { stock_quantity: delta } }, // ✅ Sửa field đúng
+          { $inc: { stock_quantity: delta } }, //  Sửa field đúng
           { session }
         );
       }
@@ -947,7 +947,7 @@ const updateProduct = async (req, res) => {
             type: createdVoucher.type,
             status: createdVoucher.status,
             voucher_date: createdVoucher.voucher_date,
-            // ✅ TRẢ VỀ THÔNG TIN KHO
+            //  TRẢ VỀ THÔNG TIN KHO
             warehouse_id: createdVoucher.warehouse_id,
             warehouse_name: createdVoucher.warehouse_name,
           }
@@ -1108,7 +1108,7 @@ const getProductsByStore = async (req, res) => {
       warehouse_name:
         p.default_warehouse_name || p.default_warehouse_id?.name || "",
 
-      // ✅ BATCHES - Include batch information for expiry and inventory tracking
+      //  BATCHES - Include batch information for expiry and inventory tracking
       batches: (p.batches || []).map((b) => ({
         batch_no: b.batch_no || "",
         expiry_date: b.expiry_date || null,
@@ -1123,7 +1123,7 @@ const getProductsByStore = async (req, res) => {
 
       createdAt: p.createdAt,
       updatedAt: p.updatedAt,
-      // ✅ Bổ sung thông tin pháp lý & bảo hành
+      //  Bổ sung thông tin pháp lý & bảo hành
       tax_rate: p.tax_rate ?? 0,
       origin: p.origin || "",
       brand: p.brand || "",
@@ -1153,7 +1153,7 @@ const getProductById = async (req, res) => {
       .populate("supplier_id", "name")
       .populate("store_id", "name")
       .populate("group_id", "name")
-      .populate("default_warehouse_id", "name"); // ✅ ĐÚNG schema
+      .populate("default_warehouse_id", "name"); //  ĐÚNG schema
 
     if (!product) {
       return res.status(404).json({ message: "Sản phẩm không tồn tại" });
@@ -1204,7 +1204,7 @@ const getProductById = async (req, res) => {
 
       createdAt: product.createdAt,
       updatedAt: product.updatedAt,
-      // ✅ Bổ sung thông tin pháp lý & bảo hành
+      //  Bổ sung thông tin pháp lý & bảo hành
       tax_rate: product.tax_rate ?? 0,
       origin: product.origin || "",
       brand: product.brand || "",
@@ -1445,7 +1445,7 @@ const searchProducts = async (req, res) => {
       .limit(parseInt(limit))
       .lean();
 
-    // ✅ Đồng bộ logic sắp xếp lô: Hạn dùng gần nhất -> Cũ nhất (FIFO)
+    //  Đồng bộ logic sắp xếp lô: Hạn dùng gần nhất -> Cũ nhất (FIFO)
     products.forEach((p) => {
       if (p.batches && p.batches.length > 0) {
         p.batches = p.batches
@@ -1716,7 +1716,7 @@ const importProducts = async (req, res) => {
               supplierId = newSupplier._id;
               supplierMap.set(lowerName, newSupplier.toObject());
               results.newlyCreated.suppliers++;
-              console.log(`✅ Created new supplier: ${supplierName}`);
+              console.log(` Created new supplier: ${supplierName}`);
             }
           }
         }
@@ -1764,7 +1764,7 @@ const importProducts = async (req, res) => {
               groupId = newGroup._id;
               groupMap.set(lowerName, newGroup.toObject());
               results.newlyCreated.productGroups++;
-              console.log(`✅ Created new product group: ${groupName}`);
+              console.log(` Created new product group: ${groupName}`);
             }
           }
         }
@@ -1846,7 +1846,7 @@ const importProducts = async (req, res) => {
               warehouseMap.set(lowerWName, newWh.toObject());
               results.newlyCreated.warehouses++;
               console.log(
-                `✅ Created new warehouse: ${rowWarehouseName} (Code: ${generatedWHCode})`
+                ` Created new warehouse: ${rowWarehouseName} (Code: ${generatedWHCode})`
               );
             }
           }
@@ -2117,7 +2117,7 @@ const importProducts = async (req, res) => {
                 ? priceInput
                 : Number(product.price?.toString() || 0);
 
-            // ✅ Validation: Kiểm tra tồn tối đa khi Import (Check chung trước khi xử lý lô)
+            //  Validation: Kiểm tra tồn tối đa khi Import (Check chung trước khi xử lý lô)
             const projectedStock =
               (currentProduct.stock_quantity || 0) + openingQty;
             const limit =
@@ -2206,7 +2206,7 @@ const importProducts = async (req, res) => {
           product: product.name,
           voucher_code: finalVoucherCode,
         });
-        console.log(`✅ Row ${rowNumber} imported successfully`);
+        console.log(` Row ${rowNumber} imported successfully`);
       } catch (err) {
         console.error(` Row ${i + 2} failed:`, err.message);
         await session.abortTransaction();
@@ -2341,7 +2341,7 @@ const downloadProductTemplate = async (req, res) => {
     res.setHeader("Content-Length", excelBuffer.length);
 
     console.log(
-      "✅ Generated dynamic Import Template with Batch/Expiry/Warehouse"
+      " Generated dynamic Import Template with Batch/Expiry/Warehouse"
     );
     return res.send(excelBuffer);
   } catch (error) {
@@ -2567,9 +2567,7 @@ const exportProducts = async (req, res) => {
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Pragma", "no-cache");
 
-    console.log(
-      `✅ Export successful: ${filename}, ${products.length} products`
-    );
+    console.log(` Export successful: ${filename}, ${products.length} products`);
 
     // Ghi log hoạt động
     try {
@@ -2583,7 +2581,7 @@ const exportProducts = async (req, res) => {
         req,
         description: `Xuất danh sách ${products.length} sản phẩm từ cửa hàng ${store.name}`,
       });
-      console.log("✅ Activity log created for export");
+      console.log(" Activity log created for export");
     } catch (logError) {
       console.error(
         " Lỗi ghi Activity Log (không ảnh hưởng export):",
@@ -2727,7 +2725,7 @@ const updateProductBatch = async (req, res) => {
     }
 
     console.log(
-      `✅ Product found: ${product.name}, batches count: ${
+      ` Product found: ${product.name}, batches count: ${
         product.batches?.length || 0
       }`
     );
@@ -2781,7 +2779,7 @@ const updateProductBatch = async (req, res) => {
       return sum + bQty;
     }, 0);
 
-    // ✅ Validation: Kiểm tra tồn kho tối đa
+    //  Validation: Kiểm tra tồn kho tối đa
     const maxStock =
       product.max_stock !== undefined && product.max_stock !== null
         ? Number(product.max_stock)
@@ -3041,9 +3039,7 @@ const updateProductBatch = async (req, res) => {
     await session.commitTransaction();
     session.endSession();
 
-    console.log(
-      `✅ Batch ${new_batch_no || old_batch_no} updated successfully`
-    );
+    console.log(` Batch ${new_batch_no || old_batch_no} updated successfully`);
 
     res.json({
       message: "Cập nhật lô hàng thành công",

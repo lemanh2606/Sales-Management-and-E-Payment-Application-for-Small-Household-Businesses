@@ -32,7 +32,7 @@ const setupLoyaltyConfig = async (req, res) => {
     if (vndPerPoint !== undefined) loyalty.vndPerPoint = vndPerPoint;
     if (minOrderValue !== undefined) loyalty.minOrderValue = minOrderValue;
 
-    // ✅ Không check lỗi “phải có pointsPerVND” nếu chỉ toggle thôi
+    //  Không check lỗi “phải có pointsPerVND” nếu chỉ toggle thôi
     if (
       loyalty.isActive &&
       (!loyalty.pointsPerVND || loyalty.pointsPerVND <= 0)

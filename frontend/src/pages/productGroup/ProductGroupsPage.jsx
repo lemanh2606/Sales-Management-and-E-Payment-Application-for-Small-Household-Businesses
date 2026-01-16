@@ -43,7 +43,10 @@ import {
   TagsOutlined,
   ReloadOutlined,
 } from "@ant-design/icons";
-import { getProductGroupsByStore, deleteProductGroup } from "../../api/productGroupApi";
+import {
+  getProductGroupsByStore,
+  deleteProductGroup,
+} from "../../api/productGroupApi";
 import ProductGroupForm from "../../components/productGroup/ProductGroupForm";
 import Layout from "../../components/Layout";
 
@@ -82,7 +85,9 @@ export default function ProductGroupsPage() {
       console.error("Fetch groups error:", err);
       notification.error({
         message: " Lỗi tải dữ liệu",
-        description: err?.response?.data?.message || "Không thể tải danh sách nhóm sản phẩm",
+        description:
+          err?.response?.data?.message ||
+          "Không thể tải danh sách nhóm sản phẩm",
         placement: "topRight",
         duration: 4,
       });
@@ -113,7 +118,9 @@ export default function ProductGroupsPage() {
     deleteModal.confirm({
       title: (
         <Space>
-          <ExclamationCircleOutlined style={{ color: "#faad14", fontSize: 24 }} />
+          <ExclamationCircleOutlined
+            style={{ color: "#faad14", fontSize: 24 }}
+          />
           <span>Xác nhận xóa nhóm sản phẩm</span>
         </Space>
       ),
@@ -124,7 +131,8 @@ export default function ProductGroupsPage() {
           </Paragraph>
           {productCount > 0 && (
             <Paragraph type="warning" style={{ marginTop: 8 }}>
-              ⚠️ Nhóm này đang có <Text strong>{productCount} sản phẩm</Text>. Các sản phẩm sẽ không bị xóa nhưng sẽ không còn thuộc nhóm này.
+              ⚠️ Nhóm này đang có <Text strong>{productCount} sản phẩm</Text>.
+              Các sản phẩm sẽ không bị xóa nhưng sẽ không còn thuộc nhóm này.
             </Paragraph>
           )}
         </div>
@@ -139,7 +147,7 @@ export default function ProductGroupsPage() {
           setDeleting(true);
           await deleteProductGroup(groupId);
           notification.success({
-            message: "✅ Xóa thành công",
+            message: " Xóa thành công",
             description: `Đã xóa nhóm "${groupName}"`,
             placement: "topRight",
             icon: <CheckCircleOutlined style={{ color: "#52c41a" }} />,
@@ -148,7 +156,8 @@ export default function ProductGroupsPage() {
         } catch (err) {
           notification.error({
             message: " Lỗi xóa nhóm",
-            description: err?.response?.data?.message || "Không thể xóa nhóm sản phẩm",
+            description:
+              err?.response?.data?.message || "Không thể xóa nhóm sản phẩm",
             placement: "topRight",
           });
         } finally {
@@ -171,9 +180,14 @@ export default function ProductGroupsPage() {
   );
 
   // Calculate stats
-  const totalProducts = groups.reduce((sum, g) => sum + (g.productCount || 0), 0);
-  const avgProducts = groups.length > 0 ? (totalProducts / groups.length).toFixed(1) : 0;
-  const maxProducts = groups.length > 0 ? Math.max(...groups.map((g) => g.productCount || 0)) : 0;
+  const totalProducts = groups.reduce(
+    (sum, g) => sum + (g.productCount || 0),
+    0
+  );
+  const avgProducts =
+    groups.length > 0 ? (totalProducts / groups.length).toFixed(1) : 0;
+  const maxProducts =
+    groups.length > 0 ? Math.max(...groups.map((g) => g.productCount || 0)) : 0;
 
   // Table columns for list view
   const columns = [
@@ -346,7 +360,8 @@ export default function ProductGroupsPage() {
             marginBottom: 24,
             borderRadius: 20,
             border: "none",
-            background: "linear-gradient(135deg, #52c41a 0%, #237804 50%, #135200 100%)",
+            background:
+              "linear-gradient(135deg, #52c41a 0%, #237804 50%, #135200 100%)",
             boxShadow: "0 12px 40px rgba(82, 196, 26, 0.35)",
             overflow: "hidden",
             position: "relative",
@@ -407,18 +422,33 @@ export default function ProductGroupsPage() {
                     <TagsOutlined style={{ fontSize: 32, color: "#fff" }} />
                   </div>
                   <div>
-                    <Title level={2} style={{ color: "#fff", margin: 0, fontSize: 32, fontWeight: 700 }}>
+                    <Title
+                      level={2}
+                      style={{
+                        color: "#fff",
+                        margin: 0,
+                        fontSize: 32,
+                        fontWeight: 700,
+                      }}
+                    >
                       Quản lý nhóm sản phẩm
                     </Title>
-                    <Text style={{ color: "rgba(255,255,255,0.9)", fontSize: 15 }}>
-                      Tổ chức và phân loại sản phẩm thành các nhóm để quản lý dễ dàng hơn
+                    <Text
+                      style={{ color: "rgba(255,255,255,0.9)", fontSize: 15 }}
+                    >
+                      Tổ chức và phân loại sản phẩm thành các nhóm để quản lý dễ
+                      dàng hơn
                     </Text>
                   </div>
                 </Space>
               </Space>
             </Col>
             <Col xs={24} lg={10}>
-              <Space size={12} style={{ width: "100%", justifyContent: "flex-end" }} wrap>
+              <Space
+                size={12}
+                style={{ width: "100%", justifyContent: "flex-end" }}
+                wrap
+              >
                 <Button
                   size="large"
                   icon={<ReloadOutlined />}
@@ -468,16 +498,25 @@ export default function ProductGroupsPage() {
                 style={{
                   borderRadius: 16,
                   border: "none",
-                  background: "linear-gradient(135deg, #e6fffb 0%, #b5f5ec 100%)",
+                  background:
+                    "linear-gradient(135deg, #e6fffb 0%, #b5f5ec 100%)",
                   boxShadow: "0 4px 16px rgba(82, 196, 26, 0.12)",
                 }}
                 styles={{ body: { padding: "20px 24px" } }}
               >
                 <Statistic
-                  title={<Text style={{ color: "#006d75", fontWeight: 600 }}>Tổng nhóm</Text>}
+                  title={
+                    <Text style={{ color: "#006d75", fontWeight: 600 }}>
+                      Tổng nhóm
+                    </Text>
+                  }
                   value={groups.length}
                   prefix={<AppstoreOutlined style={{ color: "#13c2c2" }} />}
-                  valueStyle={{ color: "#08979c", fontSize: 28, fontWeight: 700 }}
+                  valueStyle={{
+                    color: "#08979c",
+                    fontSize: 28,
+                    fontWeight: 700,
+                  }}
                 />
               </Card>
             </Col>
@@ -486,16 +525,25 @@ export default function ProductGroupsPage() {
                 style={{
                   borderRadius: 16,
                   border: "none",
-                  background: "linear-gradient(135deg, #f6ffed 0%, #d9f7be 100%)",
+                  background:
+                    "linear-gradient(135deg, #f6ffed 0%, #d9f7be 100%)",
                   boxShadow: "0 4px 16px rgba(82, 196, 26, 0.12)",
                 }}
                 styles={{ body: { padding: "20px 24px" } }}
               >
                 <Statistic
-                  title={<Text style={{ color: "#237804", fontWeight: 600 }}>Tổng sản phẩm</Text>}
+                  title={
+                    <Text style={{ color: "#237804", fontWeight: 600 }}>
+                      Tổng sản phẩm
+                    </Text>
+                  }
                   value={totalProducts}
                   prefix={<ShoppingOutlined style={{ color: "#52c41a" }} />}
-                  valueStyle={{ color: "#389e0d", fontSize: 28, fontWeight: 700 }}
+                  valueStyle={{
+                    color: "#389e0d",
+                    fontSize: 28,
+                    fontWeight: 700,
+                  }}
                 />
               </Card>
             </Col>
@@ -504,16 +552,25 @@ export default function ProductGroupsPage() {
                 style={{
                   borderRadius: 16,
                   border: "none",
-                  background: "linear-gradient(135deg, #fff7e6 0%, #ffe58f 100%)",
+                  background:
+                    "linear-gradient(135deg, #fff7e6 0%, #ffe58f 100%)",
                   boxShadow: "0 4px 16px rgba(250, 173, 20, 0.12)",
                 }}
                 styles={{ body: { padding: "20px 24px" } }}
               >
                 <Statistic
-                  title={<Text style={{ color: "#ad6800", fontWeight: 600 }}>TB sản phẩm/nhóm</Text>}
+                  title={
+                    <Text style={{ color: "#ad6800", fontWeight: 600 }}>
+                      TB sản phẩm/nhóm
+                    </Text>
+                  }
                   value={avgProducts}
                   prefix={<BarChartOutlined style={{ color: "#faad14" }} />}
-                  valueStyle={{ color: "#d48806", fontSize: 28, fontWeight: 700 }}
+                  valueStyle={{
+                    color: "#d48806",
+                    fontSize: 28,
+                    fontWeight: 700,
+                  }}
                 />
               </Card>
             </Col>
@@ -522,16 +579,25 @@ export default function ProductGroupsPage() {
                 style={{
                   borderRadius: 16,
                   border: "none",
-                  background: "linear-gradient(135deg, #f9f0ff 0%, #d3adf7 100%)",
+                  background:
+                    "linear-gradient(135deg, #f9f0ff 0%, #d3adf7 100%)",
                   boxShadow: "0 4px 16px rgba(114, 46, 209, 0.12)",
                 }}
                 styles={{ body: { padding: "20px 24px" } }}
               >
                 <Statistic
-                  title={<Text style={{ color: "#531dab", fontWeight: 600 }}>Max SP/nhóm</Text>}
+                  title={
+                    <Text style={{ color: "#531dab", fontWeight: 600 }}>
+                      Max SP/nhóm
+                    </Text>
+                  }
                   value={maxProducts}
                   prefix={<FileTextOutlined style={{ color: "#722ed1" }} />}
-                  valueStyle={{ color: "#722ed1", fontSize: 28, fontWeight: 700 }}
+                  valueStyle={{
+                    color: "#722ed1",
+                    fontSize: 28,
+                    fontWeight: 700,
+                  }}
                 />
               </Card>
             </Col>
@@ -593,9 +659,22 @@ export default function ProductGroupsPage() {
 
         {/* Content */}
         {loading ? (
-          <Card style={{ borderRadius: 16, textAlign: "center", padding: "80px 20px" }}>
+          <Card
+            style={{
+              borderRadius: 16,
+              textAlign: "center",
+              padding: "80px 20px",
+            }}
+          >
             <Spin size="large" />
-            <Text style={{ display: "block", marginTop: 16, fontSize: 16, color: "#8c8c8c" }}>
+            <Text
+              style={{
+                display: "block",
+                marginTop: 16,
+                fontSize: 16,
+                color: "#8c8c8c",
+              }}
+            >
               Đang tải dữ liệu...
             </Text>
           </Card>
@@ -615,7 +694,9 @@ export default function ProductGroupsPage() {
               description={
                 <Space direction="vertical" size={20}>
                   <Title level={4} style={{ color: "#595959", margin: 0 }}>
-                    {searchText ? "Không tìm thấy nhóm sản phẩm phù hợp" : "Chưa có nhóm sản phẩm nào"}
+                    {searchText
+                      ? "Không tìm thấy nhóm sản phẩm phù hợp"
+                      : "Chưa có nhóm sản phẩm nào"}
                   </Title>
                   <Text type="secondary" style={{ fontSize: 15 }}>
                     {searchText
@@ -629,7 +710,8 @@ export default function ProductGroupsPage() {
                       icon={<PlusOutlined />}
                       onClick={handleCreate}
                       style={{
-                        background: "linear-gradient(135deg, #52c41a 0%, #73d13d 100%)",
+                        background:
+                          "linear-gradient(135deg, #52c41a 0%, #73d13d 100%)",
                         border: "none",
                         borderRadius: 12,
                         height: 52,
@@ -665,7 +747,8 @@ export default function ProductGroupsPage() {
               pagination={{
                 pageSize: 10,
                 showSizeChanger: true,
-                showTotal: (total, range) => `${range[0]}-${range[1]} của ${total} nhóm`,
+                showTotal: (total, range) =>
+                  `${range[0]}-${range[1]} của ${total} nhóm`,
                 style: { padding: "16px 24px" },
               }}
               style={{
@@ -678,8 +761,13 @@ export default function ProductGroupsPage() {
           /* Grid View */
           <Row gutter={[20, 20]}>
             {filteredGroups.map((group) => {
-              const productPercent = maxProducts > 0 ? ((group.productCount || 0) / maxProducts) * 100 : 0;
-              const createdDate = group.createdAt ? new Date(group.createdAt).toLocaleDateString("vi-VN") : "N/A";
+              const productPercent =
+                maxProducts > 0
+                  ? ((group.productCount || 0) / maxProducts) * 100
+                  : 0;
+              const createdDate = group.createdAt
+                ? new Date(group.createdAt).toLocaleDateString("vi-VN")
+                : "N/A";
 
               return (
                 <Col xs={24} sm={12} lg={8} xl={6} key={group._id}>
@@ -699,7 +787,8 @@ export default function ProductGroupsPage() {
                     {/* Card Header with Gradient */}
                     <div
                       style={{
-                        background: "linear-gradient(135deg, #52c41a 0%, #73d13d 100%)",
+                        background:
+                          "linear-gradient(135deg, #52c41a 0%, #73d13d 100%)",
                         padding: "20px 20px 16px",
                         position: "relative",
                         overflow: "hidden",
@@ -716,7 +805,13 @@ export default function ProductGroupsPage() {
                           background: "rgba(255,255,255,0.15)",
                         }}
                       />
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                        }}
+                      >
                         <div
                           style={{
                             width: 48,
@@ -729,7 +824,9 @@ export default function ProductGroupsPage() {
                             backdropFilter: "blur(10px)",
                           }}
                         >
-                          <FolderOpenOutlined style={{ fontSize: 24, color: "#fff" }} />
+                          <FolderOpenOutlined
+                            style={{ fontSize: 24, color: "#fff" }}
+                          />
                         </div>
                         <Badge
                           count={group.productCount || 0}
@@ -750,7 +847,11 @@ export default function ProductGroupsPage() {
 
                     {/* Card Body */}
                     <div style={{ padding: "20px" }}>
-                      <Space direction="vertical" size={14} style={{ width: "100%" }}>
+                      <Space
+                        direction="vertical"
+                        size={14}
+                        style={{ width: "100%" }}
+                      >
                         {/* Group Name */}
                         <div>
                           <Tooltip title={group.name}>
@@ -795,7 +896,10 @@ export default function ProductGroupsPage() {
                             <Text type="secondary" style={{ fontSize: 12 }}>
                               Số lượng sản phẩm
                             </Text>
-                            <Text strong style={{ fontSize: 13, color: "#52c41a" }}>
+                            <Text
+                              strong
+                              style={{ fontSize: 13, color: "#52c41a" }}
+                            >
                               {group.productCount || 0}
                             </Text>
                           </div>
@@ -815,22 +919,46 @@ export default function ProductGroupsPage() {
                         {/* Meta Info */}
                         <div
                           style={{
-                            background: "linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%)",
+                            background:
+                              "linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%)",
                             borderRadius: 12,
                             padding: "12px",
                           }}
                         >
-                          <Space direction="vertical" size={6} style={{ width: "100%" }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                              <CalendarOutlined style={{ color: "#8c8c8c", fontSize: 13 }} />
+                          <Space
+                            direction="vertical"
+                            size={6}
+                            style={{ width: "100%" }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 8,
+                              }}
+                            >
+                              <CalendarOutlined
+                                style={{ color: "#8c8c8c", fontSize: 13 }}
+                              />
                               <Text style={{ fontSize: 12, color: "#595959" }}>
                                 Ngày tạo: <Text strong>{createdDate}</Text>
                               </Text>
                             </div>
-                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                              <InfoCircleOutlined style={{ color: "#8c8c8c", fontSize: 13 }} />
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 8,
+                              }}
+                            >
+                              <InfoCircleOutlined
+                                style={{ color: "#8c8c8c", fontSize: 13 }}
+                              />
                               <Text style={{ fontSize: 12, color: "#595959" }}>
-                                Mã: <Text strong style={{ color: "#722ed1" }}>#{group._id?.slice(-6)}</Text>
+                                Mã:{" "}
+                                <Text strong style={{ color: "#722ed1" }}>
+                                  #{group._id?.slice(-6)}
+                                </Text>
                               </Text>
                             </div>
                           </Space>

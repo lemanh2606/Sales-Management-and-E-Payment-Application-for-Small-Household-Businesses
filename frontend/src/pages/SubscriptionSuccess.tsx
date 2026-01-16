@@ -24,9 +24,9 @@ const SubscriptionSuccess = () => {
   const params = new URLSearchParams(window.location.search);
   const orderCode = params.get("orderCode");
   const payosStatus = params.get("status");
-  const checkoutUrl = params.get("checkoutUrl"); // ✅ Thêm để retry
+  const checkoutUrl = params.get("checkoutUrl"); //  Thêm để retry
 
-  // ✅ Gửi message về RN app hoặc navigate web
+  //  Gửi message về RN app hoặc navigate web
   const sendToRN = useCallback((data: any): boolean => {
     if ((window as any).ReactNativeWebView?.postMessage) {
       (window as any).ReactNativeWebView.postMessage(JSON.stringify(data));
@@ -35,7 +35,7 @@ const SubscriptionSuccess = () => {
     return false;
   }, []);
 
-  // ✅ Reset về Subscription (ưu tiên)
+  //  Reset về Subscription (ưu tiên)
   const goBackToSubscription = useCallback(() => {
     if (sendToRN({ type: "NAVIGATE", screen: "Subscription" })) {
       return; // RN app sẽ reset stack
@@ -44,7 +44,7 @@ const SubscriptionSuccess = () => {
     navigate("/settings/subscription");
   }, [sendToRN, navigate]);
 
-  // ✅ Về Home/Dashboard
+  //  Về Home/Dashboard
   const goToHome = useCallback(() => {
     if (sendToRN({ type: "NAVIGATE", screen: "Home" })) {
       return;
@@ -52,7 +52,7 @@ const SubscriptionSuccess = () => {
     navigate("/dashboard");
   }, [sendToRN, navigate]);
 
-  // ✅ Retry thanh toán (WebView)
+  //  Retry thanh toán (WebView)
   const retryPayment = useCallback(() => {
     if (
       checkoutUrl &&
@@ -114,7 +114,7 @@ const SubscriptionSuccess = () => {
       cancelled = true;
       clearTimeout(t);
     };
-  }, [attempt, goBackToSubscription]); // ✅ Stable callback
+  }, [attempt, goBackToSubscription]); //  Stable callback
 
   const getResultIcon = () => {
     if (status === "loading") {
@@ -305,7 +305,7 @@ const SubscriptionSuccess = () => {
           }
           extra={
             <Space size="middle" style={{ marginTop: 32 }}>
-              {/* ✅ Row 1: Nút chính */}
+              {/*  Row 1: Nút chính */}
               <Button
                 type="primary"
                 size="large"
@@ -323,7 +323,7 @@ const SubscriptionSuccess = () => {
                 Quay về trang gói dịch vụ
               </Button>
 
-              {/* ✅ Row 2: Nút phụ */}
+              {/*  Row 2: Nút phụ */}
               <Space style={{ gap: 12 }}>
                 <Button
                   size="large"

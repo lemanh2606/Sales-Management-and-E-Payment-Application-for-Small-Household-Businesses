@@ -54,7 +54,11 @@ module.exports = async (req, res) => {
   // ============================
   // 3) Verify chữ ký
   // ============================
-  const receivedSignature = (req.headers["x-payos-signature"] || parsed.signature || "").toUpperCase();
+  const receivedSignature = (
+    req.headers["x-payos-signature"] ||
+    parsed.signature ||
+    ""
+  ).toUpperCase();
 
   const expectedSignature = computePayOSSignatureFromData(tx, checksumKey);
 
@@ -89,11 +93,15 @@ module.exports = async (req, res) => {
     );
     console.log("🚫 Clear 'pending' result:", result);
 
-    return res.status(200).json({ message: "Payment cancelled — pending cleared" });
+    return res
+      .status(200)
+      .json({ message: "Payment cancelled — pending cleared" });
   }
   // Nếu không phải CANCELLED nhưng code != 00 thì bỏ qua
   if (parsed.code !== "00") {
-    console.warn("⚠ PayOS báo không thành công, nhưng không phải CANCELLED. Bỏ qua.");
+    console.warn(
+      "⚠ PayOS báo không thành công, nhưng không phải CANCELLED. Bỏ qua."
+    );
     return res.status(200).json({ message: "Ignored non-success" });
   }
 
@@ -112,7 +120,8 @@ module.exports = async (req, res) => {
   console.log("📌 Tìm thấy subscription:", subscription._id.toString());
   console.log("📌 Subscription status trước khi update:", subscription.status);
 
-  const planDuration = subscription.pending_plan_duration || subscription.duration_months || 1;
+  const planDuration =
+    subscription.pending_plan_duration || subscription.duration_months || 1;
 
   const amount = tx.amount || subscription.pending_amount || 0;
 
@@ -120,7 +129,8 @@ module.exports = async (req, res) => {
   // 5) Xử lý nâng cấp hoặc gia hạn
   // ============================
   try {
-    const isRenewal = subscription.status === "ACTIVE" && !subscription.isExpired();
+    const isRenewal =
+      subscription.status === "ACTIVE" && !subscription.isExpired();
 
     if (isRenewal) {
       console.log("🔄 Đây là giao dịch gia hạn premium");
@@ -132,7 +142,12 @@ module.exports = async (req, res) => {
 
     subscription.clearPendingPayment();
     await subscription.save();
-    console.log("💾 Subscription đã lưu:", subscription._id, "new status:", subscription.status);
+    console.log(
+      "💾 Subscription đã lưu:",
+      subscription._id,
+      "new status:",
+      subscription.status
+    );
   } catch (e) {
     console.error(" Lỗi update subscription:", e);
     return res.status(200).json({ message: "Update error" });
@@ -164,16 +179,19 @@ module.exports = async (req, res) => {
   );
   console.log("💰 PaymentHistory updated/created:", orderCode);
 
-
   // ============================
   // 8) Gửi thông báo (có try/catch riêng)
   // ============================
   try {
-    const user = await User.findById(subscription.user_id).select("fullname username");
+    const user = await User.findById(subscription.user_id).select(
+      "fullname username"
+    );
     const name = user?.fullname || user?.username || "Người dùng";
 
     // Lấy danh sách store mà user sở hữu, để báo toàn bộ store luôn vì mua Premium chỉ cần 1 lần báo All store
-    const stores = await Store.find({ owner_id: subscription.user_id }).select("_id");
+    const stores = await Store.find({ owner_id: subscription.user_id }).select(
+      "_id"
+    );
 
     console.log("🔔 Tạo thông báo dịch vụ cho user:", subscription.user_id);
 
@@ -194,7 +212,7 @@ module.exports = async (req, res) => {
     console.error("⚠ Lỗi tạo thông báo:", error);
   }
 
-  console.log("✅ Hoàn tất xử lý webhook cho orderCode:", orderCode);
+  console.log(" Hoàn tất xử lý webhook cho orderCode:", orderCode);
 
   return res.status(200).json({ message: "Đã kích hoạt gói đăng ký" });
 };

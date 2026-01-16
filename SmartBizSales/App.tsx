@@ -43,7 +43,7 @@ export default function App(): React.JSX.Element {
         <NavigationContainer
           ref={navigationRef}
           onReady={() => {
-            console.log("✅ Navigation is ready");
+            console.log(" Navigation is ready");
             setNavigationReady();
           }}
         >

@@ -632,7 +632,7 @@ const StoreSettingsScreen: React.FC = () => {
         />
         <Text style={styles.settingNoteText}>
           {store.isActive
-            ? "✅ Cửa hàng đang hiển thị và khách hàng có thể đặt hàng"
+            ? " Cửa hàng đang hiển thị và khách hàng có thể đặt hàng"
             : "⚠️ Cửa hàng tạm thời ẩn, khách hàng không thể đặt hàng"}
         </Text>
       </View>

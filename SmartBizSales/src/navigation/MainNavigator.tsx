@@ -31,14 +31,14 @@ export default function MainNavigator() {
 
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {/* ✅ Mỗi navigator phải nằm trong 1 Screen riêng [web:1034] */}
+      {/*  Mỗi navigator phải nằm trong 1 Screen riêng [web:1034] */}
       {!user ? (
         <Stack.Screen name="Auth" component={AuthNavigator} />
       ) : (
         <Stack.Screen name="App" component={AppNavigator} />
       )}
 
-      {/* ✅ Flow screens cũng là Stack.Screen */}
+      {/*  Flow screens cũng là Stack.Screen */}
       <Stack.Screen name="PaymentWebView" component={PaymentWebViewScreen} />
       <Stack.Screen
         name="SubscriptionSuccess"

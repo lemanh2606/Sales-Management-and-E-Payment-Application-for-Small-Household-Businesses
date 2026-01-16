@@ -1,4 +1,4 @@
-// controllers/tax/taxController.js - ✅ BẢN ĐÃ SỬA LỖI LƯU DỮ LIỆU
+// controllers/tax/taxController.js -  BẢN ĐÃ SỬA LỖI LƯU DỮ LIỆU
 const mongoose = require("mongoose");
 const PDFDocument = require("pdfkit");
 const Order = require("../../models/Order");
@@ -26,7 +26,7 @@ function isManagerUser(user) {
   return false;
 }
 
-// ✅ VALIDATION HELPER - IMPROVED
+//  VALIDATION HELPER - IMPROVED
 function validateRequiredFields(data, requiredFields) {
   const missing = [];
   const invalid = [];
@@ -67,7 +67,7 @@ function validateRequiredFields(data, requiredFields) {
   };
 }
 
-// ✅ STANDARDIZED ERROR RESPONSE
+//  STANDARDIZED ERROR RESPONSE
 function errorResponse(res, status, message, details = {}) {
   console.error(` [${status}] ${message}`, JSON.stringify(details, null, 2));
   return res.status(status).json({
@@ -78,9 +78,9 @@ function errorResponse(res, status, message, details = {}) {
   });
 }
 
-// ✅ STANDARDIZED SUCCESS RESPONSE
+//  STANDARDIZED SUCCESS RESPONSE
 function successResponse(res, message, data = {}, status = 200) {
-  console.log(`✅ [${status}] ${message}`);
+  console.log(` [${status}] ${message}`);
   return res.status(status).json({
     success: true,
     message,
@@ -89,7 +89,7 @@ function successResponse(res, message, data = {}, status = 200) {
   });
 }
 
-// ✅ Lấy thông tin người nộp thuế từ Store - IMPROVED
+//  Lấy thông tin người nộp thuế từ Store - IMPROVED
 async function getTaxpayerInfo(storeId) {
   try {
     const store = await Store.findOne({ _id: storeId, deleted: false })
@@ -148,7 +148,7 @@ async function getTaxpayerInfo(storeId) {
       },
       phone: store.phone || owner.phone || "",
       fax: store.fax || "",
-      email: finalEmail, // ✅ Sử dụng email đã được xác định
+      email: finalEmail, //  Sử dụng email đã được xác định
       taxAuthorizationDoc: store.taxAuthorizationDoc || null,
       personalInfo: {
         dateOfBirth: owner.dateOfBirth || null,
@@ -245,7 +245,7 @@ function formatTaxPeriod(periodType, periodKey) {
   }
 }
 
-// ✅ Format date for Vietnamese
+//  Format date for Vietnamese
 function formatDate(date) {
   if (!date) return "...";
   const d = new Date(date);
@@ -254,7 +254,7 @@ function formatDate(date) {
     .padStart(2, "0")}/${d.getFullYear()}`;
 }
 
-// ✅ Format currency for Vietnamese
+//  Format currency for Vietnamese
 function formatCurrency(amount) {
   if (!amount) return "0";
   const num = typeof amount === "string" ? parseFloat(amount) : amount;
@@ -330,7 +330,7 @@ const previewSystemRevenue = async (req, res) => {
       });
     }
 
-    console.log(`✅ Store found: ${store.name} (${storeId})`);
+    console.log(` Store found: ${store.name} (${storeId})`);
 
     // FIX: Kiểm tra periodKey có hợp lệ không trước khi gọi periodToRange
     if (periodType !== "custom" && periodKey) {
@@ -446,7 +446,7 @@ const createTaxDeclaration = async (req, res) => {
   session.startTransaction();
 
   try {
-    // ✅ Lấy dữ liệu từ request body với fallback hợp lý
+    //  Lấy dữ liệu từ request body với fallback hợp lý
     const {
       storeId,
       periodType,
@@ -479,7 +479,7 @@ const createTaxDeclaration = async (req, res) => {
       Object.keys(customTaxpayerInfo)
     );
 
-    // ✅ VALIDATE REQUIRED FIELDS - IMPROVED
+    //  VALIDATE REQUIRED FIELDS - IMPROVED
     const validation = validateRequiredFields(
       { storeId, periodType, periodKey, declaredRevenue },
       [
@@ -538,7 +538,7 @@ const createTaxDeclaration = async (req, res) => {
       });
     }
 
-    console.log(`✅ Store found: ${store.name}`);
+    console.log(` Store found: ${store.name}`);
 
     //  BỎ CHECK TỒN TẠI - CHO PHÉP TẠO NHIỀU TỜ KHAI CÙNG KỲ
     // Comment/Remove the existing duplicate check
@@ -596,7 +596,7 @@ const createTaxDeclaration = async (req, res) => {
     // Lấy thông tin người nộp thuế từ database
     const dbTaxpayerInfo = await getTaxpayerInfo(storeId);
 
-    // ✅ MERGE thông tin: database info + custom info từ client
+    //  MERGE thông tin: database info + custom info từ client
     const taxpayerInfo = {
       ...dbTaxpayerInfo,
       ...customTaxpayerInfo,
@@ -676,14 +676,14 @@ const createTaxDeclaration = async (req, res) => {
 
     console.log(" Creating declaration document...");
 
-    // ✅ Tạo document với tất cả các trường
+    //  Tạo document với tất cả các trường
     const docData = {
       shopId: storeId,
       periodType,
       periodKey: processedPeriodKey,
       isFirstTime,
       supplementNumber: Number(supplementNumber) || 0,
-      taxpayerInfo, // ✅ Đảm bảo taxpayerInfo có đầy đủ thông tin
+      taxpayerInfo, //  Đảm bảo taxpayerInfo có đầy đủ thông tin
       systemRevenue: systemRevenueDecimal,
       declaredRevenue: parseDecimal(declaredNum),
       taxRates: {
@@ -718,7 +718,7 @@ const createTaxDeclaration = async (req, res) => {
     await session.commitTransaction();
     session.endSession();
 
-    console.log(`✅ Declaration created: ${doc[0]._id}`);
+    console.log(` Declaration created: ${doc[0]._id}`);
     console.log(`ℹ️  Period: ${periodType} ${processedPeriodKey}`);
     console.log(`ℹ️  Status: ${status}`);
 
@@ -801,7 +801,7 @@ const updateTaxDeclaration = async (req, res) => {
     }
 
     console.log(
-      `✅ Declaration found: ${doc.periodType}-${doc.periodKey} (status: ${doc.status})`
+      ` Declaration found: ${doc.periodType}-${doc.periodKey} (status: ${doc.status})`
     );
 
     // Kiểm tra quyền chỉnh sửa
@@ -836,7 +836,7 @@ const updateTaxDeclaration = async (req, res) => {
 
     console.log("🔧 Updating fields...");
 
-    // ✅ Cập nhật thông tin người nộp thuế nếu có
+    //  Cập nhật thông tin người nộp thuế nếu có
     if (updatedTaxpayerInfo) {
       console.log("👤 Updating taxpayer info...");
 
@@ -989,7 +989,7 @@ const updateTaxDeclaration = async (req, res) => {
         if (parseFloat(doc.declaredRevenue.toString()) <= 0) {
           validationErrors.push("Doanh thu kê khai phải lớn hơn 0");
         }
-        // ✅ Kiểm tra email khi submit
+        //  Kiểm tra email khi submit
         if (!doc.taxpayerInfo?.email) {
           validationErrors.push("Thiếu email người nộp thuế");
         } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(doc.taxpayerInfo.email)) {
@@ -1023,7 +1023,7 @@ const updateTaxDeclaration = async (req, res) => {
     await session.commitTransaction();
     session.endSession();
 
-    console.log(`✅ Declaration updated: ${doc._id}`);
+    console.log(` Declaration updated: ${doc._id}`);
 
     // Log activity
     await logActivity({
@@ -1081,7 +1081,7 @@ const cloneTaxDeclaration = async (req, res) => {
     }
 
     console.log(
-      `✅ Source found: ${source.periodType}-${source.periodKey} v${source.version}`
+      ` Source found: ${source.periodType}-${source.periodKey} v${source.version}`
     );
 
     const maxVerDoc = await TaxDeclaration.findOne({
@@ -1127,7 +1127,7 @@ const cloneTaxDeclaration = async (req, res) => {
     await session.commitTransaction();
     session.endSession();
 
-    console.log(`✅ Clone created: ${cloneDoc[0]._id}`);
+    console.log(` Clone created: ${cloneDoc[0]._id}`);
 
     await logActivity({
       user: req.user,
@@ -1189,7 +1189,7 @@ const deleteTaxDeclaration = async (req, res) => {
     }
 
     console.log(
-      `✅ Declaration found: ${doc.periodType}-${doc.periodKey} v${doc.version}`
+      ` Declaration found: ${doc.periodType}-${doc.periodKey} v${doc.version}`
     );
 
     if (!isManagerUser(req.user)) {
@@ -1216,7 +1216,7 @@ const deleteTaxDeclaration = async (req, res) => {
         clone.isClone = false;
         await clone.save({ session });
 
-        console.log(`✅ Promoted clone v${clone.version} to original`);
+        console.log(` Promoted clone v${clone.version} to original`);
 
         await logActivity({
           user: req.user,
@@ -1236,7 +1236,7 @@ const deleteTaxDeclaration = async (req, res) => {
     await session.commitTransaction();
     session.endSession();
 
-    console.log(`✅ Declaration deleted: ${id}`);
+    console.log(` Declaration deleted: ${id}`);
 
     await logActivity({
       user: req.user,
@@ -1315,7 +1315,7 @@ const listDeclarations = async (req, res) => {
 
     const total = await TaxDeclaration.countDocuments(q);
 
-    console.log(`✅ Found ${docs.length} declarations (total: ${total})`);
+    console.log(` Found ${docs.length} declarations (total: ${total})`);
 
     const data = docs.map((d) => ({
       ...d,
@@ -1387,7 +1387,7 @@ const getDeclaration = async (req, res) => {
     }
 
     console.log(
-      `✅ Declaration found: ${doc.periodType}-${doc.periodKey} v${doc.version}`
+      ` Declaration found: ${doc.periodType}-${doc.periodKey} v${doc.version}`
     );
 
     const formatted = {
@@ -1470,7 +1470,7 @@ const approveRejectDeclaration = async (req, res) => {
     }
 
     console.log(
-      `✅ Declaration found: ${doc.periodType}-${doc.periodKey} (status: ${doc.status})`
+      ` Declaration found: ${doc.periodType}-${doc.periodKey} (status: ${doc.status})`
     );
 
     if (doc.status !== "submitted") {
@@ -1490,20 +1490,18 @@ const approveRejectDeclaration = async (req, res) => {
       doc.approvedAt = new Date();
       doc.approvedBy = req.user._id;
       doc.rejectionReason = "";
-      console.log("✅ Approving declaration...");
+      console.log(" Approving declaration...");
     } else {
       doc.status = "rejected";
       doc.rejectionReason = rejectionReason || "Không có lý do";
       doc.approvedAt = null;
       doc.approvedBy = null;
-      console.log(
-        ` Rejecting declaration: ${rejectionReason || "No reason"}`
-      );
+      console.log(` Rejecting declaration: ${rejectionReason || "No reason"}`);
     }
 
     await doc.save();
 
-    console.log(`✅ Declaration ${action}d: ${id}`);
+    console.log(` Declaration ${action}d: ${id}`);
 
     await logActivity({
       user: req.user,
@@ -1569,7 +1567,7 @@ const exportDeclaration = async (req, res) => {
     }
 
     console.log(
-      `✅ Declaration found: ${doc.periodType}-${doc.periodKey} v${doc.version}`
+      ` Declaration found: ${doc.periodType}-${doc.periodKey} v${doc.version}`
     );
     console.log(`📄 Exporting as ${format.toUpperCase()}...`);
 
@@ -1602,7 +1600,7 @@ const exportDeclaration = async (req, res) => {
       const csv = parser.parse([payload]);
       res.header("Content-Type", "text/csv; charset=utf-8");
       res.attachment(`to-khai-thue-${doc.periodKey}-v${doc.version}.csv`);
-      console.log("✅ CSV export successful");
+      console.log(" CSV export successful");
       res.send("\uFEFF" + csv);
       return;
     }
@@ -1637,7 +1635,7 @@ const exportDeclaration = async (req, res) => {
           pdf.registerFont("RobotoBold", fontPath.bold);
         }
         pdf.font("Roboto");
-        console.log("✅ Using Roboto font");
+        console.log(" Using Roboto font");
       } catch (e) {
         console.warn("⚠️ Roboto font error, using Helvetica:", e.message);
         pdf.font("Helvetica");
@@ -2284,7 +2282,7 @@ const exportDeclaration = async (req, res) => {
       align: "right",
     });
 
-    console.log("✅ PDF export successful");
+    console.log(" PDF export successful");
     pdf.end();
   } catch (err) {
     console.error(" exportDeclaration error:", err);

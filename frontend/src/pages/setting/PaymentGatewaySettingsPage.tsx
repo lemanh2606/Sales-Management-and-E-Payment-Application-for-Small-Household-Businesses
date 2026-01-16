@@ -221,7 +221,11 @@ const PaymentGatewaySettingsPage: React.FC = () => {
           qrTemplate: values.qrTemplate,
           isDefault: values.isDefault ?? editingBank.isDefault,
         };
-        await axios.put(`${API_BASE}/${storeId}/banks`, { identifier, updates }, { headers });
+        await axios.put(
+          `${API_BASE}/${storeId}/banks`,
+          { identifier, updates },
+          { headers }
+        );
         Swal.fire({
           icon: "success",
           title: "Thành công",
@@ -354,11 +358,17 @@ const PaymentGatewaySettingsPage: React.FC = () => {
         payload.accountNumber = editingBank.accountNumber;
       }
 
-      const res = await axios.post(`${API_BASE}/${storeId}/generate-qr`, payload, { headers });
+      const res = await axios.post(
+        `${API_BASE}/${storeId}/generate-qr`,
+        payload,
+        { headers }
+      );
 
       if (res.data?.success) {
         const rawUrl = res.data.data.qrUrl;
-        const qrUrl = rawUrl.includes("?") ? `${rawUrl}&t=${Date.now()}` : `${rawUrl}?t=${Date.now()}`; //chống cache
+        const qrUrl = rawUrl.includes("?")
+          ? `${rawUrl}&t=${Date.now()}`
+          : `${rawUrl}?t=${Date.now()}`; //chống cache
         setQrData({
           qrUrl,
           //qrUrl: res.data.data.qrUrl,
@@ -382,7 +392,8 @@ const PaymentGatewaySettingsPage: React.FC = () => {
   const filteredBanks = vietQrBanks.filter((bank) => {
     // Check search text
     const matchesSearch =
-      bank.shortName.toLowerCase().includes(searchText.toLowerCase()) || bank.name.toLowerCase().includes(searchText.toLowerCase());
+      bank.shortName.toLowerCase().includes(searchText.toLowerCase()) ||
+      bank.name.toLowerCase().includes(searchText.toLowerCase());
 
     // Check connected filter
     if (showConnectedOnly) {
@@ -392,7 +403,10 @@ const PaymentGatewaySettingsPage: React.FC = () => {
     return matchesSearch;
   });
 
-  const paginatedBanks = filteredBanks.slice((pagination.current - 1) * pagination.pageSize, pagination.current * pagination.pageSize);
+  const paginatedBanks = filteredBanks.slice(
+    (pagination.current - 1) * pagination.pageSize,
+    pagination.current * pagination.pageSize
+  );
 
   // DEBOUNCED SEARCH - MƯỢT NHƯ BƠ, KHÔNG GIẬT Lag
   const debouncedSearch = debounce((value: string) => {
@@ -422,7 +436,10 @@ const PaymentGatewaySettingsPage: React.FC = () => {
                   <Title level={3} style={{ margin: 0 }}>
                     Cấu hình cổng thanh toán QRCode - VietQR PRO
                   </Title>
-                  <Text type="secondary">Liên kết tài khoản ngân hàng của bạn để nhận thanh toán qua mã QR từ khách hàng</Text>
+                  <Text type="secondary">
+                    Liên kết tài khoản ngân hàng của bạn để nhận thanh toán qua
+                    mã QR từ khách hàng
+                  </Text>
                 </div>
               </Space>
             </Col>
@@ -464,8 +481,15 @@ const PaymentGatewaySettingsPage: React.FC = () => {
                   fontSize: "15px",
                 }}
               >
-                Đã kết nối <span style={{ color: "#52c41a", fontWeight: 700 }}>{banks.length}</span> /{" "}
-                <span style={{ color: "#d4380d", fontWeight: 700 }}>{vietQrBanks.length}</span> ngân hàng
+                Đã kết nối{" "}
+                <span style={{ color: "#52c41a", fontWeight: 700 }}>
+                  {banks.length}
+                </span>{" "}
+                /{" "}
+                <span style={{ color: "#d4380d", fontWeight: 700 }}>
+                  {vietQrBanks.length}
+                </span>{" "}
+                ngân hàng
               </Tag>
             </Space>
           }
@@ -507,7 +531,10 @@ const PaymentGatewaySettingsPage: React.FC = () => {
 
           {banksLoading ? (
             <div style={{ textAlign: "center", padding: 60 }}>
-              <Spin size="large" tip="Đang tải danh sách 65 ngân hàng từ VietQR..." />
+              <Spin
+                size="large"
+                tip="Đang tải danh sách 65 ngân hàng từ VietQR..."
+              />
             </div>
           ) : (
             <>
@@ -515,7 +542,9 @@ const PaymentGatewaySettingsPage: React.FC = () => {
               <Row gutter={[16, 16]}>
                 {paginatedBanks.length > 0 ? (
                   paginatedBanks.map((bank: any) => {
-                    const connectedBank = banks.find((b) => b.bankCode === bank.code);
+                    const connectedBank = banks.find(
+                      (b) => b.bankCode === bank.code
+                    );
                     const isConnected = !!connectedBank;
 
                     return (
@@ -524,7 +553,9 @@ const PaymentGatewaySettingsPage: React.FC = () => {
                           hoverable
                           style={{
                             borderRadius: 12,
-                            border: isConnected ? `2px solid #52c41a` : "1px solid #d9d9d9",
+                            border: isConnected
+                              ? `2px solid #52c41a`
+                              : "1px solid #d9d9d9",
                             position: "relative",
                             overflow: "hidden",
                             height: "100%",
@@ -593,10 +624,17 @@ const PaymentGatewaySettingsPage: React.FC = () => {
                               />
                             </div>
 
-                            <Title level={5} style={{ margin: "8px 0 4px", fontSize: 18 }}>
+                            <Title
+                              level={5}
+                              style={{ margin: "8px 0 4px", fontSize: 18 }}
+                            >
                               {bank.shortName}
                             </Title>
-                            <Text style={{ fontSize: "14px", color: "#1006a7ff" }}>{bank.name}</Text>
+                            <Text
+                              style={{ fontSize: "14px", color: "#1006a7ff" }}
+                            >
+                              {bank.name}
+                            </Text>
 
                             {isConnected && connectedBank?.isDefault && (
                               <Tag
@@ -620,8 +658,19 @@ const PaymentGatewaySettingsPage: React.FC = () => {
                           {/* Nút hành động */}
                           <div style={{ padding: "0 12px 12px" }}>
                             {isConnected ? (
-                              <Space direction="vertical" style={{ width: "100%" }}>
-                                <Button type="default" icon={<QrcodeOutlined />} block size="small" onClick={() => handleGenerateQR(connectedBank)}>
+                              <Space
+                                direction="vertical"
+                                style={{ width: "100%" }}
+                              >
+                                <Button
+                                  type="default"
+                                  icon={<QrcodeOutlined />}
+                                  block
+                                  size="small"
+                                  onClick={() =>
+                                    handleGenerateQR(connectedBank)
+                                  }
+                                >
                                   Tạo QRCode
                                 </Button>
                                 <Space
@@ -630,29 +679,41 @@ const PaymentGatewaySettingsPage: React.FC = () => {
                                     justifyContent: "space-between",
                                   }}
                                 >
-                                  <Button size="small" onClick={() => handleOpenLinkModal(bank)}>
+                                  <Button
+                                    size="small"
+                                    onClick={() => handleOpenLinkModal(bank)}
+                                  >
                                     Sửa
                                   </Button>
                                   {!connectedBank?.isDefault && (
-                                    <Button size="small" onClick={() => handleSetDefault(connectedBank!)}>
+                                    <Button
+                                      size="small"
+                                      onClick={() =>
+                                        handleSetDefault(connectedBank!)
+                                      }
+                                    >
                                       Đặt mặc định
                                     </Button>
                                   )}
                                   <Button
                                     danger
                                     size="small"
-                                    onClick={() => handleDisconnect(connectedBank!)}
+                                    onClick={() =>
+                                      handleDisconnect(connectedBank!)
+                                    }
                                     style={{
                                       backgroundColor: "transparent",
                                       borderColor: "#ff4d4f",
                                       color: "#ff4d4f",
                                     }}
                                     onMouseEnter={(e) => {
-                                      e.currentTarget.style.backgroundColor = "#f14e4bff";
+                                      e.currentTarget.style.backgroundColor =
+                                        "#f14e4bff";
                                       e.currentTarget.style.color = "#fff";
                                     }}
                                     onMouseLeave={(e) => {
-                                      e.currentTarget.style.backgroundColor = "transparent";
+                                      e.currentTarget.style.backgroundColor =
+                                        "transparent";
                                       e.currentTarget.style.color = "#ff4d4f";
                                     }}
                                   >
@@ -661,7 +722,13 @@ const PaymentGatewaySettingsPage: React.FC = () => {
                                 </Space>
                               </Space>
                             ) : (
-                              <Button type="primary" block size="large" icon={<LinkOutlined />} onClick={() => handleOpenLinkModal(bank)}>
+                              <Button
+                                type="primary"
+                                block
+                                size="large"
+                                icon={<LinkOutlined />}
+                                onClick={() => handleOpenLinkModal(bank)}
+                              >
                                 Liên kết ngay
                               </Button>
                             )}
@@ -678,7 +745,8 @@ const PaymentGatewaySettingsPage: React.FC = () => {
                         image={Empty.PRESENTED_IMAGE_SIMPLE}
                         description={
                           <span style={{ fontSize: 16, color: "#8c8c8c" }}>
-                            Không tìm thấy ngân hàng nào phù hợp với kết quả tìm kiếm "<b>{searchText}</b>"
+                            Không tìm thấy ngân hàng nào phù hợp với kết quả tìm
+                            kiếm "<b>{searchText}</b>"
                           </span>
                         }
                       ></Empty>
@@ -707,10 +775,16 @@ const PaymentGatewaySettingsPage: React.FC = () => {
                       <span style={{ color: "#1890ff", fontWeight: 600 }}>
                         {range[0]} – {range[1]}
                       </span>{" "}
-                      trong tổng số <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> ngân hàng
+                      trong tổng số{" "}
+                      <span style={{ color: "#d4380d", fontWeight: 600 }}>
+                        {total}
+                      </span>{" "}
+                      ngân hàng
                     </div>
                   )}
-                  onChange={(page, pageSize) => setPagination({ current: page, pageSize: pageSize || 8 })}
+                  onChange={(page, pageSize) =>
+                    setPagination({ current: page, pageSize: pageSize || 8 })
+                  }
                 />
               </div>
             </>
@@ -745,11 +819,18 @@ const PaymentGatewaySettingsPage: React.FC = () => {
                   Trạng thái:
                 </Text>
                 {webhookConfig?.payos?.isEnabled ? (
-                  <Tag icon={<CheckCircleOutlined />} color="success" style={{ padding: "4px 10px", fontSize: 14 }}>
+                  <Tag
+                    icon={<CheckCircleOutlined />}
+                    color="success"
+                    style={{ padding: "4px 10px", fontSize: 14 }}
+                  >
                     Đã kích hoạt
                   </Tag>
                 ) : (
-                  <Tag color="error" style={{ padding: "4px 10px", fontSize: 14 }}>
+                  <Tag
+                    color="error"
+                    style={{ padding: "4px 10px", fontSize: 14 }}
+                  >
                     Chưa kích hoạt
                   </Tag>
                 )}
@@ -761,10 +842,16 @@ const PaymentGatewaySettingsPage: React.FC = () => {
             // ĐÃ KÍCH HOẠT → HIỆN THÔNG TIN + NÚT TẮT
             <div style={{ textAlign: "center", padding: "24px 0" }}>
               <CheckCircleOutlined style={{ fontSize: 64, color: "#52c41a" }} />
-              <Title level={4} style={{ margin: "16px 0 8px", color: "#52c41a" }}>
+              <Title
+                level={4}
+                style={{ margin: "16px 0 8px", color: "#52c41a" }}
+              >
                 PayOS đã được kích hoạt thành công!
               </Title>
-              <Text type="secondary">Từ giờ trở đi, đơn hàng của bạn sẽ tự động được xác nhận bởi PAYOS khi khách chuyển khoản qua QRCode</Text>
+              <Text type="secondary">
+                Từ giờ trở đi, đơn hàng của bạn sẽ tự động được xác nhận bởi
+                PAYOS khi khách chuyển khoản qua QRCode
+              </Text>
               <div style={{ marginTop: 24 }}>
                 <Button danger onClick={() => setDisablePayOSModal(true)}>
                   Tắt tính năng tự động xác nhận thanh toán
@@ -789,7 +876,9 @@ const PaymentGatewaySettingsPage: React.FC = () => {
                   );
 
                   if (res.data.success) {
-                    message.success("Kích hoạt thành công! Sao chép Webhook URL này dán vào PayOS:");
+                    message.success(
+                      "Kích hoạt thành công! Sao chép Webhook URL này dán vào PayOS:"
+                    );
 
                     Swal.fire({
                       title: "Sao chép Webhook URL ngay!",
@@ -806,7 +895,10 @@ const PaymentGatewaySettingsPage: React.FC = () => {
                     fetchPaymentConfig(); // Reload config
                   }
                 } catch (err: any) {
-                  message.error(err?.response?.data?.message || "Kích hoạt thất bại, kiểm tra lại 3 key");
+                  message.error(
+                    err?.response?.data?.message ||
+                      "Kích hoạt thất bại, kiểm tra lại 3 key"
+                  );
                 } finally {
                   setSavingWebhook(false);
                 }
@@ -814,28 +906,59 @@ const PaymentGatewaySettingsPage: React.FC = () => {
             >
               <Row gutter={16}>
                 <Col xs={24} md={8}>
-                  <Form.Item name="clientId" label="Client ID (do PayOS cấp)" rules={[{ required: true, message: "Client ID là bắt buộc!" }]}>
-                    <Input placeholder="Ví dụ: 8a9f3b..." prefix={<CreditCardOutlined />} size="large" />
+                  <Form.Item
+                    name="clientId"
+                    label="Client ID (do PayOS cấp)"
+                    rules={[
+                      { required: true, message: "Client ID là bắt buộc!" },
+                    ]}
+                  >
+                    <Input
+                      placeholder="Ví dụ: 8a9f3b..."
+                      prefix={<CreditCardOutlined />}
+                      size="large"
+                    />
                   </Form.Item>
                 </Col>
                 <Col xs={24} md={8}>
-                  <Form.Item name="apiKey" label="API Key (do PayOS cấp)" rules={[{ required: true, message: "API Key là bắt buộc!" }]}>
-                    <Input.Password placeholder="Ví dụ: 3f8a9b1c..." size="large" />
+                  <Form.Item
+                    name="apiKey"
+                    label="API Key (do PayOS cấp)"
+                    rules={[
+                      { required: true, message: "API Key là bắt buộc!" },
+                    ]}
+                  >
+                    <Input.Password
+                      placeholder="Ví dụ: 3f8a9b1c..."
+                      size="large"
+                    />
                   </Form.Item>
                 </Col>
                 <Col xs={24} md={8}>
                   <Form.Item
                     name="checksumKey"
                     label="Checksum Key (do PayOS cấp)"
-                    rules={[{ required: true, message: "Checksum Key là bắt buộc!" }]}
+                    rules={[
+                      { required: true, message: "Checksum Key là bắt buộc!" },
+                    ]}
                   >
-                    <Input.Password placeholder="Ví dụ: a1b2c3d4..." arial-label="checksum key" size="large" />
+                    <Input.Password
+                      placeholder="Ví dụ: a1b2c3d4..."
+                      arial-label="checksum key"
+                      size="large"
+                    />
                   </Form.Item>
                 </Col>
               </Row>
 
               <div style={{ textAlign: "right" }}>
-                <Button type="primary" size="large" icon={<CheckCircleOutlined />} loading={savingWebhook} htmlType="submit">
+                <Button
+                  type="primary"
+                  size="large"
+                  icon={<CheckCircleOutlined />}
+                  loading={savingWebhook}
+                  htmlType="submit"
+                >
                   Kích hoạt PayOS
                 </Button>
               </div>
@@ -850,7 +973,8 @@ const PaymentGatewaySettingsPage: React.FC = () => {
               <Col>
                 <SafetyOutlined style={{ marginRight: 8 }} />
                 <span style={{ fontWeight: "bold", fontSize: "16px" }}>
-                  Hướng dẫn liên kết với tài khoản PayOS để sử dụng tính năng tự động xác nhận thanh toán
+                  Hướng dẫn liên kết với tài khoản PayOS để sử dụng tính năng tự
+                  động xác nhận thanh toán
                 </span>
               </Col>
               <Col>
@@ -877,10 +1001,14 @@ const PaymentGatewaySettingsPage: React.FC = () => {
                     boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = expanded ? "#40a9ff" : "#e6f7ff";
+                    e.currentTarget.style.backgroundColor = expanded
+                      ? "#40a9ff"
+                      : "#e6f7ff";
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = expanded ? "#1890ff" : "#fff";
+                    e.currentTarget.style.backgroundColor = expanded
+                      ? "#1890ff"
+                      : "#fff";
                   }}
                 >
                   {expanded ? "Thu gọn thông tin" : "Xem thêm thông tin"}
@@ -901,7 +1029,11 @@ const PaymentGatewaySettingsPage: React.FC = () => {
               style={{ marginTop: 16 }}
               items={[
                 {
-                  title: <span style={{ fontWeight: "bold", color: "#1d39c4" }}>Bước 1: Đăng ký & xác thực tài khoản PayOS</span>,
+                  title: (
+                    <span style={{ fontWeight: "bold", color: "#1d39c4" }}>
+                      Bước 1: Đăng ký & xác thực tài khoản PayOS
+                    </span>
+                  ),
                   icon: <UserAddOutlined style={{ color: "#1890ff" }} />,
                   description: (
                     <div style={{ lineHeight: "1.7" }}>
@@ -921,10 +1053,16 @@ const PaymentGatewaySettingsPage: React.FC = () => {
                         để đăng ký tài khoản mới
                       </div>
                       <div>
-                        • Sau khi đăng ký → xác thực email → chọn <b style={{ color: "#d4380d" }}>Tổ chức</b> (cá nhân/doanh nghiệp)
+                        • Sau khi đăng ký → xác thực email → chọn{" "}
+                        <b style={{ color: "#d4380d" }}>Tổ chức</b> (cá
+                        nhân/doanh nghiệp)
                       </div>
                       <div>
-                        • Hoàn tất <i style={{ color: "#d46b08", fontWeight: 600 }}>Xác thực tổ chức</i> (CMND/CCCD, thông tin công ty…)
+                        • Hoàn tất{" "}
+                        <i style={{ color: "#d46b08", fontWeight: 600 }}>
+                          Xác thực tổ chức
+                        </i>{" "}
+                        (CMND/CCCD, thông tin công ty…)
                       </div>
                       <div
                         style={{
@@ -956,15 +1094,21 @@ const PaymentGatewaySettingsPage: React.FC = () => {
                   ),
                 },
                 {
-                  title: <span style={{ fontWeight: "bold", color: "#1d39c4" }}>Bước 2: Liên kết tài khoản ngân hàng nhận tiền</span>,
+                  title: (
+                    <span style={{ fontWeight: "bold", color: "#1d39c4" }}>
+                      Bước 2: Liên kết tài khoản ngân hàng nhận tiền
+                    </span>
+                  ),
                   icon: <BankOutlined style={{ color: "#52c41a" }} />,
                   description: (
                     <div style={{ lineHeight: "1.7" }}>
                       <div>
-                        • Vào menu bên trái → <b style={{ color: "#08979c" }}>Mục "Ngân hàng"</b>
+                        • Vào menu bên trái →{" "}
+                        <b style={{ color: "#08979c" }}>Mục "Ngân hàng"</b>
                       </div>
                       <div>
-                        • Nhấn <b>Thêm tài khoản ngân hàng</b> → điền thông tin → xác thực (PayOS sẽ chuyển 1 đồng để Xác thực bạn)
+                        • Nhấn <b>Thêm tài khoản ngân hàng</b> → điền thông tin
+                        → xác thực (PayOS sẽ chuyển 1 đồng để Xác thực bạn)
                       </div>
                       <div
                         style={{
@@ -973,26 +1117,36 @@ const PaymentGatewaySettingsPage: React.FC = () => {
                           fontSize: "13px",
                         }}
                       >
-                        ⚡ Lưu ý: Phải dùng tài khoản chính chủ trùng tên với tổ chức đã xác thực
+                        ⚡ Lưu ý: Phải dùng tài khoản chính chủ trùng tên với tổ
+                        chức đã xác thực
                       </div>
                     </div>
                   ),
                 },
                 {
-                  title: <span style={{ fontWeight: "bold", color: "#1d39c4" }}>Bước 3: Tạo kênh thanh toán → Lấy 3 khóa quan trọng sau</span>,
+                  title: (
+                    <span style={{ fontWeight: "bold", color: "#1d39c4" }}>
+                      Bước 3: Tạo kênh thanh toán → Lấy 3 khóa quan trọng sau
+                    </span>
+                  ),
                   icon: <CreditCardOutlined style={{ color: "#722ed1" }} />,
                   description: (
                     <div style={{ lineHeight: "1.7" }}>
                       <div>
-                        • Menu bên trái → <b style={{ color: "#d4380d" }}>Kênh thanh toán</b> → <b>Tạo kênh thanh toán</b>
+                        • Menu bên trái →{" "}
+                        <b style={{ color: "#d4380d" }}>Kênh thanh toán</b> →{" "}
+                        <b>Tạo kênh thanh toán</b>
                       </div>
-                      <div>• Chọn tài khoản ngân hàng vừa liên kết → Xác thực các yêu cầu → Lưu lại → PayOS sẽ cấp ngay:</div>
+                      <div>
+                        • Chọn tài khoản ngân hàng vừa liên kết → Xác thực các
+                        yêu cầu → Lưu lại → PayOS sẽ cấp ngay:
+                      </div>
                       <div style={{ marginLeft: 20, marginTop: 8 }}>
-                        <b style={{ color: "#08979c" }}>✅ Client ID</b>
+                        <b style={{ color: "#08979c" }}> Client ID</b>
                         <br />
-                        <b style={{ color: "#08979c" }}>✅ API Key</b>
+                        <b style={{ color: "#08979c" }}> API Key</b>
                         <br />
-                        <b style={{ color: "#08979c" }}>✅ Checksum Key</b>
+                        <b style={{ color: "#08979c" }}> Checksum Key</b>
                       </div>
                       <div
                         style={{
@@ -1015,15 +1169,21 @@ const PaymentGatewaySettingsPage: React.FC = () => {
                   ),
                 },
                 {
-                  title: <span style={{ fontWeight: "bold", color: "#1d39c4" }}>Bước 4: Nhập 3 key vào hệ thống và bấm “Kích hoạt PayOS”</span>,
+                  title: (
+                    <span style={{ fontWeight: "bold", color: "#1d39c4" }}>
+                      Bước 4: Nhập 3 key vào hệ thống và bấm “Kích hoạt PayOS”
+                    </span>
+                  ),
                   icon: <CheckCircleOutlined style={{ color: "#52c41a" }} />,
                   description: (
                     <div style={{ lineHeight: "1.7" }}>
                       <div>
-                        • Dán lần lượt <b>Client ID</b>, <b>API Key</b>, <b>Checksum Key</b> vào 3 ô ở trên
+                        • Dán lần lượt <b>Client ID</b>, <b>API Key</b>,{" "}
+                        <b>Checksum Key</b> vào 3 ô ở trên
                       </div>
                       <div>
-                        • Bấm nút <b style={{ color: "#389e0d" }}>Kích hoạt PayOS</b>
+                        • Bấm nút{" "}
+                        <b style={{ color: "#389e0d" }}>Kích hoạt PayOS</b>
                       </div>
                       <div
                         style={{
@@ -1032,7 +1192,8 @@ const PaymentGatewaySettingsPage: React.FC = () => {
                           fontWeight: 600,
                         }}
                       >
-                        Hệ thống sẽ tự động tạo link webhook và hiện thông báo cho bạn Sao chép!
+                        Hệ thống sẽ tự động tạo link webhook và hiện thông báo
+                        cho bạn Sao chép!
                       </div>
                     </div>
                   ),
@@ -1040,16 +1201,22 @@ const PaymentGatewaySettingsPage: React.FC = () => {
                 {
                   title: (
                     <span style={{ fontWeight: "bold", color: "#52c41a" }}>
-                      Bước 5: Sao chép link Webhook từ thông báo → Dán vào PayOS (chỉ làm 1 lần)
+                      Bước 5: Sao chép link Webhook từ thông báo → Dán vào PayOS
+                      (chỉ làm 1 lần)
                     </span>
                   ),
                   icon: <LinkOutlined style={{ color: "#52c41a" }} />,
                   description: (
                     <div style={{ lineHeight: "1.7" }}>
-                      <div>• Sau khi bấm “Kích hoạt PayOS” → sẽ hiện 1 cửa sổ chứa link dài (bắt đầu bằng https://...)</div>
+                      <div>
+                        • Sau khi bấm “Kích hoạt PayOS” → sẽ hiện 1 cửa sổ chứa
+                        link dài (bắt đầu bằng https://...)
+                      </div>
                       <div>• Sao chép toàn bộ link đó</div>
                       <div>
-                        • Vào PayOS → Kênh thanh toán → Chọn kênh mà bạn đã tạo → Dán vào ô <b>Webhook URL</b> ở trường nhập cuối → Lưu lại
+                        • Vào PayOS → Kênh thanh toán → Chọn kênh mà bạn đã tạo
+                        → Dán vào ô <b>Webhook URL</b> ở trường nhập cuối → Lưu
+                        lại
                       </div>
                       <div
                         style={{
@@ -1060,10 +1227,12 @@ const PaymentGatewaySettingsPage: React.FC = () => {
                           borderRadius: 8,
                         }}
                       >
-                        <b>HOÀN TẤT!</b> Từ giờ khách chuyển khoản qua mã QR của bạn → hệ thống sẽ tự động xác nhận rằng đơn hàng đã được thanh toán
-                        thành công chỉ trong vòng 10-15 giây.
+                        <b>HOÀN TẤT!</b> Từ giờ khách chuyển khoản qua mã QR của
+                        bạn → hệ thống sẽ tự động xác nhận rằng đơn hàng đã được
+                        thanh toán thành công chỉ trong vòng 10-15 giây.
                         <br />
-                        bạn không cần phải check App ngân hàng trên điện thoại thủ công nữa!
+                        bạn không cần phải check App ngân hàng trên điện thoại
+                        thủ công nữa!
                       </div>
                     </div>
                   ),
@@ -1080,8 +1249,12 @@ const PaymentGatewaySettingsPage: React.FC = () => {
               <BankOutlined style={{ color: selectedBankTemplate?.color }} />
               <span>
                 {editingBank
-                  ? `Chỉnh sửa thông tin ngân hàng ${selectedBankTemplate?.shortName || "ngân hàng"}`
-                  : `Liên kết với ngân hàng ${selectedBankTemplate?.shortName || "ngân hàng"}`}
+                  ? `Chỉnh sửa thông tin ngân hàng ${
+                      selectedBankTemplate?.shortName || "ngân hàng"
+                    }`
+                  : `Liên kết với ngân hàng ${
+                      selectedBankTemplate?.shortName || "ngân hàng"
+                    }`}
               </span>
             </Space>
           }
@@ -1095,7 +1268,11 @@ const PaymentGatewaySettingsPage: React.FC = () => {
           width={600}
         >
           <Alert
-            message={editingBank ? "Cập nhật thông tin tài khoản" : "Nhập thông tin tài khoản ngân hàng"}
+            message={
+              editingBank
+                ? "Cập nhật thông tin tài khoản"
+                : "Nhập thông tin tài khoản ngân hàng"
+            }
             description={
               editingBank
                 ? "Cập nhật số tài khoản, tên chủ tài khoản hoặc template QR."
@@ -1111,7 +1288,11 @@ const PaymentGatewaySettingsPage: React.FC = () => {
               <Input disabled />
             </Form.Item>
 
-            <Form.Item name="bankName" label="Tên ngân hàng" rules={[{ required: true, message: "Nhập tên ngân hàng!" }]}>
+            <Form.Item
+              name="bankName"
+              label="Tên ngân hàng"
+              rules={[{ required: true, message: "Nhập tên ngân hàng!" }]}
+            >
               <Input placeholder="VD: MB Bank" prefix={<BankOutlined />} />
             </Form.Item>
 
@@ -1129,7 +1310,11 @@ const PaymentGatewaySettingsPage: React.FC = () => {
               <Input placeholder="VD: 3863666898666" />
             </Form.Item>
 
-            <Form.Item name="accountName" label="Tên chủ tài khoản" rules={[{ required: true, message: "Nhập tên chủ tài khoản!" }]}>
+            <Form.Item
+              name="accountName"
+              label="Tên chủ tài khoản"
+              rules={[{ required: true, message: "Nhập tên chủ tài khoản!" }]}
+            >
               <Input placeholder="VD: NGUYEN DUC HUY" />
             </Form.Item>
 
@@ -1155,7 +1340,12 @@ const PaymentGatewaySettingsPage: React.FC = () => {
                 >
                   Hủy
                 </Button>
-                <Button type="primary" htmlType="submit" icon={<LinkOutlined />} loading={loading}>
+                <Button
+                  type="primary"
+                  htmlType="submit"
+                  icon={<LinkOutlined />}
+                  loading={loading}
+                >
                   {editingBank ? "Cập nhật" : "Liên kết"}
                 </Button>
               </Space>
@@ -1184,11 +1374,19 @@ const PaymentGatewaySettingsPage: React.FC = () => {
         >
           <Form form={qrForm} layout="vertical">
             {/* INPUTS */}
-            <Form.Item name="amount" label="Số tiền (VND)" rules={[{ required: true, message: "Nhập số tiền!" }]}>
+            <Form.Item
+              name="amount"
+              label="Số tiền (VND)"
+              rules={[{ required: true, message: "Nhập số tiền!" }]}
+            >
               <InputNumber
                 placeholder="100000"
                 style={{ width: "100%" }}
-                formatter={(value) => (value ? value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "")}
+                formatter={(value) =>
+                  value
+                    ? value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+                    : ""
+                }
                 parser={(value) => value?.replace(/\$\s?|(,*)/g, "") || ""}
               />
             </Form.Item>
@@ -1203,18 +1401,31 @@ const PaymentGatewaySettingsPage: React.FC = () => {
                 <Divider />
 
                 {/* Ảnh QR */}
-                <Image src={qrData.qrUrl} alt="VietQR" style={{ maxWidth: "100%", borderRadius: 8 }} />
+                <Image
+                  src={qrData.qrUrl}
+                  alt="VietQR"
+                  style={{ maxWidth: "100%", borderRadius: 8 }}
+                />
 
                 <Divider />
 
                 {/* THÔNG TIN SỐ TIỀN */}
                 <Text strong style={{ fontSize: 16 }}>
-                  Số tiền: <Text type="danger">{qrData.amount?.toLocaleString()}₫</Text>
+                  Số tiền:{" "}
+                  <Text type="danger">{qrData.amount?.toLocaleString()}₫</Text>
                 </Text>
 
-                <Space direction="vertical" style={{ width: "100%", marginTop: 16 }}>
+                <Space
+                  direction="vertical"
+                  style={{ width: "100%", marginTop: 16 }}
+                >
                   {/* Nút mở QR tab mới */}
-                  <Button type="primary" block icon={<QrcodeOutlined />} onClick={() => window.open(qrData.qrUrl, "_blank")}>
+                  <Button
+                    type="primary"
+                    block
+                    icon={<QrcodeOutlined />}
+                    onClick={() => window.open(qrData.qrUrl, "_blank")}
+                  >
                     Mở ảnh QR trong tab mới
                   </Button>
 
@@ -1248,11 +1459,16 @@ const PaymentGatewaySettingsPage: React.FC = () => {
         >
           <div style={{ padding: "8px 0" }}>
             <Text>
-              Bạn có chắc muốn <b>ngắt kết nối</b> với ngân hàng <span style={{ color: "#d4380d", fontWeight: 600 }}>{bankToDelete?.bankName}</span>{" "}
+              Bạn có chắc muốn <b>ngắt kết nối</b> với ngân hàng{" "}
+              <span style={{ color: "#d4380d", fontWeight: 600 }}>
+                {bankToDelete?.bankName}
+              </span>{" "}
               không?
             </Text>
             <br />
-            <Text type="secondary">Khách hàng sẽ không thể thanh toán qua QR của ngân hàng này nữa.</Text>
+            <Text type="secondary">
+              Khách hàng sẽ không thể thanh toán qua QR của ngân hàng này nữa.
+            </Text>
           </div>
           <Divider />
           <div style={{ textAlign: "right" }}>
@@ -1265,7 +1481,12 @@ const PaymentGatewaySettingsPage: React.FC = () => {
               >
                 Hủy
               </Button>
-              <Button danger type="primary" loading={loading} onClick={confirmDeleteBank}>
+              <Button
+                danger
+                type="primary"
+                loading={loading}
+                onClick={confirmDeleteBank}
+              >
                 Ngắt kết nối
               </Button>
             </Space>
@@ -1273,7 +1494,13 @@ const PaymentGatewaySettingsPage: React.FC = () => {
         </Modal>
 
         {/* ========== Modal hỏi tắt kích hoạt PayOS xác nhận tự động  ===========*/}
-        <Modal title="Tắt PayOS?" open={disablePayOSModal} centered onCancel={() => setDisablePayOSModal(false)} footer={null}>
+        <Modal
+          title="Tắt PayOS?"
+          open={disablePayOSModal}
+          centered
+          onCancel={() => setDisablePayOSModal(false)}
+          footer={null}
+        >
           <p>Đơn hàng sẽ không tự động xác nhận nữa. Bạn có chắc không?</p>
           <Divider />
           <div style={{ textAlign: "right" }}>
@@ -1283,7 +1510,11 @@ const PaymentGatewaySettingsPage: React.FC = () => {
                 type="primary"
                 danger
                 onClick={async () => {
-                  await axios.put(`${API_BASE}/${storeId}/webhook`, {}, { headers }); // body có thể rỗng
+                  await axios.put(
+                    `${API_BASE}/${storeId}/webhook`,
+                    {},
+                    { headers }
+                  ); // body có thể rỗng
                   Swal.fire({
                     icon: "success",
                     title: "Đã tắt PayOS",

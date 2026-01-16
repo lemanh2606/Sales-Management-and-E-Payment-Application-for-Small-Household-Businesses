@@ -9,7 +9,7 @@ export default function NotFound() {
   const currentStore = JSON.parse(localStorage.getItem("currentStore") || "{}");
   const navigate = useNavigate();
 
-  const storeId = currentStore?._id; // ✅ Lấy ID của store từ localStorage
+  const storeId = currentStore?._id; //  Lấy ID của store từ localStorage
 
   return (
     <Layout>
@@ -30,17 +30,24 @@ export default function NotFound() {
             </motion.div>
           </div>
 
-          <h1 className="text-6xl md:text-7xl font-extrabold text-gray-900 mb-2">404</h1>
-          <h2 className="text-2xl md:text-3xl font-semibold mb-4">Trang chưa được tạo</h2>
+          <h1 className="text-6xl md:text-7xl font-extrabold text-gray-900 mb-2">
+            404
+          </h1>
+          <h2 className="text-2xl md:text-3xl font-semibold mb-4">
+            Trang chưa được tạo
+          </h2>
           <p className="text-gray-600 mb-8 leading-relaxed px-4">
-            Có vẻ bạn đang đi lạc — trang này hiện chưa được phát triển hoặc không tồn tại.
-            Nếu bạn nghĩ đây là sai sót, liên hệ admin hoặc quay về trang chính.
+            Có vẻ bạn đang đi lạc — trang này hiện chưa được phát triển hoặc
+            không tồn tại. Nếu bạn nghĩ đây là sai sót, liên hệ admin hoặc quay
+            về trang chính.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
             <button
               onClick={() =>
-                storeId ? navigate(`/dashboard/${storeId}`) : navigate("/dashboard")
+                storeId
+                  ? navigate(`/dashboard/${storeId}`)
+                  : navigate("/dashboard")
               }
               className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-6 py-3 rounded-xl shadow-md transition-all"
             >

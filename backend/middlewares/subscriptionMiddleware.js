@@ -7,14 +7,18 @@ const User = require("../models/User");
  * Check từ Subscription model thay vì User model
  * Auto-create trial nếu không có subscription (chỉ cho MANAGER)
  * STAFF kế thừa subscription từ Manager của store
- * 
+ *
  * Whitelist: Manager được truy cập activity log và profile khi expired
  */
 const checkSubscriptionExpiry = async (req, res, next) => {
   const user = req.user;
-  
-  console.log(` [checkSubscriptionExpiry] ${req.method} ${req.originalUrl} | user: ${user?.role || 'NO_USER'} ${user?._id || ''}`);
-  
+
+  console.log(
+    ` [checkSubscriptionExpiry] ${req.method} ${req.originalUrl} | user: ${
+      user?.role || "NO_USER"
+    } ${user?._id || ""}`
+  );
+
   if (!user) {
     return res.status(401).json({ message: "Chưa đăng nhập" });
   }
@@ -40,7 +44,9 @@ const checkSubscriptionExpiry = async (req, res, next) => {
   ];
 
   const startsWithAny = (paths = []) =>
-    paths.some((path) => req.path.startsWith(path) || req.originalUrl.startsWith(path));
+    paths.some(
+      (path) => req.path.startsWith(path) || req.originalUrl.startsWith(path)
+    );
 
   const isAlwaysAllowed = startsWithAny(alwaysAllowedPaths);
   const isReadOnlyStoreRequest =
@@ -52,8 +58,10 @@ const checkSubscriptionExpiry = async (req, res, next) => {
     req.params?.storeId;
 
   // Whitelist: MANAGER & STAFF ĐƯỢC TRUY CẬP (Read-only) khi subscription expired
-  if ((user.role === "MANAGER" || user.role === "STAFF") &&
-      (isAlwaysAllowed || isReadOnlyStoreRequest || isStoreDetailsRequest)) {
+  if (
+    (user.role === "MANAGER" || user.role === "STAFF") &&
+    (isAlwaysAllowed || isReadOnlyStoreRequest || isStoreDetailsRequest)
+  ) {
     return next();
   }
 
@@ -64,17 +72,22 @@ const checkSubscriptionExpiry = async (req, res, next) => {
     // STAFF kế thừa subscription từ Manager của store
     if (user.role === "STAFF") {
       // Tìm storeId từ nhiều nguồn (giống checkStoreAccess)
-      const storeId = req.query.storeId || req.query.shopId || req.params.storeId || req.body?.storeId || user.current_store;
-      
+      const storeId =
+        req.query.storeId ||
+        req.query.shopId ||
+        req.params.storeId ||
+        req.body?.storeId ||
+        user.current_store;
+
       const Store = require("../models/Store");
       const store = await Store.findById(storeId);
-      
+
       if (!store) {
         // Nếu không xác định được store, nhưng route yêu cầu check sub => block
         // Tuy nhiên nếu là GET request cơ bản thì đã pass ở whitelist trên
-        return res.status(403).json({ 
+        return res.status(403).json({
           message: "Không xác định được cửa hàng để kiểm tra gói dịch vụ",
-          subscription_required: true
+          subscription_required: true,
         });
       }
 
@@ -84,7 +97,8 @@ const checkSubscriptionExpiry = async (req, res, next) => {
 
       if (!subscription || subscription.isExpired()) {
         return res.status(403).json({
-          message: "Chủ cửa hàng đã hết hạn gói đăng ký. Vui lòng liên hệ quản lý để gia hạn.",
+          message:
+            "Chủ cửa hàng đã hết hạn gói đăng ký. Vui lòng liên hệ quản lý để gia hạn.",
           subscription_status: "EXPIRED",
           is_staff: true,
           manager_expired: true,
@@ -98,51 +112,82 @@ const checkSubscriptionExpiry = async (req, res, next) => {
 
     // MANAGER - Tìm subscription của chính mình
     subscription = await Subscription.findActiveByUser(user._id);
-    console.log(" findActiveByUser result for", user._id, ":", subscription ? `Found ${subscription.status}` : "Not found");
+    console.log(
+      " findActiveByUser result for",
+      user._id,
+      ":",
+      subscription ? `Found ${subscription.status}` : "Not found"
+    );
 
     // Auto-create trial CHỈ nếu CHƯA TỪNG có subscription (chỉ cho MANAGER)
     if (!subscription) {
       if (user.role !== "MANAGER") {
-        return res.status(403).json({ 
+        return res.status(403).json({
           message: "Chỉ MANAGER mới có subscription",
-          subscription_required: true
+          subscription_required: true,
         });
       }
-      
+
       // Kiểm tra xem có subscription cũ (EXPIRED/CANCELLED) không
       const anySubscription = await Subscription.findOne({ user_id: user._id });
-      console.log(" anySubscription result:", anySubscription ? `Found ${anySubscription.status}` : "Not found (creating trial)");
-      
+      console.log(
+        " anySubscription result:",
+        anySubscription
+          ? `Found ${anySubscription.status}`
+          : "Not found (creating trial)"
+      );
+
       if (!anySubscription) {
         // Chưa từng có → Tạo trial mới
         console.log("🎁 Auto-creating trial for MANAGER:", user._id);
         subscription = await Subscription.createTrial(user._id);
-        console.log("✅ Trial created:", subscription._id, "trial_ends_at:", subscription.trial_ends_at);
+        console.log(
+          " Trial created:",
+          subscription._id,
+          "trial_ends_at:",
+          subscription.trial_ends_at
+        );
       } else {
         // Đã từng có → Dùng subscription cũ
         subscription = anySubscription;
-        console.log(" Using existing subscription:", subscription._id, subscription.status);
+        console.log(
+          " Using existing subscription:",
+          subscription._id,
+          subscription.status
+        );
       }
     }
 
     const now = new Date();
-    console.log(" Subscription status:", subscription.status, "| trial_ends_at:", subscription.trial_ends_at, "| now:", now);
+    console.log(
+      " Subscription status:",
+      subscription.status,
+      "| trial_ends_at:",
+      subscription.trial_ends_at,
+      "| now:",
+      now
+    );
 
     // Case 1: TRIAL
     if (subscription.status === "TRIAL") {
       const isActive = subscription.is_trial_active;
-      console.log(" TRIAL check - is_trial_active:", isActive, "| trial_ends_at:", subscription.trial_ends_at);
-      
+      console.log(
+        " TRIAL check - is_trial_active:",
+        isActive,
+        "| trial_ends_at:",
+        subscription.trial_ends_at
+      );
+
       if (isActive) {
         // Trial còn hạn → OK
-        console.log("✅ TRIAL active, allowing access");
+        console.log(" TRIAL active, allowing access");
         return next();
       } else {
         // Trial hết hạn
         console.log(" TRIAL expired, blocking access");
         subscription.status = "EXPIRED";
         await subscription.save();
-        
+
         return res.status(403).json({
           message: "Bản dùng thử đã hết hạn. Vui lòng nâng cấp lên Premium.",
           subscription_status: "EXPIRED",
@@ -161,10 +206,10 @@ const checkSubscriptionExpiry = async (req, res, next) => {
         // Premium hết hạn
         subscription.status = "EXPIRED";
         await subscription.save();
-        
+
         // Update user is_premium flag - sử dụng findByIdAndUpdate vì user là lean object
         await User.findByIdAndUpdate(user._id, { is_premium: false });
-        
+
         return res.status(403).json({
           message: "Gói Premium đã hết hạn. Vui lòng gia hạn.",
           subscription_status: "EXPIRED",
@@ -180,10 +225,11 @@ const checkSubscriptionExpiry = async (req, res, next) => {
       subscription_status: subscription.status,
       upgrade_required: true,
     });
-    
   } catch (error) {
     console.error("Error in checkSubscriptionExpiry:", error);
-    return res.status(500).json({ message: "Lỗi server khi kiểm tra subscription" });
+    return res
+      .status(500)
+      .json({ message: "Lỗi server khi kiểm tra subscription" });
   }
 };
 
@@ -210,9 +256,9 @@ const checkPremiumOnly = async (req, res, next) => {
     if (user.role === "STAFF") {
       const Store = require("../models/Store");
       const store = await Store.findById(user.current_store);
-      
+
       if (!store) {
-        return res.status(403).json({ 
+        return res.status(403).json({
           message: "Không tìm thấy cửa hàng",
         });
       }
@@ -223,14 +269,19 @@ const checkPremiumOnly = async (req, res, next) => {
       subscription = await Subscription.findActiveByUser(user._id);
     }
 
-    if (subscription && subscription.status === "ACTIVE" && subscription.is_premium_active) {
+    if (
+      subscription &&
+      subscription.status === "ACTIVE" &&
+      subscription.is_premium_active
+    ) {
       return next();
     }
 
     return res.status(403).json({
-      message: user.role === "STAFF" 
-        ? "Chủ cửa hàng cần nâng cấp Premium để sử dụng tính năng này"
-        : "Tính năng này chỉ dành cho Premium",
+      message:
+        user.role === "STAFF"
+          ? "Chủ cửa hàng cần nâng cấp Premium để sử dụng tính năng này"
+          : "Tính năng này chỉ dành cho Premium",
       is_premium: false,
       subscription_status: subscription?.status || "NONE",
       upgrade_url: "/settings/subscription/pricing",
@@ -248,7 +299,7 @@ const checkPremiumOnly = async (req, res, next) => {
  */
 const attachSubscriptionInfo = async (req, res, next) => {
   const user = req.user;
-  
+
   if (!user) {
     return next();
   }
@@ -261,8 +312,13 @@ const attachSubscriptionInfo = async (req, res, next) => {
     if (user.role === "STAFF") {
       const Store = require("../models/Store");
       // Ưu tiên store đang active trong session/token
-      const storeId = req.query.storeId || req.query.shopId || req.params.storeId || req.body?.storeId || user.current_store;
-      
+      const storeId =
+        req.query.storeId ||
+        req.query.shopId ||
+        req.params.storeId ||
+        req.body?.storeId ||
+        user.current_store;
+
       if (storeId) {
         const store = await Store.findById(storeId);
         if (store) {
@@ -276,8 +332,11 @@ const attachSubscriptionInfo = async (req, res, next) => {
     // Attach subscription info
     req.subscription_info = {
       status: subscription?.status || "NONE",
-      is_premium: user.is_premium || (subscription?.status === "ACTIVE" && subscription?.is_premium_active),
-      is_trial: subscription?.status === "TRIAL" && subscription?.is_trial_active,
+      is_premium:
+        user.is_premium ||
+        (subscription?.status === "ACTIVE" && subscription?.is_premium_active),
+      is_trial:
+        subscription?.status === "TRIAL" && subscription?.is_trial_active,
     };
 
     // Add days remaining

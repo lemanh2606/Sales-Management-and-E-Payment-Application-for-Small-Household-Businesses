@@ -24,7 +24,7 @@ async function updateManagerPermissions() {
       useUnifiedTopology: true,
     });
 
-    console.log("✅ Đã kết nối MongoDB Atlas");
+    console.log(" Đã kết nối MongoDB Atlas");
 
     // Lấy danh sách tất cả MANAGER
     const managers = await User.find({ role: "MANAGER" });
@@ -34,12 +34,14 @@ async function updateManagerPermissions() {
       const currentMenu = user.menu || [];
 
       // Gộp menu cũ + mới, loại trùng
-      const updatedMenu = Array.from(new Set([...currentMenu, ...NEW_REPORT_PERMISSIONS]));
+      const updatedMenu = Array.from(
+        new Set([...currentMenu, ...NEW_REPORT_PERMISSIONS])
+      );
 
       if (updatedMenu.length !== currentMenu.length) {
         user.menu = updatedMenu;
         await user.save();
-        console.log(`✅ Cập nhật quyền mới cho: ${user.username}`);
+        console.log(` Cập nhật quyền mới cho: ${user.username}`);
       } else {
         console.log(`ℹ️ ${user.username} đã có đủ quyền, bỏ qua`);
       }

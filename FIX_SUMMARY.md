@@ -20,7 +20,7 @@
 
 ---
 
-## ✅ CÁC FIX ĐÃ THỰC HIỆN
+##  CÁC FIX ĐÃ THỰC HIỆN
 
 ### 📝 1. Backend: `financialController.js` - Xử lý Manager bán hàng
 
@@ -52,12 +52,12 @@ const byEmployee = await Order.aggregate([
 ```
 
 ```javascript
-// ✅ MỚI: Lấy cả Manager + STAFF, gán tên "Quản lý cửa hàng" cho Manager
+//  MỚI: Lấy cả Manager + STAFF, gán tên "Quản lý cửa hàng" cho Manager
 const byEmployee = await Order.aggregate([
   {
     $match: {
       storeId: new mongoose.Types.ObjectId(storeId),
-      // ✅ Bỏ điều kiện employeeId != null
+      //  Bỏ điều kiện employeeId != null
       createdAt: { $gte: start, $lte: end },
       status: { $in: ["paid", "partially_refunded"] },
     },
@@ -78,14 +78,14 @@ const byEmployee = await Order.aggregate([
     },
   },
   {
-    // ✅ FIX: Nếu không có employee (employeeId = null) → gán "Quản lý cửa hàng"
+    //  FIX: Nếu không có employee (employeeId = null) → gán "Quản lý cửa hàng"
     $project: {
       _id: "$_id",
       name: {
         $cond: [
           { $eq: [{ $size: "$employee" }, 0] },
-          "Quản lý cửa hàng", // ✅ Manager bán hàng
-          { $arrayElemAt: ["$employee.fullName", 0] }, // ✅ STAFF bán hàng
+          "Quản lý cửa hàng", //  Manager bán hàng
+          { $arrayElemAt: ["$employee.fullName", 0] }, //  STAFF bán hàng
         ],
       },
       revenue: 1,
@@ -98,7 +98,7 @@ const byEmployee = await Order.aggregate([
 
 #### Fix 1b: Dòng ~530 - `refundsByEmployee` aggregation
 ```javascript
-// ✅ MỚI: Thêm lookup orders để filter theo storeId, xử lý Manager + STAFF
+//  MỚI: Thêm lookup orders để filter theo storeId, xử lý Manager + STAFF
 const refundsByEmployee = await OrderRefund.aggregate([
   { $match: { refundedAt: { $gte: start, $lte: end } } },
   {
@@ -155,9 +155,9 @@ if (fullname && changedFields.includes("fullname")) {
   employeeChanged = true;
 }
 
-// ✅ MỚI: Dùng fullName (đúng field name)
+//  MỚI: Dùng fullName (đúng field name)
 if (fullname && changedFields.includes("fullname")) {
-  employee.fullName = fullname.trim(); // ✅ FIX: fullName (camelCase đúng)
+  employee.fullName = fullname.trim(); //  FIX: fullName (camelCase đúng)
   employeeChanged = true;
 }
 ```
@@ -201,26 +201,26 @@ if (loggedInUser.role === "STAFF") {
 ```
 
 ```javascript
-// ✅ MỚI: Gọi API để lấy Employee ID chính xác
+//  MỚI: Gọi API để lấy Employee ID chính xác
 if (loggedInUser.role === "STAFF") {
   try {
-    // ✅ Gọi API để lấy Employee record của STAFF này
+    //  Gọi API để lấy Employee record của STAFF này
     const res = await axios.get(`${API_BASE}/stores/${storeId}/employees?deleted=false`, { headers });
     const employeesList: Employee[] = res.data.employees || [];
 
-    // ✅ Tìm employee có user_id trùng với user đang login
+    //  Tìm employee có user_id trùng với user đang login
     const currentStaffEmployee = employeesList.find((e) => e.user_id?._id === loggedInUser.id);
 
     if (currentStaffEmployee) {
-      // ✅ Tìm thấy → lưu Employee record với ID chính xác
+      //  Tìm thấy → lưu Employee record với ID chính xác
       setCurrentUserEmployee(currentStaffEmployee);
       setEmployees([currentStaffEmployee]);
 
-      // ✅ Gửi Employee._id (không phải User.id)
+      //  Gửi Employee._id (không phải User.id)
       setOrders((prev) =>
         prev.map((tab) => ({
           ...tab,
-          employeeId: currentStaffEmployee._id, // ✅ FIX: Employee._id đúng!
+          employeeId: currentStaffEmployee._id, //  FIX: Employee._id đúng!
         }))
       );
     } else {
@@ -245,16 +245,16 @@ if (loggedInUser.role === "STAFF") {
 
 ## 🎯 KẾT QUẢ SAU FIX
 
-### ✅ MANAGER bán hàng
+###  MANAGER bán hàng
 - Order được tạo với `employeeId = null`
 - Báo cáo cuối ngày sẽ hiển thị "Quản lý cửa hàng" với doanh thu + số đơn
 
-### ✅ STAFF bán hàng
+###  STAFF bán hàng
 - Order được tạo với `employeeId = Employee._id` (đúng ID)
 - Báo cáo cuối ngày hiển thị tên STAFF (fullName từ Employees collection)
 - Khi STAFF cập nhật tên → cập nhật cả Users + Employees → báo cáo hiển thị tên mới ngay
 
-### ✅ Hoàn hàng
+###  Hoàn hàng
 - Manager hoàn hàng: hiển thị "Quản lý cửa hàng"
 - STAFF hoàn hàng: hiển thị tên STAFF (fullName)
 
@@ -278,14 +278,14 @@ if (loggedInUser.role === "STAFF") {
 1. STAFF vào Profile → Đổi tên (vd: "Nguyen Duc Huy Staff" → "NguYen Huy")
 2. Lưu thay đổi
 3. Vào MongoDB → Check:
-   - Users collection → fullname = "NguYen Huy" ✅
-   - Employees collection → fullName = "NguYen Huy" ✅
-4. Vào Báo cáo cuối ngày → Tên đã cập nhật ✅
+   - Users collection → fullname = "NguYen Huy"
+   - Employees collection → fullName = "NguYen Huy"
+4. Vào Báo cáo cuối ngày → Tên đã cập nhật
 
 ### Test Case 4: STAFF hoàn hàng
 1. STAFF vào POS → Tạo đơn, in hoá đơn (paid)
 2. Quay lại, chọn đơn → Hoàn hàng
-3. Vào Báo cáo cuối ngày → Bảng "Hoàn hàng" → Phải hiển thị tên STAFF ✅
+3. Vào Báo cáo cuối ngày → Bảng "Hoàn hàng" → Phải hiển thị tên STAFF
 
 ---
 
@@ -305,8 +305,8 @@ if (loggedInUser.role === "STAFF") {
 **Vấn đề chính**: Hệ thống lấy nhầm User ID thay vì Employee ID, và không xử lý case Manager bán hàng
 
 **Fix**:
-1. ✅ Backend: Xử lý `employeeId = null` (Manager) trong aggregation → hiển thị "Quản lý cửa hàng"
-2. ✅ Backend: Fix `fullName` field khi sync STAFF profile
-3. ✅ Frontend: Gọi API để lấy `Employee._id` chính xác cho STAFF thay vì dùng `User.id`
+1.  Backend: Xử lý `employeeId = null` (Manager) trong aggregation → hiển thị "Quản lý cửa hàng"
+2.  Backend: Fix `fullName` field khi sync STAFF profile
+3.  Frontend: Gọi API để lấy `Employee._id` chính xác cho STAFF thay vì dùng `User.id`
 
 **Kết quả**: Cả Manager và STAFF đều hiển thị đúng trong báo cáo cuối ngày ✨ -->

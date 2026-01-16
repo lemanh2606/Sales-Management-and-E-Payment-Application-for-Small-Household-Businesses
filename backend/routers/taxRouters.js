@@ -1,4 +1,4 @@
-// routes/taxRoutes.js - ✅ BẢN ĐÃ XÓA 404 HANDLER
+// routes/taxRoutes.js -  BẢN ĐÃ XÓA 404 HANDLER
 const express = require("express");
 const router = express.Router();
 const mongoose = require("mongoose");
@@ -74,7 +74,7 @@ const taxStoreAccess = async (req, res, next) => {
         );
         if (doc?.shopId) {
           storeId = doc.shopId.toString();
-          console.log(`   ✅ Found storeId from declaration: ${storeId}`);
+          console.log(`    Found storeId from declaration: ${storeId}`);
         } else {
           console.log(`   ⚠️ Declaration not found or no shopId`);
         }
@@ -95,7 +95,7 @@ const taxStoreAccess = async (req, res, next) => {
       });
     }
 
-    console.log(`   ✅ storeId resolved: ${storeId}`);
+    console.log(`    storeId resolved: ${storeId}`);
     req.storeId = storeId;
     req.currentStoreId = storeId;
     next();
@@ -122,7 +122,7 @@ const validateObjectId = (req, res, next) => {
 };
 
 // ==================== ROUTES ====================
-// ✅ QUAN TRỌNG: Đặt routes theo thứ tự chính xác
+//  QUAN TRỌNG: Đặt routes theo thứ tự chính xác
 
 // 1. Routes cụ thể không có :id
 router.get(

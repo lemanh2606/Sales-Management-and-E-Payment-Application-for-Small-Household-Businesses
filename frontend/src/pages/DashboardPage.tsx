@@ -2,8 +2,32 @@
 import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import Layout from "../components/Layout";
-import { Table, Space, Card, Typography, Progress, Collapse, Dropdown, Tooltip, Button, Spin, Alert, Input, Menu, Badge, Popover, Tag } from "antd";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
+import {
+  Table,
+  Space,
+  Card,
+  Typography,
+  Progress,
+  Collapse,
+  Dropdown,
+  Tooltip,
+  Button,
+  Spin,
+  Alert,
+  Input,
+  Menu,
+  Badge,
+  Popover,
+  Tag,
+} from "antd";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  ResponsiveContainer,
+} from "recharts";
 import { Tooltip as RechartsTooltip } from "recharts";
 import {
   EllipsisOutlined,
@@ -119,7 +143,9 @@ export default function DashboardPage() {
   const [loadingTopProducts, setLoadingTopProducts] = useState(false);
   const [errorTopProducts, setErrorTopProducts] = useState<string | null>(null);
 
-  const [revenueSummary, setRevenueSummary] = useState<RevenueSummary | null>(null);
+  const [revenueSummary, setRevenueSummary] = useState<RevenueSummary | null>(
+    null
+  );
   const [loadingRevenue, setLoadingRevenue] = useState(false);
   const [errorRevenue, setErrorRevenue] = useState<string | null>(null);
 
@@ -135,21 +161,24 @@ export default function DashboardPage() {
       {
         key: "setup-store",
         title: "Thiết lập cửa hàng",
-        description: "Cập nhật thông tin cửa hàng để giúp khách hàng và hệ thống SmartRetail liên hệ nhanh chóng hơn.",
+        description:
+          "Cập nhật thông tin cửa hàng để giúp khách hàng và hệ thống SmartRetail liên hệ nhanh chóng hơn.",
         completed: false,
         actions: [{ label: "Thiết lập cửa hàng", link: "/update/store" }],
       },
       {
         key: "add-product",
         title: "Thêm sản phẩm đầu tiên",
-        description: "Bạn kinh doanh sản phẩm gì? Hãy tạo nhóm sản phẩm, sau đó thêm sản phẩm đầu tiên để bắt đầu quản lý.",
+        description:
+          "Bạn kinh doanh sản phẩm gì? Hãy tạo nhóm sản phẩm, sau đó thêm sản phẩm đầu tiên để bắt đầu quản lý.",
         completed: false,
         actions: [{ label: "Tạo nhóm hàng hoá", link: "/product-groups" }],
       },
       {
         key: "connect-channel",
         title: "Kết nối kênh bán hàng",
-        description: "Kênh POS - Bán tại cửa hàng. Bán và vận hành cửa hàng chuyên nghiệp.",
+        description:
+          "Kênh POS - Bán tại cửa hàng. Bán và vận hành cửa hàng chuyên nghiệp.",
         completed: false,
         actions: [
           {
@@ -162,7 +191,8 @@ export default function DashboardPage() {
       {
         key: "manage-orders",
         title: "Quản lý đơn hàng tập trung",
-        description: "Các đơn hàng trên nhiều kênh bán khác nhau sẽ được quản lý tại một nơi duy nhất.",
+        description:
+          "Các đơn hàng trên nhiều kênh bán khác nhau sẽ được quản lý tại một nơi duy nhất.",
         completed: false,
         actions: [{ label: "Danh sách đơn hàng", link: "/orders/list" }],
       },
@@ -174,9 +204,12 @@ export default function DashboardPage() {
       if (!storeId) return;
       try {
         const token = localStorage.getItem("token");
-        const res = await axios.get(`${apiUrl}/notifications?storeId=${storeId}&read=false&limit=1`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await axios.get(
+          `${apiUrl}/notifications?storeId=${storeId}&read=false&limit=1`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
         setUnreadCount(res.data.meta.total || 0);
       } catch (err) {
         console.error("Lỗi tải số thông báo chưa đọc:", err);
@@ -197,7 +230,10 @@ export default function DashboardPage() {
     });
 
     return () => {
-      window.removeEventListener("notifications:updated", handleNotificationUpdate);
+      window.removeEventListener(
+        "notifications:updated",
+        handleNotificationUpdate
+      );
       socket.off("payment_success");
     };
   }, [storeId]);
@@ -223,7 +259,9 @@ export default function DashboardPage() {
       setTopProducts(res.data.data || []);
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {
-        setErrorTopProducts(err.response?.data?.message || "Lỗi tải top sản phẩm");
+        setErrorTopProducts(
+          err.response?.data?.message || "Lỗi tải top sản phẩm"
+        );
       } else {
         setErrorTopProducts("Lỗi tải top sản phẩm");
       }
@@ -255,17 +293,22 @@ export default function DashboardPage() {
 
       const data = res.data.revenue || {};
 
-      const totalRevenue = typeof data.totalRevenue === "object" ? Number(data.totalRevenue.$numberDecimal || 0) : data.totalRevenue;
+      const totalRevenue =
+        typeof data.totalRevenue === "object"
+          ? Number(data.totalRevenue.$numberDecimal || 0)
+          : data.totalRevenue;
       const countOrders = data.countOrders || 0;
-      const completedOrders = data.completedOrders || 0; // ✅ THÊM KHAI BÁO
-      const partialRefundOrders = data.partialRefundOrders || 0; // ✅ THÊM KHAI BÁO
-      const dailyRevenue = Array.isArray(data.dailyRevenue) ? data.dailyRevenue : []; // ✅ THÊM KHAI BÁO
+      const completedOrders = data.completedOrders || 0; //  THÊM KHAI BÁO
+      const partialRefundOrders = data.partialRefundOrders || 0; //  THÊM KHAI BÁO
+      const dailyRevenue = Array.isArray(data.dailyRevenue)
+        ? data.dailyRevenue
+        : []; //  THÊM KHAI BÁO
 
       setRevenueSummary({
         totalRevenue,
         countOrders,
-        completedOrders, // ✅ THÊM VÀO ĐỂ HIỆN
-        partialRefundOrders, // ✅ THÊM VÀO ĐỂ HIỆN
+        completedOrders, //  THÊM VÀO ĐỂ HIỆN
+        partialRefundOrders, //  THÊM VÀO ĐỂ HIỆN
         dailyRevenue,
       });
     } catch (err: unknown) {
@@ -307,7 +350,15 @@ export default function DashboardPage() {
         headers: { Authorization: `Bearer ${token}` },
       })
       .then((res) => {
-        const { total, pending, refunded, paid, totalSoldItems, totalRefundedItems, netSoldItems } = res.data;
+        const {
+          total,
+          pending,
+          refunded,
+          paid,
+          totalSoldItems,
+          totalRefundedItems,
+          netSoldItems,
+        } = res.data;
         setOrderStats({
           total,
           pending,
@@ -349,7 +400,9 @@ export default function DashboardPage() {
         setFinancials(res.data.data);
       } catch (err: unknown) {
         if (axios.isAxiosError(err)) {
-          setErrorFinancials(err.response?.data?.message || "Lỗi tải báo cáo tài chính");
+          setErrorFinancials(
+            err.response?.data?.message || "Lỗi tải báo cáo tài chính"
+          );
         } else {
           setErrorFinancials("Lỗi tải báo cáo tài chính");
         }
@@ -367,9 +420,12 @@ export default function DashboardPage() {
       setLoadingExpiring(true);
       try {
         const token = localStorage.getItem("token");
-        const res = await axios.get(`${apiUrl}/products/expiring?storeId=${storeId}&days=30`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await axios.get(
+          `${apiUrl}/products/expiring?storeId=${storeId}&days=30`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
         setExpiringProducts(res.data.data || []);
       } catch (err) {
         console.error("Lỗi tải sản phẩm sắp hết hạn:", err);
@@ -380,7 +436,10 @@ export default function DashboardPage() {
     fetchExpiring();
   }, [storeId]);
 
-  const avgOrderValue = orderStats.paid > 0 && financials ? financials.totalRevenue / orderStats.paid : 0;
+  const avgOrderValue =
+    orderStats.paid > 0 && financials
+      ? financials.totalRevenue / orderStats.paid
+      : 0;
 
   const items = [
     {
@@ -421,7 +480,8 @@ export default function DashboardPage() {
       align: "right",
       render: (v: TopProduct["totalSales"]) => {
         if (!v) return "₫0";
-        const num = typeof v === "object" ? v.$numberDecimal || v.toString() : v;
+        const num =
+          typeof v === "object" ? v.$numberDecimal || v.toString() : v;
         return new Intl.NumberFormat("vi-VN", {
           style: "currency",
           currency: "VND",
@@ -459,7 +519,10 @@ export default function DashboardPage() {
                   key: "help",
                   icon: <QuestionCircleOutlined />,
                   label: (
-                    <Link to="/help" style={{ color: "inherit", textDecoration: "none" }}>
+                    <Link
+                      to="/help"
+                      style={{ color: "inherit", textDecoration: "none" }}
+                    >
                       Trung tâm trợ giúp
                     </Link>
                   ),
@@ -468,7 +531,10 @@ export default function DashboardPage() {
                   key: "devices",
                   icon: <LaptopOutlined />,
                   label: (
-                    <Link to="/devices" style={{ color: "inherit", textDecoration: "none" }}>
+                    <Link
+                      to="/devices"
+                      style={{ color: "inherit", textDecoration: "none" }}
+                    >
                       Thiết bị bán hàng
                     </Link>
                   ),
@@ -477,7 +543,10 @@ export default function DashboardPage() {
                   key: "feedback",
                   icon: <MessageOutlined />,
                   label: (
-                    <Link to="/feedback" style={{ color: "inherit", textDecoration: "none" }}>
+                    <Link
+                      to="/feedback"
+                      style={{ color: "inherit", textDecoration: "none" }}
+                    >
                       Đóng góp ý kiến
                     </Link>
                   ),
@@ -487,9 +556,13 @@ export default function DashboardPage() {
                   icon: <BulbOutlined />,
                   label: (
                     <>
-                      Dành cho khách hàng mới: cùng SmartRetail làm quen phần mềm qua các bước đơn giản
+                      Dành cho khách hàng mới: cùng SmartRetail làm quen phần
+                      mềm qua các bước đơn giản
                       <div style={{ marginTop: 8 }}>
-                        <Link to="/product-groups" style={{ fontSize: 14, color: "#1890ff" }}>
+                        <Link
+                          to="/product-groups"
+                          style={{ fontSize: 14, color: "#1890ff" }}
+                        >
                           Tạo nhóm hàng hoá
                         </Link>
                       </div>
@@ -515,8 +588,16 @@ export default function DashboardPage() {
                         gap: 8,
                       }}
                     >
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <PhoneOutlined style={{ color: "#52c41a", fontSize: 16 }} />
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                        }}
+                      >
+                        <PhoneOutlined
+                          style={{ color: "#52c41a", fontSize: 16 }}
+                        />
                         <span style={{ fontWeight: 500 }}>1900 8386</span>
                       </div>
                       <Link
@@ -528,7 +609,8 @@ export default function DashboardPage() {
                           transition: "all 0.2s",
                         }}
                       >
-                        <CustomerServiceOutlined style={{ marginRight: 4 }} /> Gửi hỗ trợ
+                        <CustomerServiceOutlined style={{ marginRight: 4 }} />{" "}
+                        Gửi hỗ trợ
                       </Link>
                     </div>
                   ),
@@ -539,14 +621,23 @@ export default function DashboardPage() {
             trigger={["click"]}
             placement="bottomRight"
           >
-            <QuestionCircleOutlined style={{ fontSize: 20, color: "#8c8c8c", cursor: "pointer" }} />
+            <QuestionCircleOutlined
+              style={{ fontSize: 20, color: "#8c8c8c", cursor: "pointer" }}
+            />
           </Dropdown>
 
           {/* Icon chuông - Dropdown riêng */}
           <Badge count={unreadCount} overflowCount={99}>
-            <BellOutlined style={{ fontSize: 20, color: "#474646", cursor: "pointer" }} onClick={() => setPanelVisible(true)} />
+            <BellOutlined
+              style={{ fontSize: 20, color: "#474646", cursor: "pointer" }}
+              onClick={() => setPanelVisible(true)}
+            />
           </Badge>
-          <NotificationPanel storeId={storeId} visible={panelVisible} onClose={() => setPanelVisible(false)} />
+          <NotificationPanel
+            storeId={storeId}
+            visible={panelVisible}
+            onClose={() => setPanelVisible(false)}
+          />
 
           {/* Phần avata và dropdown - RESPONSIVE */}
           <Dropdown
@@ -558,7 +649,10 @@ export default function DashboardPage() {
                   key: "profile",
                   icon: <UserOutlined />,
                   label: (
-                    <Link to="/settings/profile" style={{ color: "inherit", textDecoration: "none" }}>
+                    <Link
+                      to="/settings/profile"
+                      style={{ color: "inherit", textDecoration: "none" }}
+                    >
                       Tài khoản của bạn
                     </Link>
                   ),
@@ -567,7 +661,10 @@ export default function DashboardPage() {
                   key: "package",
                   icon: <CreditCardOutlined />,
                   label: (
-                    <Link to="/settings/subscription" style={{ color: "inherit", textDecoration: "none" }}>
+                    <Link
+                      to="/settings/subscription"
+                      style={{ color: "inherit", textDecoration: "none" }}
+                    >
                       Thông tin gói dịch vụ
                     </Link>
                   ),
@@ -579,7 +676,10 @@ export default function DashboardPage() {
                   key: "terms",
                   icon: <FileTextOutlined />,
                   label: (
-                    <Link to="/terms" style={{ color: "inherit", textDecoration: "none" }}>
+                    <Link
+                      to="/terms"
+                      style={{ color: "inherit", textDecoration: "none" }}
+                    >
                       Điều khoản dịch vụ
                     </Link>
                   ),
@@ -588,7 +688,10 @@ export default function DashboardPage() {
                   key: "privacy",
                   icon: <LockOutlined />,
                   label: (
-                    <Link to="/privacy" style={{ color: "inherit", textDecoration: "none" }}>
+                    <Link
+                      to="/privacy"
+                      style={{ color: "inherit", textDecoration: "none" }}
+                    >
                       Chính sách bảo mật
                     </Link>
                   ),
@@ -608,16 +711,24 @@ export default function DashboardPage() {
                 transition: "background 0.2s",
                 backgroundColor: "#f5f5f5",
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "#ecebebff")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.background = "#ecebebff")
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.background = "transparent")
+              }
             >
               <img
-                src={user?.image || "https://cdn-icons-png.flaticon.com/512/9131/9131529.png"}
+                src={
+                  user?.image ||
+                  "https://cdn-icons-png.flaticon.com/512/9131/9131529.png"
+                }
                 alt="avatar"
                 onError={(e) => {
                   const target = e.currentTarget;
                   target.onerror = null; // tránh loop
-                  target.src = "https://cdn-icons-png.flaticon.com/512/9131/9131529.png";
+                  target.src =
+                    "https://cdn-icons-png.flaticon.com/512/9131/9131529.png";
                 }}
                 style={{
                   width: 40,
@@ -650,7 +761,8 @@ export default function DashboardPage() {
             Xin chào, {user?.fullname || user?.fullName || "Manager"} 👋
           </Title>
           <Text type="secondary" style={{ fontSize: "clamp(12px, 3vw, 14px)" }}>
-            Đang xem Dashboard của cửa hàng: <b>{currentStore?.name || storeId}</b>
+            Đang xem Dashboard của cửa hàng:{" "}
+            <b>{currentStore?.name || storeId}</b>
           </Text>
         </div>
 
@@ -770,8 +882,9 @@ export default function DashboardPage() {
             <Alert
               message={
                 <Text strong style={{ fontSize: 16 }}>
-                  🔔 Cảnh báo kho hàng: {expiringProducts.some((p: any) => p.status === "expired") 
-                    ? "Phát hiện lô hàng ĐÃ HẾT HẠN" 
+                  🔔 Cảnh báo kho hàng:{" "}
+                  {expiringProducts.some((p: any) => p.status === "expired")
+                    ? "Phát hiện lô hàng ĐÃ HẾT HẠN"
                     : "Lô hàng sắp hết hạn"}
                 </Text>
               }
@@ -781,49 +894,96 @@ export default function DashboardPage() {
                     {expiringProducts.slice(0, 5).map((p: any, i: number) => {
                       const isExp = p.status === "expired";
                       return (
-                        <div key={i} style={{ 
-                          marginBottom: 6, 
-                          padding: "4px 8px", 
-                          borderRadius: 6, 
-                          background: isExp ? "#fff1f0" : "transparent",
-                          borderLeft: `4px solid ${isExp ? "#ff4d4f" : "#faad14"}` 
-                        }}>
+                        <div
+                          key={i}
+                          style={{
+                            marginBottom: 6,
+                            padding: "4px 8px",
+                            borderRadius: 6,
+                            background: isExp ? "#fff1f0" : "transparent",
+                            borderLeft: `4px solid ${
+                              isExp ? "#ff4d4f" : "#faad14"
+                            }`,
+                          }}
+                        >
                           <Badge status={isExp ? "error" : "warning"} />
-                          <Text strong={isExp} delete={isExp}> {p.name} </Text>
-                          <Text type="secondary" style={{ fontSize: 11 }}>(SKU: {p.sku})</Text>
-                          {" - Lô: "}<b>{p.batch_no}</b>
+                          <Text strong={isExp} delete={isExp}>
+                            {" "}
+                            {p.name}{" "}
+                          </Text>
+                          <Text type="secondary" style={{ fontSize: 11 }}>
+                            (SKU: {p.sku})
+                          </Text>
+                          {" - Lô: "}
+                          <b>{p.batch_no}</b>
                           {" - HSD: "}
-                          <Text style={{ color: isExp ? "#f5222d" : "#d46b08", fontWeight: 600 }}>
+                          <Text
+                            style={{
+                              color: isExp ? "#f5222d" : "#d46b08",
+                              fontWeight: 600,
+                            }}
+                          >
                             {dayjs(p.expiry_date).format("DD/MM/YYYY")}
                           </Text>
-                          {isExp && <Tag color="error" style={{ marginLeft: 8 }}>Đã hết hạn</Tag>}
-                          {!isExp && <Tag color="warning" style={{ marginLeft: 8 }}>Sắp hết hạn</Tag>}
-                          <Text style={{ marginLeft: 8 }}>| SL: <b>{p.quantity}</b></Text>
+                          {isExp && (
+                            <Tag color="error" style={{ marginLeft: 8 }}>
+                              Đã hết hạn
+                            </Tag>
+                          )}
+                          {!isExp && (
+                            <Tag color="warning" style={{ marginLeft: 8 }}>
+                              Sắp hết hạn
+                            </Tag>
+                          )}
+                          <Text style={{ marginLeft: 8 }}>
+                            | SL: <b>{p.quantity}</b>
+                          </Text>
                         </div>
                       );
                     })}
                     {expiringProducts.length > 5 && (
-                      <div style={{ fontStyle: "italic", marginLeft: 12, marginTop: 4 }}>
+                      <div
+                        style={{
+                          fontStyle: "italic",
+                          marginLeft: 12,
+                          marginTop: 4,
+                        }}
+                      >
                         ... và {expiringProducts.length - 5} lô hàng khác.
                       </div>
                     )}
                   </div>
                   <Space>
-                    <Button type="primary" size="small" onClick={() => navigate("/inventory/process-expired")} danger={expiringProducts.some((p: any) => p.status === "expired")}>
+                    <Button
+                      type="primary"
+                      size="small"
+                      onClick={() => navigate("/inventory/process-expired")}
+                      danger={expiringProducts.some(
+                        (p: any) => p.status === "expired"
+                      )}
+                    >
                       Xử lý ngay
                     </Button>
-                    <Button size="small" onClick={() => setExpiringProducts([])} type="text">
+                    <Button
+                      size="small"
+                      onClick={() => setExpiringProducts([])}
+                      type="text"
+                    >
                       Để sau
                     </Button>
                   </Space>
                 </div>
               }
-              type={expiringProducts.some((p: any) => p.status === "expired") ? "error" : "warning"}
+              type={
+                expiringProducts.some((p: any) => p.status === "expired")
+                  ? "error"
+                  : "warning"
+              }
               showIcon
-              style={{ 
-                borderRadius: 12, 
+              style={{
+                borderRadius: 12,
                 boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
-                border: "1px solid #ffccc7"
+                border: "1px solid #ffccc7",
               }}
             />
           </div>
@@ -845,7 +1005,10 @@ export default function DashboardPage() {
                 <Text strong style={{ fontSize: "clamp(13px, 3vw, 15px)" }}>
                   Kết quả kinh doanh tháng {dayjs().format("MM/YYYY")}
                 </Text>
-                <Link to="/reports/dashboard" style={{ fontSize: "clamp(12px, 3vw, 14px)" }}>
+                <Link
+                  to="/reports/dashboard"
+                  style={{ fontSize: "clamp(12px, 3vw, 14px)" }}
+                >
                   Xem chi tiết
                 </Link>
               </Space>
@@ -857,7 +1020,10 @@ export default function DashboardPage() {
               <Tooltip title="Tổng doanh thu cửa hàng bạn thu được từ bán hàng chưa trừ chi phí gì.">
                 <div className="p-4 bg-purple-50 rounded-lg flex items-center justify-between col-span-1 sm:col-span-1 lg:col-span-4 cursor-pointer">
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <Text type="secondary" style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
+                    <Text
+                      type="secondary"
+                      style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}
+                    >
                       Doanh thu
                     </Text>
                     <Title
@@ -898,7 +1064,10 @@ export default function DashboardPage() {
               <Tooltip title="Doanh thu thuần = Doanh thu thực - VAT thu hộ. Đây là doanh thu thực tế sau khi trừ thuế.">
                 <div className="p-4 bg-indigo-50 rounded-lg flex items-center justify-between col-span-1 sm:col-span-1 lg:col-span-4 cursor-pointer">
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <Text type="secondary" style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
+                    <Text
+                      type="secondary"
+                      style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}
+                    >
                       Doanh thu thuần
                     </Text>
                     <Title
@@ -970,17 +1139,23 @@ export default function DashboardPage() {
               </Tooltip> */}
 
               {/* Dòng 2 - ô 2 */}
-              <Tooltip title="Doanh thu − Giá vốn hàng bán (COGS). Đây là số tiền còn lại sau khi trừ chi phí nguyên vật liệu, chưa bao gồm chi phí vận hành khác.">
+              <Tooltip title="Doanh thu thuần − Giá vốn hàng bán (COGS). Đây là số tiền còn lại sau khi trừ chi phí nguyên vật liệu, chưa bao gồm chi phí vận hành khác.">
                 <div className="p-4 bg-green-50 rounded-lg flex items-center justify-between col-span-1 sm:col-span-1 lg:col-span-4 cursor-pointer">
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <Text type="secondary" style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
+                    <Text
+                      type="secondary"
+                      style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}
+                    >
                       Lợi nhuận gộp
                     </Text>
                     <Title
                       level={4}
                       style={{
                         margin: 0,
-                        color: (financials?.grossProfit ?? 0) >= 0 ? "#389e0d" : "#f5222d",
+                        color:
+                          (financials?.grossProfit ?? 0) >= 0
+                            ? "#389e0d"
+                            : "#f5222d",
                         fontSize: "clamp(16px, 4vw, 20px)",
                         wordBreak: "break-word",
                       }}
@@ -1014,7 +1189,10 @@ export default function DashboardPage() {
               <Tooltip title="Tổng số đơn hàng đã tạo, bao gồm cả đã thanh toán và chưa thanh toán.">
                 <div className="p-4 bg-orange-50 rounded-lg flex items-center justify-between col-span-1 sm:col-span-1 lg:col-span-4 cursor-pointer">
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <Text type="secondary" style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
+                    <Text
+                      type="secondary"
+                      style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}
+                    >
                       Tổng tất cả các đơn hàng
                     </Text>
                     <Title
@@ -1044,18 +1222,25 @@ export default function DashboardPage() {
               <Tooltip
                 title={
                   <>
-                    Tổng số sản phẩm trên các đơn hàng, sau khi đã trừ đi các đơn bị hoàn trả.
-                    <br />• Tổng đã bán: {orderStats.totalSoldItems.toLocaleString("vi-VN")}
-                    <br />• Hoàn lại: {orderStats.totalRefundedItems.toLocaleString("vi-VN")}
-                    <br />• Thực đã bán: {orderStats.netSoldItems.toLocaleString("vi-VN")}
+                    Tổng số sản phẩm trên các đơn hàng, sau khi đã trừ đi các
+                    đơn bị hoàn trả.
+                    <br />• Tổng đã bán:{" "}
+                    {orderStats.totalSoldItems.toLocaleString("vi-VN")}
+                    <br />• Hoàn lại:{" "}
+                    {orderStats.totalRefundedItems.toLocaleString("vi-VN")}
+                    <br />• Thực đã bán:{" "}
+                    {orderStats.netSoldItems.toLocaleString("vi-VN")}
                   </>
                 }
               >
-                {/* ✅ span bọc ngoài nhưng ép block để không phá grid */}
+                {/*  span bọc ngoài nhưng ép block để không phá grid */}
                 <span className="block col-span-1 sm:col-span-1 lg:col-span-4">
                   <div className="p-4 bg-purple-50 rounded-lg flex items-center justify-between cursor-pointer">
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <Text type="secondary" style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
+                      <Text
+                        type="secondary"
+                        style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}
+                      >
                         Số lượng hàng thực bán
                       </Text>
                       <Title
@@ -1086,7 +1271,10 @@ export default function DashboardPage() {
               <Tooltip title="Số đơn hàng chưa được khách thanh toán.">
                 <div className="p-4 bg-red-50 rounded-lg flex items-center justify-between col-span-1 sm:col-span-1 lg:col-span-4 cursor-pointer">
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <Text type="secondary" style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
+                    <Text
+                      type="secondary"
+                      style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}
+                    >
                       Đơn hàng chưa thanh toán
                     </Text>
                     <Title
@@ -1116,7 +1304,10 @@ export default function DashboardPage() {
               <Tooltip title="Số đơn hàng khách đã trả lại và hoàn tiền.">
                 <div className="p-4 bg-gray-100 rounded-lg flex items-center justify-between col-span-1 sm:col-span-1 lg:col-span-4 cursor-pointer">
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <Text type="secondary" style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
+                    <Text
+                      type="secondary"
+                      style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}
+                    >
                       Đơn hàng bị hoàn trả
                     </Text>
                     <Title
@@ -1264,7 +1455,7 @@ export default function DashboardPage() {
                         content={
                           <div style={{ fontSize: 12 }}>
                             <div>
-                              ✅ Đã hoàn thành: <b>{revenueSummary.completedOrders ?? "—"}</b>
+                               Đã hoàn thành: <b>{revenueSummary.completedOrders ?? "—"}</b>
                             </div>
                             <div>
                               ↩️ Hoàn 1 phần: <b>{revenueSummary.partialRefundOrders ?? "—"}</b>
@@ -1302,7 +1493,10 @@ export default function DashboardPage() {
                 <Text strong style={{ fontSize: "clamp(13px, 3vw, 15px)" }}>
                   Top 5 sản phẩm bán chạy tháng {dayjs().format("MM/YYYY")}
                 </Text>
-                <Link to="/reports/top-products" style={{ fontSize: "clamp(12px, 3vw, 14px)" }}>
+                <Link
+                  to="/reports/top-products"
+                  style={{ fontSize: "clamp(12px, 3vw, 14px)" }}
+                >
                   Xem chi tiết
                 </Link>
               </Space>
@@ -1326,10 +1520,20 @@ export default function DashboardPage() {
               <Alert type="error" message={errorTopProducts} />
             ) : topProducts.length > 0 ? (
               <div style={{ overflowX: "auto" }}>
-                <Table columns={columnsTopProducts} dataSource={topProducts} rowKey="_id" pagination={false} size="small" scroll={{ x: 600 }} />
+                <Table
+                  columns={columnsTopProducts}
+                  dataSource={topProducts}
+                  rowKey="_id"
+                  pagination={false}
+                  size="small"
+                  scroll={{ x: 600 }}
+                />
               </div>
             ) : (
-              <Text type="secondary" style={{ fontSize: "clamp(12px, 3vw, 14px)" }}>
+              <Text
+                type="secondary"
+                style={{ fontSize: "clamp(12px, 3vw, 14px)" }}
+              >
                 Chưa có dữ liệu sản phẩm bán chạy
               </Text>
             )}

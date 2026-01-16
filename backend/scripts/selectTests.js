@@ -77,7 +77,7 @@ function runTests(selectedIndices) {
       }
     );
 
-    console.log("\n✅ Tests completed!");
+    console.log("\n Tests completed!");
     console.log("\n📊 Do you want to export to Google Sheets? (y/n)");
 
     rl.question("", (answer) => {
@@ -87,7 +87,7 @@ function runTests(selectedIndices) {
           encoding: "utf-8",
           stdio: "inherit",
         });
-        console.log("\n✅ Export completed!");
+        console.log("\n Export completed!");
       }
       rl.close();
     });

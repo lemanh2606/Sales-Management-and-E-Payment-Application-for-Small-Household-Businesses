@@ -16,5 +16,5 @@ expo install expo-document-picker
 # TypeScript
 npm install --save-dev @types/react @types/react-native typescript
 
-echo "✅ All dependencies installed successfully!"
+echo " All dependencies installed successfully!"
 echo "📱 Run: expo start"

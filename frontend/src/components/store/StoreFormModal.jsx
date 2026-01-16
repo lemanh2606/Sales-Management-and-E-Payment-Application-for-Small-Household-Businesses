@@ -36,12 +36,23 @@ import {
   DownOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
-import { fetchProvinces, buildCascaderOptionsNested } from "../../utils/vnProvinces";
+import {
+  fetchProvinces,
+  buildCascaderOptionsNested,
+} from "../../utils/vnProvinces";
 import { fetchLatLngFromAddress } from "../../utils/geocodeNominatim";
 
 const { TextArea } = Input;
 
-export default function StoreFormModal({ open, onClose, form: formData = {}, setForm, onSave, busy, title = "Cửa hàng" }) {
+export default function StoreFormModal({
+  open,
+  onClose,
+  form: formData = {},
+  setForm,
+  onSave,
+  busy,
+  title = "Cửa hàng",
+}) {
   const [form] = Form.useForm();
   const [localTags, setLocalTags] = useState([]);
   const [tagInput, setTagInput] = useState("");
@@ -74,7 +85,7 @@ export default function StoreFormModal({ open, onClose, form: formData = {}, set
     try {
       const data = await fetchProvinces(2);
       const options = buildCascaderOptionsNested(data);
-      console.log("✅ Loaded VN options:", options.length, "provinces");
+      console.log(" Loaded VN options:", options.length, "provinces");
       setVnOptions(options);
     } catch (e) {
       console.error(" Load provinces error:", e);
@@ -114,8 +125,12 @@ export default function StoreFormModal({ open, onClose, form: formData = {}, set
       phone: normalized.phone || "",
       description: normalized.description || "",
       imageUrl: normalized.imageUrl || "",
-      openTime: normalized.openingHours.open ? dayjs(normalized.openingHours.open, "HH:mm") : null,
-      closeTime: normalized.openingHours.close ? dayjs(normalized.openingHours.close, "HH:mm") : null,
+      openTime: normalized.openingHours.open
+        ? dayjs(normalized.openingHours.open, "HH:mm")
+        : null,
+      closeTime: normalized.openingHours.close
+        ? dayjs(normalized.openingHours.close, "HH:mm")
+        : null,
       lat: normalized.location.lat,
       lng: normalized.location.lng,
     });
@@ -142,7 +157,8 @@ export default function StoreFormModal({ open, onClose, form: formData = {}, set
     const scrollableHeight = scrollHeight - clientHeight;
 
     const threshold = 20;
-    const needHint = scrollableHeight > threshold && scrollTop < scrollableHeight - threshold;
+    const needHint =
+      scrollableHeight > threshold && scrollTop < scrollableHeight - threshold;
 
     setShowScrollHint(needHint);
   };
@@ -261,7 +277,7 @@ export default function StoreFormModal({ open, onClose, form: formData = {}, set
     const district = selectedOptions?.[1]?.label || "";
     const ward = selectedOptions?.[2]?.label || "";
 
-    console.log("✅ Đã chọn đủ 3 cấp:", { province, district, ward });
+    console.log(" Đã chọn đủ 3 cấp:", { province, district, ward });
 
     // Lấy địa chỉ hiện tại từ state (không phải form)
     const currentAddress = addressValue;
@@ -294,13 +310,13 @@ export default function StoreFormModal({ open, onClose, form: formData = {}, set
           lat: geo.lat,
           lng: geo.lng,
         });
-        message.success("✅ Đã cập nhật xong địa chỉ và tọa độ");
+        message.success(" Đã cập nhật xong địa chỉ và tọa độ");
       } else {
-        message.success("✅ Đã cập nhật xong địa chỉ");
+        message.success(" Đã cập nhật xong địa chỉ");
       }
     } catch (e) {
       console.warn("Không lấy được tọa độ tự động", e);
-      message.success("✅ Đã cập nhật xong địa chỉ");
+      message.success(" Đã cập nhật xong địa chỉ");
     } finally {
       setFetchingCoords(false);
     }
@@ -311,9 +327,20 @@ export default function StoreFormModal({ open, onClose, form: formData = {}, set
 
     const parts = address.split(",").map((s) => s.trim());
     const firstPart = parts[0] || "";
-    const adminKeywords = ["phường", "xã", "quận", "huyện", "thành phố", "tỉnh", "ward", "district"];
+    const adminKeywords = [
+      "phường",
+      "xã",
+      "quận",
+      "huyện",
+      "thành phố",
+      "tỉnh",
+      "ward",
+      "district",
+    ];
 
-    const hasAdminKeyword = adminKeywords.some((keyword) => firstPart.toLowerCase().includes(keyword));
+    const hasAdminKeyword = adminKeywords.some((keyword) =>
+      firstPart.toLowerCase().includes(keyword)
+    );
 
     return hasAdminKeyword ? "" : firstPart;
   };
@@ -321,7 +348,8 @@ export default function StoreFormModal({ open, onClose, form: formData = {}, set
 
   // ========== 👇 HÀM LẤY TỌA ĐỘ 👇 ==========
   const handleFetchCoordinates = async (forcedAddress = null) => {
-    const address = forcedAddress || addressValue || form.getFieldValue("address");
+    const address =
+      forcedAddress || addressValue || form.getFieldValue("address");
 
     if (!address || address.trim().length < 5) {
       message.warning("Vui lòng nhập địa chỉ trước khi lấy tọa độ");
@@ -342,7 +370,9 @@ export default function StoreFormModal({ open, onClose, form: formData = {}, set
         if (!addressValue) {
           setAddressValue(address);
         }
-        message.success(`Đã lấy tọa độ: ${geo.lat.toFixed(6)}, ${geo.lng.toFixed(6)}`);
+        message.success(
+          `Đã lấy tọa độ: ${geo.lat.toFixed(6)}, ${geo.lng.toFixed(6)}`
+        );
       } else {
         message.warning("Không tìm thấy tọa độ cho địa chỉ này");
       }
@@ -361,9 +391,13 @@ export default function StoreFormModal({ open, onClose, form: formData = {}, set
     const values = form.getFieldsValue();
     let url;
     if (values.lat != null && values.lng != null) {
-      url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${values.lat},${values.lng}`)}`;
+      url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+        `${values.lat},${values.lng}`
+      )}`;
     } else if (address) {
-      url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+      url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+        address
+      )}`;
     } else {
       url = "https://www.google.com/maps";
     }
@@ -387,8 +421,14 @@ export default function StoreFormModal({ open, onClose, form: formData = {}, set
         close: values.closeTime ? values.closeTime.format("HH:mm") : "",
       },
       location: {
-        lat: values.lat !== undefined && values.lat !== null && values.lat !== "" ? Number(values.lat) : null,
-        lng: values.lng !== undefined && values.lng !== null && values.lng !== "" ? Number(values.lng) : null,
+        lat:
+          values.lat !== undefined && values.lat !== null && values.lat !== ""
+            ? Number(values.lat)
+            : null,
+        lng:
+          values.lng !== undefined && values.lng !== null && values.lng !== ""
+            ? Number(values.lng)
+            : null,
       },
     };
 
@@ -421,7 +461,12 @@ export default function StoreFormModal({ open, onClose, form: formData = {}, set
         onChange={onVnAreaChange}
         changeOnSelect={false}
         showSearch={{
-          filter: (inputValue, path) => path.some((option) => (option.label || "").toLowerCase().includes(inputValue.toLowerCase())),
+          filter: (inputValue, path) =>
+            path.some((option) =>
+              (option.label || "")
+                .toLowerCase()
+                .includes(inputValue.toLowerCase())
+            ),
         }}
         style={{ width: "100%" }}
         size="large"
@@ -430,13 +475,26 @@ export default function StoreFormModal({ open, onClose, form: formData = {}, set
           vnLoading ? (
             <Spin size="small" />
           ) : (
-            <div style={{ padding: 12, textAlign: "center", color: "#999" }}>{vnOptions.length === 0 ? "Đang tải dữ liệu..." : "Không tìm thấy"}</div>
+            <div style={{ padding: 12, textAlign: "center", color: "#999" }}>
+              {vnOptions.length === 0
+                ? "Đang tải dữ liệu..."
+                : "Không tìm thấy"}
+            </div>
           )
         }
         disabled={vnLoading || vnOptions.length === 0}
         expandTrigger="hover"
       />
-      <div style={{ marginTop: 8, fontSize: 12, color: "#999", textAlign: "center" }}>💡 Chọn đủ Tỉnh → Quận → Phường để tự động điền</div>
+      <div
+        style={{
+          marginTop: 8,
+          fontSize: 12,
+          color: "#999",
+          textAlign: "center",
+        }}
+      >
+        💡 Chọn đủ Tỉnh → Quận → Phường để tự động điền
+      </div>
     </div>
   );
   // ========== 👆 END POPOVER 👆 ==========
@@ -486,7 +544,14 @@ export default function StoreFormModal({ open, onClose, form: formData = {}, set
           <Row gutter={24}>
             {/* Left Column */}
             <Col xs={24} md={14}>
-              <Card size="small" style={{ background: "#fafafa", border: "none", borderRadius: 12 }}>
+              <Card
+                size="small"
+                style={{
+                  background: "#fafafa",
+                  border: "none",
+                  borderRadius: 12,
+                }}
+              >
                 {/* Store Name */}
                 <Form.Item
                   label={
@@ -496,9 +561,15 @@ export default function StoreFormModal({ open, onClose, form: formData = {}, set
                     </Space>
                   }
                   name="name"
-                  rules={[{ required: true, message: "Vui lòng nhập tên cửa hàng" }]}
+                  rules={[
+                    { required: true, message: "Vui lòng nhập tên cửa hàng" },
+                  ]}
                 >
-                  <Input size="large" placeholder="Nhập tên cửa hàng" style={{ borderRadius: 8 }} />
+                  <Input
+                    size="large"
+                    placeholder="Nhập tên cửa hàng"
+                    style={{ borderRadius: 8 }}
+                  />
                 </Form.Item>
 
                 {/* ========== 👇 ĐỊA CHỈ VỚI NÚT CHỌN KHU VỰC (CONTROLLED) 👇 ========== */}
@@ -516,7 +587,9 @@ export default function StoreFormModal({ open, onClose, form: formData = {}, set
                     <Input
                       size="large"
                       placeholder="Nhập địa chỉ hoặc chọn từ danh sách..."
-                      prefix={<EnvironmentOutlined style={{ color: "#1890ff" }} />}
+                      prefix={
+                        <EnvironmentOutlined style={{ color: "#1890ff" }} />
+                      }
                       style={{ flex: 1, borderRadius: "8px 0 0 8px" }}
                       value={addressValue} // 👈 Controlled value
                       onChange={(e) => {
@@ -525,7 +598,8 @@ export default function StoreFormModal({ open, onClose, form: formData = {}, set
                         form.setFieldsValue({ address: newValue });
 
                         // DEBOUNCE: Tự động geocode sau 1.5s ngừng gõ
-                        if (geocodeTimerRef.current) clearTimeout(geocodeTimerRef.current);
+                        if (geocodeTimerRef.current)
+                          clearTimeout(geocodeTimerRef.current);
                         if (newValue && newValue.length > 10) {
                           geocodeTimerRef.current = setTimeout(() => {
                             handleFetchCoordinates(newValue);
@@ -642,7 +716,11 @@ export default function StoreFormModal({ open, onClose, form: formData = {}, set
                     },
                   ]}
                 >
-                  <Input size="large" placeholder="Nhập số điện thoại" style={{ borderRadius: 8 }} />
+                  <Input
+                    size="large"
+                    placeholder="Nhập số điện thoại"
+                    style={{ borderRadius: 8 }}
+                  />
                 </Form.Item>
 
                 {/* Opening Hours */}
@@ -657,7 +735,12 @@ export default function StoreFormModal({ open, onClose, form: formData = {}, set
                       }
                       name="openTime"
                     >
-                      <TimePicker size="large" format="HH:mm" style={{ width: "100%", borderRadius: 8 }} placeholder="Chọn giờ mở" />
+                      <TimePicker
+                        size="large"
+                        format="HH:mm"
+                        style={{ width: "100%", borderRadius: 8 }}
+                        placeholder="Chọn giờ mở"
+                      />
                     </Form.Item>
                   </Col>
                   <Col span={12}>
@@ -670,14 +753,26 @@ export default function StoreFormModal({ open, onClose, form: formData = {}, set
                       }
                       name="closeTime"
                     >
-                      <TimePicker size="large" format="HH:mm" style={{ width: "100%", borderRadius: 8 }} placeholder="Chọn giờ đóng" />
+                      <TimePicker
+                        size="large"
+                        format="HH:mm"
+                        style={{ width: "100%", borderRadius: 8 }}
+                        placeholder="Chọn giờ đóng"
+                      />
                     </Form.Item>
                   </Col>
                 </Row>
 
                 {/* Description */}
-                <Form.Item label={<span style={{ fontWeight: 600 }}>Mô tả</span>} name="description">
-                  <TextArea rows={4} placeholder="Nhập mô tả về cửa hàng" style={{ borderRadius: 8 }} />
+                <Form.Item
+                  label={<span style={{ fontWeight: 600 }}>Mô tả</span>}
+                  name="description"
+                >
+                  <TextArea
+                    rows={4}
+                    placeholder="Nhập mô tả về cửa hàng"
+                    style={{ borderRadius: 8 }}
+                  />
                 </Form.Item>
 
                 {/* Tags */}
@@ -771,15 +866,27 @@ export default function StoreFormModal({ open, onClose, form: formData = {}, set
                     />
                   ) : (
                     <div style={{ textAlign: "center", color: "#8c8c8c" }}>
-                      <CameraOutlined style={{ fontSize: 48, marginBottom: 12 }} />
+                      <CameraOutlined
+                        style={{ fontSize: 48, marginBottom: 12 }}
+                      />
                       <div>{uploading ? "Đang tải..." : "Chưa có ảnh"}</div>
                     </div>
                   )}
                 </div>
 
                 <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                  <Upload accept="image/*" beforeUpload={handleFileUpload} showUploadList={false}>
-                    <Button icon={<UploadOutlined />} block size="large" loading={uploading} style={{ borderRadius: 8 }}>
+                  <Upload
+                    accept="image/*"
+                    beforeUpload={handleFileUpload}
+                    showUploadList={false}
+                  >
+                    <Button
+                      icon={<UploadOutlined />}
+                      block
+                      size="large"
+                      loading={uploading}
+                      style={{ borderRadius: 8 }}
+                    >
                       Chọn file ảnh
                     </Button>
                   </Upload>
@@ -809,7 +916,15 @@ export default function StoreFormModal({ open, onClose, form: formData = {}, set
                     </Button>
                   )}
 
-                  <div style={{ fontSize: 12, color: "#8c8c8c", textAlign: "center" }}>📌 Định dạng: JPG, PNG. Tối đa 8MB</div>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: "#8c8c8c",
+                      textAlign: "center",
+                    }}
+                  >
+                    📌 Định dạng: JPG, PNG. Tối đa 8MB
+                  </div>
                 </Space>
               </Card>
             </Col>
@@ -819,7 +934,11 @@ export default function StoreFormModal({ open, onClose, form: formData = {}, set
           <Divider style={{ margin: "24px 0" }} />
           <Row justify="end" gutter={12}>
             <Col>
-              <Button size="large" onClick={onClose} style={{ borderRadius: 8, minWidth: 120 }}>
+              <Button
+                size="large"
+                onClick={onClose}
+                style={{ borderRadius: 8, minWidth: 120 }}
+              >
                 Hủy
               </Button>
             </Col>
@@ -831,7 +950,8 @@ export default function StoreFormModal({ open, onClose, form: formData = {}, set
                 loading={busy || uploading}
                 icon={<SaveOutlined />}
                 style={{
-                  background: "linear-gradient(135deg, #52c41a 0%, #73d13d 100%)",
+                  background:
+                    "linear-gradient(135deg, #52c41a 0%, #73d13d 100%)",
                   border: "none",
                   borderRadius: 8,
                   minWidth: 120,

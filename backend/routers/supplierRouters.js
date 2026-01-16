@@ -9,7 +9,7 @@ const {
   updateSupplier,
   deleteSupplier,
   exportSuppliersByStore,
-  restoreSupplier, // ✅ thêm
+  restoreSupplier, //  thêm
 } = require("../controllers/supplier/supplierController");
 
 const {
@@ -53,7 +53,7 @@ router.get(
   exportSuppliersByStore
 );
 
-// ✅ Khôi phục nhà cung cấp đã bị xóa (soft delete restore)
+//  Khôi phục nhà cung cấp đã bị xóa (soft delete restore)
 // Lưu ý: đặt trước "/:supplierId" để không bị route param bắt nhầm. [web:52][web:53]
 router.put(
   "/:supplierId/restore",
@@ -91,4 +91,3 @@ router.delete(
 );
 
 module.exports = router;
-

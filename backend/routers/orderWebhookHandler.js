@@ -45,21 +45,21 @@ module.exports = async (req, res) => {
       }
 
       console.log(
-        `✅ Đã nhận tiền, đặt trạng thái 'paid' cho orderRef=${parsed.data?.orderCode}`
+        ` Đã nhận tiền, đặt trạng thái 'paid' cho orderRef=${parsed.data?.orderCode}`
       );
 
-      // ✅ CẬP NHẬT TRẠNG THÁI PAID TRONG DATABASE
+      //  CẬP NHẬT TRẠNG THÁI PAID TRONG DATABASE
       order.status = "paid";
       await order.save();
 
-      // ✅ XỬ LÝ ĐIỂM TÍCH LŨY (CỘNG THƯỞNG + TRỪ ĐÃ DÙNG)
+      //  XỬ LÝ ĐIỂM TÍCH LŨY (CỘNG THƯỞNG + TRỪ ĐÃ DÙNG)
       await Order.processLoyalty(order._id);
 
       // 🔔 Emit socket thông báo thanh toán thành công (cho QR)
       const io = req.app.get("io");
       if (io) {
         io.emit("payment_success", {
-          orderId: order._id.toString(), // ✅ chính xác FE dùng để print
+          orderId: order._id.toString(), //  chính xác FE dùng để print
           ref: order.paymentRef,
           amount: parsed.data?.amount,
           method: "qr",

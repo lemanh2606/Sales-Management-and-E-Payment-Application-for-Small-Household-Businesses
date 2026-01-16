@@ -683,7 +683,7 @@ const OrderListScreen: React.FC = () => {
 
       file.create();
 
-      // ✅ ghi base64 đúng chuẩn nhị phân
+      //  ghi base64 đúng chuẩn nhị phân
       await LegacyFS.writeAsStringAsync(file.uri, base64, {
         encoding: LegacyFS.EncodingType.Base64,
       });

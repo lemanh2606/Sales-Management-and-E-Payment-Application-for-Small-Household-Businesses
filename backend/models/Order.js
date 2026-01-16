@@ -99,7 +99,7 @@ orderSchema.statics.processLoyalty = async function (orderId, session = null) {
     const prevSpent = parseFloat(customer.totalSpent?.toString() || 0);
     const newSpent = prevSpent + totalAmount;
 
-    // ✅ CHỈ CỘNG earnedPoints, KHÔNG TRỪ usedPoints (đã reserve khi tạo pending)
+    //  CHỈ CỘNG earnedPoints, KHÔNG TRỪ usedPoints (đã reserve khi tạo pending)
     customer.loyaltyPoints = (customer.loyaltyPoints || 0) + earnedPoints;
     customer.totalSpent = mongoose.Types.Decimal128.fromString(
       newSpent.toFixed(2)
@@ -108,7 +108,7 @@ orderSchema.statics.processLoyalty = async function (orderId, session = null) {
     await customer.save({ session });
 
     console.log(
-      `✅ [processLoyalty] Order ${orderId}: +${earnedPoints} điểm thưởng (usedPoints=${usedPoints} đã reserve trước)`
+      ` [processLoyalty] Order ${orderId}: +${earnedPoints} điểm thưởng (usedPoints=${usedPoints} đã reserve trước)`
     );
 
     // 4. Đánh dấu đơn hàng đã xử lý

@@ -237,7 +237,7 @@ const PricingScreen: React.FC = () => {
 
       if (!checkoutUrl) throw new Error("Không tìm thấy link thanh toán");
 
-      // ✅ MỞ TRONG APP (WebView screen)
+      //  MỞ TRONG APP (WebView screen)
       navigation.navigate("PaymentWebView", { checkoutUrl });
     } catch (err: any) {
       Alert.alert(

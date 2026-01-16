@@ -1,5 +1,11 @@
 // src/pages/product/ProductListPage.jsx
-import React, { useEffect, useState, useMemo, useRef, useCallback } from "react";
+import React, {
+  useEffect,
+  useState,
+  useMemo,
+  useRef,
+  useCallback,
+} from "react";
 import {
   Table,
   Button,
@@ -45,12 +51,16 @@ import {
   FileExcelOutlined,
   DownloadOutlined,
   EnvironmentOutlined,
-  CalendarOutlined, // ✅ icon cho Expiry
+  CalendarOutlined, //  icon cho Expiry
 } from "@ant-design/icons";
 import Layout from "../../components/Layout";
 import ProductForm from "../../components/product/ProductForm";
-import { getProductsByStore, importProductsByExcel, exportProducts } from "../../api/productApi";
-import { getWarehouses } from "../../api/warehouseApi"; // ✅ NEW
+import {
+  getProductsByStore,
+  importProductsByExcel,
+  exportProducts,
+} from "../../api/productApi";
+import { getWarehouses } from "../../api/warehouseApi"; //  NEW
 import * as XLSX from "xlsx";
 import dayjs from "dayjs";
 
@@ -60,9 +70,10 @@ const apiUrl = import.meta.env.VITE_API_URL;
 export default function ProductListPage() {
   const [api, contextHolder] = notification.useNotification();
 
-  const storeObj = JSON.parse(localStorage.getItem("currentStore") || "null") || {};
+  const storeObj =
+    JSON.parse(localStorage.getItem("currentStore") || "null") || {};
   const storeId = storeObj._id || storeObj.id || null;
-  const userObj = JSON.parse(localStorage.getItem("user") || "null") || {}; // ✅ NEW
+  const userObj = JSON.parse(localStorage.getItem("user") || "null") || {}; //  NEW
   const token = localStorage.getItem("token");
 
   const [allProducts, setAllProducts] = useState([]);
@@ -75,17 +86,19 @@ export default function ProductListPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [drawerVisible, setDrawerVisible] = useState(false);
-  const [isMobile, setIsMobile] = useState(typeof window !== "undefined" ? window.innerWidth < 768 : false);
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== "undefined" ? window.innerWidth < 768 : false
+  );
   const [expandedRowKeys, setExpandedRowKeys] = useState([]);
   const [editingBatch, setEditingBatch] = useState(null); // State cho việc edit lô hàng
   const [batchModalOpen, setBatchModalOpen] = useState(false);
-  const [warehouses, setWarehouses] = useState([]); // ✅ NEW: Dân sách kho hàng
+  const [warehouses, setWarehouses] = useState([]); //  NEW: Dân sách kho hàng
 
-  // ✅ thêm warehouse
+  //  thêm warehouse
   const allColumns = [
     { key: "name", label: "Tên sản phẩm", default: true },
     { key: "sku", label: "SKU", default: true },
-    { key: "warehouse", label: "Kho hàng", default: true }, // ✅ NEW
+    { key: "warehouse", label: "Kho hàng", default: true }, //  NEW
     { key: "price", label: "Giá bán", default: true },
     { key: "stock_quantity", label: "Tồn kho", default: true },
     { key: "status", label: "Trạng thái", default: true },
@@ -96,7 +109,7 @@ export default function ProductListPage() {
     { key: "min_stock", label: "Tồn tối thiểu", default: false },
     { key: "max_stock", label: "Tồn tối đa", default: false },
     { key: "image", label: "Hình ảnh", default: false },
-    { key: "expiry", label: "Hạn sử dụng", default: true }, // ✅ NEW
+    { key: "expiry", label: "Hạn sử dụng", default: true }, //  NEW
     { key: "createdAt", label: "Ngày nhập", default: false },
     { key: "updatedAt", label: "Cập nhật", default: false },
   ];
@@ -132,11 +145,15 @@ export default function ProductListPage() {
 
     try {
       setDownloadingTemplate(true);
-      const response = await fetch(`${apiUrl}/products/template/download?format=excel`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await fetch(
+        `${apiUrl}/products/template/download?format=excel`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
 
-      if (!response.ok) throw new Error(`Không thể tải template (mã ${response.status})`);
+      if (!response.ok)
+        throw new Error(`Không thể tải template (mã ${response.status})`);
 
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -149,7 +166,7 @@ export default function ProductListPage() {
       window.URL.revokeObjectURL(url);
 
       api.success({
-        message: "✅ Đã tải template",
+        message: " Đã tải template",
         description: "Vui lòng nhập dữ liệu theo file vừa tải.",
         placement: "topRight",
       });
@@ -201,7 +218,8 @@ export default function ProductListPage() {
       console.error("Fetch error:", err);
       api.error({
         message: " Lỗi tải dữ liệu",
-        description: err?.message || "Không thể tải danh sách sản phẩm. Vui lòng thử lại.",
+        description:
+          err?.message || "Không thể tải danh sách sản phẩm. Vui lòng thử lại.",
         placement: "topRight",
         duration: 5,
       });
@@ -232,9 +250,10 @@ export default function ProductListPage() {
   // Logic làm phẳng (flatten) sản phẩm theo lô - PHẢI ĐỊNH NGHĨA TRƯỚC handleViewModeChange
   const flattenProducts = useMemo(() => {
     return allProducts.reduce((acc, product) => {
-      const batches = product.batches && product.batches.length > 0
-        ? product.batches.filter(b => b.quantity > 0) // Chỉ lấy lô còn hàng
-        : [];
+      const batches =
+        product.batches && product.batches.length > 0
+          ? product.batches.filter((b) => b.quantity > 0) // Chỉ lấy lô còn hàng
+          : [];
 
       if (batches.length === 0) {
         // Nếu không có lô hoặc hết hàng -> giữ nguyên 1 dòng
@@ -261,33 +280,40 @@ export default function ProductListPage() {
   }, [allProducts]);
 
   // Xử lý chuyển chế độ xem - reset dữ liệu bảng để render lại đúng
-  const handleViewModeChange = useCallback((newMode) => {
-    // 1. Reset state trước
-    setExpandedRowKeys([]);
-    setFilteredProducts([]); // Clear table data để tránh hiển thị sai
-    setCurrentPage(1);
-    
-    // 2. Đổi viewMode - dùng setTimeout để đảm bảo render lại hoàn toàn
-    setTimeout(() => {
-      setViewMode(newMode);
-      // 3. Set lại dữ liệu dựa trên mode mới
-      const newData = newMode === "split" ? flattenProducts : allProducts;
-      if (!searchValue.trim()) {
-        setFilteredProducts(newData);
-      } else {
-        const searchLower = searchValue.toLowerCase().trim();
-        const filtered = newData.filter((product) => {
-          const name = (product.name || "").toLowerCase();
-          const sku = (product.sku || "").toLowerCase();
-          const batchNo = (product.batch_no || "").toLowerCase();
-          return name.includes(searchLower) || sku.includes(searchLower) || batchNo.includes(searchLower);
-        });
-        setFilteredProducts(filtered);
-      }
-    }, 50); // Delay nhỏ để React render lại table trống trước
-  }, [allProducts, flattenProducts, searchValue]);
+  const handleViewModeChange = useCallback(
+    (newMode) => {
+      // 1. Reset state trước
+      setExpandedRowKeys([]);
+      setFilteredProducts([]); // Clear table data để tránh hiển thị sai
+      setCurrentPage(1);
 
-  // ✅ SEARCH & FILTER
+      // 2. Đổi viewMode - dùng setTimeout để đảm bảo render lại hoàn toàn
+      setTimeout(() => {
+        setViewMode(newMode);
+        // 3. Set lại dữ liệu dựa trên mode mới
+        const newData = newMode === "split" ? flattenProducts : allProducts;
+        if (!searchValue.trim()) {
+          setFilteredProducts(newData);
+        } else {
+          const searchLower = searchValue.toLowerCase().trim();
+          const filtered = newData.filter((product) => {
+            const name = (product.name || "").toLowerCase();
+            const sku = (product.sku || "").toLowerCase();
+            const batchNo = (product.batch_no || "").toLowerCase();
+            return (
+              name.includes(searchLower) ||
+              sku.includes(searchLower) ||
+              batchNo.includes(searchLower)
+            );
+          });
+          setFilteredProducts(filtered);
+        }
+      }, 50); // Delay nhỏ để React render lại table trống trước
+    },
+    [allProducts, flattenProducts, searchValue]
+  );
+
+  //  SEARCH & FILTER
   useEffect(() => {
     // 1. Chọn nguồn dữ liệu dựa trên viewMode
     const sourceData = viewMode === "split" ? flattenProducts : allProducts;
@@ -305,7 +331,9 @@ export default function ProductListPage() {
       const batchNo = (product.batch_no || "").toLowerCase(); // Search cả số lô
       const supplierName = (product.supplier?.name || "").toLowerCase();
       const groupName = (product.group?.name || "").toLowerCase();
-      const warehouseName = (product.warehouse?.name || product.warehouse || "").toString().toLowerCase();
+      const warehouseName = (product.warehouse?.name || product.warehouse || "")
+        .toString()
+        .toLowerCase();
 
       return (
         name.includes(searchLower) ||
@@ -336,12 +364,23 @@ export default function ProductListPage() {
     return matches.map((product) => ({
       value: product.name,
       label: (
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
           <Space>
             <ShoppingOutlined style={{ color: "#1890ff" }} />
-            <span style={{ fontSize: "clamp(12px, 3vw, 14px)" }}>{product.name}</span>
+            <span style={{ fontSize: "clamp(12px, 3vw, 14px)" }}>
+              {product.name}
+            </span>
           </Space>
-          <Text type="secondary" style={{ fontSize: "clamp(10px, 2.5vw, 12px)" }}>
+          <Text
+            type="secondary"
+            style={{ fontSize: "clamp(10px, 2.5vw, 12px)" }}
+          >
             {product.sku}
           </Text>
         </div>
@@ -362,7 +401,7 @@ export default function ProductListPage() {
     setSearchValue("");
 
     api.success({
-      message: "✅ Đã làm mới!",
+      message: " Đã làm mới!",
       description: "Dữ liệu sản phẩm đã được cập nhật",
       placement: "topRight",
       duration: 2,
@@ -372,7 +411,10 @@ export default function ProductListPage() {
 
   const toggleColumn = (checkedValues) => {
     setVisibleColumns(checkedValues);
-    localStorage.setItem("productVisibleColumns", JSON.stringify(checkedValues));
+    localStorage.setItem(
+      "productVisibleColumns",
+      JSON.stringify(checkedValues)
+    );
   };
 
   const resetImportState = () => {
@@ -465,11 +507,11 @@ export default function ProductListPage() {
   // Mở modal chỉnh sửa lô hàng
   const openEditBatch = (product, batch) => {
     // Debug log
-    console.log("openEditBatch called with:", { 
-      product_id: product._id, 
-      product_name: product.name, 
+    console.log("openEditBatch called with:", {
+      product_id: product._id,
+      product_name: product.name,
       batch_no: batch.batch_no,
-      product_full: product 
+      product_full: product,
     });
     // Tạo object chứa thông tin product + batch để edit
     setEditingBatch({ product, batch });
@@ -497,7 +539,9 @@ export default function ProductListPage() {
     closeModal();
 
     api.success({
-      message: modalProduct ? "🎉 Cập nhật thành công!" : "🎉 Tạo sản phẩm thành công!",
+      message: modalProduct
+        ? "🎉 Cập nhật thành công!"
+        : "🎉 Tạo sản phẩm thành công!",
       description: modalProduct
         ? `Sản phẩm "${modalProduct.name}" đã được cập nhật trong hệ thống.`
         : "Sản phẩm mới đã được thêm vào danh sách thành công.",
@@ -506,14 +550,25 @@ export default function ProductListPage() {
     });
   };
 
-  const totalValue = filteredProducts.reduce((sum, p) => sum + ((p.price || 0) * (p.stock_quantity || 0)), 0);
-  const totalStock = filteredProducts.reduce((sum, p) => sum + (p.stock_quantity || 0), 0);
-  const activeProducts = filteredProducts.filter((p) => p.status === "Đang kinh doanh").length;
+  const totalValue = filteredProducts.reduce(
+    (sum, p) => sum + (p.price || 0) * (p.stock_quantity || 0),
+    0
+  );
+  const totalStock = filteredProducts.reduce(
+    (sum, p) => sum + (p.stock_quantity || 0),
+    0
+  );
+  const activeProducts = filteredProducts.filter(
+    (p) => p.status === "Đang kinh doanh"
+  ).length;
 
   useEffect(() => {
     if (allProducts.length > 0) {
       const lowStockProducts = allProducts.filter(
-        (p) => (p.stock_quantity || 0) > 0 && p.min_stock && (p.stock_quantity || 0) <= p.min_stock
+        (p) =>
+          (p.stock_quantity || 0) > 0 &&
+          p.min_stock &&
+          (p.stock_quantity || 0) <= p.min_stock
       );
 
       if (lowStockProducts.length > 0) {
@@ -522,15 +577,19 @@ export default function ProductListPage() {
           description: (
             <div>
               <p style={{ marginBottom: 8 }}>
-                Có <strong>{lowStockProducts.length}</strong> sản phẩm đang ở mức tồn kho tối thiểu:
+                Có <strong>{lowStockProducts.length}</strong> sản phẩm đang ở
+                mức tồn kho tối thiểu:
               </p>
               <ul style={{ paddingLeft: 20, marginBottom: 0 }}>
                 {lowStockProducts.slice(0, 3).map((p) => (
                   <li key={p._id || p.id}>
-                    {p.name}: <strong>{p.stock_quantity}</strong> (min: {p.min_stock})
+                    {p.name}: <strong>{p.stock_quantity}</strong> (min:{" "}
+                    {p.min_stock})
                   </li>
                 ))}
-                {lowStockProducts.length > 3 && <li>... và {lowStockProducts.length - 3} sản phẩm khác</li>}
+                {lowStockProducts.length > 3 && (
+                  <li>... và {lowStockProducts.length - 3} sản phẩm khác</li>
+                )}
               </ul>
             </div>
           ),
@@ -541,14 +600,16 @@ export default function ProductListPage() {
     }
   }, [allProducts]);
 
-  // ✅ COLUMN CONFIGS (thêm warehouse)
+  //  COLUMN CONFIGS (thêm warehouse)
   const columnConfigs = useMemo(() => {
     return {
       name: {
         title: (
           <Space>
             <ShoppingOutlined style={{ color: "#1890ff" }} />
-            <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Tên sản phẩm</span>
+            <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>
+              Tên sản phẩm
+            </span>
           </Space>
         ),
         dataIndex: "name",
@@ -556,13 +617,18 @@ export default function ProductListPage() {
         width: isMobile ? 180 : 230,
         ellipsis: true,
         render: (text) => (
-          <Text strong style={{ color: "#1890ff", fontSize: "clamp(12px, 2.5vw, 14px)" }}>
+          <Text
+            strong
+            style={{ color: "#1890ff", fontSize: "clamp(12px, 2.5vw, 14px)" }}
+          >
             {text}
           </Text>
         ),
       },
       sku: {
-        title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>SKU</span>,
+        title: (
+          <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>SKU</span>
+        ),
         dataIndex: "sku",
         key: "sku",
         width: isMobile ? 100 : 140,
@@ -573,12 +639,14 @@ export default function ProductListPage() {
         ),
       },
 
-      // ✅ NEW: warehouse
+      //  NEW: warehouse
       warehouse: {
         title: (
           <Space>
             <EnvironmentOutlined style={{ color: "#faad14" }} />
-            <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Kho hàng</span>
+            <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>
+              Kho hàng
+            </span>
           </Space>
         ),
         dataIndex: "warehouse",
@@ -600,7 +668,9 @@ export default function ProductListPage() {
         title: (
           <Space>
             <DollarOutlined style={{ color: "#52c41a" }} />
-            <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Giá bán</span>
+            <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>
+              Giá bán
+            </span>
           </Space>
         ),
         dataIndex: "price",
@@ -612,43 +682,88 @@ export default function ProductListPage() {
           // Nếu không có batches hoặc đang ở chế độ split mode
           if (batches.length === 0 || record.isBatch) {
             return (
-              <Text strong style={{ color: "#52c41a", fontSize: "clamp(11px, 2.5vw, 13px)" }}>
+              <Text
+                strong
+                style={{
+                  color: "#52c41a",
+                  fontSize: "clamp(11px, 2.5vw, 13px)",
+                }}
+              >
                 {value ? Number(value).toLocaleString() : "Trống"}
               </Text>
             );
           }
           // Group batches by selling_price (use product price as fallback)
           const priceGroups = {};
-          batches.forEach(b => {
+          batches.forEach((b) => {
             const price = b.selling_price || Number(value) || 0;
             if (!priceGroups[price]) priceGroups[price] = 0;
             priceGroups[price] += 1;
           });
-          const entries = Object.entries(priceGroups).sort((a, b) => Number(b[0]) - Number(a[0])); // Sort descending
+          const entries = Object.entries(priceGroups).sort(
+            (a, b) => Number(b[0]) - Number(a[0])
+          ); // Sort descending
           // Nếu tất cả lô cùng giá bán, hiển thị đơn giản
           if (entries.length === 1) {
             return (
-              <Text strong style={{ color: "#52c41a", fontSize: "clamp(11px, 2.5vw, 13px)" }}>
+              <Text
+                strong
+                style={{
+                  color: "#52c41a",
+                  fontSize: "clamp(11px, 2.5vw, 13px)",
+                }}
+              >
                 {Number(entries[0][0]).toLocaleString()}
               </Text>
             );
           }
           // Hiển thị chi tiết theo từng mức giá bán
           return (
-            <Tooltip title={
-              <div style={{ padding: 4 }}>
-                <div style={{ marginBottom: 4, borderBottom: '1px solid rgba(255,255,255,0.2)', paddingBottom: 4 }}>CHI TIẾT GIÁ BÁN THEO LÔ</div>
-                {entries.map(([price, count]) => (
-                  <div key={price} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                    <span>{count} lô:</span>
-                    <span style={{ fontWeight: 600 }}>{Number(price).toLocaleString()}đ</span>
+            <Tooltip
+              title={
+                <div style={{ padding: 4 }}>
+                  <div
+                    style={{
+                      marginBottom: 4,
+                      borderBottom: "1px solid rgba(255,255,255,0.2)",
+                      paddingBottom: 4,
+                    }}
+                  >
+                    CHI TIẾT GIÁ BÁN THEO LÔ
                   </div>
-                ))}
-              </div>
-            }>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center', cursor: 'pointer' }}>
+                  {entries.map(([price, count]) => (
+                    <div
+                      key={price}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 12,
+                      }}
+                    >
+                      <span>{count} lô:</span>
+                      <span style={{ fontWeight: 600 }}>
+                        {Number(price).toLocaleString()}đ
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              }
+            >
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 2,
+                  alignItems: "center",
+                  cursor: "pointer",
+                }}
+              >
                 {entries.map(([price, count]) => (
-                  <Tag key={price} color="green" style={{ margin: 0, fontSize: 10 }}>
+                  <Tag
+                    key={price}
+                    color="green"
+                    style={{ margin: 0, fontSize: 10 }}
+                  >
                     {count} lô: {Number(price).toLocaleString()}
                   </Tag>
                 ))}
@@ -661,7 +776,9 @@ export default function ProductListPage() {
         title: (
           <Space>
             <StockOutlined style={{ color: "#faad14" }} />
-            <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Tồn kho</span>
+            <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>
+              Tồn kho
+            </span>
           </Space>
         ),
         dataIndex: "stock_quantity",
@@ -671,50 +788,112 @@ export default function ProductListPage() {
         render: (value, record) => {
           const qtyTotal = Number(value || 0);
           const min = Number(record?.min_stock || 0);
-          
+
           // Tính tồn khả dụng (trừ hết hạn)
-          const avail = (record.batches || []).reduce((sum, b) => {
-             const isExp = b.expiry_date && new Date(b.expiry_date) < new Date();
-             return isExp ? sum : sum + (b.quantity || 0);
-          }, record.batches?.length > 0 ? 0 : qtyTotal);
+          const avail = (record.batches || []).reduce(
+            (sum, b) => {
+              const isExp =
+                b.expiry_date && new Date(b.expiry_date) < new Date();
+              return isExp ? sum : sum + (b.quantity || 0);
+            },
+            record.batches?.length > 0 ? 0 : qtyTotal
+          );
 
           const isLowStock = min > 0 && avail > 0 && avail <= min;
           const hasExpired = qtyTotal > avail;
 
           return (
-            <Tooltip title={
-               <div style={{ padding: '4px' }}>
-                  <div style={{ marginBottom: 4, borderBottom: '1px solid rgba(255,255,255,0.2)' }}>CHI TIẾT TỒN KHO</div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 20 }}>
-                     <span>Tổng tồn:</span>
-                     <span style={{ fontWeight: 600 }}>{qtyTotal}</span>
+            <Tooltip
+              title={
+                <div style={{ padding: "4px" }}>
+                  <div
+                    style={{
+                      marginBottom: 4,
+                      borderBottom: "1px solid rgba(255,255,255,0.2)",
+                    }}
+                  >
+                    CHI TIẾT TỒN KHO
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 20,
+                    }}
+                  >
+                    <span>Tổng tồn:</span>
+                    <span style={{ fontWeight: 600 }}>{qtyTotal}</span>
                   </div>
                   {hasExpired && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 20, color: '#ff4d4f' }}>
-                       <span>Hết hạn:</span>
-                       <span style={{ fontWeight: 600 }}>-{qtyTotal - avail}</span>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 20,
+                        color: "#ff4d4f",
+                      }}
+                    >
+                      <span>Hết hạn:</span>
+                      <span style={{ fontWeight: 600 }}>
+                        -{qtyTotal - avail}
+                      </span>
                     </div>
                   )}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 20, color: '#52c41a', marginTop: 4, paddingTop: 4, borderTop: '1px solid rgba(255,255,255,0.2)' }}>
-                     <span>KHẢ DỤNG:</span>
-                     <span style={{ fontWeight: 800 }}>{avail}</span>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 20,
+                      color: "#52c41a",
+                      marginTop: 4,
+                      paddingTop: 4,
+                      borderTop: "1px solid rgba(255,255,255,0.2)",
+                    }}
+                  >
+                    <span>KHẢ DỤNG:</span>
+                    <span style={{ fontWeight: 800 }}>{avail}</span>
                   </div>
-                  {isLowStock && <div style={{ color: '#faad14', fontSize: 11, marginTop: 4 }}>⚠️ Cảnh báo: Dưới mức tối thiểu!</div>}
-               </div>
-            }>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                  {isLowStock && (
+                    <div
+                      style={{ color: "#faad14", fontSize: 11, marginTop: 4 }}
+                    >
+                      ⚠️ Cảnh báo: Dưới mức tối thiểu!
+                    </div>
+                  )}
+                </div>
+              }
+            >
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 2,
+                }}
+              >
                 <Badge
                   count={avail}
                   overflowCount={999999}
                   showZero
                   style={{
-                    backgroundColor: avail >= 10 ? "#52c41a" : avail === 0 ? "#f5222d" : "#faad14",
+                    backgroundColor:
+                      avail >= 10
+                        ? "#52c41a"
+                        : avail === 0
+                        ? "#f5222d"
+                        : "#faad14",
                     fontSize: "clamp(10px, 2vw, 12px)",
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                    boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
                   }}
                 />
                 {hasExpired && (
-                   <Text delete type="danger" style={{ fontSize: 10, opacity: 0.7 }}>{qtyTotal}</Text>
+                  <Text
+                    delete
+                    type="danger"
+                    style={{ fontSize: 10, opacity: 0.7 }}
+                  >
+                    {qtyTotal}
+                  </Text>
                 )}
               </div>
             </Tooltip>
@@ -722,7 +901,11 @@ export default function ProductListPage() {
         },
       },
       status: {
-        title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Trạng thái</span>,
+        title: (
+          <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>
+            Trạng thái
+          </span>
+        ),
         dataIndex: "status",
         key: "status",
         fixed: "right",
@@ -730,7 +913,13 @@ export default function ProductListPage() {
         align: "center",
         render: (value) => (
           <Tag
-            icon={value === "Đang kinh doanh" ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
+            icon={
+              value === "Đang kinh doanh" ? (
+                <CheckCircleOutlined />
+              ) : (
+                <CloseCircleOutlined />
+              )
+            }
             color={value === "Đang kinh doanh" ? "success" : "error"}
             style={{ fontSize: "clamp(10px, 2vw, 12px)" }}
           >
@@ -739,7 +928,9 @@ export default function ProductListPage() {
         ),
       },
       cost_price: {
-        title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Giá vốn</span>,
+        title: (
+          <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Giá vốn</span>
+        ),
         dataIndex: "cost_price",
         key: "cost_price",
         width: isMobile ? 150 : 180,
@@ -748,36 +939,75 @@ export default function ProductListPage() {
           const batches = record.batches || [];
           // Nếu không có batches hoặc đang ở chế độ split mode
           if (batches.length === 0 || record.isBatch) {
-            return value ? <Tag color="lime">{Number(value).toLocaleString()}</Tag> : "Trống";
+            return value ? (
+              <Tag color="lime">{Number(value).toLocaleString()}</Tag>
+            ) : (
+              "Trống"
+            );
           }
           // Group batches by cost_price
           const priceGroups = {};
-          batches.forEach(b => {
+          batches.forEach((b) => {
             const price = b.cost_price || 0;
             if (!priceGroups[price]) priceGroups[price] = 0;
             priceGroups[price] += 1;
           });
-          const entries = Object.entries(priceGroups).sort((a, b) => Number(a[0]) - Number(b[0]));
+          const entries = Object.entries(priceGroups).sort(
+            (a, b) => Number(a[0]) - Number(b[0])
+          );
           // Nếu tất cả lô cùng giá vốn, hiển thị đơn giản
           if (entries.length === 1) {
-            return <Tag color="lime">{Number(entries[0][0]).toLocaleString()}</Tag>;
+            return (
+              <Tag color="lime">{Number(entries[0][0]).toLocaleString()}</Tag>
+            );
           }
           // Hiển thị chi tiết theo từng mức giá vốn
           return (
-            <Tooltip title={
-              <div style={{ padding: 4 }}>
-                <div style={{ marginBottom: 4, borderBottom: '1px solid rgba(255,255,255,0.2)', paddingBottom: 4 }}>CHI TIẾT GIÁ VỐN THEO LÔ</div>
-                {entries.map(([price, count]) => (
-                  <div key={price} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                    <span>{count} lô:</span>
-                    <span style={{ fontWeight: 600 }}>{Number(price).toLocaleString()}đ</span>
+            <Tooltip
+              title={
+                <div style={{ padding: 4 }}>
+                  <div
+                    style={{
+                      marginBottom: 4,
+                      borderBottom: "1px solid rgba(255,255,255,0.2)",
+                      paddingBottom: 4,
+                    }}
+                  >
+                    CHI TIẾT GIÁ VỐN THEO LÔ
                   </div>
-                ))}
-              </div>
-            }>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center', cursor: 'pointer' }}>
+                  {entries.map(([price, count]) => (
+                    <div
+                      key={price}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 12,
+                      }}
+                    >
+                      <span>{count} lô:</span>
+                      <span style={{ fontWeight: 600 }}>
+                        {Number(price).toLocaleString()}đ
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              }
+            >
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 2,
+                  alignItems: "center",
+                  cursor: "pointer",
+                }}
+              >
                 {entries.map(([price, count]) => (
-                  <Tag key={price} color="lime" style={{ margin: 0, fontSize: 10 }}>
+                  <Tag
+                    key={price}
+                    color="lime"
+                    style={{ margin: 0, fontSize: 10 }}
+                  >
                     {count} lô: {Number(price).toLocaleString()}
                   </Tag>
                 ))}
@@ -787,15 +1017,27 @@ export default function ProductListPage() {
         },
       },
       supplier: {
-        title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Nhà cung cấp</span>,
+        title: (
+          <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>
+            Nhà cung cấp
+          </span>
+        ),
         dataIndex: "supplier",
         key: "supplier",
         width: isMobile ? 120 : 150,
         ellipsis: true,
-        render: (value) => <Text style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>{value?.name || "Trống"}</Text>,
+        render: (value) => (
+          <Text style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
+            {value?.name || "Trống"}
+          </Text>
+        ),
       },
       group: {
-        title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Nhóm sản phẩm</span>,
+        title: (
+          <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>
+            Nhóm sản phẩm
+          </span>
+        ),
         dataIndex: "group",
         key: "group",
         width: isMobile ? 120 : 150,
@@ -803,31 +1045,55 @@ export default function ProductListPage() {
         render: (value) => <Tag color="purple">{value?.name || "Trống"}</Tag>,
       },
       unit: {
-        title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Đơn vị</span>,
+        title: (
+          <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Đơn vị</span>
+        ),
         dataIndex: "unit",
         key: "unit",
         width: 80,
         align: "center",
-        render: (value) => <span style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>{value || "Trống"}</span>,
+        render: (value) => (
+          <span style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
+            {value || "Trống"}
+          </span>
+        ),
       },
       min_stock: {
-        title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Tồn tối thiểu</span>,
+        title: (
+          <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>
+            Tồn tối thiểu
+          </span>
+        ),
         dataIndex: "min_stock",
         key: "min_stock",
         width: 110,
         align: "center",
-        render: (value) => <span style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>{Number(value || 0)}</span>,
+        render: (value) => (
+          <span style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
+            {Number(value || 0)}
+          </span>
+        ),
       },
       max_stock: {
-        title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Tồn tối đa</span>,
+        title: (
+          <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>
+            Tồn tối đa
+          </span>
+        ),
         dataIndex: "max_stock",
         key: "max_stock",
         width: 110,
         align: "center",
-        render: (value) => <span style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>{Number(value || 0)}</span>,
+        render: (value) => (
+          <span style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>
+            {Number(value || 0)}
+          </span>
+        ),
       },
       image: {
-        title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Ảnh</span>,
+        title: (
+          <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Ảnh</span>
+        ),
         dataIndex: "image",
         key: "image",
         width: 100,
@@ -847,26 +1113,34 @@ export default function ProductListPage() {
           ),
       },
       createdAt: {
-        title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Ngày tạo</span>,
+        title: (
+          <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Ngày tạo</span>
+        ),
         dataIndex: "createdAt",
         key: "createdAt",
         width: 120,
         align: "center",
-        render: (value) => (value ? new Date(value).toLocaleDateString("vi-VN") : "Trống"),
+        render: (value) =>
+          value ? new Date(value).toLocaleDateString("vi-VN") : "Trống",
       },
       updatedAt: {
-        title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Cập nhật</span>,
+        title: (
+          <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Cập nhật</span>
+        ),
         dataIndex: "updatedAt",
         key: "updatedAt",
         width: 120,
         align: "center",
-        render: (value) => (value ? new Date(value).toLocaleDateString("vi-VN") : "Trống"),
+        render: (value) =>
+          value ? new Date(value).toLocaleDateString("vi-VN") : "Trống",
       },
       expiry: {
         title: (
           <Space>
             <CalendarOutlined style={{ color: "#ff4d4f" }} />
-            <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Hạn sử dụng</span>
+            <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>
+              Hạn sử dụng
+            </span>
           </Space>
         ),
         key: "expiry",
@@ -883,11 +1157,17 @@ export default function ProductListPage() {
 
             let color = "green";
             let text = expiryDate.toLocaleDateString("vi-VN");
-            if (diffDays < 0) { color = "red"; text = `Hết hạn ${text}`; }
-            else if (diffDays <= 30) color = "orange";
+            if (diffDays < 0) {
+              color = "red";
+              text = `Hết hạn ${text}`;
+            } else if (diffDays <= 30) color = "orange";
             else if (diffDays <= 90) color = "blue";
 
-            return <Tag color={color} style={{ fontSize: "clamp(10px, 2vw, 12px)" }}>{text}</Tag>;
+            return (
+              <Tag color={color} style={{ fontSize: "clamp(10px, 2vw, 12px)" }}>
+                {text}
+              </Tag>
+            );
           }
 
           // 2. Chế độ Merge (Gộp sản phẩm) -> Đếm số lô còn hạn/hết hạn
@@ -895,30 +1175,47 @@ export default function ProductListPage() {
           if (batches.length === 0) return <Tag>Không có hạn</Tag>;
 
           const now = new Date();
-          const expiredBatches = batches.filter(b => b.expiry_date && new Date(b.expiry_date) < now);
-          const validBatches = batches.filter(b => !b.expiry_date || new Date(b.expiry_date) >= now);
+          const expiredBatches = batches.filter(
+            (b) => b.expiry_date && new Date(b.expiry_date) < now
+          );
+          const validBatches = batches.filter(
+            (b) => !b.expiry_date || new Date(b.expiry_date) >= now
+          );
 
           return (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>
-               {validBatches.length > 0 && (
-                  <Tag color="success" style={{ margin: 0, fontSize: 10 }}>
-                     {validBatches.length} lô còn hạn
-                  </Tag>
-               )}
-               {expiredBatches.length > 0 && (
-                  <Tag color="error" style={{ margin: 0, fontSize: 10 }}>
-                     {expiredBatches.length} lô hết hạn
-                  </Tag>
-               )}
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 2,
+                alignItems: "center",
+              }}
+            >
+              {validBatches.length > 0 && (
+                <Tag color="success" style={{ margin: 0, fontSize: 10 }}>
+                  {validBatches.length} lô còn hạn
+                </Tag>
+              )}
+              {expiredBatches.length > 0 && (
+                <Tag color="error" style={{ margin: 0, fontSize: 10 }}>
+                  {expiredBatches.length} lô hết hạn
+                </Tag>
+              )}
             </div>
           );
-        }
+        },
       },
     };
   }, [isMobile]);
 
-  // ✅ sắp xếp: name, sku, warehouse, price, stock_quantity ... status ... action
-  const leftFixedOrder = ["name", "sku", "warehouse", "price", "stock_quantity"];
+  //  sắp xếp: name, sku, warehouse, price, stock_quantity ... status ... action
+  const leftFixedOrder = [
+    "name",
+    "sku",
+    "warehouse",
+    "price",
+    "stock_quantity",
+  ];
   const rightFixed = ["status"];
 
   const middleColumnsKeys = useMemo(() => {
@@ -945,7 +1242,9 @@ export default function ProductListPage() {
     ].filter(Boolean);
 
     cols.push({
-      title: <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Thao tác</span>,
+      title: (
+        <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Thao tác</span>
+      ),
       key: "action",
       width: isMobile ? 100 : 150,
       align: "center",
@@ -973,14 +1272,15 @@ export default function ProductListPage() {
                   openEditBatch(record, batch);
                 }}
                 style={{
-                  background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                  background:
+                    "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
                   border: "none",
                 }}
               />
             </Tooltip>
           );
         }
-        
+
         // Chế độ Merge (Gộp theo SP) - sửa thông tin SP + xem chi tiết lô
         if (viewMode === "merge") {
           const hasBatches = record.batches && record.batches.length > 0;
@@ -998,7 +1298,13 @@ export default function ProductListPage() {
                   style={{ borderColor: "#52c41a", color: "#52c41a" }}
                 />
               </Tooltip>
-              <Tooltip title={hasBatches ? "Click hàng để xem chi tiết lô" : "Sản phẩm chưa có lô"}>
+              <Tooltip
+                title={
+                  hasBatches
+                    ? "Click hàng để xem chi tiết lô"
+                    : "Sản phẩm chưa có lô"
+                }
+              >
                 <Button
                   type={hasBatches ? "default" : "dashed"}
                   icon={<EyeOutlined />}
@@ -1008,14 +1314,18 @@ export default function ProductListPage() {
                     e.stopPropagation();
                     if (hasBatches) {
                       const key = record._id || record.id;
-                      setExpandedRowKeys(prev => 
-                        prev.includes(key) 
-                          ? prev.filter(k => k !== key) 
+                      setExpandedRowKeys((prev) =>
+                        prev.includes(key)
+                          ? prev.filter((k) => k !== key)
                           : [...prev, key]
                       );
                     }
                   }}
-                  style={hasBatches ? { borderColor: "#1890ff", color: "#1890ff" } : {}}
+                  style={
+                    hasBatches
+                      ? { borderColor: "#1890ff", color: "#1890ff" }
+                      : {}
+                  }
                 >
                   {!isMobile && (hasBatches ? "Xem lô" : "Không có lô")}
                 </Button>
@@ -1023,7 +1333,7 @@ export default function ProductListPage() {
             </Space>
           );
         }
-        
+
         return null;
       },
     });
@@ -1032,14 +1342,31 @@ export default function ProductListPage() {
   }, [visibleColumns, columnConfigs, middleColumnsKeys, isMobile]);
 
   const columnSelectorContent = (
-    <Card style={{ width: "100%", border: "1px solid #8c8c8c", maxHeight: isMobile ? "70vh" : 400, overflowY: "auto" }}>
+    <Card
+      style={{
+        width: "100%",
+        border: "1px solid #8c8c8c",
+        maxHeight: isMobile ? "70vh" : 400,
+        overflowY: "auto",
+      }}
+    >
       <div style={{ padding: 5 }}>
-        <Text strong style={{ fontSize: "clamp(13px, 3vw, 14px)" }}>Chọn cột hiển thị thêm:</Text>
+        <Text strong style={{ fontSize: "clamp(13px, 3vw, 14px)" }}>
+          Chọn cột hiển thị thêm:
+        </Text>
         <Divider style={{ margin: "8px 0" }} />
-        <Checkbox.Group value={visibleColumns} onChange={toggleColumn} style={{ width: "100%" }}>
+        <Checkbox.Group
+          value={visibleColumns}
+          onChange={toggleColumn}
+          style={{ width: "100%" }}
+        >
           <Space direction="vertical" style={{ width: "100%" }} size={8}>
             {allColumns.map((col) => (
-              <Checkbox key={col.key} value={col.key} style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>
+              <Checkbox
+                key={col.key}
+                value={col.key}
+                style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}
+              >
                 {col.label}
               </Checkbox>
             ))}
@@ -1057,11 +1384,17 @@ export default function ProductListPage() {
   const previewColumns = useMemo(() => {
     if (!previewRows.length) return [];
     return Object.keys(previewRows[0]).map((key) => ({
-      title: <span style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>{key}</span>,
+      title: (
+        <span style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}>{key}</span>
+      ),
       dataIndex: key,
       key,
       ellipsis: true,
-      render: (text) => <span style={{ fontSize: "clamp(10px, 2vw, 12px)" }}>{String(text ?? "")}</span>,
+      render: (text) => (
+        <span style={{ fontSize: "clamp(10px, 2vw, 12px)" }}>
+          {String(text ?? "")}
+        </span>
+      ),
     }));
   }, [previewRows]);
 
@@ -1081,19 +1414,26 @@ export default function ProductListPage() {
       await fetchProducts(false);
 
       const results = response?.results || {};
-      const newlyCreated = response?.newlyCreated || results?.newlyCreated || {};
+      const newlyCreated =
+        response?.newlyCreated || results?.newlyCreated || {};
       const successCount = results?.success?.length || 0;
       const failedCount = results?.failed?.length || 0;
 
-      let description = `Thành công: ${successCount}/${results?.total || successCount} dòng`;
-      
+      let description = `Thành công: ${successCount}/${
+        results?.total || successCount
+      } dòng`;
+
       // Show newly created items
       const createdParts = [];
-      if (newlyCreated.products > 0) createdParts.push(`${newlyCreated.products} sản phẩm mới`);
-      if (newlyCreated.suppliers > 0) createdParts.push(`${newlyCreated.suppliers} nhà cung cấp`);
-      if (newlyCreated.productGroups > 0) createdParts.push(`${newlyCreated.productGroups} nhóm sản phẩm`);
-      if (newlyCreated.warehouses > 0) createdParts.push(`${newlyCreated.warehouses} kho hàng`);
-      
+      if (newlyCreated.products > 0)
+        createdParts.push(`${newlyCreated.products} sản phẩm mới`);
+      if (newlyCreated.suppliers > 0)
+        createdParts.push(`${newlyCreated.suppliers} nhà cung cấp`);
+      if (newlyCreated.productGroups > 0)
+        createdParts.push(`${newlyCreated.productGroups} nhóm sản phẩm`);
+      if (newlyCreated.warehouses > 0)
+        createdParts.push(`${newlyCreated.warehouses} kho hàng`);
+
       if (createdParts.length > 0) {
         description += `. Đã tạo mới: ${createdParts.join(", ")}`;
       }
@@ -1108,7 +1448,7 @@ export default function ProductListPage() {
         });
       } else {
         api.success({
-          message: "✅ Nhập sản phẩm thành công",
+          message: " Nhập sản phẩm thành công",
           description,
           placement: "topRight",
           duration: 5,
@@ -1121,7 +1461,10 @@ export default function ProductListPage() {
       console.error("Import products error:", error);
       api.error({
         message: " Nhập sản phẩm thất bại",
-        description: error?.response?.data?.message || error?.message || "Vui lòng kiểm tra file và thử lại",
+        description:
+          error?.response?.data?.message ||
+          error?.message ||
+          "Vui lòng kiểm tra file và thử lại",
         placement: "topRight",
         duration: 6,
       });
@@ -1173,11 +1516,19 @@ export default function ProductListPage() {
     return (
       <Layout>
         {contextHolder}
-        <Card style={{ border: "1px solid #8c8c8c", margin: isMobile ? 12 : 0, borderRadius: 16 }}>
+        <Card
+          style={{
+            border: "1px solid #8c8c8c",
+            margin: isMobile ? 12 : 0,
+            borderRadius: 16,
+          }}
+        >
           <Title level={2} style={{ fontSize: "clamp(20px, 5vw, 32px)" }}>
             Danh sách sản phẩm
           </Title>
-          <Card style={{ background: "#FFF9C4", border: "none", marginTop: 16 }}>
+          <Card
+            style={{ background: "#FFF9C4", border: "none", marginTop: 16 }}
+          >
             <Text strong style={{ fontSize: "clamp(13px, 3vw, 15px)" }}>
               ⚠️ Không tìm thấy cửa hàng hiện hành.
             </Text>
@@ -1192,7 +1543,13 @@ export default function ProductListPage() {
       {contextHolder}
 
       <div style={{ padding: isMobile ? 1 : 0, minHeight: "100vh" }}>
-        <Card style={{ borderRadius: 16, border: "1px solid #8c8c8c", marginBottom: isMobile ? 10 : 15 }}>
+        <Card
+          style={{
+            borderRadius: 16,
+            border: "1px solid #8c8c8c",
+            marginBottom: isMobile ? 10 : 15,
+          }}
+        >
           <div style={{ marginBottom: isMobile ? 10 : 20 }}>
             <Title
               level={2}
@@ -1204,28 +1561,59 @@ export default function ProductListPage() {
                 color: "black",
               }}
             >
-               Quản lý Sản phẩm
+              Quản lý Sản phẩm
             </Title>
             {!isMobile && (
-              <Text type="secondary" style={{ fontSize: "clamp(12px, 3vw, 14px)" }}>
-                Quản lý danh mục sản phẩm - giá bán, tồn kho và thông tin chi tiết
+              <Text
+                type="secondary"
+                style={{ fontSize: "clamp(12px, 3vw, 14px)" }}
+              >
+                Quản lý danh mục sản phẩm - giá bán, tồn kho và thông tin chi
+                tiết
               </Text>
             )}
           </div>
 
-          <Row gutter={[isMobile ? 8 : 16, isMobile ? 8 : 16]} style={{ marginBottom: isMobile ? 16 : 24 }}>
+          <Row
+            gutter={[isMobile ? 8 : 16, isMobile ? 8 : 16]}
+            style={{ marginBottom: isMobile ? 16 : 24 }}
+          >
             <Col xs={12} sm={12} md={6}>
               <Tooltip title="Tổng số sản phẩm trong cửa hàng hiện tại">
-                <Card style={{ background: "#2C5364", border: "none", borderRadius: 12 }} styles={{ body: { padding: isMobile ? 12 : 20 } }}>
+                <Card
+                  style={{
+                    background: "#2C5364",
+                    border: "none",
+                    borderRadius: 12,
+                  }}
+                  styles={{ body: { padding: isMobile ? 12 : 20 } }}
+                >
                   <Statistic
                     title={
-                      <span style={{ color: "#fff", fontSize: "clamp(10px, 2.5vw, 14px)", fontWeight: 500 }}>
-                        Tổng sản phẩm <InfoCircleOutlined style={{ color: "#2196F3", fontSize: 15 }} />
+                      <span
+                        style={{
+                          color: "#fff",
+                          fontSize: "clamp(10px, 2.5vw, 14px)",
+                          fontWeight: 500,
+                        }}
+                      >
+                        Tổng sản phẩm{" "}
+                        <InfoCircleOutlined
+                          style={{ color: "#2196F3", fontSize: 15 }}
+                        />
                       </span>
                     }
                     value={filteredProducts.length}
-                    prefix={<AppstoreOutlined style={{ fontSize: "clamp(14px, 4vw, 20px)" }} />}
-                    valueStyle={{ color: "#fff", fontWeight: "bold", fontSize: "clamp(16px, 5vw, 24px)" }}
+                    prefix={
+                      <AppstoreOutlined
+                        style={{ fontSize: "clamp(14px, 4vw, 20px)" }}
+                      />
+                    }
+                    valueStyle={{
+                      color: "#fff",
+                      fontWeight: "bold",
+                      fontSize: "clamp(16px, 5vw, 24px)",
+                    }}
                   />
                 </Card>
               </Tooltip>
@@ -1233,16 +1621,40 @@ export default function ProductListPage() {
 
             <Col xs={12} sm={12} md={6}>
               <Tooltip title="Số lượng mặt hàng đang được kinh doanh">
-                <Card style={{ background: "#2C5364", border: "none", borderRadius: 12 }} styles={{ body: { padding: isMobile ? 12 : 20 } }}>
+                <Card
+                  style={{
+                    background: "#2C5364",
+                    border: "none",
+                    borderRadius: 12,
+                  }}
+                  styles={{ body: { padding: isMobile ? 12 : 20 } }}
+                >
                   <Statistic
                     title={
-                      <span style={{ color: "#fff", fontSize: "clamp(10px, 2.5vw, 14px)", fontWeight: 500 }}>
-                        Đang kinh doanh <InfoCircleOutlined style={{ color: "#2196F3", fontSize: 15 }} />
+                      <span
+                        style={{
+                          color: "#fff",
+                          fontSize: "clamp(10px, 2.5vw, 14px)",
+                          fontWeight: 500,
+                        }}
+                      >
+                        Đang kinh doanh{" "}
+                        <InfoCircleOutlined
+                          style={{ color: "#2196F3", fontSize: 15 }}
+                        />
                       </span>
                     }
                     value={activeProducts}
-                    prefix={<CheckCircleOutlined style={{ fontSize: "clamp(14px, 4vw, 20px)" }} />}
-                    valueStyle={{ color: "#fff", fontWeight: "bold", fontSize: "clamp(16px, 5vw, 24px)" }}
+                    prefix={
+                      <CheckCircleOutlined
+                        style={{ fontSize: "clamp(14px, 4vw, 20px)" }}
+                      />
+                    }
+                    valueStyle={{
+                      color: "#fff",
+                      fontWeight: "bold",
+                      fontSize: "clamp(16px, 5vw, 24px)",
+                    }}
                   />
                 </Card>
               </Tooltip>
@@ -1250,16 +1662,40 @@ export default function ProductListPage() {
 
             <Col xs={12} sm={12} md={6}>
               <Tooltip title="Số lượng tồn kho hiện tại của tất cả sản phẩm">
-                <Card style={{ background: "#2C5364", border: "none", borderRadius: 12 }} styles={{ body: { padding: isMobile ? 12 : 20 } }}>
+                <Card
+                  style={{
+                    background: "#2C5364",
+                    border: "none",
+                    borderRadius: 12,
+                  }}
+                  styles={{ body: { padding: isMobile ? 12 : 20 } }}
+                >
                   <Statistic
                     title={
-                      <span style={{ color: "#fff", fontSize: "clamp(10px, 2.5vw, 14px)", fontWeight: 500 }}>
-                        Tồn kho <InfoCircleOutlined style={{ color: "#2196F3", fontSize: 15 }} />
+                      <span
+                        style={{
+                          color: "#fff",
+                          fontSize: "clamp(10px, 2.5vw, 14px)",
+                          fontWeight: 500,
+                        }}
+                      >
+                        Tồn kho{" "}
+                        <InfoCircleOutlined
+                          style={{ color: "#2196F3", fontSize: 15 }}
+                        />
                       </span>
                     }
                     value={totalStock}
-                    prefix={<StockOutlined style={{ fontSize: "clamp(14px, 4vw, 20px)" }} />}
-                    valueStyle={{ color: "#fff", fontWeight: "bold", fontSize: "clamp(16px, 5vw, 24px)" }}
+                    prefix={
+                      <StockOutlined
+                        style={{ fontSize: "clamp(14px, 4vw, 20px)" }}
+                      />
+                    }
+                    valueStyle={{
+                      color: "#fff",
+                      fontWeight: "bold",
+                      fontSize: "clamp(16px, 5vw, 24px)",
+                    }}
                   />
                 </Card>
               </Tooltip>
@@ -1267,17 +1703,41 @@ export default function ProductListPage() {
 
             <Col xs={12} sm={12} md={6}>
               <Tooltip title="Công thức tính: 'Tồn kho' x 'Giá bán'">
-                <Card style={{ background: "#2C5364", border: "none", borderRadius: 12 }} styles={{ body: { padding: isMobile ? 12 : 20 } }}>
+                <Card
+                  style={{
+                    background: "#2C5364",
+                    border: "none",
+                    borderRadius: 12,
+                  }}
+                  styles={{ body: { padding: isMobile ? 12 : 20 } }}
+                >
                   <Statistic
                     title={
-                      <span style={{ color: "#fff", fontSize: "clamp(10px, 2.5vw, 14px)", fontWeight: 500 }}>
-                        Giá trị <InfoCircleOutlined style={{ color: "#2196F3", fontSize: 15 }} />
+                      <span
+                        style={{
+                          color: "#fff",
+                          fontSize: "clamp(10px, 2.5vw, 14px)",
+                          fontWeight: 500,
+                        }}
+                      >
+                        Giá trị{" "}
+                        <InfoCircleOutlined
+                          style={{ color: "#2196F3", fontSize: 15 }}
+                        />
                       </span>
                     }
                     value={totalValue}
-                    prefix={<DollarOutlined style={{ fontSize: "clamp(14px, 4vw, 20px)" }} />}
+                    prefix={
+                      <DollarOutlined
+                        style={{ fontSize: "clamp(14px, 4vw, 20px)" }}
+                      />
+                    }
                     suffix="₫"
-                    valueStyle={{ color: "#fff", fontWeight: "bold", fontSize: "clamp(12px, 4vw, 18px)" }}
+                    valueStyle={{
+                      color: "#fff",
+                      fontWeight: "bold",
+                      fontSize: "clamp(12px, 4vw, 18px)",
+                    }}
                   />
                 </Card>
               </Tooltip>
@@ -1288,7 +1748,12 @@ export default function ProductListPage() {
 
           <Space
             direction={isMobile ? "vertical" : "horizontal"}
-            style={{ marginBottom: isMobile ? 16 : 24, width: "100%", justifyContent: "space-between", flexWrap: "wrap" }}
+            style={{
+              marginBottom: isMobile ? 16 : 24,
+              width: "100%",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+            }}
             size={isMobile ? 12 : 16}
           >
             <AutoComplete
@@ -1296,32 +1761,58 @@ export default function ProductListPage() {
               options={searchOptions}
               onChange={(value) => setSearchValue(value)}
               onSelect={(value) => setSearchValue(value)}
-              style={{ width: isMobile ? "100%" : 400, minWidth: isMobile ? "auto" : 300 }}
+              style={{
+                width: isMobile ? "100%" : 400,
+                minWidth: isMobile ? "auto" : 300,
+              }}
             >
               <Input
                 prefix={<SearchOutlined style={{ color: "#1890ff" }} />}
-                placeholder={isMobile ? "Tìm kiếm..." : "Tìm kiếm sản phẩm theo tên, SKU, nhà cung cấp, nhóm, kho..."}
+                placeholder={
+                  isMobile
+                    ? "Tìm kiếm..."
+                    : "Tìm kiếm sản phẩm theo tên, SKU, nhà cung cấp, nhóm, kho..."
+                }
                 allowClear
                 onClear={() => setSearchValue("")}
               />
             </AutoComplete>
 
-            <Space size={isMobile ? 8 : 12} wrap style={{ width: isMobile ? "100%" : "auto" }}>
-              <Button size={isMobile ? "middle" : "large"} icon={<ReloadOutlined />} onClick={handleRefresh}>
+            <Space
+              size={isMobile ? 8 : 12}
+              wrap
+              style={{ width: isMobile ? "100%" : "auto" }}
+            >
+              <Button
+                size={isMobile ? "middle" : "large"}
+                icon={<ReloadOutlined />}
+                onClick={handleRefresh}
+              >
                 {!isMobile ? "Làm mới" : null}
               </Button>
 
-              <Button size={isMobile ? "middle" : "large"} icon={<FileExcelOutlined />} onClick={handleExportExcel} style={{ borderColor: "#52c41a", color: "#52c41a" }}>
+              <Button
+                size={isMobile ? "middle" : "large"}
+                icon={<FileExcelOutlined />}
+                onClick={handleExportExcel}
+                style={{ borderColor: "#52c41a", color: "#52c41a" }}
+              >
                 {!isMobile ? "Xuất Excel" : "Xuất"}
               </Button>
 
               {isMobile ? (
-                <Button size="middle" icon={<MenuOutlined />} onClick={() => setDrawerVisible(true)}>
+                <Button
+                  size="middle"
+                  icon={<MenuOutlined />}
+                  onClick={() => setDrawerVisible(true)}
+                >
                   Cột
                 </Button>
               ) : (
                 <Dropdown
-                  dropdownRender={() => <div style={{ width: 280 }}>{columnSelectorContent}</div>}
+                  dropdownRender={() => (
+                    <div style={{ width: 280 }}>{columnSelectorContent}</div>
+                  )}
                   trigger={["click"]}
                   placement="bottomRight"
                 >
@@ -1331,7 +1822,12 @@ export default function ProductListPage() {
                 </Dropdown>
               )}
 
-              <Button size={isMobile ? "middle" : "large"} icon={<FileExcelOutlined />} loading={isImporting} onClick={handleExcelButtonClick}>
+              <Button
+                size={isMobile ? "middle" : "large"}
+                icon={<FileExcelOutlined />}
+                loading={isImporting}
+                onClick={handleExcelButtonClick}
+              >
                 Tải lên
               </Button>
 
@@ -1343,7 +1839,7 @@ export default function ProductListPage() {
                   style={{ width: 140 }}
                   options={[
                     { value: "merge", label: "Gộp theo SP" },
-                    { value: "split", label: "Chi tiết Lô" }
+                    { value: "split", label: "Chi tiết Lô" },
                   ]}
                 />
                 <Button
@@ -1352,7 +1848,8 @@ export default function ProductListPage() {
                   icon={<PlusOutlined />}
                   onClick={openCreateModal}
                   style={{
-                    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                    background:
+                      "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
                     border: "none",
                     boxShadow: "0 2px 8px rgba(118, 75, 162, 0.4)",
                   }}
@@ -1367,7 +1864,9 @@ export default function ProductListPage() {
             <Table
               columns={getTableColumns()}
               dataSource={filteredProducts}
-              rowKey={(r) => viewMode === "split" ? r.uniqueId : (r._id || r.id)}
+              rowKey={(r) =>
+                viewMode === "split" ? r.uniqueId : r._id || r.id
+              }
               loading={loading}
               pagination={{
                 current: currentPage,
@@ -1376,9 +1875,21 @@ export default function ProductListPage() {
                 showSizeChanger: !isMobile,
                 pageSizeOptions: ["5", "10", "20", "50", "100"],
                 showTotal: (total, range) => (
-                  <div style={{ fontSize: isMobile ? 12 : 14, textAlign: isMobile ? "center" : "left" }}>
-                    Đang xem <span style={{ color: "#1890ff", fontWeight: 600 }}>{range[0]}-{range[1]}</span> trên tổng{" "}
-                    <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> dòng
+                  <div
+                    style={{
+                      fontSize: isMobile ? 12 : 14,
+                      textAlign: isMobile ? "center" : "left",
+                    }}
+                  >
+                    Đang xem{" "}
+                    <span style={{ color: "#1890ff", fontWeight: 600 }}>
+                      {range[0]}-{range[1]}
+                    </span>{" "}
+                    trên tổng{" "}
+                    <span style={{ color: "#d4380d", fontWeight: 600 }}>
+                      {total}
+                    </span>{" "}
+                    dòng
                   </div>
                 ),
               }}
@@ -1388,149 +1899,258 @@ export default function ProductListPage() {
               locale={{
                 emptyText: (
                   <div style={{ padding: isMobile ? "24px 0" : "48px 0" }}>
-                    <ShoppingOutlined style={{ fontSize: isMobile ? 32 : 48, color: "#d9d9d9" }} />
-                    <div style={{ marginTop: 16, color: "#999", fontSize: "clamp(12px, 3vw, 14px)" }}>
-                      {searchValue ? `Không tìm thấy sản phẩm nào với từ khóa "${searchValue}"` : "Chưa có sản phẩm nào"}
+                    <ShoppingOutlined
+                      style={{ fontSize: isMobile ? 32 : 48, color: "#d9d9d9" }}
+                    />
+                    <div
+                      style={{
+                        marginTop: 16,
+                        color: "#999",
+                        fontSize: "clamp(12px, 3vw, 14px)",
+                      }}
+                    >
+                      {searchValue
+                        ? `Không tìm thấy sản phẩm nào với từ khóa "${searchValue}"`
+                        : "Chưa có sản phẩm nào"}
                     </div>
                   </div>
                 ),
               }}
+              expandable={
+                viewMode === "merge"
+                  ? {
+                      expandedRowRender: (record) => {
+                        const data = record.batches || [];
+                        if (data.length === 0) {
+                          return (
+                            <Text
+                              type="secondary"
+                              italic
+                              style={{ paddingLeft: 48 }}
+                            >
+                              Chưa có thông tin lô hàng
+                            </Text>
+                          );
+                        }
 
-              expandable={viewMode === "merge" ? {
-                expandedRowRender: (record) => {
-                  const data = record.batches || [];
-                  if (data.length === 0) {
-                    return <Text type="secondary" italic style={{ paddingLeft: 48 }}>Chưa có thông tin lô hàng</Text>;
-                  }
+                        const batchColumns = [
+                          {
+                            title: "Số lô",
+                            dataIndex: "batch_no",
+                            key: "batch_no",
+                            render: (val) => (
+                              <Tag color="blue">{val || "N/A"}</Tag>
+                            ),
+                          },
+                          {
+                            title: "Hạn sử dụng",
+                            dataIndex: "expiry_date",
+                            key: "expiry_date",
+                            render: (val) => {
+                              if (!val) return <Tag>Không có hạn</Tag>;
+                              const expiryDate = new Date(val);
+                              const now = new Date();
+                              const diffDays = Math.ceil(
+                                (expiryDate - now) / (1000 * 60 * 60 * 24)
+                              );
+                              let color = "green";
+                              let prefix = "";
+                              if (diffDays < 0) {
+                                color = "red";
+                                prefix = "Hết hạn: ";
+                              } else if (diffDays <= 30) {
+                                color = "orange";
+                                prefix = "⚠️ ";
+                              } else if (diffDays <= 90) color = "blue";
+                              return (
+                                <Tag color={color}>
+                                  {prefix}
+                                  {expiryDate.toLocaleDateString("vi-VN")}
+                                </Tag>
+                              );
+                            },
+                          },
+                          {
+                            title: "Giá nhập",
+                            dataIndex: "cost_price",
+                            key: "cost_price",
+                            render: (val) => (
+                              <Tag color="purple" style={{ fontWeight: 500 }}>
+                                {val ? Number(val).toLocaleString() : 0}đ
+                              </Tag>
+                            ),
+                          },
+                          {
+                            title: "Giá bán",
+                            dataIndex: "selling_price",
+                            key: "selling_price",
+                            render: (val, b) => (
+                              <Tag color="green" style={{ fontWeight: 600 }}>
+                                {val
+                                  ? Number(val).toLocaleString()
+                                  : record.price
+                                  ? Number(record.price).toLocaleString()
+                                  : 0}
+                                đ
+                              </Tag>
+                            ),
+                          },
+                          {
+                            title: "Số lượng",
+                            dataIndex: "quantity",
+                            key: "quantity",
+                            render: (val) => (
+                              <Badge
+                                count={val}
+                                overflowCount={9999}
+                                style={{
+                                  backgroundColor:
+                                    val > 0 ? "#1890ff" : "#d9d9d9",
+                                }}
+                              />
+                            ),
+                          },
+                          {
+                            title: "Ngày nhập",
+                            dataIndex: "created_at",
+                            key: "created_at",
+                            render: (val) => (
+                              <span style={{ fontSize: 11, color: "#8c8c8c" }}>
+                                {val
+                                  ? new Date(val).toLocaleDateString("vi-VN")
+                                  : "N/A"}
+                              </span>
+                            ),
+                          },
+                          {
+                            title: "Thao tác",
+                            key: "action",
+                            width: 80,
+                            align: "center",
+                            render: (_, batch) => (
+                              <Tooltip title="Chỉnh sửa lô này">
+                                <Button
+                                  type="primary"
+                                  icon={<EditOutlined />}
+                                  size="small"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openEditBatch(record, batch);
+                                  }}
+                                  style={{
+                                    background:
+                                      "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                                    border: "none",
+                                  }}
+                                />
+                              </Tooltip>
+                            ),
+                          },
+                        ];
 
-                  const batchColumns = [
-                    { 
-                      title: "Số lô", 
-                      dataIndex: "batch_no", 
-                      key: "batch_no",
-                      render: (val) => <Tag color="blue">{val || "N/A"}</Tag>
-                    },
-                    {
-                      title: "Hạn sử dụng",
-                      dataIndex: "expiry_date",
-                      key: "expiry_date",
-                      render: (val) => {
-                        if (!val) return <Tag>Không có hạn</Tag>;
-                        const expiryDate = new Date(val);
-                        const now = new Date();
-                        const diffDays = Math.ceil((expiryDate - now) / (1000 * 60 * 60 * 24));
-                        let color = "green";
-                        let prefix = "";
-                        if (diffDays < 0) { color = "red"; prefix = "Hết hạn: "; }
-                        else if (diffDays <= 30) { color = "orange"; prefix = "⚠️ "; }
-                        else if (diffDays <= 90) color = "blue";
-                        return <Tag color={color}>{prefix}{expiryDate.toLocaleDateString("vi-VN")}</Tag>;
-                      }
-                    },
-                    {
-                      title: "Giá nhập",
-                      dataIndex: "cost_price",
-                      key: "cost_price",
-                      render: (val) => <Tag color="purple" style={{ fontWeight: 500 }}>{val ? Number(val).toLocaleString() : 0}đ</Tag>
-                    },
-                    {
-                      title: "Giá bán",
-                      dataIndex: "selling_price",
-                      key: "selling_price",
-                      render: (val, b) => <Tag color="green" style={{ fontWeight: 600 }}>{val ? Number(val).toLocaleString() : (record.price ? Number(record.price).toLocaleString() : 0)}đ</Tag>
-                    },
-                    {
-                      title: "Số lượng",
-                      dataIndex: "quantity",
-                      key: "quantity",
-                      render: (val) => <Badge count={val} overflowCount={9999} style={{ backgroundColor: val > 0 ? '#1890ff' : '#d9d9d9' }} />
-                    },
-                    {
-                      title: "Ngày nhập",
-                      dataIndex: "created_at",
-                      key: "created_at",
-                      render: (val) => <span style={{ fontSize: 11, color: '#8c8c8c' }}>{val ? new Date(val).toLocaleDateString("vi-VN") : "N/A"}</span>
-                    },
-                    {
-                      title: "Thao tác",
-                      key: "action",
-                      width: 80,
-                      align: "center",
-                      render: (_, batch) => (
-                        <Tooltip title="Chỉnh sửa lô này">
-                          <Button
-                            type="primary"
-                            icon={<EditOutlined />}
-                            size="small"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openEditBatch(record, batch);
-                            }}
+                        return (
+                          <div
                             style={{
-                              background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                              border: "none",
+                              margin: 0,
+                              padding: "12px 24px 12px 48px",
+                              background: "#fdfdfd",
+                              borderRadius: 8,
+                              border: "1px solid #f0f0f0",
                             }}
-                          />
-                        </Tooltip>
-                      )
-                    }
-                  ];
-
-                  return (
-                    <div style={{ margin: 0, padding: "12px 24px 12px 48px", background: "#fdfdfd", borderRadius: 8, border: '1px solid #f0f0f0' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12, gap: 8 }}>
-                         <div style={{ width: 4, height: 16, background: '#1890ff', borderRadius: 2 }}></div>
-                         <Text strong style={{ color: "#262626", fontSize: 13 }}>CHI TIẾT LÔ HÀNG & HẠN SỬ DỤNG</Text>
-                      </div>
-                      <Table
-                        columns={batchColumns}
-                        dataSource={data}
-                        pagination={false}
-                        size="small"
-                        rowKey={(item) => item.batch_no + item.created_at}
-                        rowClassName={(b) => b.expiry_date && new Date(b.expiry_date) < new Date() ? "expired-row-bg" : ""}
-                        bordered
-                      />
-                      <style>{`
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                marginBottom: 12,
+                                gap: 8,
+                              }}
+                            >
+                              <div
+                                style={{
+                                  width: 4,
+                                  height: 16,
+                                  background: "#1890ff",
+                                  borderRadius: 2,
+                                }}
+                              ></div>
+                              <Text
+                                strong
+                                style={{ color: "#262626", fontSize: 13 }}
+                              >
+                                CHI TIẾT LÔ HÀNG & HẠN SỬ DỤNG
+                              </Text>
+                            </div>
+                            <Table
+                              columns={batchColumns}
+                              dataSource={data}
+                              pagination={false}
+                              size="small"
+                              rowKey={(item) => item.batch_no + item.created_at}
+                              rowClassName={(b) =>
+                                b.expiry_date &&
+                                new Date(b.expiry_date) < new Date()
+                                  ? "expired-row-bg"
+                                  : ""
+                              }
+                              bordered
+                            />
+                            <style>{`
                         .expired-row-bg { background-color: #fff1f0 !important; }
                         .expired-row-bg td { color: #cf1322 !important; }
                       `}</style>
-                    </div>
-                  );
-                },
-                rowExpandable: (record) => record.batches && record.batches.length > 0,
-                expandedRowKeys: expandedRowKeys,
-                onExpand: (expanded, record) => {
-                  const key = record._id || record.id;
-                  if (expanded) {
-                    setExpandedRowKeys(prev => [...prev, key]);
-                  } else {
-                    setExpandedRowKeys(prev => prev.filter(k => k !== key));
-                  }
-                },
-              } : undefined}
+                          </div>
+                        );
+                      },
+                      rowExpandable: (record) =>
+                        record.batches && record.batches.length > 0,
+                      expandedRowKeys: expandedRowKeys,
+                      onExpand: (expanded, record) => {
+                        const key = record._id || record.id;
+                        if (expanded) {
+                          setExpandedRowKeys((prev) => [...prev, key]);
+                        } else {
+                          setExpandedRowKeys((prev) =>
+                            prev.filter((k) => k !== key)
+                          );
+                        }
+                      },
+                    }
+                  : undefined
+              }
               onRow={(record) => ({
                 onClick: () => {
                   // Chỉ xử lý click để expand khi ở chế độ merge và có batches
-                  if (viewMode === "merge" && record.batches && record.batches.length > 0) {
+                  if (
+                    viewMode === "merge" &&
+                    record.batches &&
+                    record.batches.length > 0
+                  ) {
                     const key = record._id || record.id;
-                    setExpandedRowKeys(prev => 
-                      prev.includes(key) 
-                        ? prev.filter(k => k !== key) 
+                    setExpandedRowKeys((prev) =>
+                      prev.includes(key)
+                        ? prev.filter((k) => k !== key)
                         : [...prev, key]
                     );
                   }
                 },
-                style: viewMode === "merge" && record.batches && record.batches.length > 0 
-                  ? { cursor: 'pointer' } 
-                  : {}
+                style:
+                  viewMode === "merge" &&
+                  record.batches &&
+                  record.batches.length > 0
+                    ? { cursor: "pointer" }
+                    : {},
               })}
             />
           </div>
         </Card>
 
         <Drawer
-          title={<span style={{ fontSize: "clamp(14px, 3.5vw, 16px)" }}>Chọn cột hiển thị</span>}
+          title={
+            <span style={{ fontSize: "clamp(14px, 3.5vw, 16px)" }}>
+              Chọn cột hiển thị
+            </span>
+          }
           placement="bottom"
           onClose={() => setDrawerVisible(false)}
           open={drawerVisible}
@@ -1543,16 +2163,31 @@ export default function ProductListPage() {
           title={
             <Space>
               <ShoppingOutlined style={{ color: "#1890ff" }} />
-              <span style={{ fontSize: "clamp(14px, 3.5vw, 16px)" }}>{modalProduct ? "Cập nhật sản phẩm" : "Thêm sản phẩm"}</span>
+              <span style={{ fontSize: "clamp(14px, 3.5vw, 16px)" }}>
+                {modalProduct ? "Cập nhật sản phẩm" : "Thêm sản phẩm"}
+              </span>
             </Space>
           }
           open={isModalOpen}
           onCancel={closeModal}
           footer={null}
           width={isMobile ? "100%" : 900}
-          styles={{ body: { maxHeight: isMobile ? "calc(100vh - 100px)" : "calc(100vh - 200px)", overflowY: "auto", padding: isMobile ? 16 : 24 } }}
+          styles={{
+            body: {
+              maxHeight: isMobile
+                ? "calc(100vh - 100px)"
+                : "calc(100vh - 200px)",
+              overflowY: "auto",
+              padding: isMobile ? 16 : 24,
+            },
+          }}
         >
-          <ProductForm storeId={storeId} product={modalProduct} onSuccess={onFormSuccess} onCancel={closeModal} />
+          <ProductForm
+            storeId={storeId}
+            product={modalProduct}
+            onSuccess={onFormSuccess}
+            onCancel={closeModal}
+          />
         </Modal>
 
         <Modal
@@ -1561,44 +2196,98 @@ export default function ProductListPage() {
             setImportModalOpen(false);
             resetImportState();
           }}
-          title={<span style={{ fontSize: "clamp(14px, 3.5vw, 16px)" }}>Tải lên sản phẩm bằng Excel</span>}
+          title={
+            <span style={{ fontSize: "clamp(14px, 3.5vw, 16px)" }}>
+              Tải lên sản phẩm bằng Excel
+            </span>
+          }
           width={isMobile ? "95%" : 720}
           centered
           okText="Xác nhận import"
           cancelText="Hủy"
           onOk={handleConfirmImport}
           confirmLoading={isImporting}
-          okButtonProps={{ disabled: !importFile || !!previewError || previewLoading }}
+          okButtonProps={{
+            disabled: !importFile || !!previewError || previewLoading,
+          }}
           styles={{ body: { padding: isMobile ? 12 : 24 } }}
         >
-          <input type="file" accept=".xlsx,.xls,.csv" ref={fileInputRef} style={{ display: "none" }} onChange={handleExcelFileChange} />
+          <input
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            ref={fileInputRef}
+            style={{ display: "none" }}
+            onChange={handleExcelFileChange}
+          />
 
           <Space direction="vertical" style={{ width: "100%" }} size={16}>
             <Text style={{ fontSize: "clamp(12px, 3vw, 14px)" }}>
               Sử dụng template chuẩn để đảm bảo dữ liệu hợp lệ.{" "}
-              <Button type="link" icon={<DownloadOutlined />} onClick={handleDownloadTemplate} loading={downloadingTemplate} style={{ padding: 0 }}>
+              <Button
+                type="link"
+                icon={<DownloadOutlined />}
+                onClick={handleDownloadTemplate}
+                loading={downloadingTemplate}
+                style={{ padding: 0 }}
+              >
                 Tải template
               </Button>
             </Text>
 
-            <Button icon={<FileExcelOutlined />} onClick={() => fileInputRef.current?.click()} loading={previewLoading} size={isMobile ? "middle" : "large"}>
+            <Button
+              icon={<FileExcelOutlined />}
+              onClick={() => fileInputRef.current?.click()}
+              loading={previewLoading}
+              size={isMobile ? "middle" : "large"}
+            >
               Chọn file Excel / CSV
             </Button>
 
-            {previewError && <Alert type="error" message={previewError} showIcon closable onClose={() => setPreviewError("")} />}
+            {previewError && (
+              <Alert
+                type="error"
+                message={previewError}
+                showIcon
+                closable
+                onClose={() => setPreviewError("")}
+              />
+            )}
 
             {previewRows.length > 0 ? (
               <Card size="small" styles={{ body: { padding: 0 } }}>
-                <div style={{ padding: 12, display: "flex", justifyContent: "space-between", flexWrap: "wrap" }}>
+                <div
+                  style={{
+                    padding: 12,
+                    display: "flex",
+                    justifyContent: "space-between",
+                    flexWrap: "wrap",
+                  }}
+                >
                   <Text strong>Preview {previewRows.length} dòng đầu tiên</Text>
-                  <Text type="secondary">Tổng cột: {previewColumns.length}</Text>
+                  <Text type="secondary">
+                    Tổng cột: {previewColumns.length}
+                  </Text>
                 </div>
                 <div style={{ overflowX: "auto" }}>
-                  <Table columns={previewColumns} dataSource={previewRows} rowKey={(_, idx) => idx} size="small" pagination={false} scroll={{ x: true, y: isMobile ? 200 : 240 }} />
+                  <Table
+                    columns={previewColumns}
+                    dataSource={previewRows}
+                    rowKey={(_, idx) => idx}
+                    size="small"
+                    pagination={false}
+                    scroll={{ x: true, y: isMobile ? 200 : 240 }}
+                  />
                 </div>
               </Card>
             ) : (
-              !previewError && <Alert type="info" message="Chưa có file nào được chọn" description="Chọn file Excel/CSV theo template để xem trước dữ liệu trước khi import." showIcon />
+              !previewError && (
+                <Alert
+                  type="info"
+                  message="Chưa có file nào được chọn"
+                  description="Chọn file Excel/CSV theo template để xem trước dữ liệu trước khi import."
+                  showIcon
+                />
+              )
             )}
           </Space>
         </Modal>
@@ -1625,15 +2314,32 @@ export default function ProductListPage() {
               layout="vertical"
               initialValues={{
                 batch_no: editingBatch.batch.batch_no,
-                expiry_date: editingBatch.batch.expiry_date ? dayjs(editingBatch.batch.expiry_date) : null,
+                expiry_date: editingBatch.batch.expiry_date
+                  ? dayjs(editingBatch.batch.expiry_date)
+                  : null,
                 cost_price: editingBatch.batch.cost_price || 0,
-                selling_price: editingBatch.batch.selling_price || (editingBatch.product.price?.$numberDecimal ? Number(editingBatch.product.price.$numberDecimal) : editingBatch.product.price) || 0,
+                selling_price:
+                  editingBatch.batch.selling_price ||
+                  (editingBatch.product.price?.$numberDecimal
+                    ? Number(editingBatch.product.price.$numberDecimal)
+                    : editingBatch.product.price) ||
+                  0,
                 quantity: editingBatch.batch.quantity || 0,
-                warehouse_id: editingBatch.batch.warehouse_id || (editingBatch.product.default_warehouse_id?._id || editingBatch.product.default_warehouse_id),
-                // ✅ Tự động điền thông tin
-                deliverer_name:  editingBatch.product.supplier?.contact_person || editingBatch.product.supplier?.name || "",
-                deliverer_phone: editingBatch.product.supplier_id?.phone || editingBatch.product.supplier?.phone || "",
-                receiver_name: userObj.fullname || userObj.name || userObj.userName || "",
+                warehouse_id:
+                  editingBatch.batch.warehouse_id ||
+                  editingBatch.product.default_warehouse_id?._id ||
+                  editingBatch.product.default_warehouse_id,
+                //  Tự động điền thông tin
+                deliverer_name:
+                  editingBatch.product.supplier?.contact_person ||
+                  editingBatch.product.supplier?.name ||
+                  "",
+                deliverer_phone:
+                  editingBatch.product.supplier_id?.phone ||
+                  editingBatch.product.supplier?.phone ||
+                  "",
+                receiver_name:
+                  userObj.fullname || userObj.name || userObj.userName || "",
                 receiver_phone: userObj.phone || "",
               }}
               onFinish={async (values) => {
@@ -1642,28 +2348,63 @@ export default function ProductListPage() {
                   const newQty = Number(values.quantity) || 0;
                   const oldQty = Number(editingBatch.batch.quantity) || 0;
                   const qtyDelta = newQty - oldQty;
-                  
-                  // Lấy tồn kho hiện tại của sản phẩm
-                  const currentStock = Number(editingBatch.product.stock_quantity) || 0;
-                  const projectedStock = currentStock + qtyDelta;
-                  
-                  // Lấy max_stock của sản phẩm
-                  const maxStock = editingBatch.product.max_stock !== undefined && editingBatch.product.max_stock !== null 
-                    ? Number(editingBatch.product.max_stock) 
-                    : 0;
 
-                  console.log("Validate Max Stock:", { currentStock, oldQty, newQty, qtyDelta, projectedStock, maxStock });
+                  // Lấy tồn kho hiện tại của sản phẩm
+                  const currentStock =
+                    Number(editingBatch.product.stock_quantity) || 0;
+                  const projectedStock = currentStock + qtyDelta;
+
+                  // Lấy max_stock của sản phẩm
+                  const maxStock =
+                    editingBatch.product.max_stock !== undefined &&
+                    editingBatch.product.max_stock !== null
+                      ? Number(editingBatch.product.max_stock)
+                      : 0;
+
+                  console.log("Validate Max Stock:", {
+                    currentStock,
+                    oldQty,
+                    newQty,
+                    qtyDelta,
+                    projectedStock,
+                    maxStock,
+                  });
 
                   if (maxStock > 0 && projectedStock > maxStock) {
                     Modal.warning({
                       title: "Không thể lưu - Vượt tồn kho tối đa",
                       content: (
                         <div>
-                          <p>Tổng số lượng tồn kho dự kiến (<b>{projectedStock}</b>) vượt quá hạn mức tối đa cho phép (<b>{maxStock}</b>).</p>
-                          <div style={{ background: '#f5f5f5', padding: '10px', borderRadius: '4px', marginTop: '10px' }}>
-                            <p style={{ margin: 0 }}>Tồn kho hiện tại: {currentStock}</p>
-                            <p style={{ margin: 0 }}>Thay đổi: <span style={{ color: qtyDelta >= 0 ? 'green' : 'red' }}>{qtyDelta >= 0 ? '+' : ''}{qtyDelta}</span></p>
-                            <p style={{ margin: 0, fontWeight: 'bold' }}>Dự kiến sau sửa: {projectedStock}</p>
+                          <p>
+                            Tổng số lượng tồn kho dự kiến (
+                            <b>{projectedStock}</b>) vượt quá hạn mức tối đa cho
+                            phép (<b>{maxStock}</b>).
+                          </p>
+                          <div
+                            style={{
+                              background: "#f5f5f5",
+                              padding: "10px",
+                              borderRadius: "4px",
+                              marginTop: "10px",
+                            }}
+                          >
+                            <p style={{ margin: 0 }}>
+                              Tồn kho hiện tại: {currentStock}
+                            </p>
+                            <p style={{ margin: 0 }}>
+                              Thay đổi:{" "}
+                              <span
+                                style={{
+                                  color: qtyDelta >= 0 ? "green" : "red",
+                                }}
+                              >
+                                {qtyDelta >= 0 ? "+" : ""}
+                                {qtyDelta}
+                              </span>
+                            </p>
+                            <p style={{ margin: 0, fontWeight: "bold" }}>
+                              Dự kiến sau sửa: {projectedStock}
+                            </p>
                           </div>
                         </div>
                       ),
@@ -1672,55 +2413,70 @@ export default function ProductListPage() {
                   }
 
                   if (newQty < 0) {
-                    Modal.error({ title: "Lỗi", content: "Số lượng không được âm" });
+                    Modal.error({
+                      title: "Lỗi",
+                      content: "Số lượng không được âm",
+                    });
                     return;
                   }
 
                   // Gọi API update batch thông qua update product
-                  let productId = editingBatch.product._id || editingBatch.product.id;
+                  let productId =
+                    editingBatch.product._id || editingBatch.product.id;
                   // Đảm bảo productId là string
-                  if (typeof productId === 'object') {
-                    productId = productId.toString ? productId.toString() : String(productId);
+                  if (typeof productId === "object") {
+                    productId = productId.toString
+                      ? productId.toString()
+                      : String(productId);
                   }
-                  console.log("Submitting batch update:", { 
-                    productId, 
-                    values 
+                  console.log("Submitting batch update:", {
+                    productId,
+                    values,
                   });
-                  const response = await fetch(`${apiUrl}/products/${productId}/batch`, {
-                    method: "PUT",
-                    headers: {
-                      "Content-Type": "application/json",
-                      Authorization: `Bearer ${token}`,
-                    },
-                    body: JSON.stringify({
-                      old_batch_no: editingBatch.batch.batch_no,
-                      new_batch_no: values.batch_no,
-                      expiry_date: values.expiry_date ? values.expiry_date.toISOString() : null,
-                      cost_price: values.cost_price,
-                      selling_price: values.selling_price,
-                      quantity: values.quantity,
-                      warehouse_id: values.warehouse_id,
-                      deliverer_name: values.deliverer_name,
-                      deliverer_phone: values.deliverer_phone,
-                      receiver_name: values.receiver_name,
-                      receiver_phone: values.receiver_phone,
-                    }),
-                  });
+                  const response = await fetch(
+                    `${apiUrl}/products/${productId}/batch`,
+                    {
+                      method: "PUT",
+                      headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                      },
+                      body: JSON.stringify({
+                        old_batch_no: editingBatch.batch.batch_no,
+                        new_batch_no: values.batch_no,
+                        expiry_date: values.expiry_date
+                          ? values.expiry_date.toISOString()
+                          : null,
+                        cost_price: values.cost_price,
+                        selling_price: values.selling_price,
+                        quantity: values.quantity,
+                        warehouse_id: values.warehouse_id,
+                        deliverer_name: values.deliverer_name,
+                        deliverer_phone: values.deliverer_phone,
+                        receiver_name: values.receiver_name,
+                        receiver_phone: values.receiver_phone,
+                      }),
+                    }
+                  );
 
                   const result = await response.json().catch(() => ({}));
-                  
+
                   if (!response.ok) {
-                    throw new Error(result.message || "Cập nhật lô hàng thất bại");
+                    throw new Error(
+                      result.message || "Cập nhật lô hàng thất bại"
+                    );
                   }
-                  
+
                   // Hiển thị thông báo với thông tin phiếu kho
                   let description = `Lô ${values.batch_no} đã được cập nhật`;
                   if (result.voucher) {
-                    description += `\nĐã tạo phiếu ${result.voucher.type === "IN" ? "nhập" : "xuất"} kho: ${result.voucher.code}`;
+                    description += `\nĐã tạo phiếu ${
+                      result.voucher.type === "IN" ? "nhập" : "xuất"
+                    } kho: ${result.voucher.code}`;
                   }
 
                   api.success({
-                    message: "✅ Cập nhật lô hàng thành công!",
+                    message: " Cập nhật lô hàng thành công!",
                     description,
                     placement: "topRight",
                     duration: 5,
@@ -1738,20 +2494,35 @@ export default function ProductListPage() {
             >
               <Row gutter={16}>
                 <Col span={8}>
-                  <Form.Item label="Số lô" name="batch_no" rules={[{ required: true, message: "Vui lòng nhập số lô" }]}>
+                  <Form.Item
+                    label="Số lô"
+                    name="batch_no"
+                    rules={[{ required: true, message: "Vui lòng nhập số lô" }]}
+                  >
                     <Input placeholder="VD: LOT-001" />
                   </Form.Item>
                 </Col>
                 <Col span={8}>
                   <Form.Item label="Hạn sử dụng" name="expiry_date">
-                    <DatePicker format="DD/MM/YYYY" style={{ width: "100%" }} placeholder="Chọn ngày hết hạn" />
+                    <DatePicker
+                      format="DD/MM/YYYY"
+                      style={{ width: "100%" }}
+                      placeholder="Chọn ngày hết hạn"
+                    />
                   </Form.Item>
                 </Col>
                 <Col span={8}>
-                  <Form.Item label="Kho lưu trữ" name="warehouse_id" rules={[{ required: true, message: "Vui lòng chọn kho" }]}>
+                  <Form.Item
+                    label="Kho lưu trữ"
+                    name="warehouse_id"
+                    rules={[{ required: true, message: "Vui lòng chọn kho" }]}
+                  >
                     <Select
                       placeholder="Chọn kho hàng"
-                      options={warehouses.map(w => ({ label: w.name, value: w._id }))}
+                      options={warehouses.map((w) => ({
+                        label: w.name,
+                        value: w._id,
+                      }))}
                       showSearch
                       optionFilterProp="label"
                     />
@@ -1761,36 +2532,55 @@ export default function ProductListPage() {
 
               <Row gutter={16}>
                 <Col span={8}>
-                  <Form.Item label="Giá nhập" name="cost_price" rules={[{ required: true, message: "Nhập giá vốn" }]}>
+                  <Form.Item
+                    label="Giá nhập"
+                    name="cost_price"
+                    rules={[{ required: true, message: "Nhập giá vốn" }]}
+                  >
                     <InputNumber
                       style={{ width: "100%" }}
                       min={0}
-                      formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
+                      formatter={(value) =>
+                        `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+                      }
                       parser={(value) => value.replace(/\$\s?|(,*)/g, "")}
                       addonAfter="đ"
                     />
                   </Form.Item>
                 </Col>
                 <Col span={8}>
-                  <Form.Item label="Giá bán" name="selling_price" rules={[{ required: true, message: "Nhập giá bán" }]}>
+                  <Form.Item
+                    label="Giá bán"
+                    name="selling_price"
+                    rules={[{ required: true, message: "Nhập giá bán" }]}
+                  >
                     <InputNumber
                       style={{ width: "100%" }}
                       min={0}
-                      formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
+                      formatter={(value) =>
+                        `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+                      }
                       parser={(value) => value.replace(/\$\s?|(,*)/g, "")}
                       addonAfter="đ"
                     />
                   </Form.Item>
                 </Col>
                 <Col span={8}>
-                  <Form.Item label="Số lượng" name="quantity" rules={[{ required: true, message: "Nhập số lượng" }]}>
+                  <Form.Item
+                    label="Số lượng"
+                    name="quantity"
+                    rules={[{ required: true, message: "Nhập số lượng" }]}
+                  >
                     <InputNumber style={{ width: "100%" }} min={0} />
                   </Form.Item>
                 </Col>
               </Row>
 
               <Divider orientation="left" style={{ margin: "12px 0" }}>
-                <Space><EnvironmentOutlined /> <Text type="secondary">Thông tin giao nhận (Tùy chọn)</Text></Space>
+                <Space>
+                  <EnvironmentOutlined />{" "}
+                  <Text type="secondary">Thông tin giao nhận (Tùy chọn)</Text>
+                </Space>
               </Divider>
 
               <Row gutter={16}>
@@ -1819,13 +2609,21 @@ export default function ProductListPage() {
                 </Col>
               </Row>
 
-              <div style={{ marginTop: 16, display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <div
+                style={{
+                  marginTop: 16,
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: 8,
+                }}
+              >
                 <Button onClick={closeBatchModal}>Hủy</Button>
                 <Button
                   type="primary"
                   htmlType="submit"
                   style={{
-                    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                    background:
+                      "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
                     border: "none",
                   }}
                 >

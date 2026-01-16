@@ -1,7 +1,22 @@
 // pages/settings/PricingPage.jsx
 import React, { useState, useEffect } from "react";
-import { Card, Button, Row, Col, Typography, Badge, Space, Spin, message } from "antd";
-import { CheckOutlined, CrownOutlined, RocketOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import {
+  Card,
+  Button,
+  Row,
+  Col,
+  Typography,
+  Badge,
+  Space,
+  Spin,
+  message,
+} from "antd";
+import {
+  CheckOutlined,
+  CrownOutlined,
+  RocketOutlined,
+  ThunderboltOutlined,
+} from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import subscriptionApi from "../../api/subscriptionApi";
 import Layout from "../../components/Layout";
@@ -26,7 +41,10 @@ const PricingPage = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [plansRes, subRes] = await Promise.all([subscriptionApi.getPlans(), subscriptionApi.getCurrentSubscription().catch(() => null)]);
+      const [plansRes, subRes] = await Promise.all([
+        subscriptionApi.getPlans(),
+        subscriptionApi.getCurrentSubscription().catch(() => null),
+      ]);
 
       setPlans(plansRes.data.plans || []);
       setCurrentSub(subRes?.data || null);
@@ -83,11 +101,11 @@ const PricingPage = () => {
     console.log(" Current subscription:", currentSub);
     console.log(" Available plans:", plans);
 
-    // ✅ CHO PHÉP GIA HẠN KHI ĐÃ CÓ PREMIUM ACTIVE
+    //  CHO PHÉP GIA HẠN KHI ĐÃ CÓ PREMIUM ACTIVE
     // Không chặn nữa, cho phép mua thêm để gia hạn
 
     const selectedPlan = plans.find((p) => p.duration === duration);
-    console.log("✅ Selected plan:", selectedPlan);
+    console.log(" Selected plan:", selectedPlan);
 
     if (!selectedPlan) {
       console.error(" Plan not found!");
@@ -136,7 +154,7 @@ const PricingPage = () => {
             isRenewal
               ? `
             <p style="margin-top: 8px; color: #22c55e; font-weight: 600;">
-              ✅ Thời gian sẽ được cộng thêm ${duration} tháng vào tài khoản của bạn
+               Thời gian sẽ được cộng thêm ${duration} tháng vào tài khoản của bạn
             </p>
             <p style="margin-top: 4px; font-size: 13px; color: #666;">
               Gói hiện tại còn: <strong>${currentSub.days_remaining} ngày</strong>
@@ -145,7 +163,9 @@ const PricingPage = () => {
               : ""
           }
           <p style="margin-top: 12px;">
-            Giá: <strong style="color: #22c55e; font-size: 18px;">${selectedPlan.price.toLocaleString("vi-VN")}đ</strong>
+            Giá: <strong style="color: #22c55e; font-size: 18px;">${selectedPlan.price.toLocaleString(
+              "vi-VN"
+            )}đ</strong>
           </p>
           <p style="margin-top: 8px; font-size: 13px; color: #999;">
             Sau khi xác nhận, bạn sẽ được chuyển hướng đến trang thanh toán PayOS.
@@ -161,13 +181,19 @@ const PricingPage = () => {
       width: 500,
     }).then(async (result) => {
       if (result.isConfirmed) {
-        console.log("✅ User confirmed, creating PayOS checkout...");
+        console.log(" User confirmed, creating PayOS checkout...");
         try {
           setProcessingPlan(duration);
-          const checkoutRes = await subscriptionApi.createCheckout({ plan_duration: duration });
+          const checkoutRes = await subscriptionApi.createCheckout({
+            plan_duration: duration,
+          });
           const checkoutData = checkoutRes?.data || {};
 
-          const checkoutUrl = checkoutData.checkout_url || checkoutData.checkoutUrl || checkoutData.paymentLink || checkoutData.payment_link;
+          const checkoutUrl =
+            checkoutData.checkout_url ||
+            checkoutData.checkoutUrl ||
+            checkoutData.paymentLink ||
+            checkoutData.payment_link;
           // Redirect thẳng sang PayOS
           if (checkoutUrl) {
             window.location.href = checkoutUrl;
@@ -176,7 +202,10 @@ const PricingPage = () => {
           }
         } catch (error) {
           console.error("Lỗi tạo checkout premium:", error);
-          const errorMsg = error.response?.data?.message || error.message || "Không thể tạo thanh toán";
+          const errorMsg =
+            error.response?.data?.message ||
+            error.message ||
+            "Không thể tạo thanh toán";
           Swal.fire("Lỗi", errorMsg, "error");
         } finally {
           setProcessingPlan(null);
@@ -218,7 +247,8 @@ const PricingPage = () => {
             Chọn gói Premium phù hợp với bạn
           </Title>
           <Paragraph style={{ fontSize: 18, color: "#666" }}>
-            Mở khóa tất cả tính năng với gói Premium. Mua càng dài, tiết kiệm càng nhiều! 🎉
+            Mở khóa tất cả tính năng với gói Premium. Mua càng dài, tiết kiệm
+            càng nhiều! 🎉
           </Paragraph>
 
           {/* Trial Banner */}
@@ -237,7 +267,8 @@ const PricingPage = () => {
                   🎁 Bạn đang dùng thử miễn phí
                 </Text>
                 <Text style={{ color: "white", fontSize: 14 }}>
-                  Còn <strong>{currentSub.days_remaining} ngày</strong> dùng thử. Nâng cấp ngay để không bị gián đoạn!
+                  Còn <strong>{currentSub.days_remaining} ngày</strong> dùng
+                  thử. Nâng cấp ngay để không bị gián đoạn!
                 </Text>
               </Space>
             </Card>
@@ -258,8 +289,12 @@ const PricingPage = () => {
                   hoverable
                   style={{
                     borderRadius: 12,
-                    border: isSelected ? `3px solid ${color}` : `2px solid #e0e0e0`,
-                    boxShadow: isSelected ? "0 8px 24px rgba(0,0,0,0.12)" : "0 2px 8px rgba(0,0,0,0.08)",
+                    border: isSelected
+                      ? `3px solid ${color}`
+                      : `2px solid #e0e0e0`,
+                    boxShadow: isSelected
+                      ? "0 8px 24px rgba(0,0,0,0.12)"
+                      : "0 2px 8px rgba(0,0,0,0.08)",
                     position: "relative",
                     height: "100%",
                     transition: "all 0.3s ease-in-out",
@@ -273,12 +308,17 @@ const PricingPage = () => {
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.border = `3px solid ${color}`;
-                    e.currentTarget.style.boxShadow = "0 12px 32px rgba(0,0,0,0.15)";
+                    e.currentTarget.style.boxShadow =
+                      "0 12px 32px rgba(0,0,0,0.15)";
                     e.currentTarget.style.transform = "translateY(-8px)";
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.border = isSelected ? `3px solid ${color}` : "2px solid #e0e0e0";
-                    e.currentTarget.style.boxShadow = isSelected ? "0 8px 24px rgba(0,0,0,0.12)" : "0 2px 8px rgba(0,0,0,0.08)";
+                    e.currentTarget.style.border = isSelected
+                      ? `3px solid ${color}`
+                      : "2px solid #e0e0e0";
+                    e.currentTarget.style.boxShadow = isSelected
+                      ? "0 8px 24px rgba(0,0,0,0.12)"
+                      : "0 2px 8px rgba(0,0,0,0.08)";
                     e.currentTarget.style.transform = "translateY(0)";
                   }}
                 >
@@ -302,26 +342,44 @@ const PricingPage = () => {
                   )}
 
                   {/* Icon */}
-                  <div style={{ textAlign: "center", marginBottom: 16, color }}>{getPlanIcon(plan.duration)}</div>
+                  <div style={{ textAlign: "center", marginBottom: 16, color }}>
+                    {getPlanIcon(plan.duration)}
+                  </div>
 
                   {/* Title */}
-                  <Title level={3} style={{ textAlign: "center", marginBottom: 8, color }}>
+                  <Title
+                    level={3}
+                    style={{ textAlign: "center", marginBottom: 8, color }}
+                  >
                     Gói {plan.label}
                   </Title>
 
                   {/* Price */}
                   <div style={{ textAlign: "center", marginBottom: 20 }}>
                     {plan.discount > 0 && (
-                      <Text delete style={{ fontSize: 16, color: "#999", display: "block", marginBottom: 4 }}>
+                      <Text
+                        delete
+                        style={{
+                          fontSize: 16,
+                          color: "#999",
+                          display: "block",
+                          marginBottom: 4,
+                        }}
+                      >
                         {plan.original_price.toLocaleString("vi-VN")}đ
                       </Text>
                     )}
                     <div>
-                      <Text strong style={{ fontSize: 40, color: "#000", fontWeight: 700 }}>
+                      <Text
+                        strong
+                        style={{ fontSize: 40, color: "#000", fontWeight: 700 }}
+                      >
                         {plan.price.toLocaleString("vi-VN")}đ
                       </Text>
                     </div>
-                    <Text style={{ fontSize: 14, color: "#666" }}>{plan.price_per_month.toLocaleString("vi-VN")}đ/tháng</Text>
+                    <Text style={{ fontSize: 14, color: "#666" }}>
+                      {plan.price_per_month.toLocaleString("vi-VN")}đ/tháng
+                    </Text>
                     {plan.discount_percent > 0 && (
                       <Badge
                         count={`-${plan.discount_percent}%`}
@@ -336,7 +394,11 @@ const PricingPage = () => {
                   </div>
 
                   {/* Features */}
-                  <Space direction="vertical" size={12} style={{ width: "100%", marginBottom: 24 }}>
+                  <Space
+                    direction="vertical"
+                    size={12}
+                    style={{ width: "100%", marginBottom: 24 }}
+                  >
                     <Space>
                       <CheckOutlined style={{ color: "#52c41a" }} />
                       <Text>Tất cả tính năng Premium</Text>
@@ -384,12 +446,17 @@ const PricingPage = () => {
                         e.target.style.background = "#15803d";
                         e.target.style.borderColor = "#15803d";
                         e.target.style.transform = "translateY(-2px)";
-                        e.target.style.boxShadow = "0 4px 12px rgba(34, 197, 94, 0.4)";
+                        e.target.style.boxShadow =
+                          "0 4px 12px rgba(34, 197, 94, 0.4)";
                       }
                     }}
                     onMouseLeave={(e) => {
-                      e.target.style.background = isSelected ? "#16a34a" : "#22c55e";
-                      e.target.style.borderColor = isSelected ? "#16a34a" : "#22c55e";
+                      e.target.style.background = isSelected
+                        ? "#16a34a"
+                        : "#22c55e";
+                      e.target.style.borderColor = isSelected
+                        ? "#16a34a"
+                        : "#22c55e";
                       e.target.style.transform = "translateY(0)";
                       e.target.style.boxShadow = "none";
                     }}
@@ -409,7 +476,10 @@ const PricingPage = () => {
             <Col xs={24} md={12}>
               <Card>
                 <Title level={5}>💳 Thanh toán như thế nào?</Title>
-                <Text>Chuyển khoản ngân hàng qua QR Code PayOS, nhanh chóng và an toàn.</Text>
+                <Text>
+                  Chuyển khoản ngân hàng qua QR Code PayOS, nhanh chóng và an
+                  toàn.
+                </Text>
               </Card>
             </Col>
             <Col xs={24} md={12}>
@@ -421,13 +491,17 @@ const PricingPage = () => {
             <Col xs={24} md={12}>
               <Card>
                 <Title level={5}>🎁 Trial có đầy đủ tính năng không?</Title>
-                <Text>Có! Bạn được dùng thử TẤT CẢ tính năng Premium trong 14 ngày.</Text>
+                <Text>
+                  Có! Bạn được dùng thử TẤT CẢ tính năng Premium trong 14 ngày.
+                </Text>
               </Card>
             </Col>
             <Col xs={24} md={12}>
               <Card>
                 <Title level={5}>🔐 Dữ liệu có an toàn không?</Title>
-                <Text>Hoàn toàn! Dữ liệu được mã hóa và backup tự động hàng ngày.</Text>
+                <Text>
+                  Hoàn toàn! Dữ liệu được mã hóa và backup tự động hàng ngày.
+                </Text>
               </Card>
             </Col>
           </Row>
