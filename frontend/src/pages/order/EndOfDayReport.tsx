@@ -840,7 +840,7 @@ const EndOfDayReport: React.FC = () => {
                 title: "Nhân Viên Xử Lý",
                 dataIndex: "name",
                 key: "name",
-                render: (text) => <Text strong>{text}</Text>,
+                render: (text) => <Text strong> {text}</Text>,
               },
               {
                 title: "Số Tiền Hoàn",

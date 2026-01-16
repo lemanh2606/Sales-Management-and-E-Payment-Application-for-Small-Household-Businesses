@@ -61,6 +61,8 @@ interface Order {
   employeeId: Employee;
   customer?: Customer;
   totalAmount: MongoDecimal;
+  grossAmount?: MongoDecimal;
+  discountAmount?: MongoDecimal;
   status: OrderStatus;
   createdAt: string;
   paymentMethod: PaymentMethod | string;
@@ -736,6 +738,11 @@ const OrderListScreen: React.FC = () => {
             <Text style={styles.orderAmount}>
               {formatVND(toNumberDecimal(item.totalAmount))}
             </Text>
+            {item.discountAmount && toNumberDecimal(item.discountAmount) > 0 ? (
+              <Text style={[styles.orderTime, { color: "#52c41a" }]}>
+                Giảm: -{formatVND(toNumberDecimal(item.discountAmount))}
+              </Text>
+            ) : null}
             <Text style={styles.orderTime}>
               {dayjs(item.createdAt).format("DD/MM/YYYY HH:mm")}
             </Text>

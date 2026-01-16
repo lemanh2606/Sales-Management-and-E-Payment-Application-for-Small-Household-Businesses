@@ -2256,10 +2256,7 @@ const OrderPOSHomeScreen: React.FC = () => {
               <Text style={styles.valueText}>{formatPrice(subtotal)}</Text>
             </View>
 
-            <View style={[styles.rowBetween, { marginTop: 10 }]}>
-              <Text style={styles.mutedInline}>Giảm từ điểm</Text>
-              <Text style={styles.valueText}>-{formatPrice(discount)}</Text>
-            </View>
+
             {vatAmount > 0 && (
               <View style={[styles.rowBetween, { marginTop: 10 }]}>
                 <Text style={[styles.mutedInline, { color: COLORS.warn }]}>
@@ -2270,16 +2267,17 @@ const OrderPOSHomeScreen: React.FC = () => {
                 </Text>
               </View>
             )}
-
+            
+            {/* LƯU Ý: Đã có phần render discount ở trên hoặc gom vào đây */}
             {discount > 0 && (
                <View style={[styles.rowBetween, { marginTop: 10 }]}>
-                    <Text style={[styles.mutedInline, { color: COLORS.good }]}>Giảm từ điểm</Text>
+                    <Text style={[styles.mutedInline, { color: COLORS.good }]}>Giảm giá điểm</Text>
                     <Text style={[styles.valueText, { color: COLORS.good }]}>-{formatPrice(discount)}</Text>
                </View>
             )}
 
             <View style={[styles.rowBetween, { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: COLORS.stroke }]}>
-              <Text style={[styles.mutedInline, { fontWeight: 'bold', color: COLORS.textStrong, fontSize: 16 }]}>KHÁCH PHẢI TRẢ</Text>
+              <Text style={[styles.mutedInline, { fontWeight: 'bold', color: COLORS.textStrong, fontSize: 16 }]}>THANH TOÁN</Text>
               <Text style={[styles.valueText, { color: COLORS.primary, fontSize: 22, fontWeight: '900' }]}>
                 {formatPrice(totalAmount)}
               </Text>

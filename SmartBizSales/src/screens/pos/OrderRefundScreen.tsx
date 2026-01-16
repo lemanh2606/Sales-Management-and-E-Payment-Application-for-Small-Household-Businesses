@@ -106,6 +106,8 @@ type RefundDetail = {
   refundTransactionId: string | null;
   refundReason: string;
   refundAmount: MongoDecimal;
+  grossRefundAmount?: MongoDecimal;
+  discountDeducted?: MongoDecimal;
   refundItems: RefundItem[];
   evidenceMedia: EvidenceMedia[];
   createdAt: string;
@@ -145,6 +147,16 @@ type OrderRefundDetailResponse = {
 };
 
 type SelectedProductItem = { productId: string; quantity: number };
+
+const COLORS = {
+  primary: "#2563eb",
+  good: "#16a34a",
+  warn: "#f59e0b",
+  danger: "#ef4444",
+  textStrong: "#0b1220",
+  muted: "#64748b",
+  stroke: "#e2e8f0",
+};
 
 /** =========================
  *  Small UI
@@ -923,9 +935,21 @@ const OrderRefundScreen: React.FC = () => {
                 </Text>
               </View>
               <View style={styles.kvRow}>
-                <Text style={styles.k}>Tiền hoàn</Text>
+                <Text style={styles.k}>Tiền hoàn gốc</Text>
+                <Text style={[styles.v, { textDecorationLine: 'line-through', opacity: 0.6 }]}>
+                  {formatCurrency(refundDetail.refundDetail?.grossRefundAmount || 0)}
+                </Text>
+              </View>
+              <View style={styles.kvRow}>
+                <Text style={styles.k}>Chiết khấu khấu trừ</Text>
+                <Text style={[styles.v, { color: COLORS.danger }]}>
+                  -{formatCurrency(refundDetail.refundDetail?.discountDeducted || 0)}
+                </Text>
+              </View>
+              <View style={styles.kvRow}>
+                <Text style={styles.k}>Tiền hoàn thực tế</Text>
                 <Text
-                  style={[styles.v, { fontWeight: "900", color: "#ef4444" }]}
+                  style={[styles.v, { fontWeight: "900", color: "#ef4444", fontSize: 16 }]}
                 >
                   {formatCurrency(refundDetail.refundDetail?.refundAmount)}
                 </Text>

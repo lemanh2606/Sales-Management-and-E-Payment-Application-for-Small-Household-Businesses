@@ -57,6 +57,7 @@ interface ProductBatch {
   cost_price: any;
   selling_price?: any;
   quantity: number;
+  created_at?: string;
 }
 
 interface Product {
@@ -913,6 +914,17 @@ const createOrder = async () => {
       payload.usedPoints = currentTab.usedPoints;
     }
 
+    // 🔍 DEBUG: Log thông tin điểm giảm giá
+    console.log("📤 [CreateOrder] Payload gửi lên server:", {
+      usedPointsEnabled: currentTab.usedPointsEnabled,
+      usedPoints: currentTab.usedPoints,
+      payloadUsedPoints: payload.usedPoints,
+      customer: currentTab.customer?.name,
+      customerLoyaltyPoints: currentTab.customer?.loyaltyPoints,
+      discount: discount,
+      totalAmount: totalAmount,
+    });
+
     const res = await axios.post<OrderResponse>(`${API_BASE}/orders`, payload, { headers });
     const order = res.data.order;
     const orderId = order._id;
@@ -924,6 +936,17 @@ const createOrder = async () => {
       tab.orderPrintCount = typeof order.printCount === "number" ? order.printCount : 0;
       tab.orderEarnedPoints = (order as any).earnedPoints ?? 0;
       tab.orderCreatedPaymentMethod = currentTab.paymentMethod;
+
+      // ✅ Cập nhật điểm customer sau khi server đã reserve (trừ tạm)
+      // Điểm đã được server trừ, nên cần cập nhật lại trong tab để hiển thị đúng
+      if (tab.customer && tab.usedPointsEnabled && tab.usedPoints > 0) {
+        const reservedPoints = (order as any).usedPoints ?? tab.usedPoints;
+        tab.customer = {
+          ...tab.customer,
+          loyaltyPoints: Math.max(0, (tab.customer.loyaltyPoints || 0) - reservedPoints)
+        };
+        console.log(`🔒 [FE] Điểm customer đã được reserve: ${reservedPoints}. Còn lại: ${tab.customer.loyaltyPoints}`);
+      }
 
       if (currentTab.paymentMethod === "qr" && res.data.qrDataURL) {
         tab.qrImageUrl = res.data.qrDataURL;
@@ -1826,6 +1849,26 @@ const createOrder = async () => {
 
               <Divider style={{ margin: "5px 0", borderTop: "1px solid #b8b6b6ff" }} />
 
+              {/* Breakdown thanh toán */}
+              <Space direction="vertical" style={{ width: "100%", padding: "0 4px" }} size={4}>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <Text type="secondary">Tạm tính:</Text>
+                  <Text>{formatPrice(subtotal)}</Text>
+                </div>
+                {vatAmount > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <Text type="secondary">Thuế VAT:</Text>
+                    <Text>+{formatPrice(vatAmount)}</Text>
+                  </div>
+                )}
+                {discount > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <Text type="secondary">Giảm giá điểm:</Text>
+                    <Text style={{ color: "#52c41a" }}>-{formatPrice(discount)}</Text>
+                  </div>
+                )}
+              </Space>
+
               {/* Khách phải trả */}
               <div
                 style={{
@@ -1833,6 +1876,7 @@ const createOrder = async () => {
                   borderRadius: "8px",
                   padding: "12px",
                   boxShadow: "0 4px 12px rgba(24, 144, 255, 0.25)",
+                  marginTop: 8,
                 }}
               >
                 <div
@@ -1843,7 +1887,7 @@ const createOrder = async () => {
                   }}
                 >
                   <Text strong style={{ fontSize: "16px", color: "#fff" }}>
-                    KHÁCH CẦN TRẢ:
+                    THANH TOÁN:
                   </Text>
                   <Text strong style={{ fontSize: "24px", color: "#fff" }}>
                     {formatPrice(totalAmount)}

@@ -49,6 +49,8 @@ interface Order {
   employeeId: Employee;
   customer?: Customer;
   totalAmount: MongoDecimal;
+  grossAmount?: MongoDecimal;
+  discountAmount?: MongoDecimal;
   status: "pending" | "paid" | "refunded" | "partially_refunded" | "cancelled";
   createdAt: string;
   paymentMethod: string;
@@ -644,18 +646,42 @@ const ListAllOrder: React.FC = () => {
                     </Text>
                   ),
                 },
-                {
-                  title: <span style={{ fontWeight: 600 }}>Tổng Tiền</span>,
-                  dataIndex: "totalAmount",
-                  key: "totalAmount",
-                  align: "right",
-                  width: 70,
-                  render: (value) => (
-                    <Text strong style={{ color: "#1890ff", fontSize: 15 }}>
-                      {formatCurrency(value)}
-                    </Text>
-                  ),
-                },
+                  {
+                    title: <span style={{ fontWeight: 600 }}>Tiền Hàng</span>,
+                    dataIndex: "grossAmount",
+                    key: "grossAmount",
+                    align: "right",
+                    width: 70,
+                    render: (value) => (
+                      <Text style={{ fontSize: 14 }}>
+                        {value ? formatCurrency(value) : "---"}
+                      </Text>
+                    ),
+                  },
+                  {
+                    title: <span style={{ fontWeight: 600 }}>Giảm Giá</span>,
+                    dataIndex: "discountAmount",
+                    key: "discountAmount",
+                    align: "right",
+                    width: 70,
+                    render: (value) => (
+                      <Text style={{ color: value ? "#52c41a" : "#ccc", fontSize: 14 }}>
+                        {value ? `-${formatCurrency(value)}` : "0₫"}
+                      </Text>
+                    ),
+                  },
+                  {
+                    title: <span style={{ fontWeight: 600 }}>Thực Thu</span>,
+                    dataIndex: "totalAmount",
+                    key: "totalAmount",
+                    align: "right",
+                    width: 70,
+                    render: (value) => (
+                      <Text strong style={{ color: "#1890ff", fontSize: 15 }}>
+                        {formatCurrency(value)}
+                      </Text>
+                    ),
+                  },
                 {
                   title: <span style={{ fontWeight: 600 }}>Trạng Thái</span>,
                   dataIndex: "status",

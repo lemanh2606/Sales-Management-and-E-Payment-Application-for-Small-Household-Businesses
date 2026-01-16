@@ -99,7 +99,9 @@ interface RefundOrder {
     storeId: Store;
     status: string;
   };
-  refundAmount: MongoDecimal; // Số tiền hoàn
+  refundAmount: MongoDecimal; // Số tiền hoàn thực tế
+  grossRefundAmount?: MongoDecimal; // Số tiền hoàn gốc
+  discountDeducted?: MongoDecimal; // Chiết khấu đã khấu trừ
   refundReason: string;
   refundedBy: Employee;
   status: "refunded" | "partially_refunded"; // Thường lấy từ đơn gốc hoặc logic FE
@@ -135,6 +137,8 @@ interface RefundDetail {
   refundTransactionId: string | null;
   refundReason: string;
   refundAmount: MongoDecimal;
+  grossRefundAmount?: MongoDecimal;
+  discountDeducted?: MongoDecimal;
   refundItems: RefundItem[];
   evidenceMedia: EvidenceMedia[];
   createdAt: string;
@@ -882,7 +886,17 @@ const OrderRefund: React.FC = () => {
                     <Descriptions.Item label="Thời Gian Hoàn">
                       {formatDate(refundDetail?.refundDetail?.refundedAt)}
                     </Descriptions.Item>
-                    <Descriptions.Item label="Tổng Tiền Hoàn" span={2}>
+                    <Descriptions.Item label="Tiền hoàn gốc">
+                      <Text delete>
+                        {formatCurrency(refundDetail?.refundDetail?.grossRefundAmount || 0)}
+                      </Text>
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Chiết khấu đã trừ">
+                      <Text type="danger">
+                        -{formatCurrency(refundDetail?.refundDetail?.discountDeducted || 0)}
+                      </Text>
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Tiền hoàn thực tế" span={2}>
                       <Text strong style={{ color: "#ff4d4f", fontSize: 18 }}>
                         {formatCurrency(
                           refundDetail?.refundDetail?.refundAmount
