@@ -8,36 +8,28 @@ const {
   getSupplierById,
   updateSupplier,
   deleteSupplier,
+  exportSuppliersByStore,
+  restoreSupplier, //  thêm
 } = require("../controllers/supplier/supplierController");
 
 const {
   verifyToken,
   checkStoreAccess,
-  isManager,
+
   requirePermission,
 } = require("../middlewares/authMiddleware");
 
-/*
-  ROUTES QUẢN LÝ NHÀ CUNG CẤP (Supplier Management)
-  --------------------------------------------------
-  Phân quyền gợi ý:
-  * supplier:create       -> Tạo nhà cung cấp
-  * supplier:view         -> Xem danh sách / chi tiết nhà cung cấp
-  * supplier:update       -> Chỉnh sửa thông tin nhà cung cấp
-  * supplier:delete       -> Xóa nhà cung cấp
-*/
-
-//
-// ===================== SUPPLIER ROUTES =====================
-//
+const {
+  checkSubscriptionExpiry,
+} = require("../middlewares/subscriptionMiddleware");
 
 // Tạo nhà cung cấp mới cho cửa hàng
 router.post(
   "/stores/:storeId",
   verifyToken,
+  checkSubscriptionExpiry,
   checkStoreAccess,
-  isManager,
-  requirePermission("supplier:create"),
+  requirePermission("suppliers:create"),
   createSupplier
 );
 
@@ -45,16 +37,38 @@ router.post(
 router.get(
   "/stores/:storeId",
   verifyToken,
+  checkSubscriptionExpiry,
   checkStoreAccess,
-  requirePermission("supplier:view"),
+  requirePermission("suppliers:view"),
   getSuppliersByStore
+);
+
+// Xuất danh sách nhà cung cấp trong cửa hàng ra file Excel
+router.get(
+  "/stores/:storeId/export",
+  verifyToken,
+  checkSubscriptionExpiry,
+  checkStoreAccess,
+  requirePermission("suppliers:export"),
+  exportSuppliersByStore
+);
+
+//  Khôi phục nhà cung cấp đã bị xóa (soft delete restore)
+// Lưu ý: đặt trước "/:supplierId" để không bị route param bắt nhầm. [web:52][web:53]
+router.put(
+  "/:supplierId/restore",
+  verifyToken,
+  checkSubscriptionExpiry,
+  requirePermission("suppliers:restore"),
+  restoreSupplier
 );
 
 // Lấy thông tin chi tiết 1 nhà cung cấp
 router.get(
   "/:supplierId",
   verifyToken,
-  requirePermission("supplier:view"),
+  checkSubscriptionExpiry,
+  requirePermission("suppliers:view"),
   getSupplierById
 );
 
@@ -62,8 +76,8 @@ router.get(
 router.put(
   "/:supplierId",
   verifyToken,
-  isManager,
-  requirePermission("supplier:update"),
+  checkSubscriptionExpiry,
+  requirePermission("suppliers:update"),
   updateSupplier
 );
 
@@ -71,8 +85,8 @@ router.put(
 router.delete(
   "/:supplierId",
   verifyToken,
-  isManager,
-  requirePermission("supplier:delete"),
+  checkSubscriptionExpiry,
+  requirePermission("suppliers:delete"),
   deleteSupplier
 );
 

@@ -35,9 +35,7 @@ const productImageStorage = new CloudinaryStorage({
 // 🧩 Multer middleware cho upload ảnh sản phẩm
 const uploadProductImage = multer({
   storage: productImageStorage,
-  limits: {
-    fileSize: 5 * 1024 * 1024, // Giới hạn 5MB
-  },
+  limits: { fileSize: 5 * 1024 * 1024 }, // Giới hạn 5MB
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith("image/")) {
       cb(null, true);
@@ -47,7 +45,11 @@ const uploadProductImage = multer({
   },
 });
 
-const uploadToCloudinary = async (filePath, folder = "uploads", resource_type = "auto") => {
+const uploadToCloudinary = async (
+  filePath,
+  folder = "uploads",
+  resource_type = "auto"
+) => {
   try {
     if (!fs.existsSync(filePath)) {
       throw new Error(`File không tồn tại: ${filePath}`);
@@ -79,7 +81,7 @@ const uploadToCloudinary = async (filePath, folder = "uploads", resource_type = 
       fs.createReadStream(filePath).pipe(stream);
     });
 
-    // ✅ Xoá file local sau khi upload xong
+    //  Xoá file local sau khi upload xong
     try {
       fs.unlinkSync(filePath);
     } catch (err) {
@@ -95,7 +97,7 @@ const uploadToCloudinary = async (filePath, folder = "uploads", resource_type = 
 
     return uploadResult;
   } catch (err) {
-    console.error("❌ Upload Cloudinary fail:", err);
+    console.error(" Upload Cloudinary fail:", err);
     throw new Error("Lỗi upload Cloudinary");
   }
 };
@@ -109,12 +111,14 @@ const deleteFromCloudinary = async (public_id, resource_type = "raw") => {
     console.log("➡️ public_id:", public_id);
     console.log("➡️ resource_type:", resource_type);
 
-    const result = await cloudinary.uploader.destroy(public_id, { resource_type });
+    const result = await cloudinary.uploader.destroy(public_id, {
+      resource_type,
+    });
 
     console.log("🧩 Kết quả xoá Cloudinary:", result);
     return result;
   } catch (err) {
-    console.error("❌ Xóa Cloudinary thất bại:", err);
+    console.error(" Xóa Cloudinary thất bại:", err);
     throw err;
   }
 };

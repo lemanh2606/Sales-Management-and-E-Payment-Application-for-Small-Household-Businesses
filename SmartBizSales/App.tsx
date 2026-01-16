@@ -4,9 +4,14 @@ import { AuthProvider, useAuth } from "./src/context/AuthContext";
 import AppNavigator from "./src/navigation/AppNavigator";
 import AuthNavigator from "./src/navigation/AuthNavigator";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { navigationRef } from "./src/navigation/RootNavigation";
+import {
+  navigationRef,
+  setNavigationReady,
+} from "./src/navigation/RootNavigation";
 import FlashMessage from "react-native-flash-message";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
+import MemoryMonitor from "./src/components/MemoryMonitor";
+import MainNavigator from "@/navigation/MainNavigator";
 
 // Màn hình loading khi đang kiểm tra đăng nhập
 function LoadingScreen(): React.JSX.Element {
@@ -35,10 +40,18 @@ export default function App(): React.JSX.Element {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <NavigationContainer ref={navigationRef}>
-          <RootNavigator />
+        <NavigationContainer
+          ref={navigationRef}
+          onReady={() => {
+            console.log(" Navigation is ready");
+            setNavigationReady();
+          }}
+        >
+          {/* <RootNavigator /> */}
+          <MainNavigator />
           <FlashMessage position="top" />
         </NavigationContainer>
+        {/* {__DEV__ && <MemoryMonitor />} */}
       </AuthProvider>
     </SafeAreaProvider>
   );

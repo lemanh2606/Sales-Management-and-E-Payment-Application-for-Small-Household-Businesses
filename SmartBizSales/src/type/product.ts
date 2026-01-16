@@ -1,6 +1,6 @@
 // src/types/product.ts
 import { ObjectId } from "mongodb";
-import { SupplierRef } from './supplier';
+import { Supplier } from './supplier';
 
 // --------------------- IMAGE ---------------------
 export interface ProductImage {
@@ -23,6 +23,15 @@ export interface ProductGroupRef {
 // --------------------- PRODUCT ---------------------
 export type ProductStatus = "Đang kinh doanh" | "Ngừng kinh doanh" | "Ngừng bán";
 
+export interface Batch {
+    batch_no: string;
+    expiry_date?: Date | string;
+    cost_price?: number;
+    quantity: number;
+    warehouse_id?: string;
+    created_at?: Date | string;
+}
+
 export interface Product {
     _id: ObjectId | string;
     name: string;
@@ -41,12 +50,16 @@ export interface Product {
     image?: ProductImage | null;
     lowStockAlerted?: boolean;
     isDeleted?: boolean;
-    createdAt?: Date;
-    updatedAt?: Date;
+    createdAt?: Date | string;
+    updatedAt?: Date | string;
+    
+    batches?: Batch[];
+    default_warehouse_id?: string;
+    default_warehouse_name?: string;
 
     // populated refs
     store?: StoreRef;
-    supplier?: SupplierRef;
+    supplier?: Supplier;
     group?: ProductGroupRef;
 }
 
@@ -158,9 +171,36 @@ export interface DeleteResponse {
     deletedProductId: string;
 }
 
-export interface ImportResponse {
-    data: any;
-    importedCount: undefined;
+// export interface ImportResponse {
+//     data: any;
+//     importedCount: undefined;
+//     message: string;
+//     results: ProductImportResult;
+// }
+
+export type ImportResponse = {
     message: string;
-    results: ProductImportResult;
-}
+    results: {
+        success: Array<{ row: number; sku: string; product: string }>;
+        failed: Array<{ row: number; data?: any; error: string }>;
+        total: number;
+        newlyCreated?: {
+            suppliers: number;
+            productGroups: number;
+            warehouses: number;
+            products: number;
+        };
+    };
+    newlyCreated?: {
+        suppliers: number;
+        productGroups: number;
+        warehouses: number;
+        products: number;
+    };
+};
+export type ImportFile = {
+    uri: string; // required
+    name?: string;
+    mimeType?: string; // optional, DocumentPicker may provide mimeType
+    size?: number;
+};

@@ -14,15 +14,20 @@ function getDevHost(): string {
     if (hostUri) return hostUri.split(":")[0];
 
     // Legacy Expo CLI
-    const debuggerHost = Constants.manifest?.debuggerHost;
+    const debuggerHost = (Constants.manifest as any)?.debuggerHost;
     if (debuggerHost) return debuggerHost.split(":")[0];
 
     // Fallback localhost (chỉ chạy trên dev machine)
     return "localhost";
 }
 
+// 🚀 Lấy API URL: Ưu tiên .env, fallback về auto-detect
 const API_PORT = 9999;
-const API_URL = `http://${getDevHost()}:${API_PORT}/api`;
+const API_URL =
+    // process.env.EXPO_PUBLIC_API_URL
+    // ||
+    `http://${getDevHost()}:${API_PORT}/api`
+    ;
 
 console.log("🔥 API_URL động:", API_URL);
 

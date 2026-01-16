@@ -1,0 +1,171 @@
+@keyframes pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(250, 140, 22, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(250, 140, 22, 0);
+  }
+}
+
+.pulse-animation-dashboard {
+  animation: pulse 5s infinite;
+  position: relative;
+}
+
+/* DashboardPage.css */
+
+/* Animation cho onboarding tag */
+@keyframes pulse-dashboard {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+}
+
+.pulse-animation-dashboard {
+  animation: pulse-dashboard 2s ease-in-out infinite;
+}
+
+/* Modern Dashboard Header */
+.dashboard-header {
+  transition: all 0.3s ease;
+}
+
+.dashboard-header:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+/* Icon hover effects */
+.dashboard-header .anticon {
+  transition: all 0.2s ease;
+}
+
+.dashboard-header .anticon:hover {
+  transform: scale(1.1);
+  color: #52c41a !important;
+}
+
+/* User dropdown styling */
+.dashboard-header .ant-dropdown-trigger {
+  transition: all 0.2s ease;
+}
+
+.dashboard-header .ant-dropdown-trigger:hover {
+  background: linear-gradient(135deg, #f6ffed 0%, #e6fffb 100%) !important;
+}
+
+/* ResponsiveStyles */
+@media (max-width: 768px) {
+  .dashboard-header {
+    flex-direction: row !important;
+    align-items: center !important;
+    padding: 12px 16px !important;
+    justify-content: flex-end !important;
+  }
+
+  .dashboard-body {
+    padding: 12px !important;
+  }
+
+  .ant-card-head-title {
+    font-size: 14px !important;
+    line-height: 1.4 !important;
+  }
+
+  .ant-card {
+    margin-bottom: 16px !important;
+  }
+
+  .ant-table {
+    font-size: 12px !important;
+  }
+
+  .ant-table-thead > tr > th {
+    padding: 8px 4px !important;
+    font-size: 11px !important;
+  }
+
+  .ant-table-tbody > tr > td {
+    padding: 8px 4px !important;
+    font-size: 12px !important;
+  }
+
+  /* Hide user name on very small screens */
+  @media (max-width: 480px) {
+    .dashboard-header .ant-space {
+      gap: 8px !important;
+    }
+  }
+}
+
+/* Medium screens */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .dashboard-body {
+    padding: 20px !important;
+  }
+}
+
+/* Large screens */
+@media (min-width: 1025px) {
+  .dashboard-body {
+    padding: 24px !important;
+  }
+}
+
+/* Ensure cards don't overflow */
+.ant-card-body {
+  overflow-x: auto;
+}
+
+/* Responsive collapse */
+.ant-collapse-header {
+  padding: 12px 16px !important;
+}
+
+@media (max-width: 768px) {
+  .ant-collapse-header {
+    padding: 10px 12px !important;
+    font-size: 13px !important;
+  }
+}
+
+/* Modern Card Hover Effects */
+.ant-card.ant-card-hoverable {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.ant-card.ant-card-hoverable:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12) !important;
+}
+
+/* Smooth button transitions */
+.ant-btn {
+  transition: all 0.2s ease !important;
+}
+
+.ant-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(82, 196, 26, 0.4);
+}
+
+/* Gradient text effect */
+.gradient-text {
+  background: linear-gradient(135deg, #52c41a 0%, #237804 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Stat cards hover */
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1) !important;
+}
+

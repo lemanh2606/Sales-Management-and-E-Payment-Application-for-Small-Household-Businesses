@@ -1,43 +1,77 @@
 // src/App.jsx
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
+import { ConfigProvider, message } from "antd";
+import viVN from "antd/locale/vi_VN";
+
+// Context
+import { useAuth } from "./context/AuthContext";
+
+// Loading Component
+import LoadingSpinner from "./components/LoadingSpinner";
+
+// Subscription Components
+import SubscriptionExpiredOverlay from "./components/subscription/SubscriptionExpiredOverlay";
+import ManagerSubscriptionCheck from "./components/subscription/ManagerSubscriptionCheck";
+
+// Common Pages
+import NotFound from "./pages/misc/NotFound";
+import Unauthorized from "./pages/misc/Unauthorized";
+import DashboardPage from "./pages/DashboardPage";
+
+// Auth Pages
 import RegisterPage from "./pages/auth/RegisterPage";
 import VerifyOtpPage from "./pages/auth/VerifyOtpPage";
 import LoginPage from "./pages/auth/LoginPage";
-import DashboardPage from "./pages/DashboardPage";
-import SelectStorePage from "./pages/store/SelectStorePage";
-import SupplierListPage from "./pages/supplier/SupplierListPage";
-import ProductListPage from "./pages/product/ProductListPage";
 import ForgotPassword from "./pages/auth/ForgotPassword";
-import Profile from "./pages/setting/Profile";
-import LoyaltySetting from "./pages/loyalty/LoyaltySetting";
-import EmployeesPage from "./pages/store/EmployeesPage";
 
-// 👉 Customer page bạn đã tạo
+// Store & Employees
+import SelectStorePage from "./pages/store/SelectStorePage";
+import EmployeesPage from "./pages/store/EmployeesPage";
+import InformationStore from "./pages/store/InformationStore";
+
+// Product & Supplier
+import ProductListPage from "./pages/product/ProductListPage";
+import ProductGroupsPage from "./pages/productGroup/ProductGroupsPage";
+import SupplierListPage from "./pages/supplier/SupplierListPage";
+import InventoryVoucherPage from "./pages/inventory/InventoryVoucherPage";
+import WarehousePage from "./pages/warehouse/WarehousePage";
+
+// Customer
 import CustomerListPage from "./pages/customer/CustomerListPage";
 import TopCustomer from "./pages/customer/TopCustomer";
-import { useAuth } from "./context/AuthContext";
-import Unauthorized from "./pages/misc/Unauthorized";
-import NotFound from "./pages/misc/NotFound";
 
-// 👉 Report page
+// Reports
 import ReportDashboard from "./pages/report/ReportDashboard";
 import RevenueReport from "./pages/report/RevenueReport";
-import TaxDeclaration from "./pages/report/TaxDeclaration";
 import TopProductsReport from "./pages/report/TopProductsReport";
+import InventoryReport from "./pages/report/InventoryReport";
 
-// Hiệu ứng Design
-import { Spin } from "antd";
-import { LoadingOutlined } from "@ant-design/icons";
-import ProductGroupsPage from "./pages/productGroup/ProductGroupsPage";
-import { ConfigProvider } from "antd";
-import viVN from "antd/locale/vi_VN";
+// Settings
+import Profile from "./pages/setting/Profile";
+import PricingPage from "./pages/setting/PricingPage";
+import DataExportPage from "./pages/setting/DataExportPage";
+import SubscriptionPage from "./pages/setting/SubscriptionPage";
 import ActivityLog from "./pages/setting/ActivityLog";
 import FileManager from "./pages/setting/FileManager";
+import Notification from "./pages/setting/Notification";
+import Term from "./pages/setting/Term";
+import Privacy from "./pages/setting/Privacy";
+import PaymentGatewaySettingsPage from "./pages/setting/PaymentGatewaySettingsPage";
+import ProcessExpiredPage from "./pages/inventory/ProcessExpiredPage";
 
-const loadingIcon = <LoadingOutlined style={{ fontSize: 40 }} spin />;
+//Điều hướng thanh toán
+import SubscriptionSuccess from "./pages/SubscriptionSuccess";
+import SubscriptionCancel from "./pages/SubscriptionCancel";
 
-/** Utility: đọc user từ localStorage (fallback) */
+// Loyalty
+import LoyaltySetting from "./pages/loyalty/LoyaltySetting";
+
+// Orders
+import SidebarPOS from "./pages/order/SidebarPOS";
+import ListAllOrder from "./pages/order/ListAllOrder";
+
+/** Utility: Đọc biến user từ localStorage */
 function getStoredUser() {
   try {
     const raw = localStorage.getItem("user");
@@ -49,283 +83,252 @@ function getStoredUser() {
   }
 }
 
-/** Utility: kiểm tra permission (ANY logic: có ít nhất 1 permission) */
+/** Utility: Kiểm tra quyền - permissions */
 function hasPermission(menu = [], required) {
   if (!required) return true;
   const reqs = Array.isArray(required) ? required : [required];
   return reqs.some((r) => menu.includes(r));
 }
 
-// 👉 FIX: Tweak ProtectedRoute - ưu tiên ctxUser hơn storedUser, và chỉ check role/permission nếu !loading
-// (nhưng vì loading đã handle ở đầu, nên an toàn hơn, tránh flicker nếu state lag)
+/** Navigation Protector - Chặn hoàn toàn navigation không hợp lệ */
+function NavigationProtector() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { user, token } = useAuth();
+  const lastValidPathRef = useRef("/select-store");
+
+  useEffect(() => {
+    const currentPath = location.pathname;
+    const isAuthenticated = Boolean(token) || Boolean(user);
+
+    // Whitelist pages không cần auth
+    const publicPages = ["/login", "/register", "/verify-otp", "/forgot-password", "/unauthorized", "/terms", "/privacy"];
+    const isPublicPage = publicPages.includes(currentPath) || currentPath === "/";
+
+    // Nếu chưa login và không phải public page -> redirect về login
+    if (!isAuthenticated && !isPublicPage) {
+      navigate("/login", { replace: true });
+      return;
+    }
+
+    // Nếu đã login và cố vào auth page -> redirect về lastValid hoặc select-store
+    if (isAuthenticated && ["/login", "/register", "/verify-otp", "/forgot-password"].includes(currentPath)) {
+      navigate(lastValidPathRef.current, { replace: true });
+      return;
+    }
+
+    // Lưu path hợp lệ
+    if (isAuthenticated && !isPublicPage) {
+      lastValidPathRef.current = currentPath;
+      sessionStorage.setItem("lastValidPath", currentPath);
+    }
+  }, [location.pathname, user, token, navigate]);
+
+  return null;
+}
+
+/** Protected Route - Enhanced security */
 const ProtectedRoute = ({ children, allowedRoles = [], allowedPermissions = null }) => {
   const { token, user: ctxUser, loading } = useAuth();
+  const navigate = useNavigate();
+  const lastValidPathRef = useRef(sessionStorage.getItem("lastValidPath") || "/select-store");
 
   if (loading) {
     return (
-      <Spin spinning size="large" indicator={loadingIcon} tip="Đang xác thực quyền truy cập...">
-        <div className="flex justify-center items-center min-h-screen">
-          <div className="text-center p-4"></div>
-        </div>
-      </Spin>
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "#ffffff",
+        }}
+      >
+        <LoadingSpinner
+          size="large"
+          iconColor="#52c41a"
+          tip="🔐 Đang xác thực quyền truy cập..."
+          tipColor="#52c41a"
+        />
+      </div>
     );
   }
 
-  // 👉 FIX: Prefer context user FIRST, fallback to localStorage (vì sau login, ctxUser set trước)
   const storedUser = getStoredUser();
-  const user = ctxUser || storedUser || null; // Đã tốt, nhưng comment rõ
-
+  const user = ctxUser || storedUser || null;
   const isAuthenticated = Boolean(token) || Boolean(user);
+
+  // Chưa login -> về login
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 
-  // 👉 FIX: Chỉ check role/permission nếu user đầy đủ (có role/menu), tránh null crash
-  // Role check if provided
+  // Check role
   if (allowedRoles.length > 0) {
     const role = (user && user.role) || null;
     if (!role || !allowedRoles.includes(role)) {
-      return <Navigate to="/unauthorized" replace />;
+      // Auto redirect về màn cũ thay vì unauthorized
+      navigate(lastValidPathRef.current, { replace: true });
+      return null;
     }
   }
 
-  // Permissions check if provided
+  // Check permissions
   if (allowedPermissions) {
     const menu = (user && user.menu) || [];
     if (!hasPermission(menu, allowedPermissions)) {
-      return <Navigate to="/unauthorized" replace />;
+      // Auto redirect về màn cũ thay vì unauthorized
+      navigate(lastValidPathRef.current, { replace: true });
+      return null;
     }
   }
 
   return children;
 };
 
-/**
- * PublicRoute
- * - Dùng cho trang auth (login/register/verify)
- * - Nếu đã login -> redirect /unauthorized (theo yêu cầu)
- * - allowWhenAuth: nếu true sẽ cho phép truy cập trang public ngay cả khi đã đăng nhập
- */
+/** Public Route */
 const PublicRoute = ({ children, allowWhenAuth = false }) => {
   const { token, user: ctxUser, loading } = useAuth();
 
   if (loading) {
     return (
-      <Spin spinning size="large" indicator={loadingIcon} tip="Vui lòng đợi, đang vào hệ thống...">
-        <div className="flex justify-center items-center min-h-screen">
-          <div className="text-center p-4"></div>
-        </div>
-      </Spin>
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "#ffffff",
+        }}
+      >
+        <LoadingSpinner
+          size="large"
+          iconColor="#52c41a"
+          tip="🚀 Đang vào hệ thống - Smallbiz Sales"
+          tipColor="#52c41a"
+        />
+      </div>
     );
   }
 
-  // 👉 FIX: Tương tự, prefer ctxUser
   const storedUser = getStoredUser();
   const user = ctxUser || storedUser || null;
+  const isAuthenticated = Boolean(token) || Boolean(user);
 
-  if (user && !allowWhenAuth) {
-    return <Navigate to="/unauthorized" replace />;
+  if (isAuthenticated && !allowWhenAuth) {
+    const lastPath = sessionStorage.getItem("lastValidPath") || "/select-store";
+    return <Navigate to={lastPath} replace />;
   }
+
   return children;
 };
 
-//xóa localStorage + redirect /login khi người dùng vào / lần đầu
+/** App Init */
 function AppInit() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { logout } = useAuth();
+
   useEffect(() => {
     if (location.pathname === "/") {
-      // ✅ Chỉ chạy khi đang ở root '/'
-      localStorage.clear(); 
+      logout();
       navigate("/login", { replace: true });
     }
-  }, [location.pathname, navigate]);
-  return null; // component này chỉ để handle init
+  }, [location.pathname]);
+
+  return null;
 }
 
 function App() {
+  const [messageApi, contextHolder] = message.useMessage();
+
   return (
-    <ConfigProvider locale={viVN}>
+    <ConfigProvider
+      locale={viVN}
+      theme={{
+        token: {
+          colorPrimary: "#52c41a",
+          colorSuccess: "#52c41a",
+          colorInfo: "#1890ff",
+          colorWarning: "#faad14",
+          colorError: "#f5222d",
+          borderRadius: 8,
+          fontSize: 14,
+        },
+        components: {
+          Button: { borderRadius: 8, controlHeight: 40, fontWeight: 600 },
+          Card: { borderRadiusLG: 12 },
+          Input: { borderRadius: 8, controlHeight: 40 },
+          Select: { borderRadius: 8, controlHeight: 40 },
+        },
+      }}
+    >
+      {contextHolder}
+
       <AppInit />
+      <NavigationProtector />
+      <ManagerSubscriptionCheck />
+      <SubscriptionExpiredOverlay />
+
       <Routes>
-        {/* Public (Auth) routes - bọc PublicRoute */}
-        <Route
-          path="/login"
-          element={
-            <PublicRoute>
-              <LoginPage />
-            </PublicRoute>
-          }
-        />
-        <Route
-          path="/register"
-          element={
-            <PublicRoute>
-              <RegisterPage />
-            </PublicRoute>
-          }
-        />
-        <Route
-          path="/verify-otp"
-          element={
-            <PublicRoute>
-              <VerifyOtpPage />
-            </PublicRoute>
-          }
-        />
-        <Route
-          path="/forgot-password"
-          element={
-            <PublicRoute>
-              <ForgotPassword />
-            </PublicRoute>
-          }
-        />
+        {/* ==================== Mặc định điều hướng nếu vào trang '/' ==================== */}
+        <Route path="/" element={<Navigate to="/login" replace />} />
 
-        {/* Protected routes */}
-        <Route
-          path="/dashboard/:storeId"
-          element={
-            <ProtectedRoute>
-              <DashboardPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/select-store"
-          element={
-            <ProtectedRoute>
-              <SelectStorePage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/stores/:storeId/employees"
-          element={
-            <ProtectedRoute>
-              <EmployeesPage />
-            </ProtectedRoute>
-          }
-        />
+        {/* ==================== Auth Routes ==================== */}
+        <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
+        <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
+        <Route path="/verify-otp" element={<PublicRoute><VerifyOtpPage /></PublicRoute>} />
+        <Route path="/forgot-password" element={<PublicRoute><ForgotPassword /></PublicRoute>} />
 
-        <Route
-          path="/settings/profile"
-          element={
-            <ProtectedRoute>
-              <Profile />
-            </ProtectedRoute>
-          }
-        />
+        {/* ==================== Dashboard & Store ==================== */}
+        <Route path="/dashboard/:storeId" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+        <Route path="/select-store" element={<ProtectedRoute allowedPermissions="store:create"><SelectStorePage /></ProtectedRoute>} />
+        <Route path="/update/store" element={<ProtectedRoute><InformationStore /></ProtectedRoute>} />
+        <Route path="/stores/:storeId/employees" element={<ProtectedRoute allowedPermissions="store:employee:create"><EmployeesPage /></ProtectedRoute>} />
 
-        <Route
-          path="/suppliers"
-          element={
-            <ProtectedRoute allowedPermissions="supplier:view">
-              <SupplierListPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/products"
-          element={
-            <ProtectedRoute allowedPermissions="products:view">
-              <ProductListPage />
-            </ProtectedRoute>
-          }
-        />
+        {/* ==================== Products & Suppliers ==================== */}
+        <Route path="/suppliers" element={<ProtectedRoute allowedPermissions="suppliers:create"><SupplierListPage /></ProtectedRoute>} />
+        <Route path="/products" element={<ProtectedRoute allowedPermissions="products:create"><ProductListPage /></ProtectedRoute>} />
+        <Route path="/product-groups" element={<ProtectedRoute allowedPermissions="product-groups:create"><ProductGroupsPage /></ProtectedRoute>} />
+        <Route path="/inventory-vouchers" element={<ProtectedRoute allowedPermissions="inventory:voucher:create"><InventoryVoucherPage /></ProtectedRoute>} />
+        <Route path="/inventory/process-expired" element={<ProtectedRoute allowedRoles={["MANAGER"]} allowedPermissions="inventory:voucher:create"><ProcessExpiredPage /></ProtectedRoute>} />
+        <Route path="/warehouses" element={<ProtectedRoute allowedPermissions="warehouses:view"><WarehousePage /></ProtectedRoute>} />
 
-        {/* Customer page (ví dụ yêu cầu permission customers:search) */}
-        <Route
-          path="/customers-list"
-          element={
-            <ProtectedRoute allowedPermissions="customers:search">
-              <CustomerListPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/customers/top-customers"
-          element={
-            <ProtectedRoute allowedPermissions="customers:search">
-              <TopCustomer />
-            </ProtectedRoute>
-          }
-        />
+        {/* ==================== Customers ==================== */}
+        <Route path="/customers-list" element={<ProtectedRoute allowedPermissions="customers:search"><CustomerListPage /></ProtectedRoute>} />
+        <Route path="/customers/top-customers" element={<ProtectedRoute allowedPermissions="customers:top-customers"><TopCustomer /></ProtectedRoute>} />
 
-        <Route
-          path="/product-groups"
-          element={
-            <ProtectedRoute allowedPermissions="products:view">
-              <ProductGroupsPage />
-            </ProtectedRoute>
-          }
-        />
+        {/* ==================== Loyalty ==================== */}
+        <Route path="/loyalty/config" element={<ProtectedRoute allowedRoles={["MANAGER", "STAFF"]}><LoyaltySetting /></ProtectedRoute>} />
 
-        {/* Loyalty (ví dụ check role) */}
-        <Route
-          path="/loyalty/config"
-          element={
-            <ProtectedRoute allowedRoles={["MANAGER", "STAFF"]}>
-              <LoyaltySetting />
-            </ProtectedRoute>
-          }
-        />
-        {/* ======================================================================= */}
-        {/* ====================== Báo cáo - Routes ====================== */}
-        <Route
-          path="/reports/dashboard"
-          element={
-            <ProtectedRoute allowedPermissions="reports:financial:view">
-              <ReportDashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/reports/revenue"
-          element={
-            <ProtectedRoute allowedPermissions="reports:revenue:view">
-              <RevenueReport />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/reports/tax"
-          element={
-            <ProtectedRoute allowedPermissions="tax:preview">
-              <TaxDeclaration />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/reports/top-products"
-          element={
-            <ProtectedRoute allowedPermissions="reports:top-products">
-              <TopProductsReport />
-            </ProtectedRoute>
-          }
-        />
-        {/* ======================================================================= */}
-        {/* ====================== Cấu hình - Routes ====================== */}
-        <Route
-          path="/settings/activity-log"
-          element={
-            <ProtectedRoute allowedPermissions="settings:activity-log">
-              <ActivityLog />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/settings/file"
-          element={
-            <ProtectedRoute allowedPermissions="file:view">
-              <FileManager />
-            </ProtectedRoute>
-          }
-        />
-        {/* Unauthorized */}
+        {/* ==================== Reports ==================== */}
+        <Route path="/reports/dashboard" element={<ProtectedRoute allowedPermissions="reports:revenue:view"><ReportDashboard /></ProtectedRoute>} />
+        <Route path="/reports/revenue" element={<ProtectedRoute allowedPermissions="reports:revenue:view"><RevenueReport /></ProtectedRoute>} />
+        <Route path="/reports/top-products" element={<ProtectedRoute allowedPermissions="reports:top-products"><TopProductsReport /></ProtectedRoute>} />
+        <Route path="/reports/inventory-reports" element={<ProtectedRoute allowedPermissions="inventory:stock-check:view"><InventoryReport /></ProtectedRoute>} />
+
+        {/* ==================== Settings ==================== */}
+        <Route path="/settings/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+        <Route path="/settings/notification" element={<ProtectedRoute><Notification /></ProtectedRoute>} />
+        <Route path="/settings/activity-log" element={<ProtectedRoute allowedPermissions="settings:activity-log"><ActivityLog /></ProtectedRoute>} />
+        <Route path="/settings/file" element={<ProtectedRoute allowedPermissions="files:view"><FileManager /></ProtectedRoute>} />
+        <Route path="/settings/subscription/pricing" element={<ProtectedRoute allowedPermissions="subscription:view"><PricingPage /></ProtectedRoute>} />
+        <Route path="/settings/subscription" element={<ProtectedRoute allowedPermissions="subscription:view"><SubscriptionPage /></ProtectedRoute>} />
+        <Route path="/settings/export-data" element={<ProtectedRoute allowedPermissions="reports:revenue:export"><DataExportPage /></ProtectedRoute>} />
+        <Route path="/terms" element={<ProtectedRoute><Term /></ProtectedRoute>} />
+        <Route path="/privacy" element={<ProtectedRoute><Privacy /></ProtectedRoute>} />
+        <Route path="/settings/payment-method" element={<ProtectedRoute allowedPermissions="settings:payment-method"><PaymentGatewaySettingsPage /></ProtectedRoute>} />
+
+        {/* ==================== Điều hướng thanh toán ==================== */}
+        <Route path="/subscription/success" element={<SubscriptionSuccess />} />
+        <Route path="/subscription/cancel" element={<SubscriptionCancel />} />
+
+        {/* ==================== Orders ==================== */}
+        <Route path="/orders/pos" element={<ProtectedRoute allowedPermissions="orders:create"><SidebarPOS /></ProtectedRoute>} />
+        <Route path="/orders/list" element={<ProtectedRoute allowedPermissions="orders:view"><ListAllOrder /></ProtectedRoute>} />
+
+        {/* ==================== Error Pages ==================== */}
         <Route path="/unauthorized" element={<Unauthorized />} />
-
-        {/* Default: điều hướng tới dashboard (ProtectedRoute sẽ xử lý redirect tới /login nếu chưa auth) */}
         <Route path="*" element={<NotFound />} />
       </Routes>
     </ConfigProvider>

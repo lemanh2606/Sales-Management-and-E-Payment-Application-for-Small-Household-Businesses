@@ -1,205 +1,216 @@
 // src/components/customer/CustomerForm.jsx
 import React, { useState, useEffect } from "react";
-import toast from "react-hot-toast";
-import { motion } from "framer-motion";
-import { MdSave, MdClose, MdPerson, MdPhone, MdLocationOn, MdNote } from "react-icons/md";
+import { Form, Input, Button, Space, Row, Col, message, Divider } from "antd";
+import {
+  SaveOutlined,
+  CloseOutlined,
+  UserOutlined,
+  PhoneOutlined,
+  EnvironmentOutlined,
+  FileTextOutlined,
+  CheckCircleOutlined,
+} from "@ant-design/icons";
+import Swal from "sweetalert2";
 import { createCustomer, updateCustomer } from "../../api/customerApi";
 
+const { TextArea } = Input;
+
 export default function CustomerForm({ customer, onSuccess, onCancel }) {
-    const [name, setName] = useState("");
-    const [phone, setPhone] = useState("");
-    const [address, setAddress] = useState("");
-    const [note, setNote] = useState("");
-    const [saving, setSaving] = useState(false);
-    const [errors, setErrors] = useState({});
-    const storeObj = JSON.parse(localStorage.getItem("currentStore")) || {};
+  const [form] = Form.useForm();
+  const [saving, setSaving] = useState(false);
+  const storeObj = JSON.parse(localStorage.getItem("currentStore")) || {};
 
-    useEffect(() => {
-        if (customer) {
-            setName(customer.name || "");
-            setPhone(customer.phone || "");
-            setAddress(customer.address || "");
-            setNote(customer.note || "");
-        } else {
-            setName("");
-            setPhone("");
-            setAddress("");
-            setNote("");
-        }
-        setErrors({});
-    }, [customer]);
+  useEffect(() => {
+    if (customer) {
+      form.setFieldsValue({
+        name: customer.name || "",
+        phone: customer.phone || "",
+        address: customer.address || "",
+        note: customer.note || "",
+      });
+    } else {
+      form.resetFields();
+    }
+  }, [customer, form]);
 
-    const validate = () => {
-        const e = {};
-        if (!name.trim()) e.name = "Tên không được để trống";
-        if (!phone || !/^[0-9 +()-]{9,20}$/.test(phone.trim())) e.phone = "Số điện thoại không hợp lệ";
-        if (address && address.length > 300) e.address = "Địa chỉ quá dài (tối đa 300 ký tự)";
-        if (note && note.length > 2000) e.note = "Ghi chú quá dài (tối đa 2000 ký tự)";
-        return e;
-    };
+  const handleSave = async (values) => {
+    try {
+      setSaving(true);
 
-    const handleSave = async () => {
-        const e = validate();
-        setErrors(e);
-        if (Object.keys(e).length > 0) {
-            toast.error("Vui lòng sửa thông tin trước khi lưu");
-            return;
-        }
+      if (customer && customer._id) {
+        const res = await updateCustomer(customer._id, {
+          name: values.name.trim(),
+          phone: values.phone.trim(),
+          address: values.address?.trim() || "",
+          note: values.note?.trim() || "",
+        });
+        const updated = res?.customer ?? res;
+        Swal.fire({
+          title: "🎉 Thành công!",
+          text: "Cập nhật khách hàng thành công!",
+          icon: "success",
+          confirmButtonText: "OK",
+          confirmButtonColor: "#52c41a",
+          buttonsStyling: false,
+        });
+        onSuccess?.(updated);
+      } else {
+        const res = await createCustomer({
+          storeId: storeObj._id,
+          name: values.name.trim(),
+          phone: values.phone.trim(),
+          address: values.address?.trim() || "",
+          note: values.note?.trim() || "",
+        });
+        const created = res?.customer ?? res;
+        Swal.fire({
+          title: "🎉 Thành công!",
+          text: "Thêm khách hàng thành công!",
+          icon: "success",
+          confirmButtonText: "OK luôn!",
+          confirmButtonColor: "#52c41a",
+          buttonsStyling: false,
+        });
+        onSuccess?.(created);
+      }
+    } catch (err) {
+      console.error("Customer save error:", err);
+      const errorMessage = err?.response?.data?.message || "Có lỗi xảy ra, vui lòng thử lại";
+      Swal.fire({
+        title: " Lỗi!",
+        text: errorMessage,
+        icon: "error",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#ff4d4f",
+        timer: 2000,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
 
-        try {
-            setSaving(true);
+  return (
+    <div>
+      <Form form={form} layout="vertical" onFinish={handleSave} autoComplete="off" size="large">
+        <Row gutter={16}>
+          {/* Name Field */}
+          <Col xs={24} md={12}>
+            <Form.Item
+              name="name"
+              label={<span style={{ fontWeight: 600, color: "#262626" }}>Tên khách hàng</span>}
+              rules={[
+                { required: true, message: "Vui lòng nhập tên khách hàng!" },
+                { whitespace: true, message: "Tên không được chỉ chứa khoảng trắng!" },
+                { max: 100, message: "Tên không được quá 100 ký tự!" },
+              ]}
+            >
+              <Input
+                prefix={<UserOutlined style={{ color: "#1890ff" }} />}
+                placeholder="Nhập tên khách hàng"
+                autoFocus
+                style={{
+                  borderRadius: "8px",
+                }}
+              />
+            </Form.Item>
+          </Col>
 
-            if (customer && customer._id) {
-                // Update flow
-                const res = await updateCustomer(customer._id, {
-                    name: name.trim(),
-                    phone: phone.trim(),
-                    address: address.trim(),
-                    note: note.trim(),
-                });
-                // backend trả { message, customer } theo controller mới
-                const updated = res?.customer ?? res;
-                toast.success("Cập nhật khách hàng thành công");
-                onSuccess?.(updated);
-            } else {
-                // Create flow
-                const res = await createCustomer({
-                    storeId: storeObj._id,
-                    name: name.trim(),
-                    phone: phone.trim(),
-                    address: address.trim(),
-                    note: note.trim(),
-                });
-                const created = res?.customer ?? res;
-                toast.success("Tạo khách hàng thành công");
-                onSuccess?.(created);
-            }
-        } catch (err) {
-            console.error("Customer save error:", err);
-            const message = err?.response?.data?.message || "Lỗi server khi lưu khách hàng";
-            toast.error(message);
-        } finally {
-            setSaving(false);
-        }
-    };
+          {/* Phone Field */}
+          <Col xs={24} md={12}>
+            <Form.Item
+              name="phone"
+              label={<span style={{ fontWeight: 600, color: "#262626" }}>Số điện thoại</span>}
+              rules={[
+                { required: true, message: "Vui lòng nhập số điện thoại!" },
+                { pattern: /^[0-9 +()-]{9,20}$/, message: "Số điện thoại không hợp lệ!" },
+              ]}
+            >
+              <Input
+                prefix={<PhoneOutlined style={{ color: "#52c41a" }} />}
+                placeholder="Ví dụ: 0971079629"
+                style={{
+                  borderRadius: "8px",
+                }}
+              />
+            </Form.Item>
+          </Col>
 
-    return (
-        <motion.div
-            initial={{ opacity: 0, y: 6, scale: 0.995 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ duration: 0.28 }}
-            className="w-full"
-        >
-            <div className="bg-gradient-to-br from-white to-emerald-50/50 rounded-2xl shadow-2xl border border-gray-100 p-6 md:p-8">
-                <div className="flex items-center justify-between mb-4">
-                    <div>
-                        <h3 className="text-2xl font-extrabold text-gray-900">
-                            {customer ? "Chỉnh sửa khách hàng" : "Thêm khách hàng mới"}
-                        </h3>
-                        <p className="text-sm text-gray-500 mt-1">Điền thông tin khách hàng để lưu vào hệ thống</p>
-                    </div>
+          {/* Address Field */}
+          <Col xs={24}>
+            <Form.Item
+              name="address"
+              label={<span style={{ fontWeight: 600, color: "#262626" }}>Địa chỉ</span>}
+              rules={[{ max: 300, message: "Địa chỉ không được quá 300 ký tự!" }]}
+            >
+              <Input
+                prefix={<EnvironmentOutlined style={{ color: "#faad14" }} />}
+                placeholder="Nhập địa chỉ (tùy chọn)"
+                style={{
+                  borderRadius: "8px",
+                }}
+              />
+            </Form.Item>
+          </Col>
 
-                    <button
-                        onClick={onCancel}
-                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border hover:bg-gray-50 transition text-gray-700 cursor-pointer"
-                        aria-label="Hủy"
-                        title="Hủy"
-                    >
-                        <MdClose /> Đóng
-                    </button>
-                </div>
+          {/* Note Field */}
+          <Col xs={24}>
+            <Form.Item
+              name="note"
+              label={<span style={{ fontWeight: 600, color: "#262626" }}>Ghi chú</span>}
+              rules={[{ max: 2000, message: "Ghi chú không được quá 2000 ký tự!" }]}
+            >
+              <TextArea
+                placeholder="Nhập ghi chú về khách hàng (tùy chọn)"
+                rows={4}
+                showCount
+                maxLength={2000}
+                style={{
+                  borderRadius: "8px",
+                  resize: "none",
+                }}
+              />
+            </Form.Item>
+          </Col>
+        </Row>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Name */}
-                    <label className="relative group">
-                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-600">
-                            <MdPerson size={20} />
-                        </div>
-                        <input
-                            autoFocus
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            placeholder=" "
-                            className={`w-full pl-11 pr-3 py-3 rounded-lg border ${errors.name ? "border-red-400" : "border-gray-200"} bg-white focus:ring-2 focus:ring-emerald-200 outline-none`}
-                        />
-                        <span className="absolute left-11 -top-2 text-xs text-gray-500 bg-white px-1">Tên</span>
-                        {errors.name && <p className="text-sm text-red-500 mt-1">{errors.name}</p>}
-                    </label>
+        <Divider style={{ margin: "24px 0 20px" }} />
 
-                    {/* Phone */}
-                    <label className="relative group">
-                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-600">
-                            <MdPhone size={20} />
-                        </div>
-                        <input
-                            value={phone}
-                            onChange={(e) => setPhone(e.target.value)}
-                            placeholder=" "
-                            className={`w-full pl-11 pr-3 py-3 rounded-lg border ${errors.phone ? "border-red-400" : "border-gray-200"} bg-white focus:ring-2 focus:ring-emerald-200 outline-none`}
-                        />
-                        <span className="absolute left-11 -top-2 text-xs text-gray-500 bg-white px-1">Số điện thoại</span>
-                        <p className="text-xs text-gray-400 mt-1">Ví dụ: 0971079629 hoặc +84 97 107 9629</p>
-                        {errors.phone && <p className="text-sm text-red-500 mt-1">{errors.phone}</p>}
-                    </label>
+        {/* Action Buttons */}
+        <Form.Item style={{ marginBottom: 0 }}>
+          <Space style={{ width: "100%", justifyContent: "flex-end" }} size="middle">
+            <Button
+              size="large"
+              icon={<CloseOutlined />}
+              onClick={onCancel}
+              disabled={saving}
+              style={{
+                borderRadius: "8px",
+                fontWeight: 500,
+              }}
+            >
+              Hủy
+            </Button>
 
-                    {/* Address */}
-                    <label className="relative group md:col-span-2">
-                        <div className="absolute left-3 top-4 text-emerald-600">
-                            <MdLocationOn size={20} />
-                        </div>
-                        <input
-                            value={address}
-                            onChange={(e) => setAddress(e.target.value)}
-                            placeholder=" "
-                            className={`w-full pl-11 pr-3 py-3 rounded-lg border ${errors.address ? "border-red-400" : "border-gray-200"} bg-white focus:ring-2 focus:ring-emerald-200 outline-none`}
-                        />
-                        <span className="absolute left-11 -top-2 text-xs text-gray-500 bg-white px-1">Địa chỉ</span>
-                        {errors.address && <p className="text-sm text-red-500 mt-1">{errors.address}</p>}
-                    </label>
-
-                    {/* Note */}
-                    <label className="relative group md:col-span-2">
-                        <div className="absolute left-3 top-3 text-emerald-600">
-                            <MdNote size={18} />
-                        </div>
-                        <textarea
-                            value={note}
-                            onChange={(e) => setNote(e.target.value)}
-                            placeholder=" "
-                            className="w-full pl-11 pr-3 py-3 rounded-lg border border-gray-200 bg-white focus:ring-2 focus:ring-emerald-200 outline-none min-h-[88px]"
-                        />
-                        <span className="absolute left-11 -top-2 text-xs text-gray-500 bg-white px-1">Ghi chú</span>
-                        <p className="text-xs text-gray-400 mt-1">Ghi chú nội bộ, ví dụ: loại khách VIP, kênh liên hệ...</p>
-                        {errors.note && <p className="text-sm text-red-500 mt-1">{errors.note}</p>}
-                    </label>
-                </div>
-
-                <div className="mt-6 flex items-center justify-end gap-3">
-                    <button
-                        onClick={onCancel}
-                        className="px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition cursor-pointer"
-                        disabled={saving}
-                    >
-                        Hủy
-                    </button>
-
-                    <button
-                        onClick={handleSave}
-                        className={`inline-flex cursor-pointer items-center gap-2 px-5 py-2 rounded-lg shadow-md text-white ${saving ? "bg-emerald-400 cursor-wait" : "bg-emerald-600 hover:bg-emerald-700"}`}
-                        disabled={saving}
-                    >
-                        {saving ? (
-                            <svg className="w-5 h-5 animate-spin" viewBox="3 3 18 18">
-                                <path className="opacity-25" d="M12 3C7.03 3 3 7.03 3 12"></path>
-                                <path d="M21 12A9 9 0 1 1 12 3" className="opacity-75"></path>
-                            </svg>
-                        ) : (
-                            <MdSave size={18} />
-                        )}
-                        {customer && customer._id ? (saving ? " Đang lưu..." : " Lưu thay đổi") : (saving ? " Đang tạo..." : " Tạo khách hàng")}
-                    </button>
-                </div>
-            </div>
-        </motion.div>
-    );
+            <Button
+              type="primary"
+              size="large"
+              icon={!saving && <SaveOutlined />}
+              htmlType="submit"
+              loading={saving}
+              style={{
+                background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                border: "none",
+                borderRadius: "8px",
+                fontWeight: 600,
+                minWidth: "160px",
+                boxShadow: "0 4px 12px rgba(102, 126, 234, 0.4)",
+              }}
+            >
+              {customer ? "Lưu thay đổi" : "Tạo khách hàng"}
+            </Button>
+          </Space>
+        </Form.Item>
+      </Form>
+    </div>
+  );
 }

@@ -16,6 +16,7 @@ export default function LoyaltySetting() {
   const [error, setError] = useState(null); // 👈 Lỗi nếu có
 
   const storeId = currentStore?._id; // 👈 StoreId từ context (nếu null thì báo lỗi)
+  const apiUrl = import.meta.env.VITE_API_URL;
 
   // 👈 Defaults nếu chưa có config (theo schema, nhưng set isActive=false như yêu cầu)
   const defaultConfig = {
@@ -40,7 +41,7 @@ export default function LoyaltySetting() {
     try {
       setLoading(true);
       setError(null); // Clear error trước fetch
-      const response = await axios.get(`http://localhost:9999/api/loyaltys/config/${storeId}`, {
+      const response = await axios.get(`${apiUrl}/loyaltys/config/${storeId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const apiConfig = response.data.config || defaultConfig; // 👉 FIX: Lưu config từ API
@@ -81,7 +82,7 @@ export default function LoyaltySetting() {
     setSaving(true); // Loading khi save
     try {
       const payload = { isActive: checked }; // Chỉ gửi isActive
-      const response = await axios.post(`http://localhost:9999/api/loyaltys/config/${storeId}`, payload, {
+      const response = await axios.post(`${apiUrl}/loyaltys/config/${storeId}`, payload, {
         headers: { Authorization: `Bearer ${token}` },
       });
       console.log("Toggle isActive thành công:", response.data.config.isActive);
@@ -134,7 +135,7 @@ export default function LoyaltySetting() {
         ...values,
         isActive: true, // 👈 Luôn active khi submit
       };
-      const response = await axios.post(`http://localhost:9999/api/loyaltys/config/${storeId}`, payload, {
+      const response = await axios.post(`${apiUrl}/loyaltys/config/${storeId}`, payload, {
         headers: { Authorization: `Bearer ${token}` },
       });
       console.log("Lưu config tích điểm thành công:", response.data.config);
@@ -180,7 +181,7 @@ export default function LoyaltySetting() {
             <span className="text-3xl font-bold text-gray-800">Cấu Hình Hệ Thống Tích Điểm</span>
           </div>
         }
-        className="shadow-xl border-0 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-100"
+        style={{ border: 0 }}
       >
         {loading ? (
           <Spin spinning size="large" tip="Đang tải dữ liệu...">

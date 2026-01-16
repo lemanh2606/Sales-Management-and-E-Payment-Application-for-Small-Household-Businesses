@@ -3,9 +3,12 @@ const express = require("express");
 const router = express.Router();
 
 const auth = require("../middlewares/authMiddleware");
+const { checkSubscriptionExpiry } = require("../middlewares/subscriptionMiddleware");
 const storeController = require("../controllers/store/storeController");
 
-const { verifyToken, isManager, checkStoreAccess, requirePermission } = auth;
+// GET /api/stores/:storeId/inventory-vouchers
+
+const { verifyToken, checkStoreAccess, requirePermission } = auth;
 
 /*
   ROUTES QUẢN LÝ CỬA HÀNG (Store Management)
@@ -31,80 +34,38 @@ const { verifyToken, isManager, checkStoreAccess, requirePermission } = auth;
 //
 
 // Đảm bảo người dùng có store hiện hành (manager tự động vào store đầu tiên nếu có)
-router.post(
-  "/ensure-store",
-  verifyToken,
-  requirePermission("store:dashboard:view"),
-  storeController.ensureStore
-);
+router.post("/ensure-store", verifyToken, checkSubscriptionExpiry, requirePermission("store:dashboard:view"), storeController.ensureStore);
+
+// Proxy Geocode (Lấy tọa độ từ địa chỉ) - Đặt trước :storeId để không bị trùng
+router.get("/utils/geocode", verifyToken, storeController.proxyGeocode);
 
 // Tạo cửa hàng mới (chỉ Manager)
-router.post(
-  "/",
-  verifyToken,
-  requirePermission("store:create"),
-  isManager,
-  storeController.createStore
-);
+router.post("/", verifyToken, checkSubscriptionExpiry, requirePermission("store:create"), storeController.createStore);
 
-// Lấy danh sách cửa hàng mà Manager sở hữu
-router.get(
-  "/",
-  verifyToken,
-  requirePermission("store:view"),
-  isManager,
-  storeController.getStoresByManager
-);
+// Lấy danh sách cửa hàng mà Manager sở hữu, Cho phép Manager xem danh sách cửa hàng ngay cả khi gói hết hạn
+router.get("/", verifyToken, requirePermission("store:view"), storeController.getStoresByManager);
 
 // Lấy chi tiết cửa hàng cụ thể
-router.get(
-  "/:storeId",
-  verifyToken,
-  checkStoreAccess,
-  requirePermission("store:view"),
-  storeController.getStoreById
-);
+router.get("/:storeId", verifyToken, checkSubscriptionExpiry, checkStoreAccess, requirePermission("store:view"), storeController.getStoreById);
 
 // Cập nhật thông tin cửa hàng
-router.put(
-  "/:storeId",
-  verifyToken,
-  checkStoreAccess,
-  isManager,
-  requirePermission("store:update"),
-  storeController.updateStore
-);
+router.put("/:storeId", verifyToken, checkSubscriptionExpiry, checkStoreAccess, requirePermission("store:update"), storeController.updateStore);
 
 // Xóa cửa hàng (soft delete)
-router.delete(
-  "/:storeId",
-  verifyToken,
-  checkStoreAccess,
-  isManager,
-  requirePermission("store:delete"),
-  storeController.deleteStore
-);
+router.delete("/:storeId", verifyToken, checkSubscriptionExpiry, requirePermission("store:delete"), storeController.deleteStore);
+
+// Khôi phục cửa hàng (restore soft delete)
+router.put("/:storeId/restore", verifyToken, checkSubscriptionExpiry, requirePermission("store:update"), storeController.restoreStore);
 
 //
 // ===================== DASHBOARD & SELECT STORE =====================
 //
 
 // Chọn store hiện hành
-router.post(
-  "/select/:storeId",
-  verifyToken,
-  requirePermission("store:view"),
-  storeController.selectStore
-);
+router.post("/select/:storeId", verifyToken, requirePermission("store:view"), storeController.selectStore);
 
 // Dashboard cửa hàng (Manager / Staff trong store)
-router.get(
-  "/:storeId/dashboard",
-  verifyToken,
-  checkStoreAccess,
-  requirePermission("store:dashboard:view"),
-  storeController.getStoreDashboard
-);
+router.get("/:storeId/dashboard", verifyToken, checkSubscriptionExpiry, requirePermission("store:dashboard:view"), storeController.getStoreDashboard);
 
 //
 // ===================== STAFF ASSIGNMENT =====================
@@ -114,7 +75,7 @@ router.get(
 router.post(
   "/:storeId/assign-staff",
   verifyToken,
-  checkStoreAccess,
+  checkSubscriptionExpiry,
   requirePermission("store:staff:assign"),
   storeController.assignStaffToStore
 );
@@ -128,7 +89,7 @@ router.post(
   "/:storeId/employees",
   verifyToken,
   checkStoreAccess,
-  isManager,
+  checkSubscriptionExpiry,
   requirePermission("store:employee:create"),
   storeController.createEmployee
 );
@@ -137,18 +98,26 @@ router.post(
 router.get(
   "/:storeId/employees",
   verifyToken,
+  checkSubscriptionExpiry,
   checkStoreAccess,
-  isManager,
   requirePermission("store:employee:view"),
   storeController.getEmployeesByStore
+);
+
+// routers/storeRouters.js
+router.get(
+  "/:storeId/employees/export",
+  verifyToken,
+  checkSubscriptionExpiry,
+  requirePermission("store:employee:view"),
+  storeController.exportEmployeesToExcel
 );
 
 // Lấy chi tiết nhân viên theo ID
 router.get(
   "/:storeId/employees/:id",
   verifyToken,
-  checkStoreAccess,
-  isManager,
+  checkSubscriptionExpiry,
   requirePermission("store:employee:view"),
   storeController.getEmployeeById
 );
@@ -157,8 +126,8 @@ router.get(
 router.put(
   "/:storeId/employees/:id",
   verifyToken,
+  checkSubscriptionExpiry,
   checkStoreAccess,
-  isManager,
   requirePermission("store:employee:update"),
   storeController.updateEmployee
 );
@@ -167,8 +136,8 @@ router.put(
 router.delete(
   "/:storeId/employees/:id/soft",
   verifyToken,
+  checkSubscriptionExpiry,
   checkStoreAccess,
-  isManager,
   requirePermission("store:employee:softDelete"),
   storeController.softDeleteEmployee
 );
@@ -177,8 +146,8 @@ router.delete(
 router.put(
   "/:storeId/employees/:id/restore",
   verifyToken,
+  checkSubscriptionExpiry,
   checkStoreAccess,
-  isManager,
   requirePermission("store:employee:restore"),
   storeController.restoreEmployee
 );

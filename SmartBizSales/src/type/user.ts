@@ -20,6 +20,7 @@ export interface StoreRoleItem {
 
 export interface UserPublic {
     id: string; // _id
+    image: string;
     username: string;
     fullname?: string | null;
     email?: string | null;
@@ -93,6 +94,7 @@ export interface RefreshTokenResponse {
 export interface UpdateUserDto {
     // used by PUT /api/users/:id in controller updateUser
     username?: string;
+    image?: string;
     email?: string;
     phone?: string | null;
     role?: Role;
@@ -270,6 +272,12 @@ export interface AuthResponse {
     user?: UserPublic;
     store?: any | null; // the controller returns `store` sometimes
 }
+// src/types/user.ts (thêm vào file có sẵn)
+
+export interface ResendRegisterOtpDto {
+    email: string;
+}
+
 
 // ------------------------
 // Export helper: group types for convenient import

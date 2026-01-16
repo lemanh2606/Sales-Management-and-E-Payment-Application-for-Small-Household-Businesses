@@ -12,12 +12,12 @@ const path = require("path");
 const fs = require("fs");
 const errorHandler = require("./middlewares/errorHandler");
 const notFoundHandler = require("./middlewares/notFoundHandler");
-// Swagger
-const swaggerUi = require("swagger-ui-express");
-const YAML = require("yamljs");
-const swaggerDocument = YAML.load(path.join(__dirname, "swagger.yaml")); // 👈 nhớ tạo file swagger.yaml
-// --- DB CONNECT ---
-connectDB();
+
+// Swagger (đang tắt)
+// const swaggerUi = require("swagger-ui-express");
+// const YAML = require("yamljs");
+// const swaggerDocument = YAML.load(path.join(__dirname, "swagger.json"));
+
 // --- LOAD MODELS ---
 [
   "Product",
@@ -32,64 +32,125 @@ connectDB();
 
 const app = express();
 
-// đảm bảo thư mục uploads tồn tại chỉ để đọc tạm
+/* =====================================================
+   🌍 CORS – WHITELIST + HỖ TRỢ CREDENTIALS
+    Cho phép domain trong whitelist dùng cookies/credentials
+    Domain ngoài whitelist vẫn gọi được API (không có credentials)
+    Hỗ trợ Swagger Editor test API
+===================================================== */
+const allowedOrigins = [
+  "http://localhost:3000",
+  "http://localhost:5173",
+  "http://skinanalysis.life",
+  "https://skinanalysis.life",
+  "http://smallbizsales.site",
+  "https://smallbizsales.site",
+  "https://editor.swagger.io", //  Swagger Editor
+  "https://petstore.swagger.io", //  Swagger Petstore
+];
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+
+  //  NẾU ORIGIN TRONG WHITELIST → CHO PHÉP + CREDENTIALS
+  if (allowedOrigins.includes(origin)) {
+    res.header("Access-Control-Allow-Origin", origin);
+    res.header("Access-Control-Allow-Credentials", "true");
+  } else {
+    //  ORIGIN KHÁC → CHO PHÉP NHƯNG KHÔNG CREDENTIALS
+    res.header("Access-Control-Allow-Origin", "*");
+  }
+
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept, Authorization, x-store-id, Cache-Control, Pragma"
+  );
+  res.header(
+    "Access-Control-Allow-Methods",
+    "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+  );
+
+  //  XỬ LÝ PREFLIGHT REQUEST
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+
+  next();
+});
+
+/* =====================================================
+   🚀 WEBHOOK (PHẢI ĐẶT TRƯỚC JSON)
+===================================================== */
+const orderWebhookHandler = require("./routers/orderWebhookHandler");
+const subscriptionWebhookHandler = require("./routers/subscriptionWebhookHandler");
+
+app.post(
+  "/api/orders/vietqr-webhook",
+  express.raw({ type: "*/*" }),
+  orderWebhookHandler
+);
+
+app.post(
+  "/api/subscriptions/webhook",
+  express.raw({ type: "*/*" }),
+  subscriptionWebhookHandler
+);
+
+/* =====================================================
+   📂 MULTER UPLOAD
+===================================================== */
 const uploadDir = path.join(__dirname, "uploads");
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-  console.log("📁 Đã tạo thư mục uploads/");
-}
-// ⚙️ cấu hình Multer storage để giữ nguyên tên file (slug) khi lưu local
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, "uploads/"),
-  filename: (req, file, cb) => {
-    cb(null, file.originalname); // ✅ giữ nguyên tên FE gửi (đã slug)
-  },
+  filename: (req, file, cb) => cb(null, file.originalname),
 });
 const upload = multer({ storage, limits: { fileSize: 20 * 1024 * 1024 } });
 
-// =====Socket.io=====
-const server = http.createServer(app); //  Tạo server http để gắn socket.io
-// ⚡ Khởi tạo Socket.io
+/* =====================================================
+   🌐 HTTP SERVER + SOCKET.IO
+===================================================== */
+const server = http.createServer(app);
+
+/* =====================================================
+   🔌 SOCKET.IO – WHITELIST + CREDENTIALS
+===================================================== */
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:3000", //  FE React
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "Cache-Control", "Pragma"],
+    origin: allowedOrigins, //  Dùng whitelist
+    methods: ["GET", "POST"],
+    credentials: true, //  Cho phép credentials với whitelist
   },
 });
 
-// Lưu io vào app để controller có thể sử dụng (req.app.get("io"))
 app.set("io", io);
-//  Khi có client kết nối socket
-io.on("connection", (socket) => {
-  console.log(`🟢 Client kết nối: ${socket.id}`);
 
-  socket.on("disconnect", () => {
-    console.log(`🔴 Client ngắt kết nối: ${socket.id}`);
-  });
+io.on("connection", (socket) => {
+  console.log(`🟢 Socket connected: ${socket.id}`);
+  socket.on("disconnect", () =>
+    console.log(`🔴 Socket disconnected: ${socket.id}`)
+  );
 });
+
+/* =====================================================
+   ⏰ CRON JOB
+===================================================== */
 require("./services/cronJobs");
 
-// Webhook PayOS phải viết trước express.json()
-const orderWebhookHandler = require("./routers/orderWebhookHandler");
-app.post("/api/orders/vietqr-webhook", express.raw({ type: "*/*" }), orderWebhookHandler);
-
-// --- MIDDLEWARE ---
-app.use(
-  cors({
-    origin: "http://localhost:3000",
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "Cache-Control", "Pragma"],
-  })
-);
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+/* =====================================================
+   🧱 COMMON MIDDLEWARES
+===================================================== */
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(cookieParser());
 app.use(morgan("dev"));
 
-// --- ROUTERS ---
+/* =====================================================
+   🚏 ROUTERS
+===================================================== */
 const storeRouters = require("./routers/storeRouters");
+const storePaymentRouters = require("./routers/storePaymentRouters");
 const userRouters = require("./routers/userRouters");
 const productRouters = require("./routers/productRouters");
 const productGroupRouters = require("./routers/productGroupRouters");
@@ -106,10 +167,20 @@ const loyaltyRouters = require("./routers/loyaltyRouters");
 const financialRouters = require("./routers/financialRouters");
 const activityLogRouters = require("./routers/activityLogRouters");
 const fileRouters = require("./routers/fileRouters");
+const subscriptionRouters = require("./routers/subscriptionRouters");
+const notificationRouters = require("./routers/notificationRouters");
+const inventoryReportRouters = require("./routers/inventoryReportRouters");
+const exportRouters = require("./routers/exportRouters");
+const warehouseRouters = require("./routers/warehouseRouters");
+const inventoryVoucherRouters = require("./routers/inventoryVoucherRouters");
+const operatingExpenseRouters = require("./routers/operatingExpenseRouters");
 
-// --- MOUNT ROUTERS ---
+/* =====================================================
+   🔗 MOUNT ROUTERS
+===================================================== */
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/api/stores", storeRouters);
+app.use("/api/stores-config-payment", storePaymentRouters);
 app.use("/api/users", userRouters);
 app.use("/api/products", productRouters);
 app.use("/api/product-groups", productGroupRouters);
@@ -126,13 +197,26 @@ app.use("/api/loyaltys", loyaltyRouters);
 app.use("/api/financials", financialRouters);
 app.use("/api/activity-logs", activityLogRouters);
 app.use("/api/files", fileRouters);
+app.use("/api/subscriptions", subscriptionRouters);
+app.use("/api/notifications", notificationRouters);
+app.use("/api/inventory-reports", inventoryReportRouters);
+app.use("/api/export", exportRouters);
+app.use("/api/stores", inventoryVoucherRouters);
+app.use("/api/stores", warehouseRouters);
+app.use("/api/operating-expenses", operatingExpenseRouters);
 
-// --- ROOT ---
+/* =====================================================
+   🏠 ROOT
+===================================================== */
 app.get("/", (req, res) => {
-  res.send("✅ Backend đang chạy ổn định 🚀");
+  res.send(
+    "👀 Ai vừa ping tui đó? Tui thấy rồi nha! From SmartRetail team with Love 🫶"
+  );
 });
 
-// --- API OVERVIEW (JSON) ---
+/* =====================================================
+    API OVERVIEW
+===================================================== */
 app.get("/api", (req, res) => {
   const endpoints = listEndpoints(app);
   const grouped = {};
@@ -154,18 +238,28 @@ app.get("/api", (req, res) => {
   });
 });
 
-// --- SWAGGER UI ---
-app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
-
-// --- ERROR HANDLERS ---
+/* =====================================================
+    ERROR HANDLERS
+===================================================== */
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-// --- SERVER START ---
+/* =====================================================
+   🚀 START SERVER
+===================================================== */
 const PORT = process.env.PORT || 9999;
-server.listen(PORT, () => {
-  console.log(`🔥 Server running: http://localhost:${PORT}`);
-  console.log("🔔 Socket.io đang hoạt động...");
-  console.log(`📘 Swagger Docs:  http://localhost:${PORT}/docs`);
-  console.log(`📋 API Overview:  http://localhost:${PORT}/api`);
+
+async function bootstrap() {
+  await connectDB();
+
+  server.listen(PORT, () => {
+    console.log(`🔥 Server running: http://localhost:${PORT}`);
+    console.log("🔔 Socket.io đang hoạt động...");
+    console.log(` API Overview: http://localhost:${PORT}/api`);
+  });
+}
+
+bootstrap().catch((error) => {
+  console.error(" Không thể khởi động server:", error);
+  process.exit(1);
 });

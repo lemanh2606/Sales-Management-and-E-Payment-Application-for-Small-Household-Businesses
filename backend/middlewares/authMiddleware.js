@@ -20,21 +20,26 @@ async function verifyToken(req, res, next) {
     // Lấy header Authorization (hỗ trợ cả "authorization" và "Authorization")
     const authHeader =
       req.headers["authorization"] || req.headers["Authorization"];
-    if (!authHeader) {
+    
+    let token = null;
+    if (authHeader) {
+      // Kiểm tra định dạng: phải là "Bearer <token>"
+      const parts = authHeader.split(" ");
+      if (parts.length === 2 && parts[0] === "Bearer") {
+        token = parts[1];
+      }
+    }
+
+    // Nếu không có header, thử lấy từ query param (hữu ích cho download file)
+    if (!token && req.query.token) {
+      token = req.query.token;
+    }
+
+    if (!token) {
       return res
         .status(401)
         .json({ message: "Không tìm thấy token, vui lòng đăng nhập" });
     }
-
-    // Kiểm tra định dạng: phải là "Bearer <token>"
-    const parts = authHeader.split(" ");
-    if (parts.length !== 2 || parts[0] !== "Bearer") {
-      return res
-        .status(401)
-        .json({ message: "Token sai định dạng (phải là 'Bearer <token>')" });
-    }
-
-    const token = parts[1];
     let decoded;
     try {
       // Xác thực token bằng secret
@@ -139,8 +144,8 @@ async function checkStoreAccess(req, res, next) {
       req.query.shopId ||
       req.query.storeId ||
       req.params.storeId ||
-      req.body.storeId ||
-      req.body.shopId ||
+      req.body?.storeId ||
+      req.body?.shopId ||
       null;
 
     // Nếu chưa có storeId từ request, dùng current_store của user (nếu có)
@@ -178,7 +183,16 @@ async function checkStoreAccess(req, res, next) {
         req.storeRole = "OWNER";
         return next();
       } else {
-        // Nếu manager không phải owner thì không cho phép
+        // Nếu manager không phải owner nhưng có thể được gán quyền qua store_roles (trong tương lai)
+        const roleMapping = (userData.store_roles || []).find(
+          (r) => String(r.store) === String(store._id)
+        );
+        if (roleMapping) {
+          req.store = store;
+          req.storeRole = roleMapping.role;
+          return next();
+        }
+        
         console.log("MANAGER TRUY CẬP STORE KHÔNG PHẢI OWNER");
         return res.status(403).json({
           message: "Manager không sở hữu cửa hàng này",
@@ -194,13 +208,14 @@ async function checkStoreAccess(req, res, next) {
           (r) => String(r.store) === String(store._id)
         ) || null;
 
-      if (roleMapping) {
-        // Nếu có mapping thì cho phép và gán req.storeRole theo mapping
-        console.log("STAFF ĐƯỢC GÁN STORE → ALLOW");
+      if (roleMapping || String(userData.current_store) === String(store._id)) {
+        // Nếu có mapping hoặc đây là store hiện tại của nhân viên
+        console.log("STAFF ĐƯỢC PHÉP TRUY CẬP STORE → ALLOW");
         req.store = store;
-        req.storeRole = roleMapping.role; // có thể là OWNER hoặc STAFF theo schema bạn dùng
+        req.storeRole = roleMapping ? roleMapping.role : "STAFF"; 
         return next();
       }
+      
       // Nếu không có mapping cho store này thì deny
       console.log("STAFF TRUY CẬP STORE KHÔNG ĐƯỢC GÁN");
       return res.status(403).json({
@@ -233,21 +248,17 @@ async function checkStoreAccess(req, res, next) {
   Trả 401 nếu user chưa xác thực, 403 nếu thiếu permission, 500 nếu lỗi server.
 */
 function requirePermission(permission, options = {}) {
-  const allowManager = options.allowManager !== false;
-
+  // options giữ lại để sau cần cấu hình gì thêm thì dùng, hiện tại không còn allowManager
   return (req, res, next) => {
     try {
       const user = req.user;
-      if (!user) return res.status(401).json({ message: "Not authenticated" });
-
-      // Cho phép Manager override
-      if (allowManager && user.role === "MANAGER") {
-        return next();
+      if (!user) {
+        return res.status(401).json({ message: "Not authenticated" });
       }
 
-      // Lấy menu từ user
+      // Lấy menu từ user (danh sách permission dạng string)
       const menu = Array.isArray(user.menu)
-        ? user.menu.map((p) => p.trim())
+        ? user.menu.map((p) => String(p).trim())
         : [];
 
       if (!menu.length) {
@@ -257,12 +268,14 @@ function requirePermission(permission, options = {}) {
       }
 
       const perm = String(permission).trim();
-
-      // Kiểm tra match chính xác
-      if (menu.includes(perm)) return next();
-
-      // Kiểm tra wildcard global: *, *:*, all, resource:*
       const [resource, action] = perm.split(":");
+
+      // 1. Match chính xác
+      if (menu.includes(perm)) {
+        return next();
+      }
+
+      // 2. Wildcard global: *, *:*, all, resource:*
       if (
         menu.includes(`${resource}:*`) ||
         menu.includes("*") ||
@@ -272,9 +285,10 @@ function requirePermission(permission, options = {}) {
         return next();
       }
 
-      // Kiểm tra store-scoped permissions nếu req.store có dữ liệu
+      // 3. Store-scoped permissions nếu req.store có dữ liệu
       if (req.store && req.store._id) {
         const sid = String(req.store._id);
+
         // store:<storeId>:permission hoặc store:<storeId>:resource:*
         if (
           menu.includes(`store:${sid}:${perm}`) ||
@@ -284,21 +298,23 @@ function requirePermission(permission, options = {}) {
         }
       }
 
-      // Kiểm tra wildcard scoped nếu permission dạng store:<id>:resource:action
+      // 4. Wildcard scoped nếu permission dạng store:<id>:resource:action
       if (perm.startsWith("store:")) {
         const parts = perm.split(":"); // ["store", "<id>", "resource", "action"]
         if (parts.length >= 3) {
           const sid = parts[1];
           const resName = parts[2];
+
           if (menu.includes(`store:${sid}:${resName}:*`)) {
             return next();
           }
         }
       }
 
+      // Nếu tới đây vẫn không match permission nào
       return res
         .status(403)
-        .json({ message: "Access denied (permission missing)" });
+        .json({ message: "Truy cập bị từ chối (không đủ quyền)" });
     } catch (err) {
       console.error("requirePermission error:", err);
       return res
@@ -307,11 +323,21 @@ function requirePermission(permission, options = {}) {
     }
   };
 }
+const requireRole =
+  (...roles) =>
+  (req, res, next) => {
+    const userRole = req.user?.role; // bạn chỉnh lại theo payload token (vd: req.user.userType)
+    if (!userRole || !roles.includes(userRole)) {
+      return res
+        .status(403)
+        .json({ message: "Không đủ quyền (role) để thực hiện thao tác này" });
+    }
+    next();
+  };
 
 module.exports = {
   verifyToken,
-  isManager,
-  isStaff,
   checkStoreAccess,
   requirePermission,
+  requireRole,
 };

@@ -42,7 +42,7 @@ import axios from "axios";
 import dayjs from "dayjs";
 import Layout from "../../components/Layout";
 import Swal from "sweetalert2";
-
+const apiUrl = import.meta.env.VITE_API_URL;
 const { Dragger } = Upload;
 const { Text, Title } = Typography;
 const { Option } = Select;
@@ -69,7 +69,7 @@ const FileManager = () => {
     const sizes = ["B", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(1024));
     return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${sizes[i]}`;
-  }; 
+  };
 
   // đặt màu cho icon file mặc định vì ko preview được document
   const getFileIcon = (type, extension) => {
@@ -93,7 +93,7 @@ const FileManager = () => {
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const url = `http://localhost:9999/api/files/store/${currentStore._id}`;
+      const url = `${apiUrl}/files/store/${currentStore._id}`;
       const res = await axios.get(url, {
         headers: { Authorization: `Bearer ${token}`, "Cache-Control": "no-cache", Pragma: "no-cache" },
       });
@@ -162,7 +162,14 @@ const FileManager = () => {
       const formData = new FormData();
       const currentStore = JSON.parse(localStorage.getItem("currentStore") || "{}");
       if (!currentStore?._id) {
-        message.error("Chưa chọn cửa hàng!");
+        Swal.fire({
+          title: " Lỗi!",
+          text: "Chưa chọn cửa hàng!",
+          icon: "error",
+          confirmButtonText: "OK",
+          confirmButtonColor: "#ff4d4f",
+          timer: 2000,
+        });
         onError("Missing storeId");
         setUploading(false);
         return;
@@ -172,7 +179,7 @@ const FileManager = () => {
 
       try {
         const token = localStorage.getItem("token");
-        const res = await axios.post(`http://localhost:9999/api/files/upload?storeId=${currentStore._id}`, formData, {
+        const res = await axios.post(`${apiUrl}/files/upload?storeId=${currentStore._id}`, formData, {
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "multipart/form-data",
@@ -184,7 +191,14 @@ const FileManager = () => {
           setFiles((prev) => [res.data.file, ...prev]);
           setFilteredFiles((prev) => [res.data.file, ...prev]);
         }
-        message.success(`${file.name} uploaded!`);
+        Swal.fire({
+          title: "🎉 Thành công!",
+          text: `${file.name} uploaded!`,
+          icon: "success",
+          timer: 2000,
+          confirmButtonText: "OK",
+          confirmButtonColor: "#52c41a",
+        });
         fetchFiles();
         onSuccess(res.data);
       } catch (err) {
@@ -199,7 +213,14 @@ const FileManager = () => {
           });
         } else {
           // fallback nếu lỗi không từ backend
-          message.error(`${file.name} upload failed!`);
+          Swal.fire({
+            title: " Lỗi!",
+            text: `${file.name} upload failed!`,
+            icon: "error",
+            confirmButtonText: "OK",
+            confirmButtonColor: "#ff4d4f",
+            timer: 2000,
+          });
         }
         onError(err);
       } finally {
@@ -220,7 +241,15 @@ const FileManager = () => {
   // Xoá các lựa chọn tick checkbox
   const deleteSelected = async () => {
     if (selectedKeys.length === 0) {
-      message.warning("Chưa chọn file nào để xoá!");
+      Swal.fire({
+        title: "⚠️ Cảnh báo!",
+        text: "Bạn chưa chọn file nào để xoá",
+        icon: "warning",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#faad14",
+        timer: 2000,
+      });
+
       return;
     }
 
@@ -241,7 +270,7 @@ const FileManager = () => {
         const token = localStorage.getItem("token");
         await Promise.all(
           selectedKeys.map((id) =>
-            axios.delete(`http://localhost:9999/api/files/${id}?storeId=${currentStore._id}`, {
+            axios.delete(`${apiUrl}/files/${id}?storeId=${currentStore._id}`, {
               headers: { Authorization: `Bearer ${token}` },
             })
           )
@@ -250,7 +279,7 @@ const FileManager = () => {
         fetchFiles();
         setSelectedKeys([]);
       } catch (err) {
-        console.error("❌ Lỗi xoá hàng loạt:", err);
+        console.error(" Lỗi xoá hàng loạt:", err);
         Swal.fire("Lỗi!", "Không thể xoá file, thử lại sau.", "error");
       } finally {
         setLoading(false);
@@ -278,7 +307,14 @@ const FileManager = () => {
       window.URL.revokeObjectURL(blobUrl);
     } catch (err) {
       console.error("Lỗi tải file:", err);
-      message.error("Không thể tải file!");
+      Swal.fire({
+        title: " Lỗi!",
+        text: "Không tải được file ",
+        icon: "error",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#ff4d4f",
+        timer: 2000,
+      });
     }
   };
 
@@ -412,13 +448,27 @@ const FileManager = () => {
             onConfirm={async () => {
               try {
                 const token = localStorage.getItem("token");
-                await axios.delete(`http://localhost:9999/api/files/${record._id}?storeId=${currentStore._id}`, {
+                await axios.delete(`${apiUrl}/files/${record._id}?storeId=${currentStore._id}`, {
                   headers: { Authorization: `Bearer ${token}` },
                 });
-                message.success("Xóa thành công!");
+                Swal.fire({
+                  title: "🎉 Thành công!",
+                  text: `Xoá thành công`,
+                  icon: "success",
+                  timer: 2000,
+                  confirmButtonText: "OK",
+                  confirmButtonColor: "#52c41a",
+                });
                 fetchFiles();
               } catch (err) {
-                message.error("Lỗi xóa!");
+                Swal.fire({
+                  title: " Lỗi!",
+                  text: "Lỗi Xoá không xoá được",
+                  icon: "error",
+                  confirmButtonText: "OK",
+                  confirmButtonColor: "#ff4d4f",
+                  timer: 2000,
+                });
               }
             }}
           >
@@ -453,13 +503,13 @@ const FileManager = () => {
                     onChange={(e) => setSearchText(e.target.value)}
                     style={{ width: 380 }}
                   />
-                  <Select placeholder="Lọc loại file" style={{ width: 140 }} onChange={setFilterCategory} allowClear>
+                  <Select placeholder="Lọc loại file" style={{ width: 140 }} onChange={(value) => setFilterCategory(value || "all")} allowClear>
                     <Option value="image">Hình ảnh</Option>
                     <Option value="document">Tài liệu</Option>
                     <Option value="video">Video</Option>
                     <Option value="other">Khác</Option>
                   </Select>
-                  <Select placeholder="Lọc đuôi file" style={{ width: 140 }} onChange={setFilterExtension} allowClear>
+                  <Select placeholder="Lọc đuôi file" style={{ width: 140 }} onChange={(value) => setFilterExtension(value || "all")} allowClear>
                     <Option value="jpg">JPG</Option>
                     <Option value="png">PNG</Option>
                     <Option value="pdf">PDF</Option>
@@ -476,7 +526,7 @@ const FileManager = () => {
               <p className="ant-upload-drag-icon">
                 <InboxOutlined style={{ fontSize: 48, color: "#1890ff" }} />
               </p>
-              <p className="ant-upload-text">Kéo thả file vào đây hoặc nhấn để upload</p>
+              <p className="ant-upload-text">Kéo, thả file vào đây hoặc nhấn để upload</p>
               <p className="ant-upload-hint">Hỗ trợ nhiều file: hình ảnh, PDF, video...</p>
             </Dragger>
           </Card>

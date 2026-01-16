@@ -15,25 +15,42 @@ export const searchCustomers = async (keyword, limit = 10) =>
   ).data;
 
 // CREATE - POST /api/customers
-export const createCustomer = async (data) =>
-  (await apiClient.post("/customers", data)).data;
+export const createCustomer = async (data) => (await apiClient.post("/customers", data)).data;
 
 // UPDATE - PUT /api/customers/:id
-export const updateCustomer = async (id, data) =>
-  (await apiClient.put(`/customers/${id}`, data)).data;
+export const updateCustomer = async (id, data) => (await apiClient.put(`/customers/${id}`, data)).data;
 
 // SOFT DELETE - DELETE /api/customers/:id
-export const softDeleteCustomer = async (id) =>
-  (await apiClient.delete(`/customers/${id}`)).data;
+export const softDeleteCustomer = async (id) => (await apiClient.delete(`/customers/${id}`)).data;
 
-// 🆕 GET BY STORE - GET /api/customers/store/:storeId
-export const getCustomersByStore = async (storeId) =>
-  (await apiClient.get(`/customers/store/${storeId}`)).data;
+// 🆕 RESTORE - PUT /api/customers/:id/restore (khôi phục khách hàng đã bị xóa)
+export const restoreCustomer = async (id) => (await apiClient.put(`/customers/${id}/restore`)).data;
+
+// 🆕 GET BY STORE - GET /api/customers/store/:storeId?page=1&limit=10&query=abc&deleted=false
+export const getCustomersByStore = async (storeId, params = {}) => {
+  const { page = 1, limit = 10, query = "", deleted = false } = params;
+  return (
+    await apiClient.get(`/customers/store/${storeId}`, {
+      params: { page, limit, query, deleted: deleted ? "true" : "false" },
+    })
+  ).data;
+};
+
+// 🆕 EXPORT EXCEL - GET /api/customers/store/:storeId/export
+export const exportCustomers = async (storeId) => {
+  if (!storeId) throw new Error("Thiếu storeId khi xuất danh sách khách hàng");
+  const res = await apiClient.get(`/customers/store/${storeId}/export`, {
+    responseType: "blob", // 👈 quan trọng để nhận file
+  });
+  return res.data;
+};
 
 export default {
   searchCustomers,
   createCustomer,
   updateCustomer,
   softDeleteCustomer,
-  getCustomersByStore, // 👈 thêm export mới
+  restoreCustomer,
+  getCustomersByStore,
+  exportCustomers,
 };

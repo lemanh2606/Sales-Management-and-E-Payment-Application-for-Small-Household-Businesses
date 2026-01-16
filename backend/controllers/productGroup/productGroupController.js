@@ -5,7 +5,11 @@ const Employee = require("../../models/Employee");
 const Product = require("../../models/Product");
 const logActivity = require("../../utils/logActivity");
 const path = require("path");
-const { parseExcelToJSON, validateRequiredFields, sanitizeData } = require("../../utils/fileImport");
+const {
+  parseExcelToJSON,
+  validateRequiredFields,
+  sanitizeData,
+} = require("../../utils/fileImport");
 
 // ============= CREATE =============
 const createProductGroup = async (req, res) => {
@@ -78,7 +82,7 @@ const createProductGroup = async (req, res) => {
       productGroup: formattedGroup,
     });
   } catch (error) {
-    console.error("❌ Lỗi createProductGroup:", error);
+    console.error(" Lỗi createProductGroup:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
@@ -89,7 +93,8 @@ const getProductGroupsByStore = async (req, res) => {
     const { storeId } = req.params;
 
     const store = await Store.findById(storeId);
-    if (!store) return res.status(404).json({ message: "Cửa hàng không tồn tại" });
+    if (!store)
+      return res.status(404).json({ message: "Cửa hàng không tồn tại" });
 
     const productGroups = await ProductGroup.find({ storeId, isDeleted: false })
       .populate("storeId", "name address phone")
@@ -119,7 +124,7 @@ const getProductGroupsByStore = async (req, res) => {
       productGroups: formattedGroups,
     });
   } catch (error) {
-    console.error("❌ Lỗi getProductGroupsByStore:", error);
+    console.error(" Lỗi getProductGroupsByStore:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
@@ -134,7 +139,8 @@ const getProductGroupById = async (req, res) => {
       isDeleted: false,
     }).populate("storeId", "name address phone");
 
-    if (!productGroup) return res.status(404).json({ message: "Nhóm sản phẩm không tồn tại" });
+    if (!productGroup)
+      return res.status(404).json({ message: "Nhóm sản phẩm không tồn tại" });
 
     const productCount = await Product.countDocuments({
       group_id: groupId,
@@ -154,7 +160,7 @@ const getProductGroupById = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("❌ Lỗi getProductGroupById:", error);
+    console.error(" Lỗi getProductGroupById:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
@@ -173,7 +179,8 @@ const updateProductGroup = async (req, res) => {
       _id: groupId,
       isDeleted: false,
     });
-    if (!productGroup) return res.status(404).json({ message: "Nhóm sản phẩm không tồn tại" });
+    if (!productGroup)
+      return res.status(404).json({ message: "Nhóm sản phẩm không tồn tại" });
 
     if (name && name.trim() !== productGroup.name) {
       const existingGroup = await ProductGroup.findOne({
@@ -183,18 +190,22 @@ const updateProductGroup = async (req, res) => {
         isDeleted: false,
       });
       if (existingGroup) {
-        return res.status(409).json({ message: "Nhóm sản phẩm với tên này đã tồn tại" });
+        return res
+          .status(409)
+          .json({ message: "Nhóm sản phẩm với tên này đã tồn tại" });
       }
     }
 
     const updateData = {};
     if (name !== undefined) updateData.name = name.trim();
-    if (description !== undefined) updateData.description = description ? description.trim() : "";
+    if (description !== undefined)
+      updateData.description = description ? description.trim() : "";
 
-    const updatedGroup = await ProductGroup.findByIdAndUpdate(groupId, updateData, { new: true }).populate(
-      "storeId",
-      "name address phone"
-    );
+    const updatedGroup = await ProductGroup.findByIdAndUpdate(
+      groupId,
+      updateData,
+      { new: true }
+    ).populate("storeId", "name address phone");
 
     const productCount = await Product.countDocuments({
       group_id: groupId,
@@ -226,7 +237,7 @@ const updateProductGroup = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("❌ Lỗi updateProductGroup:", error);
+    console.error(" Lỗi updateProductGroup:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
@@ -240,7 +251,8 @@ const deleteProductGroup = async (req, res) => {
       _id: groupId,
       isDeleted: false,
     });
-    if (!productGroup) return res.status(404).json({ message: "Nhóm sản phẩm không tồn tại" });
+    if (!productGroup)
+      return res.status(404).json({ message: "Nhóm sản phẩm không tồn tại" });
 
     const productsInGroup = await Product.countDocuments({
       group_id: groupId,
@@ -271,7 +283,7 @@ const deleteProductGroup = async (req, res) => {
       deletedGroupId: groupId,
     });
   } catch (error) {
-    console.error("❌ Lỗi deleteProductGroup:", error);
+    console.error(" Lỗi deleteProductGroup:", error);
     res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
@@ -296,21 +308,12 @@ const importProductGroups = async (req, res) => {
       return res.status(404).json({ message: "Cửa hàng không tồn tại" });
     }
 
-    if (!store.owner_id.equals(userId)) {
-      if (user.role === "STAFF") {
-        const employee = await Employee.findOne({ user_id: userId });
-        if (!employee || employee.store_id.toString() !== storeId) {
-          return res.status(403).json({ message: "Bạn không có quyền import" });
-        }
-      } else {
-        return res.status(403).json({ message: "Bạn không có quyền import" });
-      }
-    }
-
     const data = await parseExcelToJSON(req.file.buffer);
 
     if (data.length === 0) {
-      return res.status(400).json({ message: "File không chứa dữ liệu hợp lệ" });
+      return res
+        .status(400)
+        .json({ message: "File không chứa dữ liệu hợp lệ" });
     }
 
     const results = { success: [], failed: [], total: data.length };
@@ -339,7 +342,11 @@ const importProductGroups = async (req, res) => {
         });
 
         if (existingGroup) {
-          results.failed.push({ row: rowNumber, data: row, error: `Nhóm sản phẩm đã tồn tại: ${name}` });
+          results.failed.push({
+            row: rowNumber,
+            data: row,
+            error: `Nhóm sản phẩm đã tồn tại: ${name}`,
+          });
           continue;
         }
 
@@ -350,9 +357,16 @@ const importProductGroups = async (req, res) => {
         });
 
         await newGroup.save();
-        results.success.push({ row: rowNumber, group: { _id: newGroup._id, name: newGroup.name } });
+        results.success.push({
+          row: rowNumber,
+          group: { _id: newGroup._id, name: newGroup.name },
+        });
       } catch (error) {
-        results.failed.push({ row: rowNumber, data: row, error: error.message });
+        results.failed.push({
+          row: rowNumber,
+          data: row,
+          error: error.message,
+        });
       }
     }
 
@@ -365,14 +379,19 @@ const importProductGroups = async (req, res) => {
 
 // Download Product Group Template
 const downloadProductGroupTemplate = (req, res) => {
-  const filePath = path.resolve(__dirname, "../../templates/product_group_template.xlsx");
+  const filePath = path.resolve(
+    __dirname,
+    "../../templates/product_group_template.xlsx"
+  );
 
   return res.sendFile(
     filePath,
     {
       headers: {
-        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": "attachment; filename=product_group_template.xlsx",
+        "Content-Type":
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition":
+          "attachment; filename=product_group_template.xlsx",
       },
     },
     (err) => {

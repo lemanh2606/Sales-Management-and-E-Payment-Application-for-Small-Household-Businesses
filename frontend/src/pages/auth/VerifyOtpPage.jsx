@@ -5,7 +5,7 @@ import Swal from "sweetalert2";
 
 import InputField from "../../components/InputField";
 import Button from "../../components/Button";
-import * as userApi from "../../api/userApi"; // import tất cả userApi (verifyOtp, registerManager, maybe resendRegisterOtp)
+import { userApi } from "../../api/index";
 
 export default function VerifyOtpPage() {
   const location = useLocation();

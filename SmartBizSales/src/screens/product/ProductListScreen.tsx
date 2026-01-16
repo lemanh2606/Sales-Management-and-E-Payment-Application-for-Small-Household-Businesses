@@ -1,5 +1,5 @@
 // src/screens/product/ProductListScreen.tsx
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -14,18 +14,18 @@ import {
 } from "react-native";
 import { useAuth } from "../../context/AuthContext";
 import * as productApi from "../../api/productApi";
-import { Product, ProductStatus } from "../../type/product";
+import { Product, ProductStatus, ImportResponse } from "../../type/product";
 import Modal from "react-native-modal";
 import { Ionicons } from "@expo/vector-icons";
-import { File } from "expo-file-system";
+import { File, Directory, Paths } from "expo-file-system";
+import * as DocumentPicker from "expo-document-picker";
 
 // Components
 import ProductFormModal from "../../components/product/ProductFormModal";
 import ProductGroupFormModal from "../../components/product/ProductGroupFormModal";
-import ProductImportModal from "../../components/product/ProductImportModal";
 import { ProductExportButton } from "../../components/product/ProductExportButton";
 import { TemplateDownloadButton } from "../../components/product/TemplateDownloadButton";
-import { ProductImportButton } from "../../components/product/ProductImportButton";
+import ProductBatchModal from "../../components/product/ProductBatchModal";
 
 // Định nghĩa interface cho nhóm sản phẩm
 interface ProductGroup {
@@ -78,6 +78,19 @@ const ProductListScreen: React.FC = () => {
   const [showProductModal, setShowProductModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
 
+  // Thêm state mới
+  const [importProgress, setImportProgress] = useState<string>("");
+
+  // View mode: "merge" = gộp lô, "split" = tách từng lô (giống web)
+  const [viewMode, setViewMode] = useState<"merge" | "split">("merge");
+
+  // State quản lý điều chỉnh lô
+  const [editingBatchProduct, setEditingBatchProduct] =
+    useState<Product | null>(null);
+  const [editingBatchIndex, setEditingBatchIndex] = useState<number | null>(
+    null
+  );
+
   // ================= HÀM LẤY DANH SÁCH NHÓM SẢN PHẨM =================
   const fetchProductGroups = useCallback(async () => {
     if (!storeId) return;
@@ -123,13 +136,50 @@ const ProductListScreen: React.FC = () => {
     fetchProducts();
   }, [fetchProductGroups, fetchProducts]);
 
+  // Logic làm phẳng (flatten) sản phẩm theo lô - giống web
+  const flattenProducts = useMemo(() => {
+    return products.reduce<any[]>((acc, product) => {
+      const batches =
+        product.batches && product.batches.length > 0
+          ? product.batches.filter((b) => b.quantity > 0)
+          : [];
+
+      if (batches.length === 0) {
+        // Nếu không có lô hoặc hết hàng -> giữ nguyên 1 dòng
+        acc.push({ ...product, uniqueId: product._id, isBatch: false });
+      } else {
+        // Tách mỗi lô thành 1 dòng
+        batches.forEach((batch, index) => {
+          acc.push({
+            ...product,
+            _id: product._id,
+            uniqueId: `${product._id}_${batch.batch_no}_${index}`,
+            isBatch: true,
+            stock_quantity: batch.quantity,
+            cost_price: batch.cost_price,
+            expiry_date: batch.expiry_date,
+            batch_no: batch.batch_no,
+            warehouse: batch.warehouse_id || product.default_warehouse_id,
+            createdAt: batch.created_at || product.createdAt,
+            batches: [batch],
+            batchIndex: index, // Lưu lại index thật để update
+            originalProduct: product, // Lưu ref tới product gốc
+          });
+        });
+      }
+      return acc;
+    }, []);
+  }, [products]);
+
   // ================= XỬ LÝ LỌC VÀ TÌM KIẾM SẢN PHẨM =================
   useEffect(() => {
-    let temp = [...products];
+    // Chọn nguồn dữ liệu dựa trên viewMode (giống web)
+    const sourceData = viewMode === "split" ? flattenProducts : products;
+    let temp = [...sourceData];
 
     // Lọc theo nhóm sản phẩm
     if (selectedGroupIds.length > 0) {
-      temp = temp.filter((product) => {
+      temp = temp.filter((product: any) => {
         return (
           product.group?._id &&
           selectedGroupIds.includes(product.group?._id.toString())
@@ -139,18 +189,20 @@ const ProductListScreen: React.FC = () => {
 
     // Lọc theo trạng thái
     if (statusFilter !== "all") {
-      temp = temp.filter((product) => product.status === statusFilter);
+      temp = temp.filter((product: any) => product.status === statusFilter);
     }
 
     // Lọc theo từ khóa tìm kiếm
     if (searchText.trim()) {
       const lower = searchText.toLowerCase();
-      temp = temp.filter((product) => {
+      temp = temp.filter((product: any) => {
         const groupName = product.group?.name?.toLowerCase() || "";
+        const batchNo = (product as any).batch_no?.toLowerCase() || "";
         return (
-          product.name.toLowerCase().includes(lower) ||
-          product.sku.toLowerCase().includes(lower) ||
+          product.name?.toLowerCase().includes(lower) ||
+          product.sku?.toLowerCase().includes(lower) ||
           groupName.includes(lower) ||
+          batchNo.includes(lower) ||
           (product.description &&
             product.description.toLowerCase().includes(lower))
         );
@@ -158,7 +210,15 @@ const ProductListScreen: React.FC = () => {
     }
 
     setFilteredProducts(temp);
-  }, [products, selectedGroupIds, statusFilter, searchText, productGroups]);
+  }, [
+    products,
+    flattenProducts,
+    selectedGroupIds,
+    statusFilter,
+    searchText,
+    productGroups,
+    viewMode,
+  ]);
 
   // ================= HÀM XỬ LÝ CHỌN/BỎ CHỌN NHÓM SẢN PHẨM =================
   const toggleGroupSelection = (groupId: string) => {
@@ -169,66 +229,319 @@ const ProductListScreen: React.FC = () => {
     );
   };
 
-  // ================= XỬ LÝ IMPORT SẢN PHẨM =================
-  const handleImportProducts = async (file: any) => {
+  // Hàm kiểm tra lỗi có thể retry được không
+  const isRetryableError = (error: any): boolean => {
+    // Các lỗi có thể retry
+    if (error.code === "ECONNABORTED") return true; // Timeout
+    if (error.message?.includes("timeout")) return true;
+    if (error.message?.includes("Network Error")) return true;
+    if (error.response?.status >= 500) return true; // Server errors
+    if (error.response?.status === 429) return true; // Rate limiting
+
+    // Các lỗi không nên retry
+    if (error.response?.status === 400) return false; // Bad request
+    if (error.response?.status === 401) return false; // Unauthorized
+    if (error.response?.status === 403) return false; // Forbidden
+    if (error.response?.status === 413) return false; // Payload too large
+
+    return false;
+  };
+
+  // ================= XỬ LÝ CHỌN FILE IMPORT =================
+  const handleSelectImportFile = async () => {
+    if (!storeId) {
+      Alert.alert("Lỗi", "Vui lòng chọn cửa hàng");
+      return;
+    }
+
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: [
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "application/vnd.ms-excel",
+          "application/vnd.ms-excel.sheet.macroEnabled.12",
+        ],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled) {
+        return;
+      }
+
+      const fileAsset = result.assets[0];
+
+      if (!fileAsset) {
+        Alert.alert("Lỗi", "Không thể chọn file");
+        return;
+      }
+
+      // Kiểm tra kích thước file (tối đa 10MB)
+      if (fileAsset.size && fileAsset.size > 10 * 1024 * 1024) {
+        Alert.alert("Lỗi", "File quá lớn. Vui lòng chọn file nhỏ hơn 10MB");
+        return;
+      }
+
+      Alert.alert(
+        "Xác nhận Import",
+        `Bạn có chắc muốn import sản phẩm từ file "${fileAsset.name}"?\n\nQuá trình này có thể mất vài phút.`,
+        [
+          { text: "Hủy", style: "cancel" },
+          {
+            text: "Import",
+            style: "default",
+            onPress: () => handleImportProducts(fileAsset),
+          },
+        ]
+      );
+    } catch (error) {
+      console.error("Lỗi khi chọn file:", error);
+      Alert.alert("Lỗi", "Không thể chọn file. Vui lòng thử lại.");
+    }
+  };
+
+  // ================= XỬ LÝ IMPORT SẢN PHẨM VỚI RETRY =================
+  const handleImportProducts = async (fileAsset: any) => {
     if (!storeId) {
       Alert.alert("Lỗi", "Vui lòng chọn cửa hàng");
       return;
     }
 
     setImporting(true);
+    setImportProgress("Đang chuẩn bị file...");
+
     try {
-      console.log("📁 Starting import process...", {
-        fileName: file.name,
-        fileUri: file.uri,
-        fileType: file.mimeType,
+      console.log("🟢 Bắt đầu import process", {
+        storeId,
+        fileName: fileAsset.name,
+        fileSize: fileAsset.size,
+        fileType: fileAsset.mimeType,
       });
 
-      // Kiểm tra file trước khi gửi
-      const fileObj = new File(file.uri);
-
-      if (!fileObj.exists) {
-        throw new Error("File không tồn tại hoặc không thể truy cập");
+      // Kiểm tra file cơ bản
+      if (!fileAsset.uri) {
+        throw new Error("File URI không tồn tại");
       }
 
-      console.log("✅ File validation passed");
+      const fileObj = {
+        uri: fileAsset.uri,
+        name: fileAsset.name || "products_import.xlsx",
+        type:
+          fileAsset.mimeType ||
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      };
 
-      // Gọi API import - truyền trực tiếp file object
-      const response = await productApi.importProducts(storeId, file);
+      console.log("📤 Gọi API import...", {
+        url: `/products/store/${storeId}/import`,
+        fileInfo: fileObj,
+      });
 
-      console.log("✅ Import API response received");
+      // Thêm retry mechanism với exponential backoff
+      const maxRetries = 3;
+      let lastError;
 
-      // Xử lý response
-      const successCount =
-        response.results?.success?.length || response.importedCount || 0;
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          setImportProgress(
+            `Đang thử import (lần ${attempt}/${maxRetries})...`
+          );
+          console.log(`🔄 Attempt ${attempt}/${maxRetries}`);
 
-      Alert.alert("Thành công", `Import thành công ${successCount} sản phẩm`);
+          if (attempt > 1) {
+            // Tăng thời gian chờ giữa các lần retry
+            const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000); // Max 10s
+            console.log(`⏳ Waiting ${delay}ms before retry...`);
+            setImportProgress(`Chờ ${delay / 1000}s trước khi thử lại...`);
+            await new Promise((resolve) => setTimeout(resolve, delay));
+          }
 
-      setShowImportModal(false);
-      fetchProducts();
+          setImportProgress("Đang gửi file đến server...");
+          const response: ImportResponse = await productApi.importProducts(
+            storeId,
+            fileObj
+          );
+
+          console.log(" Import thành công:", response);
+
+          // Xử lý kết quả theo cấu trúc response mới
+          const results = response.results || {};
+          const successCount = results.success?.length || 0;
+          const failedCount = results.failed?.length || 0;
+          const totalCount = results.total || successCount + failedCount;
+          const newlyCreated = response.newlyCreated || {
+            suppliers: 0,
+            productGroups: 0,
+            warehouses: 0,
+            products: 0,
+          };
+
+          let message = "";
+          let title = "";
+
+          if (successCount > 0 && failedCount === 0) {
+            // Tất cả đều thành công
+            title = "🎉 Thành công";
+            message = `Import thành công ${successCount} dòng`;
+
+            // Thêm thông tin về đối tượng mới được tạo
+            const createdParts: string[] = [];
+            if (newlyCreated.products > 0)
+              createdParts.push(`${newlyCreated.products} sản phẩm mới`);
+            if (newlyCreated.suppliers > 0)
+              createdParts.push(`${newlyCreated.suppliers} nhà cung cấp`);
+            if (newlyCreated.productGroups > 0)
+              createdParts.push(`${newlyCreated.productGroups} nhóm sản phẩm`);
+            if (newlyCreated.warehouses > 0)
+              createdParts.push(`${newlyCreated.warehouses} kho hàng`);
+
+            if (createdParts.length > 0) {
+              message += `\n\nĐã tự động tạo mới:\n• ${createdParts.join("\n• ")}`;
+            }
+          } else if (successCount > 0 && failedCount > 0) {
+            // Một phần thành công
+            title = "⚠️ Hoàn thành một phần";
+            message = `Import thành công ${successCount}/${totalCount} dòng\n${failedCount} dòng thất bại`;
+
+            // Thêm thông tin về đối tượng mới được tạo
+            const createdParts: string[] = [];
+            if (newlyCreated.products > 0)
+              createdParts.push(`${newlyCreated.products} sản phẩm mới`);
+            if (newlyCreated.suppliers > 0)
+              createdParts.push(`${newlyCreated.suppliers} nhà cung cấp`);
+            if (newlyCreated.productGroups > 0)
+              createdParts.push(`${newlyCreated.productGroups} nhóm sản phẩm`);
+            if (newlyCreated.warehouses > 0)
+              createdParts.push(`${newlyCreated.warehouses} kho hàng`);
+
+            if (createdParts.length > 0) {
+              message += `\n\nĐã tạo mới:\n• ${createdParts.join("\n• ")}`;
+            }
+          } else {
+            // Tất cả đều thất bại
+            title = " Có lỗi xảy ra";
+            message = `Không có sản phẩm nào được import thành công\n${failedCount} dòng thất bại`;
+          }
+
+          // Hiển thị chi tiết lỗi nếu có sản phẩm thất bại
+          if (failedCount > 0 && results.failed) {
+            const errorDetails = results.failed
+              .slice(0, 5) // Chỉ hiển thị 5 lỗi đầu tiên
+              .map((error: any, index: number) => {
+                // Xử lý các loại lỗi khác nhau
+                const rowInfo = error.row ? `Dòng ${error.row}: ` : "";
+                const errorMsg =
+                  error.error || error.message || "Lỗi không xác định";
+                const productInfo = error.data?.["Tên sản phẩm"]
+                  ? ` (${error.data["Tên sản phẩm"]})`
+                  : "";
+                return `${index + 1}. ${rowInfo}${errorMsg}${productInfo}`;
+              })
+              .join("\n");
+
+            message += `\n\nChi tiết lỗi:\n${errorDetails}`;
+
+            if (failedCount > 5) {
+              message += `\n...và ${failedCount - 5} lỗi khác`;
+            }
+
+            // Thêm gợi ý cho người dùng
+            message += `\n\n💡 Mẹo: Kiểm tra lại định dạng file và đảm bảo dữ liệu đúng cấu trúc`;
+          }
+
+          // Tạo buttons cho alert
+          const alertButtons: any[] = [{ text: "OK", style: "default" }];
+
+          // Thêm nút "Xem chi tiết" nếu có lỗi
+          if (failedCount > 0) {
+            alertButtons.unshift({
+              text: "Xem chi tiết",
+              style: "default",
+              onPress: () => {
+                // Có thể mở modal hiển thị chi tiết kết quả ở đây
+                console.log("Chi tiết kết quả import:", results);
+                // Hoặc hiển thị modal với toàn bộ lỗi
+                showDetailedErrorModal(results.failed);
+              },
+            });
+          }
+
+          // Hiển thị thông báo
+          Alert.alert(title, message, alertButtons);
+
+          fetchProducts(); // Refresh danh sách
+          setImportProgress("");
+          return; // Thoát khỏi hàm khi thành công
+        } catch (error: any) {
+          lastError = error;
+          console.log(` Attempt ${attempt} failed:`, error.message);
+
+          // Nếu không phải lỗi timeout hoặc network, không retry
+          if (!isRetryableError(error)) {
+            break;
+          }
+
+          if (attempt < maxRetries) {
+            setImportProgress(`Thử lại lần ${attempt + 1}...`);
+            console.log(`🔄 Sẽ thử lại sau...`);
+          }
+        }
+      }
+
+      // Nếu đến đây nghĩa là tất cả retry đều thất bại
+      throw lastError;
     } catch (error: any) {
-      console.error("❌ Import error details:", {
-        message: error.message,
-        stack: error.stack,
-      });
+      console.error("🔴 Tất cả retry đều thất bại:", error);
 
-      let errorMessage = "Import thất bại";
-
-      if (error.message?.includes("File không tồn tại")) {
-        errorMessage = "File không tồn tại. Vui lòng chọn file khác.";
-      } else if (error.message?.includes("400")) {
-        errorMessage =
-          "Server không nhận diện được file. Vui lòng thử file khác hoặc liên hệ quản trị viên.";
-      } else if (error.message?.includes("Network Error")) {
-        errorMessage = "Lỗi kết nối mạng. Vui lòng kiểm tra internet.";
+      let userMessage = "Import thất bại";
+      if (error.message?.includes("timeout") || error.code === "ECONNABORTED") {
+        userMessage =
+          "⏰ Server xử lý quá lâu. Vui lòng thử lại với file nhỏ hơn hoặc liên hệ quản trị viên.";
+      } else if (error.response?.status === 500) {
+        userMessage = "🔄 Server đang quá tải. Vui lòng thử lại sau vài phút.";
+      } else if (error.response?.status === 413) {
+        userMessage =
+          "📁 File quá lớn. Vui lòng chia nhỏ file hoặc sử dụng file có kích thước nhỏ hơn 10MB.";
+      } else if (error.response?.status === 400) {
+        userMessage =
+          "📝 Dữ liệu file không hợp lệ. Vui lòng kiểm tra lại định dạng file và cấu trúc dữ liệu.";
+      } else if (error.response?.status === 401) {
+        userMessage = "🔐 Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.";
+      } else if (error.response?.status === 403) {
+        userMessage = "🚫 Bạn không có quyền thực hiện thao tác này.";
+      } else if (error.request) {
+        userMessage =
+          "📡 Không thể kết nối đến server. Vui lòng kiểm tra kết nối mạng.";
       } else {
-        errorMessage = error.message || "Import thất bại";
+        userMessage = ` Lỗi: ${error.message || "Không xác định"}`;
       }
 
-      Alert.alert("Lỗi Import", errorMessage);
+      Alert.alert("Thông báo", userMessage);
     } finally {
       setImporting(false);
+      setImportProgress("");
     }
+  };
+
+  // Hàm hiển thị modal chi tiết lỗi (tuỳ chọn)
+  const showDetailedErrorModal = (failedItems: any[]) => {
+    // Bạn có thể implement modal hiển thị chi tiết lỗi ở đây
+    // Ví dụ sử dụng Modal component từ react-native
+    console.log("Hiển thị modal chi tiết lỗi:", failedItems);
+
+    // Tạm thời hiển thị alert với toàn bộ lỗi
+    const detailedMessage = failedItems
+      .map((error, index) => {
+        const rowInfo = error.row ? `Dòng ${error.row}: ` : "";
+        const errorMsg = error.error || error.message || "Lỗi không xác định";
+        const productInfo = error.data?.["Tên sản phẩm"]
+          ? ` (${error.data["Tên sản phẩm"]})`
+          : "";
+        return `${index + 1}. ${rowInfo}${errorMsg}${productInfo}`;
+      })
+      .join("\n\n");
+
+    Alert.alert("Chi tiết lỗi Import", detailedMessage, [
+      { text: "Đóng", style: "cancel" },
+    ]);
   };
 
   // ================= XỬ LÝ XÓA NHIỀU SẢN PHẨM =================
@@ -238,48 +551,285 @@ const ProductListScreen: React.FC = () => {
   };
 
   // ================= RENDER MỖI SẢN PHẨM TRONG DANH SÁCH =================
-  const renderProductItem = ({ item }: { item: Product }) => (
-    <View style={styles.productCard}>
-      <View style={styles.productHeader}>
-        <View style={styles.productInfo}>
-          <Text style={styles.productName}>{item.name}</Text>
-          <Text style={styles.productSKU}>SKU: {item.sku}</Text>
-          <View style={styles.productMeta}>
-            <Text style={styles.productPrice}>
-              {productApi.formatPrice(item.price)}
-            </Text>
-            <Text style={styles.productStock}>
-              Tồn kho: {item.stock_quantity}
-            </Text>
-          </View>
-          <View style={styles.productDetails}>
+  const renderProductItem = ({ item }: { item: Product }) => {
+    const batches = item.batches || [];
+    const validBatches = batches.filter((b) => b.quantity > 0);
+    const batchesWithExpiry = validBatches.filter((b) => b.expiry_date);
+
+    // Sort by expiry date to get nearest
+    let nearestExpiry: Date | null = null;
+    let expiryColor = "#4caf50";
+    if (batchesWithExpiry.length > 0) {
+      batchesWithExpiry.sort(
+        (a, b) =>
+          new Date(a.expiry_date!).getTime() -
+          new Date(b.expiry_date!).getTime()
+      );
+      nearestExpiry = new Date(batchesWithExpiry[0].expiry_date!);
+      const diff =
+        (nearestExpiry.getTime() - new Date().getTime()) / (1000 * 3600 * 24);
+      if (diff < 0) expiryColor = "#f44336";
+      else if (diff <= 30) expiryColor = "#ff9800";
+    }
+
+    const now = new Date();
+    const expiredBatchesCount = batches.filter(
+      (b) => b.expiry_date && new Date(b.expiry_date) < now
+    ).length;
+    const validBatchesCount = batches.filter(
+      (b) => !b.expiry_date || new Date(b.expiry_date) >= now
+    ).length;
+
+    // Xác định xem item này có đang bị hết hạn không (dùng cho Split mode hoặc để báo highlight)
+    const isExpired =
+      (item as any).isBatch &&
+      (item as any).expiry_date &&
+      new Date((item as any).expiry_date) < now;
+
+    const handleEditPress = () => {
+      if ((item as any).isBatch) {
+        setEditingBatchProduct((item as any).originalProduct);
+        setEditingBatchIndex((item as any).batchIndex);
+      } else {
+        setEditingProduct(item);
+      }
+    };
+
+    return (
+      <View
+        style={[
+          styles.productCard,
+          isExpired && {
+            borderColor: "#f44336",
+            borderWidth: 1,
+            backgroundColor: "#fff1f0",
+          },
+        ]}
+      >
+        <View style={styles.productHeader}>
+          <View style={styles.productInfo}>
             <View
-              style={[
-                styles.statusBadge,
-                { backgroundColor: getStatusColor(item.status) },
-              ]}
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+              }}
             >
-              <Text style={styles.statusText}>{item.status}</Text>
-            </View>
-            {item.group && (
-              <Text style={styles.productGroup}>{item.group.name}</Text>
-            )}
-            {productApi.isLowStock(item) && (
-              <View style={styles.lowStockBadge}>
-                <Text style={styles.lowStockText}>Tồn kho thấp</Text>
+              <View style={{ flex: 1 }}>
+                <Text
+                  style={[
+                    styles.productName,
+                    isExpired && { color: "#d32f2f" },
+                  ]}
+                >
+                  {item.name}
+                </Text>
+                <View
+                  style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+                >
+                  <Text style={styles.productSKU}>SKU: {item.sku}</Text>
+                  {item.unit && (
+                    <Text style={styles.productUnit}>({item.unit})</Text>
+                  )}
+                </View>
               </View>
+              {/* Badge Hết hạn nổi bật nếu ở chế độ tách lô */}
+              {isExpired && (
+                <View
+                  style={{
+                    backgroundColor: "#f44336",
+                    paddingHorizontal: 6,
+                    paddingVertical: 2,
+                    borderRadius: 4,
+                  }}
+                >
+                  <Text
+                    style={{ color: "#fff", fontSize: 10, fontWeight: "700" }}
+                  >
+                    HẾT HẠN
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            <View style={styles.productMeta}>
+              <View>
+                <Text
+                  style={[
+                    styles.productPrice,
+                    isExpired && { color: "#d32f2f" },
+                  ]}
+                >
+                  Giá:{" "}
+                  {productApi.formatPrice(
+                    (item as any).selling_price || item.price
+                  )}
+                </Text>
+                <Text style={styles.productCostPrice}>
+                  Vốn: {productApi.formatPrice(item.cost_price)}
+                </Text>
+              </View>
+              <View style={{ alignItems: "flex-end" }}>
+                <Text
+                  style={[
+                    styles.productStock,
+                    isExpired && { color: "#d32f2f" },
+                  ]}
+                >
+                  Tồn: {item.stock_quantity} {item.unit || ""}
+                </Text>
+                {!(item as any).isBatch && validBatches.length > 0 && (
+                  <Text style={styles.batchCount}>
+                    {validBatches.length} lô còn hàng
+                  </Text>
+                )}
+              </View>
+            </View>
+
+            <View style={styles.productDetails}>
+              <View
+                style={[
+                  styles.statusBadge,
+                  {
+                    backgroundColor: isExpired
+                      ? "#d32f2f"
+                      : getStatusColor(item.status),
+                  },
+                ]}
+              >
+                <Text style={styles.statusText}>
+                  {isExpired ? "Hết hạn" : item.status}
+                </Text>
+              </View>
+
+              {item.group && (
+                <Text style={styles.productGroup}>{item.group.name}</Text>
+              )}
+
+              {item.supplier && (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    marginTop: 4,
+                    flex: 1,
+                  }}
+                >
+                  <Ionicons name="business-outline" size={12} color="#666" />
+                  <Text
+                    style={{ fontSize: 11, color: "#666", marginLeft: 4 }}
+                    numberOfLines={1}
+                  >
+                    {item.supplier.name}{" "}
+                    {item.supplier.phone ? `(${item.supplier.phone})` : ""}
+                  </Text>
+                </View>
+              )}
+
+              {/* Hiển thị số lô khi ở chế độ split */}
+              {(item as any).batch_no && (
+                <View
+                  style={[styles.expiryBadge, { backgroundColor: "#1976d2" }]}
+                >
+                  <Text style={styles.expiryText}>
+                    Lô: {(item as any).batch_no}
+                  </Text>
+                </View>
+              )}
+
+              {productApi.isLowStock(item) && (
+                <View style={styles.lowStockBadge}>
+                  <Text style={styles.lowStockText}>Tồn kho thấp</Text>
+                </View>
+              )}
+
+              {/* Hiển thị HSD Gộp hoặc Tách */}
+              {viewMode === "split" ? (
+                (item as any).expiry_date && (
+                  <View
+                    style={[
+                      styles.expiryBadge,
+                      { backgroundColor: expiryColor },
+                    ]}
+                  >
+                    <Text style={styles.expiryText}>
+                      HSD:{" "}
+                      {new Date((item as any).expiry_date).toLocaleDateString(
+                        "vi-VN"
+                      )}
+                    </Text>
+                  </View>
+                )
+              ) : (
+                // Chế độ gộp: Đếm số lô còn hạn/hết hạn
+                <View style={{ flexDirection: "row", gap: 4 }}>
+                  {validBatchesCount > 0 && (
+                    <View
+                      style={[
+                        styles.expiryBadge,
+                        { backgroundColor: "#4caf50" },
+                      ]}
+                    >
+                      <Text style={styles.expiryText}>
+                        {validBatchesCount} lô còn hạn
+                      </Text>
+                    </View>
+                  )}
+                  {expiredBatchesCount > 0 && (
+                    <View
+                      style={[
+                        styles.expiryBadge,
+                        { backgroundColor: "#f44336" },
+                      ]}
+                    >
+                      <Text style={styles.expiryText}>
+                        {expiredBatchesCount} lô hết hạn
+                      </Text>
+                    </View>
+                  )}
+                  {validBatchesCount === 0 && expiredBatchesCount === 0 && (
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        color: "#999",
+                        fontStyle: "italic",
+                      }}
+                    >
+                      Không có HSD
+                    </Text>
+                  )}
+                </View>
+              )}
+            </View>
+          </View>
+          {/* Action Buttons */}
+          <View style={{ flexDirection: "column", gap: 6 }}>
+            {/* Nút sửa thông tin SP (chỉ hiển thị ở merge mode) */}
+            {!(item as any).isBatch && (
+              <TouchableOpacity
+                style={styles.editInfoButton}
+                onPress={() => setEditingProduct(item)}
+              >
+                <Ionicons name="settings-outline" size={16} color="#16a34a" />
+              </TouchableOpacity>
+            )}
+            {/* Nút edit lô (chỉ hiển thị ở split mode) */}
+            {(item as any).isBatch && (
+              <TouchableOpacity
+                style={[
+                  styles.editButton,
+                  isExpired && { backgroundColor: "#d32f2f" },
+                ]}
+                onPress={handleEditPress}
+              >
+                <Ionicons name="create-outline" size={18} color="#fff" />
+              </TouchableOpacity>
             )}
           </View>
         </View>
-        <TouchableOpacity
-          style={styles.editButton}
-          onPress={() => setEditingProduct(item)}
-        >
-          <Ionicons name="create-outline" size={18} color="#fff" />
-        </TouchableOpacity>
       </View>
-    </View>
-  );
+    );
+  };
 
   // Lấy màu cho trạng thái
   const getStatusColor = (status: ProductStatus): string => {
@@ -327,6 +877,30 @@ const ProductListScreen: React.FC = () => {
           </Text>
         </View>
         <View style={styles.headerActions}>
+          {/* View Mode Toggle */}
+          <TouchableOpacity
+            style={[
+              styles.viewModeButton,
+              viewMode === "split" && styles.viewModeButtonActive,
+            ]}
+            onPress={() =>
+              setViewMode(viewMode === "merge" ? "split" : "merge")
+            }
+          >
+            <Ionicons
+              name={viewMode === "split" ? "list" : "layers"}
+              size={18}
+              color={viewMode === "split" ? "#fff" : "#1976d2"}
+            />
+            <Text
+              style={[
+                styles.viewModeText,
+                viewMode === "split" && styles.viewModeTextActive,
+              ]}
+            >
+              {viewMode === "split" ? "Theo lô" : "Gộp"}
+            </Text>
+          </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionButton}
             onPress={() => setActionMenuVisible(true)}
@@ -411,6 +985,22 @@ const ProductListScreen: React.FC = () => {
             <Ionicons name="folder-open" size={16} color="#fff" />
             <Text style={styles.actionBtnText}>Nhóm</Text>
           </TouchableOpacity>
+
+          {/* Nút Import Products */}
+          <TouchableOpacity
+            style={[styles.actionBtn, styles.importAction]}
+            onPress={handleSelectImportFile}
+            disabled={importing}
+          >
+            {importing ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Ionicons name="cloud-upload-outline" size={16} color="#fff" />
+            )}
+            <Text style={styles.actionBtnText}>
+              {importing ? "Importing..." : "Import"}
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -423,7 +1013,9 @@ const ProductListScreen: React.FC = () => {
       ) : (
         <FlatList
           data={filteredProducts}
-          keyExtractor={(item) => item._id.toString()}
+          keyExtractor={(item: any) =>
+            item.uniqueId || item._id?.toString() || Math.random().toString()
+          }
           renderItem={renderProductItem}
           contentContainerStyle={styles.productList}
           showsVerticalScrollIndicator={false}
@@ -448,19 +1040,54 @@ const ProductListScreen: React.FC = () => {
               {!searchText &&
                 selectedGroupIds.length === 0 &&
                 statusFilter === "all" && (
-                  <TouchableOpacity
-                    style={styles.emptyActionButton}
-                    onPress={() => setShowProductModal(true)}
-                  >
-                    <Text style={styles.emptyActionText}>
-                      Thêm sản phẩm đầu tiên
-                    </Text>
-                  </TouchableOpacity>
+                  <View style={styles.emptyActionButtons}>
+                    <TouchableOpacity
+                      style={styles.emptyActionButton}
+                      onPress={() => setShowProductModal(true)}
+                    >
+                      <Text style={styles.emptyActionText}>
+                        Thêm sản phẩm đầu tiên
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.emptyActionButton,
+                        styles.emptyImportButton,
+                      ]}
+                      onPress={handleSelectImportFile}
+                    >
+                      <Text
+                        style={[styles.emptyActionText, styles.emptyImportText]}
+                      >
+                        Import từ file Excel
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
                 )}
             </View>
           }
         />
       )}
+
+      {/* ================= MODAL IMPORT PROGRESS ================= */}
+      <Modal
+        isVisible={importing}
+        backdropOpacity={0.7}
+        animationIn="fadeIn"
+        animationOut="fadeOut"
+      >
+        <View style={styles.progressModal}>
+          <ActivityIndicator size="large" color="#2e7d32" />
+          <Text style={styles.progressTitle}>Đang Import Sản Phẩm</Text>
+          <Text style={styles.progressText}>
+            {importProgress || "Đang xử lý file..."}
+          </Text>
+          <Text style={styles.progressSubtext}>
+            Quá trình có thể mất vài phút{"\n"}
+            Vui lòng không đóng ứng dụng
+          </Text>
+        </View>
+      </Modal>
 
       {/* ================= MODAL DROPDOWNS ================= */}
 
@@ -562,23 +1189,6 @@ const ProductListScreen: React.FC = () => {
         style={styles.actionModal}
       >
         <View style={styles.actionModalContent}>
-          <ProductImportButton
-            storeId={storeId}
-            onImportSuccess={(result) => {
-              console.log("Import thành công:", result);
-              fetchProducts();
-              setActionMenuVisible(false);
-            }}
-            onImportError={(error) => {
-              console.error("Import lỗi:", error);
-              setActionMenuVisible(false);
-            }}
-            onShowImportModal={() => {
-              setActionMenuVisible(false);
-              setShowImportModal(true);
-            }}
-          />
-
           <TemplateDownloadButton
             onDownloadSuccess={() => {
               console.log("Download template thành công");
@@ -589,6 +1199,14 @@ const ProductListScreen: React.FC = () => {
               setActionMenuVisible(false);
             }}
           />
+
+          <TouchableOpacity
+            style={styles.actionMenuItem}
+            onPress={handleSelectImportFile}
+          >
+            <Ionicons name="cloud-upload-outline" size={20} color="#2e7d32" />
+            <Text style={styles.actionMenuText}>Import sản phẩm</Text>
+          </TouchableOpacity>
 
           <ProductExportButton
             storeId={storeId}
@@ -639,6 +1257,24 @@ const ProductListScreen: React.FC = () => {
         />
       )}
 
+      {/* Modal chỉnh sửa lô hàng */}
+      {editingBatchProduct && editingBatchIndex !== null && (
+        <ProductBatchModal
+          product={editingBatchProduct}
+          batchIndex={editingBatchIndex}
+          open={!!editingBatchProduct}
+          onClose={() => {
+            setEditingBatchProduct(null);
+            setEditingBatchIndex(null);
+          }}
+          onSaved={() => {
+            setEditingBatchProduct(null);
+            setEditingBatchIndex(null);
+            fetchProducts();
+          }}
+        />
+      )}
+
       {/* Modal quản lý nhóm sản phẩm */}
       {showGroupModal && (
         <ProductGroupFormModal
@@ -649,16 +1285,6 @@ const ProductListScreen: React.FC = () => {
             fetchProductGroups();
           }}
           storeId={storeId}
-        />
-      )}
-
-      {/* Modal import sản phẩm */}
-      {showImportModal && (
-        <ProductImportModal
-          visible={showImportModal}
-          onClose={() => setShowImportModal(false)}
-          onImport={handleImportProducts}
-          loading={importing}
         />
       )}
     </View>
@@ -678,8 +1304,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 16,
+    paddingTop: 5,
+    paddingBottom: 5,
     backgroundColor: "#fff",
     borderBottomWidth: 1,
     borderBottomColor: "#f0f0f0",
@@ -770,6 +1396,9 @@ const styles = StyleSheet.create({
   secondaryAction: {
     backgroundColor: "#1976d2",
   },
+  importAction: {
+    backgroundColor: "#ff9800",
+  },
   actionBtnText: {
     color: "#fff",
     fontWeight: "600",
@@ -857,6 +1486,56 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "500",
   },
+  expiryBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  expiryText: {
+    fontSize: 10,
+    color: "#fff",
+    fontWeight: "500",
+  },
+  productUnit: {
+    fontSize: 12,
+    color: "#888",
+    fontStyle: "italic",
+  },
+  productCostPrice: {
+    fontSize: 12,
+    color: "#888",
+    marginTop: 2,
+  },
+  batchCount: {
+    fontSize: 11,
+    color: "#1976d2",
+    fontWeight: "500",
+    marginTop: 2,
+  },
+  viewModeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#1976d2",
+    backgroundColor: "#fff",
+    marginRight: 8,
+    gap: 4,
+  },
+  viewModeButtonActive: {
+    backgroundColor: "#1976d2",
+    borderColor: "#1976d2",
+  },
+  viewModeText: {
+    fontSize: 12,
+    color: "#1976d2",
+    fontWeight: "500",
+  },
+  viewModeTextActive: {
+    color: "#fff",
+  },
   editButton: {
     backgroundColor: "#1976d2",
     padding: 8,
@@ -892,17 +1571,29 @@ const styles = StyleSheet.create({
     marginTop: 8,
     lineHeight: 20,
   },
+  emptyActionButtons: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 20,
+  },
   emptyActionButton: {
     backgroundColor: "#2e7d32",
-    paddingHorizontal: 24,
+    paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 8,
-    marginTop: 20,
+  },
+  emptyImportButton: {
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: "#2e7d32",
   },
   emptyActionText: {
     color: "#fff",
     fontWeight: "600",
     fontSize: 14,
+  },
+  emptyImportText: {
+    color: "#2e7d32",
   },
   noStoreText: {
     fontSize: 16,
@@ -1013,5 +1704,45 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#666",
     fontWeight: "600",
+  },
+  // Thêm styles cho progress modal
+  progressModal: {
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    padding: 24,
+    alignItems: "center",
+    marginHorizontal: 20,
+  },
+  progressTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#1b5e20",
+    marginTop: 16,
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  progressText: {
+    fontSize: 14,
+    color: "#666",
+    textAlign: "center",
+    marginBottom: 8,
+    lineHeight: 20,
+  },
+  progressSubtext: {
+    fontSize: 12,
+    color: "#999",
+    textAlign: "center",
+    lineHeight: 18,
+  },
+  // Edit buttons
+  editInfoButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#16a34a",
+    justifyContent: "center",
+    alignItems: "center",
   },
 });

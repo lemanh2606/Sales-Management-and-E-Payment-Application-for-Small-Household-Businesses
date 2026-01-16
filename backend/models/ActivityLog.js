@@ -6,7 +6,8 @@ const activityLogSchema = new mongoose.Schema(
     store: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Store",
-      required: true,
+      required: false,
+      default: null,
     },
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     userName: { type: String, required: true, trim: true }, // ở model Employee thì là fullName,
@@ -14,7 +15,7 @@ const activityLogSchema = new mongoose.Schema(
     action: {
       type: String,
       required: true,
-      enum: ["create", "update", "delete", "restore", "export", "other"],
+      enum: ["auth", "create", "update", "delete", "restore", "export", "other"],
     }, //hành động gì
     entity: { type: String, required: true }, // Đối tượng bị tác động Ví dụ: 'Order', 'Product', 'Store', 'Customer', 'Employee',....
     entityId: { type: mongoose.Schema.Types.ObjectId, required: true },

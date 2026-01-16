@@ -3,26 +3,31 @@ const express = require("express");
 const router = express.Router();
 const {
   verifyToken,
-  isManager,
+
   checkStoreAccess,
   requirePermission,
 } = require("../middlewares/authMiddleware");
+const {
+  checkSubscriptionExpiry,
+} = require("../middlewares/subscriptionMiddleware");
 const { uploadProductImage } = require("../utils/cloudinary");
 const {
   createProduct,
   getProductsByStore,
   updateProductPrice,
+  updateProductBatch, // NEW
   searchProducts,
   updateProduct,
   deleteProduct,
   deleteProductImage,
   getProductById,
   getLowStockProducts,
+  getExpiringProducts,
   importProducts,
   downloadProductTemplate,
   exportProducts,
 } = require("../controllers/product/productController");
-const upload = require("../middlewares/upload");
+const upload = require("../middlewares/uploadProduct");
 
 /*
   GHI CHÚ CHUNG VỀ PHÂN QUYỀN CHO SẢN PHẨM:
@@ -59,6 +64,19 @@ const handleMulterError = (err, req, res, next) => {
 };
 
 /*
+  ROUTE: GET /api/products/expiring
+  - Lấy danh sách sản phẩm sắp hết hạn sử dụng
+  - Query params: storeId, days (số ngày tới khi hết hạn, mặc định 30)
+  - Middleware: verifyToken -> checkSubscriptionExpiry
+*/
+router.get(
+  "/expiring",
+  verifyToken,
+  checkSubscriptionExpiry,
+  getExpiringProducts
+);
+
+/*
   ROUTE: GET /api/products/template/download
   - Tải template import Excel/CSV
   - Query: ?format=excel hoặc ?format=csv
@@ -66,14 +84,28 @@ const handleMulterError = (err, req, res, next) => {
 router.get("/template/download", verifyToken, downloadProductTemplate);
 
 /*
+  ROUTE: GET /api/products/store/:storeId/export
+  - Export tất cả sản phẩm của store ra file Excel
+  - Middleware: verifyToken -> checkStoreAccess -> requirePermission("products:view")
+*/
+router.get(
+  "/store/:storeId/export",
+  verifyToken,
+  checkStoreAccess,
+  requirePermission("products:view"),
+  exportProducts
+);
+
+/*
   ROUTE: GET /api/products/search
   - Tìm kiếm sản phẩm theo tên / SKU / barcode...
-  - Middleware: verifyToken -> checkStoreAccess -> requirePermission("products:search")
+  - Middleware: verifyToken -> checkSubscriptionExpiry -> checkStoreAccess -> requirePermission("products:search")
   - Lưu ý: checkStoreAccess sẽ dùng query.storeId / query.shopId / req.user.current_store nếu không truyền storeId
 */
 router.get(
   "/search",
   verifyToken,
+  checkSubscriptionExpiry,
   checkStoreAccess,
   requirePermission("products:search"),
   searchProducts
@@ -84,16 +116,17 @@ router.get(
   - Lấy danh sách sản phẩm tồn thấp để cảnh báo
   - Hiện tại giới hạn cho Manager (isManager). Nếu muốn granular, thay bằng requirePermission("products:low-stock")
 */
-router.get("/low-stock", verifyToken, isManager, getLowStockProducts);
+router.get("/low-stock", verifyToken, getLowStockProducts);
 
 /*
   ROUTE: POST /api/products/store/:storeId/import
   - Import sản phẩm từ Excel/CSV
-  - Middleware: verifyToken -> checkStoreAccess -> upload.single("file") -> requirePermission("products:create")
+  - Middleware: verifyToken -> checkSubscriptionExpiry -> checkStoreAccess -> upload.single("file") -> requirePermission("products:create")
 */
 router.post(
   "/store/:storeId/import",
   verifyToken,
+  checkSubscriptionExpiry,
   checkStoreAccess,
   upload.single("file"),
   handleMulterError,
@@ -104,13 +137,14 @@ router.post(
 /*
   ROUTE: POST /api/products/store/:storeId
   - Tạo sản phẩm mới trong cửa hàng
-  - Middleware: verifyToken -> checkStoreAccess -> requirePermission("products:create")
+  - Middleware: verifyToken -> checkSubscriptionExpiry -> checkStoreAccess -> requirePermission("products:create")
   - uploadProductImage.single("image") xử lý upload ảnh (nếu có)
 */
 router.post(
   "/store/:storeId",
   verifyToken,
-  checkStoreAccess,
+  checkSubscriptionExpiry,
+  // checkStoreAccess,
   uploadProductImage.single("image"),
   handleMulterError,
   requirePermission("products:create"),
@@ -120,12 +154,13 @@ router.post(
 /*
   ROUTE: GET /api/products/store/:storeId
   - Lấy danh sách sản phẩm theo store
-  - Middleware: verifyToken -> checkStoreAccess -> requirePermission("products:view")
+  - Middleware: verifyToken -> checkSubscriptionExpiry -> checkStoreAccess -> requirePermission("products:view")
 */
 router.get(
   "/store/:storeId",
   verifyToken,
-  checkStoreAccess,
+  checkSubscriptionExpiry,
+  // checkStoreAccess,
   requirePermission("products:view"),
   getProductsByStore
 );
@@ -133,26 +168,41 @@ router.get(
 /*
   ROUTE: PUT /api/products/:productId/price
   - Cập nhật giá sản phẩm
-  - Middleware: verifyToken -> checkStoreAccess -> requirePermission("products:price")
+  - Middleware: verifyToken -> checkSubscriptionExpiry -> checkStoreAccess -> requirePermission("products:price")
   - Lưu ý: update giá thường là thao tác nhạy cảm, tách permission riêng cho dễ quản lý
 */
 router.put(
   "/:productId/price",
   verifyToken,
-  checkStoreAccess,
+  checkSubscriptionExpiry,
+  // checkStoreAccess,
   requirePermission("products:price"),
   updateProductPrice
 );
 
 /*
+  ROUTE: PUT /api/products/:productId/batch
+  - Cập nhật thông tin lô hàng trong sản phẩm
+  - Middleware: verifyToken -> checkSubscriptionExpiry -> requirePermission("products:update")
+*/
+router.put(
+  "/:productId/batch",
+  verifyToken,
+  checkSubscriptionExpiry,
+  requirePermission("products:update"),
+  updateProductBatch
+);
+
+/*
   ROUTE: PUT /api/products/:productId
   - Cập nhật thông tin sản phẩm (có thể kèm upload ảnh)
-  - Middleware: verifyToken -> checkStoreAccess -> uploadProductImage -> requirePermission("products:update")
+  - Middleware: verifyToken -> checkSubscriptionExpiry -> checkStoreAccess -> uploadProductImage -> requirePermission("products:update")
 */
 router.put(
   "/:productId",
   verifyToken,
-  checkStoreAccess,
+  checkSubscriptionExpiry,
+  // checkStoreAccess,
   uploadProductImage.single("image"),
   handleMulterError,
   requirePermission("products:update"),
@@ -162,12 +212,13 @@ router.put(
 /*
   ROUTE: DELETE /api/products/:productId/image
   - Xóa ảnh sản phẩm
-  - Middleware: verifyToken -> checkStoreAccess -> requirePermission("products:image:delete")
+  - Middleware: verifyToken -> checkSubscriptionExpiry -> checkStoreAccess -> requirePermission("products:image:delete")
 */
 router.delete(
   "/:productId/image",
   verifyToken,
-  checkStoreAccess,
+  checkSubscriptionExpiry,
+  // checkStoreAccess,
   requirePermission("products:image:delete"),
   deleteProductImage
 );
@@ -175,41 +226,31 @@ router.delete(
 /*
   ROUTE: DELETE /api/products/:productId
   - Xóa sản phẩm (soft/hard tùy controller)
-  - Middleware: verifyToken -> checkStoreAccess -> requirePermission("products:delete")
+  - Middleware: verifyToken -> checkSubscriptionExpiry -> checkStoreAccess -> requirePermission("products:delete")
 */
 router.delete(
   "/:productId",
   verifyToken,
+  checkSubscriptionExpiry,
   checkStoreAccess,
   requirePermission("products:delete"),
   deleteProduct
 );
 
+
 /*
   ROUTE: GET /api/products/:productId
   - Lấy chi tiết sản phẩm theo ID
   - Đặt cuối cùng theo rule của bạn
-  - Middleware: verifyToken -> checkStoreAccess -> requirePermission("products:view")
+  - Middleware: verifyToken -> checkSubscriptionExpiry -> checkStoreAccess -> requirePermission("products:view")
 */
 router.get(
   "/:productId",
   verifyToken,
+  checkSubscriptionExpiry,
   checkStoreAccess,
   requirePermission("products:view"),
   getProductById
-);
-
-/*
-  ROUTE: GET /api/products/store/:storeId/export
-  - Export danh sách sản phẩm ra Excel
-  - Middleware: verifyToken -> checkStoreAccess -> requirePermission("products:view")
-*/
-router.get(
-  "/store/:storeId/export",
-  verifyToken,
-  checkStoreAccess,
-  requirePermission("products:view"),
-  exportProducts // Cần implement hàm này trong controller
 );
 
 module.exports = router;

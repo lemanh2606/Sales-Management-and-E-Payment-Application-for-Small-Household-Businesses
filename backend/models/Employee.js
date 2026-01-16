@@ -1,13 +1,13 @@
-// models/Employee.js (update từ file cũ - add fullName cho populate dễ)
+// /backend/models/Employee.js (update từ file cũ - add fullName cho populate dễ)
 const mongoose = require("mongoose");
 
 const employeeSchema = new mongoose.Schema(
   {
     fullName: { type: String, required: true, maxlength: 150, trim: true }, // 👈 Thêm: Họ tên đầy đủ nhân viên (dễ populate ở Order, ko cần chain User)
     phone: { type: String, default: "", maxlength: 15, trim: true },
-    salary: { type: mongoose.Schema.Types.Decimal128, required: true }, // Lương cơ bản
+    salary: { type: mongoose.Schema.Types.Decimal128, default: 0 }, // Lương cơ bản, không bắt buộc
     shift: { type: String, maxlength: 50 }, // Ca làm việc (sáng/chiều/tối)
-    commission_rate: { type: mongoose.Schema.Types.Decimal128 }, // Tỷ lệ hoa hồng (%)
+    commission_rate: { type: mongoose.Schema.Types.Decimal128, default: 0 }, // Tỷ lệ hoa hồng (%), không bắt buộc
     hired_date: { type: Date, default: Date.now }, // Ngày tuyển dụng
     user_id: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true }, // Nối với User (auth/login)
     store_id: { type: mongoose.Schema.Types.ObjectId, ref: "Store", required: true }, // Liên kết store (nhân viên chỉ 1 store)

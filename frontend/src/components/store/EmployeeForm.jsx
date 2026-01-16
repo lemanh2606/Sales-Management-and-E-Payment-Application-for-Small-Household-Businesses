@@ -12,7 +12,7 @@ export default function EmployeeForm({ mode, initialValues = {}, onSubmit, loadi
       username: initialValues?.user_id?.username ?? "",
       email: initialValues?.user_id?.email ?? "",
       phone: initialValues?.user_id?.phone ?? "",
-      salary: initialValues?.salary ?? "",
+      salary: initialValues?.salary ?? 0,
       commission_rate: initialValues?.commission_rate ?? 0,
       shift: initialValues?.shift ?? "Sáng",
     });
@@ -24,22 +24,20 @@ export default function EmployeeForm({ mode, initialValues = {}, onSubmit, loadi
 
   return (
     <Form form={form} layout="vertical" onFinish={handleFinish}>
-      <Form.Item
-        label="Tên nhân viên"
-        name="fullName"
-        rules={[{ required: true, message: "Nhập tên nhân viên" }]}
-      >
+      <Form.Item label="Tên nhân viên" name="fullName" rules={[{ required: true, message: "Nhập tên nhân viên" }]}>
         <Input />
       </Form.Item>
 
       {mode === "create" && (
-        <Form.Item
-          label="Username"
-          name="username"
-          rules={[{ required: true, message: "Nhập username" }]}
-        >
-          <Input />
-        </Form.Item>
+        <>
+          <Form.Item label="Username" name="username" rules={[{ required: true, message: "Nhập username" }]}>
+            <Input />
+          </Form.Item>
+
+          <Form.Item label="Mật khẩu" name="password" rules={[{ required: true, message: "Nhập mật khẩu" }]}>
+            <Input.Password />
+          </Form.Item>
+        </>
       )}
 
       <Form.Item label="Email" name="email">
@@ -50,11 +48,7 @@ export default function EmployeeForm({ mode, initialValues = {}, onSubmit, loadi
         <Input />
       </Form.Item>
 
-      <Form.Item
-        label="Ca làm việc"
-        name="shift"
-        rules={[{ required: true, message: "Chọn ca làm việc" }]}
-      >
+      <Form.Item label="Ca làm việc" name="shift" rules={[{ required: true, message: "Chọn ca làm việc" }]}>
         <Select>
           <Option value="Sáng">Sáng</Option>
           <Option value="Chiều">Chiều</Option>
@@ -63,24 +57,14 @@ export default function EmployeeForm({ mode, initialValues = {}, onSubmit, loadi
         </Select>
       </Form.Item>
 
-      <Form.Item
-        label="Lương cơ bản"
-        name="salary"
-        rules={[{ required: true, message: "Nhập lương cơ bản" }]}
-      >
+      <Form.Item label="Lương cơ bản" name="salary" rules={[{ required: true, message: "Nhập lương cơ bản" }]}>
         <Input type="number" />
       </Form.Item>
 
       <Form.Item label="Hoa hồng (%)" name="commission_rate">
         <Input type="number" />
       </Form.Item>
-      <Form.Item
-    label="Mật khẩu"
-    name="password"
-    rules={[{ required: true, message: "Nhập mật khẩu" }]}
-  >
-    <Input.Password />
-  </Form.Item>
+
       <Form.Item>
         <Button type="primary" htmlType="submit" loading={loading}>
           {mode === "edit" ? "Cập nhật" : "Tạo"}

@@ -1,636 +1,586 @@
 openapi: 3.0.3
 info:
-  title: Sales-Management-and-E-Payment API
-  version: "1.0.1"
-  description: API documentation for Sales Management & E-Payment Application (SEP490_G136)
+  title: SmartRetail API
+  version: 1.0.0
+  description: User & Authentication APIs
+
 servers:
-  - url: http://localhost:9999
-    description: Local dev server
+  - url: https://skinanalysis.life
 
 tags:
   - name: Auth
-  - name: Users
-  - name: Stores
-  - name: Employees
-  - name: Customers
+    description: Đăng ký, đăng nhập, OTP, refresh token
+  - name: User
+    description: Quản lý người dùng & profile
+  - name: Staff
+    description: Quản lý nhân viên
   - name: Products
-  - name: ProductGroups
-  - name: Suppliers
-  - name: StockChecks
-  - name: StockDisposals
-  - name: PurchaseOrders
-  - name: PurchaseReturns
+    description: Quản lý sản phẩm, tồn kho, import/export
+  - name: InventoryVouchers
+    description: Phiếu nhập / xuất kho – duyệt, ghi sổ, đảo phiếu
+  - name: Stores
+    description: |
+      Quản lý cửa hàng (Store Management).
+      Bao gồm tạo cửa hàng, cập nhật, xóa mềm, khôi phục,
+      chọn store hiện hành, dashboard và phân quyền staff.
+
+  - name: Employees
+    description: |
+      Quản lý nhân viên trong cửa hàng.
+      Bao gồm tạo nhân viên, cập nhật thông tin,
+      xóa mềm, khôi phục và xuất danh sách Excel.
+  - name: Warehouses
+    description: |
+      Quản lý kho theo từng cửa hàng.
+      Bao gồm tạo kho, cập nhật, xóa mềm, khôi phục
+      và thiết lập kho mặc định.
   - name: Orders
-  - name: Tax
-  - name: Webhook
-
-components:
-  securitySchemes:
-    BearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
-
-  schemas:
-    User:
-      type: object
-      properties:
-        id: { type: string }
-        username: { type: string }
-        email: { type: string }
-        phone: { type: string }
-        role:
-          type: string
-          enum: [MANAGER, STAFF]
-        isVerified: { type: boolean }
-
-    Store:
-      type: object
-      properties:
-        id: { type: string }
-        name: { type: string }
-        address: { type: string }
-        phone: { type: string }
-        owner_id: { type: string }
-        isDefault: { type: boolean }
-
-    Employee:
-      type: object
-      properties:
-        id: { type: string }
-        name: { type: string }
-        phone: { type: string }
-        role: { type: string }
-
-    Customer:
-      type: object
-      properties:
-        id: { type: string }
-        name: { type: string }
-        phone: { type: string }
-        email: { type: string }
-        address: { type: string }
-        store_id: { type: string }
-        loyaltyPoints: { type: number }
-
-    Product:
-      type: object
-      properties:
-        id: { type: string }
-        name: { type: string }
-        sku: { type: string }
-        group_id: { type: string }
-        price: { type: number }
-        minStock: { type: number }
-        maxStock: { type: number }
-        status: { type: string }
-
-    ProductGroup:
-      type: object
-      properties:
-        id: { type: string }
-        name: { type: string }
-        store_id: { type: string }
-
-    Supplier:
-      type: object
-      properties:
-        id: { type: string }
-        name: { type: string }
-        phone: { type: string }
-        address: { type: string }
-
-    StockCheck:
-      type: object
-      properties:
-        id: { type: string }
-        store_id: { type: string }
-        products:
-          type: array
-          items:
-            type: object
-            properties:
-              product_id: { type: string }
-              countedQuantity: { type: integer }
-        note: { type: string }
-        status: { type: string }
-
-    StockDisposal:
-      type: object
-      properties:
-        id: { type: string }
-        store_id: { type: string }
-        products:
-          type: array
-          items:
-            type: object
-            properties:
-              product_id: { type: string }
-              quantity: { type: integer }
-              reason: { type: string }
-        note: { type: string }
-        status: { type: string }
-
-    PurchaseOrder:
-      type: object
-      properties:
-        id: { type: string }
-        store_id: { type: string }
-        supplier_id: { type: string }
-        items:
-          type: array
-          items:
-            type: object
-            properties:
-              product_id: { type: string }
-              qty: { type: integer }
-              price: { type: number }
-        status: { type: string }
-
-    PurchaseReturn:
-      type: object
-      properties:
-        id: { type: string }
-        store_id: { type: string }
-        purchase_order_id: { type: string }
-        items:
-          type: array
-          items:
-            type: object
-            properties:
-              product_id: { type: string }
-              qty: { type: integer }
-        status: { type: string }
-
-    Order:
-      type: object
-      properties:
-        id: { type: string }
-        store_id: { type: string }
-        items:
-          type: array
-          items:
-            type: object
-            properties:
-              product_id: { type: string }
-              qty: { type: integer }
-              price: { type: number }
-        total: { type: number }
-        status: { type: string }
-
-    TaxDeclaration:
-      type: object
-      properties:
-        id: { type: string }
-        store_id: { type: string }
-        periodType: { type: string }
-        periodKey: { type: string }
-        totalRevenue: { type: number }
-        status: { type: string }
-
-security:
-  - BearerAuth: []
+    description: Quản lý đơn hàng
+  - name: Payments
+    description: Thanh toán & QR
+  - name: Refunds
+    description: Hoàn hàng
+  - name: Reports
+    description: Thống kê & báo cáo
 
 paths:
-  # ===== Auth / Users =====
   /api/users/register:
     post:
       tags: [Auth]
-      summary: Register manager (send OTP)
+      summary: Đăng ký tài khoản Manager
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
+              required: [username, email, password, fullname]
               properties:
-                username: { type: string }
-                email: { type: string }
-                password: { type: string }
-                phone: { type: string }
+                username:
+                  type: string
+                email:
+                  type: string
+                password:
+                  type: string
+                  minLength: 6
+                fullname:
+                  type: string
       responses:
-        "201": { description: "Registered, OTP sent" }
-        "400": { description: "Bad request" }
+        "201":
+          description: Đăng ký thành công
+        "400":
+          description: Dữ liệu không hợp lệ
 
   /api/users/verify-otp:
     post:
       tags: [Auth]
-      summary: Verify OTP to activate account
+      summary: Xác minh OTP đăng ký
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
+              required: [email, otp]
               properties:
-                email: { type: string }
-                otp: { type: string }
+                email:
+                  type: string
+                otp:
+                  type: string
       responses:
-        "200": { description: "OTP verified" }
-        "400": { description: "Invalid or expired OTP" }
+        "200":
+          description: Xác minh thành công
+
+  /api/users/resend-register-otp:
+    post:
+      tags: [Auth]
+      summary: Gửi lại OTP đăng ký
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+      responses:
+        "200":
+          description: OTP gửi lại thành công
 
   /api/users/login:
     post:
       tags: [Auth]
-      summary: Login (returns JWT)
+      summary: Đăng nhập
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
+              required: [username, password]
               properties:
-                username: { type: string }
-                password: { type: string }
+                username:
+                  type: string
+                  description: username hoặc email
+                password:
+                  type: string
       responses:
         "200":
-          description: Login successful
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  token: { type: string }
-                  user: { $ref: "#/components/schemas/User" }
-        "400": { description: "Invalid credentials" }
+          description: Đăng nhập thành công
+        "401":
+          description: Sai thông tin
+        "423":
+          description: Tài khoản bị khóa tạm thời
 
-  # ===== Stores =====
-  /api/stores:
-    get:
-      tags: [Stores]
-      summary: Get stores for authenticated manager
-      security: [{ BearerAuth: [] }]
-      responses:
-        "200": { description: "List of stores" }
+  /api/users/logout:
     post:
-      tags: [Stores]
-      summary: Create store (manager)
-      security: [{ BearerAuth: [] }]
+      tags: [Auth]
+      summary: Đăng xuất
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Đăng xuất thành công
+
+  /api/users/refresh-token:
+    get:
+      tags: [Auth]
+      summary: Refresh access token
+      responses:
+        "200":
+          description: Token mới
+        "401":
+          description: Refresh token không hợp lệ
+
+  /api/users/forgot-password/send-otp:
+    post:
+      tags: [Auth]
+      summary: Gửi OTP quên mật khẩu
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
+              required: [email]
               properties:
-                name: { type: string }
-                address: { type: string }
-                phone: { type: string }
-      responses:
-        "201": { description: "Store created" }
-
-  /api/stores/{storeId}:
-    get:
-      tags: [Stores]
-      summary: Get store by ID
-      parameters:
-        - in: path
-          name: storeId
-          required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
-      responses:
-        "200": { description: "Store object" }
-    put:
-      tags: [Stores]
-      summary: Update store
-      parameters:
-        - in: path
-          name: storeId
-          required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/Store"
-      responses:
-        "200": { description: "Updated" }
-    delete:
-      tags: [Stores]
-      summary: Delete store
-      parameters:
-        - in: path
-          name: storeId
-          required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
-      responses:
-        "204": { description: "Deleted" }
-
-  # ===== Employees =====
-  /api/stores/{storeId}/employees:
-    get:
-      tags: [Employees]
-      summary: Get employees by store
-      parameters:
-        - in: path
-          name: storeId
-          required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
-      responses:
-        "200": { description: "List employees" }
-    post:
-      tags: [Employees]
-      summary: Create employee
-      parameters:
-        - in: path
-          name: storeId
-          required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/Employee"
-      responses:
-        "201": { description: "Created" }
-
-  /api/stores/{storeId}/employees/{employeeId}:
-    get:
-      tags: [Employees]
-      summary: Get employee by ID
-      parameters:
-        - in: path
-          name: storeId
-          required: true
-          schema: { type: string }
-        - in: path
-          name: employeeId
-          required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
-      responses:
-        "200": { description: "Employee object" }
-    put:
-      tags: [Employees]
-      summary: Update employee
-      parameters:
-        - in: path
-          name: storeId
-          required: true
-          schema: { type: string }
-        - in: path
-          name: employeeId
-          required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/Employee"
-      responses:
-        "200": { description: "Updated" }
-
-  # ===== Customers =====
-  /api/customers:
-    post:
-      tags: [Customers]
-      summary: Create new customer
-      security: [{ BearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/Customer"
-      responses:
-        "201": { description: "Customer created" }
-
-  /api/customers/search:
-    get:
-      tags: [Customers]
-      summary: Search customers by phone or name
-      parameters:
-        - in: query
-          name: keyword
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
-      responses:
-        "200": { description: "Search results" }
-
-  /api/customers/store/{storeId}:
-    get:
-      tags: [Customers]
-      summary: Get all customers by store
-      parameters:
-        - in: path
-          name: storeId
-          required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
-      responses:
-        "200": { description: "List of customers" }
-
-  /api/customers/template/download:
-    get:
-      tags: [Customers]
-      summary: Download Excel template for customers import
-      security: [{ BearerAuth: [] }]
+                email:
+                  type: string
       responses:
         "200":
-          description: Excel template file
-          content:
-            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
-              schema:
-                type: string
-                format: binary
+          description: OTP đã gửi
 
-  /api/customers/store/{storeId}/import:
+  /api/users/forgot-password/change:
     post:
-      tags: [Customers]
-      summary: Import customers from Excel file
-      parameters:
-        - in: path
-          name: storeId
-          required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
+      tags: [Auth]
+      summary: Đổi mật khẩu khi quên (OTP)
       requestBody:
         required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, otp, password, confirmPassword]
+              properties:
+                email:
+                  type: string
+                otp:
+                  type: string
+                password:
+                  type: string
+                  minLength: 6
+                confirmPassword:
+                  type: string
+      responses:
+        "200":
+          description: Đổi mật khẩu thành công
+
+  /api/users/profile:
+    get:
+      tags: [User]
+      summary: Lấy thông tin profile
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Thông tin người dùng
+
+    put:
+      tags: [User]
+      summary: Cập nhật profile (có upload avatar)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
         content:
           multipart/form-data:
             schema:
               type: object
               properties:
-                file:
+                avatar:
                   type: string
                   format: binary
-                  description: Excel file (.xlsx)
+                username:
+                  type: string
+                email:
+                  type: string
+                phone:
+                  type: string
+                fullname:
+                  type: string
+                removeImage:
+                  type: boolean
       responses:
         "200":
-          description: Import results
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        row: { type: integer }
-                        customer: { $ref: "#/components/schemas/Customer" }
-                  failed:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        row: { type: integer }
-                        data: { type: object }
-                        error: { type: string }
-                  total: { type: integer }
-        "400": { description: "Invalid file or data" }
+          description: Cập nhật thành công
 
-  /api/customers/{id}:
-    put:
-      tags: [Customers]
-      summary: Update customer information
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/Customer"
-      responses:
-        "200": { description: "Customer updated" }
-    delete:
-      tags: [Customers]
-      summary: Soft delete customer
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
-      responses:
-        "204": { description: "Customer deleted" }
-
-  # ===== Products =====
-  /api/products:
-    get:
-      tags: [Products]
-      summary: Get products (optionally filter by store)
-      parameters:
-        - in: query
-          name: store_id
-          schema: { type: string }
-        - in: query
-          name: page
-          schema: { type: integer }
-      security: [{ BearerAuth: [] }]
-      responses:
-        "200": { description: "List of products" }
+  /api/users/password/send-otp:
     post:
-      tags: [Products]
-      summary: Create product
-      security: [{ BearerAuth: [] }]
+      tags: [User]
+      summary: Gửi OTP đổi mật khẩu (đã đăng nhập)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OTP đã gửi
+
+  /api/users/password/change:
+    post:
+      tags: [User]
+      summary: Đổi mật khẩu (OTP)
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/Product"
+              type: object
+              required: [password, confirmPassword, otp]
+              properties:
+                password:
+                  type: string
+                confirmPassword:
+                  type: string
+                otp:
+                  type: string
       responses:
-        "201": { description: "Created" }
+        "200":
+          description: Đổi mật khẩu thành công
 
-  /api/products/{productId}:
-    get:
-      tags: [Products]
-      summary: Get product by ID
-      parameters:
-        - in: path
-          name: productId
-          required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
+  /api/users/staff/soft-delete:
+    post:
+      tags: [Staff]
+      summary: Xóa mềm nhân viên
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetUserId]
+              properties:
+                targetUserId:
+                  type: string
       responses:
-        "200": { description: "Product object" }
+        "200":
+          description: Xóa thành công
+
+  /api/users/staff/restore:
+    post:
+      tags: [Staff]
+      summary: Khôi phục nhân viên
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetUserId]
+              properties:
+                targetUserId:
+                  type: string
+      responses:
+        "200":
+          description: Khôi phục thành công
+
+  /api/users/permissions/catalog:
+    get:
+      tags: [User]
+      summary: Lấy danh sách permission
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Danh sách quyền
+
+  /api/users/{id}:
     put:
-      tags: [Products]
-      summary: Update product
+      tags: [User]
+      summary: Cập nhật user (admin/manager)
+      security:
+        - bearerAuth: []
       parameters:
         - in: path
-          name: productId
+          name: id
           required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
+          schema:
+            type: string
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/Product"
+              type: object
       responses:
-        "200": { description: "Updated" }
-    delete:
-      tags: [Products]
-      summary: Delete product
-      parameters:
-        - in: path
-          name: productId
-          required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
-      responses:
-        "204": { description: "Deleted" }
-
-  /api/products/search:
-    get:
-      tags: [Products]
-      summary: Search products by name or SKU
-      parameters:
-        - in: query
-          name: keyword
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
-      responses:
-        "200": { description: "Search results" }
-
-  /api/products/low-stock:
-    get:
-      tags: [Products]
-      summary: List low stock products
-      security: [{ BearerAuth: [] }]
-      responses:
-        "200": { description: "Low stock products" }
+        "200":
+          description: Cập nhật thành công
 
   /api/products/template/download:
     get:
       tags: [Products]
-      summary: Download Excel template for products import
-      security: [{ BearerAuth: [] }]
+      summary: Tải file template import sản phẩm (Excel)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: format
+          schema:
+            type: string
+            enum: [excel, csv]
       responses:
         "200":
-          description: Excel template file
-          content:
-            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
-              schema:
-                type: string
-                format: binary
+          description: File template tải về
+
+  /api/products/store/{storeId}/export:
+    get:
+      tags: [Products]
+      summary: Xuất danh sách sản phẩm ra Excel
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: storeId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: File Excel danh sách sản phẩm
+
+  /api/products/search:
+    get:
+      tags: [Products]
+      summary: Tìm kiếm sản phẩm theo tên hoặc SKU
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: query
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: storeId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 10
+      responses:
+        "200":
+          description: Danh sách sản phẩm tìm được
+
+  /api/products/low-stock:
+    get:
+      tags: [Products]
+      summary: Lấy danh sách sản phẩm tồn kho thấp
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: storeId
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Danh sách sản phẩm tồn kho thấp
 
   /api/products/store/{storeId}/import:
     post:
       tags: [Products]
-      summary: Import products from Excel file
+      summary: Import sản phẩm từ file Excel
+      security:
+        - bearerAuth: []
       parameters:
         - in: path
           name: storeId
           required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Import hoàn tất
+
+  /api/products/store/{storeId}:
+    post:
+      tags: [Products]
+      summary: Tạo sản phẩm mới
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: storeId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [name, price, cost_price]
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                sku:
+                  type: string
+                price:
+                  type: number
+                cost_price:
+                  type: number
+                stock_quantity:
+                  type: number
+                min_stock:
+                  type: number
+                max_stock:
+                  type: number
+                unit:
+                  type: string
+                status:
+                  type: string
+                supplier_id:
+                  type: string
+                group_id:
+                  type: string
+                default_warehouse_id:
+                  type: string
+                default_warehouse_name:
+                  type: string
+                image:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Tạo sản phẩm thành công
+
+    get:
+      tags: [Products]
+      summary: Lấy danh sách sản phẩm theo cửa hàng
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: storeId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: page
+          schema:
+            type: integer
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: query
+          name: query
+          schema:
+            type: string
+        - in: query
+          name: status
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Danh sách sản phẩm
+
+  /api/products/{productId}/price:
+    put:
+      tags: [Products]
+      summary: Cập nhật giá bán sản phẩm
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: productId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [price]
+              properties:
+                price:
+                  type: number
+      responses:
+        "200":
+          description: Cập nhật giá thành công
+
+  /api/products/{productId}:
+    get:
+      tags: [Products]
+      summary: Lấy chi tiết sản phẩm theo ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: productId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Thông tin sản phẩm
+
+    put:
+      tags: [Products]
+      summary: Cập nhật thông tin sản phẩm
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: productId
+          required: true
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -638,678 +588,1256 @@ paths:
             schema:
               type: object
               properties:
-                file:
+                name:
+                  type: string
+                description:
+                  type: string
+                sku:
+                  type: string
+                price:
+                  type: number
+                cost_price:
+                  type: number
+                stock_quantity:
+                  type: number
+                min_stock:
+                  type: number
+                max_stock:
+                  type: number
+                unit:
+                  type: string
+                status:
+                  type: string
+                supplier_id:
+                  type: string
+                group_id:
+                  type: string
+                default_warehouse_id:
+                  type: string
+                default_warehouse_name:
+                  type: string
+                image:
                   type: string
                   format: binary
-                  description: Excel file (.xlsx)
       responses:
         "200":
-          description: Import results
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        row: { type: integer }
-                        product: { $ref: "#/components/schemas/Product" }
-                  failed:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        row: { type: integer }
-                        data: { type: object }
-                        error: { type: string }
-                  total: { type: integer }
-        "400": { description: "Invalid file or data" }
+          description: Cập nhật sản phẩm thành công
 
-  # ===== Product Groups =====
-  /api/product-groups:
-    get:
-      tags: [ProductGroups]
-      summary: List product groups
-      parameters:
-        - in: query
-          name: store_id
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
-      responses:
-        "200": { description: "Product group list" }
-    post:
-      tags: [ProductGroups]
-      summary: Create product group
-      security: [{ BearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ProductGroup"
-      responses:
-        "201": { description: "Created" }
-
-  /api/product-groups/{groupId}:
-    get:
-      tags: [ProductGroups]
-      summary: Get product group by ID
-      parameters:
-        - in: path
-          name: groupId
-          required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
-      responses:
-        "200": { description: "Product group object" }
-    put:
-      tags: [ProductGroups]
-      summary: Update product group
-      parameters:
-        - in: path
-          name: groupId
-          required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ProductGroup"
-      responses:
-        "200": { description: "Updated" }
     delete:
-      tags: [ProductGroups]
-      summary: Delete product group
+      tags: [Products]
+      summary: Xóa sản phẩm (soft delete)
+      security:
+        - bearerAuth: []
       parameters:
         - in: path
-          name: groupId
+          name: productId
           required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
-      responses:
-        "204": { description: "Deleted" }
-
-  /api/product-groups/template/download:
-    get:
-      tags: [ProductGroups]
-      summary: Download Excel template for product groups import
-      security: [{ BearerAuth: [] }]
+          schema:
+            type: string
       responses:
         "200":
-          description: Excel template file
-          content:
-            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
-              schema:
-                type: string
-                format: binary
+          description: Xóa sản phẩm thành công
 
-  /api/product-groups/store/{storeId}/import:
-    post:
-      tags: [ProductGroups]
-      summary: Import product groups from Excel file
+  /api/products/{productId}/image:
+    delete:
+      tags: [Products]
+      summary: Xóa ảnh sản phẩm
+      security:
+        - bearerAuth: []
       parameters:
         - in: path
-          name: storeId
+          name: productId
           required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Xóa ảnh thành công
+  paths:
+  /api/stores/{storeId}/inventory-vouchers:
+    post:
+      tags:
+        - InventoryVouchers
+      summary: Tạo phiếu kho (DRAFT)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
       requestBody:
         required: true
         content:
-          multipart/form-data:
+          application/json:
+            schema:
+              type: object
+              required:
+                - type
+                - items
+              properties:
+                type:
+                  type: string
+                  enum: [IN, OUT]
+                voucher_date:
+                  type: string
+                  format: date-time
+                reason:
+                  type: string
+                warehouse_id:
+                  type: string
+                supplier_id:
+                  type: string
+                deliverer_name:
+                  type: string
+                receiver_name:
+                  type: string
+                ref_type:
+                  type: string
+                ref_no:
+                  type: string
+                ref_date:
+                  type: string
+                  format: date
+                items:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required:
+                      - product_id
+                      - qty_actual
+                    properties:
+                      product_id:
+                        type: string
+                      qty_document:
+                        type: number
+                      qty_actual:
+                        type: number
+                      unit_cost:
+                        type: number
+                      note:
+                        type: string
+      responses:
+        "201":
+          description: Tạo phiếu kho thành công
+
+    get:
+      tags:
+        - InventoryVouchers
+      summary: Danh sách phiếu kho
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [IN, OUT]
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [DRAFT, APPROVED, POSTED, CANCELLED]
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Danh sách phiếu kho
+
+  /api/stores/{storeId}/inventory-vouchers/{voucherId}:
+    get:
+      tags:
+        - InventoryVouchers
+      summary: Lấy chi tiết phiếu kho
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: voucherId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Chi tiết phiếu kho
+
+    put:
+      tags:
+        - InventoryVouchers
+      summary: Cập nhật phiếu kho (chỉ DRAFT)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: voucherId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Cập nhật phiếu kho thành công
+
+    delete:
+      tags:
+        - InventoryVouchers
+      summary: Xóa phiếu kho (chỉ DRAFT)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: voucherId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Xóa phiếu kho thành công
+
+  /api/stores/{storeId}/inventory-vouchers/{voucherId}/approve:
+    post:
+      tags:
+        - InventoryVouchers
+      summary: Duyệt phiếu kho (MANAGER)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: voucherId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Duyệt phiếu kho thành công
+
+  /api/stores/{storeId}/inventory-vouchers/{voucherId}/post:
+    post:
+      tags:
+        - InventoryVouchers
+      summary: Ghi sổ phiếu kho (POSTED)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: voucherId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Ghi sổ phiếu kho thành công
+
+  /api/stores/{storeId}/inventory-vouchers/{voucherId}/cancel:
+    post:
+      tags:
+        - InventoryVouchers
+      summary: Hủy phiếu kho
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: voucherId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
             schema:
               type: object
               properties:
-                file:
+                cancel_reason:
                   type: string
-                  format: binary
-                  description: Excel file (.xlsx)
       responses:
         "200":
-          description: Import results
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        row: { type: integer }
-                        group: { $ref: "#/components/schemas/ProductGroup" }
-                  failed:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        row: { type: integer }
-                        data: { type: object }
-                        error: { type: string }
-                  total: { type: integer }
-        "400": { description: "Invalid file or data" }
+          description: Hủy phiếu kho thành công
 
-  # ===== Suppliers =====
-  /api/suppliers:
-    get:
-      tags: [Suppliers]
-      summary: List suppliers (optionally filter by store)
-      parameters:
-        - in: query
-          name: store_id
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
-      responses:
-        "200": { description: "Suppliers list" }
+  /api/stores/{storeId}/inventory-vouchers/{voucherId}/reverse:
     post:
-      tags: [Suppliers]
-      summary: Create supplier
-      security: [{ BearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/Supplier"
-      responses:
-        "201": { description: "Created" }
-
-  /api/suppliers/{supplierId}:
-    get:
-      tags: [Suppliers]
-      summary: Get supplier by ID
+      tags:
+        - InventoryVouchers
+      summary: Đảo phiếu kho
+      security:
+        - bearerAuth: []
       parameters:
-        - in: path
-          name: supplierId
+        - name: storeId
+          in: path
           required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
-      responses:
-        "200": { description: "Supplier object" }
-    put:
-      tags: [Suppliers]
-      summary: Update supplier
-      parameters:
-        - in: path
-          name: supplierId
+          schema:
+            type: string
+        - name: voucherId
+          in: path
           required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/Supplier"
+          schema:
+            type: string
       responses:
-        "200": { description: "Updated" }
-    delete:
-      tags: [Suppliers]
-      summary: Delete supplier
-      parameters:
-        - in: path
-          name: supplierId
-          required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
-      responses:
-        "204": { description: "Deleted" }
-
-  # ===== Stock Checks =====
-  /api/stock-checks:
-    get:
-      tags: [StockChecks]
-      summary: List stock checks
-      parameters:
-        - in: query
-          name: store_id
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
-      responses:
-        "200": { description: "List of stock checks" }
+        "200":
+          description: Đảo phiếu kho thành công
+  /api/stores/ensure-store:
     post:
-      tags: [StockChecks]
-      summary: Create stock check
-      security: [{ BearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/StockCheck"
+      tags: [Stores]
+      summary: Đảm bảo user có store hiện hành
+      security:
+        - bearerAuth: []
       responses:
-        "201": { description: "Created" }
+        "200":
+          description: OK
+        "201":
+          description: Store mặc định được tạo
 
-  /api/stock-checks/{checkId}:
-    get:
-      tags: [StockChecks]
-      summary: Get stock check by ID
-      parameters:
-        - in: path
-          name: checkId
-          required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
-      responses:
-        "200": { description: "Stock check object" }
-    put:
-      tags: [StockChecks]
-      summary: Update stock check
-      parameters:
-        - in: path
-          name: checkId
-          required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/StockCheck"
-      responses:
-        "200": { description: "Updated" }
-    delete:
-      tags: [StockChecks]
-      summary: Delete stock check
-      parameters:
-        - in: path
-          name: checkId
-          required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
-      responses:
-        "204": { description: "Deleted" }
-  # ===== Stock Disposals =====
-  /api/stock-disposals:
-    get:
-      tags: [StockDisposals]
-      summary: List stock disposals
-      parameters:
-        - in: query
-          name: store_id
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
-      responses:
-        "200": { description: "List of stock disposals" }
+  /api/stores:
     post:
-      tags: [StockDisposals]
-      summary: Create stock disposal
-      security: [{ BearerAuth: [] }]
+      tags: [Stores]
+      summary: Tạo cửa hàng mới (Manager)
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/StockDisposal"
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                address:
+                  type: string
+                phone:
+                  type: string
+                description:
+                  type: string
+                imageUrl:
+                  type: string
+                tags:
+                  type: array
+                  items:
+                    type: string
+                staff_ids:
+                  type: array
+                  items:
+                    type: string
+                location:
+                  type: object
+                  properties:
+                    lat:
+                      type: number
+                    lng:
+                      type: number
+                openingHours:
+                  type: object
+                  properties:
+                    open:
+                      type: string
+                    close:
+                      type: string
+                isDefault:
+                  type: boolean
       responses:
-        "201": { description: "Created" }
+        "201":
+          description: Tạo cửa hàng thành công
 
-  /api/stock-disposals/{disposalId}:
     get:
-      tags: [StockDisposals]
-      summary: Get stock disposal by ID
+      tags: [Stores]
+      summary: Lấy danh sách cửa hàng của Manager
+      security:
+        - bearerAuth: []
       parameters:
-        - in: path
-          name: disposalId
-          required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: deleted
+          in: query
+          schema:
+            type: boolean
       responses:
-        "200": { description: "Stock disposal object" }
+        "200":
+          description: Danh sách cửa hàng
+
+  /api/stores/{storeId}:
+    get:
+      tags: [Stores]
+      summary: Lấy chi tiết cửa hàng
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Thông tin cửa hàng
+
     put:
-      tags: [StockDisposals]
-      summary: Update stock disposal
+      tags: [Stores]
+      summary: Cập nhật cửa hàng
+      security:
+        - bearerAuth: []
       parameters:
-        - in: path
-          name: disposalId
+        - name: storeId
+          in: path
           required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
+          schema:
+            type: string
       requestBody:
-        required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/StockDisposal"
+              type: object
       responses:
-        "200": { description: "Updated" }
-    delete:
-      tags: [StockDisposals]
-      summary: Delete stock disposal
-      parameters:
-        - in: path
-          name: disposalId
-          required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
-      responses:
-        "204": { description: "Deleted" }
+        "200":
+          description: Cập nhật thành công
 
-  # ===== Purchase Orders =====
-  /api/purchase-orders:
-    get:
-      tags: [PurchaseOrders]
-      summary: List purchase orders
+    delete:
+      tags: [Stores]
+      summary: Xóa cửa hàng (soft delete)
+      security:
+        - bearerAuth: []
       parameters:
-        - in: query
-          name: store_id
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
       responses:
-        "200": { description: "List of purchase orders" }
+        "200":
+          description: Đã xóa cửa hàng
+
+  /api/stores/{storeId}/restore:
+    put:
+      tags: [Stores]
+      summary: Khôi phục cửa hàng
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Khôi phục thành công
+
+  /api/stores/select/{storeId}:
     post:
-      tags: [PurchaseOrders]
-      summary: Create purchase order
-      security: [{ BearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/PurchaseOrder"
+      tags: [Stores]
+      summary: Chọn cửa hàng hiện hành
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
       responses:
-        "201": { description: "Created" }
+        "200":
+          description: Đã chọn cửa hàng
 
-  /api/purchase-orders/{orderId}:
+  /api/stores/{storeId}/dashboard:
     get:
-      tags: [PurchaseOrders]
-      summary: Get purchase order by ID
+      tags: [Stores]
+      summary: Dashboard cửa hàng
+      security:
+        - bearerAuth: []
       parameters:
-        - in: path
-          name: orderId
+        - name: storeId
+          in: path
           required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
+          schema:
+            type: string
       responses:
-        "200": { description: "Purchase order object" }
-    put:
-      tags: [PurchaseOrders]
-      summary: Update purchase order
-      parameters:
-        - in: path
-          name: orderId
-          required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/PurchaseOrder"
-      responses:
-        "200": { description: "Updated" }
-    delete:
-      tags: [PurchaseOrders]
-      summary: Delete purchase order
-      parameters:
-        - in: path
-          name: orderId
-          required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
-      responses:
-        "204": { description: "Deleted" }
+        "200":
+          description: Dữ liệu dashboard
 
-  # ===== Purchase Returns =====
-  /api/purchase-returns:
-    get:
-      tags: [PurchaseReturns]
-      summary: List purchase returns
-      parameters:
-        - in: query
-          name: store_id
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
-      responses:
-        "200": { description: "List of purchase returns" }
+  /api/stores/{storeId}/assign-staff:
     post:
-      tags: [PurchaseReturns]
-      summary: Create purchase return
-      security: [{ BearerAuth: [] }]
+      tags: [Stores]
+      summary: Gán staff vào cửa hàng
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/PurchaseReturn"
+              type: object
+              required: [staffUserId]
+              properties:
+                staffUserId:
+                  type: string
+                role:
+                  type: string
+                  enum: [STAFF, OWNER]
       responses:
-        "201": { description: "Created" }
+        "200":
+          description: Gán staff thành công
 
-  /api/purchase-returns/{returnId}:
+  /api/stores/{storeId}/employees:
+    post:
+      tags: [Employees]
+      summary: Tạo nhân viên mới
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fullName, username, password, salary, shift]
+              properties:
+                fullName:
+                  type: string
+                username:
+                  type: string
+                password:
+                  type: string
+                email:
+                  type: string
+                phone:
+                  type: string
+                shift:
+                  type: string
+                salary:
+                  type: number
+                commission_rate:
+                  type: number
+      responses:
+        "201":
+          description: Tạo nhân viên thành công
+
     get:
-      tags: [PurchaseReturns]
-      summary: Get purchase return by ID
+      tags: [Employees]
+      summary: Danh sách nhân viên theo cửa hàng
+      security:
+        - bearerAuth: []
       parameters:
-        - in: path
-          name: returnId
+        - name: storeId
+          in: path
           required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
+          schema:
+            type: string
+        - name: deleted
+          in: query
+          schema:
+            type: boolean
       responses:
-        "200": { description: "Purchase return object" }
-    put:
-      tags: [PurchaseReturns]
-      summary: Update purchase return
+        "200":
+          description: Danh sách nhân viên
+
+  /api/stores/{storeId}/employees/export:
+    get:
+      tags: [Employees]
+      summary: Xuất danh sách nhân viên ra Excel
+      security:
+        - bearerAuth: []
       parameters:
-        - in: path
-          name: returnId
+        - name: storeId
+          in: path
           required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
+          schema:
+            type: string
+      responses:
+        "200":
+          description: File Excel
+
+  /api/stores/{storeId}/employees/{id}:
+    get:
+      tags: [Employees]
+      summary: Lấy chi tiết nhân viên
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Thông tin nhân viên
+
+    put:
+      tags: [Employees]
+      summary: Cập nhật nhân viên
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Cập nhật thành công
+
+  /api/stores/{storeId}/employees/{id}/soft:
+    delete:
+      tags: [Employees]
+      summary: Xóa mềm nhân viên
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Đã xóa mềm
+
+  /api/stores/{storeId}/employees/{id}/restore:
+    put:
+      tags: [Employees]
+      summary: Khôi phục nhân viên
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Đã khôi phục
+  /api/stores/{storeId}/warehouses:
+    get:
+      tags: [Warehouses]
+      summary: Lấy danh sách kho theo cửa hàng
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: deleted
+          in: query
+          schema:
+            type: boolean
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Danh sách kho
+    post:
+      tags: [Warehouses]
+      summary: Tạo kho mới cho cửa hàng
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/PurchaseReturn"
+              type: object
+              required: [code, name]
+              properties:
+                code:
+                  type: string
+                name:
+                  type: string
+                description:
+                  type: string
+                address:
+                  type: string
+                city:
+                  type: string
+                phone:
+                  type: string
+                email:
+                  type: string
+                warehouse_type:
+                  type: string
+                  example: normal
+                status:
+                  type: string
+                  example: active
+                is_default:
+                  type: boolean
+                manager_ids:
+                  type: array
+                  items:
+                    type: string
+                allow_negative_stock:
+                  type: boolean
+                auto_reorder:
+                  type: boolean
+                reorder_point:
+                  type: number
       responses:
-        "200": { description: "Updated" }
-    delete:
-      tags: [PurchaseReturns]
-      summary: Delete purchase return
+        "201":
+          description: Tạo kho thành công
+  /api/stores/{storeId}/warehouses/{warehouseId}:
+    get:
+      tags: [Warehouses]
+      summary: Lấy chi tiết kho
+      security:
+        - bearerAuth: []
       parameters:
-        - in: path
-          name: returnId
+        - name: storeId
+          in: path
           required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
+          schema:
+            type: string
+        - name: warehouseId
+          in: path
+          required: true
+          schema:
+            type: string
       responses:
-        "204": { description: "Deleted" }
-
-  # ===== Orders =====
+        "200":
+          description: Chi tiết kho
+    put:
+      tags: [Warehouses]
+      summary: Cập nhật kho
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: warehouseId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Cập nhật kho thành công
+    delete:
+      tags: [Warehouses]
+      summary: Xóa mềm kho
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: warehouseId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Xóa kho thành công
+  /api/stores/{storeId}/warehouses/{warehouseId}/restore:
+    patch:
+      tags: [Warehouses]
+      summary: Khôi phục kho đã xóa
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: warehouseId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Khôi phục kho thành công
+  /api/stores/{storeId}/warehouses/{warehouseId}/set-default:
+    patch:
+      tags: [Warehouses]
+      summary: Đặt kho làm mặc định cho cửa hàng
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: warehouseId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Đặt kho mặc định thành công
   /api/orders:
-    get:
-      tags: [Orders]
-      summary: List orders
-      parameters:
-        - in: query
-          name: store_id
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
-      responses:
-        "200": { description: "List of orders" }
     post:
       tags: [Orders]
-      summary: Create new order
-      security: [{ BearerAuth: [] }]
+      summary: Tạo đơn hàng mới (cash / qr)
+      security: [{ bearerAuth: [] }]
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/Order"
+              type: object
+              required: [items, paymentMethod]
+              properties:
+                storeId:
+                  type: string
+                employeeId:
+                  type: string
+                warehouseId:
+                  type: string
+                paymentMethod:
+                  type: string
+                  enum: [cash, qr]
+                isVATInvoice:
+                  type: boolean
+                vatInfo:
+                  type: object
+                usedPoints:
+                  type: number
+                customerInfo:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    phone:
+                      type: string
+                items:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [productId, quantity]
+                    properties:
+                      productId:
+                        type: string
+                      quantity:
+                        type: number
+                      saleType:
+                        type: string
+                        enum: [NORMAL, AT_COST, FREE, VIP]
+                      customPrice:
+                        type: number
       responses:
-        "201": { description: "Created" }
+        "201":
+          description: Tạo đơn hàng thành công
+        "400":
+          description: Dữ liệu không hợp lệ
+
+  /api/orders/list-all:
+    get:
+      tags: [Orders]
+      summary: Lấy toàn bộ danh sách đơn hàng
+      parameters:
+        - in: query
+          name: storeId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: periodType
+          schema: { type: string }
+        - in: query
+          name: periodKey
+          schema: { type: string }
+      responses:
+        "200":
+          description: Danh sách đơn hàng
 
   /api/orders/{orderId}:
     get:
       tags: [Orders]
-      summary: Get order by ID
+      summary: Lấy chi tiết đơn hàng
       parameters:
         - in: path
           name: orderId
           required: true
           schema: { type: string }
-      security: [{ BearerAuth: [] }]
       responses:
-        "200": { description: "Order object" }
-    patch:
-      tags: [Orders]
-      summary: Partial update order (e.g., status)
-      parameters:
-        - in: path
-          name: orderId
-          required: true
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                status: { type: string }
-      responses:
-        "200": { description: "Updated" }
+        "200":
+          description: Chi tiết đơn hàng
+        "404":
+          description: Không tìm thấy đơn
 
   /api/orders/{orderId}/set-paid-cash:
     post:
-      tags: [Orders]
-      summary: Mark order as paid by cash
+      tags: [Payments]
+      summary: Xác nhận thanh toán tiền mặt
       parameters:
         - in: path
           name: orderId
           required: true
           schema: { type: string }
-      security: [{ BearerAuth: [] }]
       responses:
-        "200": { description: "Cash payment confirmed" }
+        "200":
+          description: Thanh toán thành công
 
   /api/orders/{orderId}/print-bill:
     post:
       tags: [Orders]
-      summary: Print order bill
+      summary: In hóa đơn
       parameters:
         - in: path
           name: orderId
           required: true
           schema: { type: string }
-      security: [{ BearerAuth: [] }]
       responses:
-        "200": { description: "Bill printed" }
+        "200":
+          description: In hóa đơn thành công
+
+  /api/orders/payments/vietqr_return:
+    get:
+      tags: [Payments]
+      summary: Callback thanh toán QR thành công
+      parameters:
+        - in: query
+          name: orderCode
+          schema: { type: string }
+        - in: query
+          name: amount
+          schema: { type: number }
+      responses:
+        "200":
+          description: Thanh toán thành công
+
+  /api/orders/payments/vietqr_cancel:
+    get:
+      tags: [Payments]
+      summary: Callback hủy thanh toán QR
+      responses:
+        "400":
+          description: Thanh toán bị hủy
 
   /api/orders/{orderId}/refund:
     post:
-      tags: [Orders]
-      summary: Refund an order
+      tags: [Refunds]
+      summary: Hoàn hàng (refund order)
       parameters:
         - in: path
           name: orderId
           required: true
           schema: { type: string }
-      security: [{ BearerAuth: [] }]
       requestBody:
+        required: true
         content:
           multipart/form-data:
             schema:
               type: object
+              required: [items]
               properties:
-                files:
+                employeeId:
+                  type: string
+                refundReason:
+                  type: string
+                items:
                   type: array
-                  items: { type: string, format: binary }
+                  items:
+                    type: object
+                    required: [productId, quantity]
+                    properties:
+                      productId:
+                        type: string
+                      quantity:
+                        type: number
       responses:
-        "200": { description: "Refund processed" }
+        "200":
+          description: Hoàn hàng thành công
 
-  # ===== Tax =====
-  /api/tax:
+  /api/orders/list-paid:
     get:
-      tags: [Tax]
-      summary: List tax declarations
+      tags: [Orders]
+      summary: Danh sách đơn đã thanh toán
       parameters:
         - in: query
-          name: store_id
-          schema: { type: string }
-        - in: query
-          name: period_type
-          schema: { type: string }
-        - in: query
-          name: period_key
-          schema: { type: string }
-      security: [{ BearerAuth: [] }]
-      responses:
-        "200": { description: "List of tax declarations" }
-    post:
-      tags: [Tax]
-      summary: Create new tax declaration
-      security: [{ BearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TaxDeclaration"
-      responses:
-        "201": { description: "Created" }
-
-  /api/tax/{taxId}:
-    get:
-      tags: [Tax]
-      summary: Get tax declaration by ID
-      parameters:
-        - in: path
-          name: taxId
+          name: storeId
           required: true
           schema: { type: string }
-      security: [{ BearerAuth: [] }]
+        - in: query
+          name: status
+          schema:
+            type: string
+            example: paid,partially_refunded
       responses:
-        "200": { description: "Tax declaration object" }
-    put:
-      tags: [Tax]
-      summary: Update tax declaration
+        "200":
+          description: Danh sách đơn đã thanh toán
+
+  /api/orders/list-refund:
+    get:
+      tags: [Refunds]
+      summary: Danh sách đơn hoàn trả
       parameters:
-        - in: path
-          name: taxId
+        - in: query
+          name: storeId
           required: true
           schema: { type: string }
-      security: [{ BearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TaxDeclaration"
       responses:
-        "200": { description: "Updated" }
+        "200":
+          description: Danh sách đơn hoàn
+
+  /api/orders/order-refund/{orderId}:
+    get:
+      tags: [Refunds]
+      summary: Chi tiết đơn hoàn hàng
+      parameters:
+        - in: path
+          name: orderId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: storeId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Chi tiết hoàn hàng
+
+  /api/orders/top-products:
+    get:
+      tags: [Reports]
+      summary: Top sản phẩm bán chạy
+      parameters:
+        - in: query
+          name: storeId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: periodType
+          required: true
+          schema: { type: string }
+        - in: query
+          name: periodKey
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 10 }
+      responses:
+        "200":
+          description: Top sản phẩm bán chạy
+
+  /api/orders/top-products/export:
+    get:
+      tags: [Reports]
+      summary: Xuất top sản phẩm bán chạy
+      parameters:
+        - in: query
+          name: format
+          schema:
+            type: string
+            enum: [csv, xlsx, pdf]
+        - in: query
+          name: storeId
+          schema: { type: string }
+      responses:
+        "200":
+          description: File export
+
+  /api/orders/top-customers:
+    get:
+      tags: [Reports]
+      summary: Top khách hàng thân thiết
+      parameters:
+        - in: query
+          name: storeId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: periodType
+          schema: { type: string }
+      responses:
+        "200":
+          description: Top khách hàng
+
+  /api/orders/top-customers/export:
+    get:
+      tags: [Reports]
+      summary: Xuất top khách hàng
+      parameters:
+        - in: query
+          name: format
+          schema:
+            type: string
+            enum: [xlsx]
+        - in: query
+          name: storeId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: File export
+
+  /api/orders/export-all:
+    get:
+      tags: [Reports]
+      summary: Xuất toàn bộ đơn hàng ra Excel
+      parameters:
+        - in: query
+          name: storeId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: File Excel
+
+  /api/orders/stats:
+    get:
+      tags: [Reports]
+      summary: Thống kê đơn hàng
+      parameters:
+        - in: query
+          name: storeId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: periodType
+          schema: { type: string }
+      responses:
+        "200":
+          description: Thống kê đơn hàng
+
+  /api/orders/delete-pending/{id}:
     delete:
-      tags: [Tax]
-      summary: Delete tax declaration
+      tags: [Orders]
+      summary: Hủy đơn pending và hoàn kho
       parameters:
         - in: path
-          name: taxId
+          name: id
           required: true
           schema: { type: string }
-      security: [{ BearerAuth: [] }]
       responses:
-        "204": { description: "Deleted" }
-
-  # ===== Webhook =====
-  /api/webhook/vietqr:
-    post:
-      tags: [Webhook]
-      summary: VietQR payment webhook
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      responses:
-        "200": { description: "Webhook received" }
+        "200":
+          description: Hủy đơn thành công
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

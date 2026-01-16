@@ -1,14 +1,29 @@
-// controllers/userController.js (fix changePassword: thêm confirmPassword check khớp, fix compareString scope - paste thay file)
+// controllers/userController.js
+// (bản đã chỉnh sửa: dùng Cloudinary cho avatar profile, bỏ ImgBBService trong updateProfile)
+
 const User = require("../../models/User");
 const Employee = require("../../models/Employee");
+const Subscription = require("../../models/Subscription");
 const logActivity = require("../../utils/logActivity");
+const ActivityLog = require("../../models/ActivityLog");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const mongoose = require("mongoose");
 const { sendVerificationEmail } = require("../../services/emailService");
+const {
+  ALL_PERMISSIONS,
+  STAFF_DEFAULT_MENU,
+} = require("../../config/constants/permissions");
+
+//  Dùng Cloudinary thay cho ImgBB cho avatar profile
+const {
+  uploadToCloudinary,
+  deleteFromCloudinary,
+} = require("../../utils/cloudinary");
 
 const IS_PROD = process.env.NODE_ENV === "production";
 
-/* ------------------------- 
+/* -------------------------
    Cấu hình / hằng số (.env)
    ------------------------- */
 // Số chữ số OTP, mặc định 6
@@ -28,110 +43,11 @@ const BCRYPT_SALT_ROUNDS = Number(process.env.BCRYPT_SALT_ROUNDS || 10);
 
 // Thời hạn token
 const ACCESS_TOKEN_EXPIRES = process.env.JWT_EXPIRES || "2d";
-const REFRESH_TOKEN_EXPIRES = process.env.REFRESH_TOKEN_EXPIRES || `${process.env.REFRESH_TOKEN_EXPIRES_DAYS || 7}d`;
+const REFRESH_TOKEN_EXPIRES =
+  process.env.REFRESH_TOKEN_EXPIRES ||
+  `${process.env.REFRESH_TOKEN_EXPIRES_DAYS || 7}d`;
 
-// menu để phân quyền
-const ALL_PERMISSIONS = [
-  // store
-  "store:create",
-  "store:view",
-  "store:update",
-  "store:delete",
-  "store:dashboard:view",
-  "store:staff:assign",
-  "store:employee:create",
-  "store:employee:view",
-  "store:employee:update",
-  "store:employee:delete",
-  "store:employee:softDelete",
-  "store:employee:restore",
-  // customers
-  "customers:create",
-  "customers:search",
-  "customers:update",
-  "customers:delete",
-  "customers:top-customers",
-  // loyalty
-  "loyalty:view",
-  "loyalty:manage",
-  // orders
-  "orders:create",
-  "orders:pay",
-  "orders:print",
-  "orders:view",
-  "orders:refund",
-  // reports
-  "reports:top-products",
-  "reports:revenue:view",
-  "reports:revenue:employee",
-  "reports:revenue:export",
-  "reports:financial:view",
-  "reports:financial:export",
-  "reports:financial:list",
-  // products
-  "products:create",
-  "products:view",
-  "products:update",
-  "products:price",
-  "products:delete",
-  "products:image:delete",
-  "products:search",
-  "products:low-stock",
-  // product groups
-  "product-groups:create",
-  "product-groups:view",
-  "product-groups:update",
-  "product-groups:delete",
-  // purchase orders
-  "purchase-orders:create",
-  "purchase-orders:view",
-  "purchase-orders:update",
-  "purchase-orders:delete",
-  // purchase returns
-  "purchase-returns:create",
-  "purchase-returns:view",
-  "purchase-returns:update",
-  "purchase-returns:delete",
-  // stock checks / inventory
-  "inventory:stock-check:create",
-  "inventory:stock-check:view",
-  "inventory:stock-check:detail",
-  "inventory:stock-check:update",
-  "inventory:stock-check:delete",
-  // stock disposal
-  "inventory:disposal:create",
-  "inventory:disposal:view",
-  "inventory:disposal:update",
-  "inventory:disposal:delete",
-  // suppliers
-  "supplier:create",
-  "supplier:view",
-  "supplier:update",
-  "supplier:delete",
-  // taxx
-  "tax:preview",
-  "tax:create",
-  "tax:update",
-  "tax:clone",
-  "tax:delete",
-  "tax:list",
-  "tax:export",
-  // user
-  "users:manage",
-  "users:role:update",
-  "users:menu:update",
-  "users:update",
-  // purchase/supplier related reports/exports
-  "reports:export",
-  "reports:activity-log:view",
-  // cấu hình
-  "settings:activity-log",
-  "settings:payment-method",
-  "notifications:view",
-  "subscription:view",
-  "file:view"
-];
-/* ------------------------- 
+/* -------------------------
    Helper functions
    ------------------------- */
 
@@ -140,7 +56,9 @@ const ALL_PERMISSIONS = [
  * Trả về chuỗi (string) để dễ hash và so sánh.
  */
 const generateOTP = (len = OTP_LENGTH) =>
-  Math.floor(Math.pow(10, len - 1) + Math.random() * 9 * Math.pow(10, len - 1)).toString();
+  Math.floor(
+    Math.pow(10, len - 1) + Math.random() * 9 * Math.pow(10, len - 1)
+  ).toString();
 
 /**
  * Hash một chuỗi (password hoặc OTP) bằng bcrypt.
@@ -162,54 +80,74 @@ const compareString = async (str, hash) => await bcrypt.compare(str, hash);
  * Thời hạn từ ACCESS_TOKEN_EXPIRES.
  */
 const signAccessToken = (payload) =>
-  jwt.sign(payload, process.env.JWT_SECRET || "default_jwt_secret_change_in_env", { expiresIn: ACCESS_TOKEN_EXPIRES });
+  jwt.sign(
+    payload,
+    process.env.JWT_SECRET || "default_jwt_secret_change_in_env",
+    { expiresIn: ACCESS_TOKEN_EXPIRES }
+  );
 
 /**
  * Tạo refresh token (JWT với id, role).
  * Thời hạn từ REFRESH_TOKEN_EXPIRES.
  */
 const signRefreshToken = (payload) =>
-  jwt.sign(payload, process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET, { expiresIn: REFRESH_TOKEN_EXPIRES });
+  jwt.sign(
+    payload,
+    process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET,
+    { expiresIn: REFRESH_TOKEN_EXPIRES }
+  );
 
-/* ------------------------- 
-   Controller: registerManager (đăng ký manager với OTP email)
-   - Tạo user MANAGER, hash pass, sinh OTP hash, gửi email, set isVerified = false
-   ------------------------- */
 /* -------------------------
    Controller: registerManager
-   - Khi Manager đăng ký, mặc định cấp toàn bộ permission (ALL_PERMISSIONS)
-   - Sinh OTP, lưu user, gửi email xác minh
    ------------------------- */
 const registerManager = async (req, res) => {
   try {
     const { username, email, password, fullname } = req.body;
 
-    // Validate input cơ bản
-    if (!username || !email || !password || fullname === undefined) {
-      return res.status(400).json({ message: "Thiếu username, email hoặc password" });
+    // ===== VALIDATE INPUT (CHUẨN TEST CASE) =====
+    if (
+      !username?.trim() ||
+      !email?.trim() ||
+      !password?.trim() ||
+      !fullname?.trim()
+    ) {
+      return res.status(400).json({
+        message: "Thiếu username, email, fullname hoặc password",
+      });
     }
+
     if (password.length < 6) {
-      return res.status(400).json({ message: "Password phải ít nhất 6 ký tự" });
+      return res.status(400).json({
+        message: "Password phải ít nhất 6 ký tự",
+      });
     }
 
-    // Kiểm tra unique username/email
-    const existingUser = await User.findOne({ $or: [{ username }, { email }] });
+    // ===== CHECK UNIQUE USERNAME / EMAIL =====
+    const existingUser = await User.findOne({
+      $or: [
+        { username: username.trim() },
+        { email: email.toLowerCase().trim() },
+      ],
+    });
+
     if (existingUser) {
-      return res.status(400).json({ message: "Username hoặc email đã tồn tại" });
+      return res.status(400).json({
+        message: "Email hoặc username đã tồn tại",
+      });
     }
 
-    // Hash password
+    // ===== HASH PASSWORD =====
     const password_hash = await hashString(password);
 
-    // Sinh OTP và hash
+    // ===== OTP =====
     const otp = generateOTP();
     const otp_hash = await hashString(otp);
     const otp_expires = new Date(Date.now() + OTP_EXPIRE_MINUTES * 60 * 1000);
 
-    // Tạo user MANAGER với menu mặc định đầy đủ
+    // ===== CREATE USER =====
     const newUser = new User({
       username: username.trim(),
-      fullname: fullname?.trim() || "",
+      fullname: fullname.trim(),
       password_hash,
       role: "MANAGER",
       email: email.toLowerCase().trim(),
@@ -217,25 +155,34 @@ const registerManager = async (req, res) => {
       otp_expires,
       otp_attempts: 0,
       isVerified: false,
-      // Gán menu mặc định toàn quyền cho Manager
       menu: ALL_PERMISSIONS,
     });
 
     await newUser.save();
 
-    // Gửi email OTP
+    // ===== CREATE TRIAL =====
+    try {
+      await Subscription.createTrial(newUser._id);
+    } catch (trialErr) {
+      console.error("⚠️ Trial error:", trialErr.message);
+    }
+
+    // ===== SEND OTP EMAIL =====
     await sendVerificationEmail(email, username, otp);
 
-    res.status(201).json({ message: "Đăng ký thành công, kiểm tra email để xác minh OTP" });
+    return res.status(201).json({
+      message: "Đăng ký thành công, kiểm tra email để xác minh OTP",
+    });
   } catch (err) {
     console.error("Lỗi đăng ký:", err.message);
-    res.status(500).json({ message: "Lỗi server khi đăng ký" });
+    return res.status(500).json({
+      message: "Lỗi server khi đăng ký",
+    });
   }
 };
 
-/* ------------------------- 
-   Controller: verifyOtp (xác minh OTP cho register/change pass)
-   - So sánh OTP với hash, check expiry/attempts, nếu OK set isVerified = true hoặc change pass
+/* -------------------------
+   Controller: verifyOtp
    ------------------------- */
 const verifyOtp = async (req, res) => {
   try {
@@ -247,11 +194,15 @@ const verifyOtp = async (req, res) => {
 
     const user = await User.findOne({ email: email.toLowerCase().trim() });
     if (!user || user.otp_hash === null || user.otp_expires < new Date()) {
-      return res.status(400).json({ message: "OTP không hợp lệ hoặc đã hết hạn" });
+      return res
+        .status(400)
+        .json({ message: "OTP không hợp lệ hoặc đã hết hạn" });
     }
 
     if (user.otp_attempts >= OTP_MAX_ATTEMPTS) {
-      return res.status(400).json({ message: "Quá số lần thử, vui lòng yêu cầu OTP mới" });
+      return res
+        .status(400)
+        .json({ message: "Quá số lần thử, vui lòng yêu cầu OTP mới" });
     }
 
     if (!(await compareString(otp, user.otp_hash))) {
@@ -260,7 +211,7 @@ const verifyOtp = async (req, res) => {
       return res.status(400).json({ message: "OTP không đúng, thử lại" });
     }
 
-    // OTP OK, reset OTP fields
+    // OTP OK
     user.otp_hash = null;
     user.otp_expires = null;
     user.otp_attempts = 0;
@@ -274,9 +225,6 @@ const verifyOtp = async (req, res) => {
   }
 };
 
-/* ------------------------- 
-   Controller: login (đăng nhập với pass, check verified/lock, token)
-   ------------------------- */
 const login = async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -287,14 +235,14 @@ const login = async (req, res) => {
 
     const identifier = username.trim();
 
-    // Tìm user bằng username hoặc email (email được chuẩn hóa thành lowercase)
     const user = await User.findOne({
       $or: [{ username: identifier }, { email: identifier.toLowerCase() }],
     });
 
     if (!user) {
-      // Không tiết lộ là username hay email không đúng — giữ message chung
-      return res.status(401).json({ message: "Username hoặc password không đúng" });
+      return res
+        .status(401)
+        .json({ message: "Username hoặc password không đúng" });
     }
 
     if (!user.isVerified) {
@@ -312,21 +260,88 @@ const login = async (req, res) => {
         user.lockUntil = new Date(Date.now() + LOGIN_LOCK_MINUTES * 60 * 1000);
       }
       await user.save();
-      return res.status(401).json({ message: "Username hoặc password không đúng" });
+      return res
+        .status(401)
+        .json({ message: "Username hoặc password không đúng" });
     }
 
-    // Login success, reset counters, update last_login
+    // ========== 👇 SYNC MENU - CẬP NHẬT VÀO DB 👇 ==========
+    let menuUpdated = false;
+
+    if (user.role === "MANAGER") {
+      // MANAGER: Kiểm tra nếu thiếu quyền -> restore toàn bộ
+      const missingPermissions = ALL_PERMISSIONS.filter(
+        (perm) => !user.menu || !user.menu.includes(perm)
+      );
+
+      if (missingPermissions.length > 0) {
+        console.log(
+          `⚠️ MANAGER ${user.username}: thiếu ${missingPermissions.length}/${ALL_PERMISSIONS.length} quyền`
+        );
+
+        // Cập nhật đầy đủ quyền
+        user.menu = [...ALL_PERMISSIONS];
+        menuUpdated = true;
+
+        console.log(` Đã restore full menu cho MANAGER ${user.username}`);
+      }
+    } else if (user.role === "STAFF") {
+      // STAFF: Cập nhật quyền mặc định và LOẠI BỎ các quyền bị cấm
+      const currentMenu = user.menu || [];
+
+      // Danh sách các quyền cấm đối với STAFF theo yêu cầu mới
+      const prohibitedPatterns = [
+        "employees:",
+        "settings:activity-log",
+        "settings:payment-method",
+        "inventory:stock-check",
+      ];
+
+      // 1. Loại bỏ các quyền bị cấm nếu lỡ có trong DB
+      const filteredMenu = currentMenu.filter((perm) => {
+        return !prohibitedPatterns.some((pattern) => perm.startsWith(pattern));
+      });
+
+      // 2. Tìm các quyền mặc định bị thiếu
+      const missingDefaultPermissions = STAFF_DEFAULT_MENU.filter(
+        (perm) => !filteredMenu.includes(perm)
+      );
+
+      // Nếu có sự thay đổi (loại bỏ hoặc bổ sung) -> Cập nhật DB
+      if (
+        missingDefaultPermissions.length > 0 ||
+        filteredMenu.length !== currentMenu.length
+      ) {
+        user.menu = [
+          ...new Set([...filteredMenu, ...missingDefaultPermissions]),
+        ];
+        menuUpdated = true;
+        console.log(
+          ` Đã đồng bộ lại menu cho STAFF ${user.username} (Lọc bỏ quyền cấm & Bổ sung mặc định)`
+        );
+      }
+    }
+    // ========== 👆 END SYNC LOGIC 👆 ==========
+
+    // Login success - cập nhật thông tin login
     user.loginAttempts = 0;
     user.lockUntil = null;
     user.last_login = new Date();
+    user.last_ip = req.ip || req.connection.remoteAddress;
+    user.last_user_agent = req.headers["user-agent"] || "unknown";
+
+    // Lưu vào database
     await user.save();
 
-    // Tạo access token (JWT với id, role)
+    if (menuUpdated) {
+      console.log(
+        `💾 Menu đã được lưu vào MongoDB cho ${user.role} ${user.username}`
+      );
+    }
+
     const accessToken = signAccessToken({ id: user._id, role: user.role });
-    // Tạo refresh token (JWT với id, role)
     const refreshToken = signRefreshToken({ id: user._id, role: user.role });
 
-    // Cookie options
     const cookieOptions = {
       httpOnly: true,
       secure: IS_PROD,
@@ -338,17 +353,28 @@ const login = async (req, res) => {
       path: "/",
     };
 
-    // Set cookie refreshToken
     res.cookie("refreshToken", refreshToken, cookieOptions);
 
-    // Trả access token và info user
+    // === LOG ACTIVITY: LOGIN ===
+    await logActivity({
+      req,
+      user,
+      store: user.current_store ? { _id: user.current_store } : null,
+      action: "auth",
+      entity: "Store",
+      entityId: user.current_store || user._id, // Nếu chưa có store thì log vào profile user
+      entityName: user.current_store ? "Cửa hàng" : "Hệ thống",
+      description: `Đăng nhập vào ${user.current_store ? "Store" : "System"}`,
+    });
+
     res.json({
       message: "Đăng nhập thành công",
-      token: accessToken, // FE dùng header Authorization: Bearer <token>
+      token: accessToken,
       user: {
         id: user._id,
         username: user.username,
         fullname: user.fullname,
+        image: user.image,
         role: user.role,
         email: user.email,
         phone: user.phone,
@@ -363,10 +389,48 @@ const login = async (req, res) => {
     res.status(500).json({ message: "Lỗi server" });
   }
 };
+// ================== LOGOUT ==================
+const logout = async (req, res) => {
+  try {
+    const user = req.user;
 
-/* ------------------------- 
-   Controller public: gửi OTP khi quên mật khẩu (không cần login)
+    const loginTime = user.last_login;
+    const logoutTime = new Date();
+    const duration = loginTime
+      ? Math.round((logoutTime - loginTime) / 60000)
+      : 0;
+
+    user.last_logout = logoutTime;
+    user.online_duration_today = (user.online_duration_today || 0) + duration;
+    await user.save();
+
+    await logActivity({
+      req,
+      action: "auth",
+      entity: "User",
+      entityId: user._id,
+      entityName: user.username,
+      description: `Đăng xuất sau ${duration} phút làm việc`,
+    });
+
+    res.clearCookie("refreshToken", {
+      httpOnly: true,
+      secure: IS_PROD,
+      sameSite: "Lax",
+      path: "/",
+    });
+
+    res.json({ success: true, message: "Đăng xuất thành công" });
+  } catch (err) {
+    console.error("Lỗi logout:", err);
+    res.status(500).json({ success: false, message: "Lỗi server" });
+  }
+};
+
+/* -------------------------
+   OTP quên mật khẩu, resend OTP, đổi mật khẩu quên
    ------------------------- */
+
 const sendForgotPasswordOTP = async (req, res) => {
   try {
     const { email } = req.body;
@@ -376,7 +440,9 @@ const sendForgotPasswordOTP = async (req, res) => {
 
     const user = await User.findOne({ email: email.toLowerCase().trim() });
     if (!user) {
-      return res.status(404).json({ message: "Email không tồn tại trong hệ thống" });
+      return res
+        .status(404)
+        .json({ message: "Email không tồn tại trong hệ thống" });
     }
 
     const otp = generateOTP();
@@ -388,7 +454,13 @@ const sendForgotPasswordOTP = async (req, res) => {
     user.otp_attempts = 0;
     await user.save();
 
-    await sendVerificationEmail(user.email, user.username, otp, OTP_EXPIRE_MINUTES, "forgot-password");
+    await sendVerificationEmail(
+      user.email,
+      user.username,
+      otp,
+      OTP_EXPIRE_MINUTES,
+      "forgot-password"
+    );
 
     res.json({ message: "OTP đã gửi tới email, hết hạn sau 5 phút" });
   } catch (err) {
@@ -397,31 +469,85 @@ const sendForgotPasswordOTP = async (req, res) => {
   }
 };
 
-/* ------------------------- 
-   Controller public: đổi mật khẩu khi quên mật khẩu (không cần login)
-   ------------------------- */
+const resendRegisterOtp = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ message: "Vui lòng nhập email" });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
+
+    if (!user) {
+      return res
+        .status(404)
+        .json({ message: "Email không tồn tại trong hệ thống" });
+    }
+
+    if (user.isVerified) {
+      return res
+        .status(400)
+        .json({ message: "Email đã được xác minh. Vui lòng đăng nhập." });
+    }
+
+    const otp = generateOTP();
+    const otp_hash = await hashString(otp);
+    const otp_expires = new Date(Date.now() + OTP_EXPIRE_MINUTES * 60 * 1000);
+
+    user.otp_hash = otp_hash;
+    user.otp_expires = otp_expires;
+    user.otp_attempts = 0;
+    await user.save();
+
+    await sendVerificationEmail(
+      user.email,
+      user.username,
+      otp,
+      OTP_EXPIRE_MINUTES,
+      "register"
+    );
+
+    res.json({
+      message: "OTP đã được gửi lại thành công",
+      email: user.email,
+    });
+  } catch (err) {
+    console.error("Lỗi gửi lại OTP đăng ký:", err.message);
+    res.status(500).json({ message: "Lỗi server khi gửi lại OTP" });
+  }
+};
+
 const forgotChangePassword = async (req, res) => {
   try {
     const { email, otp, password, confirmPassword } = req.body;
 
     if (!email || !otp || !password || !confirmPassword) {
-      return res.status(400).json({ message: "Thiếu thông tin email, OTP hoặc mật khẩu" });
+      return res
+        .status(400)
+        .json({ message: "Thiếu thông tin email, OTP hoặc mật khẩu" });
     }
 
     if (password.length < 6) {
       return res.status(400).json({ message: "Mật khẩu phải ít nhất 6 ký tự" });
     }
     if (password !== confirmPassword) {
-      return res.status(400).json({ message: "Mật khẩu và xác nhận không khớp" });
+      return res
+        .status(400)
+        .json({ message: "Mật khẩu và xác nhận không khớp" });
     }
 
     const user = await User.findOne({ email: email.toLowerCase().trim() });
     if (!user || !user.otp_hash || user.otp_expires < new Date()) {
-      return res.status(400).json({ message: "OTP không hợp lệ hoặc đã hết hạn" });
+      return res
+        .status(400)
+        .json({ message: "OTP không hợp lệ hoặc đã hết hạn" });
     }
 
     if (user.otp_attempts >= OTP_MAX_ATTEMPTS) {
-      return res.status(400).json({ message: "Quá số lần thử, vui lòng gửi OTP mới" });
+      return res
+        .status(400)
+        .json({ message: "Quá số lần thử, vui lòng gửi OTP mới" });
     }
 
     if (!(await compareString(otp, user.otp_hash))) {
@@ -436,8 +562,8 @@ const forgotChangePassword = async (req, res) => {
     user.otp_expires = null;
     user.otp_attempts = 0;
     await user.save();
+
     await logActivity({
-      //Ghi nhật ký hoạt động
       user,
       store: { _id: user.current_store || null },
       action: "update",
@@ -445,7 +571,9 @@ const forgotChangePassword = async (req, res) => {
       entityId: user._id,
       entityName: user.username || user.email,
       req,
-      description: `Người dùng ${user.username || user.email} đã đổi mật khẩu thông qua chức năng quên mật khẩu`,
+      description: `Người dùng ${
+        user.username || user.email
+      } đã đổi mật khẩu thông qua chức năng quên mật khẩu`,
     });
 
     res.json({ message: "Đổi mật khẩu thành công" });
@@ -455,9 +583,8 @@ const forgotChangePassword = async (req, res) => {
   }
 };
 
-/* ------------------------- 
-   Controller: refreshToken (tùy chọn)
-   - Đọc cookie refreshToken, verify, tạo access token mới
+/* -------------------------
+   Controller: refreshToken
    ------------------------- */
 const refreshToken = async (req, res) => {
   try {
@@ -466,9 +593,14 @@ const refreshToken = async (req, res) => {
 
     let payload;
     try {
-      payload = jwt.verify(token, process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET);
+      payload = jwt.verify(
+        token,
+        process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET
+      );
     } catch (e) {
-      return res.status(401).json({ message: "Refresh token invalid or expired" });
+      return res
+        .status(401)
+        .json({ message: "Refresh token invalid or expired" });
     }
 
     const user = await User.findById(payload.id);
@@ -482,45 +614,36 @@ const refreshToken = async (req, res) => {
   }
 };
 
-/**
- * updateUser
- * - PUT /api/users/:id
- * - Quy tắc:
- *    + Self update: user tự chỉnh được username/email/phone và đổi mật khẩu (phải cung cấp currentPassword)
- *    + Người khác chỉnh user: cần các permission phù hợp trong req.user.menu (vd users:manage, users:role:update, users:menu:update...)
- *    + Nếu payload đổi role => nếu đổi sang "MANAGER" thì tự động gán menu = ALL_PERMISSIONS
- *    + Người chỉnh không được tự do gán menu nếu không có permission users:menu:update (trừ trường hợp role => MANAGER sẽ override)
- */
+/* -------------------------
+   Controller: updateUser (admin/manager)
+   ------------------------- */
+
 const updateUser = async (req, res) => {
   try {
-    const requester = req.user; // req.user được attach bởi verifyToken (plain object)
+    const requester = req.user;
     const targetUserId = req.params.id;
-    const mongoose = require("mongoose");
 
-    // validate target id
     if (!mongoose.Types.ObjectId.isValid(targetUserId)) {
       return res.status(400).json({ message: "User id không hợp lệ" });
     }
 
-    // load target user (mongoose document vì cần save)
     const targetUser = await User.findById(targetUserId);
     if (!targetUser) {
-      return res.status(404).json({ message: "Người dùng mục tiêu không tồn tại" });
+      return res
+        .status(404)
+        .json({ message: "Người dùng mục tiêu không tồn tại" });
     }
 
-    // chuẩn hóa menu requester
     const menu = Array.isArray(requester.menu) ? requester.menu : [];
 
-    // helper kiểm tra permission (global wildcard hỗ trợ)
-    const hasPerm = (p) => menu.includes(p) || menu.includes("*") || menu.includes("all");
+    const hasPerm = (p) =>
+      menu.includes(p) || menu.includes("*") || menu.includes("all");
 
-    // xác định là self hay không
-    const isSelf = String(requester._id || requester.id) === String(targetUserId);
+    const isSelf =
+      String(requester._id || requester.id) === String(targetUserId);
 
-    // Các trường cho self-update
     const selfAllowed = ["username", "email", "phone"];
 
-    // Các field manager-like có thể update nếu có permission
     const managerAllowed = [
       "username",
       "fullname",
@@ -538,47 +661,50 @@ const updateUser = async (req, res) => {
 
     const updates = {};
 
-    // ------------------
-    // 1) Xử lý đổi mật khẩu (nếu có)
-    //    - Self: cần currentPassword
-    //    - Người khác: cần users:manage
-    //    - confirmPassword phải khớp
-    // ------------------
+    // 1) Đổi mật khẩu
     if (req.body.password) {
       const newPass = req.body.password;
       const confirm = req.body.confirmPassword;
       if (!confirm) {
-        return res.status(400).json({ message: "Thiếu confirmPassword khi đổi mật khẩu" });
+        return res
+          .status(400)
+          .json({ message: "Thiếu confirmPassword khi đổi mật khẩu" });
       }
       if (newPass.length < 6) {
-        return res.status(400).json({ message: "Mật khẩu mới phải ít nhất 6 ký tự" });
+        return res
+          .status(400)
+          .json({ message: "Mật khẩu mới phải ít nhất 6 ký tự" });
       }
       if (newPass !== confirm) {
-        return res.status(400).json({ message: "Mật khẩu mới và xác nhận không khớp" });
+        return res
+          .status(400)
+          .json({ message: "Mật khẩu mới và xác nhận không khớp" });
       }
 
       if (isSelf) {
         const current = req.body.currentPassword;
         if (!current) {
-          return res.status(400).json({ message: "Cần currentPassword để đổi mật khẩu" });
+          return res
+            .status(400)
+            .json({ message: "Cần currentPassword để đổi mật khẩu" });
         }
-        // so sánh current với hash
         if (!(await compareString(current, targetUser.password_hash))) {
-          return res.status(401).json({ message: "Mật khẩu hiện tại không đúng" });
+          return res
+            .status(401)
+            .json({ message: "Mật khẩu hiện tại không đúng" });
         }
         updates.password_hash = await hashString(newPass);
       } else {
-        // người khác đổi mật khẩu => phải có quyền quản lý user
         if (!hasPerm("users:manage") && !hasPerm("users:role:update")) {
-          return res.status(403).json({ message: "Không có quyền thay đổi mật khẩu người khác" });
+          return res
+            .status(403)
+            .json({ message: "Không có quyền thay đổi mật khẩu người khác" });
         }
         updates.password_hash = await hashString(newPass);
       }
     }
 
-    // ------------------
-    // 2) Kiểm tra unique username/email nếu có thay đổi
-    // ------------------
+    // 2) Unique username/email
     const wantUsername = req.body.username && req.body.username.trim();
     const wantEmail = req.body.email && req.body.email.trim().toLowerCase();
 
@@ -591,16 +717,11 @@ const updateUser = async (req, res) => {
       if (ex2) return res.status(400).json({ message: "Email đã tồn tại" });
     }
 
-    // ------------------
-    // 3) Duyệt các field khác trong body
-    //    - Self allowed fields xử lý
-    //    - Các field khác require permission tương ứng
-    // ------------------
+    // 3) Các field khác
     for (const [key, val] of Object.entries(req.body)) {
-      // đã xử lý password-related ở trên, skip các field liên quan mật khẩu
-      if (["password", "confirmPassword", "currentPassword"].includes(key)) continue;
+      if (["password", "confirmPassword", "currentPassword"].includes(key))
+        continue;
 
-      // Self-update các trường cơ bản
       if (isSelf && selfAllowed.includes(key)) {
         if (key === "username") updates.username = val.trim();
         else if (key === "email") updates.email = val.trim().toLowerCase();
@@ -608,11 +729,11 @@ const updateUser = async (req, res) => {
         continue;
       }
 
-      // Nếu không self: cần permission (các permission cụ thể)
-      // Cập nhật thông tin chung (username/email/phone)
       if (["username", "email", "phone"].includes(key)) {
         if (!hasPerm("users:update") && !hasPerm("users:manage")) {
-          return res.status(403).json({ message: `Không có quyền cập nhật trường ${key}` });
+          return res
+            .status(403)
+            .json({ message: `Không có quyền cập nhật trường ${key}` });
         }
         if (key === "username") updates.username = val.trim();
         else if (key === "email") updates.email = val.trim().toLowerCase();
@@ -620,51 +741,63 @@ const updateUser = async (req, res) => {
         continue;
       }
 
-      // Thay đổi role
       if (key === "role") {
         if (!hasPerm("users:role:update") && !hasPerm("users:manage")) {
-          return res.status(403).json({ message: "Không có quyền thay đổi role người dùng" });
+          return res
+            .status(403)
+            .json({ message: "Không có quyền thay đổi role người dùng" });
         }
         if (!["MANAGER", "STAFF"].includes(val)) {
           return res.status(400).json({ message: "role không hợp lệ" });
         }
         updates.role = val;
 
-        // Nếu role đổi thành MANAGER thì tự động gán menu full quyền
-        if (String(val).toUpperCase() === "MANAGER") {
-          updates.menu = ALL_PERMISSIONS.slice(); // clone mảng ALL_PERMISSIONS
+        const normalizedRole = String(val).toUpperCase();
+        if (normalizedRole === "MANAGER") {
+          updates.menu = ALL_PERMISSIONS.slice();
+        } else if (normalizedRole === "STAFF") {
+          updates.menu = STAFF_DEFAULT_MENU.slice();
         }
         continue;
       }
 
-      // Thay đổi menu (permissions)
       if (key === "menu") {
-        // Nếu payload có role=MANAGER, menu đã bị override ở trên
-        // Ngược lại, để gán menu thủ công phải có quyền users:menu:update hoặc users:manage
         if (!hasPerm("users:menu:update") && !hasPerm("users:manage")) {
-          return res.status(403).json({ message: "Không có quyền cập nhật menu (permissions)" });
+          return res
+            .status(403)
+            .json({ message: "Không có quyền cập nhật menu (permissions)" });
         }
         if (!Array.isArray(val) || !val.every((v) => typeof v === "string")) {
-          return res.status(400).json({ message: "menu phải là mảng các chuỗi permission" });
+          return res
+            .status(400)
+            .json({ message: "menu phải là mảng các chuỗi permission" });
         }
         updates.menu = val;
         continue;
       }
 
-      // stores, store_roles, current_store
       if (["stores", "store_roles", "current_store"].includes(key)) {
         if (!hasPerm("users:stores:update") && !hasPerm("users:manage")) {
-          return res.status(403).json({ message: `Không có quyền cập nhật trường ${key}` });
+          return res
+            .status(403)
+            .json({ message: `Không có quyền cập nhật trường ${key}` });
         }
 
         if (key === "stores") {
-          if (!Array.isArray(val) || !val.every((s) => mongoose.Types.ObjectId.isValid(s))) {
-            return res.status(400).json({ message: "stores phải là mảng storeId hợp lệ" });
+          if (
+            !Array.isArray(val) ||
+            !val.every((s) => mongoose.Types.ObjectId.isValid(s))
+          ) {
+            return res
+              .status(400)
+              .json({ message: "stores phải là mảng storeId hợp lệ" });
           }
           updates.stores = val;
         } else if (key === "store_roles") {
           if (!Array.isArray(val)) {
-            return res.status(400).json({ message: "store_roles phải là mảng" });
+            return res
+              .status(400)
+              .json({ message: "store_roles phải là mảng" });
           }
           for (const r of val) {
             if (!r || !r.store || !r.role) {
@@ -673,7 +806,9 @@ const updateUser = async (req, res) => {
               });
             }
             if (!mongoose.Types.ObjectId.isValid(r.store)) {
-              return res.status(400).json({ message: "store_roles.store không hợp lệ" });
+              return res
+                .status(400)
+                .json({ message: "store_roles.store không hợp lệ" });
             }
             if (!["OWNER", "STAFF"].includes(r.role)) {
               return res.status(400).json({
@@ -684,146 +819,307 @@ const updateUser = async (req, res) => {
           updates.store_roles = val;
         } else if (key === "current_store") {
           if (val && !mongoose.Types.ObjectId.isValid(val)) {
-            return res.status(400).json({ message: "current_store không hợp lệ" });
+            return res
+              .status(400)
+              .json({ message: "current_store không hợp lệ" });
           }
           updates.current_store = val || null;
         }
         continue;
       }
 
-      // isDeleted / deletedAt / restoredAt
       if (["isDeleted", "deletedAt", "restoredAt"].includes(key)) {
         if (!hasPerm("users:delete") && !hasPerm("users:manage")) {
-          return res.status(403).json({ message: "Không có quyền xóa/khôi phục người dùng" });
+          return res
+            .status(403)
+            .json({ message: "Không có quyền xóa/khôi phục người dùng" });
         }
         updates[key] = val;
         continue;
       }
 
-      // Nếu gặp field không support ở đây -> bỏ qua (không trả lỗi chi tiết để tránh leak)
+      // field khác: bỏ qua
     }
 
     if (Object.keys(updates).length === 0) {
-      return res.status(400).json({ message: "Không có trường hợp lệ để cập nhật" });
+      return res
+        .status(400)
+        .json({ message: "Không có trường hợp lệ để cập nhật" });
     }
 
-    // Áp dụng cập nhật vào document
     Object.assign(targetUser, updates);
     await targetUser.save();
 
-    // Audit log cơ bản
-    console.log(
-      `UPDATE USER: actor=${requester.username || requester.id} target=${
-        targetUser.username || targetUser._id
-      } fields=${Object.keys(updates).join(", ")} time=${new Date().toISOString()}`
-    );
-
-    //Ghi nhật ký hoạt động
     await logActivity({
-      user: requester, // người đang thao tác
+      user: requester,
       store: { _id: requester.current_store },
       action: "update",
       entity: "User",
       entityId: targetUser._id,
       entityName: targetUser.username,
       req,
-      description: `Người dùng ${requester.username} đã cập nhật thông tin của ${
-        isSelf ? "chính mình" : `người dùng ${targetUser.username || targetUser._id}`
+      description: `Người dùng ${
+        requester.username
+      } đã cập nhật thông tin của ${
+        isSelf
+          ? "chính mình"
+          : `người dùng ${targetUser.username || targetUser._id}`
       }. Các trường thay đổi: ${Object.keys(updates).join(", ")}`,
     });
 
-    // Trả về user không chứa password_hash
     const result = targetUser.toObject();
     delete result.password_hash;
     return res.json({ message: "Cập nhật thành công", user: result });
   } catch (err) {
     console.error("updateUser error:", err);
-    return res.status(500).json({ message: "Lỗi server khi cập nhật người dùng" });
+    return res
+      .status(500)
+      .json({ message: "Lỗi server khi cập nhật người dùng" });
   }
 };
 
-/* ------------------------- 
-   Controller: updateProfile (thay đổi thông tin cá nhân – username, email, phone, fullname nếu STAFF)
-   - Chỉ update chính user, unique username/email, update Employee nếu role STAFF
+/* -------------------------
+   Controller: updateProfile (dùng Cloudinary cho avatar)
    ------------------------- */
+
 const updateProfile = async (req, res) => {
   try {
-    const userId = req.user.id || req.user._id; // Từ middleware verifyToken
-    const { username, email, phone, fullname } = req.body;
+    const userId = req.user.id || req.user._id;
+    console.log("👤 Updating profile for user:", userId);
+
+    if (!userId) {
+      return res.status(400).json({ message: "User ID not found in token" });
+    }
+
+    if (!req.body && !req.file) {
+      console.error(" No data received");
+      return res.status(400).json({
+        message: "Không có dữ liệu để cập nhật",
+      });
+    }
+
+    const { username, email, phone, fullname, removeImage } = req.body || {};
 
     const user = await User.findById(userId);
     if (!user) {
-      return res.status(404).json({ message: "User không tồn tại" });
+      return res.status(404).json({ message: "Người dùng không tồn tại" });
     }
 
-    // Validate unique username/email nếu thay đổi
-    const query = {};
-    if (username && username.trim() !== user.username) {
-      query.username = username.trim();
+    console.log(" Current user found:", {
+      id: user._id,
+      username: user.username,
+      email: user.email,
+      image: user.image,
+      avatarPublicId: user.avatarPublicId,
+    });
+
+    const changedFields = [];
+    let hasChanges = false;
+
+    // ============ HANDLE AVATAR REMOVE ============
+    if (removeImage === "true" || removeImage === true) {
+      if (user.avatarPublicId) {
+        try {
+          await deleteFromCloudinary(user.avatarPublicId, "image");
+          console.log("🗑️ Avatar deleted from Cloudinary");
+        } catch (e) {
+          console.warn("⚠️ Không xoá được avatar trên Cloudinary:", e.message);
+        }
+      }
+      user.image = null;
+      user.avatarPublicId = null;
+      changedFields.push("image");
+      hasChanges = true;
     }
-    if (email && email.trim() !== user.email) {
-      query.email = email.toLowerCase().trim();
-    }
-    if (Object.keys(query).length > 0) {
-      const existing = await User.findOne(query);
-      if (existing) {
-        return res.status(400).json({ message: "Username hoặc email đã tồn tại" });
+
+    // ============ HANDLE AVATAR UPLOAD (multer.diskStorage) ============
+    if (req.file) {
+      try {
+        console.log("🔄 Processing avatar upload via Cloudinary...");
+
+        const allowedMimes = [
+          "image/jpeg",
+          "image/png",
+          "image/jpg",
+          "image/gif",
+          "image/webp",
+        ];
+        if (!allowedMimes.includes(req.file.mimetype)) {
+          return res.status(400).json({
+            message:
+              "Định dạng ảnh không hợp lệ. Chỉ chấp nhận JPEG, PNG, JPG, GIF, WEBP",
+          });
+        }
+
+        const maxSize = 5 * 1024 * 1024;
+        if (req.file.size > maxSize) {
+          return res.status(400).json({
+            message: "Kích thước ảnh quá lớn. Tối đa 5MB",
+          });
+        }
+
+        // req.file.path phải được multer cấu hình dest (disk) giống fileController
+        const localPath = req.file.path;
+        const folder = `avatars/${userId}`;
+
+        const result = await uploadToCloudinary(localPath, folder, "image");
+        if (!result || !result.secure_url || !result.public_id) {
+          return res.status(500).json({
+            message: "Upload ảnh lên Cloudinary thất bại",
+          });
+        }
+
+        // Xoá avatar cũ nếu có
+        if (user.avatarPublicId && user.avatarPublicId !== result.public_id) {
+          try {
+            await deleteFromCloudinary(user.avatarPublicId, "image");
+          } catch (e) {
+            console.warn(
+              "⚠️ Không xoá được avatar cũ trên Cloudinary:",
+              e.message
+            );
+          }
+        }
+
+        user.image = result.secure_url;
+        user.avatarPublicId = result.public_id;
+
+        changedFields.push("image");
+        hasChanges = true;
+
+        console.log(" Avatar uploaded to Cloudinary:", result.secure_url);
+      } catch (uploadError) {
+        console.error(" Avatar upload error:", uploadError);
+        return res.status(500).json({
+          message: "Lỗi xử lý file ảnh",
+          error: uploadError.message,
+        });
       }
     }
 
-    // Update user fields
-    if (username) user.username = username.trim();
-    if (email) user.email = email.toLowerCase().trim();
-    if (phone !== undefined) user.phone = phone.trim();
-    if (fullname !== undefined) user.fullname = fullname.trim();
+    // ============ HANDLE TEXT FIELDS ============
+
+    if (username && username.trim() !== user.username) {
+      const existingUsername = await User.findOne({
+        username: username.trim(),
+        _id: { $ne: userId },
+      });
+      if (existingUsername) {
+        return res.status(400).json({ message: "Username đã tồn tại" });
+      }
+      user.username = username.trim();
+      changedFields.push("username");
+      hasChanges = true;
+    }
+
+    if (email && email.trim().toLowerCase() !== user.email) {
+      const existingEmail = await User.findOne({
+        email: email.trim().toLowerCase(),
+        _id: { $ne: userId },
+      });
+      if (existingEmail) {
+        return res.status(400).json({ message: "Email đã tồn tại" });
+      }
+      user.email = email.trim().toLowerCase();
+      changedFields.push("email");
+      hasChanges = true;
+    }
+
+    if (phone !== undefined && phone.trim() !== (user.phone || "")) {
+      user.phone = phone.trim();
+      changedFields.push("phone");
+      hasChanges = true;
+    }
+
+    if (fullname !== undefined && fullname.trim() !== (user.fullname || "")) {
+      user.fullname = fullname.trim();
+      changedFields.push("fullname");
+      hasChanges = true;
+    }
+
+    if (!hasChanges) {
+      return res.status(400).json({
+        message: "Không có thông tin nào thay đổi",
+      });
+    }
 
     await user.save();
+    console.log(" User updated successfully");
 
-    // Nếu role STAFF, update Employee fullname/phone (fullname optional nếu input)
+    // Sync Employee nếu STAFF
     if (user.role === "STAFF") {
       const employee = await Employee.findOne({ user_id: userId });
       if (employee) {
-        if (fullname) employee.fullname = fullname.trim(); // Thêm: fullname optional (nếu input, update Employee)
-        if (phone !== undefined) employee.phone = phone.trim(); // Sync phone vào Employee (optional, default '')
-        await employee.save();
+        let employeeChanged = false;
+
+        // ⚠️ Lưu ý: Employee model dùng fullName (camelCase), User model dùng fullname (camelCase)
+        if (fullname && changedFields.includes("fullname")) {
+          employee.fullName = fullname.trim(); // 🔴 FIX: fullName thay vì fullname
+          employeeChanged = true;
+        }
+
+        // 🔴 FIX: phone có thể là empty string "" nên dùng changedFields để kiểm tra thay vì `if (phone &&...)`
+        if (changedFields.includes("phone")) {
+          employee.phone = phone?.trim() || "";
+          employeeChanged = true;
+        }
+
+        if (user.image && changedFields.includes("image")) {
+          employee.image = user.image;
+          employeeChanged = true;
+        }
+
+        if (employeeChanged) {
+          await employee.save();
+          console.log(
+            " Employee data synced with fullName:",
+            employee.fullName
+          );
+        }
       }
     }
-    //Ghi nhật ký hoạt động
-    await logActivity({
-      user, // req.user cũng được, nhưng user đang là document chuẩn
-      store: { _id: user.current_store },
-      action: "update",
-      entity: "User",
-      entityId: user._id,
-      entityName: user.username,
-      req,
-      description: `Người dùng ${user.username} đã cập nhật thông tin cá nhân: ${[
-        username ? "username" : null,
-        fullname ? "fullname" : null,
-        email ? "email" : null,
-        phone ? "phone" : null,
-        fullname ? "fullname" : null,
-      ]
-        .filter(Boolean)
-        .join(", ")}`,
+
+    if (changedFields.length > 0) {
+      await logActivity({
+        user,
+        store: { _id: user.current_store },
+        action: "update",
+        entity: "User",
+        entityId: user._id,
+        entityName: user.username,
+        req,
+        description: `Người dùng ${
+          user.username
+        } đã cập nhật thông tin cá nhân: ${changedFields.join(", ")}`,
+      });
+    }
+
+    const updatedUser = await User.findById(userId)
+      .select("-password_hash")
+      .lean();
+
+    res.json({
+      message: "Profile updated successfully",
+      user: updatedUser,
     });
-    // Trả user updated (populate nếu cần)
-    const updatedUser = await User.findById(userId).lean();
-    res.json({ message: "Cập nhật thông tin thành công", user: updatedUser });
   } catch (err) {
-    console.error("Lỗi cập nhật profile:", err.message);
-    res.status(500).json({ message: "Lỗi server khi cập nhật profile" });
+    console.error(" Lỗi cập nhật profile:", err);
+    console.error("Error stack:", err.stack);
+    res.status(500).json({
+      message: "Lỗi server khi cập nhật profile",
+      error: err.message,
+    });
   }
 };
 
-/* ------------------------- 
-   Controller: sendPasswordOTP (gửi OTP đổi pass – chỉ nếu email có)
-   - Sinh OTP, hash, gửi email, set expiry/attempts
+/* -------------------------
+   sendPasswordOTP & changePassword
    ------------------------- */
+
 const sendPasswordOTP = async (req, res) => {
   try {
-    const userId = req.user.id || req.user._id; // Từ middleware verifyToken
-    const { email } = req.body; // Email (optional, dùng email user nếu ko input)
+    const userId = req.user.id || req.user._id;
+    const { email } = req.body;
 
     const user = await User.findById(userId);
     if (!user) {
@@ -837,19 +1133,22 @@ const sendPasswordOTP = async (req, res) => {
       });
     }
 
-    // Sinh OTP và hash
     const otp = generateOTP();
     const otp_hash = await hashString(otp);
     const otp_expires = new Date(Date.now() + OTP_EXPIRE_MINUTES * 60 * 1000);
 
-    // Lưu OTP vào user (reset nếu có cũ)
     user.otp_hash = otp_hash;
     user.otp_expires = otp_expires;
     user.otp_attempts = 0;
     await user.save();
 
-    // Gửi email OTP (đúng tham số, thêm type "change-password" customize)
-    await sendVerificationEmail(useEmail, user.username, otp, OTP_EXPIRE_MINUTES, "change-password");
+    await sendVerificationEmail(
+      useEmail,
+      user.username,
+      otp,
+      OTP_EXPIRE_MINUTES,
+      "change-password"
+    );
 
     res.json({
       message: "OTP đổi mật khẩu đã gửi đến email, hết hạn sau 5 phút",
@@ -860,23 +1159,25 @@ const sendPasswordOTP = async (req, res) => {
   }
 };
 
-/* ------------------------- 
-   Controller: changePassword (xác minh OTP + đổi pass mới)
-   - So sánh OTP, nếu OK hash password mới, reset OTP
-   ------------------------- */
 const changePassword = async (req, res) => {
   try {
-    const userId = req.user.id || req.user._id; // Từ middleware verifyToken
-    const { password, confirmPassword, otp } = req.body; // Password mới + confirmPassword + OTP
+    const userId = req.user.id || req.user._id;
+    const { password, confirmPassword, otp } = req.body;
 
     if (!password || !confirmPassword || !otp) {
-      return res.status(400).json({ message: "Thiếu mật khẩu mới, xác nhận mật khẩu hoặc OTP" });
+      return res
+        .status(400)
+        .json({ message: "Thiếu mật khẩu mới, xác nhận mật khẩu hoặc OTP" });
     }
     if (password.length < 6) {
-      return res.status(400).json({ message: "Mật khẩu mới phải ít nhất 6 ký tự" });
+      return res
+        .status(400)
+        .json({ message: "Mật khẩu mới phải ít nhất 6 ký tự" });
     }
     if (password !== confirmPassword) {
-      return res.status(400).json({ message: "Mật khẩu mới và xác nhận không khớp" });
+      return res
+        .status(400)
+        .json({ message: "Mật khẩu mới và xác nhận không khớp" });
     }
 
     const user = await User.findById(userId);
@@ -885,11 +1186,15 @@ const changePassword = async (req, res) => {
     }
 
     if (user.otp_hash === null || user.otp_expires < new Date()) {
-      return res.status(400).json({ message: "OTP không hợp lệ hoặc đã hết hạn" });
+      return res
+        .status(400)
+        .json({ message: "OTP không hợp lệ hoặc đã hết hạn" });
     }
 
     if (user.otp_attempts >= OTP_MAX_ATTEMPTS) {
-      return res.status(400).json({ message: "Quá số lần thử, vui lòng gửi OTP mới" });
+      return res
+        .status(400)
+        .json({ message: "Quá số lần thử, vui lòng gửi OTP mới" });
     }
 
     if (!(await compareString(otp, user.otp_hash))) {
@@ -898,14 +1203,13 @@ const changePassword = async (req, res) => {
       return res.status(400).json({ message: "OTP không đúng, thử lại" });
     }
 
-    // OTP OK, hash password mới, reset OTP
     const password_hash = await hashString(password);
     user.password_hash = password_hash;
     user.otp_hash = null;
     user.otp_expires = null;
     user.otp_attempts = 0;
     await user.save();
-    // Ghi nhật ký hoạt động
+
     await logActivity({
       user,
       store: { _id: user.current_store || null },
@@ -914,7 +1218,9 @@ const changePassword = async (req, res) => {
       entityId: user._id,
       entityName: user.username || user.email,
       req,
-      description: `Người dùng ${user.username || user.email} đã đổi mật khẩu thành công (xác thực bằng OTP)`,
+      description: `Người dùng ${
+        user.username || user.email
+      } đã đổi mật khẩu thành công (xác thực bằng OTP)`,
     });
 
     res.json({ message: "Đổi mật khẩu thành công" });
@@ -924,58 +1230,88 @@ const changePassword = async (req, res) => {
   }
 };
 
-//Chỉ manager xóa staff khác, check store match current_store, set isDeleted=true + deletedAt=now
+const getPermissionCatalog = async (req, res) => {
+  try {
+    return res.json({
+      permissions: ALL_PERMISSIONS,
+      staffDefault: STAFF_DEFAULT_MENU,
+    });
+  } catch (err) {
+    console.error("Lỗi lấy danh sách quyền:", err.message);
+    return res
+      .status(500)
+      .json({ message: "Lỗi server khi lấy danh sách quyền" });
+  }
+};
+
+/* -------------------------
+   softDeleteUser & restoreUser
+   ------------------------- */
+
 const softDeleteUser = async (req, res) => {
   try {
-    const userId = req.user.id || req.user._id; // Manager ID từ verifyToken
-    const { targetUserId } = req.body; // Target staff ID để xóa
+    const userId = req.user.id || req.user._id;
+    const { targetUserId } = req.body;
 
     if (!targetUserId) {
       return res.status(400).json({ message: "Thiếu targetUserId" });
     }
-    //check xem có phải role manager đang thao tác không
-    const manager = await User.findById(userId);
-    if (!manager || manager.role !== "MANAGER") {
-      return res.status(403).json({ message: "Chỉ manager mới được xóa nhân viên" });
+
+    const requester = await User.findById(userId);
+    if (!requester) {
+      return res.status(404).json({ message: "Người dùng không tồn tại" });
     }
-    //check nhân viên trong chính store đó
+
+    const store = req.store;
+    if (!store) {
+      return res.status(400).json({ message: "Không xác định được cửa hàng" });
+    }
+
     const targetUser = await User.findById(targetUserId);
     if (!targetUser || targetUser.role !== "STAFF") {
       return res.status(404).json({ message: "Nhân viên không tồn tại" });
     }
-    //check nhân viên đã bị xoá từ trước hay chưa
+
     if (targetUser.isDeleted) {
-      return res.status(400).json({ message: "Tài khoản nhân viên này đã bị xoá trước đó rồi!" });
+      return res
+        .status(400)
+        .json({ message: "Tài khoản nhân viên này đã bị xoá trước đó rồi!" });
     }
-    // Check quyền: Manager chỉ xóa staff bind store hiện tại (current_store match)
-    if (String(manager.current_store) !== String(targetUser.current_store)) {
-      return res.status(403).json({ message: "Bạn chỉ xóa được nhân viên ở cửa hàng hiện tại" });
+
+    // Kiểm tra xem targetUser có thuộc store này không
+    const isMember =
+      targetUser.stores.some((s) => String(s) === String(store._id)) ||
+      String(targetUser.current_store) === String(store._id);
+
+    if (!isMember) {
+      return res
+        .status(403)
+        .json({ message: "Nhân viên không thuộc cửa hàng này" });
     }
-    // Xóa mềm: đặt isDeleted=true, deletedAt=now
+
     targetUser.isDeleted = true;
     targetUser.deletedAt = new Date();
     await targetUser.save();
 
-    // Optional: Xóa Employee bind (set isDeleted=true nếu Employee có field)
     const employee = await Employee.findOne({ user_id: targetUserId });
     if (employee) {
-      employee.isDeleted = true; //đặt isDeleted = true ở models/Employee.js để không bị mất dữ liệu
+      employee.isDeleted = true;
       await employee.save();
     }
-    // ghi nhật ký hoạt động
+
     await logActivity({
-      user: manager, // người thực hiện
-      store: { _id: manager.current_store },
+      user: requester,
+      store: { _id: store._id },
       action: "delete",
       entity: "User",
       entityId: targetUser._id,
       entityName: targetUser.username,
       req,
-      description: `Manager ${manager.username} đã xóa mềm nhân viên ${targetUser.username} tại cửa hàng ${manager.current_store}`,
+      description: `${requester.username} đã xóa mềm nhân viên ${targetUser.username} tại cửa hàng ${store.name}`,
     });
 
     console.log(
-      `Manager ${manager.username} xóa mềm nhân viên ${targetUser.username} ở store ${manager.current_store}`
+      `${requester.username} xóa mềm nhân viên ${targetUser.username} ở store ${store._id}`
     );
     res.json({ message: "Xóa mềm nhân viên thành công" });
   } catch (err) {
@@ -984,19 +1320,23 @@ const softDeleteUser = async (req, res) => {
   }
 };
 
-// khôi phục lại tài khoản của nhân viên
 const restoreUser = async (req, res) => {
   try {
-    const userId = req.user.id || req.user._id; // Manager ID từ verifyToken
-    const { targetUserId } = req.body; // Target staff ID để khôi phục
+    const userId = req.user.id || req.user._id;
+    const { targetUserId } = req.body;
 
     if (!targetUserId) {
       return res.status(400).json({ message: "Thiếu targetUserId" });
     }
 
-    const manager = await User.findById(userId);
-    if (!manager || manager.role !== "MANAGER") {
-      return res.status(403).json({ message: "Chỉ manager mới được khôi phục nhân viên" });
+    const requester = await User.findById(userId);
+    if (!requester) {
+      return res.status(404).json({ message: "Người dùng không tồn tại" });
+    }
+
+    const store = req.store;
+    if (!store) {
+      return res.status(400).json({ message: "Không xác định được cửa hàng" });
     }
 
     const targetUser = await User.findById(targetUserId);
@@ -1008,38 +1348,40 @@ const restoreUser = async (req, res) => {
       return res.status(400).json({ message: "Nhân viên chưa bị xóa mềm" });
     }
 
-    // Check quyền: Manager chỉ khôi phục staff bind store hiện tại (current_store match)
-    if (String(manager.current_store) !== String(targetUser.current_store)) {
-      return res.status(403).json({
-        message: "Bạn chỉ khôi phục được nhân viên ở cửa hàng hiện tại",
-      });
+    // Kiểm tra xem targetUser có thuộc store này không
+    const isMember =
+      targetUser.stores.some((s) => String(s) === String(store._id)) ||
+      String(targetUser.current_store) === String(store._id);
+
+    if (!isMember) {
+      return res
+        .status(403)
+        .json({ message: "Nhân viên không thuộc cửa hàng này" });
     }
 
-    // Khôi phục: set isDeleted=false, restoredAt=now
     targetUser.isDeleted = false;
     targetUser.restoredAt = new Date();
     await targetUser.save();
 
-    // Optional: Khôi phục Employee bind (set isDeleted=false)
     const employee = await Employee.findOne({ user_id: targetUserId });
     if (employee) {
       employee.isDeleted = false;
       await employee.save();
     }
-    // Ghi nhật ký hoạt động
+
     await logActivity({
-      user: manager,
-      store: { _id: manager.current_store },
+      user: requester,
+      store: { _id: store._id },
       action: "restore",
       entity: "User",
       entityId: targetUser._id,
       entityName: targetUser.username,
       req,
-      description: `Manager ${manager.username} đã khôi phục nhân viên ${targetUser.username} tại cửa hàng ${manager.current_store}`,
+      description: `${requester.username} đã khôi phục nhân viên ${targetUser.username} tại cửa hàng ${store.name}`,
     });
 
     console.log(
-      `Manager ${manager.username} khôi phục nhân viên ${targetUser.username} ở store ${manager.current_store}`
+      `${requester.username} khôi phục nhân viên ${targetUser.username} ở store ${store._id}`
     );
     res.json({ message: "Khôi phục nhân viên thành công" });
   } catch (err) {
@@ -1052,6 +1394,7 @@ module.exports = {
   registerManager,
   verifyOtp,
   login,
+  logout,
   sendForgotPasswordOTP,
   forgotChangePassword,
   refreshToken,
@@ -1061,4 +1404,6 @@ module.exports = {
   changePassword,
   softDeleteUser,
   restoreUser,
+  resendRegisterOtp,
+  getPermissionCatalog,
 };

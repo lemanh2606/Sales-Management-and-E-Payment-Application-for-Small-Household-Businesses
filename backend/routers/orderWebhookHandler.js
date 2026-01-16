@@ -1,5 +1,7 @@
 // routers/orderWebhookHandler.js
 const { verifyPaymentWithPayOS } = require("../services/payOSService");
+const Notification = require("../models/Notification");
+const Order = require("../models/Order");
 
 module.exports = async (req, res) => {
   try {
@@ -7,7 +9,9 @@ module.exports = async (req, res) => {
     console.log("Headers:", JSON.stringify(req.headers, null, 2));
     console.log("Body raw:", req.body.toString("utf8"));
     // Nếu middleware express.raw() được gắn cho route thì req.body là Buffer
-    const rawBody = Buffer.isBuffer(req.body) ? req.body.toString("utf8") : JSON.stringify(req.body);
+    const rawBody = Buffer.isBuffer(req.body)
+      ? req.body.toString("utf8")
+      : JSON.stringify(req.body);
 
     // Parse JSON để truyền cho service/log
     let parsed;
@@ -19,28 +23,53 @@ module.exports = async (req, res) => {
     }
 
     console.log("Nhận webhook PayOS (raw):", rawBody);
-    console.log("Nhận webhook PayOS (parsed):", JSON.stringify(parsed, null, 2));
+    console.log(
+      "Nhận webhook PayOS (parsed):",
+      JSON.stringify(parsed, null, 2)
+    );
 
     // Gọi service verify, truyền cả parsed object và raw string
     const ok = await verifyPaymentWithPayOS(parsed, rawBody);
 
     if (ok) {
-      console.log(`✅ Đã nhận tiền, đặt trạng thái 'paid' cho orderRef=${parsed.data?.orderCode}`);
+      // Tìm order thật bằng paymentRef
+      const order = await Order.findOne({
+        paymentRef: parsed.data?.orderCode.toString(),
+      });
+      if (!order) {
+        console.error(
+          "Không tìm thấy order tương ứng với paymentRef",
+          parsed.data?.orderCode
+        );
+        return res.status(404).send("Order not found");
+      }
+
+      console.log(
+        ` Đã nhận tiền, đặt trạng thái 'paid' cho orderRef=${parsed.data?.orderCode}`
+      );
+
+      //  CẬP NHẬT TRẠNG THÁI PAID TRONG DATABASE
+      order.status = "paid";
+      await order.save();
+
+      //  XỬ LÝ ĐIỂM TÍCH LŨY (CỘNG THƯỞNG + TRỪ ĐÃ DÙNG)
+      await Order.processLoyalty(order._id);
+
       // 🔔 Emit socket thông báo thanh toán thành công (cho QR)
       const io = req.app.get("io");
       if (io) {
         io.emit("payment_success", {
-          ref: parsed.data?.orderCode,
+          orderId: order._id.toString(), //  chính xác FE dùng để print
+          ref: order.paymentRef,
           amount: parsed.data?.amount,
           method: "qr",
-          message: `Đơn hàng ${parsed.data?.orderCode} (QR) đã thanh toán thành công!`,
+          message: `Đơn hàng ${order._id} đã thanh toán thành công! Phương thức QR CODE`,
         });
-        console.log(`🔔 [SOCKET] Gửi thông báo: Chuyển khoản QR thành công, số tiền (${parsed.data?.amount}đ) - Mã đơn hàng: ${parsed.data?.orderCode}`);
       }
 
       return res.status(200).json({ message: "Webhook received" });
     } else {
-      console.log("❌ Webhook không hợp lệ hoặc sai chữ ký");
+      console.log(" Webhook không hợp lệ hoặc sai chữ ký");
       return res.status(400).json({ message: "Invalid webhook" });
     }
   } catch (err) {

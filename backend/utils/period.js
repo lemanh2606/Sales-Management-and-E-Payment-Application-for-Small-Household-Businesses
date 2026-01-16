@@ -1,16 +1,29 @@
-// utils/period.js (fix periodToRange: thêm case custom với monthFrom/monthTo, tính đầu/cuối tháng UTC)
+// backend/utils/period.js
 //parse theo "YYYY-MM" chứ không phải "MM-YYYY"
 function periodToRange(periodType, periodKey, monthFrom, monthTo) {
   let start, end;
 
-  if (periodType === "month") {
+  if (periodType === "day") {
+    // periodKey dạng "YYYY-MM-DD"
+    const [year, month, day] = periodKey.split("-").map(Number);
+    start = new Date(Date.UTC(year, month - 1, day, 0, 0, 0)); // Bắt đầu lúc 00:00 UTC
+    end = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999)); // Kết thúc 23:59:59.999 UTC
+  } else if (periodType === "month") {
     const [year, month] = periodKey.split("-").map(Number); // Parse "2025-10" → year 2025, month 10
     start = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0)); // Ngày đầu tháng UTC
     end = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999)); // Ngày cuối tháng UTC + ms 999 inclusive
   } else if (periodType === "quarter") {
-    const [yearStr, quarterStr] = periodKey.split("-Q"); // Parse "2025-Q4" → yearStr "2025", quarterStr "4"
-    const year = Number(yearStr);
-    const q = Number(quarterStr);
+    // periodKey có thể là "Q1" hoặc "2025-Q1"
+    let year, q;
+    if (periodKey.includes("-")) {
+      const [yearStr, quarterStr] = periodKey.split("-Q"); // Parse "2025-Q4" → yearStr "2025", quarterStr "4"
+      year = Number(yearStr);
+      q = Number(quarterStr);
+    } else {
+      // periodKey là "Q1", Q2, etc - use current year
+      year = new Date().getUTCFullYear();
+      q = Number(periodKey.replace("Q", ""));
+    }
 
     const startMonth = (q - 1) * 3; // Q1 = 0, Q2 = 3, Q3 = 6, Q4 = 9
     start = new Date(Date.UTC(year, startMonth, 1, 0, 0, 0)); // Ngày đầu quý UTC
@@ -27,15 +40,14 @@ function periodToRange(periodType, periodKey, monthFrom, monthTo) {
     end = new Date(Date.UTC(toYear, toMonth, 0, 23, 59, 59, 999)); // Ngày cuối tháng to UTC + ms 999
   }
 
-  console.log(
-    "Debug khoảng thời gian:",
-    periodType,
-    periodKey,
-    "start",
-    start.toISOString(),
-    "end",
-    end.toISOString()
-  );
+  // ADJUST FOR VIETNAM TIME (UTC+7)
+  // Backend lưu UTC. Client gửi ngày (ví dụ 2025-01-01).
+  // Mong muốn: 2025-01-01 00:00:00 VN -> 2025-01-01 23:59:59 VN
+  // Tương đương: 2024-12-31 17:00:00 UTC -> 2024-01-01 16:59:59 UTC
+  // Logic hiện tại đang tạo theo UTC 00:00 -> 23:59. Cần trừ đi 7 giờ.
+  const OFFSET_MS = 7 * 60 * 60 * 1000;
+  if (start) start = new Date(start.getTime() - OFFSET_MS);
+  if (end) end = new Date(end.getTime() - OFFSET_MS);
 
   return { start, end };
 }

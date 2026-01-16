@@ -162,13 +162,13 @@ export default function LoginPage() {
 
                                 <div className="flex items-center justify-between">
                                     <label className="inline-flex items-center gap-2 text-sm text-gray-600">
-                                        {/* <input
+                                        <input
                                             type="checkbox"
                                             checked={remember}
                                             onChange={() => setRemember((r) => !r)}
                                             className="h-4 w-4 rounded border-gray-300"
                                         />
-                                        <span>Ghi nhớ đăng nhập</span> */}
+                                        <span>Ghi nhớ đăng nhập</span>
                                     </label>
 
                                     <button

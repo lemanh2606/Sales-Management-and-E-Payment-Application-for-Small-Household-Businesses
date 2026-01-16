@@ -1,39 +1,76 @@
-// models/Product.js (xóa alertCount không dùng, giữ lowStockAlerted + pre-save hook reset - paste thay schema)
+// backend/models/Product.js
 const mongoose = require("mongoose");
 
-const productSchema = new mongoose.Schema({
-  name: { type: String, required: true, maxlength: 150, trim: true },
-  description: { type: String, maxlength: 500, trim: true },
-  sku: { type: String, maxlength: 100, trim: true }, // Mã SKU sản phẩm - unique per store
-  price: { type: mongoose.Schema.Types.Decimal128, required: true },
-  cost_price: { type: mongoose.Schema.Types.Decimal128, required: true },
-  stock_quantity: { type: Number, required: true, default: 0 },
-  min_stock: { type: Number, default: 0 }, // Tồn kho tối thiểu
-  max_stock: { type: Number, default: null }, // Tồn kho tối đa
-  unit: { type: String, maxlength: 50, trim: true },
-  status: { 
-    type: String, 
-    enum: ['Đang kinh doanh', 'Ngừng kinh doanh', 'Ngừng bán'],
-    default: 'Đang kinh doanh' 
-  }, // Trạng thái sản phẩm
-  store_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Store', required: true },
-  supplier_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Supplier' },
-  group_id: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductGroup' }, // Nhóm sản phẩm
-  image: {
-    url: { type: String, default: null }, // Cloudinary URL
-    public_id: { type: String, default: null } // Cloudinary public_id for deletion
+const productSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true, maxlength: 150, trim: true },
+    description: { type: String, maxlength: 500, trim: true },
+    sku: { type: String, maxlength: 100, trim: true },
+    price: { type: mongoose.Schema.Types.Decimal128, required: true },
+    cost_price: { type: mongoose.Schema.Types.Decimal128, required: true },
+    stock_quantity: { type: Number, required: true, default: 0 },
+    min_stock: { type: Number, default: 0 },
+    max_stock: { type: Number, default: null },
+    unit: { type: String, maxlength: 50, trim: true },
+    status: {
+      type: String,
+      enum: ["Đang kinh doanh", "Ngừng kinh doanh", "Ngừng bán"],
+      default: "Đang kinh doanh",
+    },
+
+    // ===== Thông tin pháp lý & Hóa đơn (Thông tư 88/40/78) =====
+    tax_rate: { type: Number, default: 0 }, // % Thuế GTGT (0, 5, 8, 10). -1: Không chịu thuế
+    origin: { type: String, maxlength: 100, trim: true, default: "" }, // Xuất xứ (Việt Nam, TQ...)
+    brand: { type: String, maxlength: 100, trim: true, default: "" }, // Thương hiệu
+    warranty_period: { type: String, maxlength: 100, default: "" }, // Thời gian bảo hành (12 tháng)
+
+    // ===== Cửa hàng & kho =====
+    store_id: { type: mongoose.Schema.Types.ObjectId, ref: "Store", required: true },
+
+    /**
+     * Kho mặc định của sản phẩm (khi tạo phiếu nhập auto chọn)
+     * Có thể null => dùng default_warehouse_id của Store
+     */
+    default_warehouse_id: { type: mongoose.Schema.Types.ObjectId, ref: "Warehouse", default: null },
+
+    // Snapshot tên kho mặc định tại thời điểm gán (phòng sau này đổi tên kho)
+    default_warehouse_name: { type: String, trim: true, default: "" },
+
+    // ===== Liên kết NCC & nhóm =====
+    supplier_id: { type: mongoose.Schema.Types.ObjectId, ref: "Supplier" },
+    group_id: { type: mongoose.Schema.Types.ObjectId, ref: "ProductGroup" },
+
+    image: {
+      url: { type: String, default: null },
+      public_id: { type: String, default: null },
+    },
+
+    // ===== Quản lý Lô & Hạn sử dụng =====
+    batches: [
+      {
+        batch_no: { type: String, trim: true },
+        expiry_date: { type: Date, default: null },
+        cost_price: { type: Number, default: 0 }, // Giá vốn của lô này
+        selling_price: { type: Number, default: 0 }, // Giá bán của lô này
+        quantity: { type: Number, default: 0 },   // Số lượng tồn của lô này (ban đầu = nhập, sau này trừ dần nếu implement FIFO)
+        warehouse_id: { type: mongoose.Schema.Types.ObjectId, ref: "Warehouse" }, // Lô này ở kho nào
+        created_at: { type: Date, default: Date.now }
+      }
+    ],
+
+    lowStockAlerted: { type: Boolean, default: false },
+    expiryAlerted: { type: Boolean, default: false },
+    isDeleted: { type: Boolean, default: false },
   },
-  lowStockAlerted: { type: Boolean, default: false }, // False = không báo, true = báo (reset về false khi update stock > min_stock)
-  isDeleted: { type: Boolean, default: false } // Xóa mềm
-},
-{
-  timestamps: true // Tự động thêm createdAt và updatedAt
-});
+  {
+    timestamps: true,
+  }
+);
 
 // Pre-save hook reset lowStockAlerted nếu stock > min_stock khi update
-productSchema.pre('save', function (next) {
-  if (this.isModified('stock_quantity') && this.stock_quantity > this.min_stock) {
-    this.lowStockAlerted = false;  // Reset cảnh báo nếu stock tăng > min_stock
+productSchema.pre("save", function (next) {
+  if (this.isModified("stock_quantity") && this.stock_quantity > this.min_stock) {
+    this.lowStockAlerted = false; // Reset cảnh báo nếu stock tăng > min_stock
   }
   // Đảm bảo isDeleted được set khi save document cũ
   if (this.isDeleted === undefined || this.isDeleted === null) {
@@ -43,7 +80,7 @@ productSchema.pre('save', function (next) {
 });
 
 // Middleware: Tự động thêm isDeleted = false cho documents không có field này
-productSchema.pre(/^find/, function(next) {
+productSchema.pre(/^find/, function (next) {
   // Chỉ áp dụng filter nếu query chưa có điều kiện isDeleted
   if (this.getQuery().isDeleted === undefined) {
     this.where({ isDeleted: false });
@@ -51,10 +88,32 @@ productSchema.pre(/^find/, function(next) {
   next();
 });
 
-// Index compound cho SKU unique per store
-productSchema.index({ sku: 1, store_id: 1 }, { unique: true });
+// Cho phép trùng SKU trong phạm vi cửa hàng theo yêu cầu người dùng (Bỏ unique: true)
+productSchema.index({ store_id: 1, sku: 1 }, { name: "store_sku_normal" });
+// Query sản phẩm theo store + soft delete
+productSchema.index({ store_id: 1, isDeleted: 1 });
+// Lọc theo nhóm sản phẩm trong store
+productSchema.index({ store_id: 1, group_id: 1, isDeleted: 1 });
+// Lọc theo nhà cung cấp trong store
+productSchema.index({ store_id: 1, supplier_id: 1, isDeleted: 1 });
+// Default warehouse của sản phẩm
+productSchema.index({ default_warehouse_id: 1 });
+// Trạng thái kinh doanh trong store
+productSchema.index({ store_id: 1, status: 1, isDeleted: 1 });
+// Tìm kiếm theo tên (non-text, prefix / sort)
+productSchema.index({ store_id: 1, name: 1 });
+// Thường dùng cho sort mới nhất trong store
+productSchema.index({ store_id: 1, createdAt: -1 });
+productSchema.index({
+  stock_quantity: 1,
+  min_stock: 1,
+  status: 1,
+  lowStockAlerted: 1,
+});
+productSchema.index({
+  name: "text",
+  description: "text",
+  sku: "text",
+});
 
-// Index cho query low stock nhanh
-productSchema.index({ stock_quantity: 1, min_stock: 1, status: 1, lowStockAlerted: 1 });
-
-module.exports = mongoose.model('Product', productSchema);
+module.exports = mongoose.model("Product", productSchema);

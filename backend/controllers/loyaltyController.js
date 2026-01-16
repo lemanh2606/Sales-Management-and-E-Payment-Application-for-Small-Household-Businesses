@@ -8,10 +8,6 @@ const setupLoyaltyConfig = async (req, res) => {
     const { storeId } = req.params;
     const { pointsPerVND, vndPerPoint, minOrderValue, isActive } = req.body;
 
-    if (req.storeRole !== "OWNER") {
-      return res.status(403).json({ message: "Chỉ chủ cửa hàng mới setup tích điểm" });
-    }
-
     let loyalty = await LoyaltySetting.findOne({ storeId });
 
     // Nếu chưa có → tạo mới
@@ -36,8 +32,11 @@ const setupLoyaltyConfig = async (req, res) => {
     if (vndPerPoint !== undefined) loyalty.vndPerPoint = vndPerPoint;
     if (minOrderValue !== undefined) loyalty.minOrderValue = minOrderValue;
 
-    // ✅ Không check lỗi “phải có pointsPerVND” nếu chỉ toggle thôi
-    if (loyalty.isActive && (!loyalty.pointsPerVND || loyalty.pointsPerVND <= 0)) {
+    //  Không check lỗi “phải có pointsPerVND” nếu chỉ toggle thôi
+    if (
+      loyalty.isActive &&
+      (!loyalty.pointsPerVND || loyalty.pointsPerVND <= 0)
+    ) {
       return res.status(400).json({
         message: "Tỉ lệ tích điểm phải lớn hơn 0 trước khi bật hệ thống",
       });
@@ -80,10 +79,6 @@ const setupLoyaltyConfig = async (req, res) => {
 const getLoyaltyConfig = async (req, res) => {
   try {
     const { storeId } = req.params;
-
-    if (req.storeRole !== "OWNER" && req.storeRole !== "STAFF") {
-      return res.status(403).json({ message: "Không có quyền xem config tích điểm" });
-    }
 
     const loyalty = await LoyaltySetting.findOne({ storeId }).lean();
 
