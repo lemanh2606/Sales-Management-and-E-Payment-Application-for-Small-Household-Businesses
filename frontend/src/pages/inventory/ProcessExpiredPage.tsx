@@ -251,7 +251,7 @@ const ProcessExpiredPage = () => {
           <Table 
              dataSource={items}
              columns={columns}
-             rowKey={(r) => r._id || r.id || Math.random().toString()}
+             rowKey={(r) => `${r._id || r.id}-${r.batch_no || 'none'}`}
              rowSelection={{
                  type: 'checkbox',
                  onChange: (_, rows) => handleSelectItems(rows),

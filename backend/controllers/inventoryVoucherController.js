@@ -316,29 +316,27 @@ function validateItemsOrThrow(rawItems) {
 
 function enforcePostedBusinessRules(doc) {
   if (!doc.warehouse_name || String(doc.warehouse_name).trim() === "") {
-    const err = new Error(
-      "Thiếu kho (warehouse_name). Vui lòng nhập kho trước khi ghi sổ."
-    );
+    const err = new Error("Vui lòng chọn kho hàng trước khi ghi sổ.");
     err.status = 400;
     throw err;
   }
 
   if (!doc.reason || String(doc.reason).trim() === "") {
     const err = new Error(
-      "Thiếu lý do (reason). Vui lòng nhập lý do trước khi ghi sổ."
+      "Vui lòng nhập lý do nhập/xuất kho trước khi ghi sổ."
     );
     err.status = 400;
     throw err;
   }
 
   if (!doc.deliverer_name || !String(doc.deliverer_name).trim()) {
-    const err = new Error("Thiếu người giao (deliverer_name).");
+    const err = new Error("Vui lòng nhập tên người giao trước khi ghi sổ.");
     err.status = 400;
     throw err;
   }
 
   if (!doc.receiver_name || !String(doc.receiver_name).trim()) {
-    const err = new Error("Thiếu người nhận (receiver_name).");
+    const err = new Error("Vui lòng nhập tên người nhận trước khi ghi sổ.");
     err.status = 400;
     throw err;
   }
@@ -354,14 +352,38 @@ function enforcePostedBusinessRules(doc) {
 
   if (!isAdjustment) {
     if (!doc.ref_no || !String(doc.ref_no).trim()) {
-      const err = new Error("Thiếu số chứng từ gốc (ref_no).");
+      const err = new Error(
+        "Để ghi sổ, vui lòng nhập số chứng từ gốc (VD: Số hóa đơn, Số phiếu giao hàng từ nhà cung cấp)."
+      );
       err.status = 400;
       throw err;
     }
     if (!doc.ref_date) {
-      const err = new Error("Thiếu ngày chứng từ gốc (ref_date).");
+      const err = new Error("Để ghi sổ, vui lòng nhập ngày chứng từ gốc.");
       err.status = 400;
       throw err;
+    }
+  }
+
+  // Validate expiry dates for IN vouchers
+  if (String(doc.type || "").toUpperCase() === "IN") {
+    const voucherDate = doc.voucher_date
+      ? new Date(doc.voucher_date)
+      : new Date();
+    for (let i = 0; i < (doc.items || []).length; i++) {
+      const item = doc.items[i];
+      if (item.expiry_date) {
+        const expiryDate = new Date(item.expiry_date);
+        if (expiryDate < voucherDate) {
+          const err = new Error(
+            `Lỗi nhập liệu: Dòng ${
+              i + 1
+            } - Hạn sử dụng không được phép nhỏ hơn ngày nhập kho. Vui lòng kiểm tra lại ngày sản phẩm để tránh nhập hàng hết hạn.`
+          );
+          err.status = 400;
+          throw err;
+        }
+      }
     }
   }
 }

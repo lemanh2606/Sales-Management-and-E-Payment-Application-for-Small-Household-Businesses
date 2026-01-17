@@ -199,7 +199,7 @@ const ProcessExpiredScreen = ({ navigation }: any) => {
       <FlatList
         data={items}
         renderItem={renderItem}
-        keyExtractor={(item) => `${item._id}-${item.batch_no}`}
+        keyExtractor={(item, index) => `${item._id}-${item.batch_no}-${index}`}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           !loading ? (

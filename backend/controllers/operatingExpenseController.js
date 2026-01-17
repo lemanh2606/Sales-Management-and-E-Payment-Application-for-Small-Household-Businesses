@@ -186,18 +186,16 @@ const getByPeriod = async (req, res) => {
     const { storeId, periodType, periodKey } = req.query;
 
     if (!storeId || !periodType || !periodKey) {
-      return res
-        .status(400)
-        .json({
-          message: "Thiếu dữ liệu bắt buộc: storeId, periodType, periodKey",
-        });
+      return res.status(400).json({
+        message: "Thiếu dữ liệu bắt buộc: storeId, periodType, periodKey",
+      });
     }
 
     // Lấy các keys liên quan (ví dụ Quý thì lấy thêm các tháng thuộc quý đó)
     const relatedPeriods = getSubPeriodKeys(periodType, periodKey);
 
     const docs = await OperatingExpense.find({
-      storeId,
+      storeId: new mongoose.Types.ObjectId(storeId),
       $or: relatedPeriods,
       isDeleted: false,
     });

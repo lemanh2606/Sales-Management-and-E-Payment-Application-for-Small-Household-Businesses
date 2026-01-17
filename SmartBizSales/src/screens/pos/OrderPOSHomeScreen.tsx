@@ -9,6 +9,7 @@ import React, {
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   FlatList,
   Image,
   Keyboard,
@@ -434,6 +435,13 @@ const OrderPOSHomeScreen: React.FC = () => {
 
   const [token, setToken] = useState<string | null>(null);
   const [loggedInUser, setLoggedInUser] = useState<any>(null);
+
+  // Animation values for Phase 2: Sticky Header
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const scrollViewRef = useRef<ScrollView>(null);
+
+  // Search focus state for prominent search UI
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
 
   const authHeaders = useMemo(() => {
     return token ? { Authorization: `Bearer ${token}` } : undefined;
@@ -1885,6 +1893,35 @@ const OrderPOSHomeScreen: React.FC = () => {
     return true;
   }, [currentTab.cart, currentTab.pendingOrderId]);
 
+  // ===== Phase 2: Animation setup =====
+  const HEADER_MAX = 175;
+  const HEADER_MIN = Platform.OS === "ios" ? 100 : 90;
+  const SCROLL_DISTANCE = HEADER_MAX - HEADER_MIN;
+
+  const headerHeight = scrollY.interpolate({
+    inputRange: [0, SCROLL_DISTANCE],
+    outputRange: [HEADER_MAX, HEADER_MIN],
+    extrapolate: "clamp",
+  });
+
+  const headerTranslate = scrollY.interpolate({
+    inputRange: [0, SCROLL_DISTANCE],
+    outputRange: [0, -40],
+    extrapolate: "clamp",
+  });
+
+  const titleOpacity = scrollY.interpolate({
+    inputRange: [0, SCROLL_DISTANCE / 2, SCROLL_DISTANCE],
+    outputRange: [1, 0.5, 0],
+    extrapolate: "clamp",
+  });
+
+  const searchBoxTranslate = scrollY.interpolate({
+    inputRange: [0, SCROLL_DISTANCE],
+    outputRange: [0, 10], // Đưa ô search xuống chút khi thu gọn
+    extrapolate: "clamp",
+  });
+
   // ===== render loading =====
   if (loadingInit) {
     return (
@@ -1899,40 +1936,50 @@ const OrderPOSHomeScreen: React.FC = () => {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <View style={styles.safeContainer}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-        {/* Header */}
-        <View style={styles.header}>
+      
+      {/* Search Overlay Backdrop */}
+      {isSearchFocused && (
+        <Pressable 
+          style={styles.searchBackdrop} 
+          onPress={() => {
+            setShowProductDropdown(false);
+            setIsSearchFocused(false);
+            Keyboard.dismiss();
+          }} 
+        />
+      )}
+
+      {/* Header - Animated Sticky */}
+      <Animated.View style={[styles.header, { height: headerHeight, zIndex: 100 }]}>
+        <Animated.View style={{ opacity: titleOpacity, transform: [{ translateY: headerTranslate }] }}>
           <View style={styles.headerTopRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.headerTitle} numberOfLines={1}>
                 {storeName}
               </Text>
-              <Text style={styles.headerSub}>POS • Bán hàng</Text>
+              <Text style={styles.headerSub}>CHUYÊN NGHIỆP • TIN CẬY</Text>
             </View>
 
             <IconTextButton
               type="ghost"
-              text="Reset"
+              text="Reset Đơn"
               onPress={() => {
                 Alert.alert(
-                  "Reset đơn",
-                  "Bạn có chắc muốn reset đơn hiện tại?",
+                  "Xác nhận",
+                  "Xoá toàn bộ giỏ hàng và đặt lại đơn?",
                   [
                     { text: "Huỷ", style: "cancel" },
                     {
-                      text: "Reset",
+                      text: "Đồng ý",
                       style: "destructive",
                       onPress: resetCurrentTab,
                     },
                   ]
                 );
               }}
-              style={{ paddingVertical: 10, paddingHorizontal: 12 }}
+              style={{ paddingVertical: 8, paddingHorizontal: 12 }}
             />
           </View>
 
@@ -1940,299 +1987,192 @@ const OrderPOSHomeScreen: React.FC = () => {
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            style={{ marginTop: SPACING.sm }}
+            style={{ marginTop: 8 }}
+            contentContainerStyle={{ paddingBottom: 4 }}
           >
-            <View
-              style={{ flexDirection: "row", gap: 10, alignItems: "center" }}
-            >
+            <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
               {orders.map((t) => {
                 const active = t.key === activeTab;
                 return (
-                  <View
-                    key={t.key}
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 8,
-                    }}
-                  >
+                  <View key={t.key} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
                     <Pill
-                      label={`Đơn ${t.key}`}
+                      label={`Đơn${t.key}`}
                       active={active}
                       onPress={() => setActiveTab(t.key)}
                     />
-                    {orders.length > 1 ? (
-                      <Pressable
-                        onPress={() => removeOrderTab(t.key)}
-                        style={({ pressed }) => [
-                          styles.iconClose,
-                          pressed && { opacity: 0.8 },
-                        ]}
-                        hitSlop={8}
-                      >
-                        <Text style={styles.iconCloseText}>×</Text>
+                    {orders.length > 1 && (
+                      <Pressable onPress={() => removeOrderTab(t.key)} style={styles.iconClose}>
+                        <Ionicons name="close" size={14} color={active ? COLORS.primary : COLORS.muted} />
                       </Pressable>
-                    ) : null}
+                    )}
                   </View>
                 );
               })}
-
-              <IconTextButton
-                type="outline"
-                text="+ Đơn mới"
-                onPress={addNewOrderTab}
-                style={{ paddingHorizontal: 14 }}
-              />
+              <TouchableOpacity onPress={addNewOrderTab} style={styles.addTabBtn}>
+                <Ionicons name="add" size={20} color={COLORS.primary} />
+              </TouchableOpacity>
             </View>
           </ScrollView>
+        </Animated.View>
 
-          {/* Search product - Enhanced UI */}
-          <View style={styles.searchSection}>
-            <View style={styles.searchBoxEnhanced}>
-              <Ionicons name="search" size={20} color={COLORS.muted} />
-              <TextInput
-                value={searchProduct}
-                onChangeText={(t) => {
-                  setSearchProduct(t);
-                  setShowProductDropdown(true);
-                }}
-                onFocus={() => setShowProductDropdown(true)}
-                onBlur={() => {
-                  setTimeout(() => {
-                    if (!selectingProductRef.current)
-                      setShowProductDropdown(false);
-                  }, 180);
-                }}
-                placeholder="Tìm sản phẩm..."
-                placeholderTextColor={COLORS.placeholder}
-                style={styles.searchInputEnhanced}
-                returnKeyType="search"
-              />
-
-              {/* Voice Search Button - Real Speech Recognition */}
-              <TouchableOpacity
-                onPress={() => {
-                  if (isListening) {
-                    stopVoiceSearch();
-                  } else {
-                    startVoiceSearch();
+        {/* Search Section - Stays sticky but can move slightly */}
+        <Animated.View style={[
+          styles.searchSection, 
+          { transform: [{ translateY: searchBoxTranslate }] },
+          isSearchFocused && styles.searchFocusedContainer
+        ]}>
+          <View style={[
+            styles.searchBoxEnhanced,
+            isSearchFocused && styles.searchBoxActive
+          ]}>
+            <Ionicons name="search" size={20} color={isSearchFocused ? COLORS.primary : COLORS.muted} />
+            <TextInput
+              value={searchProduct}
+              onChangeText={(t) => {
+                setSearchProduct(t);
+                setShowProductDropdown(true);
+              }}
+              onFocus={() => {
+                setShowProductDropdown(true);
+                setIsSearchFocused(true);
+              }}
+              onBlur={() => {
+                setTimeout(() => {
+                  if (!selectingProductRef.current) {
+                    setShowProductDropdown(false);
+                    // Không set setIsSearchFocused(false) ngay để cho phép click backdrop
                   }
-                }}
-                style={[styles.voiceBtn, isListening && styles.voiceBtnActive]}
-              >
-                <Ionicons
-                  name={isListening ? "mic" : "mic-outline"}
-                  size={20}
-                  color={isListening ? "#fff" : COLORS.primary}
-                />
-              </TouchableOpacity>
+                }, 180);
+              }}
+              onSubmitEditing={() => {
+                if (suggestedProducts.length > 0) {
+                  const first = suggestedProducts[0];
+                  if (getAvailableStock(first) > 0) addToCart(first);
+                  else Alert.alert("Hết hàng", `Sản phẩm "${first.name}" đã hết hàng.`);
+                }
+              }}
+              blurOnSubmit={false}
+              placeholder="Tìm tên sản phẩm, mã SKU..."
+              placeholderTextColor={COLORS.placeholder}
+              style={styles.searchInputEnhanced}
+              returnKeyType="search"
+            />
 
-              {/* Show listening indicator */}
-              {isListening && (
-                <View style={styles.listeningBadge}>
-                  <ActivityIndicator size="small" color={COLORS.primary} />
-                  <Text style={styles.listeningText}>
-                    {voiceTranscript || "Đang nghe..."}
+            {!!searchProduct && (
+              <Pressable
+                onPress={() => {
+                  setSearchProduct("");
+                  setSearchedProducts([]);
+                  setShowProductDropdown(false);
+                }}
+                hitSlop={10}
+                style={styles.clearBtn}
+              >
+                <Ionicons name="close-circle" size={20} color={COLORS.muted} />
+              </Pressable>
+            )}
+
+            <TouchableOpacity
+              onPress={() => isListening ? stopVoiceSearch() : startVoiceSearch()}
+              style={[styles.voiceBtn, isListening && styles.voiceBtnActive]}
+            >
+              <Ionicons name={isListening ? "mic" : "mic-outline"} size={20} color={isListening ? "#fff" : COLORS.primary} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => Alert.alert("📷 Quét mã", "Đang mở camera...")}
+              style={styles.scanBtn}
+            >
+              <Ionicons name="barcode-outline" size={20} color={COLORS.primary} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Product Dropdown Overlay - Displayed when focused and sticky */}
+          {showProductDropdown && (
+            <Animated.View style={[styles.productDropdown, styles.prominentDropdown]}>
+              {productSearchLoading ? (
+                <View style={styles.dropdownCenter}>
+                  <ActivityIndicator color={COLORS.primary} size="small" />
+                  <Text style={styles.dropdownHint}>Đang tìm món...</Text>
+                </View>
+              ) : suggestedProducts.length === 0 ? (
+                <View style={styles.dropdownCenter}>
+                  <Ionicons name="cube-outline" size={32} color={COLORS.muted} />
+                  <Text style={styles.dropdownHint}>
+                    {searchProduct ? "Không tìm thấy hàng" : "Nhập để tìm hàng"}
                   </Text>
                 </View>
-              )}
-
-              {/* Barcode Scanner */}
-              <TouchableOpacity
-                onPress={() =>
-                  Alert.alert(
-                    "📷 Quét mã vạch",
-                    "Chức năng quét mã đang được tích hợp."
-                  )
-                }
-                style={styles.scanBtn}
-              >
-                <Ionicons
-                  name="barcode-outline"
-                  size={20}
-                  color={COLORS.primary}
-                />
-              </TouchableOpacity>
-
-              {/* Clear Button */}
-              {!!searchProduct && (
-                <Pressable
-                  onPress={() => {
-                    setSearchProduct("");
-                    setSearchedProducts([]);
-                    setShowProductDropdown(false);
-                  }}
-                  hitSlop={10}
-                  style={styles.clearBtn}
+              ) : (
+                <ScrollView 
+                  style={{ maxHeight: 400 }} 
+                  keyboardShouldPersistTaps="always"
+                  showsVerticalScrollIndicator={false}
                 >
-                  <Ionicons
-                    name="close-circle"
-                    size={20}
-                    color={COLORS.muted}
-                  />
-                </Pressable>
-              )}
-            </View>
-
-            {/* Product Dropdown - Enhanced */}
-            {showProductDropdown && (
-              <View style={styles.productDropdown}>
-                {productSearchLoading ? (
-                  <View style={styles.dropdownCenter}>
-                    <ActivityIndicator color={COLORS.primary} size="small" />
-                    <Text style={styles.dropdownHint}>Đang tìm kiếm...</Text>
-                  </View>
-                ) : productSearchError ? (
-                  <View style={styles.dropdownCenter}>
-                    <Ionicons
-                      name="alert-circle"
-                      size={24}
-                      color={COLORS.danger}
-                    />
-                    <Text
-                      style={[styles.dropdownHint, { color: COLORS.danger }]}
-                    >
-                      {productSearchError}
-                    </Text>
-                  </View>
-                ) : suggestedProducts.length === 0 ? (
-                  <View style={styles.dropdownCenter}>
-                    <Ionicons
-                      name="cube-outline"
-                      size={32}
-                      color={COLORS.muted}
-                    />
-                    <Text style={styles.dropdownHint}>
-                      {searchProduct
-                        ? "Không tìm thấy sản phẩm"
-                        : "Nhập tên để tìm kiếm"}
-                    </Text>
-                  </View>
-                ) : (
-                  <ScrollView
-                    style={{ maxHeight: 300 }}
-                    keyboardShouldPersistTaps="always"
-                    showsVerticalScrollIndicator={false}
-                  >
-                    {suggestedProducts.map((p) => {
-                      const avail = getAvailableStock(p);
-                      const isOut = avail <= 0;
-                      const hasBatches = p.batches && p.batches.length > 0;
-
-                      return (
-                        <Pressable
-                          key={p._id}
-                          onPressIn={() => (selectingProductRef.current = true)}
-                          onPressOut={() =>
-                            (selectingProductRef.current = false)
-                          }
-                          onPress={() => !isOut && addToCart(p)}
-                          style={({ pressed }) => [
-                            styles.productCard,
-                            pressed && !isOut && styles.productCardPressed,
-                            isOut && { opacity: 0.6 },
-                          ]}
-                        >
-                          <View style={{ width: "100%" }}>
-                            <View
-                              style={{
-                                flexDirection: "row",
-                                alignItems: "center",
-                              }}
-                            >
-                              {/* Product Image */}
-                              {p.image?.url ? (
-                                <Image
-                                  source={{ uri: p.image.url }}
-                                  style={styles.productThumb}
-                                />
-                              ) : (
-                                <View
-                                  style={[
-                                    styles.productThumb,
-                                    styles.productThumbEmpty,
-                                  ]}
-                                >
-                                  <Ionicons
-                                    name="cube"
-                                    size={20}
-                                    color={COLORS.muted}
-                                  />
-                                </View>
-                              )}
-
-                              {/* Product Info */}
-                              <View style={styles.productInfo}>
-                                <Text
-                                  style={[
-                                    styles.productName,
-                                    isOut && { color: COLORS.muted },
-                                  ]}
-                                  numberOfLines={1}
-                                >
-                                  {p.name}
-                                </Text>
-                                <View style={styles.productMeta}>
-                                  <Text style={styles.productSku}>{p.sku}</Text>
-                                  <View
-                                    style={[
-                                      styles.stockBadge,
-                                      isOut && { backgroundColor: "#fee2e2" },
-                                    ]}
-                                  >
-                                    <Text
-                                      style={[
-                                        styles.stockText,
-                                        isOut && { color: COLORS.danger },
-                                      ]}
-                                    >
-                                      {isOut
-                                        ? "Hết hàng có thể bán"
-                                        : `Tồn: ${avail}`}
-                                    </Text>
-                                  </View>
-                                </View>
-                              </View>
-
-                              {/* Price & Add Button */}
-                              <View style={styles.productRight}>
-                                <Text
-                                  style={[
-                                    styles.productPrice,
-                                    isOut && { color: COLORS.muted },
-                                  ]}
-                                >
-                                  {formatPrice(p.price)}
-                                </Text>
-                                {!isOut && (
-                                  <View style={styles.addBtnMini}>
-                                    <Ionicons
-                                      name="add"
-                                      size={16}
-                                      color={COLORS.white}
-                                    />
-                                  </View>
-                                )}
-                              </View>
-                            </View>
-
-                            {/* Đã ẩn chi tiết lô hàng để tối ưu giao diện theo yêu cầu */}
+                  {suggestedProducts.map((p) => {
+                    const avail = getAvailableStock(p);
+                    const isOut = avail <= 0;
+                    return (
+                      <Pressable
+                        key={p._id}
+                        onPressIn={() => (selectingProductRef.current = true)}
+                        onPressOut={() => (selectingProductRef.current = false)}
+                        onPress={() => !isOut && addToCart(p)}
+                        style={({ pressed }) => [
+                          styles.productCard,
+                          pressed && !isOut && styles.productCardPressed,
+                          isOut && { opacity: 0.5 },
+                        ]}
+                      >
+                        {p.image?.url ? (
+                          <Image source={{ uri: p.image.url }} style={styles.productThumb} />
+                        ) : (
+                          <View style={[styles.productThumb, styles.productThumbEmpty]}>
+                            <Ionicons name="cube" size={20} color={COLORS.muted} />
                           </View>
-                        </Pressable>
-                      );
-                    })}
-                  </ScrollView>
-                )}
-              </View>
-            )}
-          </View>
-        </View>
+                        )}
+                        <View style={styles.productInfo}>
+                          <Text style={[styles.productName, { fontSize: 15 }]} numberOfLines={1}>{p.name}</Text>
+                          <View style={styles.productMeta}>
+                            <Text style={styles.productSku}>{p.sku}</Text>
+                            <View style={[styles.stockBadge, isOut && { backgroundColor: "#fee2e2" }]}>
+                              <Text style={[styles.stockText, isOut && { color: COLORS.danger }]}>
+                                {isOut ? "HẾT HÀNG" : `TỒN: ${avail}`}
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+                        <View style={styles.productRight}>
+                          <Text style={styles.productPrice}>{formatPrice(p.price)}</Text>
+                          {!isOut && (
+                            <View style={styles.addBtnMini}>
+                              <Ionicons name="add" size={16} color={COLORS.white} />
+                            </View>
+                          )}
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              )}
+            </Animated.View>
+          )}
+        </Animated.View>
+      </Animated.View>
 
-        {/* Body */}
-        <ScrollView
-          contentContainerStyle={styles.container}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <Animated.ScrollView
+          ref={scrollViewRef as any}
+          contentContainerStyle={[styles.container, { paddingTop: 20 }]}
           keyboardShouldPersistTaps="always"
           showsVerticalScrollIndicator={false}
+          scrollEventThrottle={16}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+            { useNativeDriver: false }
+          )}
         >
           {/* Quick Info Bar - Employee & Customer inline */}
           <View style={styles.quickInfoBar}>
@@ -2623,7 +2563,7 @@ const OrderPOSHomeScreen: React.FC = () => {
 
           {/* spacer for bottom bar */}
           <View style={{ height: 108 }} />
-        </ScrollView>
+        </Animated.ScrollView>
 
         {/* Bottom Bar */}
         <View style={styles.bottomBar}>
@@ -3150,7 +3090,7 @@ const OrderPOSHomeScreen: React.FC = () => {
           </View>
         </Modal>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 };
 
@@ -3170,21 +3110,7 @@ const styles = StyleSheet.create({
   },
   mutedText: { color: COLORS.muted, marginTop: 10, fontWeight: "800" },
 
-  header: {
-    paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.md,
-    paddingBottom: SPACING.lg,
-    backgroundColor: COLORS.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.stroke,
-    ...SHADOW,
-  },
-  headerTopRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-    gap: 12,
-  },
+
   headerTitle: { color: COLORS.textStrong, fontSize: 18, fontWeight: "900" },
   headerSub: { color: COLORS.muted, marginTop: 4, fontWeight: "800" },
 
@@ -3777,82 +3703,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
-  // ===== Enhanced Product Search Styles =====
-  searchSection: {
-    marginTop: SPACING.md,
-  },
-  searchBoxEnhanced: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.lg,
-    borderWidth: 1,
-    borderColor: COLORS.stroke,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    ...SHADOW,
-  },
-  searchInputEnhanced: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: "600",
-    color: COLORS.textStrong,
-    paddingVertical: 6,
-  },
-  voiceBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#eff6ff",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  voiceBtnActive: {
-    backgroundColor: COLORS.primary,
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  listeningBadge: {
-    position: "absolute",
-    top: 55,
-    left: 20,
-    right: 20,
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    padding: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 8,
-    zIndex: 999,
-    borderWidth: 1,
-    borderColor: COLORS.primary,
-  },
-  listeningText: {
-    flex: 1,
-    fontSize: 14,
-    color: COLORS.primary,
-    fontWeight: "600",
-  },
-  scanBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#f0fdf4",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  clearBtn: {
-    padding: 4,
-  },
+
 
   // Product Dropdown
   productDropdown: {
@@ -3944,5 +3795,138 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
     alignItems: "center",
     justifyContent: "center",
+  },
+
+  // Professional POS Styles
+  safeContainer: {
+    flex: 1,
+    backgroundColor: COLORS.bg,
+  },
+  searchBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    zIndex: 90,
+  },
+  header: {
+    backgroundColor: COLORS.surface,
+    paddingHorizontal: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.stroke,
+    justifyContent: "center",
+    ...SHADOW,
+  },
+  headerTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: Platform.OS === "ios" ? 10 : 5,
+  },
+  addTabBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+    borderStyle: "dashed",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#eff6ff",
+  },
+  searchSection: {
+    marginTop: 12,
+    position: "relative",
+    zIndex: 110,
+  },
+  searchFocusedContainer: {
+    zIndex: 200,
+  },
+  searchBoxActive: {
+    borderColor: COLORS.primary,
+    borderWidth: 2,
+    elevation: 10,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.2,
+    backgroundColor: "#fff",
+  },
+  prominentDropdown: {
+    position: "absolute",
+    top: 55,
+    left: 0,
+    right: 0,
+    maxHeight: 450,
+    backgroundColor: "#fff",
+    borderRadius: RADIUS.lg,
+    elevation: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 15,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    zIndex: 300,
+  },
+  searchInputEnhanced: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: "700",
+    color: COLORS.textStrong,
+    paddingVertical: 6,
+  },
+  voiceBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#eff6ff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  voiceBtnActive: {
+    backgroundColor: COLORS.primary,
+    elevation: 5,
+  },
+  listeningBadge: {
+    position: "absolute",
+    top: 60,
+    left: 10,
+    right: 10,
+    backgroundColor: "#fff",
+    borderRadius: RADIUS.md,
+    padding: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    ...SHADOW,
+    zIndex: 1000,
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+  },
+  listeningText: {
+    flex: 1,
+    fontSize: 14,
+    color: COLORS.primary,
+    fontWeight: "700",
+  },
+  scanBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#f0fdf4",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  clearBtn: {
+    padding: 6,
+  },
+  searchBoxEnhanced: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1.5,
+    borderColor: COLORS.stroke,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    ...SHADOW,
   },
 });

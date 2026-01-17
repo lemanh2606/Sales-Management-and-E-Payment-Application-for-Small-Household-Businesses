@@ -64,9 +64,9 @@ export const upsertOperatingExpense = async (data: {
   storeId: string;
   periodType: string;
   periodKey: string;
-  items: Array<{ amount: number; note: string; isSaved: boolean }>;
+  items: Array<{ _id?: string; amount: number; note: string; isSaved: boolean }>;
 }): Promise<any> => {
-  const response = await apiClient.post("/operating-expenses/upsert", data);
+  const response = await apiClient.post("/operating-expenses", data);
   return response.data;
 };
 

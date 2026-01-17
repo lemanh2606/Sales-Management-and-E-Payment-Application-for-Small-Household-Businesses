@@ -1866,7 +1866,7 @@ const importProducts = async (req, res) => {
           // NEW RULE: If SKU found but name is different -> Error and notify
           if (product && product.name !== productName) {
             throw new Error(
-              `Dòng ${i + 2}: Mã SKU "${sku}" đã tồn tại cho sản phẩm "${
+              `Dòng ${i + 2}: Mã SKU "${sku}" đã tồn tại cho cửa hàng "${
                 product.name
               }". Không thể trùng mã với tên khác phẩm ("${productName}").`
             );

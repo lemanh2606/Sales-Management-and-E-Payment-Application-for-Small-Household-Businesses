@@ -242,7 +242,7 @@ const ProductBatchModal: React.FC<ProductBatchModalProps> = ({
             </View>
 
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Thông tin phiếu kho (Tùy chọn)</Text>
+              <Text style={styles.sectionTitle}>Thông tin phiếu kho</Text>
               <View style={styles.row}>
                 <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
                   <Text style={styles.label}>Người giao / NCC</Text>

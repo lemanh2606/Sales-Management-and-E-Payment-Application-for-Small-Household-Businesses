@@ -345,11 +345,15 @@ const InventoryVoucherFormScreen: React.FC = () => {
     // Validate required fields
     const errors: string[] = [];
     
-    if (!warehouseId) errors.push("• Chưa chọn kho hàng");
-    if (!reason.trim()) errors.push("• Chưa nhập lý do nhập/xuất kho");
-    if (!delivererName.trim()) errors.push("• Chưa nhập tên người giao");
-    if (!receiverName.trim()) errors.push("• Chưa nhập tên người nhận");
-    if (items.length === 0) errors.push("• Chưa thêm sản phẩm nào");
+    if (!warehouseId) errors.push("• Vui lòng chọn kho hàng");
+    if (!reason.trim()) errors.push("• Vui lòng nhập lý do nhập/xuất kho");
+    if (!delivererName.trim()) errors.push("• Vui lòng nhập tên người giao");
+    if (!receiverName.trim()) errors.push("• Vui lòng nhập tên người nhận");
+    if (!refNo.trim()) errors.push("• Vui lòng nhập số chứng từ gốc");
+    if (items.length === 0) errors.push("• Vui lòng thêm sản phẩm");
+    
+    // Parse voucher date for comparison
+    const voucherDateParsed = new Date(voucherDate);
     
     // Validate items
     items.forEach((item, idx) => {
@@ -358,6 +362,14 @@ const InventoryVoucherFormScreen: React.FC = () => {
       }
       if (item.unit_cost < 0) {
         errors.push(`• Dòng ${idx + 1}: Giá vốn không hợp lệ`);
+      }
+      
+      // Validate expiry date >= voucher date for IN vouchers
+      if (type === "IN" && item.expiry_date) {
+        const expiryDateParsed = new Date(item.expiry_date);
+        if (expiryDateParsed < voucherDateParsed) {
+          errors.push(`• Dòng ${idx + 1}: Lỗi nhập liệu: Hạn sử dụng không được phép nhỏ hơn ngày nhập kho. Vui lòng kiểm tra lại ngày sản phẩm để tránh nhập hàng hết hạn.`);
+        }
       }
 
       // Kiểm tra tồn kho khả dụng nếu là phiếu XUẤT
@@ -373,7 +385,7 @@ const InventoryVoucherFormScreen: React.FC = () => {
     });
     
     if (errors.length > 0) {
-      return Alert.alert("Thiếu thông tin bắt buộc", errors.join("\n"));
+      return Alert.alert("Lỗi nhập liệu", errors.join("\n"));
     }
     
     try {
@@ -503,14 +515,14 @@ const InventoryVoucherFormScreen: React.FC = () => {
             <TouchableOpacity style={styles.selectBox} onPress={() => setShowWarehouseModal(true)}>
                <View>
                  <Text style={styles.labelSmall}>{selectedWarehouse ? "Đã chọn kho" : "Chưa chọn kho"}</Text>
-                 <Text style={styles.selectValue}>{selectedWarehouse?.name || "Bấm để chọn kho..."}</Text>
+                 <Text style={styles.selectValue}>{selectedWarehouse?.name || "Bấm để chọn kho hàng..."}</Text>
                </View>
                <Ionicons name="chevron-down" size={20} color="#10b981" />
             </TouchableOpacity>
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Lý do / Ghi chú</Text>
+            <Text style={styles.label}>Lý do / Ghi chú (*)</Text>
             <TextInput 
               style={[styles.input, { height: 60 }]} 
               value={reason} 
@@ -522,11 +534,11 @@ const InventoryVoucherFormScreen: React.FC = () => {
 
           <View style={styles.row}>
             <View style={[styles.inputGroup, { flex: 1, marginRight: 12 }]}>
-              <Text style={styles.label}>Số chứng từ gốc</Text>
-              <TextInput style={styles.input} value={refNo} onChangeText={setRefNo} placeholder="VD: HD-001" />
+              <Text style={styles.label}>Số chứng từ gốc <Text style={{ color: '#fa8c16', fontSize: 10 }}>(Ghi sổ *)</Text></Text>
+              <TextInput style={styles.input} value={refNo} onChangeText={setRefNo} placeholder="VD: Số hóa đơn NCC" />
             </View>
             <View style={[styles.inputGroup, { flex: 1 }]}>
-              <Text style={styles.label}>Ngày chứng từ gốc</Text>
+              <Text style={styles.label}>Ngày chứng từ gốc <Text style={{ color: '#fa8c16', fontSize: 10 }}>(Ghi sổ *)</Text></Text>
               <TextInput style={styles.input} value={refDate} onChangeText={setRefDate} placeholder="YYYY-MM-DD" />
             </View>
           </View>
@@ -975,7 +987,7 @@ const InventoryVoucherFormScreen: React.FC = () => {
                 {availableBatches.length > 0 ? (
                     <FlatList
                         data={availableBatches}
-                        keyExtractor={(item, index) => item.batch_no || index.toString()}
+                        keyExtractor={(item, index) => item.batch_no && item.batch_no !== 'N/A' ? `${item.batch_no}-${index}` : index.toString()}
                         renderItem={({ item }) => (
                             <TouchableOpacity style={styles.searchItem} onPress={() => handleSelectBatch(item)}>
                                 <View>
