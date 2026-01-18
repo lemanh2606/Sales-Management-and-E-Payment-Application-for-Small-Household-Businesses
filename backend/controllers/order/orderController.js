@@ -1962,7 +1962,7 @@ const getTopSellingProducts = async (req, res) => {
     );
 
     const match = {
-      "order.status": "paid",
+      "order.status": { $in: ["paid", "partially_refunded"] },
       "order.createdAt": { $gte: start, $lte: end },
       "order.storeId": new mongoose.Types.ObjectId(finalStoreId),
     };
@@ -1983,12 +1983,41 @@ const getTopSellingProducts = async (req, res) => {
       // Filter status + thời gian + storeId
       { $match: match },
 
+      // Filter: Chỉ lấy sản phẩm chưa bị hoàn hết (quantity > refundedQuantity)
+      {
+        $match: {
+          $expr: {
+            $gt: ["$quantity", { $ifNull: ["$refundedQuantity", 0] }],
+          },
+        },
+      },
+
       // Group theo productId
       {
         $group: {
           _id: "$productId",
-          totalQuantity: { $sum: "$quantity" },
-          totalSales: { $sum: "$subtotal" },
+          // totalQuantity = quantity - refundedQuantity
+          totalQuantity: {
+            $sum: {
+              $subtract: ["$quantity", { $ifNull: ["$refundedQuantity", 0] }],
+            },
+          },
+          // totalSales = (quantity - refundedQuantity) * priceAtTime
+          totalSales: {
+            $sum: {
+              $toDouble: {
+                $multiply: [
+                  {
+                    $subtract: [
+                      "$quantity",
+                      { $ifNull: ["$refundedQuantity", 0] },
+                    ],
+                  },
+                  "$priceAtTime",
+                ],
+              },
+            },
+          },
           countOrders: { $sum: 1 },
         },
       },
@@ -2434,7 +2463,8 @@ const exportTopSellingProducts = async (req, res) => {
       matchDate = { $gte: start };
     }
 
-    const match = { "order.status": "paid" };
+    // Fix: support partially_refunded
+    const match = { "order.status": { $in: ["paid", "partially_refunded"] } };
     if (matchDate) match["order.createdAt"] = matchDate;
     if (storeId) match["order.storeId"] = new mongoose.Types.ObjectId(storeId);
 
@@ -2451,11 +2481,40 @@ const exportTopSellingProducts = async (req, res) => {
       { $unwind: "$order" },
       { $match: match },
 
+      // Filter: Chỉ lấy sản phẩm chưa bị hoàn hết (quantity > refundedQuantity)
+      {
+        $match: {
+          $expr: {
+            $gt: ["$quantity", { $ifNull: ["$refundedQuantity", 0] }],
+          },
+        },
+      },
+
       {
         $group: {
           _id: "$productId",
-          totalQuantity: { $sum: "$quantity" },
-          totalSales: { $sum: { $toDouble: "$subtotal" } }, // quan trọng: bỏ $numberDecimal
+          // totalQuantity = quantity - refundedQuantity
+          totalQuantity: {
+            $sum: {
+              $subtract: ["$quantity", { $ifNull: ["$refundedQuantity", 0] }],
+            },
+          },
+          // totalSales = (quantity - refundedQuantity) * priceAtTime
+          totalSales: {
+            $sum: {
+              $toDouble: {
+                $multiply: [
+                  {
+                    $subtract: [
+                      "$quantity",
+                      { $ifNull: ["$refundedQuantity", 0] },
+                    ],
+                  },
+                  "$priceAtTime",
+                ],
+              },
+            },
+          },
           countOrders: { $sum: 1 },
         },
       },

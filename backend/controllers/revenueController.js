@@ -73,7 +73,9 @@ function buildExportFileName({ reportName, req, periodKey }) {
 
   // Chỉ report chi tiết (exportRevenue) mới thêm kì xuất.
   if (periodKey) {
-    return `${reportPart}_${exportDate}_${exporterName}_${safeFilePart(periodKey)}.xlsx`;
+    return `${reportPart}_${exportDate}_${exporterName}_${safeFilePart(
+      periodKey
+    )}.xlsx`;
   }
   return `${reportPart}_${exportDate}_${exporterName}.xlsx`;
 }
@@ -91,7 +93,7 @@ function periodTypeToVietnamese(periodType) {
 function createWorksheetWithReportHeader({ reportTitle, req, sheetData }) {
   const exporterName = getExporterNameDisplay(req);
   const storeName = req.store?.name || "Cửa hàng";
-  
+
   const headerAOA = [
     [storeName.toUpperCase(), "", "", "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM"],
     ["", "", "", "Độc lập - Tự do - Hạnh phúc"],
@@ -167,7 +169,12 @@ function createWorksheetWithReportHeader({ reportTitle, req, sheetData }) {
 }
 
 // ========== HÀM TÍNH DOANH THU – CÓ CẢ HOÀN 1 NỬA partially_refunded ==========
-async function calcRevenueByPeriod({ storeId, periodType, periodKey, type = "total" }) {
+async function calcRevenueByPeriod({
+  storeId,
+  periodType,
+  periodKey,
+  type = "total",
+}) {
   // Chuyển periodType + periodKey (vd: month + 2025-12) thành khoảng ngày [start, end]
   const { start, end } = periodToRange(periodType, periodKey);
 
@@ -232,7 +239,9 @@ async function calcRevenueByPeriod({ storeId, periodType, periodKey, type = "tot
         },
       },
     ]);
-    const totalRefundAmount = refundAgg[0] ? Number(refundAgg[0].totalRefundAmount.toString()) : 0;
+    const totalRefundAmount = refundAgg[0]
+      ? Number(refundAgg[0].totalRefundAmount.toString())
+      : 0;
     const finalRevenue = row.grossRevenue - totalRefundAmount;
 
     const dailyPipeline = [
@@ -293,13 +302,15 @@ async function calcRevenueByPeriod({ storeId, periodType, periodKey, type = "tot
       },
     ]);
 
-    const refundMap = new Map(dailyRefundAgg.map(r => [r._id.day, Number(r.refund.toString())]));
-    
-    // Merge: Nếu ngày nào có hoàn mà không có bán, vẫn phải hiện? 
+    const refundMap = new Map(
+      dailyRefundAgg.map((r) => [r._id.day, Number(r.refund.toString())])
+    );
+
+    // Merge: Nếu ngày nào có hoàn mà không có bán, vẫn phải hiện?
     // Thường chart chỉ hiện ngày có bán, nhưng ta nên merge.
     const mergedDaily = [...dailyRevenue];
     refundMap.forEach((refundVal, day) => {
-      const existing = mergedDaily.find(d => d.day === day);
+      const existing = mergedDaily.find((d) => d.day === day);
       if (existing) {
         existing.revenue -= refundVal;
       } else {
@@ -362,11 +373,18 @@ async function calcRevenueByPeriod({ storeId, periodType, periodKey, type = "tot
         },
       },
     ];
-    const refundResults = await mongoose.model("OrderRefund").aggregate(refundPipeline);
-    const refundMap = new Map(refundResults.map(r => [String(r._id), Number(r.refundAmount.toString())]));
+    const refundResults = await mongoose
+      .model("OrderRefund")
+      .aggregate(refundPipeline);
+    const refundMap = new Map(
+      refundResults.map((r) => [
+        String(r._id),
+        Number(r.refundAmount.toString()),
+      ])
+    );
 
     // 3. Merge
-    const merged = grossResults.map(g => {
+    const merged = grossResults.map((g) => {
       const empId = String(g._id);
       const refund = refundMap.get(empId) || 0;
       const gross = Number(g.grossRevenue.toString());
@@ -384,7 +402,8 @@ async function calcRevenueByPeriod({ storeId, periodType, periodKey, type = "tot
     // Add employees who only had refunds in this period (negative revenue)
     refundMap.forEach((refund, empId) => {
       merged.push({
-        _id: empId === "null" || empId === "undefined" ? null : toObjectId(empId),
+        _id:
+          empId === "null" || empId === "undefined" ? null : toObjectId(empId),
         totalRevenue: -refund,
         grossRevenue: 0,
         totalRefundAmount: refund,
@@ -393,16 +412,20 @@ async function calcRevenueByPeriod({ storeId, periodType, periodKey, type = "tot
     });
 
     const pipeline = [
-      { $match: { _id: { $in: merged.map(m => m._id) } } }, // This is dummy just to use aggregate for lookup if needed
+      { $match: { _id: { $in: merged.map((m) => m._id) } } }, // This is dummy just to use aggregate for lookup if needed
     ];
     // Actually, it's easier to just map and populate manually or use another aggregate.
     // Let's use a simpler way since we have the merged array.
-    
+
     const finalData = [];
     for (const item of merged) {
       let employeeInfo = { fullName: "Chủ cửa hàng (Admin)", phone: "" };
       if (item._id) {
-        const empDoc = await mongoose.model("Employee").findById(item._id).select("fullName phone").lean();
+        const empDoc = await mongoose
+          .model("Employee")
+          .findById(item._id)
+          .select("fullName phone")
+          .lean();
         if (empDoc) {
           employeeInfo = { fullName: empDoc.fullName, phone: empDoc.phone };
         } else {
@@ -413,7 +436,8 @@ async function calcRevenueByPeriod({ storeId, periodType, periodKey, type = "tot
       finalData.push({
         ...item,
         totalRevenueDouble: item.totalRevenue,
-        avgOrderValue: item.countOrders > 0 ? item.totalRevenue / item.countOrders : 0,
+        avgOrderValue:
+          item.countOrders > 0 ? item.totalRevenue / item.countOrders : 0,
         employeeInfo,
         periodType,
         periodKey,
@@ -470,7 +494,9 @@ const getRevenueByEmployee = async (req, res) => {
     res.json({ message: "Báo cáo doanh thu theo nhân viên thành công", data });
   } catch (err) {
     console.error("Lỗi báo cáo doanh thu theo nhân viên:", err.message);
-    res.status(500).json({ message: "Lỗi server khi báo cáo doanh thu theo nhân viên" });
+    res
+      .status(500)
+      .json({ message: "Lỗi server khi báo cáo doanh thu theo nhân viên" });
   }
 };
 
@@ -495,8 +521,12 @@ const exportRevenue = async (req, res) => {
       const totalRevenueForShare = Number(totalRow?.totalRevenue || 0) || 0;
       const periodStart = totalRow?.periodStart;
       const periodEnd = totalRow?.periodEnd;
-      const periodStartText = periodStart ? dayjs(periodStart).format("DD/MM/YYYY") : "—";
-      const periodEndText = periodEnd ? dayjs(periodEnd).format("DD/MM/YYYY") : "—";
+      const periodStartText = periodStart
+        ? dayjs(periodStart).format("DD/MM/YYYY")
+        : "—";
+      const periodEndText = periodEnd
+        ? dayjs(periodEnd).format("DD/MM/YYYY")
+        : "—";
 
       const wb = XLSX.utils.book_new();
       const reportTitle = "Báo cáo doanh thu chi tiết";
@@ -506,17 +536,33 @@ const exportRevenue = async (req, res) => {
         const totalSheetData = totalData.map((item) => ({
           "Loại kỳ": periodTypeToVietnamese(item.periodType),
           "Mã kỳ": item.periodKey,
-          "Từ ngày": item.periodStart ? dayjs(item.periodStart).format("DD/MM/YYYY") : "—",
-          "Đến ngày": item.periodEnd ? dayjs(item.periodEnd).format("DD/MM/YYYY") : "—",
+          "Từ ngày": item.periodStart
+            ? dayjs(item.periodStart).format("DD/MM/YYYY")
+            : "—",
+          "Đến ngày": item.periodEnd
+            ? dayjs(item.periodEnd).format("DD/MM/YYYY")
+            : "—",
           "Tổng doanh thu (VNĐ)": Number(item.totalRevenue),
           "Số hóa đơn": item.countOrders,
           "Số đơn hoàn tất": item.completedOrders || 0,
           "Số đơn hoàn 1 phần": item.partialRefundOrders || 0,
           "TB / hóa đơn (VNĐ)": Number(item.avgOrderValue || 0),
         }));
-        const ws1 = createWorksheetWithReportHeader({ reportTitle, req, sheetData: totalSheetData });
+        const ws1 = createWorksheetWithReportHeader({
+          reportTitle,
+          req,
+          sheetData: totalSheetData,
+        });
         ws1["!cols"] = [
-          { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 22 }, { wch: 14 }, { wch: 16 }, { wch: 18 }, { wch: 18 }
+          { wch: 12 },
+          { wch: 14 },
+          { wch: 12 },
+          { wch: 12 },
+          { wch: 22 },
+          { wch: 14 },
+          { wch: 16 },
+          { wch: 18 },
+          { wch: 18 },
         ];
         XLSX.utils.book_append_sheet(wb, ws1, "Tổng hợp");
       }
@@ -530,60 +576,137 @@ const exportRevenue = async (req, res) => {
           "Đến ngày": periodEndText,
           "Nhân viên": item.employeeInfo?.fullName || "Nhân viên đã nghỉ",
           "Số điện thoại": item.employeeInfo?.phone || "—",
-          "Doanh thu (VNĐ)": Number(item.totalRevenueNumber ?? item.totalRevenueDouble ?? item.totalRevenue),
+          "Doanh thu (VNĐ)": Number(
+            item.totalRevenueNumber ??
+              item.totalRevenueDouble ??
+              item.totalRevenue
+          ),
           "Số hóa đơn": item.countOrders,
           "TB / hóa đơn (VNĐ)": Number(item.avgOrderValue || 0),
-          "% tổng doanh thu": totalRevenueForShare > 0
-              ? Number(((Number(item.totalRevenueNumber ?? item.totalRevenueDouble ?? item.totalRevenue) || 0) / totalRevenueForShare) * 100).toFixed(2)
+          "% tổng doanh thu":
+            totalRevenueForShare > 0
+              ? Number(
+                  ((Number(
+                    item.totalRevenueNumber ??
+                      item.totalRevenueDouble ??
+                      item.totalRevenue
+                  ) || 0) /
+                    totalRevenueForShare) *
+                    100
+                ).toFixed(2)
               : "0.00",
         }));
 
-        const ws2 = createWorksheetWithReportHeader({ reportTitle, req, sheetData: empSheetData });
+        const ws2 = createWorksheetWithReportHeader({
+          reportTitle,
+          req,
+          sheetData: empSheetData,
+        });
         ws2["!cols"] = [
-          { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 28 }, { wch: 16 }, { wch: 22 }, { wch: 14 }, { wch: 18 }, { wch: 16 }
+          { wch: 12 },
+          { wch: 14 },
+          { wch: 12 },
+          { wch: 12 },
+          { wch: 28 },
+          { wch: 16 },
+          { wch: 22 },
+          { wch: 14 },
+          { wch: 18 },
+          { wch: 16 },
         ];
         XLSX.utils.book_append_sheet(wb, ws2, "Nhân viên");
       }
 
       if (!totalData?.length && !empData?.length) {
-      return await sendEmptyNotificationWorkbook(res, "dữ liệu báo cáo", req.store, "Bao_Cao_Doanh_Thu");
+        return await sendEmptyNotificationWorkbook(
+          res,
+          "dữ liệu báo cáo",
+          req.store,
+          "Bao_Cao_Doanh_Thu"
+        );
       }
 
-      const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
-      const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu", req, periodKey: periodKey || "hien_tai" });
-      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      const buffer = XLSX.write(wb, {
+        bookType: "xlsx",
+        type: "buffer",
+        cellStyles: true,
+      });
+      const fileName = buildExportFileName({
+        reportName: "Bao_Cao_Doanh_Thu",
+        req,
+        periodKey: periodKey || "hien_tai",
+      });
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${fileName}"`
+      );
       return res.send(buffer);
     }
 
     if (format === "pdf") {
       res.setHeader("Content-Type", "application/pdf");
-      const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu", req });
-      res.setHeader("Content-Disposition", `attachment; filename="${fileName.replace(".xlsx", ".pdf")}"`);
+      const fileName = buildExportFileName({
+        reportName: "Bao_Cao_Doanh_Thu",
+        req,
+      });
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${fileName.replace(".xlsx", ".pdf")}"`
+      );
 
       const doc = new PDFDocument({ margin: 50, size: "A4" });
       doc.pipe(res);
 
       const fontPath = path.join(__dirname, "..", "fonts", "Roboto", "static");
-      doc.registerFont("Roboto-Regular", path.join(fontPath, "Roboto-Regular.ttf"));
+      doc.registerFont(
+        "Roboto-Regular",
+        path.join(fontPath, "Roboto-Regular.ttf")
+      );
       doc.registerFont("Roboto-Bold", path.join(fontPath, "Roboto-Bold.ttf"));
-      doc.registerFont("Roboto-Italic", path.join(fontPath, "Roboto-Italic.ttf"));
+      doc.registerFont(
+        "Roboto-Italic",
+        path.join(fontPath, "Roboto-Italic.ttf")
+      );
 
       // 1. Legal Header
-      doc.font("Roboto-Bold").fontSize(10).text((req.store?.name || "Cửa hàng").toUpperCase(), { align: "left" });
+      doc
+        .font("Roboto-Bold")
+        .fontSize(10)
+        .text((req.store?.name || "Cửa hàng").toUpperCase(), { align: "left" });
       doc.moveUp();
       doc.text("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", { align: "right" });
       doc.text("Độc lập - Tự do - Hạnh phúc", { align: "right" });
-      doc.fontSize(9).font("Roboto-Italic").text("-----------------", { align: "right" });
+      doc
+        .fontSize(9)
+        .font("Roboto-Italic")
+        .text("-----------------", { align: "right" });
       doc.moveDown(2);
 
       // 2. Title
-      doc.font("Roboto-Bold").fontSize(18).text("BÁO CÁO DOANH THU CHI TIẾT", { align: "center" });
-      doc.font("Roboto-Italic").fontSize(11).text(`Kỳ báo cáo: ${periodKey || "Hiện tại"} (${periodTypeToVietnamese(periodType)})`, { align: "center" });
+      doc
+        .font("Roboto-Bold")
+        .fontSize(18)
+        .text("BÁO CÁO DOANH THU CHI TIẾT", { align: "center" });
+      doc
+        .font("Roboto-Italic")
+        .fontSize(11)
+        .text(
+          `Kỳ báo cáo: ${periodKey || "Hiện tại"} (${periodTypeToVietnamese(
+            periodType
+          )})`,
+          { align: "center" }
+        );
       doc.moveDown(2);
 
       // 3. Info
-      doc.font("Roboto-Regular").fontSize(10).text(`Người xuất: ${getExporterNameDisplay(req)}`);
+      doc
+        .font("Roboto-Regular")
+        .fontSize(10)
+        .text(`Người xuất: ${getExporterNameDisplay(req)}`);
       doc.text(`Ngày xuất: ${dayjs().format("DD/MM/YYYY HH:mm")}`);
       doc.moveDown(1);
       doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
@@ -593,9 +716,17 @@ const exportRevenue = async (req, res) => {
       doc.font("Roboto-Bold").fontSize(12).text("TỔNG HỢP CHUNG");
       doc.font("Roboto-Regular").fontSize(10);
       if (totalRow) {
-        doc.text(`Tổng doanh thu: ${new Intl.NumberFormat("vi-VN").format(totalRow.totalRevenue)} VND`);
+        doc.text(
+          `Tổng doanh thu: ${new Intl.NumberFormat("vi-VN").format(
+            totalRow.totalRevenue
+          )} VND`
+        );
         doc.text(`Số hóa đơn: ${totalRow.countOrders}`);
-        doc.text(`Giá trị trung bình/đơn: ${new Intl.NumberFormat("vi-VN").format(totalRow.avgOrderValue)} VND`);
+        doc.text(
+          `Giá trị trung bình/đơn: ${new Intl.NumberFormat("vi-VN").format(
+            totalRow.avgOrderValue
+          )} VND`
+        );
       }
       doc.moveDown(2);
 
@@ -604,7 +735,16 @@ const exportRevenue = async (req, res) => {
         doc.font("Roboto-Bold").fontSize(12).text("CHI TIẾT THEO NHÂN VIÊN");
         doc.moveDown(0.5);
         empData.forEach((emp, idx) => {
-          doc.font("Roboto-Regular").fontSize(10).text(`${idx + 1}. ${emp.employeeInfo?.fullName || "N/A"}: ${new Intl.NumberFormat("vi-VN").format(emp.totalRevenueNumber ?? emp.totalRevenue)} VND (${emp.countOrders} đơn)`);
+          doc
+            .font("Roboto-Regular")
+            .fontSize(10)
+            .text(
+              `${idx + 1}. ${
+                emp.employeeInfo?.fullName || "N/A"
+              }: ${new Intl.NumberFormat("vi-VN").format(
+                emp.totalRevenueNumber ?? emp.totalRevenue
+              )} VND (${emp.countOrders} đơn)`
+            );
         });
       }
 
@@ -612,15 +752,26 @@ const exportRevenue = async (req, res) => {
 
       // 6. Signatures
       const startY = doc.y > 650 ? (doc.addPage(), 50) : doc.y;
-      doc.font("Roboto-Bold").text("Người lập biểu", 50, startY, { width: 150, align: "center" });
+      doc
+        .font("Roboto-Bold")
+        .text("Người lập biểu", 50, startY, { width: 150, align: "center" });
       doc.text("Kế toán trưởng", 220, startY, { width: 150, align: "center" });
-      doc.text("Chủ hộ kinh doanh", 390, startY, { width: 150, align: "center" });
-      
-      doc.font("Roboto-Italic").fontSize(9).text("(Ký, họ tên)", 50, doc.y, { width: 150, align: "center" });
+      doc.text("Chủ hộ kinh doanh", 390, startY, {
+        width: 150,
+        align: "center",
+      });
+
+      doc
+        .font("Roboto-Italic")
+        .fontSize(9)
+        .text("(Ký, họ tên)", 50, doc.y, { width: 150, align: "center" });
       doc.moveUp();
       doc.text("(Ký, họ tên)", 220, doc.y, { width: 150, align: "center" });
       doc.moveUp();
-      doc.text("(Ký, họ tên, đóng dấu)", 390, doc.y, { width: 150, align: "center" });
+      doc.text("(Ký, họ tên, đóng dấu)", 390, doc.y, {
+        width: 150,
+        align: "center",
+      });
 
       doc.end();
       return;
@@ -737,10 +888,27 @@ const getRevenueSummaryByYear = async (req, res) => {
       ]),
     ]);
 
-    const revenueMap = new Map((revenueByMonth || []).map((r) => [r._id.month, safeNumber(r.grossRevenue.toString())]));
-    const refundMap = new Map((refundByMonth || []).map((r) => [r._id.month, safeNumber(r.refundAmount.toString())]));
-    const qtyMap = new Map((qtyByMonth || []).map((r) => [r._id.month, safeNumber(r.itemsSold)]));
-    const qtyRefundMap = new Map((qtyRefundByMonth || []).map((r) => [r._id.month, safeNumber(r.itemsRefunded)]));
+    const revenueMap = new Map(
+      (revenueByMonth || []).map((r) => [
+        r._id.month,
+        safeNumber(r.grossRevenue.toString()),
+      ])
+    );
+    const refundMap = new Map(
+      (refundByMonth || []).map((r) => [
+        r._id.month,
+        safeNumber(r.refundAmount.toString()),
+      ])
+    );
+    const qtyMap = new Map(
+      (qtyByMonth || []).map((r) => [r._id.month, safeNumber(r.itemsSold)])
+    );
+    const qtyRefundMap = new Map(
+      (qtyRefundByMonth || []).map((r) => [
+        r._id.month,
+        safeNumber(r.itemsRefunded),
+      ])
+    );
 
     // Xuất đủ 12 tháng
     const rows = Array.from({ length: 12 }, (_, idx) => {
@@ -758,7 +926,10 @@ const getRevenueSummaryByYear = async (req, res) => {
       };
     });
 
-    return res.json({ message: "Báo cáo tổng hợp doanh thu theo năm", data: rows });
+    return res.json({
+      message: "Báo cáo tổng hợp doanh thu theo năm",
+      data: rows,
+    });
   } catch (err) {
     console.error("Lỗi báo cáo tổng hợp doanh thu theo năm:", err);
     return res.status(500).json({ message: "Lỗi server khi báo cáo tổng hợp" });
@@ -811,41 +982,81 @@ const exportRevenueSummaryByYear = async (req, res) => {
     XLSX.utils.book_append_sheet(wb, ws, "Báo cáo doanh thu bán hàng tổng");
 
     if (format === "xlsx") {
-      const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
-      const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu_Tong_Hop", req });
-      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      const buffer = XLSX.write(wb, {
+        bookType: "xlsx",
+        type: "buffer",
+        cellStyles: true,
+      });
+      const fileName = buildExportFileName({
+        reportName: "Bao_Cao_Doanh_Thu_Tong_Hop",
+        req,
+      });
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${fileName}"`
+      );
       return res.send(buffer);
     }
 
     if (format === "pdf") {
       res.setHeader("Content-Type", "application/pdf");
-      const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu_Tong_Hop", req });
-      res.setHeader("Content-Disposition", `attachment; filename="${fileName.replace(".xlsx", ".pdf")}"`);
+      const fileName = buildExportFileName({
+        reportName: "Bao_Cao_Doanh_Thu_Tong_Hop",
+        req,
+      });
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${fileName.replace(".xlsx", ".pdf")}"`
+      );
 
       const doc = new PDFDocument({ margin: 50, size: "A4" });
       doc.pipe(res);
 
       const fontPath = path.join(__dirname, "..", "fonts", "Roboto", "static");
-      doc.registerFont("Roboto-Regular", path.join(fontPath, "Roboto-Regular.ttf"));
+      doc.registerFont(
+        "Roboto-Regular",
+        path.join(fontPath, "Roboto-Regular.ttf")
+      );
       doc.registerFont("Roboto-Bold", path.join(fontPath, "Roboto-Bold.ttf"));
-      doc.registerFont("Roboto-Italic", path.join(fontPath, "Roboto-Italic.ttf"));
+      doc.registerFont(
+        "Roboto-Italic",
+        path.join(fontPath, "Roboto-Italic.ttf")
+      );
 
       // Legal Header
-      doc.font("Roboto-Bold").fontSize(10).text((req.store?.name || "Cửa hàng").toUpperCase(), { align: "left" });
+      doc
+        .font("Roboto-Bold")
+        .fontSize(10)
+        .text((req.store?.name || "Cửa hàng").toUpperCase(), { align: "left" });
       doc.moveUp();
       doc.text("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", { align: "right" });
       doc.text("Độc lập - Tự do - Hạnh phúc", { align: "right" });
-      doc.fontSize(9).font("Roboto-Italic").text("-----------------", { align: "right" });
+      doc
+        .fontSize(9)
+        .font("Roboto-Italic")
+        .text("-----------------", { align: "right" });
       doc.moveDown(2);
 
       // Title
-      doc.font("Roboto-Bold").fontSize(18).text("BÁO CÁO DOANH THU TỔNG HỢP", { align: "center" });
-      doc.font("Roboto-Italic").fontSize(11).text(`Năm: ${year}`, { align: "center" });
+      doc
+        .font("Roboto-Bold")
+        .fontSize(18)
+        .text("BÁO CÁO DOANH THU TỔNG HỢP", { align: "center" });
+      doc
+        .font("Roboto-Italic")
+        .fontSize(11)
+        .text(`Năm: ${year}`, { align: "center" });
       doc.moveDown(2);
 
       // Info
-      doc.font("Roboto-Regular").fontSize(10).text(`Người xuất: ${getExporterNameDisplay(req)}`);
+      doc
+        .font("Roboto-Regular")
+        .fontSize(10)
+        .text(`Người xuất: ${getExporterNameDisplay(req)}`);
       doc.text(`Ngày xuất: ${dayjs().format("DD/MM/YYYY HH:mm")}`);
       doc.moveDown(1);
       doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
@@ -853,18 +1064,34 @@ const exportRevenueSummaryByYear = async (req, res) => {
 
       // Data
       rows.forEach((r, idx) => {
-        doc.font("Roboto-Bold").fontSize(11).text(`${idx + 1}. Tháng ${r.monthLabel || ""}`);
+        doc
+          .font("Roboto-Bold")
+          .fontSize(11)
+          .text(`${idx + 1}. Tháng ${r.monthLabel || ""}`);
         doc.font("Roboto-Regular").fontSize(10);
-        doc.text(`   Sản phẩm bán ra: ${safeNumber(r.itemsSold)}`, { indent: 20 });
-        doc.text(`   Doanh thu: ${new Intl.NumberFormat("vi-VN").format(safeNumber(r.totalRevenue))} VND`, { indent: 20 });
+        doc.text(`   Sản phẩm bán ra: ${safeNumber(r.itemsSold)}`, {
+          indent: 20,
+        });
+        doc.text(
+          `   Doanh thu: ${new Intl.NumberFormat("vi-VN").format(
+            safeNumber(r.totalRevenue)
+          )} VND`,
+          { indent: 20 }
+        );
         doc.moveDown(0.5);
       });
 
       doc.moveDown(2);
       // Signatures
       const startY = doc.y > 650 ? (doc.addPage(), 50) : doc.y;
-      doc.font("Roboto-Bold").fontSize(10).text("Người lập biểu", 50, startY, { width: 150, align: "center" });
-      doc.text("Chủ hộ kinh doanh", 390, startY, { width: 150, align: "center" });
+      doc
+        .font("Roboto-Bold")
+        .fontSize(10)
+        .text("Người lập biểu", 50, startY, { width: 150, align: "center" });
+      doc.text("Chủ hộ kinh doanh", 390, startY, {
+        width: 150,
+        align: "center",
+      });
 
       doc.end();
       return;
@@ -888,7 +1115,9 @@ const getDailyProductSales = async (req, res) => {
     const date = req.query.date; // YYYY-MM-DD
 
     if (!storeId || !date) {
-      return res.status(400).json({ message: "Thiếu storeId hoặc date (YYYY-MM-DD)" });
+      return res
+        .status(400)
+        .json({ message: "Thiếu storeId hoặc date (YYYY-MM-DD)" });
     }
 
     const { start, end } = periodToRange("day", date);
@@ -922,7 +1151,9 @@ const getDailyProductSales = async (req, res) => {
         { $unwind: "$product" },
         {
           $addFields: {
-            grossLine: { $multiply: [{ $toDouble: "$priceAtTime" }, "$quantity"] },
+            grossLine: {
+              $multiply: [{ $toDouble: "$priceAtTime" }, "$quantity"],
+            },
             netLine: { $toDouble: "$subtotal" },
           },
         },
@@ -961,14 +1192,14 @@ const getDailyProductSales = async (req, res) => {
       ]),
     ]);
 
-    const refundMap = new Map(refundRows.map(r => [String(r._id), r]));
-    
+    const refundMap = new Map(refundRows.map((r) => [String(r._id), r]));
+
     // Merge
-    const mergedData = salesRows.map(s => {
+    const mergedData = salesRows.map((s) => {
       const ref = refundMap.get(String(s._id));
       const rQty = ref ? ref.refundedQty : 0;
       const rAmt = ref ? Number(ref.refundedAmount.toString()) : 0;
-      
+
       const finalQty = s.qty - rQty;
       const finalNet = s.netTotal - rAmt;
 
@@ -988,7 +1219,11 @@ const getDailyProductSales = async (req, res) => {
 
     // Add items that were ONLY refunded today (negative sales)
     for (const [prodId, r] of refundMap) {
-      const prod = await mongoose.model("Product").findById(prodId).select("name sku description").lean();
+      const prod = await mongoose
+        .model("Product")
+        .findById(prodId)
+        .select("name sku description")
+        .lean();
       mergedData.push({
         sku: prod?.sku || "",
         productName: prod?.name || "Sản phẩm đã xóa",
@@ -1001,10 +1236,16 @@ const getDailyProductSales = async (req, res) => {
       });
     }
 
-    return res.json({ message: "Báo cáo bán hàng theo ngày thành công", date, data: mergedData });
+    return res.json({
+      message: "Báo cáo bán hàng theo ngày thành công",
+      date,
+      data: mergedData,
+    });
   } catch (err) {
     console.error("Lỗi báo cáo bán hàng theo ngày:", err);
-    return res.status(500).json({ message: "Lỗi server khi báo cáo bán hàng theo ngày" });
+    return res
+      .status(500)
+      .json({ message: "Lỗi server khi báo cáo bán hàng theo ngày" });
   }
 };
 
@@ -1015,10 +1256,14 @@ const exportDailyProductSales = async (req, res) => {
     const { format = "xlsx" } = req.query;
 
     if (!storeId || !date) {
-      return res.status(400).json({ message: "Thiếu storeId hoặc date (YYYY-MM-DD)" });
+      return res
+        .status(400)
+        .json({ message: "Thiếu storeId hoặc date (YYYY-MM-DD)" });
     }
     if (format !== "xlsx" && format !== "pdf") {
-      return res.status(400).json({ message: "Chỉ hỗ trợ xuất Excel (.xlsx) hoặc PDF (.pdf)" });
+      return res
+        .status(400)
+        .json({ message: "Chỉ hỗ trợ xuất Excel (.xlsx) hoặc PDF (.pdf)" });
     }
 
     // Call logic JSON -> map lại theo đúng header template
@@ -1055,47 +1300,96 @@ const exportDailyProductSales = async (req, res) => {
       req,
       sheetData,
     });
-    ws["!cols"] = [{ wch: 14 }, { wch: 26 }, { wch: 34 }, { wch: 12 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
+    ws["!cols"] = [
+      { wch: 14 },
+      { wch: 26 },
+      { wch: 34 },
+      { wch: 12 },
+      { wch: 10 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 14 },
+    ];
 
     // Tên sheet Excel bị giới hạn 31 ký tự; dùng tên ngắn để tránh lỗi khi export.
     XLSX.utils.book_append_sheet(wb, ws, "Bán hàng hằng ngày");
 
     if (format === "xlsx") {
-      const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
-      const fileName = buildExportFileName({ reportName: "Bao_Cao_Ban_Hang_Hang_Ngay", req });
-      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      const buffer = XLSX.write(wb, {
+        bookType: "xlsx",
+        type: "buffer",
+        cellStyles: true,
+      });
+      const fileName = buildExportFileName({
+        reportName: "Bao_Cao_Ban_Hang_Hang_Ngay",
+        req,
+      });
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${fileName}"`
+      );
       return res.send(buffer);
     }
 
     if (format === "pdf") {
       res.setHeader("Content-Type", "application/pdf");
-      const fileName = buildExportFileName({ reportName: "Bao_Cao_Ban_Hang_Hang_Ngay", req });
-      res.setHeader("Content-Disposition", `attachment; filename="${fileName.replace(".xlsx", ".pdf")}"`);
+      const fileName = buildExportFileName({
+        reportName: "Bao_Cao_Ban_Hang_Hang_Ngay",
+        req,
+      });
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${fileName.replace(".xlsx", ".pdf")}"`
+      );
 
       const doc = new PDFDocument({ margin: 50, size: "A4" });
       doc.pipe(res);
 
       const fontPath = path.join(__dirname, "..", "fonts", "Roboto", "static");
-      doc.registerFont("Roboto-Regular", path.join(fontPath, "Roboto-Regular.ttf"));
+      doc.registerFont(
+        "Roboto-Regular",
+        path.join(fontPath, "Roboto-Regular.ttf")
+      );
       doc.registerFont("Roboto-Bold", path.join(fontPath, "Roboto-Bold.ttf"));
-      doc.registerFont("Roboto-Italic", path.join(fontPath, "Roboto-Italic.ttf"));
+      doc.registerFont(
+        "Roboto-Italic",
+        path.join(fontPath, "Roboto-Italic.ttf")
+      );
 
       // 1. Legal Header
-      doc.font("Roboto-Bold").fontSize(10).text((req.store?.name || "Cửa hàng").toUpperCase(), { align: "left" });
+      doc
+        .font("Roboto-Bold")
+        .fontSize(10)
+        .text((req.store?.name || "Cửa hàng").toUpperCase(), { align: "left" });
       doc.moveUp();
       doc.text("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", { align: "right" });
       doc.text("Độc lập - Tự do - Hạnh phúc", { align: "right" });
-      doc.fontSize(9).font("Roboto-Italic").text("-----------------", { align: "right" });
+      doc
+        .fontSize(9)
+        .font("Roboto-Italic")
+        .text("-----------------", { align: "right" });
       doc.moveDown(2);
 
       // 2. Title
-      doc.font("Roboto-Bold").fontSize(18).text("BÁO CÁO BÁN HÀNG HẰNG NGÀY", { align: "center" });
-      doc.font("Roboto-Italic").fontSize(11).text(`Ngày: ${dayjs(date).format("DD/MM/YYYY")}`, { align: "center" });
+      doc
+        .font("Roboto-Bold")
+        .fontSize(18)
+        .text("BÁO CÁO BÁN HÀNG HẰNG NGÀY", { align: "center" });
+      doc
+        .font("Roboto-Italic")
+        .fontSize(11)
+        .text(`Ngày: ${dayjs(date).format("DD/MM/YYYY")}`, { align: "center" });
       doc.moveDown(2);
 
       // 3. Info
-      doc.font("Roboto-Regular").fontSize(10).text(`Người xuất: ${getExporterNameDisplay(req)}`);
+      doc
+        .font("Roboto-Regular")
+        .fontSize(10)
+        .text(`Người xuất: ${getExporterNameDisplay(req)}`);
       doc.text(`Ngày xuất: ${dayjs().format("DD/MM/YYYY HH:mm")}`);
       doc.moveDown(1);
       doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
@@ -1105,8 +1399,22 @@ const exportDailyProductSales = async (req, res) => {
       doc.font("Roboto-Bold").fontSize(10);
       rows.forEach((r, idx) => {
         doc.font("Roboto-Bold").text(`${idx + 1}. ${r.productName} (${r.sku})`);
-        doc.font("Roboto-Regular").text(`   SL: ${r.quantity} | Giá: ${new Intl.NumberFormat("vi-VN").format(r.unitPrice)} | Tổng: ${new Intl.NumberFormat("vi-VN").format(r.grossTotal)}`, { indent: 20 });
-        doc.text(`   Giảm: ${new Intl.NumberFormat("vi-VN").format(r.discountAmount)} | Thực thu: ${new Intl.NumberFormat("vi-VN").format(r.netTotal)}`, { indent: 20 });
+        doc
+          .font("Roboto-Regular")
+          .text(
+            `   SL: ${r.quantity} | Giá: ${new Intl.NumberFormat(
+              "vi-VN"
+            ).format(r.unitPrice)} | Tổng: ${new Intl.NumberFormat(
+              "vi-VN"
+            ).format(r.grossTotal)}`,
+            { indent: 20 }
+          );
+        doc.text(
+          `   Giảm: ${new Intl.NumberFormat("vi-VN").format(
+            r.discountAmount
+          )} | Thực thu: ${new Intl.NumberFormat("vi-VN").format(r.netTotal)}`,
+          { indent: 20 }
+        );
         doc.moveDown(0.5);
       });
 
@@ -1114,8 +1422,14 @@ const exportDailyProductSales = async (req, res) => {
 
       // Signatures
       const startY = doc.y > 650 ? (doc.addPage(), 50) : doc.y;
-      doc.font("Roboto-Bold").fontSize(10).text("Người lập biểu", 50, startY, { width: 150, align: "center" });
-      doc.text("Chủ hộ kinh doanh", 390, startY, { width: 150, align: "center" });
+      doc
+        .font("Roboto-Bold")
+        .fontSize(10)
+        .text("Người lập biểu", 50, startY, { width: 150, align: "center" });
+      doc.text("Chủ hộ kinh doanh", 390, startY, {
+        width: 150,
+        align: "center",
+      });
 
       doc.end();
       return;
@@ -1249,7 +1563,12 @@ const getYearlyCategoryCompare = async (req, res) => {
       { $sort: { revenueThisYear: -1 } },
     ]);
 
-    return res.json({ message: "So sánh doanh số hằng năm", year, prevYear, data: rows || [] });
+    return res.json({
+      message: "So sánh doanh số hằng năm",
+      year,
+      prevYear,
+      data: rows || [],
+    });
   } catch (err) {
     console.error("Lỗi so sánh doanh số hằng năm:", err);
     return res.status(500).json({ message: "Lỗi server khi so sánh doanh số" });
@@ -1301,49 +1620,107 @@ const exportYearlyCategoryCompare = async (req, res) => {
       req,
       sheetData,
     });
-    ws["!cols"] = [{ wch: 28 }, { wch: 18 }, { wch: 18 }, { wch: 16 }, { wch: 16 }];
+    ws["!cols"] = [
+      { wch: 28 },
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 16 },
+      { wch: 16 },
+    ];
     XLSX.utils.book_append_sheet(wb, ws, "So sánh doanh số hằng năm");
 
     if (format === "xlsx") {
-      const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
-      const fileName = buildExportFileName({ reportName: "So_Sanh_Doanh_So_Hang_Nam", req });
-      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      const buffer = XLSX.write(wb, {
+        bookType: "xlsx",
+        type: "buffer",
+        cellStyles: true,
+      });
+      const fileName = buildExportFileName({
+        reportName: "So_Sanh_Doanh_So_Hang_Nam",
+        req,
+      });
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${fileName}"`
+      );
       return res.send(buffer);
     }
 
     if (format === "pdf") {
       res.setHeader("Content-Type", "application/pdf");
-      const fileName = buildExportFileName({ reportName: "So_Sanh_Doanh_So_Hang_Nam", req });
-      res.setHeader("Content-Disposition", `attachment; filename="${fileName.replace(".xlsx", ".pdf")}"`);
+      const fileName = buildExportFileName({
+        reportName: "So_Sanh_Doanh_So_Hang_Nam",
+        req,
+      });
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${fileName.replace(".xlsx", ".pdf")}"`
+      );
 
       const doc = new PDFDocument({ margin: 50, size: "A4" });
       doc.pipe(res);
 
       const fontPath = path.join(__dirname, "..", "fonts", "Roboto", "static");
-      doc.registerFont("Roboto-Regular", path.join(fontPath, "Roboto-Regular.ttf"));
+      doc.registerFont(
+        "Roboto-Regular",
+        path.join(fontPath, "Roboto-Regular.ttf")
+      );
       doc.registerFont("Roboto-Bold", path.join(fontPath, "Roboto-Bold.ttf"));
-      doc.registerFont("Roboto-Italic", path.join(fontPath, "Roboto-Italic.ttf"));
+      doc.registerFont(
+        "Roboto-Italic",
+        path.join(fontPath, "Roboto-Italic.ttf")
+      );
 
       // Header
-      doc.font("Roboto-Bold").fontSize(10).text((req.store?.name || "Cửa hàng").toUpperCase(), { align: "left" });
+      doc
+        .font("Roboto-Bold")
+        .fontSize(10)
+        .text((req.store?.name || "Cửa hàng").toUpperCase(), { align: "left" });
       doc.moveUp();
       doc.text("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", { align: "right" });
       doc.text("Độc lập - Tự do - Hạnh phúc", { align: "right" });
       doc.moveDown(2);
 
       // Title
-      doc.font("Roboto-Bold").fontSize(18).text("SO SÁNH DOANH THU DANH MỤC", { align: "center" });
-      doc.font("Roboto-Italic").fontSize(11).text(`Năm: ${year} và ${prevYear}`, { align: "center" });
+      doc
+        .font("Roboto-Bold")
+        .fontSize(18)
+        .text("SO SÁNH DOANH THU DANH MỤC", { align: "center" });
+      doc
+        .font("Roboto-Italic")
+        .fontSize(11)
+        .text(`Năm: ${year} và ${prevYear}`, { align: "center" });
       doc.moveDown(2);
 
       // Data
       rows.forEach((r, idx) => {
-        doc.font("Roboto-Bold").fontSize(11).text(`${idx + 1}. ${r.category}`);
+        doc
+          .font("Roboto-Bold")
+          .fontSize(11)
+          .text(`${idx + 1}. ${r.category}`);
         doc.font("Roboto-Regular").fontSize(10);
-        doc.text(`   Năm ${prevYear}: ${new Intl.NumberFormat("vi-VN").format(safeNumber(r.revenuePrevYear))} VND`, { indent: 20 });
-        doc.text(`   Năm ${year}: ${new Intl.NumberFormat("vi-VN").format(safeNumber(r.revenueThisYear))} VND`, { indent: 20 });
-        doc.text(`   Chênh lệch: ${new Intl.NumberFormat("vi-VN").format(safeNumber(r.difference))} VND`, { indent: 20 });
+        doc.text(
+          `   Năm ${prevYear}: ${new Intl.NumberFormat("vi-VN").format(
+            safeNumber(r.revenuePrevYear)
+          )} VND`,
+          { indent: 20 }
+        );
+        doc.text(
+          `   Năm ${year}: ${new Intl.NumberFormat("vi-VN").format(
+            safeNumber(r.revenueThisYear)
+          )} VND`,
+          { indent: 20 }
+        );
+        doc.text(
+          `   Chênh lệch: ${new Intl.NumberFormat("vi-VN").format(
+            safeNumber(r.difference)
+          )} VND`,
+          { indent: 20 }
+        );
         doc.moveDown(0.5);
       });
 
@@ -1366,7 +1743,9 @@ const getMonthlyRevenueByDay = async (req, res) => {
     const storeId = req.query.storeId || req.query.shopId;
     const month = req.query.month; // YYYY-MM
     if (!storeId || !month) {
-      return res.status(400).json({ message: "Thiếu storeId hoặc month (YYYY-MM)" });
+      return res
+        .status(400)
+        .json({ message: "Thiếu storeId hoặc month (YYYY-MM)" });
     }
 
     const { start, end } = periodToRange("month", month);
@@ -1442,9 +1821,20 @@ const getMonthlyRevenueByDay = async (req, res) => {
     ]);
 
     const orderMap = new Map(
-      (ordersByDay || []).map((r) => [`${r.y}-${r.m}-${r.d}`, { revenue: safeNumber(r.revenue), orderCount: safeNumber(r.orderCount) }])
+      (ordersByDay || []).map((r) => [
+        `${r.y}-${r.m}-${r.d}`,
+        {
+          revenue: safeNumber(r.revenue),
+          orderCount: safeNumber(r.orderCount),
+        },
+      ])
     );
-    const itemsMap = new Map((itemsByDay || []).map((r) => [`${r.y}-${r.m}-${r.d}`, safeNumber(r.itemsSold)]));
+    const itemsMap = new Map(
+      (itemsByDay || []).map((r) => [
+        `${r.y}-${r.m}-${r.d}`,
+        safeNumber(r.itemsSold),
+      ])
+    );
 
     const monthStart = dayjs(month + "-01");
     const daysInMonth = monthStart.daysInMonth();
@@ -1456,7 +1846,9 @@ const getMonthlyRevenueByDay = async (req, res) => {
       const key = `${y}-${m}-${d}`;
       const o = orderMap.get(key) || { revenue: 0, orderCount: 0 };
       return {
-        date: dayjs(`${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`).format("YYYY-MM-DD"),
+        date: dayjs(
+          `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`
+        ).format("YYYY-MM-DD"),
         dayLabel: d, // Add dayLabel for PDF
         orderCount: o.orderCount,
         itemsSold: itemsMap.get(key) || 0,
@@ -1464,10 +1856,16 @@ const getMonthlyRevenueByDay = async (req, res) => {
       };
     });
 
-    return res.json({ message: "Báo cáo doanh thu theo tháng (theo ngày)", month, data });
+    return res.json({
+      message: "Báo cáo doanh thu theo tháng (theo ngày)",
+      month,
+      data,
+    });
   } catch (err) {
     console.error("Lỗi báo cáo doanh thu theo tháng:", err);
-    return res.status(500).json({ message: "Lỗi server khi báo cáo theo tháng" });
+    return res
+      .status(500)
+      .json({ message: "Lỗi server khi báo cáo theo tháng" });
   }
 };
 
@@ -1478,10 +1876,14 @@ const exportMonthlyRevenueByDay = async (req, res) => {
     const { format = "xlsx" } = req.query;
 
     if (!storeId || !month) {
-      return res.status(400).json({ message: "Thiếu storeId hoặc month (YYYY-MM)" });
+      return res
+        .status(400)
+        .json({ message: "Thiếu storeId hoặc month (YYYY-MM)" });
     }
     if (format !== "xlsx" && format !== "pdf") {
-      return res.status(400).json({ message: "Chỉ hỗ trợ xuất Excel (.xlsx) hoặc PDF (.pdf)" });
+      return res
+        .status(400)
+        .json({ message: "Chỉ hỗ trợ xuất Excel (.xlsx) hoặc PDF (.pdf)" });
     }
 
     let rows;
@@ -1516,39 +1918,82 @@ const exportMonthlyRevenueByDay = async (req, res) => {
     XLSX.utils.book_append_sheet(wb, ws, "Doanh thu theo tháng");
 
     if (format === "xlsx") {
-      const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
-      const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu_Theo_Thang", req });
-      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      const buffer = XLSX.write(wb, {
+        bookType: "xlsx",
+        type: "buffer",
+        cellStyles: true,
+      });
+      const fileName = buildExportFileName({
+        reportName: "Bao_Cao_Doanh_Thu_Theo_Thang",
+        req,
+      });
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${fileName}"`
+      );
       return res.send(buffer);
     }
 
     if (format === "pdf") {
       res.setHeader("Content-Type", "application/pdf");
-      const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu_Theo_Thang", req });
-      res.setHeader("Content-Disposition", `attachment; filename="${fileName.replace(".xlsx", ".pdf")}"`);
+      const fileName = buildExportFileName({
+        reportName: "Bao_Cao_Doanh_Thu_Theo_Thang",
+        req,
+      });
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${fileName.replace(".xlsx", ".pdf")}"`
+      );
 
       const doc = new PDFDocument({ margin: 50, size: "A4" });
       doc.pipe(res);
 
       const fontPath = path.join(__dirname, "..", "fonts", "Roboto", "static");
-      doc.registerFont("Roboto-Regular", path.join(fontPath, "Roboto-Regular.ttf"));
+      doc.registerFont(
+        "Roboto-Regular",
+        path.join(fontPath, "Roboto-Regular.ttf")
+      );
       doc.registerFont("Roboto-Bold", path.join(fontPath, "Roboto-Bold.ttf"));
 
       // Header
-      doc.font("Roboto-Bold").fontSize(10).text((req.store?.name || "Cửa hàng").toUpperCase(), { align: "left" });
+      doc
+        .font("Roboto-Bold")
+        .fontSize(10)
+        .text((req.store?.name || "Cửa hàng").toUpperCase(), { align: "left" });
       doc.moveUp();
       doc.text("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", { align: "right" });
       doc.text("Độc lập - Tự do - Hạnh phúc", { align: "right" });
       doc.moveDown(2);
 
-      doc.font("Roboto-Bold").fontSize(18).text("BÁO CÁO DOANH THU THEO THÁNG", { align: "center" });
-      doc.font("Roboto-Regular").fontSize(11).text(`Tháng: ${month}`, { align: "center" });
+      doc
+        .font("Roboto-Bold")
+        .fontSize(18)
+        .text("BÁO CÁO DOANH THU THEO THÁNG", { align: "center" });
+      doc
+        .font("Roboto-Regular")
+        .fontSize(11)
+        .text(`Tháng: ${month}`, { align: "center" });
       doc.moveDown(2);
 
       rows.forEach((r, idx) => {
-        doc.font("Roboto-Bold").fontSize(10).text(`${idx + 1}. Ngày ${r.dayLabel}:`);
-        doc.font("Roboto-Regular").text(`   Số đơn: ${r.orderCount} | Số SP: ${r.itemsSold} | Doanh thu: ${new Intl.NumberFormat("vi-VN").format(safeNumber(r.revenue))} VND`, { indent: 20 });
+        doc
+          .font("Roboto-Bold")
+          .fontSize(10)
+          .text(`${idx + 1}. Ngày ${r.dayLabel}:`);
+        doc
+          .font("Roboto-Regular")
+          .text(
+            `   Số đơn: ${r.orderCount} | Số SP: ${
+              r.itemsSold
+            } | Doanh thu: ${new Intl.NumberFormat("vi-VN").format(
+              safeNumber(r.revenue)
+            )} VND`,
+            { indent: 20 }
+          );
         doc.moveDown(0.3);
       });
 
@@ -1572,7 +2017,11 @@ const getMonthlyRevenueSummary = async (req, res) => {
     const month = req.query.month; // YYYY-MM (legacy)
     const year = req.query.year ? parseYear(req.query.year) : null; // new: YYYY
     if (!storeId || (!month && !year)) {
-      return res.status(400).json({ message: "Thiếu storeId hoặc (month YYYY-MM) hoặc (year YYYY)" });
+      return res
+        .status(400)
+        .json({
+          message: "Thiếu storeId hoặc (month YYYY-MM) hoặc (year YYYY)",
+        });
     }
 
     // ===== NEW: tổng hợp theo năm (trả về đủ 12 tháng) =====
@@ -1625,7 +2074,10 @@ const getMonthlyRevenueSummary = async (req, res) => {
           },
           {
             $group: {
-              _id: { y: { $year: "$order.createdAt" }, m: { $month: "$order.createdAt" } },
+              _id: {
+                y: { $year: "$order.createdAt" },
+                m: { $month: "$order.createdAt" },
+              },
               itemsSold: { $sum: "$quantity" },
             },
           },
@@ -1641,9 +2093,20 @@ const getMonthlyRevenueSummary = async (req, res) => {
       ]);
 
       const revenueMap = new Map(
-        (ordersByMonth || []).map((r) => [`${r.y}-${r.m}`, { revenue: safeNumber(r.totalRevenue), orderCount: safeNumber(r.orderCount) }])
+        (ordersByMonth || []).map((r) => [
+          `${r.y}-${r.m}`,
+          {
+            revenue: safeNumber(r.totalRevenue),
+            orderCount: safeNumber(r.orderCount),
+          },
+        ])
       );
-      const itemsMap = new Map((itemsByMonth || []).map((r) => [`${r.y}-${r.m}`, safeNumber(r.itemsSold)]));
+      const itemsMap = new Map(
+        (itemsByMonth || []).map((r) => [
+          `${r.y}-${r.m}`,
+          safeNumber(r.itemsSold),
+        ])
+      );
 
       const data = Array.from({ length: 12 }, (_, idx) => {
         const m = idx + 1;
@@ -1659,7 +2122,8 @@ const getMonthlyRevenueSummary = async (req, res) => {
         const totalRevenue = safeNumber(cur.revenue);
         const orderCount = safeNumber(cur.orderCount);
         const itemsSold = safeNumber(itemsMap.get(key) || 0);
-        const avgRevenuePerDay = daysInMonth > 0 ? totalRevenue / daysInMonth : 0;
+        const avgRevenuePerDay =
+          daysInMonth > 0 ? totalRevenue / daysInMonth : 0;
         const diffVsPrevMonth = totalRevenue - safeNumber(prev.revenue);
 
         return {
@@ -1686,74 +2150,80 @@ const getMonthlyRevenueSummary = async (req, res) => {
     const daysInMonth = monthStart.daysInMonth();
 
     const prevMonthKey = monthStart.subtract(1, "month").format("YYYY-MM");
-    const { start: prevStart, end: prevEnd } = periodToRange("month", prevMonthKey);
+    const { start: prevStart, end: prevEnd } = periodToRange(
+      "month",
+      prevMonthKey
+    );
 
-    const [thisMonthOrders, thisMonthItems, prevMonthOrders] = await Promise.all([
-      Order.aggregate([
-        {
-          $match: {
-            storeId: toObjectId(storeId),
-            status: { $in: PAID_STATUSES },
-            createdAt: { $gte: start, $lte: end },
+    const [thisMonthOrders, thisMonthItems, prevMonthOrders] =
+      await Promise.all([
+        Order.aggregate([
+          {
+            $match: {
+              storeId: toObjectId(storeId),
+              status: { $in: PAID_STATUSES },
+              createdAt: { $gte: start, $lte: end },
+            },
           },
-        },
-        {
-          $group: {
-            _id: null,
-            totalRevenue: { $sum: { $toDecimal: "$totalAmount" } },
-            orderCount: { $sum: 1 },
+          {
+            $group: {
+              _id: null,
+              totalRevenue: { $sum: { $toDecimal: "$totalAmount" } },
+              orderCount: { $sum: 1 },
+            },
           },
-        },
-        {
-          $project: {
-            _id: 0,
-            totalRevenue: { $toDouble: "$totalRevenue" },
-            orderCount: 1,
+          {
+            $project: {
+              _id: 0,
+              totalRevenue: { $toDouble: "$totalRevenue" },
+              orderCount: 1,
+            },
           },
-        },
-      ]),
-      OrderItem.aggregate([
-        {
-          $lookup: {
-            from: "orders",
-            localField: "orderId",
-            foreignField: "_id",
-            as: "order",
+        ]),
+        OrderItem.aggregate([
+          {
+            $lookup: {
+              from: "orders",
+              localField: "orderId",
+              foreignField: "_id",
+              as: "order",
+            },
           },
-        },
-        { $unwind: "$order" },
-        {
-          $match: {
-            "order.storeId": toObjectId(storeId),
-            "order.status": { $in: PAID_STATUSES },
-            "order.createdAt": { $gte: start, $lte: end },
+          { $unwind: "$order" },
+          {
+            $match: {
+              "order.storeId": toObjectId(storeId),
+              "order.status": { $in: PAID_STATUSES },
+              "order.createdAt": { $gte: start, $lte: end },
+            },
           },
-        },
-        {
-          $group: {
-            _id: null,
-            itemsSold: { $sum: "$quantity" },
+          {
+            $group: {
+              _id: null,
+              itemsSold: { $sum: "$quantity" },
+            },
           },
-        },
-        { $project: { _id: 0, itemsSold: 1 } },
-      ]),
-      Order.aggregate([
-        {
-          $match: {
-            storeId: toObjectId(storeId),
-            status: { $in: PAID_STATUSES },
-            createdAt: { $gte: prevStart, $lte: prevEnd },
+          { $project: { _id: 0, itemsSold: 1 } },
+        ]),
+        Order.aggregate([
+          {
+            $match: {
+              storeId: toObjectId(storeId),
+              status: { $in: PAID_STATUSES },
+              createdAt: { $gte: prevStart, $lte: prevEnd },
+            },
           },
-        },
-        {
-          $group: {
-            _id: null,
-            totalRevenue: { $sum: { $toDecimal: "$totalAmount" } },
+          {
+            $group: {
+              _id: null,
+              totalRevenue: { $sum: { $toDecimal: "$totalAmount" } },
+            },
           },
-        },
-        { $project: { _id: 0, totalRevenue: { $toDouble: "$totalRevenue" } } },
-      ]),
-    ]);
+          {
+            $project: { _id: 0, totalRevenue: { $toDouble: "$totalRevenue" } },
+          },
+        ]),
+      ]);
 
     const totalRevenue = safeNumber(thisMonthOrders?.[0]?.totalRevenue);
     const orderCount = safeNumber(thisMonthOrders?.[0]?.orderCount);
@@ -1779,7 +2249,9 @@ const getMonthlyRevenueSummary = async (req, res) => {
     });
   } catch (err) {
     console.error("Lỗi báo cáo tổng hợp theo tháng:", err);
-    return res.status(500).json({ message: "Lỗi server khi báo cáo tổng hợp theo tháng" });
+    return res
+      .status(500)
+      .json({ message: "Lỗi server khi báo cáo tổng hợp theo tháng" });
   }
 };
 
@@ -1791,10 +2263,16 @@ const exportMonthlyRevenueSummary = async (req, res) => {
     const { format = "xlsx" } = req.query;
 
     if (!storeId || (!month && !year)) {
-      return res.status(400).json({ message: "Thiếu storeId hoặc (month YYYY-MM) hoặc (year YYYY)" });
+      return res
+        .status(400)
+        .json({
+          message: "Thiếu storeId hoặc (month YYYY-MM) hoặc (year YYYY)",
+        });
     }
     if (format !== "xlsx" && format !== "pdf") {
-      return res.status(400).json({ message: "Chỉ hỗ trợ xuất Excel (.xlsx) hoặc PDF (.pdf)" });
+      return res
+        .status(400)
+        .json({ message: "Chỉ hỗ trợ xuất Excel (.xlsx) hoặc PDF (.pdf)" });
     }
 
     let payload;
@@ -1813,7 +2291,12 @@ const exportMonthlyRevenueSummary = async (req, res) => {
     if (year) {
       const rows = payload?.data;
       if (!Array.isArray(rows) || !rows.length) {
-      return await sendEmptyNotificationWorkbook(res, "dữ liệu báo cáo", req.store, "Bao_Cao_Doanh_Thu");
+        return await sendEmptyNotificationWorkbook(
+          res,
+          "dữ liệu báo cáo",
+          req.store,
+          "Bao_Cao_Doanh_Thu"
+        );
       }
       const sheetData = rows.map((r) => ({
         Tháng: r.monthLabel,
@@ -1824,7 +2307,10 @@ const exportMonthlyRevenueSummary = async (req, res) => {
         "So với tháng trước (VNĐ)": safeNumber(r.diffVsPrevMonth),
       }));
 
-      const totalRevenue = sheetData.reduce((sum, r) => sum + safeNumber(r["Tổng doanh thu (VNĐ)"]), 0);
+      const totalRevenue = sheetData.reduce(
+        (sum, r) => sum + safeNumber(r["Tổng doanh thu (VNĐ)"]),
+        0
+      );
 
       sheetData.push({
         Tháng: "Tổng cộng",
@@ -1839,12 +2325,24 @@ const exportMonthlyRevenueSummary = async (req, res) => {
         req,
         sheetData,
       });
-      ws["!cols"] = [{ wch: 10 }, { wch: 18 }, { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 18 }];
+      ws["!cols"] = [
+        { wch: 10 },
+        { wch: 18 },
+        { wch: 12 },
+        { wch: 18 },
+        { wch: 18 },
+        { wch: 18 },
+      ];
       XLSX.utils.book_append_sheet(wb, ws, "Tổng hợp theo tháng");
     } else {
       const row = payload?.data;
       if (!row) {
-      return await sendEmptyNotificationWorkbook(res, "dữ liệu báo cáo", req.store, "Bao_Cao_Doanh_Thu");
+        return await sendEmptyNotificationWorkbook(
+          res,
+          "dữ liệu báo cáo",
+          req.store,
+          "Bao_Cao_Doanh_Thu"
+        );
       }
       const sheetData = [
         {
@@ -1861,46 +2359,93 @@ const exportMonthlyRevenueSummary = async (req, res) => {
         req,
         sheetData,
       });
-      ws["!cols"] = [{ wch: 10 }, { wch: 18 }, { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 18 }];
+      ws["!cols"] = [
+        { wch: 10 },
+        { wch: 18 },
+        { wch: 12 },
+        { wch: 18 },
+        { wch: 18 },
+        { wch: 18 },
+      ];
       XLSX.utils.book_append_sheet(wb, ws, "Tổng hợp theo tháng");
     }
 
     if (format === "xlsx") {
-      const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
-      const fileName = buildExportFileName({ reportName: "Bao_Cao_Tong_Hop_Theo_Thang", req });
-      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      const buffer = XLSX.write(wb, {
+        bookType: "xlsx",
+        type: "buffer",
+        cellStyles: true,
+      });
+      const fileName = buildExportFileName({
+        reportName: "Bao_Cao_Tong_Hop_Theo_Thang",
+        req,
+      });
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${fileName}"`
+      );
       return res.send(buffer);
     }
 
     if (format === "pdf") {
       res.setHeader("Content-Type", "application/pdf");
-      const fileName = buildExportFileName({ reportName: "Bao_Cao_Tong_Hop_Theo_Thang", req });
-      res.setHeader("Content-Disposition", `attachment; filename="${fileName.replace(".xlsx", ".pdf")}"`);
+      const fileName = buildExportFileName({
+        reportName: "Bao_Cao_Tong_Hop_Theo_Thang",
+        req,
+      });
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${fileName.replace(".xlsx", ".pdf")}"`
+      );
 
       const doc = new PDFDocument({ margin: 50, size: "A4" });
       doc.pipe(res);
 
       const fontPath = path.join(__dirname, "..", "fonts", "Roboto", "static");
-      doc.registerFont("Roboto-Regular", path.join(fontPath, "Roboto-Regular.ttf"));
+      doc.registerFont(
+        "Roboto-Regular",
+        path.join(fontPath, "Roboto-Regular.ttf")
+      );
       doc.registerFont("Roboto-Bold", path.join(fontPath, "Roboto-Bold.ttf"));
-      doc.registerFont("Roboto-Italic", path.join(fontPath, "Roboto-Italic.ttf"));
+      doc.registerFont(
+        "Roboto-Italic",
+        path.join(fontPath, "Roboto-Italic.ttf")
+      );
 
       // 1. Legal Header
-      doc.font("Roboto-Bold").fontSize(10).text((req.store?.name || "Cửa hàng").toUpperCase(), { align: "left" });
+      doc
+        .font("Roboto-Bold")
+        .fontSize(10)
+        .text((req.store?.name || "Cửa hàng").toUpperCase(), { align: "left" });
       doc.moveUp();
       doc.text("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", { align: "right" });
       doc.text("Độc lập - Tự do - Hạnh phúc", { align: "right" });
-      doc.fontSize(9).font("Roboto-Italic").text("-----------------", { align: "right" });
+      doc
+        .fontSize(9)
+        .font("Roboto-Italic")
+        .text("-----------------", { align: "right" });
       doc.moveDown(2);
 
       // 2. Title
-      doc.font("Roboto-Bold").fontSize(18).text("TỔNG HỢP DOANH THU THEO THÁNG", { align: "center" });
-      doc.font("Roboto-Italic").fontSize(11).text(year ? `Năm: ${year}` : `Tháng: ${month}`, { align: "center" });
+      doc
+        .font("Roboto-Bold")
+        .fontSize(18)
+        .text("TỔNG HỢP DOANH THU THEO THÁNG", { align: "center" });
+      doc
+        .font("Roboto-Italic")
+        .fontSize(11)
+        .text(year ? `Năm: ${year}` : `Tháng: ${month}`, { align: "center" });
       doc.moveDown(2);
 
       // 3. Info
-      doc.font("Roboto-Regular").fontSize(10).text(`Người xuất: ${getExporterNameDisplay(req)}`);
+      doc
+        .font("Roboto-Regular")
+        .fontSize(10)
+        .text(`Người xuất: ${getExporterNameDisplay(req)}`);
       doc.text(`Ngày xuất: ${dayjs().format("DD/MM/YYYY HH:mm")}`);
       doc.moveDown(1);
       doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
@@ -1911,11 +2456,29 @@ const exportMonthlyRevenueSummary = async (req, res) => {
       if (rows && rows.length > 0) {
         rows.forEach((r, idx) => {
           if (!r) return;
-          doc.font("Roboto-Bold").fontSize(11).text(`${idx + 1}. ${r.monthLabel || ""}`);
+          doc
+            .font("Roboto-Bold")
+            .fontSize(11)
+            .text(`${idx + 1}. ${r.monthLabel || ""}`);
           doc.font("Roboto-Regular").fontSize(10);
-          doc.text(`   Doanh thu: ${new Intl.NumberFormat("vi-VN").format(safeNumber(r.totalRevenue))} VND`, { indent: 20 });
-          doc.text(`   Đơn hàng: ${safeNumber(r.orderCount)} | Sản phẩm: ${safeNumber(r.itemsSold)}`, { indent: 20 });
-          doc.text(`   TB / ngày: ${new Intl.NumberFormat("vi-VN").format(safeNumber(r.avgRevenuePerDay))} VND`, { indent: 20 });
+          doc.text(
+            `   Doanh thu: ${new Intl.NumberFormat("vi-VN").format(
+              safeNumber(r.totalRevenue)
+            )} VND`,
+            { indent: 20 }
+          );
+          doc.text(
+            `   Đơn hàng: ${safeNumber(r.orderCount)} | Sản phẩm: ${safeNumber(
+              r.itemsSold
+            )}`,
+            { indent: 20 }
+          );
+          doc.text(
+            `   TB / ngày: ${new Intl.NumberFormat("vi-VN").format(
+              safeNumber(r.avgRevenuePerDay)
+            )} VND`,
+            { indent: 20 }
+          );
           doc.moveDown(0.5);
         });
       }
@@ -1924,15 +2487,27 @@ const exportMonthlyRevenueSummary = async (req, res) => {
 
       // Signatures
       const startY = doc.y > 650 ? (doc.addPage(), 50) : doc.y;
-      doc.font("Roboto-Bold").fontSize(10).text("Người lập biểu", 50, startY, { width: 150, align: "center" });
+      doc
+        .font("Roboto-Bold")
+        .fontSize(10)
+        .text("Người lập biểu", 50, startY, { width: 150, align: "center" });
       doc.text("Kế toán trưởng", 220, startY, { width: 150, align: "center" });
-      doc.text("Chủ hộ kinh doanh", 390, startY, { width: 150, align: "center" });
-      
-      doc.font("Roboto-Italic").fontSize(9).text("(Ký, họ tên)", 50, doc.y + 5, { width: 150, align: "center" });
+      doc.text("Chủ hộ kinh doanh", 390, startY, {
+        width: 150,
+        align: "center",
+      });
+
+      doc
+        .font("Roboto-Italic")
+        .fontSize(9)
+        .text("(Ký, họ tên)", 50, doc.y + 5, { width: 150, align: "center" });
       doc.moveUp();
       doc.text("(Ký, họ tên)", 220, doc.y, { width: 150, align: "center" });
       doc.moveUp();
-      doc.text("(Ký, họ tên, đóng dấu)", 390, doc.y, { width: 150, align: "center" });
+      doc.text("(Ký, họ tên, đóng dấu)", 390, doc.y, {
+        width: 150,
+        align: "center",
+      });
 
       doc.end();
       return;
@@ -1952,7 +2527,9 @@ const getMonthlyTopProducts = async (req, res) => {
     const storeId = req.query.storeId || req.query.shopId;
     const month = req.query.month; // YYYY-MM
     if (!storeId || !month) {
-      return res.status(400).json({ message: "Thiếu storeId hoặc month (YYYY-MM)" });
+      return res
+        .status(400)
+        .json({ message: "Thiếu storeId hoặc month (YYYY-MM)" });
     }
 
     const { start, end } = periodToRange("month", month);
@@ -2007,14 +2584,18 @@ const getMonthlyTopProducts = async (req, res) => {
       },
     ]);
 
-    const totalRevenueAll = (rows || []).reduce((sum, r) => sum + safeNumber(r.revenue), 0);
+    const totalRevenueAll = (rows || []).reduce(
+      (sum, r) => sum + safeNumber(r.revenue),
+      0
+    );
     const data = (rows || []).map((r) => {
       const revenue = safeNumber(r.revenue);
       return {
         productName: r.productName,
         totalQuantity: safeNumber(r.quantity),
         totalRevenue: revenue,
-        contributionPercent: totalRevenueAll > 0 ? (revenue / totalRevenueAll) * 100 : 0,
+        contributionPercent:
+          totalRevenueAll > 0 ? (revenue / totalRevenueAll) * 100 : 0,
       };
     });
 
@@ -2026,7 +2607,9 @@ const getMonthlyTopProducts = async (req, res) => {
     });
   } catch (err) {
     console.error("Lỗi báo cáo bán chạy theo sản phẩm:", err);
-    return res.status(500).json({ message: "Lỗi server khi báo cáo bán chạy theo sản phẩm" });
+    return res
+      .status(500)
+      .json({ message: "Lỗi server khi báo cáo bán chạy theo sản phẩm" });
   }
 };
 
@@ -2037,10 +2620,14 @@ const exportMonthlyTopProducts = async (req, res) => {
     const { format = "xlsx" } = req.query;
 
     if (!storeId || !month) {
-      return res.status(400).json({ message: "Thiếu storeId hoặc month (YYYY-MM)" });
+      return res
+        .status(400)
+        .json({ message: "Thiếu storeId hoặc month (YYYY-MM)" });
     }
     if (format !== "xlsx" && format !== "pdf") {
-      return res.status(400).json({ message: "Chỉ hỗ trợ xuất Excel (.xlsx) hoặc PDF (.pdf)" });
+      return res
+        .status(400)
+        .json({ message: "Chỉ hỗ trợ xuất Excel (.xlsx) hoặc PDF (.pdf)" });
     }
 
     let payload;
@@ -2075,32 +2662,72 @@ const exportMonthlyTopProducts = async (req, res) => {
     XLSX.utils.book_append_sheet(wb, ws, "Bán chạy theo sản phẩm");
 
     if (format === "xlsx") {
-      const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
-      const fileName = buildExportFileName({ reportName: "Bao_Cao_Ban_Chay_Theo_San_Pham", req });
-      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      const buffer = XLSX.write(wb, {
+        bookType: "xlsx",
+        type: "buffer",
+        cellStyles: true,
+      });
+      const fileName = buildExportFileName({
+        reportName: "Bao_Cao_Ban_Chay_Theo_San_Pham",
+        req,
+      });
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${fileName}"`
+      );
       return res.send(buffer);
     }
 
     if (format === "pdf") {
       res.setHeader("Content-Type", "application/pdf");
-      const fileName = buildExportFileName({ reportName: "Bao_Cao_Ban_Chay_Theo_San_Pham", req });
-      res.setHeader("Content-Disposition", `attachment; filename="${fileName.replace(".xlsx", ".pdf")}"`);
+      const fileName = buildExportFileName({
+        reportName: "Bao_Cao_Ban_Chay_Theo_San_Pham",
+        req,
+      });
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${fileName.replace(".xlsx", ".pdf")}"`
+      );
 
       const doc = new PDFDocument({ margin: 50, size: "A4" });
       doc.pipe(res);
 
       const fontPath = path.join(__dirname, "..", "fonts", "Roboto", "static");
-      doc.registerFont("Roboto-Regular", path.join(fontPath, "Roboto-Regular.ttf"));
+      doc.registerFont(
+        "Roboto-Regular",
+        path.join(fontPath, "Roboto-Regular.ttf")
+      );
       doc.registerFont("Roboto-Bold", path.join(fontPath, "Roboto-Bold.ttf"));
 
-      doc.font("Roboto-Bold").fontSize(18).text("BÁO CÁO SẢN PHẨM BÁN CHẠY", { align: "center" });
-      doc.font("Roboto-Regular").fontSize(11).text(`Tháng: ${month}`, { align: "center" });
+      doc
+        .font("Roboto-Bold")
+        .fontSize(18)
+        .text("BÁO CÁO SẢN PHẨM BÁN CHẠY", { align: "center" });
+      doc
+        .font("Roboto-Regular")
+        .fontSize(11)
+        .text(`Tháng: ${month}`, { align: "center" });
       doc.moveDown(2);
 
       rows.forEach((r, idx) => {
-        doc.font("Roboto-Bold").fontSize(10).text(`${idx + 1}. ${r.productName}`);
-        doc.font("Roboto-Regular").text(`   Số lượng: ${safeNumber(r.totalQuantity)} | Doanh thu: ${new Intl.NumberFormat("vi-VN").format(safeNumber(r.totalRevenue))} VND | Tỷ lệ: ${safeNumber(r.contributionPercent).toFixed(2)}%`, { indent: 20 });
+        doc
+          .font("Roboto-Bold")
+          .fontSize(10)
+          .text(`${idx + 1}. ${r.productName}`);
+        doc
+          .font("Roboto-Regular")
+          .text(
+            `   Số lượng: ${safeNumber(
+              r.totalQuantity
+            )} | Doanh thu: ${new Intl.NumberFormat("vi-VN").format(
+              safeNumber(r.totalRevenue)
+            )} VND | Tỷ lệ: ${safeNumber(r.contributionPercent).toFixed(2)}%`,
+            { indent: 20 }
+          );
         doc.moveDown(0.4);
       });
 
@@ -2167,7 +2794,9 @@ const getYearlyProductGroupProductCompare = async (req, res) => {
       {
         $addFields: {
           groupId: { $ifNull: [{ $arrayElemAt: ["$group._id", 0] }, null] },
-          groupName: { $ifNull: [{ $arrayElemAt: ["$group.name", 0] }, "(Chưa phân nhóm)"] },
+          groupName: {
+            $ifNull: [{ $arrayElemAt: ["$group.name", 0] }, "(Chưa phân nhóm)"],
+          },
           orderYear: { $year: "$order.createdAt" },
           netLine: { $toDouble: "$subtotal" },
         },
@@ -2222,7 +2851,8 @@ const getYearlyProductGroupProductCompare = async (req, res) => {
         });
       }
       const item = g.items.get(pKey);
-      if (r.orderYear === prevYear) item.revenuePrevYear += safeNumber(r.revenue);
+      if (r.orderYear === prevYear)
+        item.revenuePrevYear += safeNumber(r.revenue);
       if (r.orderYear === year) item.revenueThisYear += safeNumber(r.revenue);
     }
 
@@ -2249,19 +2879,29 @@ const getYearlyProductGroupProductCompare = async (req, res) => {
 
     // sort group theo tổng doanh thu năm nay desc
     data.sort((a, b) => {
-      const sumA = (a.items || []).reduce((s, it) => s + safeNumber(it.revenueThisYear), 0);
-      const sumB = (b.items || []).reduce((s, it) => s + safeNumber(it.revenueThisYear), 0);
+      const sumA = (a.items || []).reduce(
+        (s, it) => s + safeNumber(it.revenueThisYear),
+        0
+      );
+      const sumB = (b.items || []).reduce(
+        (s, it) => s + safeNumber(it.revenueThisYear),
+        0
+      );
       return sumB - sumA;
     });
 
     return res.json({
-      message: "Báo cáo doanh thu hằng năm theo danh mục (productGroup) và sản phẩm",
+      message:
+        "Báo cáo doanh thu hằng năm theo danh mục (productGroup) và sản phẩm",
       year,
       prevYear,
       data,
     });
   } catch (err) {
-    console.error("Lỗi báo cáo doanh thu năm theo productGroup->sản phẩm:", err);
+    console.error(
+      "Lỗi báo cáo doanh thu năm theo productGroup->sản phẩm:",
+      err
+    );
     return res.status(500).json({ message: "Lỗi server khi báo cáo theo năm" });
   }
 };
@@ -2323,45 +2963,91 @@ const exportYearlyProductGroupProductCompare = async (req, res) => {
       req,
       sheetData: rows,
     });
-    ws["!cols"] = [{ wch: 34 }, { wch: 18 }, { wch: 18 }, { wch: 16 }, { wch: 18 }];
+    ws["!cols"] = [
+      { wch: 34 },
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 16 },
+      { wch: 18 },
+    ];
     XLSX.utils.book_append_sheet(wb, ws, "Doanh thu hằng năm");
 
     if (format === "xlsx") {
-      const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
-      const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu_Hang_Nam", req });
-      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      const buffer = XLSX.write(wb, {
+        bookType: "xlsx",
+        type: "buffer",
+        cellStyles: true,
+      });
+      const fileName = buildExportFileName({
+        reportName: "Bao_Cao_Doanh_Thu_Hang_Nam",
+        req,
+      });
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${fileName}"`
+      );
       return res.send(buffer);
     }
 
     if (format === "pdf") {
       res.setHeader("Content-Type", "application/pdf");
-      const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu_Hang_Nam", req });
-      res.setHeader("Content-Disposition", `attachment; filename="${fileName.replace(".xlsx", ".pdf")}"`);
+      const fileName = buildExportFileName({
+        reportName: "Bao_Cao_Doanh_Thu_Hang_Nam",
+        req,
+      });
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${fileName.replace(".xlsx", ".pdf")}"`
+      );
 
       const doc = new PDFDocument({ margin: 50, size: "A4" });
       doc.pipe(res);
 
       const fontPath = path.join(__dirname, "..", "fonts", "Roboto", "static");
-      doc.registerFont("Roboto-Regular", path.join(fontPath, "Roboto-Regular.ttf"));
+      doc.registerFont(
+        "Roboto-Regular",
+        path.join(fontPath, "Roboto-Regular.ttf")
+      );
       doc.registerFont("Roboto-Bold", path.join(fontPath, "Roboto-Bold.ttf"));
-      doc.registerFont("Roboto-Italic", path.join(fontPath, "Roboto-Italic.ttf"));
+      doc.registerFont(
+        "Roboto-Italic",
+        path.join(fontPath, "Roboto-Italic.ttf")
+      );
 
       // 1. Legal Header
-      doc.font("Roboto-Bold").fontSize(10).text((req.store?.name || "Cửa hàng").toUpperCase(), { align: "left" });
+      doc
+        .font("Roboto-Bold")
+        .fontSize(10)
+        .text((req.store?.name || "Cửa hàng").toUpperCase(), { align: "left" });
       doc.moveUp();
       doc.text("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", { align: "right" });
       doc.text("Độc lập - Tự do - Hạnh phúc", { align: "right" });
-      doc.fontSize(9).font("Roboto-Italic").text("-----------------", { align: "right" });
+      doc
+        .fontSize(9)
+        .font("Roboto-Italic")
+        .text("-----------------", { align: "right" });
       doc.moveDown(2);
 
       // 2. Title
-      doc.font("Roboto-Bold").fontSize(18).text("SO SÁNH DOANH THU HẰNG NĂM", { align: "center" });
-      doc.font("Roboto-Italic").fontSize(11).text(`Năm đối chiếu: ${prevYear} và ${year}`, { align: "center" });
+      doc
+        .font("Roboto-Bold")
+        .fontSize(18)
+        .text("SO SÁNH DOANH THU HẰNG NĂM", { align: "center" });
+      doc
+        .font("Roboto-Italic")
+        .fontSize(11)
+        .text(`Năm đối chiếu: ${prevYear} và ${year}`, { align: "center" });
       doc.moveDown(2);
 
       // 3. Info
-      doc.font("Roboto-Regular").fontSize(10).text(`Người xuất: ${getExporterNameDisplay(req)}`);
+      doc
+        .font("Roboto-Regular")
+        .fontSize(10)
+        .text(`Người xuất: ${getExporterNameDisplay(req)}`);
       doc.text(`Ngày xuất: ${dayjs().format("DD/MM/YYYY HH:mm")}`);
       doc.moveDown(1);
       doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
@@ -2369,12 +3055,29 @@ const exportYearlyProductGroupProductCompare = async (req, res) => {
 
       // 4. Data
       groups.forEach((g) => {
-        doc.font("Roboto-Bold").fontSize(12).text(g.productGroup?.name || "(Chưa phân nhóm)");
+        doc
+          .font("Roboto-Bold")
+          .fontSize(12)
+          .text(g.productGroup?.name || "(Chưa phân nhóm)");
         doc.moveDown(0.2);
         (g.items || []).forEach((it) => {
           doc.font("Roboto-Regular").fontSize(10).text(`${it.productName}:`);
-          doc.text(`   ${prevYear}: ${new Intl.NumberFormat("vi-VN").format(safeNumber(it.revenuePrevYear))} | ${year}: ${new Intl.NumberFormat("vi-VN").format(safeNumber(it.revenueThisYear))}`, { indent: 20 });
-          doc.text(`   Chênh lệch: ${new Intl.NumberFormat("vi-VN").format(safeNumber(it.difference))} | Tổng: ${new Intl.NumberFormat("vi-VN").format(safeNumber(it.totalTwoYears))}`, { indent: 20 });
+          doc.text(
+            `   ${prevYear}: ${new Intl.NumberFormat("vi-VN").format(
+              safeNumber(it.revenuePrevYear)
+            )} | ${year}: ${new Intl.NumberFormat("vi-VN").format(
+              safeNumber(it.revenueThisYear)
+            )}`,
+            { indent: 20 }
+          );
+          doc.text(
+            `   Chênh lệch: ${new Intl.NumberFormat("vi-VN").format(
+              safeNumber(it.difference)
+            )} | Tổng: ${new Intl.NumberFormat("vi-VN").format(
+              safeNumber(it.totalTwoYears)
+            )}`,
+            { indent: 20 }
+          );
           doc.moveDown(0.3);
         });
         doc.moveDown(0.5);
@@ -2384,8 +3087,14 @@ const exportYearlyProductGroupProductCompare = async (req, res) => {
 
       // Signatures
       const startY = doc.y > 650 ? (doc.addPage(), 50) : doc.y;
-      doc.font("Roboto-Bold").fontSize(10).text("Người lập biểu", 50, startY, { width: 150, align: "center" });
-      doc.text("Chủ hộ kinh doanh", 390, startY, { width: 150, align: "center" });
+      doc
+        .font("Roboto-Bold")
+        .fontSize(10)
+        .text("Người lập biểu", 50, startY, { width: 150, align: "center" });
+      doc.text("Chủ hộ kinh doanh", 390, startY, {
+        width: 150,
+        align: "center",
+      });
 
       doc.end();
       return;
@@ -2406,7 +3115,9 @@ const getQuarterlyRevenueByCategory = async (req, res) => {
     const storeId = req.query.storeId || req.query.shopId;
     const quarter = req.query.quarter; // YYYY-Qn
     if (!storeId || !quarter) {
-      return res.status(400).json({ message: "Thiếu storeId hoặc quarter (YYYY-Qn)" });
+      return res
+        .status(400)
+        .json({ message: "Thiếu storeId hoặc quarter (YYYY-Qn)" });
     }
 
     const { start, end } = periodToRange("quarter", quarter);
@@ -2494,9 +3205,20 @@ const getQuarterlyRevenueByCategory = async (req, res) => {
     });
 
     // sort theo tổng actual desc
-    data.sort((a, b) => b.month1.actual + b.month2.actual + b.month3.actual - (a.month1.actual + a.month2.actual + a.month3.actual));
+    data.sort(
+      (a, b) =>
+        b.month1.actual +
+        b.month2.actual +
+        b.month3.actual -
+        (a.month1.actual + a.month2.actual + a.month3.actual)
+    );
 
-    return res.json({ message: "Báo cáo doanh thu theo quý (theo danh mục)", quarter, months, data });
+    return res.json({
+      message: "Báo cáo doanh thu theo quý (theo danh mục)",
+      quarter,
+      months,
+      data,
+    });
   } catch (err) {
     console.error("Lỗi báo cáo doanh thu theo quý:", err);
     return res.status(500).json({ message: "Lỗi server khi báo cáo theo quý" });
@@ -2510,7 +3232,9 @@ const exportQuarterlyRevenueByCategory = async (req, res) => {
     const { format = "xlsx" } = req.query;
 
     if (!storeId || !quarter) {
-      return res.status(400).json({ message: "Thiếu storeId hoặc quarter (YYYY-Qn)" });
+      return res
+        .status(400)
+        .json({ message: "Thiếu storeId hoặc quarter (YYYY-Qn)" });
     }
     if (format !== "xlsx") {
       return res.status(400).json({ message: "Chỉ hỗ trợ xuất Excel (.xlsx)" });
@@ -2533,7 +3257,8 @@ const exportQuarterlyRevenueByCategory = async (req, res) => {
       return res.status(404).json({ message: "Không có dữ liệu để xuất" });
     }
 
-    const [m1, m2, m3] = Array.isArray(months) && months.length === 3 ? months : [1, 2, 3];
+    const [m1, m2, m3] =
+      Array.isArray(months) && months.length === 3 ? months : [1, 2, 3];
     const wb = XLSX.utils.book_new();
     const sheetData = rows.map((r) => ({
       "Danh mục": r.category,
@@ -2553,36 +3278,89 @@ const exportQuarterlyRevenueByCategory = async (req, res) => {
       req,
       sheetData,
     });
-    ws["!cols"] = [{ wch: 22 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }];
+    ws["!cols"] = [
+      { wch: 22 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 16 },
+    ];
     XLSX.utils.book_append_sheet(wb, ws, "Báo cáo theo quý");
 
     if (format === "xlsx") {
-      const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
-      const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu_Theo_Quy", req });
-      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      const buffer = XLSX.write(wb, {
+        bookType: "xlsx",
+        type: "buffer",
+        cellStyles: true,
+      });
+      const fileName = buildExportFileName({
+        reportName: "Bao_Cao_Doanh_Thu_Theo_Quy",
+        req,
+      });
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${fileName}"`
+      );
       return res.send(buffer);
     }
 
     if (format === "pdf") {
       res.setHeader("Content-Type", "application/pdf");
-      const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu_Theo_Quy", req });
-      res.setHeader("Content-Disposition", `attachment; filename="${fileName.replace(".xlsx", ".pdf")}"`);
+      const fileName = buildExportFileName({
+        reportName: "Bao_Cao_Doanh_Thu_Theo_Quy",
+        req,
+      });
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${fileName.replace(".xlsx", ".pdf")}"`
+      );
 
       const doc = new PDFDocument({ margin: 50, size: "A4" });
       doc.pipe(res);
 
       const fontPath = path.join(__dirname, "..", "fonts", "Roboto", "static");
-      doc.registerFont("Roboto-Regular", path.join(fontPath, "Roboto-Regular.ttf"));
+      doc.registerFont(
+        "Roboto-Regular",
+        path.join(fontPath, "Roboto-Regular.ttf")
+      );
       doc.registerFont("Roboto-Bold", path.join(fontPath, "Roboto-Bold.ttf"));
 
-      doc.font("Roboto-Bold").fontSize(18).text("BÁO CÁO DOANH THU THEO QUÝ", { align: "center" });
-      doc.font("Roboto-Regular").fontSize(11).text(`Quý: ${quarter}`, { align: "center" });
+      doc
+        .font("Roboto-Bold")
+        .fontSize(18)
+        .text("BÁO CÁO DOANH THU THEO QUÝ", { align: "center" });
+      doc
+        .font("Roboto-Regular")
+        .fontSize(11)
+        .text(`Quý: ${quarter}`, { align: "center" });
       doc.moveDown(2);
 
       rows.forEach((r, idx) => {
-        doc.font("Roboto-Bold").fontSize(10).text(`${idx + 1}. ${r.category}`);
-        doc.font("Roboto-Regular").text(`   T1: ${new Intl.NumberFormat("vi-VN").format(r.month1?.actual)} | T2: ${new Intl.NumberFormat("vi-VN").format(r.month2?.actual)} | T3: ${new Intl.NumberFormat("vi-VN").format(r.month3?.actual)}`, { indent: 20 });
+        doc
+          .font("Roboto-Bold")
+          .fontSize(10)
+          .text(`${idx + 1}. ${r.category}`);
+        doc
+          .font("Roboto-Regular")
+          .text(
+            `   T1: ${new Intl.NumberFormat("vi-VN").format(
+              r.month1?.actual
+            )} | T2: ${new Intl.NumberFormat("vi-VN").format(
+              r.month2?.actual
+            )} | T3: ${new Intl.NumberFormat("vi-VN").format(
+              r.month3?.actual
+            )}`,
+            { indent: 20 }
+          );
         doc.moveDown(0.4);
       });
 
@@ -2666,7 +3444,11 @@ const getYearlyTopProducts = async (req, res) => {
       },
     ]);
 
-    return res.json({ message: "Báo cáo doanh thu theo năm (top sản phẩm)", year, data: rows || [] });
+    return res.json({
+      message: "Báo cáo doanh thu theo năm (top sản phẩm)",
+      year,
+      data: rows || [],
+    });
   } catch (err) {
     console.error("Lỗi báo cáo theo năm (top sản phẩm):", err);
     return res.status(500).json({ message: "Lỗi server khi báo cáo theo năm" });
@@ -2717,36 +3499,83 @@ const exportYearlyTopProducts = async (req, res) => {
       req,
       sheetData,
     });
-    ws["!cols"] = [{ wch: 6 }, { wch: 14 }, { wch: 28 }, { wch: 14 }, { wch: 16 }, { wch: 16 }];
+    ws["!cols"] = [
+      { wch: 6 },
+      { wch: 14 },
+      { wch: 28 },
+      { wch: 14 },
+      { wch: 16 },
+      { wch: 16 },
+    ];
     XLSX.utils.book_append_sheet(wb, ws, "Báo cáo theo năm");
 
     if (format === "xlsx") {
-      const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer", cellStyles: true });
-      const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu_Theo_Nam", req });
-      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      const buffer = XLSX.write(wb, {
+        bookType: "xlsx",
+        type: "buffer",
+        cellStyles: true,
+      });
+      const fileName = buildExportFileName({
+        reportName: "Bao_Cao_Doanh_Thu_Theo_Nam",
+        req,
+      });
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${fileName}"`
+      );
       return res.send(buffer);
     }
 
     if (format === "pdf") {
       res.setHeader("Content-Type", "application/pdf");
-      const fileName = buildExportFileName({ reportName: "Bao_Cao_Doanh_Thu_Theo_Nam", req });
-      res.setHeader("Content-Disposition", `attachment; filename="${fileName.replace(".xlsx", ".pdf")}"`);
+      const fileName = buildExportFileName({
+        reportName: "Bao_Cao_Doanh_Thu_Theo_Nam",
+        req,
+      });
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${fileName.replace(".xlsx", ".pdf")}"`
+      );
 
       const doc = new PDFDocument({ margin: 50, size: "A4" });
       doc.pipe(res);
 
       const fontPath = path.join(__dirname, "..", "fonts", "Roboto", "static");
-      doc.registerFont("Roboto-Regular", path.join(fontPath, "Roboto-Regular.ttf"));
+      doc.registerFont(
+        "Roboto-Regular",
+        path.join(fontPath, "Roboto-Regular.ttf")
+      );
       doc.registerFont("Roboto-Bold", path.join(fontPath, "Roboto-Bold.ttf"));
 
-      doc.font("Roboto-Bold").fontSize(18).text("BÁO CÁO DOANH THU THEO NĂM", { align: "center" });
-      doc.font("Roboto-Regular").fontSize(11).text(`Năm: ${year}`, { align: "center" });
+      doc
+        .font("Roboto-Bold")
+        .fontSize(18)
+        .text("BÁO CÁO DOANH THU THEO NĂM", { align: "center" });
+      doc
+        .font("Roboto-Regular")
+        .fontSize(11)
+        .text(`Năm: ${year}`, { align: "center" });
       doc.moveDown(2);
 
       rows.forEach((r, idx) => {
-        doc.font("Roboto-Bold").fontSize(10).text(`${idx + 1}. ${r.name || r.sku}`);
-        doc.font("Roboto-Regular").text(`   Số lượng: ${safeNumber(r.itemsSold)} | Thực tế: ${new Intl.NumberFormat("vi-VN").format(safeNumber(r.actualRevenue))} VND`, { indent: 20 });
+        doc
+          .font("Roboto-Bold")
+          .fontSize(10)
+          .text(`${idx + 1}. ${r.name || r.sku}`);
+        doc
+          .font("Roboto-Regular")
+          .text(
+            `   Số lượng: ${safeNumber(
+              r.itemsSold
+            )} | Thực tế: ${new Intl.NumberFormat("vi-VN").format(
+              safeNumber(r.actualRevenue)
+            )} VND`,
+            { indent: 20 }
+          );
         doc.moveDown(0.4);
       });
 
