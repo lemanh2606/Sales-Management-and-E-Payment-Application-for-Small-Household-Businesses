@@ -18,7 +18,7 @@ import { useAuth } from "../../context/AuthContext";
 import apiClient from "../../api/apiClient";
 
 const ProcessExpiredScreen = ({ navigation }: any) => {
-  const { currentStore } = useAuth();
+  const { currentStore, user } = useAuth();
   const storeId = currentStore?._id;
 
   const [loading, setLoading] = useState(false);
@@ -32,10 +32,14 @@ const ProcessExpiredScreen = ({ navigation }: any) => {
 
   // Form states
   const [warehouseId, setWarehouseId] = useState("");
+  const [supplierId, setSupplierId] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [partnerName, setPartnerName] = useState("");
+  const [partnerPhone, setPartnerPhone] = useState("");
   const [delivererName, setDelivererName] = useState("");
+  const [delivererPhone, setDelivererPhone] = useState("");
   const [receiverName, setReceiverName] = useState("");
+  const [receiverPhone, setReceiverPhone] = useState("");
 
   useEffect(() => {
     fetchExpiring();
@@ -84,7 +88,71 @@ const ProcessExpiredScreen = ({ navigation }: any) => {
       return;
     }
     setMode(selectedMode);
-    setReceiverName(selectedMode === "DISPOSE" ? "Hội đồng tiêu hủy" : "");
+    
+    // Get the full objects for selected items
+    const selectedRows = items.filter(it => selectedIds.includes(`${it._id}-${it.batch_no}`));
+
+    // 1. Auto-detect warehouse
+    // Check if all selected items are from the same warehouse
+    const uniqueWarehouses = [...new Set(selectedRows.map(it => it.warehouse_id).filter(Boolean))];
+    if (uniqueWarehouses.length === 1) {
+       setWarehouseId(uniqueWarehouses[0]);
+    } else if (uniqueWarehouses.length === 0 && warehouses.length > 0) {
+       // If no specific warehouse in items, default to first available if not set
+       if (!warehouseId) setWarehouseId(warehouses[0]._id);
+    }
+
+    // 2. Pre-fill Deliverer (Current User)
+    if (user) {
+        setDelivererName(user.fullname || user.username || "");
+        setDelivererPhone(user.phone || "");
+    }
+
+    // 3. Auto-detect Supplier (Partner) & Receiver
+    const uniqueSupplierIds = [...new Set(selectedRows.map(it => it.supplier_id).filter(Boolean))];
+    
+    // Default values
+    let newSupplierId = null;
+    let newPartnerName = "";
+    let newPartnerPhone = "";
+    let newReceiverName = "";
+    let newReceiverPhone = "";
+
+    if (uniqueSupplierIds.length === 1) {
+        const supId = uniqueSupplierIds[0];
+        const representativeItem = selectedRows.find(it => it.supplier_id === supId);
+        
+        if (representativeItem) {
+            newSupplierId = supId;
+            newPartnerName = representativeItem.supplier_name || "";
+            newPartnerPhone = representativeItem.supplier_phone || "";
+            // For RETURN, receiver is the Supplier contact
+            if (selectedMode === "RETURN") {
+                 newReceiverName = representativeItem.supplier_contact || representativeItem.contact_person || representativeItem.supplier_name || "";
+                 newReceiverPhone = representativeItem.supplier_phone || "";
+            }
+        }
+    }
+
+    // Apply defaults based on Mode if not set by Supplier logic
+    if (selectedMode === "DISPOSE") {
+        newReceiverName = "Hội đồng tiêu hủy";
+        setNotes("Tiêu hủy hàng hết hạn");
+        // For DISPOSE, we might not set partner info unless needed, 
+        // but if we detected a supplier, we can keep it or clear it. 
+        // Typically DISPOSE doesn't involve external partner strictly, but 'partner_name' field is often used for organization name.
+        // We'll leave partner blank or set to 'Cơ quan ...' if intended, but here we just leave what we found or blank.
+        if(!newPartnerName) newPartnerName = ""; 
+    } else {
+        setNotes("Trả hàng hết hạn cho Nhà cung cấp");
+    }
+
+    setSupplierId(newSupplierId);
+    setPartnerName(newPartnerName);
+    setPartnerPhone(newPartnerPhone);
+    setReceiverName(newReceiverName);
+    setReceiverPhone(newReceiverPhone);
+
     setModalVisible(true);
   };
 
@@ -114,15 +182,27 @@ const ProcessExpiredScreen = ({ navigation }: any) => {
 
               const payload = {
                 mode,
+                store_id: storeId, // Ensure store_id is sent
+                type: "OUT",
+                reason: notes || (mode === "DISPOSE" ? "Tiêu hủy hàng hết hạn" : "Trả lại hàng hết hạn cho NCC"),
+                voucher_date: new Date().toISOString(),
                 warehouse_id: warehouseId,
-                notes,
+                
+                supplier_id: mode === "RETURN" ? supplierId : undefined,
+                
                 partner_name: partnerName,
+                partner_phone: partnerPhone,
+                
                 deliverer_name: delivererName,
+                deliverer_phone: delivererPhone,
+                
                 receiver_name: receiverName,
+                receiver_phone: receiverPhone,
+
                 items: selectedItemsData,
               };
 
-              await apiClient.post(`/inventory-vouchers/${storeId}/inventory-vouchers/process-expired`, payload);
+              await apiClient.post(`/stores/${storeId}/inventory-vouchers/process-expired`, payload);
               
               Alert.alert("Thành công", "Phiếu đã được lập và tồn kho đã được cập nhật.");
               setModalVisible(false);
@@ -182,7 +262,7 @@ const ProcessExpiredScreen = ({ navigation }: any) => {
   return (
     <View style={styles.container}>
       <LinearGradient colors={["#1890ff", "#096dd9"]} style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => navigation.navigate("InventoryVoucherList")} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Xử lý hàng hết hạn</Text>
@@ -288,21 +368,49 @@ const ProcessExpiredScreen = ({ navigation }: any) => {
                     </TouchableOpacity>
                 )}
               </View>
+              {/* Partner Phone */}
+               <Text style={styles.label}>SĐT {mode === "RETURN" ? "Nhà cung cấp" : "Đơn vị"}</Text>
+               <TextInput
+                  style={styles.input}
+                  value={partnerPhone}
+                  onChangeText={setPartnerPhone}
+                  placeholder="Số điện thoại..."
+                  keyboardType="phone-pad"
+                />
 
               <Text style={styles.label}>Người lập phiếu (*)</Text>
-              <TextInput
-                style={styles.input}
-                value={delivererName}
-                onChangeText={setDelivererName}
-                placeholder="Tên người giao hàng..."
-              />
+              <View style={{flexDirection: 'row', gap: 8}}>
+                  <TextInput
+                    style={[styles.input, {flex: 1.5}]}
+                    value={delivererName}
+                    onChangeText={setDelivererName}
+                    placeholder="Tên người giao hàng..."
+                  />
+                  <TextInput
+                    style={[styles.input, {flex: 1}]}
+                    value={delivererPhone}
+                    onChangeText={setDelivererPhone}
+                    placeholder="SĐT..."
+                    keyboardType="phone-pad"
+                  />
+              </View>
 
               <Text style={styles.label}>Người nhận / Hội đồng (*)</Text>
-              <TextInput
-                style={styles.input}
-                value={receiverName}
-                onChangeText={setReceiverName}
-              />
+              <View style={{flexDirection: 'row', gap: 8}}>
+                  <TextInput
+                    style={[styles.input, {flex: 1.5}]}
+                    value={receiverName}
+                    onChangeText={setReceiverName}
+                    placeholder="Tên người nhận..."
+                  />
+                  <TextInput
+                    style={[styles.input, {flex: 1}]}
+                    value={receiverPhone}
+                    onChangeText={setReceiverPhone}
+                    placeholder="SĐT..."
+                    keyboardType="phone-pad"
+                  />
+              </View>
 
               <Text style={styles.label}>Ghi chú / Lý do</Text>
               <TextInput
@@ -339,6 +447,12 @@ const ProcessExpiredScreen = ({ navigation }: any) => {
                             style={{paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#eee'}}
                             onPress={() => {
                                 setPartnerName(item.name);
+                                setSupplierId(item._id);
+                                setPartnerPhone(item.phone || "");
+                                if(mode === "RETURN") {
+                                    setReceiverName(item.contact_person || item.name || "");
+                                    setReceiverPhone(item.phone || "");
+                                }
                                 setSupplierModalVisible(false);
                             }}
                         >

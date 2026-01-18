@@ -474,7 +474,7 @@ export default function DashboardPage() {
       align: "center",
     },
     {
-      title: "Doanh thu",
+      title: "Giá vốn hàng bán",
       dataIndex: "totalSales",
       key: "totalSales",
       align: "right",
@@ -1241,7 +1241,7 @@ export default function DashboardPage() {
                         type="secondary"
                         style={{ fontSize: "clamp(11px, 2.5vw, 13px)" }}
                       >
-                        Số lượng hàng thực bán
+                        Số lượng hàng hóa thực bán
                       </Text>
                       <Title
                         level={4}

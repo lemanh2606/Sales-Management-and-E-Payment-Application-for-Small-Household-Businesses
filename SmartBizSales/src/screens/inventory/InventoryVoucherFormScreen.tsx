@@ -328,8 +328,19 @@ const InventoryVoucherFormScreen: React.FC = () => {
 
   const handleSelectSupplier = (sup: any) => {
     setSupplierId(sup._id);
-    setDelivererName(sup.contact_person || sup.name);
-    setDelivererPhone(sup.phone || "");
+    
+    // Auto-fill Contact info based on Type
+    if (type === "IN") {
+         setDelivererName(sup.contact_person || sup.name);
+         setDelivererPhone(sup.phone || "");
+         // Receiver is usually User (already set or kept)
+    } else {
+         // OUT or RETURN: We deliver TO Supplier
+         setReceiverName(sup.contact_person || sup.name);
+         setReceiverPhone(sup.phone || "");
+         // Deliverer is usually User (already set or kept)
+    }
+
     // Set supplier snapshot fields
     setSupplierPhone(sup.phone || "");
     setSupplierEmail(sup.email || "");

@@ -23,6 +23,7 @@ import quarterOfYear from "dayjs/plugin/quarterOfYear";
 import "dayjs/locale/vi";
 
 import apiClient from "../../api/apiClient";
+import orderApi from "../../api/orderApi";
 import { useAuth } from "../../context/AuthContext";
 import debounce from "@/utils/debounce";
 import { Ionicons } from "@expo/vector-icons";
@@ -213,10 +214,12 @@ function PendingOrdersModal({
   visible,
   onClose,
   orders,
+  onDelete,
 }: {
   visible: boolean;
   onClose: () => void;
   orders: Order[];
+  onDelete: (id: string) => void;
 }) {
   return (
     <Modal
@@ -250,8 +253,8 @@ function PendingOrdersModal({
           </View>
 
           <Text style={styles.modalHint}>
-            Danh sách bên dưới lấy theo kỳ đang chọn và chỉ hiển thị các đơn
-            trạng thái “Chờ thanh toán”.
+            Danh sách dưới đây là các đơn hàng "Chưa thanh toán".
+            {"\n"}Bạn có thể xóa nếu đó là đơn ảo hoặc khách hủy.
           </Text>
 
           {orders.length === 0 ? (
@@ -281,13 +284,14 @@ function PendingOrdersModal({
                         {item.customer?.name || "Khách lẻ"} •{" "}
                         {item.customer?.phone || "N/A"}
                       </Text>
-                      <Text style={styles.pendingSub} numberOfLines={1}>
-                        {dayjs(item.createdAt).format("DD/MM/YYYY HH:mm")}
+                      <Text style={styles.pendingAmount}>
+                        {formatVND(toNumberDecimal(item.totalAmount))}
                       </Text>
                     </View>
-                    <View style={{ alignItems: "flex-end" }}>
+
+                    <View style={{ alignItems: "flex-end", gap: 8 }}>
                       <View
-                        style={[
+                         style={[
                           styles.badge,
                           {
                             backgroundColor: "#fff7e6",
@@ -295,14 +299,18 @@ function PendingOrdersModal({
                           },
                         ]}
                       >
-                        <Ionicons name={st.icon} size={14} color={st.color} />
-                        <Text style={[styles.badgeText, { color: st.color }]}>
-                          {st.label}
-                        </Text>
+                         <Text style={[styles.badgeText, { color: st.color }]}>
+                           {dayjs(item.createdAt).format("HH:mm")}
+                         </Text>
                       </View>
-                      <Text style={styles.pendingAmount}>
-                        {formatVND(toNumberDecimal(item.totalAmount))}
-                      </Text>
+
+                      <TouchableOpacity 
+                        onPress={() => onDelete(item._id)}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        style={{ padding: 4 }}
+                      >
+                          <Ionicons name="trash-outline" size={20} color="#ef4444" />
+                      </TouchableOpacity>
                     </View>
                   </View>
                 );
@@ -1318,6 +1326,32 @@ const OrderListScreen: React.FC = () => {
         visible={pendingVisible}
         onClose={() => setPendingVisible(false)}
         orders={pendingOrders}
+        onDelete={async (id) => {
+          Alert.alert(
+            "Xác nhận xoá",
+            "Bạn có chắc muốn xóa đơn chưa thanh toán này không? Hành động không thể hoàn tác.",
+            [
+              { text: "Hủy", style: "cancel" },
+              {
+                text: "Xóa",
+                style: "destructive",
+                onPress: async () => {
+                  try {
+                    setLoading(true);
+                    await orderApi.deletePendingOrder(id, storeId);
+                    // Refresh data
+                    setOrders(prev => prev.filter(o => o._id !== id));
+                    Alert.alert("Thành công", "Đã xóa đơn hàng.");
+                  } catch (e: any) {
+                    Alert.alert("Lỗi", e?.message || "Không thể xóa đơn hàng");
+                  } finally {
+                    setLoading(false);
+                  }
+                },
+              },
+            ]
+          );
+        }}
       />
     </View>
   );

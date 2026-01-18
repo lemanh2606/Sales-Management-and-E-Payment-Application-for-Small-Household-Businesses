@@ -1072,179 +1072,179 @@ export default function EmployeesPage() {
                 />
               ),
             },
-            {
-              key: "permissions",
-              label: "Phân quyền",
-              children: (
-                <>
-                  <Alert
-                    type="info"
-                    showIcon
-                    message="Chọn nhân viên ở danh sách bên trái, sau đó tick quyền ở bảng bên phải để cập nhật."
-                    className="mb-4"
-                  />
-                  <Row gutter={16}>
-                    <Col xs={24} lg={10}>
-                      <Card
-                        title="Danh sách nhân viên"
-                        extra={<Typography.Text type="secondary">{filteredActive.length} nhân viên</Typography.Text>}
-                        bodyStyle={{ padding: 0 }}
-                      >
-                        <Table
-                          columns={permissionColumns}
-                          dataSource={filteredActive}
-                          rowKey="_id"
-                          pagination={{
-                            position: ["bottomRight"],
-                            showSizeChanger: true,
-                            responsive: true,
-                            size: "small",
-                            current: permissionPagination.current,
-                            pageSize: permissionPagination.pageSize,
-                            total: filteredActive.length,
-                            showTotal: (total, range) => (
-                              <div>
-                                Đang xem{" "}
-                                <span
-                                  style={{
-                                    color: "#1890ff",
-                                    fontWeight: 600,
-                                  }}
-                                >
-                                  {range[0]} – {range[1]}
-                                </span>{" "}
-                                trên tổng số{" "}
-                                <span
-                                  style={{
-                                    color: "#d4380d",
-                                    fontWeight: 600,
-                                  }}
-                                >
-                                  {total}
-                                </span>{" "}
-                                nhân viên
-                              </div>
-                            ),
-                          }}
-                          loading={loading && tabKey === "permissions"}
-                          scroll={{ x: "max-content" }}
-                          size="small"
-                          onChange={(pag) =>
-                            setPermissionPagination({
-                              current: pag.current,
-                              pageSize: pag.pageSize,
-                            })
-                          }
-                          onRow={(record) => ({
-                            onClick: () => handleSelectStaff(record),
-                            style: {
-                              cursor: "pointer",
-                              backgroundColor: selectedStaff && String(selectedStaff._id) === String(record._id) ? "#f0f5ff" : "transparent",
-                            },
-                          })}
-                        />
-                      </Card>
-                    </Col>
-                    <Col xs={24} lg={14}>
-                      <Card
-                        title={
-                          selectedStaff
-                            ? `Quyền của ${selectedStaff.fullName || selectedStaff.user_id?.username || "nhân viên"}`
-                            : "Chọn nhân viên để phân quyền"
-                        }
-                        extra={
-                          selectedStaff ? (
-                            <Button type="link" danger size="small" onClick={handleResetPermissionSelection} disabled={permissionSaving}>
-                              Bỏ chọn
-                            </Button>
-                          ) : null
-                        }
-                      >
-                        {permissionPanelLoading ? (
-                          <Skeleton active paragraph={{ rows: 8 }} />
-                        ) : !selectedStaff ? (
-                          <Empty description="Chọn một nhân viên ở bảng bên trái" />
-                        ) : (
-                          <>
-                            <Space direction="vertical" style={{ width: "100%" }} size="middle">
-                              <Typography.Text>
-                                Đã chọn {selectedPermissions.length}/{permissionOptions.length} quyền.
-                              </Typography.Text>
-                              <Space wrap>
-                                <Button
-                                  onClick={() => setSelectedPermissions([...defaultStaffPermissions])}
-                                  disabled={!defaultStaffPermissions.length || permissionSaving}
-                                >
-                                  Dùng quyền mặc định
-                                </Button>
-                                <Button
-                                  onClick={() => setSelectedPermissions([...permissionOptions])}
-                                  disabled={!permissionOptions.length || permissionSaving}
-                                >
-                                  Chọn tất cả
-                                </Button>
-                                <Button onClick={() => setSelectedPermissions([])} disabled={permissionSaving}>
-                                  Bỏ hết
-                                </Button>
-                              </Space>
-                            </Space>
-                            <Divider />
-                            {groupedPermissionOptions.length ? (
-                              groupedPermissionOptions.map((group) => {
-                                const checkedCount = group.items.filter((item) => selectedPermissionSet.has(item.key)).length;
-                                const isChecked = checkedCount === group.items.length && group.items.length > 0;
-                                const isIndeterminate = checkedCount > 0 && checkedCount < group.items.length;
-                                return (
-                                  <Card key={group.key} size="small" className="mb-3" bodyStyle={{ padding: 12 }}>
-                                    <div className="flex justify-between items-center">
-                                      <Checkbox
-                                        checked={isChecked}
-                                        indeterminate={isIndeterminate}
-                                        onChange={(e) => handleToggleGroup(group.key, e.target.checked)}
-                                        disabled={permissionSaving}
-                                      >
-                                        {group.label}
-                                      </Checkbox>
-                                      <Typography.Text type="secondary">
-                                        {checkedCount}/{group.items.length}
-                                      </Typography.Text>
-                                    </div>
-                                    <Divider style={{ margin: "12px 0" }} />
-                                    <Row gutter={[12, 8]}>
-                                      {group.items.map((item) => (
-                                        <Col span={12} key={item.key}>
-                                          <Checkbox
-                                            checked={selectedPermissionSet.has(item.key)}
-                                            onChange={(e) => handleTogglePermission(item.key, e.target.checked)}
-                                            disabled={permissionSaving}
-                                          >
-                                            {item.label}
-                                          </Checkbox>
-                                        </Col>
-                                      ))}
-                                    </Row>
-                                  </Card>
-                                );
-                              })
-                            ) : (
-                              <Empty description="Không có quyền khả dụng" />
-                            )}
-                            <div className="flex justify-end gap-3 mt-4">
-                              <Button onClick={handleResetPermissionSelection} disabled={permissionSaving}>
-                                Hủy
-                              </Button>
-                              <Button type="primary" onClick={handlePermissionSave} loading={permissionSaving}>
-                                Lưu phân quyền
-                              </Button>
-                            </div>
-                          </>
-                        )}
-                      </Card>
-                    </Col>
-                  </Row>
-                </>
-              ),
-            },
+            // {
+            //   key: "permissions",
+            //   label: "Phân quyền",
+            //   children: (
+            //     <>
+            //       <Alert
+            //         type="info"
+            //         showIcon
+            //         message="Chọn nhân viên ở danh sách bên trái, sau đó tick quyền ở bảng bên phải để cập nhật."
+            //         className="mb-4"
+            //       />
+            //       <Row gutter={16}>
+            //         <Col xs={24} lg={10}>
+            //           <Card
+            //             title="Danh sách nhân viên"
+            //             extra={<Typography.Text type="secondary">{filteredActive.length} nhân viên</Typography.Text>}
+            //             bodyStyle={{ padding: 0 }}
+            //           >
+            //             <Table
+            //               columns={permissionColumns}
+            //               dataSource={filteredActive}
+            //               rowKey="_id"
+            //               pagination={{
+            //                 position: ["bottomRight"],
+            //                 showSizeChanger: true,
+            //                 responsive: true,
+            //                 size: "small",
+            //                 current: permissionPagination.current,
+            //                 pageSize: permissionPagination.pageSize,
+            //                 total: filteredActive.length,
+            //                 showTotal: (total, range) => (
+            //                   <div>
+            //                     Đang xem{" "}
+            //                     <span
+            //                       style={{
+            //                         color: "#1890ff",
+            //                         fontWeight: 600,
+            //                       }}
+            //                     >
+            //                       {range[0]} – {range[1]}
+            //                     </span>{" "}
+            //                     trên tổng số{" "}
+            //                     <span
+            //                       style={{
+            //                         color: "#d4380d",
+            //                         fontWeight: 600,
+            //                       }}
+            //                     >
+            //                       {total}
+            //                     </span>{" "}
+            //                     nhân viên
+            //                   </div>
+            //                 ),
+            //               }}
+            //               loading={loading && tabKey === "permissions"}
+            //               scroll={{ x: "max-content" }}
+            //               size="small"
+            //               onChange={(pag) =>
+            //                 setPermissionPagination({
+            //                   current: pag.current,
+            //                   pageSize: pag.pageSize,
+            //                 })
+            //               }
+            //               onRow={(record) => ({
+            //                 onClick: () => handleSelectStaff(record),
+            //                 style: {
+            //                   cursor: "pointer",
+            //                   backgroundColor: selectedStaff && String(selectedStaff._id) === String(record._id) ? "#f0f5ff" : "transparent",
+            //                 },
+            //               })}
+            //             />
+            //           </Card>
+            //         </Col>
+            //         <Col xs={24} lg={14}>
+            //           <Card
+            //             title={
+            //               selectedStaff
+            //                 ? `Quyền của ${selectedStaff.fullName || selectedStaff.user_id?.username || "nhân viên"}`
+            //                 : "Chọn nhân viên để phân quyền"
+            //             }
+            //             extra={
+            //               selectedStaff ? (
+            //                 <Button type="link" danger size="small" onClick={handleResetPermissionSelection} disabled={permissionSaving}>
+            //                   Bỏ chọn
+            //                 </Button>
+            //               ) : null
+            //             }
+            //           >
+            //             {permissionPanelLoading ? (
+            //               <Skeleton active paragraph={{ rows: 8 }} />
+            //             ) : !selectedStaff ? (
+            //               <Empty description="Chọn một nhân viên ở bảng bên trái" />
+            //             ) : (
+            //               <>
+            //                 <Space direction="vertical" style={{ width: "100%" }} size="middle">
+            //                   <Typography.Text>
+            //                     Đã chọn {selectedPermissions.length}/{permissionOptions.length} quyền.
+            //                   </Typography.Text>
+            //                   <Space wrap>
+            //                     <Button
+            //                       onClick={() => setSelectedPermissions([...defaultStaffPermissions])}
+            //                       disabled={!defaultStaffPermissions.length || permissionSaving}
+            //                     >
+            //                       Dùng quyền mặc định
+            //                     </Button>
+            //                     <Button
+            //                       onClick={() => setSelectedPermissions([...permissionOptions])}
+            //                       disabled={!permissionOptions.length || permissionSaving}
+            //                     >
+            //                       Chọn tất cả
+            //                     </Button>
+            //                     <Button onClick={() => setSelectedPermissions([])} disabled={permissionSaving}>
+            //                       Bỏ hết
+            //                     </Button>
+            //                   </Space>
+            //                 </Space>
+            //                 <Divider />
+            //                 {groupedPermissionOptions.length ? (
+            //                   groupedPermissionOptions.map((group) => {
+            //                     const checkedCount = group.items.filter((item) => selectedPermissionSet.has(item.key)).length;
+            //                     const isChecked = checkedCount === group.items.length && group.items.length > 0;
+            //                     const isIndeterminate = checkedCount > 0 && checkedCount < group.items.length;
+            //                     return (
+            //                       <Card key={group.key} size="small" className="mb-3" bodyStyle={{ padding: 12 }}>
+            //                         <div className="flex justify-between items-center">
+            //                           <Checkbox
+            //                             checked={isChecked}
+            //                             indeterminate={isIndeterminate}
+            //                             onChange={(e) => handleToggleGroup(group.key, e.target.checked)}
+            //                             disabled={permissionSaving}
+            //                           >
+            //                             {group.label}
+            //                           </Checkbox>
+            //                           <Typography.Text type="secondary">
+            //                             {checkedCount}/{group.items.length}
+            //                           </Typography.Text>
+            //                         </div>
+            //                         <Divider style={{ margin: "12px 0" }} />
+            //                         <Row gutter={[12, 8]}>
+            //                           {group.items.map((item) => (
+            //                             <Col span={12} key={item.key}>
+            //                               <Checkbox
+            //                                 checked={selectedPermissionSet.has(item.key)}
+            //                                 onChange={(e) => handleTogglePermission(item.key, e.target.checked)}
+            //                                 disabled={permissionSaving}
+            //                               >
+            //                                 {item.label}
+            //                               </Checkbox>
+            //                             </Col>
+            //                           ))}
+            //                         </Row>
+            //                       </Card>
+            //                     );
+            //                   })
+            //                 ) : (
+            //                   <Empty description="Không có quyền khả dụng" />
+            //                 )}
+            //                 <div className="flex justify-end gap-3 mt-4">
+            //                   <Button onClick={handleResetPermissionSelection} disabled={permissionSaving}>
+            //                     Hủy
+            //                   </Button>
+            //                   <Button type="primary" onClick={handlePermissionSave} loading={permissionSaving}>
+            //                     Lưu phân quyền
+            //                   </Button>
+            //                 </div>
+            //               </>
+            //             )}
+            //           </Card>
+            //         </Col>
+            //       </Row>
+            //     </>
+            //   ),
+            // },
           ]}
         />
 

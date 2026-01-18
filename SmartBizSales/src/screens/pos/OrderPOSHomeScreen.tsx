@@ -251,6 +251,9 @@ type CartItem = {
   subtotal: string; // giữ giống web: string .toFixed(2)
   tax_rate?: number;
   stock_quantity?: number; // Store original stock for validation
+  batchId?: string | null;
+  batchCode?: string | null;
+  expiryDate?: string | null;
 };
 
 type OrderTab = {
@@ -913,9 +916,9 @@ const OrderPOSHomeScreen: React.FC = () => {
 
   const addToCart = useCallback(
     (product: Product) => {
+      // 1. Calculate total available stock (exclude expired)
       const availableStock = getAvailableStock(product);
 
-      // Check if product is out of stock or expired
       if (availableStock <= 0) {
         const hasExpired =
           product.batches &&
@@ -925,40 +928,73 @@ const OrderPOSHomeScreen: React.FC = () => {
         Alert.alert(
           hasExpired ? "Hàng hết hạn" : "Hết hàng",
           hasExpired
-            ? `Sản phẩm "${product.name}" hiện chỉ còn các lô đã hết hạn sử dụng, không thể bán.`
+            ? `Sản phẩm "${product.name}" hiện chỉ còn các lô đã hết hạn sử dụng.`
             : `Sản phẩm "${product.name}" đã hết hàng trong kho.`
         );
         return;
       }
 
+      // 2. Select the best batch (FEFO)
+      let selectedBatchId: string | null = null;
+      let selectedBatchName: string | null = null;
+      let selectedBatchExpiry: string | null = null;
+
+      if (product.batches && product.batches.length > 0) {
+         const now = new Date();
+         const validBatches = product.batches.filter(b => {
+            const isExpired = b.expiry_date && new Date(b.expiry_date) < now;
+            return (b.quantity || 0) > 0 && !isExpired;
+         });
+
+         if (validBatches.length > 0) {
+            // Sort: Nearest Expiry first
+            validBatches.sort((a, b) => {
+               if (a.expiry_date && b.expiry_date) {
+                  return new Date(a.expiry_date).getTime() - new Date(b.expiry_date).getTime();
+               }
+               if (a.expiry_date) return -1;
+               if (b.expiry_date) return 1;
+               return 0;
+            });
+
+            const bestBatch = validBatches[0];
+            selectedBatchId = bestBatch.batch_no; 
+            selectedBatchName = bestBatch.batch_no; 
+            selectedBatchExpiry = bestBatch.expiry_date;
+         }
+      }
+
       const priceNum = getPriceNumber(product.price);
 
       updateOrderTab((tab) => {
-        const existing = tab.cart.find(
-          (item) => item.productId === product._id
-        );
+        let existingIndex = -1;
+        
+        if (selectedBatchId) {
+             existingIndex = tab.cart.findIndex(
+               (item) => item.productId === product._id && item.batchId === selectedBatchId
+             );
+        } else {
+             existingIndex = tab.cart.findIndex(
+               (item) => item.productId === product._id && !item.batchId
+             );
+        }
 
-        if (existing) {
+        if (existingIndex !== -1) {
+          const existing = tab.cart[existingIndex];
           const newQty = existing.quantity + 1;
 
-          // Check if new quantity exceeds available stock
           if (newQty > availableStock) {
-            Alert.alert(
-              "Vượt tồn kho khả dụng",
-              `Sản phẩm "${product.name}" chỉ còn ${availableStock} có thể bán (không tính hàng hết hạn). Bạn đã có ${existing.quantity} trong giỏ.`
-            );
-            return;
+             Alert.alert("Vượt tồn kho", `Tổng tồn kho khả dụng chỉ còn ${availableStock}.`);
+             return;
           }
 
-          tab.cart = tab.cart.map((item) =>
-            item.productId === product._id
-              ? {
-                  ...item,
-                  quantity: newQty,
-                  subtotal: (newQty * getItemUnitPrice(item)).toFixed(2),
-                }
-              : item
-          );
+          const newCart = [...tab.cart];
+          newCart[existingIndex] = {
+             ...existing,
+             quantity: newQty,
+             subtotal: (newQty * getItemUnitPrice(existing)).toFixed(2),
+          };
+          tab.cart = newCart;
         } else {
           tab.cart = [
             ...tab.cart,
@@ -975,13 +1011,15 @@ const OrderPOSHomeScreen: React.FC = () => {
               overridePrice: null,
               saleType: "NORMAL",
               subtotal: priceNum.toFixed(2),
-              stock_quantity: availableStock, // Store available stock
+              stock_quantity: availableStock,
+              batchId: selectedBatchId,
+              batchCode: selectedBatchName,
+              expiryDate: selectedBatchExpiry,
             },
           ];
         }
       });
 
-      // reset search UI
       setSearchProduct("");
       setSearchedProducts([]);
       setShowProductDropdown(false);
@@ -990,13 +1028,16 @@ const OrderPOSHomeScreen: React.FC = () => {
     [updateOrderTab]
   );
 
-  const updateQuantity = (id: string, qty: number) => {
+  const updateQuantity = (id: string, batchId: string | null | undefined, qty: number) => {
     updateOrderTab((tab) => {
-      const item = tab.cart.find((i) => i.productId === id);
+      const isMatch = (i: CartItem) => 
+         i.productId === id && ( (!batchId && !i.batchId) || (batchId && i.batchId === batchId) );
+
+      const item = tab.cart.find(isMatch);
       if (!item) return;
 
       if (qty <= 0) {
-        tab.cart = tab.cart.filter((i) => i.productId !== id);
+        tab.cart = tab.cart.filter((i) => !isMatch(i));
       } else {
         // Get max stock from cart item (stored when added) or from search results
         const maxStock =
@@ -1012,7 +1053,7 @@ const OrderPOSHomeScreen: React.FC = () => {
           // Cap the quantity to max stock
           const cappedQty = maxStock;
           tab.cart = tab.cart.map((i) =>
-            i.productId === id
+            isMatch(i)
               ? {
                   ...i,
                   quantity: cappedQty,
@@ -1024,7 +1065,7 @@ const OrderPOSHomeScreen: React.FC = () => {
         }
 
         tab.cart = tab.cart.map((i) =>
-          i.productId === id
+          isMatch(i)
             ? {
                 ...i,
                 quantity: qty,
@@ -1036,9 +1077,11 @@ const OrderPOSHomeScreen: React.FC = () => {
     });
   };
 
-  const removeItem = (productId: string) => {
+  const removeItem = (productId: string, batchId: string | null | undefined) => {
     updateOrderTab((tab) => {
-      tab.cart = tab.cart.filter((i) => i.productId !== productId);
+       const isMatch = (i: CartItem) => 
+         i.productId === productId && ( (!batchId && !i.batchId) || (batchId && i.batchId === batchId) );
+       tab.cart = tab.cart.filter((i) => !isMatch(i));
     });
   };
 
@@ -1592,7 +1635,11 @@ const OrderPOSHomeScreen: React.FC = () => {
 
   const openPriceModal = (record: CartItem) => {
     const realItem =
-      currentTab.cart.find((i) => i.productId === record.productId) || record;
+      currentTab.cart.find((i) => 
+         i.productId === record.productId && 
+         ( (record.batchId && i.batchId === record.batchId) || (!record.batchId && !i.batchId) )
+      ) || record;
+
     setPriceEditModal({
       visible: true,
       item: realItem,
@@ -1637,20 +1684,52 @@ const OrderPOSHomeScreen: React.FC = () => {
     const newSubtotal = (finalUnit * item.quantity).toFixed(2);
 
     updateOrderTab((tab) => {
-      tab.cart = tab.cart.map((i) =>
-        i.productId === item.productId
+      tab.cart = tab.cart.map((i) => {
+        const isMatch = i.productId === item.productId && ( (item.batchId && i.batchId === item.batchId) || (!item.batchId && !i.batchId) );
+        return isMatch
           ? {
               ...i,
               saleType: st,
               overridePrice: override,
               subtotal: newSubtotal,
             }
-          : i
-      );
+          : i;
+      });
     });
 
     setPriceEditModal({ visible: false });
   };
+
+  // Numpad Logic for Cash Received
+  const handleNumpadPress = useCallback((val: string) => {
+    updateOrderTab((t) => {
+      let currentStr = String(t.cashReceived || 0);
+      if (currentStr === "0") currentStr = "";
+
+      if (val === "C") {
+        t.cashReceived = 0;
+        return;
+      }
+      if (val === "BACK") {
+        const newStr = currentStr.slice(0, -1);
+        t.cashReceived = newStr ? parseInt(newStr) : 0;
+        return;
+      }
+      
+      let nextStr = currentStr;
+      if (val === "000") {
+         if (currentStr.length === 0) return; // avoid 000 at start
+         nextStr += "000";
+      } else {
+         nextStr += val;
+      }
+
+      // Limit to 100 billion to avoid overflow
+      if (nextStr.length > 11) return; 
+
+      t.cashReceived = parseInt(nextStr);
+    });
+  }, []);
 
   // ===== points block =====
   const PointsBlock = useMemo(() => {
@@ -1756,7 +1835,13 @@ const OrderPOSHomeScreen: React.FC = () => {
               </Text>
               <Text style={styles.cartSub}>
                 {item.sku} • {item.unit}
+                {item.batchCode ? ` • Lô: ${item.batchCode}` : ""}
               </Text>
+              {item.expiryDate && (
+                <Text style={[styles.cartSub, { color: COLORS.danger, fontSize: 11 }]}>
+                  HSD: {new Date(item.expiryDate).toLocaleDateString("vi-VN")}
+                </Text>
+              )}
               {item.tax_rate !== undefined && item.tax_rate !== 0 && (
                 <View
                   style={{
@@ -1804,7 +1889,7 @@ const OrderPOSHomeScreen: React.FC = () => {
             <View style={styles.cartQtyBox}>
               <TouchableOpacity
                 onPress={() =>
-                  updateQuantity(item.productId, item.quantity - 1)
+                  updateQuantity(item.productId, item.batchId, item.quantity - 1)
                 }
                 style={styles.qtyBtn}
               >
@@ -1815,7 +1900,7 @@ const OrderPOSHomeScreen: React.FC = () => {
 
               <TouchableOpacity
                 onPress={() =>
-                  updateQuantity(item.productId, item.quantity + 1)
+                  updateQuantity(item.productId, item.batchId, item.quantity + 1)
                 }
                 style={styles.qtyBtn}
               >
@@ -1829,7 +1914,7 @@ const OrderPOSHomeScreen: React.FC = () => {
               {[5, 10, 20].map((q) => (
                 <TouchableOpacity
                   key={q}
-                  onPress={() => updateQuantity(item.productId, q)}
+                  onPress={() => updateQuantity(item.productId, item.batchId, q)}
                   style={styles.quickQtyBtn}
                 >
                   <Text style={styles.quickQtyText}>{q}</Text>
@@ -1842,7 +1927,7 @@ const OrderPOSHomeScreen: React.FC = () => {
             <View style={styles.rowRight}>
               <Text style={styles.cartSubtotal}>{formatPrice(amount)}</Text>
               <TouchableOpacity
-                onPress={() => removeItem(item.productId)}
+                onPress={() => removeItem(item.productId, item.batchId)}
                 hitSlop={8}
                 style={styles.cartRemoveBtn}
               >
@@ -2175,99 +2260,37 @@ const OrderPOSHomeScreen: React.FC = () => {
           )}
         >
           {/* Quick Info Bar - Employee & Customer inline */}
-          <View style={styles.quickInfoBar}>
+          <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+            {/* Employee Button */}
             <Pressable
-              style={styles.quickInfoItem}
+              style={[styles.quickInfoBar, { flex: 0.8 }]}
               onPress={() => setEmployeeModalOpen(true)}
             >
-              <Text style={styles.quickInfoLabel}>NV bán</Text>
-              <Text style={styles.quickInfoValue} numberOfLines={1}>
-                {employeeLabel}
-              </Text>
-              <Ionicons name="chevron-down" size={16} color={COLORS.muted} />
-            </Pressable>
-
-            <View style={styles.quickInfoDivider} />
-
-            <Pressable
-              style={[styles.quickInfoItem, { flex: 1.2 }]}
-              onPress={() => {
-                setNewCustomerName("");
-                setNewCustomerPhone(phoneInput || tempPhone || "");
-                setNewCustomerModalOpen(true);
-              }}
-            >
-              <Text style={styles.quickInfoLabel}>Khách hàng</Text>
-              <Text style={styles.quickInfoValue} numberOfLines={1}>
-                {currentTab.customer ? currentTab.customer.name : "Vãng lai"}
-              </Text>
-              <Ionicons
-                name="person-add-outline"
-                size={16}
-                color={COLORS.primary}
-              />
-            </Pressable>
-          </View>
-
-          {/* Customer Search - Compact */}
-          <View style={styles.customerSearchBox}>
-            <Ionicons name="search" size={18} color={COLORS.muted} />
-            <TextInput
-              value={phoneInput}
-              onChangeText={onChangePhoneInput}
-              onFocus={() => setShowCustomerDropdown(true)}
-              onBlur={() => {
-                setTimeout(() => {
-                  if (!selectingCustomerRef.current)
-                    setShowCustomerDropdown(false);
-                }, 180);
-              }}
-              placeholder="Tìm khách theo SĐT..."
-              placeholderTextColor={COLORS.placeholder}
-              style={styles.customerSearchInput}
-              keyboardType="phone-pad"
-            />
-            {currentTab.customer && (
-              <View style={styles.customerBadge}>
-                <Text style={styles.customerBadgeText}>
-                  {currentTab.customer.loyaltyPoints?.toLocaleString("vi-VN") ||
-                    0}{" "}
-                  điểm
+              <View style={styles.quickInfoItem}>
+                <Text style={styles.quickInfoLabel}>NV</Text>
+                <Text style={styles.quickInfoValue} numberOfLines={1}>
+                  {employeeLabel}
                 </Text>
+                <Ionicons name="chevron-down" size={14} color={COLORS.muted} />
               </View>
-            )}
-          </View>
+            </Pressable>
 
-          {showCustomerDropdown && foundCustomers.length > 0 && (
-            <View style={[styles.dropdown, { marginTop: -8, marginBottom: 8 }]}>
-              <ScrollView
-                style={{ maxHeight: 180 }}
-                keyboardShouldPersistTaps="always"
-              >
-                {foundCustomers.map((c) => (
-                  <Pressable
-                    key={c._id}
-                    onPressIn={() => (selectingCustomerRef.current = true)}
-                    onPressOut={() => (selectingCustomerRef.current = false)}
-                    onPress={() => selectCustomer(c)}
-                    style={({ pressed }) => [
-                      styles.dropdownItem,
-                      pressed && { backgroundColor: "#eff6ff" },
-                    ]}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.dropdownTitle}>{c.name}</Text>
-                      <Text style={styles.hint}>
-                        {c.phone} •{" "}
-                        {(c.loyaltyPoints || 0).toLocaleString("vi-VN")} đểm
-                      </Text>
-                    </View>
-                    <Text style={styles.addHint}>Chọn</Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </View>
-          )}
+            {/* Customer Bar - Full width or flex */}
+             <View style={[styles.customerBar, { flex: 1.2 }]}>
+                <View style={styles.customerIconBox}>
+                   <Ionicons name="person" size={20} color={COLORS.textStrong} />
+                </View>
+                <View style={styles.customerBarInfo}>
+                  <Text style={styles.customerBarLabel}>KHÁCH HÀNG</Text>
+                  <Text style={styles.customerBarName} numberOfLines={1}>
+                     {currentTab.customer ? currentTab.customer.name : "Khách vãng lai"}
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={() => setNewCustomerModalOpen(true)} style={styles.customerChangeBtn}>
+                   <Text style={styles.customerChangeText}>ĐỔI</Text>
+                </TouchableOpacity>
+             </View>
+          </View>
 
           {/* Loyalty Points - Compact */}
           {loyaltySetting?.isActive && currentTab.customer && (
@@ -2353,7 +2376,7 @@ const OrderPOSHomeScreen: React.FC = () => {
             ) : (
               <FlatList
                 data={currentTab.cart}
-                keyExtractor={(i) => i.productId}
+                keyExtractor={(i) => `${i.productId}_${i.batchId || 'nobatch'}`}
                 scrollEnabled={false}
                 renderItem={CartRow as any}
                 ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
@@ -2490,17 +2513,50 @@ const OrderPOSHomeScreen: React.FC = () => {
             {currentTab.paymentMethod === "cash" ? (
               <View style={{ marginTop: 14 }}>
                 <Text style={styles.mutedInline}>Tiền khách đưa</Text>
-                <TextInput
-                  value={String(currentTab.cashReceived || 0)}
-                  onChangeText={(txt) => {
-                    const n = clampInt(txt, 0);
-                    updateOrderTab((t) => (t.cashReceived = n));
-                  }}
-                  keyboardType="numeric"
-                  placeholder="0"
-                  placeholderTextColor={COLORS.placeholder}
-                  style={styles.input}
-                />
+                {/* Cash Input Display (No Keyboard) */}
+                <View style={{ alignItems: 'flex-end', marginBottom: 10, marginTop: 4 }}>
+                  <Text style={{fontSize: 28, fontWeight: '900', color: COLORS.primary}}>
+                     {formatPrice(currentTab.cashReceived || 0)}
+                  </Text>
+                </View>
+
+                {/* Quick Suggestions */}
+                <View style={styles.suggestionRow}>
+                  {[totalAmount, 50000, 100000, 200000, 500000].map((amt, idx) => {
+                     if(amt <= 0) return null;
+                     if(idx > 0 && amt === totalAmount) return null;
+                     
+                     return (
+                     <TouchableOpacity key={idx} onPress={() => updateOrderTab(t => t.cashReceived = amt)} style={styles.moneyChip}>
+                       <Text style={styles.moneyChipText}>{formatPrice(amt)}</Text>
+                     </TouchableOpacity>
+                  )})}
+                </View>
+
+                {/* Numpad */}
+                <View style={styles.numpadContainer}>
+                   {[['1','2','3'],['4','5','6'],['7','8','9']].map((row, i) => (
+                     <View key={i} style={styles.numpadRow}>
+                       {row.map(n => (
+                         <TouchableOpacity key={n} onPress={() => handleNumpadPress(n)} style={styles.numBtn}>
+                           <Text style={styles.numBtnText}>{n}</Text>
+                         </TouchableOpacity>
+                       ))}
+                     </View>
+                   ))}
+                   <View style={styles.numpadRow}>
+                     <TouchableOpacity onPress={() => handleNumpadPress('C')} style={[styles.numBtn, styles.numBtnAction]}>
+                        <Text style={styles.numBtnActionText}>XOÁ</Text>
+                     </TouchableOpacity>
+                     <TouchableOpacity onPress={() => handleNumpadPress('0')} style={styles.numBtn}>
+                        <Text style={styles.numBtnText}>0</Text>
+                     </TouchableOpacity>
+                     
+                     <TouchableOpacity onPress={() => handleNumpadPress('000')} style={styles.numBtn}>
+                        <Text style={styles.numBtnText}>000</Text>
+                     </TouchableOpacity>
+                   </View>
+                </View>
 
                 <View
                   style={[
@@ -2739,56 +2795,99 @@ const OrderPOSHomeScreen: React.FC = () => {
           </View>
         </Modal>
 
-        {/* New customer modal */}
+        {/* Customer Selection & Create Modal */}
         <Modal
           visible={newCustomerModalOpen}
           transparent
-          animationType="fade"
+          animationType="slide"
           onRequestClose={() => setNewCustomerModalOpen(false)}
         >
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{flex:1}}>
           <View style={styles.modalBackdrop}>
-            <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>Thêm khách hàng</Text>
-
-              <Text style={[styles.mutedInline, { marginTop: 10 }]}>
-                Tên khách
-              </Text>
-              <TextInput
-                value={newCustomerName}
-                onChangeText={setNewCustomerName}
-                placeholder="Nhập tên..."
-                placeholderTextColor={COLORS.placeholder}
-                style={styles.input}
-              />
-
-              <Text style={[styles.mutedInline, { marginTop: 10 }]}>
-                Số điện thoại
-              </Text>
-              <TextInput
-                value={newCustomerPhone}
-                onChangeText={setNewCustomerPhone}
-                placeholder="Nhập SĐT..."
-                placeholderTextColor={COLORS.placeholder}
-                style={styles.input}
-                keyboardType="phone-pad"
-              />
-
-              <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
-                <IconTextButton
-                  type="outline"
-                  text="Huỷ"
-                  onPress={() => setNewCustomerModalOpen(false)}
-                  style={{ flex: 1 }}
-                />
-                <IconTextButton
-                  type="primary"
-                  text="Tạo"
-                  onPress={createCustomer}
-                  style={{ flex: 1 }}
-                />
+            <View style={[styles.modalCard, { height: '80%', maxHeight: 650 }]}>
+              <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:12}}>
+                 <Text style={styles.modalTitle}>Chọn khách hàng</Text>
+                 <TouchableOpacity onPress={() => setNewCustomerModalOpen(false)} style={{padding:4}}>
+                    <Ionicons name="close" size={24} color={COLORS.muted} />
+                 </TouchableOpacity>
               </View>
+
+              {/* Search Section */}
+              <View style={styles.searchBoxEnhanced}>
+                 <Ionicons name="search" size={20} color={COLORS.muted} />
+                 <TextInput 
+                    value={phoneInput}
+                    onChangeText={onChangePhoneInput}
+                    placeholder="Tìm theo tên hoặc SĐT..."
+                    placeholderTextColor={COLORS.placeholder}
+                    style={styles.searchInputEnhanced}
+                    autoFocus
+                 />
+                 {phoneInput ? (
+                    <TouchableOpacity onPress={() => onChangePhoneInput('')} style={{padding:4}}>
+                       <Ionicons name="close-circle" size={18} color={COLORS.muted} />
+                    </TouchableOpacity>
+                 ) : null}
+              </View>
+
+              {/* Results List */}
+              <View style={{flex: 1, marginTop: 10, marginBottom: 10, minHeight: 100}}>
+                 {loading ? (
+                    <ActivityIndicator size="small" color={COLORS.primary} style={{marginTop: 20}} />
+                 ) : (
+                    <ScrollView keyboardShouldPersistTaps="handled">
+                       {foundCustomers.map(c => (
+                          <TouchableOpacity key={c._id} onPress={() => { selectCustomer(c); setNewCustomerModalOpen(false); }} style={styles.dropdownItem}>
+                             <View style={{flex:1}}>
+                                <Text style={styles.dropdownTitle}>{c.name}</Text>
+                                <Text style={styles.hint}>{c.phone}</Text>
+                             </View>
+                             {c._id === currentTab.customer?._id ? (
+                                <Text style={{color: COLORS.good, fontWeight: 'bold'}}>Đang chọn</Text>
+                             ) : (
+                                <Text style={styles.addHint}>Chọn</Text>
+                             )}
+                          </TouchableOpacity>
+                       ))}
+                       {foundCustomers.length === 0 && phoneInput.length > 0 && !loading && (
+                          <Text style={{textAlign:'center', marginTop: 20, color: COLORS.muted}}>Chưa tìm thấy khách hàng nào.</Text>
+                       )}
+                    </ScrollView>
+                 )}
+              </View>
+
+              <View style={{height: 1, backgroundColor: COLORS.stroke, marginVertical: 10}} />
+
+              {/* Create New Section */}
+              <Text style={styles.sectionTitleMini}>Tạo khách hàng mới</Text>
+              <View style={{flexDirection:'row', gap: 10, marginTop: 10}}>
+                 <View style={{flex:1}}>
+                    <Text style={[styles.mutedInline, {fontSize: 11}]}>Tên khách</Text>
+                    <TextInput 
+                       value={newCustomerName} onChangeText={setNewCustomerName}
+                       style={styles.input} placeholder="Nhập tên..."
+                       placeholderTextColor={COLORS.placeholder}
+                    />
+                 </View>
+                 <View style={{flex:1}}>
+                    <Text style={[styles.mutedInline, {fontSize: 11}]}>SĐT</Text>
+                    <TextInput 
+                       value={newCustomerPhone} onChangeText={setNewCustomerPhone}
+                       style={styles.input} placeholder="Nhập SĐT..."
+                       placeholderTextColor={COLORS.placeholder}
+                       keyboardType="phone-pad"
+                    />
+                 </View>
+              </View>
+              <IconTextButton 
+                 type="primary" text="Tạo khách hàng" 
+                 onPress={createCustomer}
+                 style={{marginTop: 12}}
+              />
+
             </View>
           </View>
+          </KeyboardAvoidingView>
         </Modal>
 
         {/* QR modal */}
@@ -3850,20 +3949,20 @@ const styles = StyleSheet.create({
   },
   prominentDropdown: {
     position: "absolute",
-    top: 55,
+    top: 65,
     left: 0,
     right: 0,
-    maxHeight: 450,
+    maxHeight: 320, // Reduced to fit above keyboard
     backgroundColor: "#fff",
     borderRadius: RADIUS.lg,
-    elevation: 20,
+    elevation: 80,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
+    shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.3,
-    shadowRadius: 15,
+    shadowRadius: 20,
     borderWidth: 1,
     borderColor: COLORS.primary,
-    zIndex: 300,
+    zIndex: 9999,
   },
   searchInputEnhanced: {
     flex: 1,
@@ -3928,5 +4027,117 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     ...SHADOW,
+  },
+
+
+  // Numpad Styles (New)
+  numpadContainer: {
+    marginTop: 10,
+    backgroundColor: "#eff6ff",
+    borderRadius: RADIUS.lg,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+  },
+  numpadRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 8,
+  },
+  numBtn: {
+    flex: 1,
+    backgroundColor: COLORS.white,
+    height: 48,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    ...SHADOW,
+    borderWidth: 1,
+    borderColor: COLORS.stroke,
+  },
+  numBtnText: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: COLORS.textStrong,
+  },
+  numBtnAction: {
+    backgroundColor: "#fee2e2",
+    borderColor: "#fecaca",
+  },
+  numBtnActionText: {
+    color: COLORS.danger,
+    fontSize: 16,
+  },
+  
+  // Quick Money Chips (New)
+  suggestionRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 10,
+  },
+  moneyChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "#d1fae5",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#6ee7b7",
+  },
+  moneyChipText: {
+    color: "#047857",
+    fontWeight: "700",
+    fontSize: 13,
+  },
+
+  // Customer Bar (Professional New)
+  customerBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.stroke,
+    padding: 6,
+    paddingRight: 12,
+    gap: 12,
+  },
+  customerIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: RADIUS.md,
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: COLORS.stroke,
+  },
+  customerBarInfo: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  customerBarLabel: {
+    fontSize: 11,
+    color: COLORS.muted,
+    fontWeight: "700",
+    textTransform: "uppercase",
+  },
+  customerBarName: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: COLORS.textStrong,
+  },
+  customerChangeBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: "#e0f2fe",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#bae6fd",
+  },
+  customerChangeText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#0369a1",
   },
 });

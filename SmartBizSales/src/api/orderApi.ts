@@ -129,8 +129,8 @@ export default {
     verifyInvoiceAuto,
     vietqrReturn,
     vietqrCancel,
-    refundOrder,
-    getTopSellingProducts,
     exportTopSellingProducts,
     getTopFrequentCustomers,
+    deletePendingOrder: async (orderId: string, storeId?: string) => 
+        (await apiClient.delete(`/orders/delete-pending/${orderId}`, { params: { storeId } })).data,
 };
