@@ -1106,7 +1106,7 @@ const generateEndOfDayReport = async (req, res) => {
           storeId: new mongoose.Types.ObjectId(storeId),
           // employeeId: { $ne: null }, // Đã mở để tính cho cả Owner
           createdAt: { $gte: start, $lte: end },
-          status: { $in: ["paid", "partially_refunded", "refunded"] },
+          status: { $in: ["paid", "partially_refunded"] },
         },
       },
       {

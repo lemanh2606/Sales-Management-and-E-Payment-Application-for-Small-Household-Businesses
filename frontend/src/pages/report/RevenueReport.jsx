@@ -132,7 +132,8 @@ const RevenueReport = () => {
         const res = await axios.get(`${apiUrl}/revenues/daily-products?storeId=${currentStore._id}&date=${date}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        setSummary(null);
+        // Lưu tổng discount vào summary để hiển thị ở footer
+        setSummary({ totalDailyDiscount: res.data.totalDailyDiscount || 0 });
         setEmployeeData([]);
         setReportRows(res.data.data || []);
         return;
@@ -502,14 +503,6 @@ const RevenueReport = () => {
       title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Tổng doanh thu</span>,
       dataIndex: "grossTotal",
       key: "grossTotal",
-      align: "right",
-      width: 160,
-      render: (v) => <span style={{ fontSize: 16 }}>{formatVND(v)}</span>,
-    },
-    {
-      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Tổng giảm</span>,
-      dataIndex: "discountAmount",
-      key: "discountAmount",
       align: "right",
       width: 160,
       render: (v) => <span style={{ fontSize: 16 }}>{formatVND(v)}</span>,
@@ -1032,6 +1025,38 @@ const RevenueReport = () => {
                 }}
                 scroll={{ x: 1100 }}
                 locale={{ emptyText: <div style={{ color: "#8c8c8c", padding: "20px" }}>Không có dữ liệu</div> }}
+                summary={(pageData) => {
+                  if (reportType !== REPORT_TYPES.DAILY_PRODUCTS) return undefined;
+                  
+                  // Tính tổng trên toàn bộ dữ liệu (reportRows)
+                  const totalGross = reportRows.reduce((a, b) => a + toNumber(b.grossTotal), 0);
+                  // Tính tổng thực thu từ các item (đã trừ hoàn)
+                  // Lưu ý: netTotal ở đây là (doanh thu item - hoàn item), chưa trừ discount order
+                  const totalNetOfItems = reportRows.reduce((a, b) => a + toNumber(b.netTotal), 0);
+                  
+                  const totalDiscount = toNumber(summary?.totalDailyDiscount);
+                  const finalRevenue = totalNetOfItems - totalDiscount;
+
+                  return (
+                    <Table.Summary fixed>
+                      <Table.Summary.Row style={{ backgroundColor: "#fafafa" }}>
+                        <Table.Summary.Cell index={0} colSpan={5}>
+                          <Text strong style={{ float: "right" }}>Tổng cộng:</Text>
+                        </Table.Summary.Cell>
+                        <Table.Summary.Cell index={1} align="right">
+                          <Text strong>{formatVND(totalGross)}</Text>
+                        </Table.Summary.Cell>
+                        <Table.Summary.Cell index={2} align="right">
+                          <Text type="danger">{totalDiscount > 0 ? `-${formatVND(totalDiscount)}` : "0"}</Text>
+                          <div style={{ fontSize: 11, color: "#8c8c8c" }}>(Giảm giá hóa đơn)</div>
+                        </Table.Summary.Cell>
+                        <Table.Summary.Cell index={3} align="right">
+                          <Text strong style={{ color: "#1890ff", fontSize: 16 }}>{formatVND(finalRevenue)}</Text>
+                        </Table.Summary.Cell>
+                      </Table.Summary.Row>
+                    </Table.Summary>
+                  );
+                }}
               />
             </Card>
           )}

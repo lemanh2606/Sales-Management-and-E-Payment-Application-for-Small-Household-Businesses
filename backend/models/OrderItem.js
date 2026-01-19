@@ -13,7 +13,7 @@ const orderItemSchema = new mongoose.Schema(
       ref: "Product",
       required: true,
     }, // Sản phẩm
-    quantity: { type: Number, required: true, min: 1, max: 999 }, // Số lượng
+    quantity: { type: Number, required: true, min: 1 }, // Số lượng
     priceAtTime: { type: mongoose.Schema.Types.Decimal128, required: true }, // Giá lúc bán
     saleType: {
       type: String,

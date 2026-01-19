@@ -16,7 +16,7 @@ const Store = require("../models/Store");
 
 // Các trạng thái đơn hàng được tính vào doanh thu.
 // Lưu ý: `partially_refunded` vẫn tính doanh thu theo `totalAmount/subtotal` hiện có trong DB.
-const PAID_STATUSES = ["paid", "partially_refunded"]; // thống kê doanh thu tính cả hoàn 1 phần
+const PAID_STATUSES = ["paid", "partially_refunded", "refunded"]; // thống kê doanh thu tính cả hoàn 1 phần và hoàn toàn bộ
 
 // Ép id về ObjectId an toàn (tránh lỗi khi id là number/undefined).
 function toObjectId(id) {
@@ -181,7 +181,7 @@ async function calcRevenueByPeriod({
   // Chỉ lấy các đơn ĐÃ THANH TOÁN (toàn bộ hoặc 1 phần)
   const baseMatch = {
     storeId: toObjectId(storeId),
-    status: { $in: ["paid", "partially_refunded", "refunded"] }, // Lấy cả 3 loại
+    status: { $in: ["paid", "partially_refunded"] }, // Lấy cả 3 loại
     createdAt: { $gte: start, $lte: end },
   };
 
@@ -232,6 +232,11 @@ async function calcRevenueByPeriod({
       },
       { $unwind: "$orderInfo" },
       { $match: { "orderInfo.storeId": toObjectId(storeId) } },
+      {
+        $match: {
+          "orderInfo.status": { $in: ["paid", "partially_refunded"] },
+        },
+      },
       {
         $group: {
           _id: null,
@@ -366,6 +371,11 @@ async function calcRevenueByPeriod({
       },
       { $unwind: "$orderInfo" },
       { $match: { "orderInfo.storeId": toObjectId(storeId) } },
+      {
+        $match: {
+          "orderInfo.status": { $in: ["paid", "partially_refunded"] },
+        },
+      },
       {
         $group: {
           _id: "$orderInfo.employeeId",
@@ -1141,7 +1151,7 @@ const getDailyProductSales = async (req, res) => {
 
     const { start, end } = periodToRange("day", date);
 
-    const [salesRows, refundRows] = await Promise.all([
+    const [salesRows, refundRows, dailyDiscountAgg] = await Promise.all([
       OrderItem.aggregate([
         {
           $lookup: {
@@ -1155,7 +1165,7 @@ const getDailyProductSales = async (req, res) => {
         {
           $match: {
             "order.storeId": toObjectId(storeId),
-            "order.status": { $in: ["paid", "partially_refunded", "refunded"] },
+            "order.status": { $in: PAID_STATUSES },
             "order.createdAt": { $gte: start, $lte: end },
           },
         },
@@ -1214,7 +1224,25 @@ const getDailyProductSales = async (req, res) => {
           },
         },
       ]),
+      // MỚI: Tính tổng giảm giá cấp Order trong ngày
+      Order.aggregate([
+        {
+          $match: {
+            storeId: toObjectId(storeId),
+            status: { $in: ["paid", "partially_refunded", "refunded"] },
+            createdAt: { $gte: start, $lte: end },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            totalDiscount: { $sum: { $toDouble: "$discountAmount" } },
+          },
+        },
+      ]),
     ]);
+
+    const totalDailyDiscount = dailyDiscountAgg[0]?.totalDiscount || 0;
 
     const refundMap = new Map(refundRows.map((r) => [String(r._id), r]));
 
@@ -1223,11 +1251,20 @@ const getDailyProductSales = async (req, res) => {
       const ref = refundMap.get(String(s._id));
       const rQty = ref ? ref.refundedQty : 0;
       const rAmt = ref ? Number(ref.refundedAmount.toString()) : 0;
+      // rVat might be needed if you want "Real revenue" that includes VAT
       const rVat = ref ? Number(ref.refundedVAT.toString()) : 0;
 
       const finalQty = s.qty - rQty;
-      // Fix: netTotal tính cả VAT = (Net + VAT) - (RefundNet + RefundVAT)
-      const finalNet = s.netTotal + (s.vatTotal || 0) - (rAmt + rVat);
+
+      // Tính tỷ lệ thực bán để điều chỉnh GrossTotal hiển thị
+      let ratio = 1;
+      if (s.qty > 0) {
+        ratio = Math.max(0, finalQty / s.qty);
+      }
+      const adjustedGross = s.grossTotal * ratio;
+
+      // Net total item = (Subtotal - RefundSubtotal) + (VAT - RefundVAT)
+      const finalNet = s.netTotal - rAmt + ((s.vatTotal || 0) - rVat);
 
       refundMap.delete(String(s._id));
 
@@ -1237,9 +1274,9 @@ const getDailyProductSales = async (req, res) => {
         productDescription: s.description || "",
         unitPrice: s.qty > 0 ? s.grossTotal / s.qty : 0,
         quantity: finalQty,
-        grossTotal: s.grossTotal,
-        discountAmount: Math.max(0, s.grossTotal - s.netTotal),
-        netTotal: finalNet,
+        grossTotal: adjustedGross, // Hiển thị doanh thu tương ứng với số lượng thực bán
+        // discountAmount: 0,
+        netTotal: finalNet, // Thực thu của item (đã trừ hoàn, bao gồm VAT, chưa trừ discount order)
       };
     });
 
@@ -1268,6 +1305,7 @@ const getDailyProductSales = async (req, res) => {
       message: "Báo cáo bán hàng theo ngày thành công",
       date,
       data: mergedData,
+      totalDailyDiscount, // Trả thêm tổng giảm giá
     });
   } catch (err) {
     console.error("Lỗi báo cáo bán hàng theo ngày:", err);
@@ -1294,37 +1332,87 @@ const exportDailyProductSales = async (req, res) => {
         .json({ message: "Chỉ hỗ trợ xuất Excel (.xlsx) hoặc PDF (.pdf)" });
     }
 
-    // Call logic JSON -> map lại theo đúng header template
     let rows;
+    let totalDailyDiscount = 0;
     await getDailyProductSales(
       { query: { storeId, date } },
       {
-        json: ({ data }) => {
-          rows = data;
+        json: (resData) => {
+          rows = resData.data;
+          totalDailyDiscount = resData.totalDailyDiscount || 0;
         },
         status: () => ({ json: () => {} }),
       }
     );
 
-    rows = Array.isArray(rows) ? rows : [];
+    const allRows = Array.isArray(rows) ? rows : [];
 
-    // User request: Don't list items with quantity 0 (or less) in export
-    rows = rows.filter((r) => r.quantity > 0);
-    if (!rows.length) {
+    // Tính tổng tất cả (cả âm) để số liệu chính xác
+    const sumGross = allRows.reduce((a, b) => a + Number(b.grossTotal || 0), 0);
+    const sumNetItems = allRows.reduce(
+      (a, b) => a + Number(b.netTotal || 0),
+      0
+    );
+    const finalRevenue = sumNetItems - totalDailyDiscount;
+
+    // Filter cho hiển thị (giống giao diện)
+    const displayRows = allRows.filter((r) => r.quantity > 0);
+
+    if (!displayRows.length) {
       return res.status(404).json({ message: "Không có dữ liệu để xuất" });
     }
 
     const wb = XLSX.utils.book_new();
-    const sheetData = rows.map((r) => ({
+    const sheetData = displayRows.map((r) => ({
       "Mã hàng": r.sku,
       "Tên sản phẩm": r.productName,
       "Mô tả": r.productDescription,
       "Đơn giá (VNĐ)": r.unitPrice,
       "Số lượng": r.quantity,
       "Tổng (VNĐ)": r.grossTotal,
-      "Tổng giảm (VNĐ)": r.discountAmount,
+      // "Tổng giảm (VNĐ)": r.discountAmount, // Bỏ cột này
       "Thực thu (VNĐ)": r.netTotal,
     }));
+
+    // Thêm dòng tổng kết vào cuối sheetData cho Excel
+    sheetData.push(
+      {
+        "Mã hàng": "",
+        "Tên sản phẩm": "",
+        "Mô tả": "",
+        "Đơn giá (VNĐ)": "",
+        "Số lượng": "",
+        "Tổng (VNĐ)": "",
+        "Thực thu (VNĐ)": "",
+      }, // Dòng trống
+      {
+        "Mã hàng": "",
+        "Tên sản phẩm": "TỔNG CỘNG",
+        "Mô tả": "",
+        "Đơn giá (VNĐ)": "",
+        "Số lượng": "",
+        "Tổng (VNĐ)": sumGross,
+        "Thực thu (VNĐ)": sumNetItems,
+      },
+      {
+        "Mã hàng": "",
+        "Tên sản phẩm": "GIẢM GIÁ HÓA ĐƠN",
+        "Mô tả": "",
+        "Đơn giá (VNĐ)": "",
+        "Số lượng": "",
+        "Tổng (VNĐ)": "",
+        "Thực thu (VNĐ)": -totalDailyDiscount,
+      },
+      {
+        "Mã hàng": "",
+        "Tên sản phẩm": "DOANH THU THỰC TẾ",
+        "Mô tả": "",
+        "Đơn giá (VNĐ)": "",
+        "Số lượng": "",
+        "Tổng (VNĐ)": "",
+        "Thực thu (VNĐ)": finalRevenue,
+      }
+    );
 
     const ws = createWorksheetWithReportHeader({
       reportTitle: "Báo cáo bán hàng hằng ngày",
@@ -1338,8 +1426,8 @@ const exportDailyProductSales = async (req, res) => {
       { wch: 12 },
       { wch: 10 },
       { wch: 14 },
-      { wch: 14 },
-      { wch: 14 },
+      // { wch: 14 }, // Discount col removed
+      { wch: 18 },
     ];
 
     // Tên sheet Excel bị giới hạn 31 ký tự; dùng tên ngắn để tránh lỗi khi export.
@@ -1411,55 +1499,45 @@ const exportDailyProductSales = async (req, res) => {
         .fontSize(18)
         .text("BÁO CÁO BÁN HÀNG HẰNG NGÀY", { align: "center" });
       doc
-        .font("Roboto-Italic")
+        .font("Roboto-Regular")
         .fontSize(11)
-        .text(`Ngày: ${dayjs(date).format("DD/MM/YYYY")}`, { align: "center" });
+        .text(`Ngày: ${date}`, { align: "center" });
       doc.moveDown(2);
 
-      // 3. Info
-      doc
-        .font("Roboto-Regular")
-        .fontSize(10)
-        .text(`Người xuất: ${getExporterNameDisplay(req)}`);
-      doc.text(`Ngày xuất: ${dayjs().format("DD/MM/YYYY HH:mm")}`);
-      doc.moveDown(1);
-      doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
-      doc.moveDown(1);
-
-      // 4. Content
-      doc.font("Roboto-Bold").fontSize(10);
-      rows.forEach((r, idx) => {
-        doc.font("Roboto-Bold").text(`${idx + 1}. ${r.productName} (${r.sku})`);
+      // 3. List Items
+      displayRows.forEach((r, idx) => {
+        const net = new Intl.NumberFormat("vi-VN").format(r.netTotal);
+        const gross = new Intl.NumberFormat("vi-VN").format(r.grossTotal);
+        doc
+          .font("Roboto-Bold")
+          .fontSize(10)
+          .text(`${idx + 1}. ${r.productName} (${r.sku})`);
         doc
           .font("Roboto-Regular")
           .text(
-            `   SL: ${r.quantity} | Giá: ${new Intl.NumberFormat(
+            `   SL: ${r.quantity} | Đơn giá: ${new Intl.NumberFormat(
               "vi-VN"
-            ).format(r.unitPrice)} | Tổng: ${new Intl.NumberFormat(
-              "vi-VN"
-            ).format(r.grossTotal)}`,
-            { indent: 20 }
+            ).format(r.unitPrice)} | Tổng: ${gross} | Thực thu: ${net} VND`
           );
-        doc.text(
-          `   Giảm: ${new Intl.NumberFormat("vi-VN").format(
-            r.discountAmount
-          )} | Thực thu: ${new Intl.NumberFormat("vi-VN").format(r.netTotal)}`,
-          { indent: 20 }
-        );
-        doc.moveDown(0.5);
+        doc.moveDown(0.3);
       });
 
-      doc.moveDown(2);
+      doc.moveDown(1);
+      doc.stroke(); // Draw line
+      doc.moveDown(1);
 
-      // Signatures
-      const startY = doc.y > 650 ? (doc.addPage(), 50) : doc.y;
-      doc
-        .font("Roboto-Bold")
-        .fontSize(10)
-        .text("Người lập biểu", 50, startY, { width: 150, align: "center" });
-      doc.text("Chủ hộ kinh doanh", 390, startY, {
-        width: 150,
-        align: "center",
+      // 4. Summary Footer
+      const fmt = (n) => new Intl.NumberFormat("vi-VN").format(n);
+
+      doc.font("Roboto-Bold").fontSize(11);
+      doc.text(`TỔNG DOANH THU: ${fmt(sumGross)} VND`, { align: "right" });
+      doc.text(`GIẢM GIÁ HÓA ĐƠN: -${fmt(totalDailyDiscount)} VND`, {
+        align: "right",
+        color: "red",
+      });
+      doc.fontSize(12).text(`THỰC THU: ${fmt(finalRevenue)} VND`, {
+        align: "right",
+        color: "blue",
       });
 
       doc.end();
@@ -1810,7 +1888,7 @@ const getMonthlyRevenueByDay = async (req, res) => {
         {
           $match: {
             storeId: toObjectId(storeId),
-            status: { $in: ["paid", "partially_refunded"] },
+            status: { $in: PAID_STATUSES },
             createdAt: { $gte: start, $lte: end },
           },
         },
@@ -1858,7 +1936,7 @@ const getMonthlyRevenueByDay = async (req, res) => {
         {
           $match: {
             "order.storeId": toObjectId(storeId),
-            "order.status": { $in: ["paid", "partially_refunded"] },
+            "order.status": { $in: PAID_STATUSES },
             "order.createdAt": { $gte: start, $lte: end },
           },
         },
@@ -2353,7 +2431,7 @@ const getMonthlyRevenueSummary = async (req, res) => {
         {
           $match: {
             storeId: toObjectId(storeId),
-            status: { $in: ["paid", "partially_refunded"] },
+            status: { $in: PAID_STATUSES },
             createdAt: { $gte: start, $lte: end },
           },
         },
@@ -2385,7 +2463,7 @@ const getMonthlyRevenueSummary = async (req, res) => {
         {
           $match: {
             "order.storeId": toObjectId(storeId),
-            "order.status": { $in: ["paid", "partially_refunded"] },
+            "order.status": { $in: PAID_STATUSES },
             "order.createdAt": { $gte: start, $lte: end },
           },
         },
