@@ -1,5 +1,11 @@
 // src/pages/order/OrderPOSHome.tsx
-import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+} from "react";
 import {
   Table,
   Input,
@@ -57,6 +63,7 @@ interface ProductBatch {
   cost_price: any;
   selling_price?: any;
   quantity: number;
+  created_at?: string;
 }
 
 interface Product {
@@ -151,7 +158,7 @@ interface OrderTab {
   orderCreatedAt: string;
   orderPrintCount: number;
   orderEarnedPoints: number;
-  isPaid: boolean; // ✅ Đánh dấu đơn hàng đã thanh toán (online)
+  isPaid: boolean; //  Đánh dấu đơn hàng đã thanh toán (online)
 
   // Per-tab QR data
   qrImageUrl: string | null;
@@ -240,7 +247,9 @@ const OrderPOSHome: React.FC = () => {
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
   // Thêm state để lưu employee hiện tại của user đang login
-  const [currentUserEmployee, setCurrentUserEmployee] = useState<Seller | null>(null);
+  const [currentUserEmployee, setCurrentUserEmployee] = useState<Seller | null>(
+    null
+  );
   const [isStoreEmpty, setIsStoreEmpty] = useState(false);
   const [hasCheckedEmpty, setHasCheckedEmpty] = useState(false);
 
@@ -301,7 +310,7 @@ const OrderPOSHome: React.FC = () => {
       tab.orderCreatedAt = "";
       tab.orderPrintCount = 0;
       tab.orderEarnedPoints = 0;
-      tab.isPaid = false; // ✅ Reset trạng thái đã thanh toán
+      tab.isPaid = false; //  Reset trạng thái đã thanh toán
       // Reset QR data
       tab.qrImageUrl = null;
       tab.qrPayload = null;
@@ -352,10 +361,14 @@ const OrderPOSHome: React.FC = () => {
       const savedData = localStorage.getItem(CART_STORAGE_KEY);
       if (savedData) {
         const parsed = JSON.parse(savedData);
-        if (parsed.orders && Array.isArray(parsed.orders) && parsed.orders.length > 0) {
+        if (
+          parsed.orders &&
+          Array.isArray(parsed.orders) &&
+          parsed.orders.length > 0
+        ) {
           setOrders(parsed.orders);
           if (parsed.activeTab) setActiveTab(parsed.activeTab);
-          console.log(`✅ Đã khôi phục giỏ hàng POS cho user ${userId}`);
+          console.log(` Đã khôi phục giỏ hàng POS cho user ${userId}`);
         }
       }
     } catch (err) {
@@ -367,7 +380,9 @@ const OrderPOSHome: React.FC = () => {
   useEffect(() => {
     if (!storeId || !userId) return;
     // Don't save if all carts are empty (initial state)
-    const hasItems = orders.some((tab) => tab.cart.length > 0 || tab.customer || tab.pendingOrderId);
+    const hasItems = orders.some(
+      (tab) => tab.cart.length > 0 || tab.customer || tab.pendingOrderId
+    );
     if (hasItems) {
       try {
         const dataToSave = {
@@ -413,7 +428,8 @@ const OrderPOSHome: React.FC = () => {
         // Tạo object employee từ thông tin user
         const staffEmployee: Seller = {
           _id: loggedInUser.id,
-          fullName: loggedInUser.fullname || loggedInUser.username || "Nhân viên",
+          fullName:
+            loggedInUser.fullname || loggedInUser.username || "Nhân viên",
           user_id: {
             _id: loggedInUser.id,
             username: loggedInUser.username,
@@ -439,7 +455,10 @@ const OrderPOSHome: React.FC = () => {
       }
 
       // Manager / Owner → load danh sách employees từ API
-      const res = await axios.get(`${API_BASE}/stores/${storeId}/employees?deleted=false`, { headers });
+      const res = await axios.get(
+        `${API_BASE}/stores/${storeId}/employees?deleted=false`,
+        { headers }
+      );
 
       const employeesList: Employee[] = res.data.employees || [];
       setEmployees(employeesList);
@@ -448,7 +467,8 @@ const OrderPOSHome: React.FC = () => {
       if (loggedInUser.role === "MANAGER" || loggedInUser.role === "OWNER") {
         const virtualOwner: VirtualOwner = {
           _id: "virtual-owner",
-          fullName: loggedInUser.fullname || loggedInUser.username || "Chủ cửa hàng",
+          fullName:
+            loggedInUser.fullname || loggedInUser.username || "Chủ cửa hàng",
           isOwner: true,
         };
 
@@ -496,7 +516,10 @@ const OrderPOSHome: React.FC = () => {
   const checkStoreProducts = async () => {
     if (!storeId) return;
     try {
-      const res = await axios.get(`${API_BASE}/products/store/${storeId}?limit=1`, { headers });
+      const res = await axios.get(
+        `${API_BASE}/products/store/${storeId}?limit=1`,
+        { headers }
+      );
       const products = res.data.products || [];
       const isEmpty = products.length === 0;
       setIsStoreEmpty(isEmpty);
@@ -533,7 +556,12 @@ const OrderPOSHome: React.FC = () => {
         return;
       }
       try {
-        const res = await axios.get(`${API_BASE}/products/search?query=${encodeURIComponent(query)}&storeId=${storeId}`, { headers });
+        const res = await axios.get(
+          `${API_BASE}/products/search?query=${encodeURIComponent(
+            query
+          )}&storeId=${storeId}`,
+          { headers }
+        );
         const products = res.data.products || [];
         setSearchedProducts(products);
 
@@ -560,13 +588,19 @@ const OrderPOSHome: React.FC = () => {
 
   // Tính toán tồn kho khả dụng (trừ đi các lô đã hết hạn)
   const getAvailableStock = (product: Product) => {
-    if (!product.batches || product.batches.length === 0) return product.stock_quantity;
+    if (!product.batches || product.batches.length === 0)
+      return product.stock_quantity;
 
     // Tổng số lượng trong các lô chưa hết hạn
-    const available = (product.batches as ProductBatch[]).reduce((sum: number, b: ProductBatch) => {
-      const isExpired = !!(b.expiry_date && new Date(b.expiry_date) < new Date());
-      return isExpired ? sum : sum + (b.quantity || 0);
-    }, 0);
+    const available = (product.batches as ProductBatch[]).reduce(
+      (sum: number, b: ProductBatch) => {
+        const isExpired = !!(
+          b.expiry_date && new Date(b.expiry_date) < new Date()
+        );
+        return isExpired ? sum : sum + (b.quantity || 0);
+      },
+      0
+    );
 
     return available;
   };
@@ -577,7 +611,11 @@ const OrderPOSHome: React.FC = () => {
 
     // Don't add products with no stock
     if (availableStock <= 0) {
-      const hasExpired = product.batches && product.batches.some((b) => b.expiry_date && new Date(b.expiry_date) < new Date());
+      const hasExpired =
+        product.batches &&
+        product.batches.some(
+          (b) => b.expiry_date && new Date(b.expiry_date) < new Date()
+        );
       Swal.fire({
         icon: "warning",
         title: hasExpired ? "Hàng hết hạn" : "Hết hàng",
@@ -645,7 +683,7 @@ const OrderPOSHome: React.FC = () => {
     const hasPendingOrder = currentTab.pendingOrderId !== null;
     const isAlreadyPaid = currentTab.isPaid;
 
-    // ✅ Ngăn chặn thay đổi số lượng khi đã thanh toán
+    //  Ngăn chặn thay đổi số lượng khi đã thanh toán
     if (isAlreadyPaid) {
       Swal.fire({
         icon: "warning",
@@ -688,7 +726,7 @@ const OrderPOSHome: React.FC = () => {
       }
     });
 
-    // ✅ Nếu đã có đơn hàng pending VÀ chưa thanh toán, tự động cập nhật đơn hàng
+    //  Nếu đã có đơn hàng pending VÀ chưa thanh toán, tự động cập nhật đơn hàng
     if (hasPendingOrder && !isAlreadyPaid) {
       // Dùng setTimeout để đảm bảo state đã được cập nhật
       setTimeout(() => {
@@ -716,7 +754,10 @@ const OrderPOSHome: React.FC = () => {
   );
 
   // Cập nhật thông tin tab đơn hàng
-  const updateOrderTab = (updater: (tab: OrderTab) => void, key = activeTab) => {
+  const updateOrderTab = (
+    updater: (tab: OrderTab) => void,
+    key = activeTab
+  ) => {
     setOrders((prev) =>
       prev.map((tab) => {
         if (tab.key !== key) return tab;
@@ -736,7 +777,9 @@ const OrderPOSHome: React.FC = () => {
         key: newKey,
         cart: [],
         customer: null,
-        employeeId: currentUserEmployee?.isOwner ? null : currentUserEmployee?._id || null,
+        employeeId: currentUserEmployee?.isOwner
+          ? null
+          : currentUserEmployee?._id || null,
         usedPoints: 0,
         usedPointsEnabled: false,
         isVAT: false,
@@ -776,13 +819,28 @@ const OrderPOSHome: React.FC = () => {
   };
 
   const currentTab = orders.find((tab) => tab.key === activeTab)!;
-  const selectValue = currentTab.employeeId === null ? "virtual-owner" : currentTab.employeeId;
+  const selectValue =
+    currentTab.employeeId === null ? "virtual-owner" : currentTab.employeeId;
 
   // Tính toán các giá trị thanh toán
-  const subtotal = useMemo(() => currentTab.cart.reduce((sum, item) => sum + getItemUnitPrice(item) * item.quantity, 0), [currentTab.cart]);
+  const subtotal = useMemo(
+    () =>
+      currentTab.cart.reduce(
+        (sum, item) => sum + getItemUnitPrice(item) * item.quantity,
+        0
+      ),
+    [currentTab.cart]
+  );
   const discount = useMemo(
-    () => (currentTab.usedPointsEnabled ? currentTab.usedPoints * (loyaltySetting?.vndPerPoint || 0) : 0),
-    [currentTab.usedPoints, currentTab.usedPointsEnabled, loyaltySetting?.vndPerPoint]
+    () =>
+      currentTab.usedPointsEnabled
+        ? currentTab.usedPoints * (loyaltySetting?.vndPerPoint || 0)
+        : 0,
+    [
+      currentTab.usedPoints,
+      currentTab.usedPointsEnabled,
+      loyaltySetting?.vndPerPoint,
+    ]
   );
   const beforeTax = Math.max(subtotal - discount, 0);
 
@@ -790,7 +848,10 @@ const OrderPOSHome: React.FC = () => {
   const vatAmount = useMemo(() => {
     return currentTab.cart.reduce((sum, item) => {
       const itemPrice = getItemUnitPrice(item);
-      const itemTaxRate = item.tax_rate !== undefined && item.tax_rate !== null ? Number(item.tax_rate) : 0;
+      const itemTaxRate =
+        item.tax_rate !== undefined && item.tax_rate !== null
+          ? Number(item.tax_rate)
+          : 0;
       const effectiveRate = itemTaxRate === -1 ? 0 : itemTaxRate;
       return sum + (itemPrice * item.quantity * effectiveRate) / 100;
     }, 0);
@@ -803,19 +864,32 @@ const OrderPOSHome: React.FC = () => {
   useEffect(() => {
     const orderCode = currentTab?.qrPayload;
     // Chỉ poll khi có QR và đang hiển thị (hoặc đơn đang pending chờ) VÀ chưa thanh toán
-    if (!orderCode || !currentTab.qrImageUrl || !currentTab.pendingOrderId || currentTab.isPaid) return;
+    if (
+      !orderCode ||
+      !currentTab.qrImageUrl ||
+      !currentTab.pendingOrderId ||
+      currentTab.isPaid
+    )
+      return;
 
     // Cờ để tránh gọi liên tục nếu component unmount
     let isActive = true;
 
     const checkPayment = async () => {
       try {
-        const res = await axios.get(`${API_BASE}/orders/pos/payment-status/${orderCode}?storeId=${storeId}`, { headers });
-        if (isActive && res.data.success && String(res.data.status).toUpperCase() === "PAID") {
+        const res = await axios.get(
+          `${API_BASE}/orders/pos/payment-status/${orderCode}?storeId=${storeId}`,
+          { headers }
+        );
+        if (
+          isActive &&
+          res.data.success &&
+          String(res.data.status).toUpperCase() === "PAID"
+        ) {
           // Stop polling
           clearInterval(pollId);
 
-          // ✅ Đánh dấu đã thanh toán (KHÔNG tự động in)
+          //  Đánh dấu đã thanh toán (KHÔNG tự động in)
           updateOrderTab((tab) => {
             tab.isPaid = true;
           });
@@ -823,7 +897,7 @@ const OrderPOSHome: React.FC = () => {
           // Show success với nút in hóa đơn
           Swal.fire({
             icon: "success",
-            title: "✅ Đã nhận thanh toán!",
+            title: " Đã nhận thanh toán!",
             html: `
                         <p>Hệ thống PayOS xác nhận thành công.</p>
                         <p style="color: #1890ff; font-weight: bold; margin-top: 12px;">
@@ -844,8 +918,14 @@ const OrderPOSHome: React.FC = () => {
       isActive = false;
       clearInterval(pollId);
     };
-  }, [currentTab?.qrPayload, currentTab?.qrImageUrl, currentTab?.pendingOrderId, currentTab?.isPaid]);
+  }, [
+    currentTab?.qrPayload,
+    currentTab?.qrImageUrl,
+    currentTab?.pendingOrderId,
+    currentTab?.isPaid,
+  ]);
 
+  // Tạo đơn hàng
   // Tạo đơn hàng
   const createOrder = async () => {
     if (currentTab.cart.length === 0)
@@ -856,25 +936,23 @@ const OrderPOSHome: React.FC = () => {
       });
 
     // Validate cash payment
-    if (currentTab.paymentMethod === "cash" && currentTab.cashReceived < totalAmount) {
+    if (
+      currentTab.paymentMethod === "cash" &&
+      currentTab.cashReceived < totalAmount
+    ) {
       return Swal.fire({
         icon: "warning",
         title: "Chưa đủ tiền thanh toán",
-        text: `Tổng tiền thanh toán là ${formatPrice(totalAmount)}. Vui lòng nhận đủ tiền từ khách.`,
+        text: `Tổng tiền thanh toán là ${formatPrice(
+          totalAmount
+        )}. Vui lòng nhận đủ tiền từ khách.`,
         confirmButtonText: "Kiểm tra lại",
       });
     }
 
-    // if (!currentTab.employeeId)
-    //   return Swal.fire({
-    //     icon: "info",
-    //     title: "Thông báo",
-    //     text: "Đã tự động chọn bạn làm nhân viên bán hàng",
-    //     confirmButtonText: "OK",
-    //   });
-
     // === CHUYỂN VIRTUAL-OWNER VỀ NULL TRƯỚC KHI GỬI ===
-    const sendEmployeeId = currentTab.employeeId === "virtual-owner" ? null : currentTab.employeeId;
+    const sendEmployeeId =
+      currentTab.employeeId === "virtual-owner" ? null : currentTab.employeeId;
 
     setLoading(true);
     try {
@@ -895,10 +973,16 @@ const OrderPOSHome: React.FC = () => {
         items,
         paymentMethod: currentTab.paymentMethod,
         isVATInvoice: currentTab.isVAT,
-        orderId: currentTab.pendingOrderId || undefined, // Gửi ID nếu đang có đơn pending
+        orderId: currentTab.pendingOrderId || undefined,
+        // Explicitly send calculated amounts to match UI exactly (WYSIWYG)
+        vatAmount: vatAmount,
+        discountAmount: discount,
+        beforeTaxAmount: beforeTax,
+        totalAmount: totalAmount,
+        grossAmount: subtotal + vatAmount,
       };
 
-      // Nếu có customer được chọn thì gửi customerInfo, ko có thì thôi
+      // Nếu có customer được chọn thì gửi customerInfo
       if (currentTab.customer) {
         payload.customerInfo = {
           phone: currentTab.customer.phone,
@@ -906,7 +990,7 @@ const OrderPOSHome: React.FC = () => {
         };
       }
 
-      // ✅ Gửi thông tin hóa đơn VAT nếu có
+      // Gửi thông tin hóa đơn VAT nếu có
       if (currentTab.isVAT) {
         payload.vatInfo = {
           companyName: currentTab.companyName,
@@ -916,39 +1000,112 @@ const OrderPOSHome: React.FC = () => {
       }
 
       // Chỉ gửi usedPoints khi user bật tính năng và có điểm > 0
-      if (currentTab.usedPointsEnabled && currentTab.usedPoints && currentTab.usedPoints > 0) {
+      if (
+        currentTab.usedPointsEnabled &&
+        currentTab.usedPoints &&
+        currentTab.usedPoints > 0
+      ) {
         payload.usedPoints = currentTab.usedPoints;
       }
 
-      const res = await axios.post<OrderResponse>(`${API_BASE}/orders`, payload, { headers });
+      // 🔍 DEBUG: Log thông tin điểm giảm giá
+      console.log("📤 [CreateOrder] Payload gửi lên server:", {
+        usedPointsEnabled: currentTab.usedPointsEnabled,
+        usedPoints: currentTab.usedPoints,
+        payloadUsedPoints: payload.usedPoints,
+        customer: currentTab.customer?.name,
+        customerLoyaltyPoints: currentTab.customer?.loyaltyPoints,
+        discount: discount,
+        totalAmount: totalAmount,
+      });
+
+      const res = await axios.post<OrderResponse>(
+        `${API_BASE}/orders`,
+        payload,
+        { headers }
+      );
       const order = res.data.order;
       const orderId = order._id;
 
-      // Set thông tin cho current tab (per-tab, not global)
+      // Set thông tin cho current tab
       updateOrderTab((tab) => {
         tab.pendingOrderId = orderId;
         tab.orderCreatedAt = order.createdAt || "";
-        tab.orderPrintCount = typeof order.printCount === "number" ? order.printCount : 0;
+        tab.orderPrintCount =
+          typeof order.printCount === "number" ? order.printCount : 0;
         tab.orderEarnedPoints = (order as any).earnedPoints ?? 0;
         tab.orderCreatedPaymentMethod = currentTab.paymentMethod;
 
+        //  Cập nhật điểm customer sau khi server đã reserve (trừ tạm)
+        // Điểm đã được server trừ, nên cần cập nhật lại trong tab để hiển thị đúng
+        if (tab.customer && tab.usedPointsEnabled && tab.usedPoints > 0) {
+          const reservedPoints = (order as any).usedPoints ?? tab.usedPoints;
+          tab.customer = {
+            ...tab.customer,
+            loyaltyPoints: Math.max(
+              0,
+              (tab.customer.loyaltyPoints || 0) - reservedPoints
+            ),
+          };
+          console.log(
+            `🔒 [FE] Điểm customer đã được reserve: ${reservedPoints}. Còn lại: ${tab.customer.loyaltyPoints}`
+          );
+        }
+
         if (currentTab.paymentMethod === "qr" && res.data.qrDataURL) {
           tab.qrImageUrl = res.data.qrDataURL;
-          tab.savedQrImageUrl = res.data.qrDataURL; // 🟢 Lưu giữ QR để restore lại
-          tab.qrPayload = (res.data.order as any)?.paymentRef; // Save code for polling
+          tab.savedQrImageUrl = res.data.qrDataURL;
+          tab.qrPayload = (res.data.order as any)?.paymentRef;
 
-          tab.qrExpiryTs = res.data.order?.qrExpiry ? new Date(res.data.order.qrExpiry).getTime() : null;
-          tab.savedQrExpiryTs = res.data.order?.qrExpiry ? new Date(res.data.order.qrExpiry).getTime() : null; // 🟢 Lưu giữ
+          tab.qrExpiryTs = res.data.order?.qrExpiry
+            ? new Date(res.data.order.qrExpiry).getTime()
+            : null;
+          tab.savedQrExpiryTs = res.data.order?.qrExpiry
+            ? new Date(res.data.order.qrExpiry).getTime()
+            : null;
         }
       });
     } catch (err: any) {
-      Swal.fire({
-        title: "Không tạo được QR Code!",
-        text: err.response?.data?.message || "Lỗi tạo đơn",
-        icon: "error",
-        confirmButtonText: "OK",
-        confirmButtonColor: "#ff4d4f",
-      });
+      //  XỬ LÝ ĐẶC BIỆT CHO LỖI QR/PAYOS
+      const errorMessage = err.response?.data?.message || "";
+      const isQRPaymentError =
+        currentTab.paymentMethod === "qr" ||
+        errorMessage.toLowerCase().includes("payos") ||
+        errorMessage.toLowerCase().includes("qr") ||
+        errorMessage.toLowerCase().includes("thanh toán") ||
+        errorMessage.toLowerCase().includes("payment");
+
+      if (isQRPaymentError) {
+        const result = await Swal.fire({
+          icon: "info",
+          title: "⚠️ Chưa tích hợp thanh toán",
+          html: `
+          <p>Bạn chưa tích hợp ngân hàng VietQR tĩnh hoặc tích hợp check thanh toán QR tự động (PayOS).</p>
+          <p>Vui lòng cấu hình trong phần <strong>Cài đặt > Thiết lập cổng thanh toán</strong></p>
+        `,
+          showCancelButton: true,
+          confirmButtonText: "Đi tới cài đặt",
+          cancelButtonText: "Để sau",
+          confirmButtonColor: "#1890ff",
+          cancelButtonColor: "#d9d9d9",
+        });
+
+        if (result.isConfirmed) {
+          // Navigate to settings page
+          window.location.href = "/settings/payment-method";
+          // Hoặc nếu dùng React Router:
+          // navigate("/settings/payment-method");
+        }
+      } else {
+        // Lỗi thông thường khác
+        Swal.fire({
+          title: "❌ Lỗi!",
+          text: errorMessage || "Lỗi tạo đơn",
+          icon: "error",
+          confirmButtonText: "OK",
+          confirmButtonColor: "#ff4d4f",
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -956,7 +1113,7 @@ const OrderPOSHome: React.FC = () => {
 
   // Sửa hàm triggerPrint
   const triggerPrint = async (orderId: string) => {
-    // ✅ NGĂN CHẶN GỌI TRÙNG
+    //  NGĂN CHẶN GỌI TRÙNG
     if (isPrinting) {
       console.log("⚠️ Đang in, vui lòng đợi...");
       return;
@@ -965,7 +1122,11 @@ const OrderPOSHome: React.FC = () => {
     setIsPrinting(true);
 
     try {
-      await axios.post(`${API_BASE}/orders/${orderId}/print-bill`, {}, { headers });
+      await axios.post(
+        `${API_BASE}/orders/${orderId}/print-bill`,
+        {},
+        { headers }
+      );
       Swal.fire({
         icon: "success",
         title: "Thành công!",
@@ -984,14 +1145,15 @@ const OrderPOSHome: React.FC = () => {
         timer: 1500,
       });
     } finally {
-      // ✅ RESET SAU 2 GIÂY ĐỂ TRÁNH SPAM
+      //  RESET SAU 2 GIÂY ĐỂ TRÁNH SPAM
       setTimeout(() => {
         setIsPrinting(false);
       }, 2000);
     }
   };
 
-  const currentEmployeeName = employees.find((e) => e._id === currentTab.employeeId)?.fullName || "N/A";
+  const currentEmployeeName =
+    employees.find((e) => e._id === currentTab.employeeId)?.fullName || "N/A";
   const currentCustomerName = currentTab?.customer?.name || "Khách vãng lai";
   const currentCustomerPhone = currentTab?.customer?.phone || "Không có";
 
@@ -1005,7 +1167,8 @@ const OrderPOSHome: React.FC = () => {
 
   const openPriceModal = (record: CartItem) => {
     // tìm object gốc trong currentTab.cart bằng productId
-    const realItem = currentTab.cart.find((i) => i.productId === record.productId) || record;
+    const realItem =
+      currentTab.cart.find((i) => i.productId === record.productId) || record;
     setPriceEditModal({
       visible: true,
       item: realItem,
@@ -1055,18 +1218,50 @@ const OrderPOSHome: React.FC = () => {
             flex: 1,
           }}
         >
-          <div style={{ background: "rgba(255,255,255,0.2)", padding: 10, borderRadius: 12, display: "flex" }}>
+          <div
+            style={{
+              background: "rgba(255,255,255,0.2)",
+              padding: 10,
+              borderRadius: 12,
+              display: "flex",
+            }}
+          >
             <ShopOutlined style={{ fontSize: 24, color: "#fff" }} />
           </div>
           <div>
-            <Title level={4} className="premium-title" style={{ margin: 0, color: "#fff", background: "none", WebkitTextFillColor: "white" }}>
+            <Title
+              level={4}
+              className="premium-title"
+              style={{
+                margin: 0,
+                color: "#fff",
+                background: "none",
+                WebkitTextFillColor: "white",
+              }}
+            >
               {currentStore.name || "Cửa Hàng"}
             </Title>
-            <Text style={{ color: "rgba(255,255,255,0.8)", fontSize: "12px", letterSpacing: 1 }}>POS TERMINAL v2.0</Text>
+            <Text
+              style={{
+                color: "rgba(255,255,255,0.8)",
+                fontSize: "12px",
+                letterSpacing: 1,
+              }}
+            >
+              POS TERMINAL v2.0
+            </Text>
           </div>
         </div>
 
-        <div style={{ flex: 2, display: "flex", gap: 8, alignItems: "center", maxWidth: 550 }}>
+        <div
+          style={{
+            flex: 2,
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            maxWidth: 550,
+          }}
+        >
           <Input
             size="large"
             placeholder="Tìm sản phẩm (SKU/Tên)..."
@@ -1083,7 +1278,14 @@ const OrderPOSHome: React.FC = () => {
             autoFocus
           />
         </div>
-        <div style={{ flex: 1, display: "flex", justifyContent: "flex-end", gap: 12 }}>
+        <div
+          style={{
+            flex: 1,
+            display: "flex",
+            justifyContent: "flex-end",
+            gap: 12,
+          }}
+        >
           <Badge count={currentTab.cart.length} offset={[-2, 2]}>
             <Button ghost icon={<PlusOutlined />} onClick={addNewOrderTab}>
               Tạo đơn mới
@@ -1098,7 +1300,11 @@ const OrderPOSHome: React.FC = () => {
             position: "absolute",
             top: "90px",
             left: "50%",
-            transform: `translateX(-50%) ${searchedProducts.length > 0 ? "translateY(0)" : "translateY(-10px)"}`,
+            transform: `translateX(-50%) ${
+              searchedProducts.length > 0
+                ? "translateY(0)"
+                : "translateY(-10px)"
+            }`,
             width: "80%",
             maxWidth: 600,
             background: "rgba(255, 255, 255, 0.95)",
@@ -1124,12 +1330,26 @@ const OrderPOSHome: React.FC = () => {
             let oldestValidBatch = null;
             if (hasBatches) {
               const validBatches = [...(p.batches || [])]
-                .filter((b) => (b.quantity || 0) > 0 && (!b.expiry_date || new Date(b.expiry_date) >= new Date()))
+                .filter(
+                  (b) =>
+                    (b.quantity || 0) > 0 &&
+                    (!b.expiry_date || new Date(b.expiry_date) >= new Date())
+                )
                 .sort((a, b) => {
-                  if (!a.expiry_date && b.expiry_date) return 1;
+                  // 1. Ưu tiên lô có hạn dùng (Sắp hết hạn trước)
                   if (a.expiry_date && !b.expiry_date) return -1;
-                  if (a.expiry_date && b.expiry_date) return new Date(a.expiry_date).getTime() - new Date(b.expiry_date).getTime();
-                  return 0;
+                  if (!a.expiry_date && b.expiry_date) return 1;
+                  if (a.expiry_date && b.expiry_date) {
+                    const diff =
+                      new Date(a.expiry_date).getTime() -
+                      new Date(b.expiry_date).getTime();
+                    if (diff !== 0) return diff;
+                  }
+                  // 2. FIFO cho lô không hạn hoặc cùng hạn
+                  return (
+                    new Date(a.created_at || 0).getTime() -
+                    new Date(b.created_at || 0).getTime()
+                  );
                 });
               if (validBatches.length > 0) oldestValidBatch = validBatches[0];
             }
@@ -1152,8 +1372,10 @@ const OrderPOSHome: React.FC = () => {
                 }}
                 onMouseEnter={(e) => {
                   if (!isOut) {
-                    e.currentTarget.style.background = "rgba(99, 102, 241, 0.05)";
-                    e.currentTarget.style.borderColor = "rgba(99, 102, 241, 0.2)";
+                    e.currentTarget.style.background =
+                      "rgba(99, 102, 241, 0.05)";
+                    e.currentTarget.style.borderColor =
+                      "rgba(99, 102, 241, 0.2)";
                   }
                 }}
                 onMouseLeave={(e) => {
@@ -1163,24 +1385,86 @@ const OrderPOSHome: React.FC = () => {
                   }
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: "16px", width: "100%" }}>
-                  <div style={{ width: 50, height: 50, borderRadius: 8, overflow: "hidden", background: "#f0f2f5", flexShrink: 0 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "16px",
+                    width: "100%",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 50,
+                      height: 50,
+                      borderRadius: 8,
+                      overflow: "hidden",
+                      background: "#f0f2f5",
+                      flexShrink: 0,
+                    }}
+                  >
                     {p.image?.url ? (
-                      <img src={p.image.url} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      <img
+                        src={p.image.url}
+                        alt={p.name}
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "cover",
+                        }}
+                      />
                     ) : (
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
-                        <ShopOutlined style={{ fontSize: 20, color: "#d9d9d9" }} />
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          height: "100%",
+                        }}
+                      >
+                        <ShopOutlined
+                          style={{ fontSize: 20, color: "#d9d9d9" }}
+                        />
                       </div>
                     )}
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, fontSize: "15px", color: isOut ? "#999" : "#1f2937" }}>{p.name}</div>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 2, flexWrap: "wrap" }}>
-                      <Tag color="blue" style={{ margin: 0, borderRadius: 4, fontSize: 10, border: "none" }}>
+                    <div
+                      style={{
+                        fontWeight: 600,
+                        fontSize: "15px",
+                        color: isOut ? "#999" : "#1f2937",
+                      }}
+                    >
+                      {p.name}
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        alignItems: "center",
+                        marginTop: 2,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <Tag
+                        color="blue"
+                        style={{
+                          margin: 0,
+                          borderRadius: 4,
+                          fontSize: 10,
+                          border: "none",
+                        }}
+                      >
                         {p.sku}
                       </Tag>
-                      <Text type={isOut ? "danger" : "secondary"} style={{ fontSize: 12 }}>
-                        {isOut ? "Hết hàng có thể bán" : `Tồn khả dụng: ${avail}`}
+                      <Text
+                        type={isOut ? "danger" : "secondary"}
+                        style={{ fontSize: 12 }}
+                      >
+                        {isOut
+                          ? "Hết hàng có thể bán"
+                          : `Tồn khả dụng: ${avail}`}
                       </Text>
                       {p.stock_quantity > avail && (
                         <Tooltip title="Đã trừ hàng hết hạn">
@@ -1192,21 +1476,36 @@ const OrderPOSHome: React.FC = () => {
 
                       {/* Hiển thị lô ưu tiên bán trước */}
                       {oldestValidBatch && (
-                        <Tag color="orange" icon={<InfoCircleOutlined />} style={{ borderRadius: 4, fontSize: 10, margin: 0 }}>
+                        <Tag
+                          color="orange"
+                          icon={<InfoCircleOutlined />}
+                          style={{ borderRadius: 4, fontSize: 10, margin: 0 }}
+                        >
                           Ưu tiên lô:{" "}
                           <Text strong style={{ fontSize: 10 }}>
                             {oldestValidBatch.batch_no}
                           </Text>
-                          {oldestValidBatch.expiry_date && ` (HSD: ${new Date(oldestValidBatch.expiry_date).toLocaleDateString("vi-VN")})`}
+                          {oldestValidBatch.expiry_date &&
+                            ` (HSD: ${new Date(
+                              oldestValidBatch.expiry_date
+                            ).toLocaleDateString("vi-VN")})`}
                         </Tag>
                       )}
                     </div>
                   </div>
                   <div style={{ textAlign: "right" }}>
-                    <Text strong style={{ color: isOut ? "#999" : "#6366f1", fontSize: "16px" }}>
+                    <Text
+                      strong
+                      style={{
+                        color: isOut ? "#999" : "#6366f1",
+                        fontSize: "16px",
+                      }}
+                    >
                       {formatPrice(p.price)}
                     </Text>
-                    <div style={{ fontSize: 11, color: "#94a3b8" }}>{p.unit}</div>
+                    <div style={{ fontSize: 11, color: "#94a3b8" }}>
+                      {p.unit}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1217,7 +1516,13 @@ const OrderPOSHome: React.FC = () => {
       {/* BODY - 2 CỘT (GRID 24 CỘT) */}
       <Row gutter={[16, 16]} style={{ flex: 1, padding: 16 }}>
         {/* CỘT TRÁI - GIỎ HÀNG (CHIẾM 16/24) */}
-        <Col xs={24} md={16} lg={17} xl={18} style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+        <Col
+          xs={24}
+          md={16}
+          lg={17}
+          xl={18}
+          style={{ display: "flex", flexDirection: "column", height: "100%" }}
+        >
           {/* Row 1 - Card chính (chiếm hết chiều cao trừ footer) */}
           <Row style={{ flex: 1, overflow: "hidden" }}>
             <Col span={24}>
@@ -1245,12 +1550,15 @@ const OrderPOSHome: React.FC = () => {
                   type="editable-card"
                   onEdit={(targetKey, action) => {
                     if (action === "add") addNewOrderTab();
-                    else if (action === "remove") removeOrderTab(targetKey as string);
+                    else if (action === "remove")
+                      removeOrderTab(targetKey as string);
                   }}
                   style={{ flex: 1, display: "flex", flexDirection: "column" }}
                   items={orders.map((tab) => ({
                     key: tab.key,
-                    label: <span style={{ fontWeight: 600 }}>Đơn {tab.key}</span>,
+                    label: (
+                      <span style={{ fontWeight: 600 }}>Đơn {tab.key}</span>
+                    ),
                     closable: orders.length > 1,
                     children: (
                       <div
@@ -1291,7 +1599,10 @@ const OrderPOSHome: React.FC = () => {
                                   }}
                                 >
                                   <img
-                                    src={record.image?.url || "/default-product.png"}
+                                    src={
+                                      record.image?.url ||
+                                      "/default-product.png"
+                                    }
                                     alt={record.name}
                                     style={{
                                       width: 40,
@@ -1319,7 +1630,9 @@ const OrderPOSHome: React.FC = () => {
                                 <InputNumber
                                   min={1}
                                   value={r.quantity}
-                                  onChange={(v) => updateQuantity(r.productId, v || 1)}
+                                  onChange={(v) =>
+                                    updateQuantity(r.productId, v || 1)
+                                  }
                                   style={{ width: "60%" }}
                                 />
                               ),
@@ -1330,7 +1643,9 @@ const OrderPOSHome: React.FC = () => {
                               align: "right",
                               render: (_, record) => {
                                 const unitPrice = getItemUnitPrice(record);
-                                const isCustom = record.saleType && record.saleType !== "NORMAL";
+                                const isCustom =
+                                  record.saleType &&
+                                  record.saleType !== "NORMAL";
 
                                 return (
                                   <div style={{ textAlign: "right" }}>
@@ -1347,7 +1662,11 @@ const OrderPOSHome: React.FC = () => {
                                             lineHeight: "16px",
                                           }}
                                         >
-                                          {SALE_TYPE_LABEL[record.saleType || "NORMAL"]}
+                                          {
+                                            SALE_TYPE_LABEL[
+                                              record.saleType || "NORMAL"
+                                            ]
+                                          }
                                         </Tag>
                                       )}
                                     </div>
@@ -1373,7 +1692,8 @@ const OrderPOSHome: React.FC = () => {
                               dataIndex: "unit",
                               width: 80,
                               align: "center",
-                              render: (value: string) => (value && String(value).trim() ? value : "---"),
+                              render: (value: string) =>
+                                value && String(value).trim() ? value : "---",
                             },
                             {
                               title: "Thuế (%)",
@@ -1381,8 +1701,12 @@ const OrderPOSHome: React.FC = () => {
                               width: 80,
                               align: "center",
                               render: (val) => {
-                                const rate = val !== undefined && val !== null ? Number(val) : 0;
-                                if (rate === -1) return <Tag color="default">Ko thuế</Tag>;
+                                const rate =
+                                  val !== undefined && val !== null
+                                    ? Number(val)
+                                    : 0;
+                                if (rate === -1)
+                                  return <Tag color="default">Ko thuế</Tag>;
                                 return <Tag color="orange">{rate}%</Tag>;
                               },
                             },
@@ -1392,7 +1716,8 @@ const OrderPOSHome: React.FC = () => {
                               align: "right",
                               width: 150,
                               render: (_sub, record: CartItem) => {
-                                const amount = getItemUnitPrice(record) * record.quantity;
+                                const amount =
+                                  getItemUnitPrice(record) * record.quantity;
                                 return (
                                   <Text strong style={{ color: "#1890ff" }}>
                                     {formatPrice(amount)}
@@ -1411,7 +1736,9 @@ const OrderPOSHome: React.FC = () => {
                                   icon={<DeleteOutlined />}
                                   onClick={() =>
                                     updateOrderTab((t) => {
-                                      t.cart = t.cart.filter((i) => i.productId !== r.productId);
+                                      t.cart = t.cart.filter(
+                                        (i) => i.productId !== r.productId
+                                      );
                                     })
                                   }
                                 />
@@ -1517,7 +1844,9 @@ const OrderPOSHome: React.FC = () => {
                   placeholder="Nhập SĐT khách hàng..."
                   prefix={<UserOutlined />}
                   suffix={
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div
+                      style={{ display: "flex", alignItems: "center", gap: 8 }}
+                    >
                       <div
                         style={{
                           width: 1,
@@ -1550,7 +1879,9 @@ const OrderPOSHome: React.FC = () => {
                     setShowCustomerDropdown(true);
                   }}
                   onFocus={() => setShowCustomerDropdown(true)}
-                  onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 200)}
+                  onBlur={() =>
+                    setTimeout(() => setShowCustomerDropdown(false), 200)
+                  }
                   style={{
                     marginBottom: 12,
                     borderRadius: 8,
@@ -1611,8 +1942,12 @@ const OrderPOSHome: React.FC = () => {
                           cursor: "pointer",
                           borderBottom: "1px solid #f0f0f0",
                         }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = "#f5faff")}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
+                        onMouseEnter={(e) =>
+                          (e.currentTarget.style.background = "#f5faff")
+                        }
+                        onMouseLeave={(e) =>
+                          (e.currentTarget.style.background = "#fff")
+                        }
                       >
                         <Space direction="vertical" size={0}>
                           <Text strong>{c.name}</Text>
@@ -1651,12 +1986,17 @@ const OrderPOSHome: React.FC = () => {
                 <Space>
                   <UserOutlined style={{ color: "#52c41a" }} />
                   <Text strong>{currentTab.customer.name}</Text>
-                  <Badge count={`Đã có: ${currentTab.customer.loyaltyPoints} điểm`} style={{ backgroundColor: "#faad14" }} />
+                  <Badge
+                    count={`Đã có: ${currentTab.customer.loyaltyPoints} điểm`}
+                    style={{ backgroundColor: "#faad14" }}
+                  />
                 </Space>
               </div>
             )}
 
-            <Divider style={{ margin: "5px 0", borderTop: "1px solid #b8b6b6ff" }} />
+            <Divider
+              style={{ margin: "5px 0", borderTop: "1px solid #b8b6b6ff" }}
+            />
 
             {/* Tổng tiền và các tùy chọn */}
             <div
@@ -1693,7 +2033,9 @@ const OrderPOSHome: React.FC = () => {
                     color: "#fa8c16",
                   }}
                 >
-                  <Text style={{ fontSize: "15px", color: "#fa8c16" }}>Tổng thuế GTGT (Tự động):</Text>
+                  <Text style={{ fontSize: "15px", color: "#fa8c16" }}>
+                    Tổng thuế GTGT (Tự động):
+                  </Text>
                   <Text strong style={{ fontSize: "16px", color: "#fa8c16" }}>
                     +{formatPrice(vatAmount)}
                   </Text>
@@ -1719,13 +2061,19 @@ const OrderPOSHome: React.FC = () => {
                 >
                   <Space>
                     <GiftOutlined style={{ color: "#faad14" }} />
-                    <Text style={{ fontWeight: 500 }}>Giảm giá từ điểm tích lũy:</Text>
+                    <Text style={{ fontWeight: 500 }}>
+                      Giảm giá từ điểm tích lũy:
+                    </Text>
                   </Space>
 
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div
+                    style={{ display: "flex", alignItems: "center", gap: 8 }}
+                  >
                     <Switch
                       checked={!!currentTab.usedPointsEnabled}
-                      disabled={!loyaltySetting?.isActive || !currentTab.customer}
+                      disabled={
+                        !loyaltySetting?.isActive || !currentTab.customer
+                      }
                       onChange={(checked) => {
                         updateOrderTab((t) => {
                           t.usedPointsEnabled = checked;
@@ -1768,31 +2116,84 @@ const OrderPOSHome: React.FC = () => {
               </div>
 
               {currentTab.isVAT && (
-                <div style={{ background: "#f5f5f5", padding: 8, borderRadius: 8, marginTop: 4 }}>
-                  <Space direction="vertical" style={{ width: "100%" }} size={4}>
+                <div
+                  style={{
+                    background: "#f5f5f5",
+                    padding: 8,
+                    borderRadius: 8,
+                    marginTop: 4,
+                  }}
+                >
+                  <Space
+                    direction="vertical"
+                    style={{ width: "100%" }}
+                    size={4}
+                  >
                     <Input
                       placeholder="Tên công ty/đơn vị"
                       size="small"
                       value={currentTab.companyName}
-                      onChange={(e) => updateOrderTab((t) => (t.companyName = e.target.value))}
+                      onChange={(e) =>
+                        updateOrderTab((t) => (t.companyName = e.target.value))
+                      }
                     />
                     <Input
                       placeholder="Mã số thuế"
                       size="small"
                       value={currentTab.taxCode}
-                      onChange={(e) => updateOrderTab((t) => (t.taxCode = e.target.value))}
+                      onChange={(e) =>
+                        updateOrderTab((t) => (t.taxCode = e.target.value))
+                      }
                     />
                     <Input
                       placeholder="Địa chỉ đơn vị"
                       size="small"
                       value={currentTab.companyAddress}
-                      onChange={(e) => updateOrderTab((t) => (t.companyAddress = e.target.value))}
+                      onChange={(e) =>
+                        updateOrderTab(
+                          (t) => (t.companyAddress = e.target.value)
+                        )
+                      }
                     />
                   </Space>
                 </div>
               )}
 
-              <Divider style={{ margin: "5px 0", borderTop: "1px solid #b8b6b6ff" }} />
+              <Divider
+                style={{ margin: "5px 0", borderTop: "1px solid #b8b6b6ff" }}
+              />
+
+              {/* Breakdown thanh toán */}
+              <Space
+                direction="vertical"
+                style={{ width: "100%", padding: "0 4px" }}
+                size={4}
+              >
+                <div
+                  style={{ display: "flex", justifyContent: "space-between" }}
+                >
+                  <Text type="secondary">Tạm tính:</Text>
+                  <Text>{formatPrice(subtotal)}</Text>
+                </div>
+                {vatAmount > 0 && (
+                  <div
+                    style={{ display: "flex", justifyContent: "space-between" }}
+                  >
+                    <Text type="secondary">Thuế VAT:</Text>
+                    <Text>+{formatPrice(vatAmount)}</Text>
+                  </div>
+                )}
+                {discount > 0 && (
+                  <div
+                    style={{ display: "flex", justifyContent: "space-between" }}
+                  >
+                    <Text type="secondary">Giảm giá điểm:</Text>
+                    <Text style={{ color: "#52c41a" }}>
+                      -{formatPrice(discount)}
+                    </Text>
+                  </div>
+                )}
+              </Space>
 
               {/* Khách phải trả */}
               <div
@@ -1801,6 +2202,7 @@ const OrderPOSHome: React.FC = () => {
                   borderRadius: "8px",
                   padding: "12px",
                   boxShadow: "0 4px 12px rgba(24, 144, 255, 0.25)",
+                  marginTop: 8,
                 }}
               >
                 <div
@@ -1811,7 +2213,7 @@ const OrderPOSHome: React.FC = () => {
                   }}
                 >
                   <Text strong style={{ fontSize: "16px", color: "#fff" }}>
-                    KHÁCH CẦN TRẢ:
+                    THANH TOÁN:
                   </Text>
                   <Text strong style={{ fontSize: "24px", color: "#fff" }}>
                     {formatPrice(totalAmount)}
@@ -1819,7 +2221,9 @@ const OrderPOSHome: React.FC = () => {
                 </div>
               </div>
 
-              <Divider style={{ margin: "1px 0", borderTop: "1px solid #b8b6b6ff" }} />
+              <Divider
+                style={{ margin: "1px 0", borderTop: "1px solid #b8b6b6ff" }}
+              />
 
               {/* Phương thức thanh toán */}
               <div>
@@ -1833,7 +2237,9 @@ const OrderPOSHome: React.FC = () => {
                       t.paymentMethod = "cash";
                     })
                   }
-                  type={currentTab.paymentMethod === "cash" ? "primary" : "default"}
+                  type={
+                    currentTab.paymentMethod === "cash" ? "primary" : "default"
+                  }
                   size="large"
                   style={{ flex: 1, borderRadius: "8px" }}
                 >
@@ -1846,7 +2252,9 @@ const OrderPOSHome: React.FC = () => {
                       t.paymentMethod = "qr";
                     })
                   }
-                  type={currentTab.paymentMethod === "qr" ? "primary" : "default"}
+                  type={
+                    currentTab.paymentMethod === "qr" ? "primary" : "default"
+                  }
                   size="large"
                   style={{ flex: 1, borderRadius: "8px" }}
                 >
@@ -1858,7 +2266,9 @@ const OrderPOSHome: React.FC = () => {
               {currentTab.paymentMethod === "cash" && (
                 <>
                   <div style={{ marginTop: 5 }}>
-                    <Text style={{ display: "block", marginBottom: 8 }}>Tiền khách đưa:</Text>
+                    <Text style={{ display: "block", marginBottom: 8 }}>
+                      Tiền khách đưa:
+                    </Text>
                     <InputNumber
                       min={0}
                       value={currentTab.cashReceived}
@@ -1868,8 +2278,12 @@ const OrderPOSHome: React.FC = () => {
                           t.cashReceived = val || 0;
                         });
                       }}
-                      formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
-                      parser={(v) => parseFloat(v?.replace(/\$\s?|(,*)/g, "") || "0")}
+                      formatter={(v) =>
+                        `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+                      }
+                      parser={(v) =>
+                        parseFloat(v?.replace(/\$\s?|(,*)/g, "") || "0")
+                      }
                       size="large"
                       style={{ width: "100%" }}
                       addonAfter="đ"
@@ -1882,7 +2296,10 @@ const OrderPOSHome: React.FC = () => {
                       background: changeAmount >= 0 ? "#f6ffed" : "#fff1f0",
                       padding: "10px",
                       borderRadius: "8px",
-                      border: changeAmount >= 0 ? "1px solid #b7eb8f" : "1px solid #ffa39e",
+                      border:
+                        changeAmount >= 0
+                          ? "1px solid #b7eb8f"
+                          : "1px solid #ffa39e",
                     }}
                   >
                     <Text
@@ -1935,78 +2352,85 @@ const OrderPOSHome: React.FC = () => {
               </Button>
 
               {/* Tiếp tục thanh toán QR - Show khi đã tạo đơn QR */}
-              {currentTab.pendingOrderId && currentTab.paymentMethod === "qr" && !currentTab.qrImageUrl && (
-                <Button
-                  type="default"
-                  size="large"
-                  block
-                  onClick={() => {
-                    // 🟢 Restore từ saved QR data
-                    if (currentTab.savedQrImageUrl) {
-                      updateOrderTab((tab) => {
-                        tab.qrImageUrl = tab.savedQrImageUrl;
-                        tab.qrPayload = tab.savedQrPayload;
-                        tab.qrExpiryTs = tab.savedQrExpiryTs;
-                      });
-                    } else {
-                      Swal.fire({
-                        icon: "warning",
-                        title: "QR không hợp lệ",
-                        text: "QR đã hết hạn hoặc không có dữ liệu, vui lòng tạo QR mới",
-                        confirmButtonText: "Đã hiểu",
-                      });
-                    }
-                  }}
-                  style={{
-                    marginTop: 8,
-                    height: "45px",
-                    fontSize: "15px",
-                    fontWeight: 500,
-                    borderRadius: "8px",
-                    border: "1px solid #1890ff",
-                    color: "#1890ff",
-                  }}
-                >
-                  📱 Tiếp tục thanh toán QR
-                </Button>
-              )}
-
-              {/* Xác nhận thanh toán tiền mặt */}
-              {currentTab.pendingOrderId && currentTab.paymentMethod === "cash" && (
-                <Popconfirm
-                  title={`Xác nhận khách đã đưa ${formatPrice(totalAmount)}?`}
-                  onConfirm={async () => {
-                    try {
-                      await axios.post(`${API_BASE}/orders/${currentTab.pendingOrderId}/set-paid-cash`, {}, { headers });
-                      setBillModalOpen(true);
-                    } catch (err: any) {
-                      Swal.fire({
-                        title: "Có lỗi xảy ra!",
-                        text: "Lỗi xác nhận thanh toán",
-                        icon: "error",
-                        confirmButtonText: "OK",
-                        confirmButtonColor: "#ff4d4f",
-                        timer: 2000,
-                      });
-                    }
-                  }}
-                >
+              {currentTab.pendingOrderId &&
+                currentTab.paymentMethod === "qr" &&
+                !currentTab.qrImageUrl && (
                   <Button
-                    type="primary"
-                    danger
+                    type="default"
                     size="large"
                     block
+                    onClick={() => {
+                      // 🟢 Restore từ saved QR data
+                      if (currentTab.savedQrImageUrl) {
+                        updateOrderTab((tab) => {
+                          tab.qrImageUrl = tab.savedQrImageUrl;
+                          tab.qrPayload = tab.savedQrPayload;
+                          tab.qrExpiryTs = tab.savedQrExpiryTs;
+                        });
+                      } else {
+                        Swal.fire({
+                          icon: "warning",
+                          title: "QR không hợp lệ",
+                          text: "QR đã hết hạn hoặc không có dữ liệu, vui lòng tạo QR mới",
+                          confirmButtonText: "Đã hiểu",
+                        });
+                      }
+                    }}
                     style={{
-                      height: "50px",
-                      fontSize: "16px",
-                      fontWeight: 600,
+                      marginTop: 8,
+                      height: "45px",
+                      fontSize: "15px",
+                      fontWeight: 500,
                       borderRadius: "8px",
+                      border: "1px solid #1890ff",
+                      color: "#1890ff",
                     }}
                   >
-                    Xác Nhận Thanh Toán Tiền Mặt
+                    📱 Tiếp tục thanh toán QR
                   </Button>
-                </Popconfirm>
-              )}
+                )}
+
+              {/* Xác nhận thanh toán tiền mặt */}
+              {currentTab.pendingOrderId &&
+                currentTab.paymentMethod === "cash" && (
+                  <Popconfirm
+                    title={`Xác nhận khách đã đưa ${formatPrice(totalAmount)}?`}
+                    onConfirm={async () => {
+                      try {
+                        await axios.post(
+                          `${API_BASE}/orders/${currentTab.pendingOrderId}/set-paid-cash`,
+                          {},
+                          { headers }
+                        );
+                        setBillModalOpen(true);
+                      } catch (err: any) {
+                        Swal.fire({
+                          title: "Có lỗi xảy ra!",
+                          text: "Lỗi xác nhận thanh toán",
+                          icon: "error",
+                          confirmButtonText: "OK",
+                          confirmButtonColor: "#ff4d4f",
+                          timer: 2000,
+                        });
+                      }
+                    }}
+                  >
+                    <Button
+                      type="primary"
+                      danger
+                      size="large"
+                      block
+                      style={{
+                        height: "50px",
+                        fontSize: "16px",
+                        fontWeight: 600,
+                        borderRadius: "8px",
+                      }}
+                    >
+                      Xác Nhận Thanh Toán Tiền Mặt
+                    </Button>
+                  </Popconfirm>
+                )}
             </div>
           </Card>
         </Col>
@@ -2051,8 +2475,15 @@ const OrderPOSHome: React.FC = () => {
       <Modal
         open={!!(currentTab.qrImageUrl || currentTab.qrPayload)}
         footer={
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
-            {/* ✅ Hiển thị trạng thái đã thanh toán */}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: "12px",
+            }}
+          >
+            {/*  Hiển thị trạng thái đã thanh toán */}
             {currentTab.isPaid && (
               <div
                 style={{
@@ -2066,16 +2497,22 @@ const OrderPOSHome: React.FC = () => {
                 }}
               >
                 <Text strong style={{ color: "#52c41a", fontSize: "16px" }}>
-                  ✅ Đã nhận thanh toán thành công!
+                  Đã nhận thanh toán thành công!
                 </Text>
               </div>
             )}
 
-            <div style={{ display: "flex", justifyContent: "center", gap: "12px" }}>
+            <div
+              style={{ display: "flex", justifyContent: "center", gap: "12px" }}
+            >
               {/* Chỉ hiện nút Huỷ khi CHƯA thanh toán */}
               {!currentTab.isPaid && (
                 <Button
-                  style={{ background: "#e7e4e4ff", borderColor: "#d9d9d9", color: "#595959" }}
+                  style={{
+                    background: "#e7e4e4ff",
+                    borderColor: "#d9d9d9",
+                    color: "#595959",
+                  }}
                   key="cancel"
                   onClick={() => {
                     updateOrderTab((tab) => {
@@ -2097,7 +2534,11 @@ const OrderPOSHome: React.FC = () => {
                     // 🔴 Call API set-paid-QR + in bill trong 1 request
                     (async () => {
                       try {
-                        await axios.post(`${API_BASE}/orders/${currentTab.pendingOrderId}/print-bill`, {}, { headers });
+                        await axios.post(
+                          `${API_BASE}/orders/${currentTab.pendingOrderId}/print-bill`,
+                          {},
+                          { headers }
+                        );
                         // Reset QR
                         updateOrderTab((tab) => {
                           tab.qrImageUrl = null;
@@ -2109,7 +2550,8 @@ const OrderPOSHome: React.FC = () => {
                         Swal.fire({
                           icon: "error",
                           title: "In hoá đơn thất bại",
-                          text: err.response?.data?.message || "Lỗi khi in hoá đơn",
+                          text:
+                            err.response?.data?.message || "Lỗi khi in hoá đơn",
                           confirmButtonText: "OK",
                         });
                       }
@@ -2126,7 +2568,9 @@ const OrderPOSHome: React.FC = () => {
                   fontWeight: currentTab.isPaid ? 600 : 400,
                 }}
               >
-                {currentTab.isPaid ? "🖨️ In hoá đơn" : "In hoá đơn (Xác nhận thanh toán)"}
+                {currentTab.isPaid
+                  ? "🖨️ In hoá đơn"
+                  : "In hoá đơn (Xác nhận thanh toán)"}
               </Button>
             </div>
           </div>
@@ -2154,9 +2598,17 @@ const OrderPOSHome: React.FC = () => {
             }}
           >
             {currentTab.qrImageUrl ? (
-              <img src={currentTab.qrImageUrl} alt="QR code" style={{ width: 410, height: 410 }} />
+              <img
+                src={currentTab.qrImageUrl}
+                alt="QR code"
+                style={{ width: 410, height: 410 }}
+              />
             ) : currentTab.qrPayload ? (
-              <QRCode value={currentTab.qrPayload} size={410} title="Mã QR thanh toán đơn hàng" />
+              <QRCode
+                value={currentTab.qrPayload}
+                size={410}
+                title="Mã QR thanh toán đơn hàng"
+              />
             ) : null}
           </div>
           {currentTab.qrExpiryTs && (
@@ -2217,7 +2669,11 @@ const OrderPOSHome: React.FC = () => {
         address={currentStore?.address || ""}
         storePhone={currentStore?.phone || ""}
         storeTaxCode={currentStore?.taxCode || ""}
-        employeeName={currentTab.employeeId === null ? currentUserEmployee?.fullName : currentEmployeeName}
+        employeeName={
+          currentTab.employeeId === null
+            ? currentUserEmployee?.fullName
+            : currentEmployeeName
+        }
         customerName={currentCustomerName}
         customerPhone={currentCustomerPhone}
         paymentMethod={currentTab.paymentMethod}
@@ -2241,14 +2697,21 @@ const OrderPOSHome: React.FC = () => {
           if (priceEditModal.tempSaleType === "FREE") {
             finalPrice = 0;
           } else if (priceEditModal.tempSaleType === "AT_COST") {
-            finalPrice = getPriceNumber(priceEditModal.item.cost_price || priceEditModal.item.price);
-          } else if (priceEditModal.tempOverridePrice !== null && priceEditModal.tempOverridePrice !== undefined) {
+            finalPrice = getPriceNumber(
+              priceEditModal.item.cost_price || priceEditModal.item.price
+            );
+          } else if (
+            priceEditModal.tempOverridePrice !== null &&
+            priceEditModal.tempOverridePrice !== undefined
+          ) {
             finalPrice = priceEditModal.tempOverridePrice;
           } else {
             finalPrice = getPriceNumber(priceEditModal.item.price);
           }
 
-          const newSubtotal = (finalPrice * priceEditModal.item.quantity).toFixed(2);
+          const newSubtotal = (
+            finalPrice * priceEditModal.item.quantity
+          ).toFixed(2);
 
           updateOrderTab((tab) => {
             tab.cart = tab.cart.map((i) =>
@@ -2256,7 +2719,10 @@ const OrderPOSHome: React.FC = () => {
                 ? {
                     ...i,
                     saleType: priceEditModal.tempSaleType!,
-                    overridePrice: priceEditModal.tempSaleType === "NORMAL" ? null : finalPrice,
+                    overridePrice:
+                      priceEditModal.tempSaleType === "NORMAL"
+                        ? null
+                        : finalPrice,
                     subtotal: newSubtotal,
                   }
                 : i
@@ -2268,12 +2734,16 @@ const OrderPOSHome: React.FC = () => {
       >
         {priceEditModal.item && (
           <Space direction="vertical" style={{ width: "100%" }}>
-            <Space style={{ width: "100%", justifyContent: "space-between" }} align="center">
+            <Space
+              style={{ width: "100%", justifyContent: "space-between" }}
+              align="center"
+            >
               <Text strong>
                 Sản phẩm: <Tag color="blue">{priceEditModal.item.name}</Tag>
               </Text>
               <Text style={{ color: "#1677ff" }}>
-                Số lượng: {priceEditModal.item.quantity} {priceEditModal.item.unit}
+                Số lượng: {priceEditModal.item.quantity}{" "}
+                {priceEditModal.item.unit}
               </Text>
             </Space>
 
@@ -2288,21 +2758,30 @@ const OrderPOSHome: React.FC = () => {
                     value === "FREE"
                       ? 0
                       : value === "AT_COST"
-                      ? getPriceNumber(prev.item!.cost_price || prev.item!.price)
+                      ? getPriceNumber(
+                          prev.item!.cost_price || prev.item!.price
+                        )
                       : value === "NORMAL"
                       ? null
                       : prev.tempOverridePrice,
                 }));
               }}
             >
-              <Option value="NORMAL">Giá niêm yết ({formatPrice(priceEditModal.item.price)})</Option>
+              <Option value="NORMAL">
+                Giá niêm yết ({formatPrice(priceEditModal.item.price)})
+              </Option>
               <Option value="VIP">Giá ưu đãi (nhập tay)</Option>
-              <Option value="AT_COST">Giá vốn ({formatPrice(getPriceNumber(priceEditModal.item.cost_price))})</Option>
+              <Option value="AT_COST">
+                Giá vốn (
+                {formatPrice(getPriceNumber(priceEditModal.item.cost_price))})
+              </Option>
               <Option value="CLEARANCE">Xả kho (nhập tay)</Option>
               <Option value="FREE">Miễn phí (0đ)</Option>
             </Select>
 
-            {["VIP", "CLEARANCE"].includes(priceEditModal.tempSaleType || "NORMAL") && (
+            {["VIP", "CLEARANCE"].includes(
+              priceEditModal.tempSaleType || "NORMAL"
+            ) && (
               <InputNumber
                 style={{ width: "100%" }}
                 value={priceEditModal.tempOverridePrice ?? undefined}
@@ -2332,13 +2811,18 @@ const OrderPOSHome: React.FC = () => {
               <Text strong>Thành tiền sau thay đổi:</Text>
               <br />
               <Text type="success" style={{ fontSize: 18 }}>
-                {(priceEditModal.tempOverridePrice !== null && priceEditModal.tempOverridePrice !== undefined
+                {(priceEditModal.tempOverridePrice !== null &&
+                priceEditModal.tempOverridePrice !== undefined
                   ? priceEditModal.tempOverridePrice
                   : priceEditModal.tempSaleType === "FREE"
                   ? 0
                   : priceEditModal.tempSaleType === "AT_COST"
-                  ? getPriceNumber(priceEditModal.item.cost_price || priceEditModal.item.price)
-                  : getPriceNumber(priceEditModal.item.price)) * priceEditModal.item.quantity}
+                  ? getPriceNumber(
+                      priceEditModal.item.cost_price ||
+                        priceEditModal.item.price
+                    )
+                  : getPriceNumber(priceEditModal.item.price)) *
+                  priceEditModal.item.quantity}
                 {" đ"}
               </Text>
             </div>

@@ -20,8 +20,12 @@ import {
   TextInput,
   View,
   Image,
+  TouchableOpacity,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import dayjs from "dayjs";
+import { Ionicons } from "@expo/vector-icons";
 import apiClient from "../../api/apiClient";
 
 // Nếu bạn dùng Expo để chọn ảnh/video:
@@ -106,6 +110,8 @@ type RefundDetail = {
   refundTransactionId: string | null;
   refundReason: string;
   refundAmount: MongoDecimal;
+  grossRefundAmount?: MongoDecimal;
+  discountDeducted?: MongoDecimal;
   refundItems: RefundItem[];
   evidenceMedia: EvidenceMedia[];
   createdAt: string;
@@ -145,6 +151,16 @@ type OrderRefundDetailResponse = {
 };
 
 type SelectedProductItem = { productId: string; quantity: number };
+
+const COLORS = {
+  primary: "#2563eb",
+  good: "#16a34a",
+  warn: "#f59e0b",
+  danger: "#ef4444",
+  textStrong: "#0b1220",
+  muted: "#64748b",
+  stroke: "#e2e8f0",
+};
 
 /** =========================
  *  Small UI
@@ -248,12 +264,18 @@ const OrderRefundScreen: React.FC = () => {
   const [selectedSalespersonId, setSelectedSalespersonId] = useState<string | null>(
     null
   );
+  // Date filter
+  const [startDate, setStartDate] = useState<Date | null>(null);
+  const [endDate, setEndDate] = useState<Date | null>(null);
+  const [showPicker, setShowPicker] = useState<"start" | "end" | null>(null);
 
   // modal filters
   const [modalSearchText, setModalSearchText] = useState("");
   const [modalSelectedEmployeeId, setModalSelectedEmployeeId] = useState<string | null>(
     null
   );
+  const [modalSelectedStatus, setModalSelectedStatus] = useState<string | null>(null);
+  const [modalSelectedPaymentMethod, setModalSelectedPaymentMethod] = useState<string | null>(null);
 
   // data
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -273,6 +295,7 @@ const OrderRefundScreen: React.FC = () => {
   // Modals
   const [paidOrdersModalOpen, setPaidOrdersModalOpen] = useState(false);
   const [refundModalOpen, setRefundModalOpen] = useState(false);
+  const [refundDetailModalOpen, setRefundDetailModalOpen] = useState(false);
 
   // Paid order selection
   const [selectedPaidOrder, setSelectedPaidOrder] = useState<PaidOrder | null>(
@@ -289,7 +312,6 @@ const OrderRefundScreen: React.FC = () => {
   >({});
 
   // Form inputs
-  const [refundEmployeeId, setRefundEmployeeId] = useState<string | null>(null);
   const [refundReason, setRefundReason] = useState("");
 
   // Evidence media (local)
@@ -351,19 +373,30 @@ const OrderRefundScreen: React.FC = () => {
   }, [storeId, authHeaders]);
 
   const loadRefundDetail = useCallback(
-    async (orderId: string) => {
+    async (refundItem: OrderRefundDoc) => {
       if (!storeId) return;
-      setSelectedOrderId(orderId);
+      // Highlight using Refund ID
+      setSelectedOrderId(refundItem._id);
       setLoadingDetail(true);
+      
+      // Fetch using Original Order ID
+      const originalOrderId = refundItem.orderId?._id;
+      if (!originalOrderId) {
+         setLoadingDetail(false);
+         Alert.alert("Lỗi", "Không tìm thấy thông tin đơn gốc");
+         return;
+      }
+
       try {
         const res: any = await apiClient.get(
-          `/orders/order-refund/${orderId}`,
+          `/orders/order-refund/${originalOrderId}`,
           {
             params: { storeId },
             headers: authHeaders,
           }
         );
         setRefundDetail(res?.data || null);
+        setRefundDetailModalOpen(true);
       } catch (e: any) {
         Alert.alert(
           "Lỗi",
@@ -455,9 +488,39 @@ const OrderRefundScreen: React.FC = () => {
         matchSales = orderData?.employeeId?._id === selectedSalespersonId;
       }
 
-      return matchSearch && matchEmp && matchSales;
+      // Filter theo ngày
+      let matchDate = true;
+      if (startDate && endDate) {
+        const orderDate = dayjs(o.createdAt);
+        // Start of day for startDate, End of day for endDate
+        const start = dayjs(startDate).startOf("day");
+        const end = dayjs(endDate).endOf("day");
+        matchDate = orderDate.isAfter(start) && orderDate.isBefore(end);
+      } else if (startDate) {
+        const orderDate = dayjs(o.createdAt);
+        const start = dayjs(startDate).startOf("day");
+        matchDate = orderDate.isAfter(start);
+      } else if (endDate) {
+        const orderDate = dayjs(o.createdAt);
+        const end = dayjs(endDate).endOf("day");
+        matchDate = orderDate.isBefore(end);
+      }
+
+      return matchSearch && matchEmp && matchSales && matchDate;
     });
-  }, [refundOrders, searchText, selectedEmployeeId, selectedSalespersonId]);
+  }, [refundOrders, searchText, selectedEmployeeId, selectedSalespersonId, startDate, endDate]);
+
+  const onDateChange = (event: any, selectedDate?: Date) => {
+    const mode = showPicker;
+    setShowPicker(null);
+    if (!selectedDate) return;
+    
+    if (mode === "start") {
+      setStartDate(selectedDate);
+    } else if (mode === "end") {
+      setEndDate(selectedDate);
+    }
+  };
 
   const filteredPaidOrders = useMemo(() => {
     const q = modalSearchText.trim().toLowerCase();
@@ -475,7 +538,15 @@ const OrderRefundScreen: React.FC = () => {
         matchEmp = o.employeeId?._id === modalSelectedEmployeeId;
       }
 
-      return matchSearch && matchEmp;
+      const matchStatus = !modalSelectedStatus
+        ? true
+        : o.status === modalSelectedStatus;
+
+      const matchPayment = !modalSelectedPaymentMethod
+        ? true
+        : o.paymentMethod === modalSelectedPaymentMethod;
+
+      return matchSearch && matchEmp && matchStatus && matchPayment;
     });
   }, [paidOrders, modalSearchText, modalSelectedEmployeeId]);
 
@@ -493,7 +564,6 @@ const OrderRefundScreen: React.FC = () => {
       // reset form states
       setSelectedProducts({});
       setRefundQtyByProduct({});
-      setRefundEmployeeId(null);
       setRefundReason("");
       setEvidenceMedia([]);
 
@@ -584,7 +654,6 @@ const OrderRefundScreen: React.FC = () => {
     setSelectedPaidOrderItems([]);
     setSelectedProducts({});
     setRefundQtyByProduct({});
-    setRefundEmployeeId(null);
     setRefundReason("");
     setEvidenceMedia([]);
   };
@@ -621,7 +690,7 @@ const OrderRefundScreen: React.FC = () => {
     setLoadingList(true);
     try {
       const formData: any = new FormData();
-      // Không gửi employeeId - backend sẽ tự lấy từ người đăng nhập
+      // Backend uses logged-in user automatically
       formData.append("refundReason", reason);
       formData.append("items", JSON.stringify(items));
 
@@ -760,6 +829,40 @@ const OrderRefundScreen: React.FC = () => {
               ))}
             </View>
           </ScrollView>
+
+          {/* Date Filter UI */}
+          <View style={{ marginTop: 12, flexDirection: "row", gap: 12 }}>
+            <TouchableOpacity 
+              style={styles.dateBtn} 
+              onPress={() => setShowPicker("start")}
+            >
+              <Ionicons name="calendar-outline" size={16} color="#64748b" />
+              <Text style={styles.dateBtnText}>
+                {startDate ? dayjs(startDate).format("DD/MM/YYYY") : "Từ ngày"}
+              </Text>
+            </TouchableOpacity>
+            
+            <View style={{ justifyContent: "center" }}><Text>-</Text></View>
+
+            <TouchableOpacity 
+              style={styles.dateBtn} 
+              onPress={() => setShowPicker("end")}
+            >
+              <Ionicons name="calendar-outline" size={16} color="#64748b" />
+              <Text style={styles.dateBtnText}>
+                {endDate ? dayjs(endDate).format("DD/MM/YYYY") : "Đến ngày"}
+              </Text>
+            </TouchableOpacity>
+
+            {(startDate || endDate) && (
+              <TouchableOpacity 
+                style={styles.clearDateBtn} 
+                onPress={() => { setStartDate(null); setEndDate(null); }}
+              >
+                <Ionicons name="close-circle" size={18} color="#ef4444" />
+              </TouchableOpacity>
+            )}
+          </View>
         </Card>
 
         {/* List + detail */}
@@ -784,171 +887,38 @@ const OrderRefundScreen: React.FC = () => {
                     const active = item._id === selectedOrderId;
                     return (
                       <Pressable
-                        onPress={() => loadRefundDetail(item._id)}
+                        onPress={() => loadRefundDetail(item)}
                         style={({ pressed }) => [
-                          styles.orderRow,
-                          active && styles.orderRowActive,
-                          pressed && { opacity: 0.95 },
+                           styles.refundItem,
+                           active && styles.refundItemActive,
+                           pressed && { opacity: 0.9 }
                         ]}
                       >
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.orderId}>
-                            #{item._id.slice(-8)}
+                        <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                          <Text style={styles.refundCode}>
+                             {item.orderId?._id?.slice(-6) || "---"}
                           </Text>
-                          <Text style={styles.orderMeta} numberOfLines={1}>
-                            Khách: {item.orderId?.customer?.name || "Khách vãng lai"} •{" "}
-                            {item.orderId?.customer?.phone || "---"}
-                          </Text>
-                          <Text style={styles.orderMeta} numberOfLines={1}>
-                            NV bán: {item.orderId?.employeeId?.fullName || "Chủ cửa hàng"}
-                          </Text>
-                          <Text style={styles.orderMeta} numberOfLines={1}>
-                            NV hoàn: {item.refundedBy?.fullName || "Chủ cửa hàng"} •{" "}
-                            {formatDateTime(item.createdAt)}
+                          <Text style={styles.refundDate}>
+                             {formatDateTime(item.createdAt)}
                           </Text>
                         </View>
-
-                        <View style={{ alignItems: "flex-end" }}>
-                          <Text style={styles.money}>
-                            {formatCurrency(item.refundAmount)}
+                         <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 4 }}>
+                          <Text style={styles.refundCustomer}>
+                             {item.orderId?.customer?.name || "Khách lẻ"}
                           </Text>
-                          <Text
-                            style={[
-                              styles.badge,
-                              item.orderId?.status === "refunded"
-                                ? styles.badgeDanger
-                                : styles.badgeWarn,
-                            ]}
-                          >
-                            {item.orderId?.status === "refunded"
-                              ? "Hoàn toàn bộ"
-                              : "Hoàn 1 phần"}
+                          <Text style={styles.refundAmount}>
+                             {formatCurrency(item.refundAmount)}
                           </Text>
                         </View>
                       </Pressable>
                     );
                   }}
                 />
+
               )}
             </Card>
           </View>
         </View>
-
-        <Card title="Chi tiết hoàn trả">
-          {loadingDetail ? (
-            <View style={styles.centerSlim}>
-              <ActivityIndicator />
-              <Text style={styles.muted}>Đang tải chi tiết...</Text>
-            </View>
-          ) : !refundDetail ? (
-            <Text style={styles.muted}>
-              Chọn 1 đơn ở danh sách để xem chi tiết.
-            </Text>
-          ) : (
-            <View>
-              <Text style={styles.sectionTitle}>Đơn gốc</Text>
-              <View style={styles.kvRow}>
-                <Text style={styles.k}>Mã đơn</Text>
-                <Text style={styles.v}>{refundDetail.order._id}</Text>
-              </View>
-              <View style={styles.kvRow}>
-                <Text style={styles.k}>Cửa hàng</Text>
-                <Text style={styles.v}>{refundDetail.order.storeId?.name}</Text>
-              </View>
-              <View style={styles.kvRow}>
-                <Text style={styles.k}>Nhân viên bán</Text>
-                <Text style={styles.v}>
-                  {refundDetail.order.employeeId?.fullName || "Chủ cửa hàng"}
-                </Text>
-              </View>
-              <View style={styles.kvRow}>
-                <Text style={styles.k}>Khách</Text>
-                <Text style={styles.v}>
-                  {refundDetail.order.customer
-                    ? `${refundDetail.order.customer.name} (${refundDetail.order.customer.phone})`
-                    : "Trống"}
-                </Text>
-              </View>
-              <View style={styles.kvRow}>
-                <Text style={styles.k}>Tổng tiền</Text>
-                <Text
-                  style={[styles.v, { fontWeight: "900", color: "#2563eb" }]}
-                >
-                  {formatCurrency(refundDetail.order.totalAmount)}
-                </Text>
-              </View>
-
-              <View style={styles.hr} />
-
-              <Text style={styles.sectionTitle}>Sản phẩm trong đơn</Text>
-              {refundDetail.orderItems?.map((it) => (
-                <View key={it._id} style={styles.lineItem}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.lineTitle}>{it.productId?.name}</Text>
-                    <Text style={styles.lineSub}>SKU: {it.productId?.sku}</Text>
-                    <Text style={styles.lineSub}>
-                      SL: {it.quantity} • Đơn giá:{" "}
-                      {formatCurrency(it.priceAtTime)}
-                    </Text>
-                  </View>
-                  <Text style={styles.money}>
-                    {formatCurrency(it.subtotal)}
-                  </Text>
-                </View>
-              ))}
-
-              <View style={styles.hr} />
-
-              <Text style={[styles.sectionTitle, { color: "#ef4444" }]}>
-                Chi tiết hoàn
-              </Text>
-              <View style={styles.kvRow}>
-                <Text style={styles.k}>Người xử lý</Text>
-                <Text style={styles.v}>
-                  {(refundDetail.refundDetail as any)?.refundedByName ||
-                    refundDetail.refundDetail?.refundedBy?.fullName ||
-                    "Chủ cửa hàng"}
-                </Text>
-              </View>
-              <View style={styles.kvRow}>
-                <Text style={styles.k}>Thời gian</Text>
-                <Text style={styles.v}>
-                  {formatDateTime(refundDetail.refundDetail?.refundedAt)}
-                </Text>
-              </View>
-              <View style={styles.kvRow}>
-                <Text style={styles.k}>Lý do</Text>
-                <Text style={styles.v}>
-                  {refundDetail.refundDetail?.refundReason || "---"}
-                </Text>
-              </View>
-              <View style={styles.kvRow}>
-                <Text style={styles.k}>Tiền hoàn</Text>
-                <Text
-                  style={[styles.v, { fontWeight: "900", color: "#ef4444" }]}
-                >
-                  {formatCurrency(refundDetail.refundDetail?.refundAmount)}
-                </Text>
-              </View>
-
-              <Text style={[styles.sectionTitle, { marginTop: 12 }]}>
-                Sản phẩm đã hoàn
-              </Text>
-              {refundDetail.refundDetail?.refundItems?.map((ri) => (
-                <View key={ri._id} style={styles.lineItem}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.lineTitle}>{ri.productId?.name}</Text>
-                    <Text style={styles.lineSub}>SKU: {ri.productId?.sku}</Text>
-                    <Text style={styles.lineSub}>SL hoàn: {ri.quantity}</Text>
-                  </View>
-                  <Text style={[styles.money, { color: "#ef4444" }]}>
-                    {formatCurrency(ri.subtotal)}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          )}
-        </Card>
       </ScrollView>
 
       {/* Modal: paid orders */}
@@ -1004,6 +974,23 @@ const OrderRefundScreen: React.FC = () => {
                   </View>
                 </ScrollView>
 
+                <View style={{ marginBottom: 10 }}>
+                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                      <View style={{ flexDirection: "row", gap: 8 }}>
+                          <PillBtn text="Tất cả trạng thái" active={!modalSelectedStatus} onPress={() => setModalSelectedStatus(null)} />
+                          <PillBtn text="Đã thanh toán" active={modalSelectedStatus === "paid"} onPress={() => setModalSelectedStatus("paid")} />
+                          <PillBtn text="Hoàn 1 phần" active={modalSelectedStatus === "partially_refunded"} onPress={() => setModalSelectedStatus("partially_refunded")} />
+                      </View>
+                   </ScrollView>
+                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
+                      <View style={{ flexDirection: "row", gap: 8 }}>
+                          <PillBtn text="Tất cả PTTT" active={!modalSelectedPaymentMethod} onPress={() => setModalSelectedPaymentMethod(null)} />
+                          <PillBtn text="Tiền mặt" active={modalSelectedPaymentMethod === "cash"} onPress={() => setModalSelectedPaymentMethod("cash")} />
+                          <PillBtn text="QRCode" active={modalSelectedPaymentMethod === "qr"} onPress={() => setModalSelectedPaymentMethod("qr")} />
+                      </View>
+                   </ScrollView>
+                </View>
+
                 <ScrollView
                   style={{ maxHeight: 400 }}
                   keyboardShouldPersistTaps="always"
@@ -1021,9 +1008,17 @@ const OrderRefundScreen: React.FC = () => {
                         ]}
                       >
                         <View style={{ flex: 1 }}>
-                          <Text style={styles.orderId}>#{o._id.slice(-8)}</Text>
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                             <Text style={styles.orderId}>#{o._id.slice(-8)}</Text>
+                             <View style={[styles.badge, o.status === "paid" ? styles.badgeSuccess : styles.badgeWarn ]}>
+                                <Text style={[styles.badgeText, o.status === "paid" ? styles.badgeTextSuccess : styles.badgeTextWarn ]}>
+                                   {o.status === "paid" ? "Đã thanh toán" : "Hoàn 1 phần"}
+                                </Text>
+                             </View>
+                          </View>
+                          
                           <Text style={styles.orderMeta} numberOfLines={1}>
-                            Khách: {o.customer?.name || "Trống"} •{" "}
+                            Khách: {o.customer?.name || "Khách vãng lai"} •{" "}
                             {o.customer?.phone || "---"}
                           </Text>
                           <Text style={styles.orderMeta} numberOfLines={1}>
@@ -1071,19 +1066,27 @@ const OrderRefundScreen: React.FC = () => {
             <Text style={styles.modalTitle}>Tạo đơn hoàn trả</Text>
 
             {selectedPaidOrder ? (
-              <Text style={styles.muted}>
-                Đơn: #{selectedPaidOrder._id.slice(-8)} • Tổng:{" "}
-                {formatCurrency(selectedPaidOrder.totalAmount)}
-              </Text>
+              <View style={{ backgroundColor: "#f8fafc", padding: 10, borderRadius: 8, marginBottom: 10 }}>
+                 <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                    <Text style={[styles.textBase, { fontWeight: "700" }]}>Đơn #{selectedPaidOrder._id.slice(-8)}</Text>
+                    <Text style={[styles.money, { color: COLORS.primary }]}>{formatCurrency(selectedPaidOrder.totalAmount)}</Text>
+                 </View>
+                 <View style={{ marginTop: 4 }}>
+                    <Text style={[styles.textSm, { color: "#64748b" }]}>
+                       Khách: <Text style={{ fontWeight: "600", color: "#334155" }}>{selectedPaidOrder.customer?.name || "Khách vãng lai"}</Text> 
+                       {selectedPaidOrder.customer?.phone ? ` - ${selectedPaidOrder.customer.phone}` : ""}
+                    </Text>
+                 </View>
+              </View>
             ) : null}
 
             <ScrollView
               style={{ marginTop: 10 }}
               keyboardShouldPersistTaps="always"
             >
-              {/* Người xử lý sẽ được lấy tự động từ backend */}
+              {/* Removed Employee Selection - Auto use logged in user */}
 
-              <Text style={[styles.label, { marginTop: 12 }]}>
+              <Text style={[styles.label, { marginTop: 0 }]}>
                 Lý do hoàn trả
               </Text>
               <TextInput
@@ -1175,14 +1178,21 @@ const OrderRefundScreen: React.FC = () => {
                           {it.productId?.name}
                         </Text>
                         <Text style={styles.lineSub}>
-                          SKU: {it.productId?.sku} • Đã mua: {it.quantity} • Đơn giá:{" "}
+                          SKU: {it.productId?.sku} • Đơn giá:{" "}
                           {formatCurrency(it.priceAtTime)}
                         </Text>
-                        {alreadyRefunded > 0 && (
-                          <Text style={[styles.lineSub, { color: "#ef4444" }]}>
-                            Đã hoàn: {alreadyRefunded} | Còn lại: {maxQty}
-                          </Text>
-                        )}
+                        <Text style={[styles.lineSub, { marginTop: 2 }]}>
+                           Đã mua: <Text style={{ color: COLORS.primary, fontWeight: "700" }}>{it.quantity}</Text>
+                           {alreadyRefunded > 0 && (
+                             <Text style={{ color: COLORS.danger }}>
+                               {" | "}Đã hoàn: {alreadyRefunded}
+                             </Text>
+                           )}
+                           {" | "}
+                           <Text style={{ color: "#10b981", fontWeight: "700" }}>
+                              Còn hoàn được: {maxQty}
+                           </Text>
+                        </Text>
                       </View>
                     </Pressable>
 
@@ -1235,6 +1245,76 @@ const OrderRefundScreen: React.FC = () => {
                 <Text style={styles.dangerBtnText}>Xác nhận hoàn</Text>
               </Pressable>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal: Refund Detail (view only) */}
+      <Modal
+        visible={refundDetailModalOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setRefundDetailModalOpen(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { maxHeight: "90%" }]}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <Text style={styles.modalTitle}>Chi tiết hoàn trả</Text>
+              <TouchableOpacity onPress={() => setRefundDetailModalOpen(false)}>
+                <Ionicons name="close" size={24} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            {loadingDetail ? (
+                <View style={[styles.centerSlim, { minHeight: 200 }]}>
+                    <ActivityIndicator size="large" color={COLORS.primary} />
+                </View>
+            ) : !refundDetail ? (
+                <Text style={[styles.muted, { textAlign: "center", padding: 20 }]}>Không có dữ liệu</Text>
+            ) : (
+                <ScrollView showsVerticalScrollIndicator={false}>
+                    {/* ORIGINAL ORDER INFO */}
+                    <View style={{ backgroundColor: "#f1f5f9", padding: 12, borderRadius: 8, marginBottom: 12 }}>
+                        <Text style={[styles.sectionTitle, { marginTop: 0, marginBottom: 8 }]}>Đơn gốc #{refundDetail.order._id.slice(-6)}</Text>
+                        <View style={styles.kvRow}><Text style={styles.k}>Khách hàng</Text><Text style={styles.v}>{refundDetail.order.customer?.name || "Khách lẻ"}</Text></View>
+                        <View style={styles.kvRow}><Text style={styles.k}>Tổng tiền đơn</Text><Text style={[styles.v, { color: COLORS.primary, fontWeight: "700" }]}>{formatCurrency(refundDetail.order.totalAmount)}</Text></View>
+                        <View style={styles.kvRow}><Text style={styles.k}>Nhân viên bán</Text><Text style={styles.v}>{refundDetail.order.employeeId?.fullName || "Chủ cửa hàng"}</Text></View>
+                    </View>
+
+                    {/* REFUND INFO */}
+                    <Text style={[styles.sectionTitle, { color: COLORS.danger }]}>Thông tin hoàn trả</Text>
+                    <View style={styles.kvRow}><Text style={styles.k}>Người thực hiện</Text><Text style={styles.v}>{(refundDetail.refundDetail as any)?.refundedByName || refundDetail.refundDetail?.refundedBy?.fullName || "Chủ cửa hàng"}</Text></View>
+                    <View style={styles.kvRow}><Text style={styles.k}>Thời gian</Text><Text style={styles.v}>{formatDateTime(refundDetail.refundDetail?.refundedAt)}</Text></View>
+                    <View style={styles.kvRow}><Text style={styles.k}>Lý do</Text><Text style={styles.v}>{refundDetail.refundDetail?.refundReason || "---"}</Text></View>
+                    
+                    <View style={[styles.hr, { marginVertical: 8 }]} />
+                    
+                    <View style={styles.kvRow}><Text style={styles.k}>Tiền hoàn gốc</Text><Text style={[styles.v, { textDecorationLine: "line-through", opacity: 0.6 }]}>{formatCurrency(refundDetail.refundDetail?.grossRefundAmount || 0)}</Text></View>
+                    <View style={styles.kvRow}><Text style={styles.k}>Khấu trừ KM</Text><Text style={[styles.v, { color: COLORS.danger }]}>-{formatCurrency(refundDetail.refundDetail?.discountDeducted || 0)}</Text></View>
+                    <View style={[styles.kvRow, { marginTop: 4 }]}><Text style={[styles.k, { fontWeight: "700" }]}>Thực hoàn</Text><Text style={[styles.v, { color: COLORS.danger, fontWeight: "900", fontSize: 16 }]}>{formatCurrency(refundDetail.refundDetail?.refundAmount)}</Text></View>
+
+                    <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Sản phẩm đã hoàn</Text>
+                    {refundDetail.refundDetail?.refundItems?.map((ri) => (
+                        <View key={ri._id} style={[styles.lineItem, { backgroundColor: "#fff", borderBottomWidth: 1, borderColor: "#f1f5f9", paddingVertical: 8 }]}>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.lineTitle}>{ri.productId?.name}</Text>
+                                <Text style={styles.lineSub}>SKU: {ri.productId?.sku}</Text>
+                                <Text style={styles.lineSub}>SL: {ri.quantity} x {formatCurrency(ri.priceAtTime)}</Text>
+                            </View>
+                            <Text style={[styles.money, { color: COLORS.danger }]}>{formatCurrency(ri.subtotal)}</Text>
+                        </View>
+                    ))}
+                    
+                    <View style={{ height: 20 }} />
+                </ScrollView>
+            )}
+
+            <Pressable
+                onPress={() => setRefundDetailModalOpen(false)}
+                style={[styles.outlineBtn, { marginTop: 10 }]}
+            >
+                <Text style={styles.outlineBtnText}>Đóng</Text>
+            </Pressable>
           </View>
         </View>
       </Modal>
@@ -1361,7 +1441,15 @@ const styles = StyleSheet.create({
   },
   badgeDanger: { backgroundColor: "#fee2e2", color: "#b91c1c" as any },
   badgeWarn: { backgroundColor: "#ffedd5", color: "#9a3412" as any },
+  badgeSuccess: { backgroundColor: "#d1fae5", color: "#065f46" as any },
   badgeInfo: { backgroundColor: "#dbeafe", color: "#1d4ed8" as any },
+
+  badgeText: { fontWeight: "800", fontSize: 11 },
+  badgeTextSuccess: { color: "#065f46" },
+  badgeTextWarn: { color: "#9a3412" },
+
+  textBase: { fontSize: 14, color: "#0f172a" },
+  textSm: { fontSize: 12, color: "#475569" },
 
   sectionTitle: {
     fontWeight: "900",
@@ -1511,4 +1599,16 @@ const styles = StyleSheet.create({
     width: 30,
     textAlign: "center",
   },
+  
+  // New styles
+  dateBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: "#f1f5f9", borderWidth: 1, borderColor: "#e2e8f0" },
+  dateBtnText: { fontSize: 13, color: "#334155", fontWeight: "600" },
+  clearDateBtn: { padding: 8, justifyContent: "center" },
+
+  refundItem: { padding: 12, borderRadius: 8, backgroundColor: "#fff", borderWidth: 1, borderColor: "#f1f5f9" },
+  refundItemActive: { borderColor: COLORS.primary, backgroundColor: "#eff6ff" },
+  refundCode: { fontWeight: "700", color: "#334155" },
+  refundDate: { fontSize: 11, color: "#64748b" },
+  refundCustomer: { fontSize: 12, color: "#475569" },
+  refundAmount: { fontWeight: "700", color: COLORS.danger },
 });

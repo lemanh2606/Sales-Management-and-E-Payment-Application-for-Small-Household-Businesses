@@ -58,15 +58,15 @@ const SubscriptionSuccessScreen: React.FC = () => {
         const sub = (res as any)?.data?.data || (res as any)?.data;
 
         if (!cancelled && sub && sub.status === "ACTIVE") {
-          setMessage("✅ Thanh toán thành công! Đang về trang đăng ký...");
+          setMessage(" Thanh toán thành công! Đang về trang đăng ký...");
           setUiStatus("success");
-          setTimeout(() => goSubscription(), 1200); // ✅ VỀ SUBSCRIPTION NGAY
+          setTimeout(() => goSubscription(), 1200); //  VỀ SUBSCRIPTION NGAY
           return;
         }
 
         if (!cancelled) {
           if (attempt < 5) {
-            // ✅ Tăng lên 5 lần
+            //  Tăng lên 5 lần
             setAttempt((prev) => prev + 1);
             setMessage(`Đang xác nhận... (${attempt + 1}/6)`);
           } else {
@@ -89,7 +89,7 @@ const SubscriptionSuccessScreen: React.FC = () => {
       }
     };
 
-    const t = setTimeout(verify, 1000); // ✅ Giảm delay
+    const t = setTimeout(verify, 1000); //  Giảm delay
     return () => {
       cancelled = true;
       clearTimeout(t);
@@ -124,7 +124,7 @@ const SubscriptionSuccessScreen: React.FC = () => {
                   pressed && { opacity: 0.9 },
                 ]}
               >
-                <Text style={styles.btnText}>✅ Về gói đăng ký</Text>
+                <Text style={styles.btnText}> Về gói đăng ký</Text>
               </Pressable>
 
               <Pressable

@@ -34,9 +34,9 @@ const app = express();
 
 /* =====================================================
    🌍 CORS – WHITELIST + HỖ TRỢ CREDENTIALS
-   ✅ Cho phép domain trong whitelist dùng cookies/credentials
-   ✅ Domain ngoài whitelist vẫn gọi được API (không có credentials)
-   ✅ Hỗ trợ Swagger Editor test API
+    Cho phép domain trong whitelist dùng cookies/credentials
+    Domain ngoài whitelist vẫn gọi được API (không có credentials)
+    Hỗ trợ Swagger Editor test API
 ===================================================== */
 const allowedOrigins = [
   "http://localhost:3000",
@@ -45,19 +45,19 @@ const allowedOrigins = [
   "https://skinanalysis.life",
   "http://smallbizsales.site",
   "https://smallbizsales.site",
-  "https://editor.swagger.io", // ✅ Swagger Editor
-  "https://petstore.swagger.io" // ✅ Swagger Petstore
+  "https://editor.swagger.io", //  Swagger Editor
+  "https://petstore.swagger.io", //  Swagger Petstore
 ];
 
 app.use((req, res, next) => {
   const origin = req.headers.origin;
 
-  // ✅ NẾU ORIGIN TRONG WHITELIST → CHO PHÉP + CREDENTIALS
+  //  NẾU ORIGIN TRONG WHITELIST → CHO PHÉP + CREDENTIALS
   if (allowedOrigins.includes(origin)) {
     res.header("Access-Control-Allow-Origin", origin);
     res.header("Access-Control-Allow-Credentials", "true");
   } else {
-    // ✅ ORIGIN KHÁC → CHO PHÉP NHƯNG KHÔNG CREDENTIALS
+    //  ORIGIN KHÁC → CHO PHÉP NHƯNG KHÔNG CREDENTIALS
     res.header("Access-Control-Allow-Origin", "*");
   }
 
@@ -70,7 +70,7 @@ app.use((req, res, next) => {
     "GET, POST, PUT, PATCH, DELETE, OPTIONS"
   );
 
-  // ✅ XỬ LÝ PREFLIGHT REQUEST
+  //  XỬ LÝ PREFLIGHT REQUEST
   if (req.method === "OPTIONS") {
     return res.sendStatus(204);
   }
@@ -118,9 +118,9 @@ const server = http.createServer(app);
 ===================================================== */
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins, // ✅ Dùng whitelist
+    origin: allowedOrigins, //  Dùng whitelist
     methods: ["GET", "POST"],
-    credentials: true, // ✅ Cho phép credentials với whitelist
+    credentials: true, //  Cho phép credentials với whitelist
   },
 });
 
@@ -209,7 +209,9 @@ app.use("/api/operating-expenses", operatingExpenseRouters);
    🏠 ROOT
 ===================================================== */
 app.get("/", (req, res) => {
-  res.send("👀 Ai vừa ping tui đó? Tui thấy rồi nha! From SmartRetail team with Love 🫶");
+  res.send(
+    "👀 Ai vừa ping tui đó? Tui thấy rồi nha! From SmartRetail team with Love 🫶"
+  );
 });
 
 /* =====================================================

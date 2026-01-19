@@ -83,7 +83,9 @@ const GroupCard: React.FC<{
               <Text style={styles.metaText}>{createdDate}</Text>
             </View>
             <View style={styles.metaDivider} />
-            <Text style={styles.metaText}>ID: {group._id.slice(-6).toUpperCase()}</Text>
+            <Text style={styles.metaText}>
+              ID: {group._id.slice(-6).toUpperCase()}
+            </Text>
           </View>
         </View>
       </View>
@@ -91,12 +93,16 @@ const GroupCard: React.FC<{
       <View style={styles.groupActionRow}>
         <TouchableOpacity style={styles.actionBtn} onPress={onEdit}>
           <Ionicons name="create-outline" size={18} color="#2563eb" />
-          <Text style={[styles.actionBtnText, { color: "#2563eb" }]}>Chỉnh sửa</Text>
+          <Text style={[styles.actionBtnText, { color: "#2563eb" }]}>
+            Chỉnh sửa
+          </Text>
         </TouchableOpacity>
         <View style={styles.actionDivider} />
         <TouchableOpacity style={styles.actionBtn} onPress={onDelete}>
           <Ionicons name="trash-outline" size={18} color="#ef4444" />
-          <Text style={[styles.actionBtnText, { color: "#ef4444" }]}>Xóa nhóm</Text>
+          <Text style={[styles.actionBtnText, { color: "#ef4444" }]}>
+            Xóa nhóm
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -189,14 +195,14 @@ const ProductGroupListScreen: React.FC = () => {
         return;
       }
 
-      // ✅ Dùng API có sẵn với params
+      //  Dùng API có sẵn với params
       const response = await productGroupApi.getProductGroupsByStore(storeId, {
         page: 1,
         limit: 100,
       });
 
       const data = response.productGroups || [];
-      console.log("✅ Loaded", data.length, "product groups");
+      console.log(" Loaded", data.length, "product groups");
       console.log("Total:", response.total);
       setGroups(data);
     } catch (error: any) {
@@ -285,14 +291,14 @@ const ProductGroupListScreen: React.FC = () => {
       }
 
       if (editingGroup) {
-        // ✅ UPDATE - Dùng API có sẵn
+        //  UPDATE - Dùng API có sẵn
         await productGroupApi.updateProductGroup(editingGroup._id, {
           name: formData.name,
           description: formData.description,
         });
         Alert.alert("Thành công", "Cập nhật nhóm sản phẩm thành công");
       } else {
-        // ✅ CREATE - Dùng API có sẵn
+        //  CREATE - Dùng API có sẵn
         await productGroupApi.createProductGroup(storeId, {
           name: formData.name,
           description: formData.description,
@@ -384,22 +390,44 @@ const ProductGroupListScreen: React.FC = () => {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.statsScroll}
         >
-          <StatCard title="TB SP" value={avgProducts} icon="stats-chart" color="rgba(255,255,255,0.2)" />
-          <StatCard title="Max SP" value={maxProducts} icon="trophy" color="rgba(255,255,255,0.2)" />
-          <StatCard title="Tổng nhóm" value={groups.length} icon="apps" color="rgba(255,255,255,0.2)" />
+          <StatCard
+            title="TB SP"
+            value={avgProducts}
+            icon="stats-chart"
+            color="rgba(255,255,255,0.2)"
+          />
+          <StatCard
+            title="Max SP"
+            value={maxProducts}
+            icon="trophy"
+            color="rgba(255,255,255,0.2)"
+          />
+          <StatCard
+            title="Tổng nhóm"
+            value={groups.length}
+            icon="apps"
+            color="rgba(255,255,255,0.2)"
+          />
         </ScrollView>
       </Animated.View>
 
       {/* Floating Action Bar (Search) - Remains sticky but moves with header if desired, or stay fixed */}
-      <Animated.View style={[
-        styles.stickySearch,
-        {
-          top: HEADER_HEIGHT - 30, // Positioned overlapping the header bottom
-          transform: [{ translateY: headerTranslate }],
-        }
-      ]}>
+      <Animated.View
+        style={[
+          styles.stickySearch,
+          {
+            top: HEADER_HEIGHT - 30, // Positioned overlapping the header bottom
+            transform: [{ translateY: headerTranslate }],
+          },
+        ]}
+      >
         <View style={styles.searchBox}>
-          <Ionicons name="search" size={20} color="#94a3b8" style={{ marginRight: 10 }} />
+          <Ionicons
+            name="search"
+            size={20}
+            color="#94a3b8"
+            style={{ marginRight: 10 }}
+          />
           <TextInput
             style={styles.searchInput}
             value={search}
@@ -422,7 +450,7 @@ const ProductGroupListScreen: React.FC = () => {
         renderItem={renderItem}
         contentContainerStyle={[
           styles.listContent,
-          { paddingTop: HEADER_HEIGHT + 35 } // offset for header + search
+          { paddingTop: HEADER_HEIGHT + 35 }, // offset for header + search
         ]}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: scrollY } } }],
@@ -446,11 +474,18 @@ const ProductGroupListScreen: React.FC = () => {
               {search ? "Không tìm thấy kết quả" : "Chưa có nhóm hàng hóa"}
             </Text>
             <Text style={styles.emptySubtitle}>
-              {search ? "Thử tìm kiếm với từ khóa khác" : "Bắt đầu bằng cách tạo nhóm hàng hóa đầu tiên của bạn"}
+              {search
+                ? "Thử tìm kiếm với từ khóa khác"
+                : "Bắt đầu bằng cách tạo nhóm hàng hóa đầu tiên của bạn"}
             </Text>
             {!search && (
               <TouchableOpacity style={styles.emptyAddBtn} onPress={handleAdd}>
-                <Ionicons name="add" size={20} color="#fff" style={{ marginRight: 6 }} />
+                <Ionicons
+                  name="add"
+                  size={20}
+                  color="#fff"
+                  style={{ marginRight: 6 }}
+                />
                 <Text style={styles.emptyAddBtnText}>Tạo nhóm mới</Text>
               </TouchableOpacity>
             )}
@@ -540,7 +575,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#fff",
   },
-  loadingText: { marginTop: 12, fontSize: 14, color: "#64748b", fontWeight: "600" },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: "#64748b",
+    fontWeight: "600",
+  },
 
   // Collapsible Header
   collapsibleHeader: {
@@ -845,7 +885,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     height: 56,
   },
-  formInputText: { flex: 1, marginLeft: 12, fontSize: 16, color: "#0f172a", fontWeight: "500" },
+  formInputText: {
+    flex: 1,
+    marginLeft: 12,
+    fontSize: 16,
+    color: "#0f172a",
+    fontWeight: "500",
+  },
   formTextArea: { height: 120, paddingTop: 16, alignItems: "flex-start" },
   saveBtn: {
     flexDirection: "row",

@@ -60,7 +60,7 @@ const RevenueReport = () => {
 
   // Format VND
   const formatVND = (value) => {
-    if (!value) return "₫0";
+    if (!value) return "0";
     const num = typeof value === "object" ? value.$numberDecimal : value;
     return new Intl.NumberFormat("vi-VN", {
       style: "currency",
@@ -132,7 +132,8 @@ const RevenueReport = () => {
         const res = await axios.get(`${apiUrl}/revenues/daily-products?storeId=${currentStore._id}&date=${date}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        setSummary(null);
+        // Lưu tổng discount vào summary để hiển thị ở footer
+        setSummary({ totalDailyDiscount: res.data.totalDailyDiscount || 0 });
         setEmployeeData([]);
         setReportRows(res.data.data || []);
         return;
@@ -417,15 +418,15 @@ const RevenueReport = () => {
       key: "orderCount",
       align: "right",
       width: 140,
-      render: (v, r) => <span style={{ fontSize: 16 }}>{r?.isTotal ? "—" : v ?? 0}</span>,
+      render: (v, r) => <span style={{ fontSize: 16, fontWeight: r?.isTotal ? 700 : 400 }}>{v ?? 0}</span>,
     },
     {
-      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Tổng số sản phẩm bán</span>,
+      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Tổng số lượng sản phẩm bán</span>,
       dataIndex: "itemsSold",
       key: "itemsSold",
       align: "right",
       width: 190,
-      render: (v, r) => <span style={{ fontSize: 16 }}>{r?.isTotal ? "—" : v ?? 0}</span>,
+      render: (v, r) => <span style={{ fontSize: 16, fontWeight: r?.isTotal ? 700 : 400 }}>{v ?? 0}</span>,
     },
     {
       title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Doanh thu trung bình / ngày</span>,
@@ -433,7 +434,7 @@ const RevenueReport = () => {
       key: "avgRevenuePerDay",
       align: "right",
       width: 220,
-      render: (v, r) => <span style={{ fontSize: 16 }}>{r?.isTotal ? "—" : formatVND(v)}</span>,
+      render: (v, r) => <span style={{ fontSize: 16, fontWeight: r?.isTotal ? 700 : 400 }}>{r?.isTotal ? "—" : formatVND(v)}</span>,
     },
     {
       title: <span style={{ fontSize: "16px", fontWeight: 600 }}>So với tháng trước (+/−)</span>,
@@ -442,7 +443,7 @@ const RevenueReport = () => {
       align: "right",
       width: 210,
       render: (v, r) => {
-        if (r?.isTotal) return <span style={{ fontSize: 16 }}>—</span>;
+        if (r?.isTotal) return <span style={{ fontSize: 16, fontWeight: 700 }}>—</span>;
         const n = toNumber(v);
         const sign = n > 0 ? "+" : "";
         return <span style={{ fontSize: 16 }}>{sign + formatVND(n)}</span>;
@@ -454,6 +455,10 @@ const RevenueReport = () => {
     const rows = Array.isArray(reportRows) ? reportRows : [];
     if (reportType !== REPORT_TYPES.MONTHLY_SUMMARY) return rows;
     const totalRevenue = rows.reduce((sum, r) => sum + toNumber(r.totalRevenue), 0);
+    const totalOrderCount = rows.reduce((sum, r) => sum + toNumber(r.orderCount), 0);
+    const totalItemsSold = rows.reduce((sum, r) => sum + toNumber(r.itemsSold), 0);
+    const totalAvgRevenuePerDay = rows.reduce((sum, r) => sum + toNumber(r.avgRevenuePerDay), 0);
+    const totalDiffVsPrevMonth = rows.reduce((sum, r) => sum + toNumber(r.diffVsPrevMonth), 0);
 
     return [
       ...rows,
@@ -461,8 +466,8 @@ const RevenueReport = () => {
         isTotal: true,
         monthLabel: "Tổng cộng",
         totalRevenue,
-        orderCount: null,
-        itemsSold: null,
+        orderCount: totalOrderCount,
+        itemsSold: totalItemsSold,
         avgRevenuePerDay: null,
         diffVsPrevMonth: null,
       },
@@ -495,7 +500,7 @@ const RevenueReport = () => {
       width: 110,
     },
     {
-      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Tổng</span>,
+      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Tổng doanh thu</span>,
       dataIndex: "grossTotal",
       key: "grossTotal",
       align: "right",
@@ -503,15 +508,7 @@ const RevenueReport = () => {
       render: (v) => <span style={{ fontSize: 16 }}>{formatVND(v)}</span>,
     },
     {
-      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Tổng giảm</span>,
-      dataIndex: "discountAmount",
-      key: "discountAmount",
-      align: "right",
-      width: 160,
-      render: (v) => <span style={{ fontSize: 16 }}>{formatVND(v)}</span>,
-    },
-    {
-      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Thực thu</span>,
+      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Thực thu ( tính VAT)</span>,
       dataIndex: "netTotal",
       key: "netTotal",
       align: "right",
@@ -921,7 +918,7 @@ const RevenueReport = () => {
                 }
                 style={{ border: "1px solid #8c8c8c" }}
               >
-                {/* MÔ TẢ NHẸ */}
+                {/* MÔ TẢ NHẸ
                 <Alert
                   type="info"
                   showIcon
@@ -931,11 +928,10 @@ const RevenueReport = () => {
                   }}
                   message={
                     <span style={{ fontSize: 14 }}>
-                      Bảng này <strong>chỉ thống kê doanh thu từ các hóa đơn do nhân viên trực tiếp bán</strong>. Không bao gồm các hóa đơn do{" "}
-                      <strong>chủ cửa hàng trực tiếp bán</strong>
+                      Bảng này <strong>thống kê doanh thu từ các hóa đơn do nhân viên trực tiếp bán</strong>
                     </span>
                   }
-                />
+                /> */}
 
                 {/* ĐƯỜNG NGĂN */}
                 <div
@@ -1005,7 +1001,14 @@ const RevenueReport = () => {
                     ? dailyProductColumns
                     : yearlyGroupedColumns
                 }
-                dataSource={reportTableRows.map((r, idx) => ({ key: idx, ...r }))}
+                dataSource={reportTableRows
+                  .filter((r) => {
+                    if (reportType === REPORT_TYPES.DAILY_PRODUCTS) {
+                      return toNumber(r.quantity) > 0;
+                    }
+                    return true;
+                  })
+                  .map((r, idx) => ({ key: idx, ...r }))}
                 pagination={
                   reportType === REPORT_TYPES.MONTHLY_SUMMARY
                     ? false
@@ -1022,6 +1025,38 @@ const RevenueReport = () => {
                 }}
                 scroll={{ x: 1100 }}
                 locale={{ emptyText: <div style={{ color: "#8c8c8c", padding: "20px" }}>Không có dữ liệu</div> }}
+                summary={(pageData) => {
+                  if (reportType !== REPORT_TYPES.DAILY_PRODUCTS) return undefined;
+                  
+                  // Tính tổng trên toàn bộ dữ liệu (reportRows)
+                  const totalGross = reportRows.reduce((a, b) => a + toNumber(b.grossTotal), 0);
+                  // Tính tổng thực thu từ các item (đã trừ hoàn)
+                  // Lưu ý: netTotal ở đây là (doanh thu item - hoàn item), chưa trừ discount order
+                  const totalNetOfItems = reportRows.reduce((a, b) => a + toNumber(b.netTotal), 0);
+                  
+                  const totalDiscount = toNumber(summary?.totalDailyDiscount);
+                  const finalRevenue = totalNetOfItems - totalDiscount;
+
+                  return (
+                    <Table.Summary fixed>
+                      <Table.Summary.Row style={{ backgroundColor: "#fafafa" }}>
+                        <Table.Summary.Cell index={0} colSpan={5}>
+                          <Text strong style={{ float: "right" }}>Tổng cộng:</Text>
+                        </Table.Summary.Cell>
+                        <Table.Summary.Cell index={1} align="right">
+                          <Text strong>{formatVND(totalGross)}</Text>
+                        </Table.Summary.Cell>
+                        <Table.Summary.Cell index={2} align="right">
+                          <Text type="danger">{totalDiscount > 0 ? `-${formatVND(totalDiscount)}` : "0"}</Text>
+                          <div style={{ fontSize: 11, color: "#8c8c8c" }}>(Giảm giá hóa đơn)</div>
+                        </Table.Summary.Cell>
+                        <Table.Summary.Cell index={3} align="right">
+                          <Text strong style={{ color: "#1890ff", fontSize: 16 }}>{formatVND(finalRevenue)}</Text>
+                        </Table.Summary.Cell>
+                      </Table.Summary.Row>
+                    </Table.Summary>
+                  );
+                }}
               />
             </Card>
           )}

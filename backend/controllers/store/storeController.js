@@ -48,7 +48,7 @@ const validateEmployeeData = (data, isCreate = false) => {
     }
   }
 
-  // ✅ Lương cơ bản: nếu có nhập thì phải không âm, không nhập thì OK (default 0)
+  //  Lương cơ bản: nếu có nhập thì phải không âm, không nhập thì OK (default 0)
   if (data.salary !== undefined && data.salary !== null && data.salary !== "") {
     const salary = parseFloat(data.salary);
     if (isNaN(salary) || salary < 0) {
@@ -59,7 +59,7 @@ const validateEmployeeData = (data, isCreate = false) => {
     }
   }
 
-  // ✅ Hoa hồng (%): nếu có nhập thì phải không âm, không nhập thì OK (default 0)
+  //  Hoa hồng (%): nếu có nhập thì phải không âm, không nhập thì OK (default 0)
   if (
     data.commission_rate !== undefined &&
     data.commission_rate !== null &&
@@ -1127,7 +1127,7 @@ const getEmployeesByStore = async (req, res) => {
     // Filter với isDeleted dựa trên query (default false)
     const isDeleted = deleted === "true";
 
-    // ✅ ĐƠN GIẢN HÓA: BỎ TẤT CẢ CHECK QUYỀN
+    //  ĐƠN GIẢN HÓA: BỎ TẤT CẢ CHECK QUYỀN
     // Chỉ kiểm tra store tồn tại
     const store = await Store.findById(storeId).lean();
     if (!store) {
@@ -1155,7 +1155,7 @@ const getEmployeesByStore = async (req, res) => {
     }));
 
     console.log(
-      `✅ Lấy ${employees.length} nhân viên ${
+      ` Lấy ${employees.length} nhân viên ${
         isDeleted ? "đã xóa" : "đang làm"
       } cho cửa hàng ${store.name}`
     );
@@ -1259,12 +1259,12 @@ const updateEmployee = async (req, res) => {
 
     // Update Employee fields
     if (fullName) employee.fullName = fullName;
-    // ✅ Cho phép update salary = 0
+    //  Cho phép update salary = 0
     if (salary !== undefined && salary !== null) {
       employee.salary = salary.toString();
     }
     if (shift !== undefined) employee.shift = shift;
-    // ✅ Tương tự commission_rate
+    //  Tương tự commission_rate
     if (commission_rate !== undefined && commission_rate !== null) {
       employee.commission_rate = commission_rate.toString();
     }
@@ -1364,14 +1364,14 @@ const softDeleteEmployee = async (req, res) => {
 };
 
 // PUT /api/stores/:storeId/employees/:id/restore - Khôi phục nhân viên bị xóa mềm
-const { 
-  sendEmptyNotificationWorkbook, 
-  createWorkbook, 
-  sendWorkbook, 
-  styleDataRow, 
-  toDateString, 
-  formatCurrency, 
-  formatNumber 
+const {
+  sendEmptyNotificationWorkbook,
+  createWorkbook,
+  sendWorkbook,
+  styleDataRow,
+  toDateString,
+  formatCurrency,
+  formatNumber,
 } = require("../../utils/excelExport");
 
 const restoreEmployee = async (req, res) => {
@@ -1447,7 +1447,12 @@ const exportEmployeesToExcel = async (req, res) => {
       .lean();
 
     if (!employees || employees.length === 0) {
-      return await sendEmptyNotificationWorkbook(res, "nhân viên", store, "Danh_Sach_Nhan_Vien");
+      return await sendEmptyNotificationWorkbook(
+        res,
+        "nhân viên",
+        store,
+        "Danh_Sach_Nhan_Vien"
+      );
     }
 
     const columns = [
@@ -1463,7 +1468,10 @@ const exportEmployeesToExcel = async (req, res) => {
       { header: "Trạng thái", key: "status", width: 15 },
     ];
 
-    const { workbook, worksheet } = createWorkbook("Danh sách nhân viên", columns);
+    const { workbook, worksheet } = createWorkbook(
+      "Danh sách nhân viên",
+      columns
+    );
 
     const toNumber = (val) => {
       if (!val) return 0;
@@ -1479,9 +1487,16 @@ const exportEmployeesToExcel = async (req, res) => {
         name: emp.fullName || "",
         phone: emp.user_id?.phone || emp.phone || "",
         email: emp.user_id?.email || "",
-        role: emp.user_id?.role === "OWNER" ? "Chủ cửa hàng" : (emp.user_id?.role === "MANAGER" ? "Quản lý" : "Nhân viên"),
+        role:
+          emp.user_id?.role === "OWNER"
+            ? "Chủ cửa hàng"
+            : emp.user_id?.role === "MANAGER"
+            ? "Quản lý"
+            : "Nhân viên",
         salary: formatCurrency(toNumber(emp.salary)),
-        commission: emp.commission_rate ? `${toNumber(emp.commission_rate)}%` : "-",
+        commission: emp.commission_rate
+          ? `${toNumber(emp.commission_rate)}%`
+          : "-",
         shift: emp.shift || "",
         hiredDate: toDateString(emp.hired_date),
         status: "Đang làm việc",
@@ -1604,26 +1619,29 @@ module.exports = {
       }
 
       console.log(`🌐 Proxy Geocode: ${q}`);
-      
-      const response = await axios.get("https://nominatim.openstreetmap.org/search", {
-        params: {
-          q,
-          format: "json",
-          limit: 1,
-          addressdetails: 1,
-        },
-        headers: {
-          "Accept-Language": "vi",
-          "User-Agent": "SmallBizSales-App/1.0" // Nominatim requires a User-Agent
-        },
-      });
+
+      const response = await axios.get(
+        "https://nominatim.openstreetmap.org/search",
+        {
+          params: {
+            q,
+            format: "json",
+            limit: 1,
+            addressdetails: 1,
+          },
+          headers: {
+            "Accept-Language": "vi",
+            "User-Agent": "SmallBizSales-App/1.0", // Nominatim requires a User-Agent
+          },
+        }
+      );
 
       res.json(response.data);
     } catch (error) {
       console.error(" Geocode Proxy Error:", error.message);
-      res.status(500).json({ 
-        message: "Lỗi khi lấy tọa độ từ OpenStreetMap", 
-        error: error.message 
+      res.status(500).json({
+        message: "Lỗi khi lấy tọa độ từ OpenStreetMap",
+        error: error.message,
       });
     }
   },

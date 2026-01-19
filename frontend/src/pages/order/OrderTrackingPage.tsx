@@ -83,6 +83,8 @@ interface Order {
   isVATInvoice: boolean;
   vatAmount: MongoDecimal;
   beforeTaxAmount: MongoDecimal;
+  grossAmount?: MongoDecimal;
+  discountAmount?: MongoDecimal;
   createdAt: string;
   updatedAt: string;
   __v: number;
@@ -554,16 +556,16 @@ const OrderTrackingPage: React.FC = () => {
                 {/* Tổng tiền */}
                 <Card type="inner" title={<Text strong>Thông Tin Thanh Toán</Text>} style={{ borderColor: "#1890ff" }}>
                   <Descriptions column={1} size="small">
-                    <Descriptions.Item label="Tiền Trước Thuế">
-                      <Text style={{ fontSize: 16 }}>{formatCurrency(orderDetail.order.beforeTaxAmount)}</Text>
+                    <Descriptions.Item label="Tổng trị giá (gồm VAT)">
+                      <Text style={{ fontSize: 16 }}>{formatCurrency(orderDetail.order.grossAmount || 0)}</Text>
                     </Descriptions.Item>
-                    {orderDetail.order.isVATInvoice && (
-                      <Descriptions.Item label="VAT (10%)">
-                        <Text style={{ fontSize: 16, color: "#faad14" }}>+{formatCurrency(orderDetail.order.vatAmount)}</Text>
+                    {orderDetail.order.discountAmount && parseFloat((orderDetail.order.discountAmount as any).$numberDecimal) > 0 && (
+                      <Descriptions.Item label="Giảm từ điểm">
+                        <Text style={{ fontSize: 16, color: "#52c41a" }}>-{formatCurrency(orderDetail.order.discountAmount)}</Text>
                       </Descriptions.Item>
                     )}
-                    <Descriptions.Item label="Tổng Tiền">
-                      <Text strong style={{ fontSize: 20, color: "#1890ff" }}>
+                    <Descriptions.Item label="THANH TOÁN">
+                      <Text strong style={{ fontSize: 22, color: "#1890ff" }}>
                         {formatCurrency(orderDetail.order.totalAmount)}
                       </Text>
                     </Descriptions.Item>

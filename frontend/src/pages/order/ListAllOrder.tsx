@@ -1,21 +1,44 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { Card, Input, Table, Tag, Space, DatePicker, Select, Typography, Spin, Empty, Button, Row, Col } from "antd";
-import { SearchOutlined, FileTextOutlined, ClockCircleOutlined, CheckCircleOutlined, RollbackOutlined, FileExcelOutlined } from "@ant-design/icons";
+import {
+  Card,
+  Input,
+  Table,
+  Tag,
+  Space,
+  DatePicker,
+  Select,
+  Typography,
+  Spin,
+  Empty,
+  Button,
+  Row,
+  Col,
+} from "antd";
+import {
+  SearchOutlined,
+  FileTextOutlined,
+  ClockCircleOutlined,
+  CheckCircleOutlined,
+  RollbackOutlined,
+  FileExcelOutlined,
+  PrinterOutlined,
+} from "@ant-design/icons";
+import ModalPrintBill from "./ModalPrintBill";
 import axios from "axios";
 import dayjs, { Dayjs } from "dayjs";
 import Swal from "sweetalert2";
 import debounce from "../../utils/debounce";
 import Layout from "../../components/Layout";
 import PendingOrdersManagerModal from "./PendingOrdersManagerModal";
-import utc from "dayjs/plugin/utc"; // ✅ THÊM
-import timezone from "dayjs/plugin/timezone"; // ✅ THÊM
+import utc from "dayjs/plugin/utc"; //  THÊM
+import timezone from "dayjs/plugin/timezone"; //  THÊM
 
 // Khởi tạo plugin
-dayjs.extend(utc); // ✅ THÊM
-dayjs.extend(timezone); // ✅ THÊM
+dayjs.extend(utc); //  THÊM
+dayjs.extend(timezone); //  THÊM
 
 // Set timezone mặc định (optional)
-dayjs.tz.setDefault("Asia/Ho_Chi_Minh"); // ✅ THÊM
+dayjs.tz.setDefault("Asia/Ho_Chi_Minh"); //  THÊM
 
 const { Option } = Select;
 const { Title, Text } = Typography;
@@ -49,6 +72,8 @@ interface Order {
   employeeId: Employee;
   customer?: Customer;
   totalAmount: MongoDecimal;
+  grossAmount?: MongoDecimal;
+  discountAmount?: MongoDecimal;
   status: "pending" | "paid" | "refunded" | "partially_refunded" | "cancelled";
   createdAt: string;
   paymentMethod: string;
@@ -66,6 +91,7 @@ interface OrderListResponse {
 // ========== Component ==========
 const ListAllOrder: React.FC = () => {
   const currentStore = JSON.parse(localStorage.getItem("currentStore") || "{}");
+  const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
   const storeId = currentStore._id;
   const token = localStorage.getItem("token");
   const headers = { Authorization: `Bearer ${token}` };
@@ -73,10 +99,19 @@ const ListAllOrder: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchText, setSearchText] = useState("");
-  const [selectedStatus, setSelectedStatus] = useState<string | undefined>(undefined);
-  const [paymentFilter, setPaymentFilter] = useState<string | undefined>(undefined);
+  const [selectedStatus, setSelectedStatus] = useState<string | undefined>(
+    undefined
+  );
+  const [paymentFilter, setPaymentFilter] = useState<string | undefined>(
+    undefined
+  );
   const [pagination, setPagination] = useState({ current: 1, pageSize: 10 });
+
   const [pendingModalVisible, setPendingModalVisible] = useState(false);
+  
+  // Print Modal State
+  const [printModalVisible, setPrintModalVisible] = useState(false);
+  const [printingOrder, setPrintingOrder] = useState<any>(null);
 
   // Period filter states
   const [periodType, setPeriodType] = useState<string>("month");
@@ -85,12 +120,17 @@ const ListAllOrder: React.FC = () => {
   const [monthTo, setMonthTo] = useState<string>("");
 
   // Format currency
-  const formatCurrency = (value: MongoDecimal): string => parseFloat(value.$numberDecimal).toLocaleString("vi-VN") + "₫";
+  const formatCurrency = (value: MongoDecimal): string =>
+    parseFloat(value.$numberDecimal).toLocaleString("vi-VN") + "₫";
 
-  const formatDate = (date: string): string => new Date(date).toLocaleString("vi-VN");
+  const formatDate = (date: string): string =>
+    new Date(date).toLocaleString("vi-VN");
 
   const getStatusConfig = (status: string) => {
-    const configs: Record<string, { color: string; icon: React.ReactNode; text: string }> = {
+    const configs: Record<
+      string,
+      { color: string; icon: React.ReactNode; text: string }
+    > = {
       pending: {
         color: "orange",
         icon: <ClockCircleOutlined />,
@@ -128,17 +168,25 @@ const ListAllOrder: React.FC = () => {
   const loadOrders = async () => {
     setLoading(true);
     try {
-      const params: any = { storeId, periodType, periodKey, timezone: "Asia/Ho_Chi_Minh" };
+      const params: any = {
+        storeId,
+        periodType,
+        periodKey,
+        timezone: "Asia/Ho_Chi_Minh",
+      };
 
       if (periodType === "custom") {
         params.monthFrom = monthFrom;
         params.monthTo = monthTo;
       }
 
-      const res = await axios.get<OrderListResponse>(`${apiUrl}/orders/list-all`, {
-        params,
-        headers,
-      });
+      const res = await axios.get<OrderListResponse>(
+        `${apiUrl}/orders/list-all`,
+        {
+          params,
+          headers,
+        }
+      );
       setOrders(res.data.orders);
     } catch (err: any) {
       Swal.fire({
@@ -200,12 +248,16 @@ const ListAllOrder: React.FC = () => {
   const filteredOrders = orders.filter((order) => {
     const matchSearch = searchText
       ? order._id.toLowerCase().includes(searchText.toLowerCase()) ||
-        order.customer?.name?.toLowerCase().includes(searchText.toLowerCase()) ||
+        order.customer?.name
+          ?.toLowerCase()
+          .includes(searchText.toLowerCase()) ||
         order.customer?.phone?.includes(searchText)
       : true;
 
     const matchStatus = selectedStatus ? order.status === selectedStatus : true;
-    const matchPayment = paymentFilter ? order.paymentMethod === paymentFilter : true;
+    const matchPayment = paymentFilter
+      ? order.paymentMethod === paymentFilter
+      : true;
 
     return matchSearch && matchStatus && matchPayment;
   });
@@ -218,12 +270,21 @@ const ListAllOrder: React.FC = () => {
     }
 
     if (!isReadyToLoad()) {
-      Swal.fire("Cảnh báo", "Vui lòng chọn đủ thông tin kỳ trước khi xuất Excel", "warning");
+      Swal.fire(
+        "Cảnh báo",
+        "Vui lòng chọn đủ thông tin kỳ trước khi xuất Excel",
+        "warning"
+      );
       return;
     }
 
     try {
-      const params: any = { storeId, periodType, periodKey, timezone: "Asia/Ho_Chi_Minh" };
+      const params: any = {
+        storeId,
+        periodType,
+        periodKey,
+        timezone: "Asia/Ho_Chi_Minh",
+      };
       if (periodType === "custom") {
         params.monthFrom = monthFrom;
         params.monthTo = monthTo;
@@ -251,6 +312,36 @@ const ListAllOrder: React.FC = () => {
     }
   };
 
+  // --- LOGIC IN BILL ---
+  const handleOpenPrintModal = async (orderId: string) => {
+    try {
+      setLoading(true);
+      // Fetch full details (items)
+      const res = await axios.get(`${apiUrl}/orders/${orderId}`, { headers });
+      setPrintingOrder(res.data.order);
+      setPrintModalVisible(true);
+    } catch (err) {
+      Swal.fire("Lỗi", "Không thể tải chi tiết đơn hàng để in", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePrintConfirm = async () => {
+    try {
+      if (printingOrder && printingOrder._id) {
+        await axios.post(
+          `${apiUrl}/orders/${printingOrder._id}/print-bill`,
+          {},
+          { headers }
+        );
+        // Refresh list to update printCount
+        loadOrders();
+      }
+    } catch (err) {}
+    setPrintModalVisible(false);
+  };
+
   // Pagination config
   const paginationConfig = {
     current: pagination.current,
@@ -264,10 +355,13 @@ const ListAllOrder: React.FC = () => {
         <span style={{ color: "#1890ff", fontWeight: 600 }}>
           {range[0]} – {range[1]}
         </span>{" "}
-        trên tổng số <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> đơn hàng
+        trên tổng số{" "}
+        <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> đơn
+        hàng
       </div>
     ),
-    onChange: (page: number, pageSize: number) => setPagination({ current: page, pageSize }),
+    onChange: (page: number, pageSize: number) =>
+      setPagination({ current: page, pageSize }),
   };
 
   return (
@@ -287,7 +381,10 @@ const ListAllOrder: React.FC = () => {
             {/* Tên cửa hàng + Mô tả */}
             <Col xs={24} sm={24} md={8} lg={6}>
               <div>
-                <Title level={2} style={{ margin: 0, color: "#1890ff", marginBottom: 4 }}>
+                <Title
+                  level={2}
+                  style={{ margin: 0, color: "#1890ff", marginBottom: 4 }}
+                >
                   {currentStore.name || "Đang tải..."}
                 </Title>
                 <Text style={{ color: "#595959", fontSize: "14px" }}>
@@ -305,10 +402,18 @@ const ListAllOrder: React.FC = () => {
                   height: "100%",
                 }}
               >
-                <Text strong style={{ marginBottom: 8, minHeight: 22, fontSize: 13 }}>
+                <Text
+                  strong
+                  style={{ marginBottom: 8, minHeight: 22, fontSize: 13 }}
+                >
                   Loại kỳ
                 </Text>
-                <Select value={periodType} onChange={setPeriodType} style={{ width: "100%" }} size="middle">
+                <Select
+                  value={periodType}
+                  onChange={setPeriodType}
+                  style={{ width: "100%" }}
+                  size="middle"
+                >
                   <Option value="day">Ngày</Option>
                   <Option value="month">Tháng</Option>
                   <Option value="quarter">Quý</Option>
@@ -328,7 +433,10 @@ const ListAllOrder: React.FC = () => {
                     height: "100%",
                   }}
                 >
-                  <Text strong style={{ marginBottom: 8, minHeight: 22, fontSize: 13 }}>
+                  <Text
+                    strong
+                    style={{ marginBottom: 8, minHeight: 22, fontSize: 13 }}
+                  >
                     {periodType === "day" && "Ngày"}
                     {periodType === "month" && "Tháng"}
                     {periodType === "quarter" && "Quý"}
@@ -343,7 +451,9 @@ const ListAllOrder: React.FC = () => {
                       format="DD/MM/YYYY"
                       onChange={(date) =>
                         setPeriodKey(
-                          date ? date.tz("Asia/Ho_Chi_Minh").format("YYYY-MM-DD") : "" // ✅ THÊM .tz()
+                          date
+                            ? date.tz("Asia/Ho_Chi_Minh").format("YYYY-MM-DD")
+                            : "" //  THÊM .tz()
                         )
                       }
                     />
@@ -356,16 +466,31 @@ const ListAllOrder: React.FC = () => {
                       style={{ width: "100%" }}
                       size="middle"
                       placeholder="Chọn"
-                      onChange={(date) => setPeriodKey(date ? date.format("YYYY-MM") : "")}
+                      onChange={(date) =>
+                        setPeriodKey(date ? date.format("YYYY-MM") : "")
+                      }
                     />
                   )}
 
                   {periodType === "quarter" && (
-                    <Select style={{ width: "100%" }} size="middle" placeholder="Chọn" onChange={(v) => setPeriodKey(v)}>
-                      <Option value={`${dayjs().year()}-Q1`}>Q1/{dayjs().year()}</Option>
-                      <Option value={`${dayjs().year()}-Q2`}>Q2/{dayjs().year()}</Option>
-                      <Option value={`${dayjs().year()}-Q3`}>Q3/{dayjs().year()}</Option>
-                      <Option value={`${dayjs().year()}-Q4`}>Q4/{dayjs().year()}</Option>
+                    <Select
+                      style={{ width: "100%" }}
+                      size="middle"
+                      placeholder="Chọn"
+                      onChange={(v) => setPeriodKey(v)}
+                    >
+                      <Option value={`${dayjs().year()}-Q1`}>
+                        Q1/{dayjs().year()}
+                      </Option>
+                      <Option value={`${dayjs().year()}-Q2`}>
+                        Q2/{dayjs().year()}
+                      </Option>
+                      <Option value={`${dayjs().year()}-Q3`}>
+                        Q3/{dayjs().year()}
+                      </Option>
+                      <Option value={`${dayjs().year()}-Q4`}>
+                        Q4/{dayjs().year()}
+                      </Option>
                     </Select>
                   )}
 
@@ -375,7 +500,9 @@ const ListAllOrder: React.FC = () => {
                       style={{ width: "100%" }}
                       size="middle"
                       placeholder="Chọn"
-                      onChange={(date) => setPeriodKey(date ? date.format("YYYY") : "")}
+                      onChange={(date) =>
+                        setPeriodKey(date ? date.format("YYYY") : "")
+                      }
                     />
                   )}
                 </div>
@@ -392,7 +519,10 @@ const ListAllOrder: React.FC = () => {
                     height: "100%",
                   }}
                 >
-                  <Text strong style={{ marginBottom: 8, minHeight: 22, fontSize: 13 }}>
+                  <Text
+                    strong
+                    style={{ marginBottom: 8, minHeight: 22, fontSize: 13 }}
+                  >
                     Từ
                   </Text>
                   <DatePicker
@@ -417,7 +547,10 @@ const ListAllOrder: React.FC = () => {
                     height: "100%",
                   }}
                 >
-                  <Text strong style={{ marginBottom: 8, minHeight: 22, fontSize: 13 }}>
+                  <Text
+                    strong
+                    style={{ marginBottom: 8, minHeight: 22, fontSize: 13 }}
+                  >
                     Đến
                   </Text>
                   <DatePicker
@@ -452,8 +585,21 @@ const ListAllOrder: React.FC = () => {
                 >
                   Trạng thái
                 </Text>
-                <Select placeholder="Tất cả" value={selectedStatus} onChange={setSelectedStatus} allowClear size="middle" style={{ width: "100%" }}>
-                  {["pending", "paid", "refunded", "partially_refunded", "cancelled"].map((status) => {
+                <Select
+                  placeholder="Tất cả"
+                  value={selectedStatus}
+                  onChange={setSelectedStatus}
+                  allowClear
+                  size="middle"
+                  style={{ width: "100%" }}
+                >
+                  {[
+                    "pending",
+                    "paid",
+                    "refunded",
+                    "partially_refunded",
+                    "cancelled",
+                  ].map((status) => {
                     const cfg = getStatusConfig(status);
                     return (
                       <Option key={status} value={status}>
@@ -487,9 +633,19 @@ const ListAllOrder: React.FC = () => {
                 >
                   Phương thức
                 </Text>
-                <Select placeholder="Tất cả" value={paymentFilter} onChange={setPaymentFilter} allowClear size="middle" style={{ width: "100%" }}>
+                <Select
+                  placeholder="Tất cả"
+                  value={paymentFilter}
+                  onChange={setPaymentFilter}
+                  allowClear
+                  size="middle"
+                  style={{ width: "100%" }}
+                >
                   {["cash", "qr"].map((method) => {
-                    const map: Record<string, { label: string; color: string }> = {
+                    const map: Record<
+                      string,
+                      { label: string; color: string }
+                    > = {
                       cash: { label: "Tiền mặt", color: "green" },
                       qr: { label: "Chuyển khoản", color: "blue" },
                     };
@@ -555,7 +711,9 @@ const ListAllOrder: React.FC = () => {
           ) : filteredOrders.length === 0 ? (
             <Empty
               description={
-                !periodKey && periodType !== "custom" ? "Vui lòng chọn kỳ để xem danh sách đơn hàng" : "Không có đơn hàng nào trong kỳ này"
+                !periodKey && periodType !== "custom"
+                  ? "Vui lòng chọn kỳ để xem danh sách đơn hàng"
+                  : "Không có đơn hàng nào trong kỳ này"
               }
             />
           ) : (
@@ -598,7 +756,12 @@ const ListAllOrder: React.FC = () => {
                   dataIndex: ["employeeId", "fullName"],
                   key: "employee",
                   width: 120,
-                  render: (text) => (text ? <Text style={{ fontSize: 14 }}>{text}</Text> : <Tag color="gold">Chủ bán hàng</Tag>),
+                  render: (text) =>
+                    text ? (
+                      <Text style={{ fontSize: 14 }}>{text}</Text>
+                    ) : (
+                      <Tag color="gold">Chủ bán hàng</Tag>
+                    ),
                 },
                 {
                   title: <span style={{ fontWeight: 600 }}>Phương thức</span>,
@@ -607,7 +770,10 @@ const ListAllOrder: React.FC = () => {
                   align: "center",
                   width: 80,
                   render: (method: string) => {
-                    const map: Record<string, { label: string; color: string }> = {
+                    const map: Record<
+                      string,
+                      { label: string; color: string }
+                    > = {
                       cash: { label: "Tiền mặt", color: "green" },
                       qr: { label: "Chuyển khoản", color: "blue" },
                     };
@@ -624,7 +790,8 @@ const ListAllOrder: React.FC = () => {
                   key: "isVATInvoice",
                   align: "center",
                   width: 50,
-                  render: (val) => (val ? <Tag color="blue">Có</Tag> : <Tag>Không</Tag>),
+                  render: (val) =>
+                    val ? <Tag color="blue">Có</Tag> : <Tag>Không</Tag>,
                 },
                 {
                   title: <span style={{ fontWeight: 600 }}>In HĐ</span>,
@@ -645,7 +812,36 @@ const ListAllOrder: React.FC = () => {
                   ),
                 },
                 {
-                  title: <span style={{ fontWeight: 600 }}>Tổng Tiền</span>,
+                  title: <span style={{ fontWeight: 600 }}>Tiền Hàng</span>,
+                  dataIndex: "grossAmount",
+                  key: "grossAmount",
+                  align: "right",
+                  width: 70,
+                  render: (value) => (
+                    <Text style={{ fontSize: 14 }}>
+                      {value ? formatCurrency(value) : "---"}
+                    </Text>
+                  ),
+                },
+                {
+                  title: <span style={{ fontWeight: 600 }}>Giảm Giá</span>,
+                  dataIndex: "discountAmount",
+                  key: "discountAmount",
+                  align: "right",
+                  width: 70,
+                  render: (value) => (
+                    <Text
+                      style={{
+                        color: value ? "#52c41a" : "#ccc",
+                        fontSize: 14,
+                      }}
+                    >
+                      {value ? `-${formatCurrency(value)}` : "0₫"}
+                    </Text>
+                  ),
+                },
+                {
+                  title: <span style={{ fontWeight: 600 }}>Thực Thu</span>,
                   dataIndex: "totalAmount",
                   key: "totalAmount",
                   align: "right",
@@ -678,9 +874,86 @@ const ListAllOrder: React.FC = () => {
                   align: "center",
                   width: 100,
                   fixed: "right",
-                  render: (date) => <Text style={{ fontSize: 13, color: "#595959" }}>{formatDate(date)}</Text>,
+                  render: (date) => (
+                    <Text style={{ fontSize: 13, color: "#595959" }}>
+                      {formatDate(date)}
+                    </Text>
+                  ),
+                },
+                {
+                  title: <span style={{ fontWeight: 600 }}>Thao tác</span>,
+                  key: "action",
+                  width: 80,
+                  align: "center",
+                  fixed: "right",
+                  render: (_, record) => (
+                    <Button
+                      icon={<PrinterOutlined />}
+                      size="small"
+                      onClick={() => handleOpenPrintModal(record._id)}
+                    >
+                      In
+                    </Button>
+                  ),
                 },
               ]}
+            />
+          )}
+
+          {/* MODAL PRINT BILL */}
+          {printingOrder && (
+            <ModalPrintBill
+              open={printModalVisible}
+              onCancel={() => setPrintModalVisible(false)}
+              onPrint={handlePrintConfirm}
+              cart={(printingOrder.items || []).map((i: any) => ({
+                productId: i.productId,
+                name: i.product?.name || i.productName || "Sản phẩm",
+                quantity: i.quantity,
+                unit: i.product?.unit || "Cái",
+                subtotal: i.subtotal?.$numberDecimal || i.subtotal,
+                sku: i.product?.sku || "",
+                price: i.priceAtTime?.$numberDecimal || i.priceAtTime || 0,
+              }))}
+              totalAmount={
+                printingOrder.totalAmount?.$numberDecimal ||
+                printingOrder.totalAmount ||
+                0
+              }
+              // Store Info
+              storeName={currentStore.name}
+              address={currentStore.address || ""}
+              storePhone={currentStore.phone}
+              // Order Info
+              orderId={printingOrder._id}
+              createdAt={printingOrder.createdAt}
+              printCount={printingOrder.printCount} // printCount hiện tại (trước khi in lại)
+              customerName={printingOrder.customer?.name}
+              customerPhone={printingOrder.customer?.phone}
+              paymentMethod={printingOrder.paymentMethod}
+              isVAT={printingOrder.isVATInvoice}
+              vatAmount={
+                printingOrder.vatAmount?.$numberDecimal ||
+                printingOrder.vatAmount ||
+                0
+              }
+              subtotal={
+                printingOrder.beforeTaxAmount?.$numberDecimal ||
+                printingOrder.beforeTaxAmount ||
+                0
+              }
+              discount={
+                printingOrder.discountAmount?.$numberDecimal ||
+                printingOrder.discountAmount ||
+                0
+              }
+              employeeName={
+                printingOrder.employeeId?.fullName ||
+                printingOrder.employeeName ||
+                currentUser.fullname ||
+                "Chủ cửa hàng"
+              }
+              earnedPoints={0} // Có thể lấy nếu BE trả về
             />
           )}
         </Card>

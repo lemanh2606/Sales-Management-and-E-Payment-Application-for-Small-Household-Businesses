@@ -11,6 +11,8 @@ import {
   FlatList,
   Platform,
   Modal,
+  Linking,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -21,7 +23,6 @@ import dayjs from "dayjs";
 import quarterOfYear from "dayjs/plugin/quarterOfYear";
 import "dayjs/locale/vi";
 import { BarChart } from "react-native-gifted-charts";
-
 import { useAuth } from "../../context/AuthContext";
 import apiClient from "../../api/apiClient";
 
@@ -151,7 +152,7 @@ function DateFieldButton({
 // MAIN SCREEN
 // =====================
 const RevenueReportScreen: React.FC = () => {
-  const { currentStore } = useAuth();
+  const { currentStore, token } = useAuth();
   const storeId = currentStore?._id;
   const storeName = currentStore?.name || "Chưa chọn cửa hàng";
 
@@ -166,6 +167,9 @@ const RevenueReportScreen: React.FC = () => {
 
   // Filter collapse
   const [isFilterExpanded, setIsFilterExpanded] = useState<boolean>(true);
+  
+  // Export Modal
+  const [showExportModal, setShowExportModal] = useState(false);
 
   // Filters
   const [periodType, setPeriodType] = useState<PeriodType>("");
@@ -496,6 +500,24 @@ const RevenueReportScreen: React.FC = () => {
   }, [applyPickedDate, pickerTarget, tempDate]);
 
   // =====================
+  // EXPORT
+  // =====================
+  const handleExport = async (format: "xlsx" | "pdf") => {
+    if (!storeId || !periodType || !periodKey) {
+      alert("Vui lòng chọn kỳ báo cáo trước");
+      return;
+    }
+
+    try {
+      const url = `${apiClient.defaults.baseURL}/revenues/export?storeId=${storeId}&periodType=${periodType}&periodKey=${periodKey}&format=${format}&token=${token}`;
+      await Linking.openURL(url);
+      setShowExportModal(false);
+    } catch (error) {
+      alert("Không thể mở liên kết tải về");
+    }
+  };
+
+  // =====================
   // SORTING
   // =====================
   const toggleSort = (type: "orders" | "revenue"): void => {
@@ -588,6 +610,12 @@ const RevenueReportScreen: React.FC = () => {
           <Text style={styles.headerTitle}>D.Thu Nhân viên</Text>
           <Text style={styles.headerSubtitle} numberOfLines={1}>{storeName}</Text>
         </View>
+        <TouchableOpacity 
+          style={styles.headerBtn}
+          onPress={() => setShowExportModal(true)}
+        >
+          <Ionicons name="download-outline" size={20} color="#1890ff" />
+        </TouchableOpacity>
       </View>
 
       <View style={styles.filterSection}>
@@ -744,6 +772,26 @@ const RevenueReportScreen: React.FC = () => {
             </View>
         </Modal>
       )}
+
+      {/* EXPORT MODAL */}
+      <Modal visible={showExportModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.exportModal}>
+            <Text style={styles.exportTitle}>Xuất báo cáo</Text>
+            <TouchableOpacity style={styles.exportOption} onPress={() => handleExport("xlsx")}>
+              <Ionicons name="document-outline" size={24} color="#16a34a" />
+              <Text style={styles.exportText}>Excel (.xlsx)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.exportOption} onPress={() => handleExport("pdf")}>
+              <Ionicons name="document-text-outline" size={24} color="#ef4444" />
+              <Text style={styles.exportText}>PDF (.pdf)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowExportModal(false)}>
+              <Text style={styles.cancelText}>Hủy</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -798,6 +846,17 @@ const styles = StyleSheet.create({
   summaryBadgeText: { fontSize: 10, color: "#fff", fontWeight: "800" },
   summaryValue: { fontSize: 24, fontWeight: "900", color: "#fff", marginVertical: 8 },
   summaryFooter: { flexDirection: "row", alignItems: "center", gap: 6, paddingTop: 10, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.2)" },
+  
+  headerBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: "#eff6ff", alignItems: "center", justifyContent: "center" },
+
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center" },
+  exportModal: { width: "80%", backgroundColor: "#fff", borderRadius: 20, padding: 20 },
+  exportTitle: { fontSize: 18, fontWeight: "800", color: "#1e293b", textAlign: "center", marginBottom: 16 },
+  exportOption: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 12, backgroundColor: "#f8fafc", marginBottom: 8 },
+  exportText: { fontSize: 15, fontWeight: "600", color: "#1e293b" },
+  cancelBtn: { marginTop: 8, padding: 14, alignItems: "center" },
+  cancelText: { color: "#64748b", fontSize: 15, fontWeight: "600" },
+
   summarySubValue: { fontSize: 12, color: "#fff", fontWeight: "600" },
   
   chartCard: { backgroundColor: "#fff", margin: 16, padding: 16, borderRadius: 16, elevation: 2, shadowColor: "#000", shadowOpacity: 0.05 },

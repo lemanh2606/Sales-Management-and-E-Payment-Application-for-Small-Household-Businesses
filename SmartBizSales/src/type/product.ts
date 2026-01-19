@@ -57,6 +57,12 @@ export interface Product {
     default_warehouse_id?: string;
     default_warehouse_name?: string;
 
+    // Added fields for sync
+    tax_rate?: number;
+    origin?: string;
+    brand?: string;
+    warranty_period?: string;
+
     // populated refs
     store?: StoreRef;
     supplier?: Supplier;

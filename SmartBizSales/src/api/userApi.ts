@@ -26,15 +26,23 @@ import type {
 export const registerManager = async (
   data: RegisterManagerDto
 ): Promise<GenericResponse> => {
-  const response = await apiClient.post<GenericResponse>("/users/register", data);
+  const response = await apiClient.post<GenericResponse>(
+    "/users/register",
+    data
+  );
   return response.data;
 };
 
 /**
  * Xác thực OTP đăng ký
  */
-export const verifyOtp = async (data: VerifyOtpDto): Promise<GenericResponse> => {
-  const response = await apiClient.post<GenericResponse>("/users/verify-otp", data);
+export const verifyOtp = async (
+  data: VerifyOtpDto
+): Promise<GenericResponse> => {
+  const response = await apiClient.post<GenericResponse>(
+    "/users/verify-otp",
+    data
+  );
   return response.data;
 };
 
@@ -64,7 +72,10 @@ export const loginUser = async (data: LoginDto): Promise<AuthResponse> => {
 /**
  * Refresh access token bằng refresh token cookie
  */
-export const refreshToken = async (): Promise<{ token: string; user?: User }> => {
+export const refreshToken = async (): Promise<{
+  token: string;
+  user?: User;
+}> => {
   const response = await apiClient.get<{ token: string; user?: User }>(
     "/users/refresh-token"
   );
@@ -158,7 +169,7 @@ export const updateProfile = async (
 
     const res = await apiClient.put("/users/profile", formData, {
       timeout: 120000,
-      // ✅ khuyến nghị: KHÔNG set Content-Type ở RN để axios tự gắn boundary [web:1509]
+      //  khuyến nghị: KHÔNG set Content-Type ở RN để axios tự gắn boundary [web:1509]
       headers: { "Content-Type": "multipart/form-data" },
     });
 
@@ -214,7 +225,9 @@ export const softDeleteUser = async (
 /**
  * Khôi phục nhân viên theo store hiện tại
  */
-export const restoreUser = async (data: RestoreUserDto): Promise<GenericResponse> => {
+export const restoreUser = async (
+  data: RestoreUserDto
+): Promise<GenericResponse> => {
   const response = await apiClient.post<GenericResponse>(
     "/users/staff/restore",
     data

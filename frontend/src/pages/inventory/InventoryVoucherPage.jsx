@@ -459,8 +459,11 @@ export default function InventoryVoucherPage() {
     const s = suppliers.find((x) => String(x?._id) === String(supplierId));
     if (!s) return;
 
-    // auto-fill: người giao + thông tin NCC
-    form.setFieldsValue({
+    const type = form.getFieldValue("type");
+    const isOut = type === "OUT" || type === "RETURN"; // Nếu bạn có loại RETURN riêng thì thêm vào
+    
+    // Base supplier info
+    const updates = {
       supplier_id: s._id,
       supplier_name_snapshot: s.name || "",
       supplier_phone_snapshot: s.phone || "",
@@ -468,14 +471,25 @@ export default function InventoryVoucherPage() {
       supplier_address_snapshot: s.address || "",
       supplier_taxcode_snapshot: s.taxcode || "",
       supplier_contact_person_snapshot: s.contact_person || "",
+    };
 
-      deliverer_name: s.contact_person || s.name || "",
-      deliverer_phone: s.phone || "",
+    if (isOut) {
+      // Xuất trả: Cửa hàng giao -> NCC nhận
+      updates.deliverer_name = form.getFieldValue("deliverer_name") || userDisplayName || "";
+      updates.deliverer_phone = form.getFieldValue("deliverer_phone") || userPhone || "";
 
-      // receiver: mặc định user
-      receiver_name: form.getFieldValue("receiver_name") || userDisplayName || "",
-      receiver_phone: form.getFieldValue("receiver_phone") || userPhone || "",
-    });
+      updates.receiver_name = s.contact_person || s.name || "";
+      updates.receiver_phone = s.phone || "";
+    } else {
+      // Nhập: NCC giao -> Cửa hàng nhận
+      updates.deliverer_name = s.contact_person || s.name || "";
+      updates.deliverer_phone = s.phone || "";
+
+      updates.receiver_name = form.getFieldValue("receiver_name") || userDisplayName || "";
+      updates.receiver_phone = form.getFieldValue("receiver_phone") || userPhone || "";
+    }
+
+    form.setFieldsValue(updates);
   };
   const warehouseOptions = useMemo(() => {
     return warehouses.map((w) => {
@@ -522,6 +536,9 @@ export default function InventoryVoucherPage() {
     setEditingVoucher(null);
     setIsModalOpen(true);
 
+    // Find default warehouse
+    const defaultWh = warehouses.find((w) => w.is_default) || warehouses[0] || null;
+
     form.resetFields();
     form.setFieldsValue({
       type: "IN",
@@ -541,7 +558,7 @@ export default function InventoryVoucherPage() {
 
       // nâng cao
       attached_docs: 0,
-      warehouse_id: defaultWh?.id || null,
+      warehouse_id: defaultWh?._id || defaultWh?.id || null,
       warehouse_name: defaultWh?.name || "",
       warehousename: defaultWh?.name || "",
 
@@ -653,17 +670,26 @@ export default function InventoryVoucherPage() {
       // Comprehensive validation
       const errors = [];
       
-      if (!values.warehouse_id) errors.push("Chưa chọn kho hàng");
-      if (!values.reason?.trim()) errors.push("Chưa nhập lý do nhập/xuất kho");
-      if (!values.deliverer_name?.trim()) errors.push("Chưa nhập tên người giao");
-      if (!values.receiver_name?.trim()) errors.push("Chưa nhập tên người nhận");
+      if (!values.warehouse_id) errors.push("Vui lòng chọn kho hàng");
+      if (!values.reason?.trim()) errors.push("Vui lòng nhập lý do nhập/xuất kho");
+      if (!values.deliverer_name?.trim()) errors.push("Vui lòng nhập tên người giao");
+      if (!values.receiver_name?.trim()) errors.push("Vui lòng nhập tên người nhận");
       
       // Validate items
       const itemErrors = [];
+      const voucherDate = values.voucher_date ? dayjs(values.voucher_date) : dayjs();
+      
       (values.items || []).forEach((item, idx) => {
         if (item?.product_id) {
           if (!item.qty_actual || item.qty_actual <= 0) {
             itemErrors.push(`Dòng ${idx + 1}: Số lượng phải > 0`);
+          }
+          // Validate expiry date >= voucher date for IN vouchers
+          if (values.type === "IN" && item.expiry_date) {
+            const expiryDate = dayjs(item.expiry_date);
+            if (expiryDate.isBefore(voucherDate, 'day')) {
+              itemErrors.push(`Dòng ${idx + 1}: Lỗi nhập liệu: Hạn sử dụng không được phép nhỏ hơn ngày nhập kho. Vui lòng kiểm tra lại ngày sản phẩm để tránh nhập hàng hết hạn.`);
+            }
           }
         }
       });
@@ -671,14 +697,14 @@ export default function InventoryVoucherPage() {
       if (errors.length > 0 || itemErrors.length > 0) {
         const allErrors = [...errors, ...itemErrors];
         return api.error({
-          message: "Thiếu thông tin bắt buộc",
+          message: "Lỗi nhập liệu",
           description: (
             <ul style={{ margin: 0, paddingLeft: 16 }}>
               {allErrors.map((err, i) => <li key={i}>{err}</li>)}
             </ul>
           ),
           placement: "topRight",
-          duration: 5,
+          duration: 6,
         });
       }
 
@@ -1570,7 +1596,7 @@ export default function InventoryVoucherPage() {
                 </Col>
 
                 <Col xs={24} md={12}>
-                  <Form.Item name="reason" label="Lý do" rules={[{ required: true, message: "Nhập lý do" }]}>
+                  <Form.Item name="reason" label={<span>Lý do <span style={{ color: '#ff4d4f' }}>*</span></span>} rules={[{ required: true, message: "Vui lòng nhập lý do nhập/xuất kho" }]}>
                     <Input placeholder="VD: Nhập hàng từ NCC / Xuất bán lẻ / Xuất hủy..." size="large" style={{ borderRadius: 10 }} />
                   </Form.Item>
                 </Col>
@@ -1718,12 +1744,12 @@ export default function InventoryVoucherPage() {
                   children: (
                     <Row gutter={20}>
                       <Col xs={24} md={8}>
-                        <Form.Item name="warehouse_id" label="Kho lưu trữ">
+                        <Form.Item name="warehouse_id" label={<span>Kho lưu trữ <span style={{ color: '#ff4d4f' }}>*</span></span>} rules={[{ required: true, message: "Vui lòng chọn kho hàng" }]}>
                           <Select
                             showSearch
                             allowClear
                             size="large"
-                            placeholder="Chọn kho (mặc định theo cửa hàng)"
+                            placeholder="Bấm để chọn kho hàng..."
                             options={warehouseOptions}
                             loading={loadingWarehouses}
                             filterOption={filterWarehouseOption}
@@ -1763,13 +1789,13 @@ export default function InventoryVoucherPage() {
                       </Col>
 
                       <Col xs={24} md={5}>
-                        <Form.Item name="ref_no" label="Số chứng từ gốc">
-                          <Input placeholder="VD: HD00123" size="large" style={{ borderRadius: 10 }} />
+                        <Form.Item name="ref_no" label={<span>Số chứng từ gốc <Tooltip title="Bắt buộc khi ghi sổ"><span style={{ color: '#fa8c16', fontSize: 11 }}>(Ghi sổ *)</span></Tooltip></span>}>
+                          <Input placeholder="VD: Số hóa đơn/phiếu giao hàng" size="large" style={{ borderRadius: 10 }} rules={[{ required: true, message: "Vui lòng nhập số chứng từ gốc" }]} />
                         </Form.Item>
                       </Col>
 
                       <Col xs={24} md={6}>
-                        <Form.Item name="ref_date" label="Ngày chứng từ gốc">
+                        <Form.Item name="ref_date" label={<span>Ngày chứng từ gốc <Tooltip title="Bắt buộc khi ghi sổ"><span style={{ color: '#fa8c16', fontSize: 11 }}>(Ghi sổ *)</span></Tooltip></span>}>
                           <DatePicker style={{ width: "100%", borderRadius: 10 }} format="DD/MM/YYYY" size="large" />
                         </Form.Item>
                       </Col>
@@ -1904,20 +1930,18 @@ export default function InventoryVoucherPage() {
                                     const items = form.getFieldValue("items") || [];
                                     const next = items.map((it, i) => {
                                       if (i !== idx) return it;
-                                      const currentUnitCost = it?.unit_cost !== undefined ? it.unit_cost : undefined;
-                                      const currentSellingPrice = it?.selling_price !== undefined ? it.selling_price : undefined;
+                                      // Always auto-fill price from product when selecting
                                       return {
                                         ...it,
                                         sku_snapshot: p.sku || "",
                                         name_snapshot: p.name || "",
                                         unit_snapshot: p.unit || "",
-                                        unit_cost:
-                                          currentUnitCost !== undefined ? currentUnitCost : toNumberDecimal(p.costprice ?? p.cost_price ?? 0),
-                                        selling_price:
-                                          currentSellingPrice !== undefined ? currentSellingPrice : toNumberDecimal(p.price ?? 0),
+                                        unit_cost: toNumberDecimal(p.costprice ?? p.cost_price ?? 0),
+                                        selling_price: toNumberDecimal(p.price ?? 0),
                                       };
                                     });
                                     form.setFieldsValue({ items: next });
+                                    setFormChangeKey((k) => k + 1); // Trigger re-render for totals
                                   }}
                                 />
                               </Form.Item>

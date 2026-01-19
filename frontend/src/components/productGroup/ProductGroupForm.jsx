@@ -19,12 +19,20 @@ import {
   FileTextOutlined,
   CheckCircleOutlined,
 } from "@ant-design/icons";
-import { createProductGroup, updateProductGroup } from "../../api/productGroupApi";
+import {
+  createProductGroup,
+  updateProductGroup,
+} from "../../api/productGroupApi";
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
 
-export default function ProductGroupForm({ storeId, group, onSuccess, onCancel }) {
+export default function ProductGroupForm({
+  storeId,
+  group,
+  onSuccess,
+  onCancel,
+}) {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
 
@@ -55,7 +63,7 @@ export default function ProductGroupForm({ storeId, group, onSuccess, onCancel }
       if (group) {
         await updateProductGroup(group._id, { name, description });
         notification.success({
-          message: "✅ Cập nhật thành công",
+          message: " Cập nhật thành công",
           description: `Đã cập nhật nhóm "${name}"`,
           placement: "topRight",
           icon: <CheckCircleOutlined style={{ color: "#52c41a" }} />,
@@ -63,7 +71,7 @@ export default function ProductGroupForm({ storeId, group, onSuccess, onCancel }
       } else {
         await createProductGroup(storeId, { name, description });
         notification.success({
-          message: "✅ Tạo mới thành công",
+          message: " Tạo mới thành công",
           description: `Đã tạo nhóm "${name}"`,
           placement: "topRight",
           icon: <CheckCircleOutlined style={{ color: "#52c41a" }} />,
@@ -73,7 +81,8 @@ export default function ProductGroupForm({ storeId, group, onSuccess, onCancel }
     } catch (err) {
       notification.error({
         message: " Có lỗi xảy ra",
-        description: err?.response?.data?.message || "Không thể thực hiện thao tác",
+        description:
+          err?.response?.data?.message || "Không thể thực hiện thao tác",
         placement: "topRight",
       });
     } finally {
@@ -123,7 +132,7 @@ export default function ProductGroupForm({ storeId, group, onSuccess, onCancel }
             background: "rgba(255,255,255,0.08)",
           }}
         />
-        
+
         <Space align="center" size={16}>
           <div
             style={{
@@ -144,11 +153,23 @@ export default function ProductGroupForm({ storeId, group, onSuccess, onCancel }
             )}
           </div>
           <div>
-            <Title level={3} style={{ color: "#fff", margin: 0, fontWeight: 700 }}>
+            <Title
+              level={3}
+              style={{ color: "#fff", margin: 0, fontWeight: 700 }}
+            >
               {group ? "Chỉnh sửa nhóm sản phẩm" : "Tạo nhóm sản phẩm mới"}
             </Title>
-            <Text style={{ color: "rgba(255,255,255,0.9)", fontSize: 14, marginTop: 4, display: "block" }}>
-              {group ? "Cập nhật thông tin nhóm sản phẩm" : "Thêm một nhóm sản phẩm mới vào hệ thống"}
+            <Text
+              style={{
+                color: "rgba(255,255,255,0.9)",
+                fontSize: 14,
+                marginTop: 4,
+                display: "block",
+              }}
+            >
+              {group
+                ? "Cập nhật thông tin nhóm sản phẩm"
+                : "Thêm một nhóm sản phẩm mới vào hệ thống"}
             </Text>
           </div>
         </Space>
@@ -167,7 +188,9 @@ export default function ProductGroupForm({ storeId, group, onSuccess, onCancel }
             label={
               <Space size={8}>
                 <TagOutlined style={{ color: "#52c41a" }} />
-                <Text strong style={{ fontSize: 15 }}>Tên nhóm sản phẩm</Text>
+                <Text strong style={{ fontSize: 15 }}>
+                  Tên nhóm sản phẩm
+                </Text>
               </Space>
             }
             rules={[
@@ -193,12 +216,12 @@ export default function ProductGroupForm({ storeId, group, onSuccess, onCancel }
             label={
               <Space size={8}>
                 <FileTextOutlined style={{ color: "#52c41a" }} />
-                <Text strong style={{ fontSize: 15 }}>Mô tả</Text>
+                <Text strong style={{ fontSize: 15 }}>
+                  Mô tả
+                </Text>
               </Space>
             }
-            rules={[
-              { max: 500, message: "Mô tả không được quá 500 ký tự" },
-            ]}
+            rules={[{ max: 500, message: "Mô tả không được quá 500 ký tự" }]}
           >
             <TextArea
               placeholder="Thêm mô tả chi tiết về nhóm sản phẩm này..."

@@ -1,4 +1,4 @@
-// src/components/product/ProductFormModal.tsx
+
 import React, { useEffect, useState, useRef } from "react";
 import {
   View,
@@ -12,16 +12,21 @@ import {
   Modal,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from "react-native";
-import { Product, ProductStatus, ProductGroupRef } from "../../type/product";
+import { LinearGradient } from "expo-linear-gradient";
+import * as ImagePicker from "expo-image-picker";
+import { Ionicons } from "@expo/vector-icons";
+import * as ImageManipulator from "expo-image-manipulator";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Product, ProductStatus } from "../../type/product";
 import { Supplier } from "../../type/supplier";
 import apiClient from "../../api/apiClient";
 import { useAuth } from "../../context/AuthContext";
-import { Ionicons } from "@expo/vector-icons";
 
 interface ProductFormModalProps {
   product?: Product | null;
-  open?: boolean;
+  open: boolean;
   onClose: () => void;
   onSaved?: () => void;
 }
@@ -31,16 +36,22 @@ interface ProductGroup {
   name: string;
 }
 
+interface Warehouse {
+  _id: string;
+  name: string;
+}
+
 const ProductFormModal: React.FC<ProductFormModalProps> = ({
   product,
-  open = true,
+  open,
   onClose,
   onSaved,
 }) => {
   const { currentStore } = useAuth();
   const storeId = currentStore?._id;
 
-  const [formData, setFormData] = useState({
+  // --- FORM STATE ---
+  const [formData, setFormData] = useState<any>({
     name: "",
     sku: "",
     cost_price: "",
@@ -49,67 +60,58 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
     min_stock: "",
     max_stock: "",
     unit: "",
-    status: "Đang kinh doanh" as ProductStatus,
+    status: "Đang kinh doanh",
     supplier_id: "",
     group_id: "",
+    default_warehouse_id: "",
     tax_rate: "0",
     origin: "",
     brand: "",
     warranty_period: "",
-    image: "",
     description: "",
   });
 
+  const [image, setImage] = useState<string | null>(null); // URL or Local URI
+  const [selectedImageFile, setSelectedImageFile] = useState<any>(null); // File object for upload
+
+  // --- DATA STATE ---
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [groups, setGroups] = useState<ProductGroup[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  
   const [loading, setLoading] = useState(false);
   const [showOptional, setShowOptional] = useState(false);
-  const [showScrollHint, setShowScrollHint] = useState(false);
-
-  // State cho dropdown
+  
+  // --- DROPDOWNS ---
   const [showSupplierDropdown, setShowSupplierDropdown] = useState(false);
   const [showGroupDropdown, setShowGroupDropdown] = useState(false);
+  const [showWarehouseDropdown, setShowWarehouseDropdown] = useState(false);
   const [showTaxDropdown, setShowTaxDropdown] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
 
-  const scrollViewRef = useRef<ScrollView>(null);
-
-  // ================= FETCH DATA =================
+  // --- FETCH DATA ---
   useEffect(() => {
-    const fetchData = async () => {
-      if (!storeId || !open) return;
+    if (open && storeId) {
+      fetchData();
+    }
+  }, [open, storeId]);
 
-      try {
-        // Fetch suppliers
-        const suppliersRes = await apiClient.get<{ suppliers: Supplier[] }>(
-          `/suppliers/stores/${storeId}`
-        );
-        setSuppliers(suppliersRes.data.suppliers || []);
+  const fetchData = async () => {
+    try {
+      const [suppliersRes, groupsRes, warehousesRes] = await Promise.all([
+        apiClient.get<{ suppliers: Supplier[] }>(`/suppliers/stores/${storeId}`),
+        apiClient.get<{ productGroups: ProductGroup[] }>(`/product-groups/store/${storeId}`),
+        apiClient.get<{ warehouses: Warehouse[] }>(`/stores/${storeId}/warehouses`)
+      ]);
+      setSuppliers(suppliersRes.data.suppliers || []);
+      setGroups(groupsRes.data.productGroups || []);
+      setWarehouses(warehousesRes.data.warehouses || []);
+    } catch (error) {
+      console.error("Lỗi tải dữ liệu form:", error);
+    }
+  };
 
-        // Fetch product groups
-        const groupsRes = await apiClient.get<{
-          productGroups: ProductGroupRef[];
-        }>(`/product-groups/store/${storeId}`);
-        setGroups(
-          (groupsRes.data.productGroups || []).map((group) => ({
-            ...group,
-            _id: group._id.toString(),
-            name: group.name || "",
-          }))
-        );
-      } catch (error) {
-        console.error("Lỗi khi tải dữ liệu:", error);
-        Alert.alert(
-          "Lỗi",
-          "Không thể tải danh sách nhà cung cấp và nhóm sản phẩm"
-        );
-      }
-    };
-
-    fetchData();
-  }, [storeId, open]);
-
-  // ================= INIT FORM =================
+  // --- INIT FORM ---
   useEffect(() => {
     if (product) {
       setFormData({
@@ -123,991 +125,502 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
         unit: product.unit || "",
         status: product.status || "Đang kinh doanh",
         supplier_id: product.supplier?._id || "",
-        group_id: product.group?._id?.toString() || "",
-        tax_rate: (product as any).tax_rate?.toString() || "0",
-        origin: (product as any).origin || "",
-        brand: (product as any).brand || "",
-        warranty_period: (product as any).warranty_period || "",
-        image: product.image?.url || "",
+        group_id: product.group?._id || "",
+        default_warehouse_id: product.default_warehouse_id || (product as any).warehouse_id || "", 
+        tax_rate: product.tax_rate?.toString() || "0",
+        origin: product.origin || "",
+        brand: product.brand || "",
+        warranty_period: product.warranty_period || "",
         description: product.description || "",
       });
+      setImage(product.image?.url || null);
     } else {
-      // Reset form khi tạo mới
       setFormData({
-        name: "",
-        sku: "",
-        cost_price: "",
-        price: "",
-        stock_quantity: "",
-        min_stock: "",
-        max_stock: "",
-        unit: "",
-        status: "Đang kinh doanh",
-        supplier_id: "",
-        group_id: "",
-        tax_rate: "0",
-        origin: "",
-        brand: "",
-        warranty_period: "",
-        image: "",
-        description: "",
+        name: "", sku: "", cost_price: "", price: "", stock_quantity: "",
+        min_stock: "", max_stock: "", unit: "", status: "Đang kinh doanh",
+        supplier_id: "", group_id: "", default_warehouse_id: "",
+        tax_rate: "0", origin: "", brand: "", warranty_period: "", description: ""
       });
+      setImage(null);
     }
-    setShowOptional(false);
+    setSelectedImageFile(null);
+    setShowOptional(!!product); // Expand optional by default if editing
   }, [product, open]);
 
-  // ================= HANDLE SCROLL =================
-  const handleScroll = (event: any) => {
-    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
-    const paddingToBottom = 20;
-    const isCloseToBottom =
-      layoutMeasurement.height + contentOffset.y >=
-      contentSize.height - paddingToBottom;
-    setShowScrollHint(!isCloseToBottom);
-  };
-
-  // ================= VALIDATION =================
-  const validateForm = (): boolean => {
-    // Validation cho min_stock và max_stock (áp dụng cả 2 mode)
-    if (formData.min_stock && Number(formData.min_stock) < 0) {
-      Alert.alert("Lỗi", "Tồn kho tối thiểu không được âm");
-      return false;
-    }
-
-    if (formData.max_stock && Number(formData.max_stock) < 0) {
-      Alert.alert("Lỗi", "Tồn kho tối đa không được âm");
-      return false;
-    }
-
-    if (
-      formData.min_stock &&
-      formData.max_stock &&
-      Number(formData.max_stock) <= Number(formData.min_stock)
-    ) {
-      Alert.alert("Lỗi", "Tồn kho tối đa phải lớn hơn tồn kho tối thiểu");
-      return false;
-    }
-
-    // Khi EDIT - chỉ cần validate min/max stock (đã xong ở trên)
-    if (product) {
-      return true;
-    }
-
-    // Khi TẠO MỚI - validate thêm các trường bắt buộc
-    if (!formData.name.trim()) {
-      Alert.alert("Lỗi", "Tên sản phẩm không được để trống");
-      return false;
-    }
-
-    if (!formData.cost_price || Number(formData.cost_price) < 0) {
-      Alert.alert("Lỗi", "Giá vốn không hợp lệ");
-      return false;
-    }
-
-    if (!formData.price || Number(formData.price) < 0) {
-      Alert.alert("Lỗi", "Giá bán không hợp lệ");
-      return false;
-    }
-
-    if (!formData.stock_quantity || Number(formData.stock_quantity) < 0) {
-      Alert.alert("Lỗi", "Số lượng tồn kho không hợp lệ");
-      return false;
-    }
-
-    if (!formData.supplier_id) {
-      Alert.alert("Lỗi", "Vui lòng chọn nhà cung cấp");
-      return false;
-    }
-
-    return true;
-  };
-
-  // ================= HANDLE SAVE =================
-  const handleSave = async () => {
-    if (!storeId) {
-      Alert.alert("Lỗi", "Vui lòng chọn cửa hàng trước khi thêm sản phẩm");
-      return;
-    }
-
-    if (!validateForm()) {
-      return;
-    }
-
+  const handlePickImage = async () => {
     try {
-      setLoading(true);
-
-      let payload: any = {};
-
-      if (product?._id) {
-        // ===== EDIT MODE: Chỉ gửi các trường được phép sửa =====
-        payload = {
-          // Các trường cho phép sửa khi edit
-          status: formData.status,
-          unit: formData.unit.trim() || undefined,
-          group_id: formData.group_id || undefined,
-          min_stock: formData.min_stock.trim() ? Number(formData.min_stock) : undefined,
-          max_stock: formData.max_stock.trim() ? Number(formData.max_stock) : undefined,
-          // Thông tin pháp lý & bảo hành
-          tax_rate: formData.tax_rate ? Number(formData.tax_rate) : 0,
-          origin: formData.origin.trim() || "",
-          brand: formData.brand.trim() || "",
-          warranty_period: formData.warranty_period.trim() || "",
-          // Mô tả & hình ảnh
-          description: formData.description.trim() || "",
-          image: formData.image.trim() || undefined,
-        };
-        // Lọc bỏ các field undefined
-        Object.keys(payload).forEach(k => payload[k] === undefined && delete payload[k]);
-      } else {
-        // ===== CREATE MODE: Gửi đầy đủ các trường =====
-        payload = {
-          name: formData.name.trim(),
-          cost_price: Number(formData.cost_price),
-          price: Number(formData.price),
-          stock_quantity: Number(formData.stock_quantity),
-          status: formData.status,
-          supplier_id: formData.supplier_id,
-          store_id: storeId,
-        };
-
-        // Thêm các trường optional nếu có giá trị
-        if (formData.sku.trim()) payload.sku = formData.sku.trim();
-        if (formData.unit.trim()) payload.unit = formData.unit.trim();
-        if (formData.group_id) payload.group_id = formData.group_id;
-        if (formData.tax_rate) payload.tax_rate = Number(formData.tax_rate);
-        if (formData.origin.trim()) payload.origin = formData.origin.trim();
-        if (formData.brand.trim()) payload.brand = formData.brand.trim();
-        if (formData.warranty_period.trim()) payload.warranty_period = formData.warranty_period.trim();
-        if (formData.image.trim()) payload.image = formData.image.trim();
-        if (formData.description.trim()) payload.description = formData.description.trim();
-        if (formData.min_stock.trim()) payload.min_stock = Number(formData.min_stock);
-        if (formData.max_stock.trim()) payload.max_stock = Number(formData.max_stock);
-      }
-
-      console.log("Saving product:", {
-        isEdit: !!product?._id,
-        productId: product?._id,
-        data: payload,
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: 'images',
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
       });
 
-      if (product?._id) {
-        await apiClient.put(`/products/${product._id}`, payload);
-        Alert.alert("Thành công", "Đã cập nhật sản phẩm thành công");
-      } else {
-        await apiClient.post(`/products/store/${storeId}`, payload);
-        Alert.alert("Thành công", "Đã thêm sản phẩm mới thành công");
+      if (!result.canceled) {
+        let asset = result.assets[0];
+
+        // Always compress image to ensure fast upload and valid size (< 5MB)
+        console.log("Original image size:", asset.fileSize);
+        
+        try {
+            const manipResult = await ImageManipulator.manipulateAsync(
+                asset.uri,
+                [{ resize: { width: 1024 } }], // Resize to max width 1024px
+                { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+            );
+            
+            // Update asset with compressed image
+            asset = { 
+                ...asset, 
+                uri: manipResult.uri, 
+                width: manipResult.width, 
+                height: manipResult.height,
+                // fileSize is not returned by manipulator, but it will be much smaller
+            };
+            console.log("Compressed image uri:", manipResult.uri);
+        } catch (manipErr) {
+            console.error("Compression error:", manipErr);
+            // Fallback to original if compression fails, but warn user
+        }
+
+        setImage(asset.uri);
+        
+        // Create file object for upload
+        const filename = asset.uri.split('/').pop();
+        // Force type to jpeg since we compressed to jpeg
+        const type = "image/jpeg"; 
+        
+        setSelectedImageFile({
+          uri: asset.uri,
+          name: filename,
+          type: type
+        });
+      }
+    } catch (err) {
+      Alert.alert("Lỗi", "Không thể chọn ảnh");
+    }
+  };
+
+  const handleSave = async () => {
+    if (!storeId) return;
+    
+    // VALIDATION
+    if (!formData.name) return Alert.alert("Lỗi", "Vui lòng nhập tên sản phẩm");
+    if (!product) {
+       // ... existing validation
+      if (!formData.cost_price) return Alert.alert("Lỗi", "Vui lòng nhập giá vốn");
+      if (!formData.price) return Alert.alert("Lỗi", "Vui lòng nhập giá bán");
+      if (!formData.stock_quantity) return Alert.alert("Lỗi", "Vui lòng nhập tồn kho");
+      if (!formData.default_warehouse_id) return Alert.alert("Lỗi", "Vui lòng chọn kho hàng");
+      if (!formData.supplier_id) return Alert.alert("Lỗi", "Vui lòng chọn nhà cung cấp");
+    }
+
+    setLoading(true);
+    try {
+      const data = new FormData();
+      
+      // 1. Common fields
+      const appendIf = (key: string, val: any) => {
+         if (val !== undefined && val !== null && String(val).trim() !== "") {
+            data.append(key, String(val));
+         }
+      };
+
+      appendIf("name", formData.name);
+      appendIf("description", formData.description);
+      appendIf("price", formData.price);
+      appendIf("cost_price", formData.cost_price);
+      appendIf("tax_rate", formData.tax_rate);
+      appendIf("stock_quantity", formData.stock_quantity);
+      appendIf("min_stock", formData.min_stock);
+      appendIf("max_stock", formData.max_stock);
+      appendIf("supplier_id", formData.supplier_id);
+      appendIf("group_id", formData.group_id);
+      appendIf("default_warehouse_id", formData.default_warehouse_id);
+      appendIf("unit", formData.unit);
+      appendIf("status", formData.status);
+      appendIf("origin", formData.origin);
+      appendIf("brand", formData.brand);
+      appendIf("warranty_period", formData.warranty_period);
+      appendIf("sku", formData.sku);
+
+      // 2. IMAGE HANDLING
+      if (selectedImageFile) {
+        let uri = selectedImageFile.uri;
+        // Basic check for Android
+        if (Platform.OS === 'android' && !uri.startsWith("file://") && !uri.startsWith("content://")) {
+            uri = `file://${uri}`;
+        }
+        
+        data.append("image", {
+          uri: uri,
+          name: selectedImageFile.name || "upload.jpg",
+          type: selectedImageFile.type || "image/jpeg",
+        } as any);
+      } else if (product && !image) {
+        data.append("removeImage", "true");
       }
 
+      // 3. SEND REQUEST
+      const token = await AsyncStorage.getItem("token");
+      const baseURL = apiClient.defaults.baseURL; // http://192.168.100.23:9999/api
+      
+      let url = product?._id 
+          ? `${baseURL}/products/${product._id}`
+          : `${baseURL}/products/store/${storeId}`;
+          
+      // Ensure store_id in body for create
+      if (!product) data.append("store_id", storeId as string);
+
+      console.log(`Saving to: ${url}`);
+      
+      const response = await fetch(url, {
+          method: product?._id ? "PUT" : "POST",
+          headers: {
+              "Authorization": `Bearer ${token}`,
+              "Accept": "application/json",
+              // Fetch automatically sets Content-Type: multipart/form-data; boundary=...
+          },
+          body: data,
+      });
+
+      const text = await response.text();
+      let resData;
+      try {
+        resData = JSON.parse(text);
+      } catch (e) {
+        console.error("Non-JSON Response:", text);
+        throw new Error("Lỗi máy chủ: Phản hồi không hợp lệ");
+      }
+
+      if (!response.ok) {
+         console.error("Server Error:", resData);
+         throw new Error(resData.message || resData.error || "Không thể lưu");
+      }
+
+      Alert.alert("Thành công", product ? "Đã cập nhật sản phẩm" : "Đã tạo sản phẩm mới");
       onSaved?.();
-      handleClose();
-    } catch (error: any) {
-      console.error("Lỗi khi lưu sản phẩm:", error);
-
-      const errorMessage =
-        error?.response?.data?.message ||
-        error?.message ||
-        "Không thể lưu sản phẩm. Vui lòng thử lại.";
-
-      Alert.alert("Lỗi", errorMessage);
+      onClose();
+    } catch (err: any) {
+      console.error("Save Error:", err);
+      Alert.alert("Lỗi", err.message || "Không thể lưu");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleClose = () => {
-    if (!loading) {
-      setShowSupplierDropdown(false);
-      setShowGroupDropdown(false);
-      setShowStatusDropdown(false);
-      onClose();
-    }
+  // --- RENDER HELPERS ---
+  const getName = (list: any[], id: string, placeholder = "Chọn...") => {
+     return list.find(i => i._id === id)?.name || placeholder;
   };
 
-  const handleChange = (field: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const getSupplierName = (supplierId: string) => {
-    const supplier = suppliers.find((s) => s._id === supplierId);
-    return supplier?.name || "-- Chọn nhà cung cấp --";
-  };
-
-  const getGroupName = (groupId: string) => {
-    const group = groups.find((g) => g._id === groupId);
-    return group?.name || "-- Chọn nhóm sản phẩm --";
-  };
-
-  // Render Dropdown Modal
-  const renderDropdownModal = (
-    visible: boolean,
-    onClose: () => void,
-    title: string,
-    options: Array<{ _id: string; name: string }>,
-    selectedValue: string,
-    onSelect: (id: string) => void,
-    emptyMessage: string
-  ) => (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-    >
-      <TouchableOpacity
-        style={styles.dropdownBackdrop}
-        activeOpacity={1}
-        onPress={onClose}
-      >
-        <View style={styles.dropdownContainer}>
-          <View style={styles.dropdownHeader}>
-            <Text style={styles.dropdownTitle}>{title}</Text>
-            <TouchableOpacity onPress={onClose}>
-              <Ionicons name="close" size={24} color="#666" />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={styles.dropdownList}>
-            {options.length === 0 ? (
-              <Text style={styles.emptyMessage}>{emptyMessage}</Text>
-            ) : (
-              options.map((option) => (
-                <TouchableOpacity
-                  key={option._id}
-                  style={[
-                    styles.dropdownItem,
-                    selectedValue === option._id && styles.dropdownItemSelected,
-                  ]}
-                  onPress={() => {
-                    onSelect(option._id);
-                    onClose();
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.dropdownItemText,
-                      selectedValue === option._id &&
-                        styles.dropdownItemTextSelected,
-                    ]}
-                  >
-                    {option.name}
-                  </Text>
-                  {selectedValue === option._id && (
-                    <Ionicons name="checkmark" size={20} color="#16a34a" />
-                  )}
+  const renderDropdown = (title: string, data: any[], selected: string, onSelect: (id: string) => void, show: boolean, setShow: (v: boolean) => void) => (
+      <Modal visible={show} transparent animationType="fade" onRequestClose={() => setShow(false)}>
+        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShow(false)}>
+          <View style={styles.dropdownContainer}>
+            <View style={styles.dropdownHeader}>
+              <Text style={styles.dropdownTitle}>{title}</Text>
+              <TouchableOpacity onPress={() => setShow(false)}><Ionicons name="close" size={24} color="#666"/></TouchableOpacity>
+            </View>
+            <ScrollView style={{maxHeight: 300}}>
+              {data.map(item => (
+                <TouchableOpacity key={item._id} style={[styles.dropdownItem, selected === item._id && styles.dropdownItemSelected]}
+                  onPress={() => { onSelect(item._id); setShow(false); }}>
+                  <Text style={[styles.dropdownItemText, selected === item._id && {color: "#16a34a", fontWeight: "700"}]}>{item.name}</Text>
+                  {selected === item._id && <Ionicons name="checkmark" size={20} color="#16a34a" />}
                 </TouchableOpacity>
-              ))
-            )}
-          </ScrollView>
-        </View>
-      </TouchableOpacity>
-    </Modal>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
   );
 
   return (
-    <Modal
-      visible={open}
-      transparent
-      animationType="slide"
-      onRequestClose={handleClose}
-    >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.backdrop}
-      >
-        <View style={styles.backdrop}>
-          <View style={styles.modalContainer}>
+    <Modal visible={open} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+        <View style={styles.container}>
             {/* Header */}
-            <View style={styles.header}>
-              <Text style={styles.title}>
-                {product ? "Chỉnh sửa sản phẩm" : "Tạo sản phẩm mới"}
-              </Text>
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={handleClose}
-                disabled={loading}
-              >
-                <Ionicons name="close" size={24} color="#666" />
-              </TouchableOpacity>
-            </View>
+            <LinearGradient colors={["#16a34a", "#15803d"]} style={styles.header}>
+                <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: Platform.OS === 'ios' ? 0 : 10}}>
+                    <Text style={styles.headerTitle}>{product ? "Cập nhật sản phẩm" : "Thêm sản phẩm mới"}</Text>
+                    <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+                        <Ionicons name="close" size={24} color="#fff" />
+                    </TouchableOpacity>
+                </View>
+            </LinearGradient>
 
-            <ScrollView
-              ref={scrollViewRef}
-              style={styles.formContainer}
-              showsVerticalScrollIndicator={false}
-              onScroll={handleScroll}
-              scrollEventThrottle={16}
-            >
-              {/* Thông tin cơ bản - Hiển thị cả 2 mode, disable khi edit */}
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>
-                  {product ? "Thông tin sản phẩm (không thể sửa)" : "Thông tin bắt buộc"}
-                </Text>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>
-                    Tên sản phẩm {!product && <Text style={styles.required}>*</Text>}
-                  </Text>
-                  <TextInput
-                    style={[styles.input, product && styles.inputDisabled]}
-                    placeholder="Nhập tên sản phẩm..."
-                    placeholderTextColor="#999"
-                    value={formData.name}
-                    onChangeText={(text) => handleChange("name", text)}
-                    editable={!loading && !product}
-                  />
+            <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{flex: 1}}>
+            <ScrollView contentContainerStyle={styles.contentParams}>
+                
+                {/* Image Picker */}
+                <View style={styles.imageSection}>
+                    <TouchableOpacity style={styles.imagePicker} onPress={handlePickImage} disabled={loading}>
+                        {image ? (
+                           <Image source={{ uri: image }} style={styles.previewImage} />
+                        ) : (
+                           <View style={styles.placeholderImage}>
+                              <Ionicons name="image-outline" size={40} color="#999" />
+                              <Text style={{color: "#999", marginTop: 8}}>Chọn ảnh...</Text>
+                           </View>
+                        )}
+                        <View style={styles.cameraIcon}>
+                             <Ionicons name="camera" size={20} color="#fff" />
+                        </View>
+                    </TouchableOpacity>
                 </View>
 
-                <View style={styles.row}>
-                  <View style={[styles.inputGroup, styles.halfInput]}>
-                    <Text style={styles.label}>
-                      Giá vốn (VND) {!product && <Text style={styles.required}>*</Text>}
-                    </Text>
-                    <TextInput
-                      style={[styles.input, product && styles.inputDisabled]}
-                      placeholder="0"
-                      placeholderTextColor="#999"
-                      value={formData.cost_price}
-                      onChangeText={(text) =>
-                        handleChange("cost_price", text.replace(/[^0-9]/g, ""))
-                      }
-                      keyboardType="numeric"
-                      editable={!loading && !product}
-                    />
-                  </View>
-
-                  <View style={[styles.inputGroup, styles.halfInput]}>
-                    <Text style={styles.label}>
-                      Giá bán (VND) {!product && <Text style={styles.required}>*</Text>}
-                    </Text>
-                    <TextInput
-                      style={[styles.input, product && styles.inputDisabled]}
-                      placeholder="0"
-                      placeholderTextColor="#999"
-                      value={formData.price}
-                      onChangeText={(text) =>
-                        handleChange("price", text.replace(/[^0-9]/g, ""))
-                      }
-                      keyboardType="numeric"
-                      editable={!loading && !product}
-                    />
-                  </View>
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>
-                    Số lượng tồn kho {!product && <Text style={styles.required}>*</Text>}
-                  </Text>
-                  <TextInput
-                    style={[styles.input, product && styles.inputDisabled]}
-                    placeholder="0"
-                    placeholderTextColor="#999"
-                    value={formData.stock_quantity}
-                    onChangeText={(text) =>
-                      handleChange(
-                        "stock_quantity",
-                        text.replace(/[^0-9]/g, "")
-                      )
-                    }
-                    keyboardType="numeric"
-                    editable={!loading && !product}
-                  />
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>
-                    Nhà cung cấp {!product && <Text style={styles.required}>*</Text>}
-                  </Text>
-                  <TouchableOpacity
-                    style={[styles.dropdown, product && styles.inputDisabled]}
-                    onPress={() => !product && setShowSupplierDropdown(true)}
-                    disabled={loading || !!product}
-                  >
-                    <Text
-                      style={[
-                        styles.dropdownText,
-                        !formData.supplier_id && styles.dropdownPlaceholder,
-                      ]}
-                    >
-                      {getSupplierName(formData.supplier_id)}
-                    </Text>
-                    <Ionicons name="chevron-down" size={20} color={product ? "#ccc" : "#666"} />
-                  </TouchableOpacity>
-                  {!product && suppliers.length === 0 && (
-                    <Text style={styles.hintText}>
-                      Chưa có nhà cung cấp. Vui lòng tạo nhà cung cấp trước.
-                    </Text>
-                  )}
-                </View>
-              </View>
-
-              {/* Thông tin tùy chọn / Thông tin có thể chỉnh sửa */}
-              <View style={styles.section}>
-                <TouchableOpacity
-                  style={styles.optionalHeader}
-                  onPress={() => setShowOptional(!showOptional)}
-                  disabled={loading}
-                >
-                  <Ionicons
-                    name={showOptional ? "chevron-up" : "chevron-down"}
-                    size={24}
-                    color="#16a34a"
-                  />
-                  <Text style={styles.optionalTitle}>
-                    {product ? "Thông tin có thể chỉnh sửa" : "Thông tin tùy chọn"}
-                  </Text>
-                </TouchableOpacity>
-
-                {(showOptional || product) && (
-                  <View style={styles.optionalContent}>
-                    {/* SKU - hiển thị nhưng disable khi edit */}
-                    <View style={styles.inputGroup}>
-                      <Text style={styles.label}>Mã SKU</Text>
-                      <TextInput
-                        style={[styles.input, product && styles.inputDisabled]}
-                        placeholder="Nhập mã SKU..."
-                        placeholderTextColor="#999"
-                        value={formData.sku}
-                        onChangeText={(text) => handleChange("sku", text)}
-                        editable={!loading && !product}
-                      />
+                {/* BASIC INFO CARD */}
+                <View style={styles.card}>
+                    <Text style={styles.sectionHeader}>Thông tin cơ bản {product && "(Không thể sửa)"}</Text>
+                    
+                    <View style={styles.videoFormGroup}>
+                        <Text style={styles.label}>Tên sản phẩm <Text style={styles.req}>*</Text></Text>
+                        <TextInput style={[styles.input, product && styles.disabledInput]} 
+                             value={formData.name} 
+                             onChangeText={t => setFormData({...formData, name: t})}
+                             placeholder="VD: Nước ngọt Coca Cola"
+                             editable={!product}
+                        />
                     </View>
 
-                    {/* Đơn vị tính & Nhóm - CHO PHÉP SỬA */}
                     <View style={styles.row}>
-                      <View style={[styles.inputGroup, styles.halfInput]}>
-                        <Text style={styles.label}>Đơn vị tính</Text>
-                        <TextInput
-                          style={styles.input}
-                          placeholder="cái, hộp, kg..."
-                          placeholderTextColor="#999"
-                          value={formData.unit}
-                          onChangeText={(text) => handleChange("unit", text)}
-                          editable={!loading}
-                        />
-                      </View>
+                        <View style={[styles.col, {marginRight: 8}]}>
+                             <Text style={styles.label}>Giá vốn <Text style={styles.req}>*</Text></Text>
+                             <TextInput style={[styles.input, product && styles.disabledInput]} 
+                                  value={formData.cost_price} 
+                                  onChangeText={t => setFormData({...formData, cost_price: t.replace(/[^0-9]/g, "")})}
+                                  keyboardType="numeric"
+                                  placeholder="0"
+                                  editable={!product}
+                             />
+                        </View>
+                        <View style={[styles.col, {marginLeft: 8}]}>
+                             <Text style={styles.label}>Giá bán <Text style={styles.req}>*</Text></Text>
+                             <TextInput style={[styles.input, product && styles.disabledInput]} 
+                                  value={formData.price} 
+                                  onChangeText={t => setFormData({...formData, price: t.replace(/[^0-9]/g, "")})}
+                                  keyboardType="numeric"
+                                  placeholder="0"
+                                  editable={!product}
+                             />
+                        </View>
+                    </View>
 
-                      <View style={[styles.inputGroup, styles.halfInput]}>
-                        <Text style={styles.label}>Nhóm sản phẩm</Text>
-                        <TouchableOpacity
-                          style={styles.dropdown}
-                          onPress={() => setShowGroupDropdown(true)}
-                          disabled={loading}
-                        >
-                          <Text
-                            style={[
-                              styles.dropdownText,
-                              !formData.group_id && styles.dropdownPlaceholder,
-                            ]}
-                          >
-                            {getGroupName(formData.group_id)}
-                          </Text>
-                          <Ionicons
-                            name="chevron-down"
-                            size={20}
-                            color="#666"
-                          />
+                    <View style={styles.videoFormGroup}>
+                        <Text style={styles.label}>Tồn kho ban đầu <Text style={styles.req}>*</Text></Text>
+                        <TextInput style={[styles.input, product && styles.disabledInput]} 
+                             value={formData.stock_quantity} 
+                             onChangeText={t => setFormData({...formData, stock_quantity: t.replace(/[^0-9]/g, "")})}
+                             keyboardType="numeric"
+                             placeholder="0"
+                             editable={!product}
+                        />
+                    </View>
+
+                    <View style={styles.videoFormGroup}>
+                        <Text style={styles.label}>Kho hàng mặc định <Text style={styles.req}>*</Text></Text>
+                        <TouchableOpacity style={[styles.selectInput, product && styles.disabledInput]} 
+                              onPress={() => !product && setShowWarehouseDropdown(true)}
+                              disabled={!!product}>
+                              <Text style={{color: formData.default_warehouse_id ? "#333" : "#999"}}>
+                                  {getName(warehouses, formData.default_warehouse_id, "Chọn kho hàng...")}
+                              </Text>
+                              <Ionicons name="chevron-down" size={20} color="#666" />
                         </TouchableOpacity>
-                      </View>
                     </View>
 
-                    {/* TRẠNG THÁI - hiển thị ở cả 2 chế độ */}
-                    <View style={styles.inputGroup}>
-                      <Text style={styles.label}>Trạng thái</Text>
-                      <TouchableOpacity
-                        style={styles.dropdown}
-                        onPress={() => setShowStatusDropdown(true)}
-                        disabled={loading}
-                      >
-                        <Text style={styles.dropdownText}>
-                          {formData.status}
-                        </Text>
-                        <Ionicons name="chevron-down" size={20} color="#666" />
-                      </TouchableOpacity>
+                    <View style={styles.videoFormGroup}>
+                        <Text style={styles.label}>Nhà cung cấp <Text style={styles.req}>*</Text></Text>
+                        <TouchableOpacity style={[styles.selectInput, product && styles.disabledInput]} 
+                              onPress={() => !product && setShowSupplierDropdown(true)}
+                              disabled={!!product}>
+                              <Text style={{color: formData.supplier_id ? "#333" : "#999"}}>
+                                  {getName(suppliers, formData.supplier_id, "Chọn nhà cung cấp...")}
+                              </Text>
+                              <Ionicons name="chevron-down" size={20} color="#666" />
+                        </TouchableOpacity>
                     </View>
-
-                    {/* Thuế GTGT */}
-                    <View style={styles.inputGroup}>
-                      <Text style={styles.label}>Thuế GTGT</Text>
-                      <TouchableOpacity
-                        style={styles.dropdown}
-                        onPress={() => setShowTaxDropdown(true)}
-                        disabled={loading}
-                      >
-                        <Text style={styles.dropdownText}>
-                          {formData.tax_rate === "-1" ? "KCT" : `${formData.tax_rate}%`}
-                        </Text>
-                        <Ionicons name="chevron-down" size={20} color="#666" />
-                      </TouchableOpacity>
-                    </View>
-
-                    {/* Xuất xứ & Thương hiệu */}
-                    <View style={styles.row}>
-                      <View style={[styles.inputGroup, styles.halfInput]}>
-                        <Text style={styles.label}>Xuất xứ</Text>
-                        <TextInput
-                          style={styles.input}
-                          placeholder="VD: Việt Nam"
-                          placeholderTextColor="#999"
-                          value={formData.origin}
-                          onChangeText={(text) => handleChange("origin", text)}
-                          editable={!loading}
-                        />
-                      </View>
-                      <View style={[styles.inputGroup, styles.halfInput]}>
-                        <Text style={styles.label}>Thương hiệu</Text>
-                        <TextInput
-                          style={styles.input}
-                          placeholder="VD: Sony"
-                          placeholderTextColor="#999"
-                          value={formData.brand}
-                          onChangeText={(text) => handleChange("brand", text)}
-                          editable={!loading}
-                        />
-                      </View>
-                    </View>
-
-                    {/* Bảo hành */}
-                    <View style={styles.inputGroup}>
-                      <Text style={styles.label}>Bảo hành</Text>
-                      <TextInput
-                        style={styles.input}
-                        placeholder="VD: 12 tháng"
-                        placeholderTextColor="#999"
-                        value={formData.warranty_period}
-                        onChangeText={(text) => handleChange("warranty_period", text)}
-                        editable={!loading}
-                      />
-                    </View>
-
-                    <View style={styles.inputGroup}>
-                      <Text style={styles.label}>Hình ảnh (URL)</Text>
-                      <TextInput
-                        style={styles.input}
-                        placeholder="https://example.com/image.jpg"
-                        placeholderTextColor="#999"
-                        value={formData.image}
-                        onChangeText={(text) => handleChange("image", text)}
-                        editable={!loading}
-                      />
-                    </View>
-
-                    <View style={styles.inputGroup}>
-                      <Text style={styles.label}>Mô tả</Text>
-                      <TextInput
-                        style={[styles.input, styles.textArea]}
-                        placeholder="Nhập mô tả sản phẩm..."
-                        placeholderTextColor="#999"
-                        value={formData.description}
-                        onChangeText={(text) =>
-                          handleChange("description", text)
-                        }
-                        multiline
-                        numberOfLines={3}
-                        textAlignVertical="top"
-                        editable={!loading}
-                      />
-                    </View>
-
-                    {/* Tồn kho min/max - CHO PHÉP SỬA */}
-                    <View style={styles.row}>
-                      <View style={[styles.inputGroup, styles.halfInput]}>
-                        <Text style={styles.label}>Tồn kho tối thiểu</Text>
-                        <TextInput
-                          style={styles.input}
-                          placeholder="0"
-                          placeholderTextColor="#999"
-                          value={formData.min_stock}
-                          onChangeText={(text) =>
-                            handleChange(
-                              "min_stock",
-                              text.replace(/[^0-9]/g, "")
-                            )
-                          }
-                          keyboardType="numeric"
-                          editable={!loading}
-                        />
-                      </View>
-
-                      <View style={[styles.inputGroup, styles.halfInput]}>
-                        <Text style={styles.label}>Tồn kho tối đa</Text>
-                        <TextInput
-                          style={styles.input}
-                          placeholder="0"
-                          placeholderTextColor="#999"
-                          value={formData.max_stock}
-                          onChangeText={(text) =>
-                            handleChange(
-                              "max_stock",
-                              text.replace(/[^0-9]/g, "")
-                            )
-                          }
-                          keyboardType="numeric"
-                          editable={!loading}
-                        />
-                      </View>
-                    </View>
-                  </View>
-                )}
-              </View>
-
-              {/* Scroll hint */}
-              {showScrollHint && (
-                <View style={styles.scrollHint}>
-                  <Ionicons name="chevron-down" size={16} color="#666" />
-                  <Text style={styles.scrollHintText}>Nội dung phía dưới</Text>
                 </View>
-              )}
+
+                {/* ADVANCED INFO */}
+                <View style={styles.card}>
+                    <TouchableOpacity style={styles.expandHeader} onPress={() => setShowOptional(!showOptional)}>
+                         <Text style={styles.sectionHeader}>Thông tin chi tiết</Text>
+                         <Ionicons name={showOptional ? "chevron-up" : "chevron-down"} size={20} color="#666" />
+                    </TouchableOpacity>
+                    
+                    {showOptional && (
+                        <View style={{marginTop: 12}}>
+                             <View style={styles.row}>
+                                <View style={[styles.col, {marginRight: 8}]}>
+                                    <Text style={styles.label}>SKU</Text>
+                                    <TextInput style={[styles.input, product && styles.disabledInput]} 
+                                        value={formData.sku} 
+                                        onChangeText={t => setFormData({...formData, sku: t})}
+                                        editable={!product}
+                                        placeholder="Mã SKU"
+                                    />
+                                </View>
+                                <View style={[styles.col, {marginLeft: 8}]}>
+                                    <Text style={styles.label}>Đơn vị tính</Text>
+                                    <TextInput style={styles.input} 
+                                        value={formData.unit} 
+                                        onChangeText={t => setFormData({...formData, unit: t})}
+                                        placeholder="Cái/Hộp..."
+                                    />
+                                </View>
+                             </View>
+
+                             <View style={styles.videoFormGroup}>
+                                <Text style={styles.label}>Nhóm sản phẩm</Text>
+                                <TouchableOpacity style={styles.selectInput} onPress={() => setShowGroupDropdown(true)}>
+                                    <Text style={{color: formData.group_id ? "#333" : "#999"}}>
+                                        {getName(groups, formData.group_id, "Chọn nhóm...")}
+                                    </Text>
+                                    <Ionicons name="chevron-down" size={20} color="#666" />
+                                </TouchableOpacity>
+                             </View>
+
+                             <View style={styles.row}>
+                                <View style={[styles.col, {marginRight: 8}]}>
+                                    <Text style={styles.label}>Tối thiểu</Text>
+                                    <TextInput style={styles.input} 
+                                        value={formData.min_stock} 
+                                        onChangeText={t => setFormData({...formData, min_stock: t.replace(/[^0-9]/g, "")})}
+                                        keyboardType="numeric"
+                                        placeholder="Min"
+                                    />
+                                </View>
+                                <View style={[styles.col, {marginLeft: 8}]}>
+                                    <Text style={styles.label}>Tối đa</Text>
+                                    <TextInput style={styles.input} 
+                                        value={formData.max_stock} 
+                                        onChangeText={t => setFormData({...formData, max_stock: t.replace(/[^0-9]/g, "")})}
+                                        keyboardType="numeric"
+                                        placeholder="Max"
+                                    />
+                                </View>
+                             </View>
+
+                             <View style={styles.videoFormGroup}>
+                                <Text style={styles.label}>Trạng thái</Text>
+                                <TouchableOpacity style={styles.selectInput} onPress={() => setShowStatusDropdown(true)}>
+                                    <Text style={{color: "#333"}}>{formData.status}</Text>
+                                    <Ionicons name="chevron-down" size={20} color="#666" />
+                                </TouchableOpacity>
+                             </View>
+
+                             <Text style={[styles.sectionHeader, {marginTop: 16, fontSize: 14}]}>Thông tin pháp lý</Text>
+                             
+                             <View style={styles.row}>
+                                <View style={[styles.col, {marginRight: 8}]}>
+                                    <Text style={styles.label}>Thuế GTGT</Text>
+                                    <TouchableOpacity style={styles.selectInput} onPress={() => setShowTaxDropdown(true)}>
+                                        <Text style={{color: "#333"}}>{formData.tax_rate === "-1" ? "KCT" : formData.tax_rate + "%"}</Text>
+                                        <Ionicons name="chevron-down" size={20} color="#666" />
+                                    </TouchableOpacity>
+                                </View>
+                                <View style={[styles.col, {marginLeft: 8}]}>
+                                    <Text style={styles.label}>Xuất xứ</Text>
+                                    <TextInput style={styles.input} 
+                                        value={formData.origin} 
+                                        onChangeText={t => setFormData({...formData, origin: t})}
+                                        placeholder="Việt Nam..."
+                                    />
+                                </View>
+                             </View>
+
+                              <View style={styles.videoFormGroup}>
+                                <Text style={styles.label}>Thương hiệu</Text>
+                                <TextInput style={styles.input} 
+                                     value={formData.brand} 
+                                     onChangeText={t => setFormData({...formData, brand: t})}
+                                     placeholder="Sony, Samsung..."
+                                />
+                             </View>
+                             
+                             <View style={styles.videoFormGroup}>
+                                <Text style={styles.label}>Mô tả</Text>
+                                <TextInput style={[styles.input, {height: 80, textAlignVertical: 'top'}]} 
+                                     value={formData.description} 
+                                     onChangeText={t => setFormData({...formData, description: t})}
+                                     multiline
+                                     numberOfLines={4}
+                                     placeholder="Mô tả chi tiết..."
+                                />
+                             </View>
+                        </View>
+                    )}
+                </View>
             </ScrollView>
+            </KeyboardAvoidingView>
 
-            {/* Action Buttons */}
-            <View style={styles.actions}>
-              <TouchableOpacity
-                style={[styles.button, styles.cancelButton]}
-                onPress={handleClose}
-                disabled={loading}
-              >
-                <Text style={[styles.buttonText, styles.cancelButtonText]}>
-                  Hủy bỏ
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.button,
-                  styles.saveButton,
-                  loading && styles.saveButtonDisabled,
-                ]}
-                onPress={handleSave}
-                disabled={loading || (!product && !formData.supplier_id)}
-              >
-                {loading ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <>
-                    <Ionicons
-                      name={product ? "refresh" : "add-circle"}
-                      size={20}
-                      color="#fff"
-                      style={styles.buttonIcon}
-                    />
-                    <Text style={styles.buttonText}>
-                      {product ? "Lưu thay đổi" : "Tạo sản phẩm"}
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
+            {/* Footer Actions */}
+            <View style={styles.footer}>
+                <TouchableOpacity style={styles.btnCancel} onPress={onClose} disabled={loading}>
+                    <Text style={styles.btnCancelText}>Hủy</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.btnSave} onPress={handleSave} disabled={loading}>
+                    {loading ? <ActivityIndicator color="#fff"/> : <Text style={styles.btnSaveText}>{product ? "Lưu Thay Đổi" : "Tạo Sản Phẩm"}</Text>}
+                </TouchableOpacity>
             </View>
-          </View>
+
+            {/* Dropdowns */}
+            {renderDropdown("Chọn Kho Hàng", warehouses, formData.default_warehouse_id, (id) => setFormData({...formData, default_warehouse_id: id}), showWarehouseDropdown, setShowWarehouseDropdown)}
+            {renderDropdown("Chọn Nhà Cung Cấp", suppliers, formData.supplier_id, (id) => setFormData({...formData, supplier_id: id}), showSupplierDropdown, setShowSupplierDropdown)}
+            {renderDropdown("Chọn Nhóm Sản Phẩm", groups, formData.group_id, (id) => setFormData({...formData, group_id: id}), showGroupDropdown, setShowGroupDropdown)}
+            {renderDropdown("Chọn Trạng Thái", 
+                 [{_id: "Đang kinh doanh", name: "Đang kinh doanh"}, {_id: "Ngừng kinh doanh", name: "Ngừng kinh doanh"}, {_id: "Ngừng bán", name: "Ngừng bán"}], 
+                 formData.status, (id) => setFormData({...formData, status: id as any}), showStatusDropdown, setShowStatusDropdown)}
+            {renderDropdown("Chọn Thuế GTGT", 
+                 [{_id: "-1", name: "KCT"}, {_id: "0", name: "0%"}, {_id: "5", name: "5%"}, {_id: "8", name: "8%"}, {_id: "10", name: "10%"}], 
+                 formData.tax_rate, (id) => setFormData({...formData, tax_rate: id}), showTaxDropdown, setShowTaxDropdown)}
         </View>
-      </KeyboardAvoidingView>
-
-      {/* Dropdown Modals */}
-      {renderDropdownModal(
-        showSupplierDropdown,
-        () => setShowSupplierDropdown(false),
-        "Chọn nhà cung cấp",
-        suppliers,
-        formData.supplier_id,
-        (supplierId) => handleChange("supplier_id", supplierId),
-        "Chưa có nhà cung cấp nào"
-      )}
-
-      {renderDropdownModal(
-        showGroupDropdown,
-        () => setShowGroupDropdown(false),
-        "Chọn nhóm sản phẩm",
-        groups,
-        formData.group_id,
-        (groupId) => handleChange("group_id", groupId),
-        "Chưa có nhóm sản phẩm nào"
-      )}
-
-      {renderDropdownModal(
-        showTaxDropdown,
-        () => setShowTaxDropdown(false),
-        "Chọn mức thuế GTGT",
-        [
-          { _id: "-1", name: "KCT (Không chịu thuế)" },
-          { _id: "0", name: "0% (Không kê khai)" },
-          { _id: "5", name: "5%" },
-          { _id: "8", name: "8%" },
-          { _id: "10", name: "10%" },
-        ],
-        formData.tax_rate,
-        (taxRate) => handleChange("tax_rate", taxRate),
-        "Không có mức thuế nào"
-      )}
-
-      {renderDropdownModal(
-        showStatusDropdown,
-        () => setShowStatusDropdown(false),
-        "Chọn trạng thái",
-        [
-          { _id: "Đang kinh doanh", name: "Đang kinh doanh" },
-          { _id: "Ngừng kinh doanh", name: "Ngừng kinh doanh" },
-          { _id: "Ngừng bán", name: "Ngừng bán" },
-        ],
-        formData.status,
-        (status) => handleChange("status", status),
-        "Không có trạng thái nào"
-      )}
     </Modal>
   );
 };
 
-export default ProductFormModal;
-
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  modalContainer: {
-    width: "100%",
-    maxWidth: 500,
-    backgroundColor: "#fff",
-    borderRadius: 20,
-    maxHeight: "90%",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#16a34a",
-    flex: 1,
-  },
-  closeButton: {
-    padding: 4,
-  },
-  formContainer: {
-    padding: 20,
-    maxHeight: 500,
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 16,
-    paddingBottom: 8,
-    borderBottomWidth: 2,
-    borderBottomColor: "#16a34a",
-  },
-  optionalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e5e5",
-  },
-  optionalTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#16a34a",
-    marginLeft: 8,
-  },
-  optionalContent: {
-    marginTop: 16,
-    gap: 16,
-  },
-  inputGroup: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 8,
-  },
-  required: {
-    color: "#dc2626",
-  },
-  input: {
-    borderWidth: 2,
-    borderColor: "#e5e5e5",
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: "#333",
-    backgroundColor: "#fafafa",
-  },
-  textArea: {
-    minHeight: 80,
-    textAlignVertical: "top",
-  },
-  row: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  halfInput: {
-    flex: 1,
-  },
-  dropdown: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    borderWidth: 2,
-    borderColor: "#e5e5e5",
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: "#fafafa",
-  },
-  dropdownText: {
-    fontSize: 16,
-    color: "#333",
-  },
-  dropdownPlaceholder: {
-    color: "#999",
-  },
-  hintText: {
-    fontSize: 12,
-    color: "#666",
-    marginTop: 4,
-    fontStyle: "italic",
-  },
-  scrollHint: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    gap: 8,
-  },
-  scrollHintText: {
-    fontSize: 14,
-    color: "#666",
-  },
-  actions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: "#f0f0f0",
-    gap: 12,
-  },
-  button: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-    minWidth: 120,
-  },
-  cancelButton: {
-    backgroundColor: "transparent",
-    borderWidth: 2,
-    borderColor: "#666",
-  },
-  cancelButtonText: {
-    color: "#666",
-    fontWeight: "600",
-  },
-  saveButton: {
-    backgroundColor: "#16a34a",
-    shadowColor: "#16a34a",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  saveButtonDisabled: {
-    backgroundColor: "#86efac",
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  buttonText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#fff",
-  },
-  buttonIcon: {
-    marginRight: 8,
-  },
-  // Dropdown Modal Styles
-  dropdownBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  dropdownContainer: {
-    width: "100%",
-    maxWidth: 400,
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    maxHeight: "60%",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  dropdownHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
-  },
-  dropdownTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#333",
-  },
-  dropdownList: {
-    maxHeight: 300,
-  },
-  dropdownItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
-  },
-  dropdownItemSelected: {
-    backgroundColor: "#f0f9f0",
-  },
-  dropdownItemText: {
-    fontSize: 16,
-    color: "#333",
-    flex: 1,
-  },
-  dropdownItemTextSelected: {
-    color: "#16a34a",
-    fontWeight: "600",
-  },
-  emptyMessage: {
-    padding: 20,
-    textAlign: "center",
-    color: "#666",
-    fontSize: 16,
-  },
-  // Style cho input bị disabled
-  inputDisabled: {
-    backgroundColor: "#f5f5f5",
-    color: "#999",
-  },
+  container: { flex: 1, backgroundColor: "#f5f5f5" },
+  header: { padding: 16, paddingTop: 40 },
+  headerTitle: { fontSize: 18, fontWeight: "bold", color: "#fff" },
+  closeBtn: { padding: 4 },
+  contentParams: { padding: 16, paddingBottom: 100 },
+  
+  imageSection: { alignItems: "center", marginBottom: 20 },
+  imagePicker: { width: 120, height: 120, borderRadius: 16, backgroundColor: "#e2e8f0", justifyContent: "center", alignItems: "center", overflow: "hidden", borderWidth: 1, borderColor: "#cbd5e1" },
+  previewImage: { width: "100%", height: "100%" },
+  placeholderImage: { alignItems: "center" },
+  cameraIcon: { position: "absolute", bottom: 0, right: 0, backgroundColor: "#16a34a", padding: 6, borderTopLeftRadius: 10 },
+
+  card: { backgroundColor: "#fff", borderRadius: 12, padding: 16, marginBottom: 16, shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 5, elevation: 2 },
+  sectionHeader: { fontSize: 16, fontWeight: "700", color: "#334155", marginBottom: 12, textTransform: "uppercase" },
+  expandHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  
+  videoFormGroup: { marginBottom: 12 },
+  label: { fontSize: 13, fontWeight: "600", color: "#64748b", marginBottom: 6 },
+  req: { color: "#ef4444" },
+  input: { backgroundColor: "#f8fafc", borderWidth: 1, borderColor: "#e2e8f0", borderRadius: 8, padding: 12, color: "#0f172a", fontSize: 15 },
+  disabledInput: { backgroundColor: "#f1f5f9", color: "#94a3b8" },
+  selectInput: { backgroundColor: "#f8fafc", borderWidth: 1, borderColor: "#e2e8f0", borderRadius: 8, padding: 12, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  
+  row: { flexDirection: "row", marginBottom: 12 },
+  col: { flex: 1 },
+
+  footer: { position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: "#fff", padding: 16, borderTopWidth: 1, borderTopColor: "#e2e8f0", flexDirection: "row", gap: 12 },
+  btnCancel: { flex: 1, padding: 14, borderRadius: 10, backgroundColor: "#f1f5f9", alignItems: "center" },
+  btnCancelText: { fontWeight: "600", color: "#64748b" },
+  btnSave: { flex: 2, padding: 14, borderRadius: 10, backgroundColor: "#16a34a", alignItems: "center" },
+  btnSaveText: { fontWeight: "700", color: "#fff" },
+
+  // Dropdown Modal
+  modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
+  dropdownContainer: { backgroundColor: "#fff", borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 16, maxHeight: "60%" },
+  dropdownHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16, borderBottomWidth: 1, borderBottomColor: "#eee", paddingBottom: 12 },
+  dropdownTitle: { fontSize: 16, fontWeight: "bold" },
+  dropdownItem: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#f1f5f9" },
+  dropdownItemSelected: { backgroundColor: "#f0fdf4" },
+  dropdownItemText: { fontSize: 15, color: "#334155" }
 });
+
+export default ProductFormModal;

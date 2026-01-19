@@ -18,7 +18,7 @@ async function exportToGoogleSheets() {
       encoding: "utf-8",
       stdio: "inherit",
     });
-    console.log("\n✅ Tests completed!");
+    console.log("\n Tests completed!");
   } catch (error) {
     console.log("\n⚠️ Some tests failed, continuing export...");
   }
@@ -30,7 +30,7 @@ async function exportToGoogleSheets() {
   const sheets = await initGoogleSheets();
   await updateAllSheets(sheets, enrichedResults);
 
-  console.log("\n✅ All sheets updated successfully!");
+  console.log("\n All sheets updated successfully!");
   console.log(
     "📊 View: https://docs.google.com/spreadsheets/d/" +
       process.env.GOOGLE_SHEET_ID
@@ -59,7 +59,7 @@ async function initGoogleSheets() {
   const authClient = await auth.getClient();
   const sheets = google.sheets({ version: "v4", auth: authClient });
 
-  console.log("✅ Connected to Google Sheets API");
+  console.log(" Connected to Google Sheets API");
   return sheets;
 }
 
@@ -169,7 +169,7 @@ async function updateAllSheets(sheets, testResults) {
   for (const [funcName, tests] of Object.entries(testResults)) {
     try {
       await updateSheet(sheets, spreadsheetId, funcName, tests);
-      console.log("✅ Updated: " + funcName + " (" + tests.length + " tests)");
+      console.log(" Updated: " + funcName + " (" + tests.length + " tests)");
       updated++;
       await sleep(300);
     } catch (error) {
@@ -179,7 +179,7 @@ async function updateAllSheets(sheets, testResults) {
   }
 
   console.log("\n📊 Summary:");
-  console.log("  ✅ Updated: " + updated + " sheets");
+  console.log("   Updated: " + updated + " sheets");
   console.log("   Failed: " + failed + " sheets");
 }
 

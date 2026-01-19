@@ -26,7 +26,10 @@ const getPreviousPeriodKey = (periodType, periodKey) => {
   if (periodType === "month") {
     const [year, month] = periodKey.split("-").map(Number);
     const date = new Date(year, month - 2, 1); // Trừ 1 tháng
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
+      2,
+      "0"
+    )}`;
   }
   if (periodType === "quarter") {
     const [yearStr, qStr] = periodKey.split("-Q");
@@ -69,18 +72,25 @@ function getMonthsInPeriod(periodType) {
   }
 }
 
-const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpense = 0 }) => {
+const calcFinancialSummary = async ({
+  storeId,
+  periodType,
+  periodKey,
+  extraExpense = 0,
+}) => {
   const { start, end } = periodToRange(periodType, periodKey);
   const objectStoreId = new mongoose.Types.ObjectId(storeId);
 
   // ================================================================
   // 1️⃣ DOANH THU: CHỈ TÍNH ĐƠN PAID & PARTIALLY_REFUNDED
   // ================================================================
+  // KHÔNG bao gồm đơn "refunded" vào grossRevenue vì đơn đó đã hoàn toàn bộ tiền
+  //  Chỉ tính đơn "paid" và "partially_refunded" vào doanh thu
   const revenueAgg = await Order.aggregate([
     {
       $match: {
         storeId: objectStoreId,
-        status: { $in: ["paid", "partially_refunded", "refunded"] }, // ✅ Bao gồm cả refunded để lấy gross ban đầu
+        status: { $in: ["paid", "partially_refunded", "refunded"] }, //  Bao gồm cả refunded để bù trừ
         createdAt: { $gte: start, $lte: end },
       },
     },
@@ -89,6 +99,7 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
         _id: null,
         grossRevenue: { $sum: { $toDecimal: "$totalAmount" } },
         totalOrders: { $sum: 1 },
+        totalUsedPoints: { $sum: "$usedPoints" }, //  Tính tổng điểm đã dùng
         paidOrders: {
           $sum: { $cond: [{ $eq: ["$status", "paid"] }, 1, 0] },
         },
@@ -102,9 +113,18 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
   const revenueData = revenueAgg[0] || {
     grossRevenue: 0,
     totalOrders: 0,
+    totalUsedPoints: 0,
     paidOrders: 0,
     partiallyRefundedOrders: 0,
   };
+
+  // Lấy cấu hình tích điểm để tính tiền giảm giá
+  const loyaltySetting = await mongoose
+    .model("LoyaltySetting")
+    .findOne({ storeId: objectStoreId });
+  const vndPerPoint = loyaltySetting?.vndPerPoint || 0;
+  const totalPointDiscount =
+    toNumber(revenueData.totalUsedPoints) * vndPerPoint;
 
   const fullyRefundedCount = await Order.countDocuments({
     storeId: objectStoreId,
@@ -135,6 +155,7 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
       $group: {
         _id: null,
         totalRefundAmount: { $sum: { $toDecimal: "$refundAmount" } },
+        totalRefundVAT: { $sum: { $toDecimal: "$refundVATAmount" } }, //  Thuế VAT của hàng hoàn
         totalRefundCount: { $sum: 1 },
       },
     },
@@ -142,41 +163,39 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
 
   const refundData = refundAgg[0] || {
     totalRefundAmount: 0,
+    totalRefundVAT: 0,
     totalRefundCount: 0,
   };
 
-  // ✅ DOANH THU THỰC = Tổng đã thanh toán (phát sinh trong kỳ) - Hoàn trả (phát sinh trong kỳ)
+  //  DOANH THU THỰC = Tổng đã thanh toán - Hoàn trả
+  // totalAmount đã trừ chiết khấu tích điểm tại POS nên KHÔNG trừ lại totalPointDiscount ở đây
   let grossRevenue = toNumber(revenueData.grossRevenue);
   let totalRefundAmount = toNumber(refundData.totalRefundAmount);
-  let totalRevenue = grossRevenue - totalRefundAmount;
+  let totalRevenue = Math.max(0, grossRevenue - totalRefundAmount);
 
   // ================================================================
-  // 3️⃣ VAT (Không tính đơn refunded)
+  // 3️⃣ VAT (Chỉ tính đơn paid và partially_refunded)
   // ================================================================
   const vat = await Order.aggregate([
     {
       $match: {
         storeId: objectStoreId,
-        status: { $in: ["paid", "partially_refunded", "refunded"] },
+        status: { $in: ["paid", "partially_refunded", "refunded"] }, //  Bao gồm cả refunded
         createdAt: { $gte: start, $lte: end },
       },
     },
-    { $group: { _id: null, totalVAT: { $sum: "$vatAmount" } } },
+    { $group: { _id: null, totalVAT: { $sum: { $toDecimal: "$vatAmount" } } } },
   ]);
-  let totalVAT = toNumber(vat[0]?.totalVAT);
+
+  // VAT thực tế = VAT từ đơn hàng - VAT từ đơn hoàn trả
+  let orderVAT = toNumber(vat[0]?.totalVAT);
+  let totalRefundVAT = toNumber(refundData.totalRefundVAT);
+  let totalVAT = Math.max(0, orderVAT - totalRefundVAT);
 
   // ================================================================
   // 4️⃣ COGS (Chi phí hàng bán) - CHỈ TỪ ĐƠN PAID & PARTIALLY_REFUNDED
   // ================================================================
-  // Lấy danh sách orderId của đơn paid & partially_refunded
-  const validOrders = await Order.find({
-    storeId: objectStoreId,
-    status: { $in: ["paid", "partially_refunded", "refunded"] },
-    createdAt: { $gte: start, $lte: end },
-  }).select("_id");
-
-  const validOrderIds = validOrders.map((o) => o._id);
-
+  //  Bao gồm cả đơn refunded vì COGS sẽ được trừ đi bởi phiếu nhập hoàn (ORDER_REFUND)
   const cogsAgg = await InventoryVoucher.aggregate([
     {
       $match: {
@@ -184,8 +203,7 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
         type: "OUT",
         status: "POSTED",
         ref_type: "ORDER",
-        ref_id: { $in: validOrderIds }, // ✅ CHỈ lấy COGS của đơn hợp lệ
-        voucher_date: { $gte: start, $lte: end },
+        voucher_date: { $gte: start, $lte: end }, //  Theo ngày xuất kho thực tế
       },
     },
     { $unwind: "$items" },
@@ -194,22 +212,16 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
         _id: null,
         totalCOGS: {
           $sum: {
-            $multiply: ["$items.qty_actual", { $toDecimal: "$items.unit_cost" }],
+            $multiply: [
+              "$items.qty_actual",
+              { $toDecimal: "$items.unit_cost" },
+            ],
           },
         },
       },
     },
   ]);
   let totalCOGS = toNumber(cogsAgg[0]?.totalCOGS);
-
-  // ✅ TRỪ ĐI COGS CỦA HÀNG HOÀN (Chỉ từ đơn partially_refunded)
-  const refundedOrders = await Order.find({
-    storeId: objectStoreId,
-    status: { $in: ["partially_refunded", "refunded"] },
-    createdAt: { $gte: start, $lte: end },
-  }).select("_id");
-
-  const refundedOrderIds = refundedOrders.map((o) => o._id);
 
   const refundCogsAgg = await InventoryVoucher.aggregate([
     {
@@ -218,7 +230,7 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
         type: "IN",
         status: "POSTED",
         ref_type: "ORDER_REFUND",
-        voucher_date: { $gte: start, $lte: end },
+        voucher_date: { $gte: start, $lte: end }, //  Theo ngày nhập hoàn thực tế
       },
     },
     { $unwind: "$items" },
@@ -227,7 +239,10 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
         _id: null,
         totalRefundCOGS: {
           $sum: {
-            $multiply: ["$items.qty_actual", { $toDecimal: "$items.unit_cost" }],
+            $multiply: [
+              "$items.qty_actual",
+              { $toDecimal: "$items.unit_cost" },
+            ],
           },
         },
       },
@@ -235,7 +250,7 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
   ]);
   let totalRefundCOGS = toNumber(refundCogsAgg[0]?.totalRefundCOGS);
 
-  // COGS thực = COGS bán - COGS hoàn (không âm)
+  // COGS thực = COGS bán - COGS hoàn
   totalCOGS = Math.max(0, totalCOGS - totalRefundCOGS);
 
   // ================================================================
@@ -257,9 +272,14 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
     .select("salary commission_rate user_id");
 
   // Chỉ tính chi phí cho MANAGER và STAFF (không tính owner/admin)
-  const filteredEmployees = employees.filter((e) => ["MANAGER", "STAFF"].includes(e.user_id?.role));
+  const filteredEmployees = employees.filter((e) =>
+    ["MANAGER", "STAFF"].includes(e.user_id?.role)
+  );
 
-  const totalSalary = filteredEmployees.reduce((sum, e) => sum + toNumber(e.salary) * months, 0);
+  const totalSalary = filteredEmployees.reduce(
+    (sum, e) => sum + toNumber(e.salary) * months,
+    0
+  );
 
   const empRevenue = await calcRevenueByPeriod({
     storeId,
@@ -270,8 +290,12 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
 
   const totalCommission = empRevenue.reduce((sum, r) => {
     if (!r._id) return sum;
-    const emp = filteredEmployees.find((e) => e._id && e._id.toString() === r._id.toString());
-    return sum + toNumber(r.totalRevenue) * (toNumber(emp?.commission_rate) / 100);
+    const emp = filteredEmployees.find(
+      (e) => e._id && e._id.toString() === r._id.toString()
+    );
+    return (
+      sum + toNumber(r.totalRevenue) * (toNumber(emp?.commission_rate) / 100)
+    );
   }, 0);
 
   // Fetch manual extra expenses from DB (Aggregate from sub-periods)
@@ -282,8 +306,23 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
   } else if (periodType === "quarter") {
     const [year, qStr] = periodKey.split("-Q");
     const q = parseInt(qStr, 10);
-    const months = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"];
-    const quarterMonths = months.slice((q - 1) * 3, q * 3).map((m) => `${year}-${m}`);
+    const months = [
+      "01",
+      "02",
+      "03",
+      "04",
+      "05",
+      "06",
+      "07",
+      "08",
+      "09",
+      "10",
+      "11",
+      "12",
+    ];
+    const quarterMonths = months
+      .slice((q - 1) * 3, q * 3)
+      .map((m) => `${year}-${m}`);
     opExpFilter.$or = [
       { periodType: "quarter", periodKey: periodKey },
       { periodType: "month", periodKey: { $in: quarterMonths } },
@@ -291,7 +330,10 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
   } else if (periodType === "year") {
     const year = periodKey;
     const quarters = ["Q1", "Q2", "Q3", "Q4"].map((q) => `${year}-${q}`);
-    const months = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, "0")}`);
+    const months = Array.from(
+      { length: 12 },
+      (_, i) => `${year}-${String(i + 1).padStart(2, "0")}`
+    );
     opExpFilter.$or = [
       { periodType: "year", periodKey: periodKey },
       { periodType: "quarter", periodKey: { $in: quarters } },
@@ -301,15 +343,19 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
 
   const opExpDocs = await OperatingExpense.find(opExpFilter);
   const totalExtraExpense = opExpDocs.reduce((sum, doc) => {
-    return sum + (doc.items || []).reduce((s, it) => s + (Number(it.amount) || 0), 0);
+    return (
+      sum + (doc.items || []).reduce((s, it) => s + (Number(it.amount) || 0), 0)
+    );
   }, 0);
 
   // Tổng chi phí vận hành = Chi phí ngoài (điện, nước...) + Lương + Hoa hồng
   let operatingCost = totalExtraExpense + totalSalary + totalCommission;
 
   // ================================================================
-  // 7️⃣ HAO HỤT KHO
+  // 7️⃣ HAO HỤT KHO (Chỉ tính phiếu xuất không phải bán hàng)
   // ================================================================
+  //  Hao hụt kho = Tổng giá trị hàng xuất kho KHÔNG phải do bán hàng
+  // Bao gồm: Kiểm kê (ADJUSTMENT), Tiêu hủy (DISPOSAL), Hết hạn (EXPIRED), Hư hỏng (DAMAGED), Chuyển kho (TRANSFER)
   const inventoryLossAgg = await InventoryVoucher.aggregate([
     {
       $match: {
@@ -317,6 +363,8 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
         type: "OUT",
         status: "POSTED",
         voucher_date: { $gte: start, $lte: end },
+        //  Chỉ tính các loại không phải bán hàng
+        ref_type: { $nin: ["ORDER", "ORDER_REFUND"] },
       },
     },
     { $unwind: "$items" },
@@ -325,7 +373,10 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
         _id: null,
         totalOutValue: {
           $sum: {
-            $multiply: ["$items.qty_actual", { $toDecimal: "$items.unit_cost" }],
+            $multiply: [
+              "$items.qty_actual",
+              { $toDecimal: "$items.unit_cost" },
+            ],
           },
         },
       },
@@ -333,8 +384,7 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
   ]);
 
   let totalOutValue = toNumber(inventoryLossAgg[0]?.totalOutValue);
-  let inventoryLoss = totalOutValue - (totalCOGS + totalRefundCOGS);
-  if (inventoryLoss < 0) inventoryLoss = 0; // Tránh trường hợp âm do sai số
+  let inventoryLoss = totalOutValue; //  Hao hụt = Tổng giá trị xuất kho không phải bán hàng
 
   // ================================================================
   // 8️⃣ LỢI NHUẬN GỘP & LỢI NHUẬN RÒNG (Chuẩn nghiệp vụ)
@@ -408,7 +458,12 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
               $expr: {
                 $and: [
                   { $eq: ["$order.storeId", objectStoreId] },
-                  { $in: ["$order.status", ["paid", "partially_refunded", "refunded"]] }, // ✅ Bao gồm cả refunded
+                  {
+                    $in: [
+                      "$order.status",
+                      ["paid", "partially_refunded", "refunded"],
+                    ],
+                  }, //  Bao gồm cả refunded để bù trừ hoàn trả
                   { $gte: ["$order.printDate", start] },
                   { $lte: ["$order.printDate", end] },
                 ],
@@ -435,7 +490,10 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
               cost_price: { $toDecimal: "$$p.cost_price" },
               stock_quantity: "$$p.stock_quantity",
               stockValueCost: {
-                $multiply: ["$$p.stock_quantity", { $toDecimal: "$$p.cost_price" }],
+                $multiply: [
+                  "$$p.stock_quantity",
+                  { $toDecimal: "$$p.cost_price" },
+                ],
               },
             },
           },
@@ -446,7 +504,10 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
               input: "$products",
               as: "p",
               in: {
-                $multiply: ["$$p.stock_quantity", { $toDecimal: "$$p.cost_price" }],
+                $multiply: [
+                  "$$p.stock_quantity",
+                  { $toDecimal: "$$p.cost_price" },
+                ],
               },
             },
           },
@@ -464,14 +525,51 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
         },
         stockQuantity: { $sum: "$products.stock_quantity" },
         quantitySold: {
-          $sum: "$sales.quantity",
+          $sum: {
+            $map: {
+              input: "$sales",
+              as: "s",
+              in: {
+                $subtract: [
+                  "$$s.quantity",
+                  { $ifNull: ["$$s.refundedQuantity", 0] },
+                ],
+              },
+            },
+          },
         },
         revenue: {
           $sum: {
             $map: {
               input: "$sales",
               as: "s",
-              in: { $toDecimal: "$$s.subtotal" },
+              in: {
+                $multiply: [
+                  {
+                    $subtract: [
+                      "$$s.quantity",
+                      { $ifNull: ["$$s.refundedQuantity", 0] },
+                    ],
+                  }, //  Thực bán
+                  {
+                    $add: [
+                      { $toDecimal: "$$s.priceAtTime" },
+                      {
+                        $divide: [
+                          { $toDecimal: { $ifNull: ["$$s.vat_amount", 0] } },
+                          {
+                            $cond: [
+                              { $gt: ["$$s.quantity", 0] },
+                              "$$s.quantity",
+                              1,
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
             },
           },
         },
@@ -481,7 +579,11 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
       $addFields: {
         potentialProfit: { $subtract: ["$stockValueSale", "$stockValueCost"] },
         stockToRevenueRatio: {
-          $cond: [{ $gt: ["$revenue", 0] }, { $divide: ["$stockValueSale", "$revenue"] }, 999],
+          $cond: [
+            { $gt: ["$revenue", 0] },
+            { $divide: ["$stockValueSale", "$revenue"] },
+            999,
+          ],
         },
       },
     },
@@ -511,22 +613,23 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
   }));
 
   // ================================================================
-  // ✅ RETURN DATA
+  //  RETURN DATA
   // ================================================================
   return {
-    // ✅ Doanh thu (KHÔNG tính đơn refunded)
-    totalRevenue, // Doanh thu thực
+    //  Doanh thu (KHÔNG tính đơn refunded)
+    totalRevenue, // Doanh thu thực (đã trừ hoàn & points discount)
     grossRevenue, // Tổng đã thanh toán (không bao gồm đơn refunded)
     totalRefundAmount, // Tiền hoàn từ đơn partially_refunded
+    totalPointDiscount, //  Giảm giá từ tích điểm
 
-    // ✅ Thống kê đơn hàng
+    //  Thống kê đơn hàng
     totalOrders: toNumber(revenueData.totalOrders), // Chỉ paid + partially_refunded
     paidOrders: toNumber(revenueData.paidOrders),
     partiallyRefundedOrders: toNumber(revenueData.partiallyRefundedOrders),
-    fullyRefundedOrders: fullyRefundedCount, // ✅ Đơn hoàn toàn bộ (không tính vào doanh thu)
+    fullyRefundedOrders: fullyRefundedCount, //  Đơn hoàn toàn bộ (không tính vào doanh thu)
     totalRefundCount: toNumber(refundData.totalRefundCount),
 
-    // ✅ Chi phí & Lợi nhuận
+    //  Chi phí & Lợi nhuận
     totalVAT, // VAT thu hộ (10% nếu có)
     netSales,
     totalCOGS,
@@ -535,13 +638,13 @@ const calcFinancialSummary = async ({ storeId, periodType, periodKey, extraExpen
     operatingCost,
     netProfit,
 
-    // ✅ Tồn kho & Hao hụt
+    //  Tồn kho & Hao hụt
     stockValue,
     stockValueAtSalePrice,
     inventoryLoss,
     totalOutValue,
 
-    // ✅ Thống kê nhóm
+    //  Thống kê nhóm
     groupStats: formattedGroupStats,
 
     //  DEPRECATED
@@ -561,7 +664,11 @@ const getFinancialSummary = async (req, res) => {
 
     if (prevKey) {
       try {
-        const prevData = await calcFinancialSummary({ storeId, periodType, periodKey: prevKey });
+        const prevData = await calcFinancialSummary({
+          storeId,
+          periodType,
+          periodKey: prevKey,
+        });
 
         // Tính % thay đổi cho các chỉ số chính
         const calculateChange = (cur, prev) => {
@@ -571,10 +678,22 @@ const getFinancialSummary = async (req, res) => {
 
         comparison = {
           prevPeriodKey: prevKey,
-          revenueChange: calculateChange(currentData.totalRevenue, prevData.totalRevenue),
-          grossProfitChange: calculateChange(currentData.grossProfit, prevData.grossProfit),
-          netProfitChange: calculateChange(currentData.netProfit, prevData.netProfit),
-          operatingCostChange: calculateChange(currentData.operatingCost, prevData.operatingCost),
+          revenueChange: calculateChange(
+            currentData.totalRevenue,
+            prevData.totalRevenue
+          ),
+          grossProfitChange: calculateChange(
+            currentData.grossProfit,
+            prevData.grossProfit
+          ),
+          netProfitChange: calculateChange(
+            currentData.netProfit,
+            prevData.netProfit
+          ),
+          operatingCostChange: calculateChange(
+            currentData.operatingCost,
+            prevData.operatingCost
+          ),
         };
       } catch (e) {
         console.warn("Lỗi tính so sánh kỳ trước:", e.message);
@@ -601,13 +720,26 @@ const exportFinancial = async (req, res) => {
       { metric: "Tổng doanh thu thực", value: data.totalRevenue, unit: "VND" },
       { metric: "Tổng doanh thu cơ sở", value: data.grossRevenue, unit: "VND" },
       { metric: "Tiền hoàn trả", value: data.totalRefundAmount, unit: "VND" },
+      {
+        metric: "Giảm giá tích điểm",
+        value: data.totalPointDiscount,
+        unit: "VND",
+      }, //  Thêm field mới
       { metric: "Lợi nhuận gộp", value: data.grossProfit, unit: "VND" },
       { metric: "Chi phí vận hành", value: data.operatingCost, unit: "VND" },
       { metric: "Lợi nhuận ròng", value: data.netProfit, unit: "VND" },
       { metric: "Giá trị tồn kho (vốn)", value: data.stockValue, unit: "VND" },
       { metric: "Số đơn hàng", value: data.totalOrders, unit: "Đơn" },
-      { metric: "Đơn hoàn hoàn toàn", value: data.fullyRefundedOrders, unit: "Đơn" },
-      { metric: "Thuế VAT thu hộ", value: data.totalVAT, unit: "VND" },
+      {
+        metric: "Đơn hoàn hoàn toàn",
+        value: data.fullyRefundedOrders,
+        unit: "Đơn",
+      },
+      {
+        metric: "Thuế VAT thu hộ (đã trừ hoàn)",
+        value: data.totalVAT,
+        unit: "VND",
+      },
     ];
 
     if (format === "csv") {
@@ -624,7 +756,9 @@ const exportFinancial = async (req, res) => {
 
       // 1. Thông tin cửa hàng & Tiêu ngữ (Circular compliant header)
       worksheet.mergeCells("A1:C1");
-      worksheet.getCell("A1").value = (req.store?.name || "Cửa hàng phụ tùng").toUpperCase();
+      worksheet.getCell("A1").value = (
+        req.store?.name || "Cửa hàng phụ tùng"
+      ).toUpperCase();
       worksheet.getCell("A1").font = { bold: true, size: 11 };
 
       worksheet.mergeCells("E1:G1");
@@ -656,9 +790,18 @@ const exportFinancial = async (req, res) => {
 
       // 4. Data Table Header
       const headerRow = 10;
-      worksheet.getRow(headerRow).values = ["STT", "Chỉ số tài chính", "Giá trị", "Đơn vị", "Ghi chú"];
+      worksheet.getRow(headerRow).values = [
+        "STT",
+        "Chỉ số tài chính",
+        "Giá trị",
+        "Đơn vị",
+        "Ghi chú",
+      ];
       worksheet.getRow(headerRow).font = { bold: true };
-      worksheet.getRow(headerRow).alignment = { horizontal: "center", vertical: "middle" };
+      worksheet.getRow(headerRow).alignment = {
+        horizontal: "center",
+        vertical: "middle",
+      };
 
       ["A", "B", "C", "D", "E"].forEach((col) => {
         worksheet.getCell(`${col}${headerRow}`).fill = {
@@ -676,7 +819,13 @@ const exportFinancial = async (req, res) => {
 
       // 5. Populate Data
       rows.forEach((row, idx) => {
-        const r = worksheet.addRow([idx + 1, row.metric, row.value, row.unit, ""]);
+        const r = worksheet.addRow([
+          idx + 1,
+          row.metric,
+          row.value,
+          row.unit,
+          "",
+        ]);
         r.getCell(1).alignment = { horizontal: "center" };
         r.getCell(3).numFmt = "#,##0";
         r.getCell(4).alignment = { horizontal: "center" };
@@ -717,8 +866,14 @@ const exportFinancial = async (req, res) => {
       worksheet.getColumn(4).width = 10;
       worksheet.getColumn(5).width = 15;
 
-      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-      res.setHeader("Content-Disposition", `attachment; filename=financial_report_${req.query.periodKey}.xlsx`);
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename=financial_report_${req.query.periodKey}.xlsx`
+      );
 
       await workbook.xlsx.write(res);
       return res.end();
@@ -726,7 +881,10 @@ const exportFinancial = async (req, res) => {
 
     if (format === "pdf") {
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename=financial_report_${req.query.periodKey}.pdf`);
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename=financial_report_${req.query.periodKey}.pdf`
+      );
 
       const doc = new PDFDocument({ margin: 50, size: "A4" });
       doc.pipe(res);
@@ -745,17 +903,30 @@ const exportFinancial = async (req, res) => {
       doc
         .font("Roboto-Bold")
         .fontSize(10)
-        .text((req.store?.name || "Cửa hàng phụ tùng").toUpperCase(), { align: "left" });
+        .text((req.store?.name || "Cửa hàng phụ tùng").toUpperCase(), {
+          align: "left",
+        });
       doc.moveUp();
       doc.text("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", { align: "right" });
-      doc.font("Roboto-Bold").text("Độc lập - Tự do - Hạnh phúc", { align: "right" });
-      doc.fontSize(9).font("Roboto-Italic").text("-----------------", { align: "right" });
+      doc
+        .font("Roboto-Bold")
+        .text("Độc lập - Tự do - Hạnh phúc", { align: "right" });
+      doc
+        .fontSize(9)
+        .font("Roboto-Italic")
+        .text("-----------------", { align: "right" });
 
       doc.moveDown(2);
 
       // 2. Title
-      doc.font("Roboto-Bold").fontSize(18).text("BÁO CÁO TỔNG HỢP TÌNH HÌNH TÀI CHÍNH", { align: "center" });
-      doc.font("Roboto-Italic").fontSize(11).text(`Kỳ báo cáo: ${req.query.periodKey}`, { align: "center" });
+      doc
+        .font("Roboto-Bold")
+        .fontSize(18)
+        .text("BÁO CÁO TỔNG HỢP TÌNH HÌNH TÀI CHÍNH", { align: "center" });
+      doc
+        .font("Roboto-Italic")
+        .fontSize(11)
+        .text(`Kỳ báo cáo: ${req.query.periodKey}`, { align: "center" });
 
       doc.moveDown(2);
 
@@ -764,7 +935,11 @@ const exportFinancial = async (req, res) => {
         .font("Roboto-Regular")
         .fontSize(10)
         .text(`Người xuất báo cáo: ${req.user?.fullname || "Hệ thống"}`);
-      doc.text(`Ngày xuất: ${new Date().toLocaleDateString("vi-VN")} ${new Date().toLocaleTimeString("vi-VN")}`);
+      doc.text(
+        `Ngày xuất: ${new Date().toLocaleDateString(
+          "vi-VN"
+        )} ${new Date().toLocaleTimeString("vi-VN")}`
+      );
 
       doc.moveDown(1);
       doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
@@ -774,7 +949,11 @@ const exportFinancial = async (req, res) => {
       rows.forEach((r, idx) => {
         const y = doc.y;
         doc.font("Roboto-Regular").text(`${idx + 1}. ${r.metric}:`, 50, y);
-        doc.font("Roboto-Bold").text(`${r.value.toLocaleString("vi-VN")} ${r.unit}`, 350, y, { align: "right" });
+        doc
+          .font("Roboto-Bold")
+          .text(`${r.value.toLocaleString("vi-VN")} ${r.unit}`, 350, y, {
+            align: "right",
+          });
         doc.moveDown(0.5);
       });
 
@@ -784,15 +963,28 @@ const exportFinancial = async (req, res) => {
 
       // 5. Signatures
       const startY = doc.y;
-      doc.font("Roboto-Bold").text("Người lập biểu", 50, startY, { width: 150, align: "center" });
-      doc.font("Roboto-Bold").text("Kế toán trưởng", 220, startY, { width: 150, align: "center" });
-      doc.font("Roboto-Bold").text("Chủ hộ kinh doanh", 390, startY, { width: 150, align: "center" });
+      doc
+        .font("Roboto-Bold")
+        .text("Người lập biểu", 50, startY, { width: 150, align: "center" });
+      doc
+        .font("Roboto-Bold")
+        .text("Kế toán trưởng", 220, startY, { width: 150, align: "center" });
+      doc.font("Roboto-Bold").text("Chủ hộ kinh doanh", 390, startY, {
+        width: 150,
+        align: "center",
+      });
 
-      doc.font("Roboto-Italic").fontSize(9).text("(Ký, họ tên)", 50, doc.y, { width: 150, align: "center" });
+      doc
+        .font("Roboto-Italic")
+        .fontSize(9)
+        .text("(Ký, họ tên)", 50, doc.y, { width: 150, align: "center" });
       doc.moveUp();
       doc.text("(Ký, họ tên)", 220, doc.y, { width: 150, align: "center" });
       doc.moveUp();
-      doc.text("(Ký, họ tên, đóng dấu)", 390, doc.y, { width: 150, align: "center" });
+      doc.text("(Ký, họ tên, đóng dấu)", 390, doc.y, {
+        width: 150,
+        align: "center",
+      });
 
       doc.end();
       return;
@@ -810,7 +1002,10 @@ const generateEndOfDayReport = async (req, res) => {
   try {
     const { format } = require("date-fns");
     const { storeId } = req.params;
-    const { periodType = "day", periodKey = new Date().toISOString().split("T")[0] } = req.query; // Default today
+    const {
+      periodType = "day",
+      periodKey = new Date().toISOString().split("T")[0],
+    } = req.query; // Default today
 
     // Lấy khoảng thời gian từ period.js
     const { start, end } = periodToRange(periodType, periodKey);
@@ -820,7 +1015,7 @@ const generateEndOfDayReport = async (req, res) => {
       {
         $match: {
           storeId: new mongoose.Types.ObjectId(storeId),
-          status: { $in: ["paid", "partially_refunded"] },
+          status: { $in: ["paid", "partially_refunded", "refunded"] }, //  Bao gồm cả refunded để bù trừ hoàn trả
           createdAt: { $gte: start, $lte: end },
         },
       },
@@ -846,7 +1041,11 @@ const generateEndOfDayReport = async (req, res) => {
         $addFields: {
           // Giảm giá từ điểm = usedPoints * vndPerPoint (mặc định nếu loyalty null thì 0)
           discountFromPoints: {
-            $cond: [{ $and: ["$usedPoints", "$loyalty.vndPerPoint"] }, { $multiply: ["$usedPoints", "$loyalty.vndPerPoint"] }, 0],
+            $cond: [
+              { $and: ["$usedPoints", "$loyalty.vndPerPoint"] },
+              { $multiply: ["$usedPoints", "$loyalty.vndPerPoint"] },
+              0,
+            ],
           },
         },
       },
@@ -854,14 +1053,18 @@ const generateEndOfDayReport = async (req, res) => {
         $group: {
           _id: null,
           totalOrders: { $sum: 1 },
-          totalRevenue: { $sum: "$totalAmount" },
-          totalVAT: { $sum: "$vatAmount" },
+          totalRevenue: { $sum: { $toDecimal: "$totalAmount" } },
+          totalVAT: { $sum: { $toDecimal: "$vatAmount" } },
           totalDiscount: { $sum: "$discountFromPoints" }, // tổng giảm giá tích điểm
           totalLoyaltyUsed: { $sum: "$usedPoints" }, // tổng điểm đã dùng
           totalLoyaltyEarned: { $sum: "$earnedPoints" }, // tổng điểm cộng thêm
           cashInDrawer: {
             $sum: {
-              $cond: [{ $eq: ["$paymentMethod", "cash"] }, "$totalAmount", 0],
+              $cond: [
+                { $eq: ["$paymentMethod", "cash"] },
+                { $toDecimal: "$totalAmount" },
+                0,
+              ],
             },
           },
         },
@@ -884,7 +1087,7 @@ const generateEndOfDayReport = async (req, res) => {
         $match: {
           storeId: new mongoose.Types.ObjectId(storeId),
           createdAt: { $gte: start, $lte: end },
-          status: { $in: ["paid", "partially_refunded"] },
+          status: { $in: ["paid", "partially_refunded", "refunded"] },
         },
       },
       {
@@ -928,7 +1131,12 @@ const generateEndOfDayReport = async (req, res) => {
             $cond: {
               if: { $eq: ["$_id", null] },
               then: "Chủ cửa hàng (Admin)",
-              else: { $ifNull: [{ $arrayElemAt: ["$employee.fullName", 0] }, "Nhân viên đã xóa"] },
+              else: {
+                $ifNull: [
+                  { $arrayElemAt: ["$employee.fullName", 0] },
+                  "Nhân viên đã xóa",
+                ],
+              },
             },
           },
           revenue: 1,
@@ -952,14 +1160,40 @@ const generateEndOfDayReport = async (req, res) => {
       {
         $match: {
           "order.storeId": new mongoose.Types.ObjectId(storeId),
-          "order.status": { $in: ["paid", "partially_refunded"] },
+          "order.status": { $in: ["paid", "partially_refunded", "refunded"] }, //  Bao gồm cả refunded
         },
       },
       {
         $group: {
           _id: "$productId",
-          quantitySold: { $sum: "$quantity" },
-          revenue: { $sum: "$subtotal" },
+          quantitySold: {
+            $sum: {
+              $subtract: ["$quantity", { $ifNull: ["$refundedQuantity", 0] }],
+            },
+          }, //  Trừ hoàn
+          revenue: {
+            $sum: {
+              $multiply: [
+                {
+                  $subtract: [
+                    "$quantity",
+                    { $ifNull: ["$refundedQuantity", 0] },
+                  ],
+                },
+                {
+                  $add: [
+                    { $toDecimal: "$priceAtTime" },
+                    {
+                      $divide: [
+                        { $toDecimal: { $ifNull: ["$vat_amount", 0] } },
+                        { $cond: [{ $gt: ["$quantity", 0] }, "$quantity", 1] },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          },
         },
       },
       {
@@ -1002,16 +1236,26 @@ const generateEndOfDayReport = async (req, res) => {
           _id: null,
           totalRefunds: { $sum: 1 },
           refundAmount: { $sum: { $toDecimal: "$refundAmount" } },
+          totalRefundVAT: { $sum: { $toDecimal: "$refundVATAmount" } }, //  Thuế VAT hoàn
           // Tính riêng tiền hoàn tiền mặt
           cashRefundAmount: {
             $sum: {
-              $cond: [{ $eq: ["$order.paymentMethod", "cash"] }, { $toDecimal: "$refundAmount" }, 0],
+              $cond: [
+                { $eq: ["$order.paymentMethod", "cash"] },
+                { $toDecimal: "$refundAmount" },
+                0,
+              ],
             },
           },
         },
       },
     ]);
-    const refundSummary = refunds[0] || { totalRefunds: 0, refundAmount: 0, cashRefundAmount: 0 };
+    const refundSummary = refunds[0] || {
+      totalRefunds: 0,
+      refundAmount: 0,
+      totalRefundVAT: 0,
+      cashRefundAmount: 0,
+    };
 
     //phân loại hoàn hàng theo nhân viên, ai tiếp khách để hoàn hàng
     const refundsByEmployee = await OrderRefund.aggregate([
@@ -1036,10 +1280,14 @@ const generateEndOfDayReport = async (req, res) => {
       },
       {
         $project: {
-          _id: 0,
+          _id: 1,
           refundedBy: "$refundedBy",
           name: {
-            $ifNull: [{ $arrayElemAt: ["$employee.fullName", 0] }, "Chủ cửa hàng (Admin)"],
+            $ifNull: [
+              { $arrayElemAt: ["$employee.fullName", 0] },
+              "$refundedByName",
+              "Chủ cửa hàng (Admin)",
+            ],
           },
           refundAmount: 1,
           refundedAt: 1,
@@ -1050,7 +1298,12 @@ const generateEndOfDayReport = async (req, res) => {
 
     // 6. Tồn kho cuối ngày
     const stockSnapshot = await Product.aggregate([
-      { $match: { store_id: new mongoose.Types.ObjectId(storeId), isDeleted: { $ne: true } } },
+      {
+        $match: {
+          store_id: new mongoose.Types.ObjectId(storeId),
+          isDeleted: { $ne: true },
+        },
+      },
       {
         $project: {
           productId: "$_id",
@@ -1063,18 +1316,76 @@ const generateEndOfDayReport = async (req, res) => {
       { $limit: 50 }, // Giới hạn 50 sản phẩm
     ]);
 
-    const storeInfo = await Store.findById(storeId).select("name address phone");
+    const storeInfo = await Store.findById(storeId).select(
+      "name address phone"
+    );
+    const objectStoreId = new mongoose.Types.ObjectId(storeId);
 
-    // ✅ TÍNH TOÁN ĐÚNG: Trừ giá trị hoàn
+    const cogsAgg = await InventoryVoucher.aggregate([
+      {
+        $match: {
+          store_id: objectStoreId,
+          status: "POSTED",
+          voucher_date: { $gte: start, $lte: end },
+          $or: [
+            { type: "OUT", ref_type: "ORDER" },
+            { type: "IN", ref_type: "ORDER_REFUND" },
+          ],
+        },
+      },
+      { $unwind: "$items" },
+      {
+        $group: {
+          _id: null,
+          totalCOGS: {
+            $sum: {
+              $cond: [
+                { $eq: ["$type", "OUT"] },
+                {
+                  $multiply: [
+                    "$items.qty_actual",
+                    { $toDecimal: "$items.unit_cost" },
+                  ],
+                },
+                {
+                  $multiply: [
+                    "$items.qty_actual",
+                    { $toDecimal: "$items.unit_cost" },
+                    -1,
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      },
+    ]);
+
+    const totalCOGS = toNumber(cogsAgg[0]?.totalCOGS) || 0;
+
+    //  TÍNH TOÁN ĐÚNG: Trừ giá trị hoàn
     const grossRevenue = toNumber(orderSummary.totalRevenue);
     const totalRefundAmount = toNumber(refundSummary.refundAmount);
     const cashRefundAmount = toNumber(refundSummary.cashRefundAmount);
     const grossCashInDrawer = toNumber(orderSummary.cashInDrawer);
+    const orderVAT = toNumber(orderSummary.totalVAT);
+    const totalRefundVAT = toNumber(refundSummary.totalRefundVAT);
+    const totalDiscount = toNumber(orderSummary.totalDiscount);
 
     // Doanh thu thực = Doanh thu gộp - Tiền hoàn
+    // totalAmount đã trừ discountLoyalty tại POS
     const netRevenue = Math.max(0, grossRevenue - totalRefundAmount);
-    // Tiền mặt thực = Tiền mặt thu - Tiền mặt hoàn
     const netCashInDrawer = Math.max(0, grossCashInDrawer - cashRefundAmount);
+
+    // ================================================================
+    // DOANH THU THUẦN & LỢI NHUẬN GỘP (Chuẩn nghiệp vụ)
+    // ================================================================
+    // Thuế VAT thực tế = Thuế thu hộ - Thuế hoàn trả
+    const adjustedVAT = Math.max(0, orderVAT - totalRefundVAT);
+    // Doanh thu thuần (Net Sales) = Doanh thu thực - Thuế VAT thực tế
+    const netSales = netRevenue - adjustedVAT;
+    // Lợi nhuận gộp (Gross Profit) = Doanh thu thuần - Giá vốn hàng bán
+    const grossProfit = netSales - totalCOGS;
 
     // Tổng hợp báo cáo
     const report = {
@@ -1090,19 +1401,25 @@ const generateEndOfDayReport = async (req, res) => {
         phone: storeInfo?.phone || "",
       },
       summary: {
-        // ✅ Doanh thu
+        //  Doanh thu
         grossRevenue: grossRevenue, // Tổng doanh thu trước hoàn
         totalRefundAmount: totalRefundAmount, // Tiền hoàn
-        totalRevenue: netRevenue, // Doanh thu thực (đã trừ hoàn)
+        totalRevenue: netRevenue, // Doanh thu thực (đã trừ hoàn & discount)
+        vatTotal: adjustedVAT, // Thuế VAT thực tế
+        netSales: netSales, // Doanh thu thuần = Doanh thu thực - VAT
+        totalDiscount: totalDiscount, // Giảm giá tích điểm
 
-        // ✅ Tiền mặt
+        //  Chi phí & Lợi nhuận
+        totalCOGS: totalCOGS, // Giá vốn hàng bán
+        grossProfit: grossProfit, // Lợi nhuận gộp = Doanh thu thuần - COGS
+
+        //  Tiền mặt
         grossCashInDrawer: grossCashInDrawer, // Tiền mặt trước hoàn
         cashRefundAmount: cashRefundAmount, // Tiền mặt hoàn
         cashInDrawer: netCashInDrawer, // Tiền mặt thực (đã trừ hoàn)
 
-        // ✅ Thống kê khác
+        //  Thống kê khác
         totalOrders: toNumber(orderSummary.totalOrders),
-        vatTotal: toNumber(orderSummary.totalVAT),
         totalRefunds: toNumber(refundSummary.totalRefunds),
         totalDiscount: toNumber(orderSummary.totalDiscount),
         totalLoyaltyUsed: toNumber(orderSummary.totalLoyaltyUsed),
@@ -1142,7 +1459,11 @@ const exportEndOfDayReport = async (req, res) => {
   try {
     const dayjs = require("dayjs");
     const { storeId } = req.params;
-    const { periodType = "day", periodKey = new Date().toISOString().split("T")[0], format: exportFormat = "xlsx" } = req.query;
+    const {
+      periodType = "day",
+      periodKey = new Date().toISOString().split("T")[0],
+      format: exportFormat = "xlsx",
+    } = req.query;
 
     // Lấy khoảng thời gian
     const { start, end } = periodToRange(periodType, periodKey);
@@ -1154,7 +1475,7 @@ const exportEndOfDayReport = async (req, res) => {
       {
         $match: {
           storeId: objectStoreId,
-          status: { $in: ["paid", "partially_refunded"] },
+          status: { $in: ["paid", "partially_refunded", "refunded"] },
           createdAt: { $gte: start, $lte: end },
         },
       },
@@ -1179,7 +1500,11 @@ const exportEndOfDayReport = async (req, res) => {
       {
         $addFields: {
           discountFromPoints: {
-            $cond: [{ $and: ["$usedPoints", "$loyalty.vndPerPoint"] }, { $multiply: ["$usedPoints", "$loyalty.vndPerPoint"] }, 0],
+            $cond: [
+              { $and: ["$usedPoints", "$loyalty.vndPerPoint"] },
+              { $multiply: ["$usedPoints", "$loyalty.vndPerPoint"] },
+              0,
+            ],
           },
         },
       },
@@ -1187,13 +1512,19 @@ const exportEndOfDayReport = async (req, res) => {
         $group: {
           _id: null,
           totalOrders: { $sum: 1 },
-          totalRevenue: { $sum: "$totalAmount" },
-          totalVAT: { $sum: "$vatAmount" },
+          totalRevenue: { $sum: { $toDecimal: "$totalAmount" } },
+          totalVAT: { $sum: { $toDecimal: "$vatAmount" } },
           totalDiscount: { $sum: "$discountFromPoints" },
           totalLoyaltyUsed: { $sum: "$usedPoints" },
           totalLoyaltyEarned: { $sum: "$earnedPoints" },
           cashInDrawer: {
-            $sum: { $cond: [{ $eq: ["$paymentMethod", "cash"] }, "$totalAmount", 0] },
+            $sum: {
+              $cond: [
+                { $eq: ["$paymentMethod", "cash"] },
+                { $toDecimal: "$totalAmount" },
+                0,
+              ],
+            },
           },
         },
       },
@@ -1210,15 +1541,46 @@ const exportEndOfDayReport = async (req, res) => {
 
     // 2. Phân loại theo phương thức thanh toán
     const byPayment = await Order.aggregate([
-      { $match: { storeId: objectStoreId, createdAt: { $gte: start, $lte: end }, status: { $in: ["paid", "partially_refunded"] } } },
-      { $group: { _id: "$paymentMethod", revenue: { $sum: "$totalAmount" }, count: { $sum: 1 } } },
+      {
+        $match: {
+          storeId: objectStoreId,
+          createdAt: { $gte: start, $lte: end },
+          status: { $in: ["paid", "partially_refunded", "refunded"] },
+        },
+      },
+      {
+        $group: {
+          _id: "$paymentMethod",
+          revenue: { $sum: "$totalAmount" },
+          count: { $sum: 1 },
+        },
+      },
     ]);
 
     // 3. Phân loại theo nhân viên
     const byEmployee = await Order.aggregate([
-      { $match: { storeId: objectStoreId, createdAt: { $gte: start, $lte: end }, status: { $in: ["paid", "partially_refunded"] } } },
-      { $group: { _id: "$employeeId", revenue: { $sum: "$totalAmount" }, orders: { $sum: 1 } } },
-      { $lookup: { from: "employees", localField: "_id", foreignField: "_id", as: "employee" } },
+      {
+        $match: {
+          storeId: objectStoreId,
+          createdAt: { $gte: start, $lte: end },
+          status: { $in: ["paid", "partially_refunded", "refunded"] },
+        },
+      },
+      {
+        $group: {
+          _id: "$employeeId",
+          revenue: { $sum: "$totalAmount" },
+          orders: { $sum: 1 },
+        },
+      },
+      {
+        $lookup: {
+          from: "employees",
+          localField: "_id",
+          foreignField: "_id",
+          as: "employee",
+        },
+      },
       {
         $project: {
           _id: "$_id",
@@ -1226,7 +1588,12 @@ const exportEndOfDayReport = async (req, res) => {
             $cond: {
               if: { $eq: ["$_id", null] },
               then: "Chủ cửa hàng (Admin)",
-              else: { $ifNull: [{ $arrayElemAt: ["$employee.fullName", 0] }, "Nhân viên đã xóa"] },
+              else: {
+                $ifNull: [
+                  { $arrayElemAt: ["$employee.fullName", 0] },
+                  "Nhân viên đã xóa",
+                ],
+              },
             },
           },
           revenue: 1,
@@ -1239,7 +1606,14 @@ const exportEndOfDayReport = async (req, res) => {
     // 4. Hoàn trả
     const refunds = await OrderRefund.aggregate([
       { $match: { refundedAt: { $gte: start, $lte: end } } },
-      { $lookup: { from: "orders", localField: "orderId", foreignField: "_id", as: "order" } },
+      {
+        $lookup: {
+          from: "orders",
+          localField: "orderId",
+          foreignField: "_id",
+          as: "order",
+        },
+      },
       { $unwind: "$order" },
       { $match: { "order.storeId": objectStoreId } },
       {
@@ -1247,41 +1621,169 @@ const exportEndOfDayReport = async (req, res) => {
           _id: null,
           totalRefunds: { $sum: 1 },
           refundAmount: { $sum: { $toDecimal: "$refundAmount" } },
-          cashRefundAmount: { $sum: { $cond: [{ $eq: ["$order.paymentMethod", "cash"] }, { $toDecimal: "$refundAmount" }, 0] } },
+          totalRefundVAT: { $sum: { $toDecimal: "$refundVATAmount" } }, //  Thuế VAT hoàn
+          cashRefundAmount: {
+            $sum: {
+              $cond: [
+                { $eq: ["$order.paymentMethod", "cash"] },
+                { $toDecimal: "$refundAmount" },
+                0,
+              ],
+            },
+          },
         },
       },
     ]);
-    const refundSummary = refunds[0] || { totalRefunds: 0, refundAmount: 0, cashRefundAmount: 0 };
+    const refundSummary = refunds[0] || {
+      totalRefunds: 0,
+      refundAmount: 0,
+      totalRefundVAT: 0,
+      cashRefundAmount: 0,
+    };
+
+    const cogsAgg = await InventoryVoucher.aggregate([
+      {
+        $match: {
+          store_id: objectStoreId,
+          status: "POSTED",
+          voucher_date: { $gte: start, $lte: end },
+          $or: [
+            { type: "OUT", ref_type: "ORDER" },
+            { type: "IN", ref_type: "ORDER_REFUND" },
+          ],
+        },
+      },
+      { $unwind: "$items" },
+      {
+        $group: {
+          _id: null,
+          totalCOGS: {
+            $sum: {
+              $cond: [
+                { $eq: ["$type", "OUT"] },
+                {
+                  $multiply: [
+                    "$items.qty_actual",
+                    { $toDecimal: "$items.unit_cost" },
+                  ],
+                },
+                {
+                  $multiply: [
+                    "$items.qty_actual",
+                    { $toDecimal: "$items.unit_cost" },
+                    -1,
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      },
+    ]);
+    const totalCOGS = toNumber(cogsAgg[0]?.totalCOGS) || 0;
 
     // Tính toán
     const grossRevenue = toNumber(orderSummary.totalRevenue);
     const totalRefundAmount = toNumber(refundSummary.refundAmount);
     const cashRefundAmount = toNumber(refundSummary.cashRefundAmount);
     const grossCashInDrawer = toNumber(orderSummary.cashInDrawer);
+    const orderVAT = toNumber(orderSummary.totalVAT);
+    const totalRefundVAT = toNumber(refundSummary.totalRefundVAT);
+    const totalDiscount = toNumber(orderSummary.totalDiscount);
+
+    // Tính toán thực tế (totalAmount đã trừ discountLoyalty tại POS)
     const netRevenue = Math.max(0, grossRevenue - totalRefundAmount);
     const netCashInDrawer = Math.max(0, grossCashInDrawer - cashRefundAmount);
+    const adjustedVAT = Math.max(0, orderVAT - totalRefundVAT);
 
-    const storeInfo = await Store.findById(storeId).select("name address phone");
+    // ================================================================
+    // DOANH THU THUẦN & LỢI NHUẬN GỘP (Chuẩn nghiệp vụ)
+    // ================================================================
+    const netSales = netRevenue - adjustedVAT;
+    const grossProfit = netSales - totalCOGS;
+
+    const storeInfo = await Store.findById(storeId).select(
+      "name address phone"
+    );
     const storeName = storeInfo?.name || "Cửa hàng";
     const storeAddress = storeInfo?.address || "";
     const exporterName = req.user?.fullname || req.user?.email || "Người dùng";
 
-    // Các dòng dữ liệu chính
+    // Các dòng dữ liệu chính - CHUẨN NGHIỆP VỤ TÀI CHÍNH
     const summaryRows = [
-      { metric: "Tổng số đơn hàng", value: orderSummary.totalOrders, unit: "Đơn" },
-      { metric: "Doanh thu gộp (trước hoàn)", value: grossRevenue, unit: "VND" },
+      {
+        metric: "Tổng số đơn hàng",
+        value: orderSummary.totalOrders,
+        unit: "Đơn",
+      },
+      {
+        metric: "Doanh thu gộp (trước hoàn & KM)",
+        value: grossRevenue,
+        unit: "VND",
+      },
       { metric: "Tiền hoàn trả khách", value: totalRefundAmount, unit: "VND" },
-      { metric: "DOANH THU THỰC (Đã trừ hoàn)", value: netRevenue, unit: "VND", highlight: true },
-      { metric: "Thuế VAT thu hộ", value: toNumber(orderSummary.totalVAT), unit: "VND" },
-      { metric: "Tiền mặt thu (trước hoàn)", value: grossCashInDrawer, unit: "VND" },
+      { metric: "Giảm giá tích điểm", value: totalDiscount, unit: "VND" },
+      {
+        metric: "Doanh thu thực (Net Revenue)",
+        value: netRevenue,
+        unit: "VND",
+        highlight: true,
+      },
+      {
+        metric: "Thuế VAT thu hộ (đã trừ hoàn)",
+        value: adjustedVAT,
+        unit: "VND",
+      },
+      {
+        metric: "DOANH THU THUẦN (Net Sales)",
+        value: netSales,
+        unit: "VND",
+        highlight: true,
+      },
+      { metric: "Giá vốn hàng bán (COGS)", value: totalCOGS, unit: "VND" },
+      {
+        metric: "LỢI NHUẬN GỘP (Gross Profit)",
+        value: grossProfit,
+        unit: "VND",
+        highlight: true,
+      },
+      {
+        metric: "Tiền mặt thu (trước hoàn)",
+        value: grossCashInDrawer,
+        unit: "VND",
+      },
       { metric: "Tiền mặt hoàn trả", value: cashRefundAmount, unit: "VND" },
-      { metric: "TIỀN MẶT THỰC (Đã trừ hoàn)", value: netCashInDrawer, unit: "VND", highlight: true },
-      { metric: "Số lần hoàn trả", value: toNumber(refundSummary.totalRefunds), unit: "Lượt" },
-      { metric: "Điểm tích lũy sử dụng", value: toNumber(orderSummary.totalLoyaltyUsed), unit: "Điểm" },
-      { metric: "Điểm tích lũy cộng thêm", value: toNumber(orderSummary.totalLoyaltyEarned), unit: "Điểm" },
+      {
+        metric: "TIỀN MẶT THỰC (Đã trừ hoàn)",
+        value: netCashInDrawer,
+        unit: "VND",
+        highlight: true,
+      },
+      {
+        metric: "Số lần hoàn trả",
+        value: toNumber(refundSummary.totalRefunds),
+        unit: "Lượt",
+      },
+      {
+        metric: "Điểm tích lũy sử dụng",
+        value: toNumber(orderSummary.totalLoyaltyUsed),
+        unit: "Điểm",
+      },
+      {
+        metric: "Điểm tích lũy cộng thêm",
+        value: toNumber(orderSummary.totalLoyaltyEarned),
+        unit: "Điểm",
+      },
     ];
 
-    const periodLabel = periodType === "day" ? "Ngày" : periodType === "month" ? "Tháng" : periodType === "quarter" ? "Quý" : "Năm";
+    const periodLabel =
+      periodType === "day"
+        ? "Ngày"
+        : periodType === "month"
+        ? "Tháng"
+        : periodType === "quarter"
+        ? "Quý"
+        : "Năm";
     const reportTitle = `BÁO CÁO KẾT QUẢ BÁN HÀNG ${periodLabel.toUpperCase()}: ${periodKey}`;
     const dateExport = dayjs().format("DD/MM/YYYY HH:mm");
 
@@ -1318,7 +1820,11 @@ const exportEndOfDayReport = async (req, res) => {
       ws.mergeCells("A5:G5");
       ws.getCell("A5").value = reportTitle;
       ws.getCell("A5").alignment = { horizontal: "center" };
-      ws.getCell("A5").font = { bold: true, size: 16, color: { argb: "FF1890FF" } };
+      ws.getCell("A5").font = {
+        bold: true,
+        size: 16,
+        color: { argb: "FF1890FF" },
+      };
 
       ws.getCell("A7").value = "Người xuất:";
       ws.getCell("B7").value = exporterName;
@@ -1329,10 +1835,20 @@ const exportEndOfDayReport = async (req, res) => {
       const headerRow = 10;
       ws.getRow(headerRow).values = ["STT", "Chỉ số", "Giá trị", "Đơn vị"];
       ws.getRow(headerRow).font = { bold: true };
-      ws.getRow(headerRow).alignment = { horizontal: "center", vertical: "middle" };
+      ws.getRow(headerRow).alignment = {
+        horizontal: "center",
+        vertical: "middle",
+      };
       ["A", "B", "C", "D"].forEach((col) => {
-        ws.getCell(`${col}${headerRow}`).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1890FF" } };
-        ws.getCell(`${col}${headerRow}`).font = { bold: true, color: { argb: "FFFFFFFF" } };
+        ws.getCell(`${col}${headerRow}`).fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FF1890FF" },
+        };
+        ws.getCell(`${col}${headerRow}`).font = {
+          bold: true,
+          color: { argb: "FFFFFFFF" },
+        };
         ws.getCell(`${col}${headerRow}`).border = {
           top: { style: "thin" },
           left: { style: "thin" },
@@ -1349,11 +1865,24 @@ const exportEndOfDayReport = async (req, res) => {
         r.getCell(4).alignment = { horizontal: "center" };
         if (row.highlight) {
           r.font = { bold: true };
-          r.getCell(2).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE6F7FF" } };
-          r.getCell(3).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE6F7FF" } };
+          r.getCell(2).fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FFE6F7FF" },
+          };
+          r.getCell(3).fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FFE6F7FF" },
+          };
         }
         for (let i = 1; i <= 4; i++) {
-          r.getCell(i).border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
+          r.getCell(i).border = {
+            top: { style: "thin" },
+            left: { style: "thin" },
+            bottom: { style: "thin" },
+            right: { style: "thin" },
+          };
         }
       });
 
@@ -1363,7 +1892,11 @@ const exportEndOfDayReport = async (req, res) => {
       ws2.getRow(1).font = { bold: true };
       const paymentNames = { cash: "Tiền mặt", qr: "QR Code / Chuyển khoản" };
       byPayment.forEach((p) => {
-        ws2.addRow([paymentNames[p._id] || p._id, toNumber(p.revenue), p.count]);
+        ws2.addRow([
+          paymentNames[p._id] || p._id,
+          toNumber(p.revenue),
+          p.count,
+        ]);
       });
 
       // Sheet 3: Phân loại theo nhân viên
@@ -1371,7 +1904,12 @@ const exportEndOfDayReport = async (req, res) => {
       ws3.addRow(["Nhân viên", "Doanh thu (VND)", "Số đơn", "TB/đơn (VND)"]);
       ws3.getRow(1).font = { bold: true };
       byEmployee.forEach((e) => {
-        ws3.addRow([e.name, toNumber(e.revenue), e.orders, Math.round(toNumber(e.avgOrderValue))]);
+        ws3.addRow([
+          e.name,
+          toNumber(e.revenue),
+          e.orders,
+          Math.round(toNumber(e.avgOrderValue)),
+        ]);
       });
 
       // Column widths
@@ -1395,8 +1933,17 @@ const exportEndOfDayReport = async (req, res) => {
       ws.getCell(`F${lastRow + 1}`).font = { size: 9, italic: true };
       ws.getCell(`F${lastRow + 1}`).alignment = { horizontal: "center" };
 
-      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-      res.setHeader("Content-Disposition", `attachment; filename=Bao_Cao_Cuoi_Ngay_${periodKey.replace(/[/:]/g, "-")}.xlsx`);
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename=Bao_Cao_Cuoi_Ngay_${periodKey.replace(
+          /[/:]/g,
+          "-"
+        )}.xlsx`
+      );
       await workbook.xlsx.write(res);
       return res.end();
     }
@@ -1404,33 +1951,65 @@ const exportEndOfDayReport = async (req, res) => {
     // ===== EXPORT PDF =====
     if (exportFormat === "pdf") {
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename=Bao_Cao_Cuoi_Ngay_${periodKey.replace(/[/:]/g, "-")}.pdf`);
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename=Bao_Cao_Cuoi_Ngay_${periodKey.replace(
+          /[/:]/g,
+          "-"
+        )}.pdf`
+      );
 
       const doc = new PDFDocument({ margin: 50, size: "A4" });
       doc.pipe(res);
 
       // Register fonts
       const fontPath = path.join(__dirname, "..", "fonts", "Roboto", "static");
-      doc.registerFont("Roboto-Regular", path.join(fontPath, "Roboto-Regular.ttf"));
+      doc.registerFont(
+        "Roboto-Regular",
+        path.join(fontPath, "Roboto-Regular.ttf")
+      );
       doc.registerFont("Roboto-Bold", path.join(fontPath, "Roboto-Bold.ttf"));
-      doc.registerFont("Roboto-Italic", path.join(fontPath, "Roboto-Italic.ttf"));
+      doc.registerFont(
+        "Roboto-Italic",
+        path.join(fontPath, "Roboto-Italic.ttf")
+      );
 
       // Header
-      doc.font("Roboto-Bold").fontSize(11).text(storeName.toUpperCase(), { align: "left" });
-      if (storeAddress) doc.font("Roboto-Italic").fontSize(9).text(storeAddress, { align: "left" });
+      doc
+        .font("Roboto-Bold")
+        .fontSize(11)
+        .text(storeName.toUpperCase(), { align: "left" });
+      if (storeAddress)
+        doc
+          .font("Roboto-Italic")
+          .fontSize(9)
+          .text(storeAddress, { align: "left" });
       doc.moveUp(storeAddress ? 2 : 1);
       doc.text("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", { align: "right" });
-      doc.font("Roboto-Bold").fontSize(10).text("Độc lập - Tự do - Hạnh phúc", { align: "right" });
-      doc.font("Roboto-Italic").fontSize(9).text("-----------------", { align: "right" });
+      doc
+        .font("Roboto-Bold")
+        .fontSize(10)
+        .text("Độc lập - Tự do - Hạnh phúc", { align: "right" });
+      doc
+        .font("Roboto-Italic")
+        .fontSize(9)
+        .text("-----------------", { align: "right" });
       doc.moveDown(2);
 
       // Title
-      doc.font("Roboto-Bold").fontSize(16).fillColor("#1890ff").text(reportTitle, { align: "center" });
+      doc
+        .font("Roboto-Bold")
+        .fontSize(16)
+        .fillColor("#1890ff")
+        .text(reportTitle, { align: "center" });
       doc.fillColor("#000");
       doc.moveDown(1);
 
       // Info
-      doc.font("Roboto-Regular").fontSize(10).text(`Người xuất: ${exporterName}`);
+      doc
+        .font("Roboto-Regular")
+        .fontSize(10)
+        .text(`Người xuất: ${exporterName}`);
       doc.text(`Ngày xuất: ${dateExport}`);
       doc.moveDown(1);
       doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
@@ -1442,7 +2021,11 @@ const exportEndOfDayReport = async (req, res) => {
       summaryRows.forEach((r, idx) => {
         const isHighlight = r.highlight;
         doc.font(isHighlight ? "Roboto-Bold" : "Roboto-Regular").fontSize(10);
-        doc.text(`${idx + 1}. ${r.metric}: ${r.value.toLocaleString("vi-VN")} ${r.unit}`);
+        doc.text(
+          `${idx + 1}. ${r.metric}: ${r.value.toLocaleString("vi-VN")} ${
+            r.unit
+          }`
+        );
       });
 
       doc.moveDown(1);
@@ -1451,14 +2034,21 @@ const exportEndOfDayReport = async (req, res) => {
 
       // Theo phương thức thanh toán
       if (byPayment.length > 0) {
-        doc.font("Roboto-Bold").fontSize(12).text("THEO PHƯƠNG THỨC THANH TOÁN");
+        doc
+          .font("Roboto-Bold")
+          .fontSize(12)
+          .text("THEO PHƯƠNG THỨC THANH TOÁN");
         doc.moveDown(0.5);
         const paymentNames = { cash: "Tiền mặt", qr: "QR Code / Chuyển khoản" };
         byPayment.forEach((p) => {
           doc
             .font("Roboto-Regular")
             .fontSize(10)
-            .text(`• ${paymentNames[p._id] || p._id}: ${toNumber(p.revenue).toLocaleString("vi-VN")} VND (${p.count} đơn)`);
+            .text(
+              `• ${paymentNames[p._id] || p._id}: ${toNumber(
+                p.revenue
+              ).toLocaleString("vi-VN")} VND (${p.count} đơn)`
+            );
         });
         doc.moveDown(1);
       }
@@ -1471,7 +2061,11 @@ const exportEndOfDayReport = async (req, res) => {
           doc
             .font("Roboto-Regular")
             .fontSize(10)
-            .text(`• ${e.name}: ${toNumber(e.revenue).toLocaleString("vi-VN")} VND (${e.orders} đơn)`);
+            .text(
+              `• ${e.name}: ${toNumber(e.revenue).toLocaleString(
+                "vi-VN"
+              )} VND (${e.orders} đơn)`
+            );
         });
         doc.moveDown(1);
       }
@@ -1480,20 +2074,34 @@ const exportEndOfDayReport = async (req, res) => {
 
       // Signatures
       const startY = doc.y > 680 ? (doc.addPage(), 50) : doc.y;
-      doc.font("Roboto-Bold").fontSize(10).text("Người lập biểu", 50, startY, { width: 150, align: "center" });
+      doc
+        .font("Roboto-Bold")
+        .fontSize(10)
+        .text("Người lập biểu", 50, startY, { width: 150, align: "center" });
       doc.text("Kế toán trưởng", 220, startY, { width: 150, align: "center" });
-      doc.text("Chủ hộ kinh doanh", 390, startY, { width: 150, align: "center" });
-      doc.font("Roboto-Italic").fontSize(9).text("(Ký, họ tên)", 50, doc.y, { width: 150, align: "center" });
+      doc.text("Chủ hộ kinh doanh", 390, startY, {
+        width: 150,
+        align: "center",
+      });
+      doc
+        .font("Roboto-Italic")
+        .fontSize(9)
+        .text("(Ký, họ tên)", 50, doc.y, { width: 150, align: "center" });
       doc.moveUp();
       doc.text("(Ký, họ tên)", 220, doc.y, { width: 150, align: "center" });
       doc.moveUp();
-      doc.text("(Ký, họ tên, đóng dấu)", 390, doc.y, { width: 150, align: "center" });
+      doc.text("(Ký, họ tên, đóng dấu)", 390, doc.y, {
+        width: 150,
+        align: "center",
+      });
 
       doc.end();
       return;
     }
 
-    res.status(400).json({ message: "Format không hỗ trợ. Vui lòng chọn xlsx hoặc pdf." });
+    res
+      .status(400)
+      .json({ message: "Format không hỗ trợ. Vui lòng chọn xlsx hoặc pdf." });
   } catch (err) {
     console.error("Lỗi export báo cáo cuối ngày:", err.message);
     res.status(500).json({ message: "Lỗi server khi xuất báo cáo cuối ngày" });

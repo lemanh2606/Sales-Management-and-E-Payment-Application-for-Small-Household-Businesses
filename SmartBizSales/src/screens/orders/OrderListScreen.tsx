@@ -13,6 +13,7 @@ import {
   Platform,
   Modal,
   Alert,
+  Share,
 } from "react-native";
 
 import DateTimePicker, {
@@ -23,6 +24,7 @@ import quarterOfYear from "dayjs/plugin/quarterOfYear";
 import "dayjs/locale/vi";
 
 import apiClient from "../../api/apiClient";
+import orderApi from "../../api/orderApi";
 import { useAuth } from "../../context/AuthContext";
 import debounce from "@/utils/debounce";
 import { Ionicons } from "@expo/vector-icons";
@@ -39,6 +41,9 @@ interface Store {
   _id: string;
   id?: string;
   name: string;
+  address?: string;
+  phone?: string;
+  taxCode?: string;
 }
 
 interface Customer {
@@ -61,10 +66,14 @@ interface Order {
   employeeId: Employee;
   customer?: Customer;
   totalAmount: MongoDecimal;
+  grossAmount?: MongoDecimal;
+  discountAmount?: MongoDecimal;
   status: OrderStatus;
   createdAt: string;
   paymentMethod: PaymentMethod | string;
   isVATInvoice: boolean;
+  vatAmount?: MongoDecimal;
+  beforeTaxAmount?: MongoDecimal;
   printDate?: string;
   printCount: number;
 }
@@ -189,6 +198,58 @@ function statusMeta(status: OrderStatus) {
   return map[status] || map.pending;
 }
 
+// Helper: Chuyển số thành chữ (Tiếng Việt)
+const docSoVND = (so: number): string => {
+  if (so === 0) return "Không đồng";
+  const chuSo = ["không", "một", "hai", "ba", "bốn", "năm", "sáu", "bảy", "tám", "chín"];
+  const donVi = ["", "nghìn", "triệu", "tỷ", "nghìn tỷ", "triệu tỷ"];
+  
+  const docBlock = (block: number) => {
+    let s = "";
+    const h = Math.floor(block / 100);
+    const ch = Math.floor((block % 100) / 10);
+    const dv = block % 10;
+    
+    if (h > 0 || block >= 100) {
+      s += chuSo[h] + " trăm ";
+      if (ch === 0 && dv > 0) s += "lẻ ";
+    }
+    
+    if (ch > 1) {
+      s += chuSo[ch] + " mươi ";
+      if (dv === 1) s += "mốt ";
+      else if (dv === 5) s += "lăm ";
+      else if (dv > 0) s += chuSo[dv];
+    } else if (ch === 1) {
+      s += "mười ";
+      if (dv === 1) s += "một ";
+      else if (dv === 5) s += "lăm ";
+      else if (dv > 0) s += chuSo[dv];
+    } else if (dv > 0) {
+      s += chuSo[dv];
+    }
+    return s.trim();
+  };
+
+  let res = "";
+  let i = 0;
+  let s = Math.floor(so);
+  if (s < 0) return "Âm " + docSoVND(Math.abs(s));
+
+  do {
+    const block = s % 1000;
+    if (block > 0) {
+      const blockStr = docBlock(block);
+      res = blockStr + " " + donVi[i] + " " + res;
+    }
+    s = Math.floor(s / 1000);
+    i++;
+  } while (s > 0);
+
+  const result = res.trim();
+  return result.charAt(0).toUpperCase() + result.slice(1) + " đồng chẵn.";
+};
+
 function paymentMeta(method: string) {
   const map: Record<
     string,
@@ -211,10 +272,12 @@ function PendingOrdersModal({
   visible,
   onClose,
   orders,
+  onDelete,
 }: {
   visible: boolean;
   onClose: () => void;
   orders: Order[];
+  onDelete: (id: string) => void;
 }) {
   return (
     <Modal
@@ -248,8 +311,8 @@ function PendingOrdersModal({
           </View>
 
           <Text style={styles.modalHint}>
-            Danh sách bên dưới lấy theo kỳ đang chọn và chỉ hiển thị các đơn
-            trạng thái “Chờ thanh toán”.
+            Danh sách dưới đây là các đơn hàng "Chưa thanh toán".
+            {"\n"}Bạn có thể xóa nếu đó là đơn ảo hoặc khách hủy.
           </Text>
 
           {orders.length === 0 ? (
@@ -279,13 +342,14 @@ function PendingOrdersModal({
                         {item.customer?.name || "Khách lẻ"} •{" "}
                         {item.customer?.phone || "N/A"}
                       </Text>
-                      <Text style={styles.pendingSub} numberOfLines={1}>
-                        {dayjs(item.createdAt).format("DD/MM/YYYY HH:mm")}
+                      <Text style={styles.pendingAmount}>
+                        {formatVND(toNumberDecimal(item.totalAmount))}
                       </Text>
                     </View>
-                    <View style={{ alignItems: "flex-end" }}>
+
+                    <View style={{ alignItems: "flex-end", gap: 8 }}>
                       <View
-                        style={[
+                         style={[
                           styles.badge,
                           {
                             backgroundColor: "#fff7e6",
@@ -293,14 +357,18 @@ function PendingOrdersModal({
                           },
                         ]}
                       >
-                        <Ionicons name={st.icon} size={14} color={st.color} />
-                        <Text style={[styles.badgeText, { color: st.color }]}>
-                          {st.label}
-                        </Text>
+                         <Text style={[styles.badgeText, { color: st.color }]}>
+                           {dayjs(item.createdAt).format("HH:mm")}
+                         </Text>
                       </View>
-                      <Text style={styles.pendingAmount}>
-                        {formatVND(toNumberDecimal(item.totalAmount))}
-                      </Text>
+
+                      <TouchableOpacity 
+                        onPress={() => onDelete(item._id)}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        style={{ padding: 4 }}
+                      >
+                          <Ionicons name="trash-outline" size={20} color="#ef4444" />
+                      </TouchableOpacity>
                     </View>
                   </View>
                 );
@@ -323,7 +391,7 @@ function PendingOrdersModal({
 
 // ========== Main screen ==========
 const OrderListScreen: React.FC = () => {
-  const { currentStore, token } = useAuth();
+  const { currentStore, token, user } = useAuth();
   const storeId = (currentStore as any)?.id || (currentStore as any)?._id;
   const storeName = (currentStore as any)?.name || "Cửa hàng";
 
@@ -366,6 +434,8 @@ const OrderListScreen: React.FC = () => {
   const [showPicker, setShowPicker] = useState(false);
   const [pickerTarget, setPickerTarget] = useState<PickerTarget>("month");
   const [tempDate, setTempDate] = useState<Date>(new Date());
+
+  const [printingId, setPrintingId] = useState<string | null>(null);
 
   // ========== Helpers ==========
   const isReadyToLoad = useCallback(() => {
@@ -681,7 +751,7 @@ const OrderListScreen: React.FC = () => {
 
       file.create();
 
-      // ✅ ghi base64 đúng chuẩn nhị phân
+      //  ghi base64 đúng chuẩn nhị phân
       await LegacyFS.writeAsStringAsync(file.uri, base64, {
         encoding: LegacyFS.EncodingType.Base64,
       });
@@ -714,105 +784,447 @@ const OrderListScreen: React.FC = () => {
     axiosConfig,
   ]);
 
-  // ========== Render item ==========
-  const renderOrderItem = useCallback(({ item }: { item: Order }) => {
-    const st = statusMeta(item.status);
-    const pm = paymentMeta(item.paymentMethod);
+  // ========== Printing Logic ==========
+  const buildReprintHtml = useCallback(
+    (order: any) => {
+      // 1. Prepare Data
+      const storeInfo = (currentStore as Store) || {};
+      const storeName = storeInfo.name || "Cửa hàng";
+      const storeAddress = storeInfo.address || "---";
+      const storePhone = storeInfo.phone || "";
+      const storeTaxCode = storeInfo.taxCode || ""; // Hoặc lấy từ settings nếu có
 
-    return (
-      <View style={styles.orderCard}>
-        <View style={styles.orderTopRow}>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.orderCode} numberOfLines={1}>
-              #{item._id.slice(-8)}
-            </Text>
-            <Text style={styles.orderSub} numberOfLines={1}>
-              {item.customer?.name || "Khách lẻ"} •{" "}
-              {item.customer?.phone || "N/A"}
-            </Text>
+      const orderIdStr = order?._id ? order._id.slice(-8) : "---";
+      const createdDate = order?.createdAt ? new Date(order.createdAt) : new Date();
+      
+      // Khách hàng
+      const customerName = order?.customer?.name || "Khách vãng lai";
+      const customerPhone = order?.customer?.phone || "";
+      // const customerAddress = order?.customer?.address || ""; // Nếu có address
+
+      // Seller name fallback logic:
+      let sellerName = order?.employeeId?.fullName; 
+      if (!sellerName) {
+         sellerName = (user as any)?.fullname;
+      }
+      if (!sellerName) sellerName = "Chủ cửa hàng"; // Final fallback
+
+      // Items
+      const rows = (order?.items || [])
+        .map((item: any, idx: number) => {
+          const name = item.productName || item.productId?.name || "Sản phẩm";
+          const unit = item.productId?.unit || "";
+          
+          const quantity = Number(item.quantity || 0); // Quantity usually number
+          const price = toNumberDecimal(item.priceAtTime || 0);
+          const sub = toNumberDecimal(item.subtotal || 0);
+
+          return `
+          <tr>
+            <td style="border: 1px solid #000; padding: 5px; text-align: center;">${idx + 1}</td>
+            <td style="border: 1px solid #000; padding: 5px;">${name}</td>
+            <td style="border: 1px solid #000; padding: 5px; text-align: center;">${unit}</td>
+            <td style="border: 1px solid #000; padding: 5px; text-align: center;">${quantity}</td>
+            <td style="border: 1px solid #000; padding: 5px; text-align: right;">${formatVND(price).replace('₫', '')}</td>
+            <td style="border: 1px solid #000; padding: 5px; text-align: right;">${formatVND(sub).replace('₫', '')}</td>
+          </tr>
+        `;
+        })
+        .join("");
+
+      // Totals
+      const subTotal = toNumberDecimal(order?.beforeTaxAmount || 0); 
+      const vatAmount = toNumberDecimal(order?.vatAmount || 0);
+      const discount = toNumberDecimal(order?.discountAmount || 0);
+      const totalAmount = toNumberDecimal(order?.totalAmount || 0);
+      const isVAT = !!order?.isVATInvoice;
+
+      // Payment Method Label
+      const pmLabel = order?.paymentMethod === "cash" 
+          ? "TIỀN MẶT" 
+          : order?.paymentMethod === "qr" 
+            ? "CHUYỂN KHOẢN / QR" 
+            : "KHÁC";
+
+      // Date components
+      const dd = dayjs(createdDate).format("DD");
+      const mm = dayjs(createdDate).format("MM");
+      const yyyy = dayjs(createdDate).format("YYYY");
+
+      // HTML Template (Simulating Web ModalPrintBill structure)
+      return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <style>
+    body { 
+      font-family: 'Times New Roman', serif; 
+      font-size: 13px; 
+      padding: 20px; 
+      color: #000; 
+      background-color: #fff;
+      line-height: 1.4;
+    }
+    .header { display: flex; justify-content: space-between; margin-bottom: 10px; }
+    .header-left { flex: 2; }
+    .header-right { flex: 1; text-align: right; }
+    .store-name { font-weight: bold; font-size: 16px; text-transform: uppercase; }
+    
+    .title-box { text-align: center; margin: 15px 0; }
+    .title-main { font-weight: bold; font-size: 20px; }
+    .title-date { font-style: italic; font-size: 12px; }
+
+    .customer-box { margin-bottom: 15px; }
+    .row { display: flex; margin-bottom: 4px; }
+    .label { min-width: 150px; }
+    .val-bold { font-weight: bold; }
+    
+    table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+    th { border: 1px solid #000; padding: 5px; background-color: #f2f2f2; font-weight: bold; }
+    
+    .totals-box { width: 100%; margin-left: auto; }
+    .total-row { display: flex; justify-content: flex-end; margin-bottom: 4px; }
+    .total-label { min-width: 200px; }
+    .total-val { min-width: 120px; text-align: right; font-weight: bold; }
+    
+    .amount-words { margin-top: 10px; font-style: italic; }
+    
+    .signatures { display: flex; margin-top: 40px; text-align: center; }
+    .sig-block { flex: 1; }
+    .sig-title { font-weight: bold; }
+    .sig-sub { font-size: 11px; font-style: italic; }
+    .sig-name { margin-top: 60px; font-weight: bold; }
+    
+    .footer { margin-top: 40px; text-align: center; font-size: 11px; color: #666; }
+  </style>
+</head>
+<body>
+  
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <div class="store-name">${storeName}</div>
+      <div>Địa chỉ: ${storeAddress}</div>
+      ${storePhone ? `<div>Điện thoại: ${storePhone}</div>` : ""}
+      ${storeTaxCode ? `<div>Mã số thuế: ${storeTaxCode}</div>` : ""}
+    </div>
+    <div class="header-right">
+      <div style="font-size: 12px;">Số: ${orderIdStr}</div>
+      <div style="font-size: 12px;">Ngày: ${dd}/${mm}/${yyyy}</div>
+    </div>
+  </div>
+
+  <hr style="margin: 10px 0; border-color: #000;" />
+
+  <!-- Title -->
+  <div class="title-box">
+    <div class="title-main">${isVAT ? "HÓA ĐƠN GIÁ TRỊ GIA TĂNG" : "HÓA ĐƠN BÁN LẺ"}</div>
+    <div class="title-date">Ngày ${dd} tháng ${mm} năm ${yyyy}</div>
+  </div>
+
+  <!-- Customer Info -->
+  <div class="customer-box">
+    <div class="row">
+      <span class="label">Họ tên người mua hàng:</span>
+      <span class="val-bold">${customerName}</span>
+    </div>
+    <div class="row">
+      <span class="label">Điện thoại:</span>
+      <span>${customerPhone || "---"}</span>
+    </div>
+    <div class="row">
+      <span class="label">Hình thức thanh toán:</span>
+      <span style="text-transform: uppercase;">${pmLabel}</span>
+    </div>
+    <!-- Add VAT Company info if needed (checking isVATInvoice) -->
+    ${isVAT ? `
+    <div class="row">
+      <span class="label">Đơn vị / MST:</span>
+      <span>(Thông tin VAT)</span>
+    </div>` : ""}
+  </div>
+
+  <!-- Table -->
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 40px;">STT</th>
+        <th>Tên hàng hóa, dịch vụ</th>
+        <th style="width: 70px;">Đơn vị</th>
+        <th style="width: 60px;">SL</th>
+        <th style="width: 100px;">Đơn giá</th>
+        <th style="width: 120px;">Thành tiền</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows}
+    </tbody>
+  </table>
+
+  <!-- Totals -->
+  <div class="totals-box">
+    <div class="total-row">
+      <span class="total-label">Cộng tiền hàng:</span>
+      <span class="total-val">${formatVND(subTotal).replace('₫', '')}</span>
+    </div>
+    ${discount > 0 ? `
+    <div class="total-row">
+      <span class="total-label">Chiết khấu:</span>
+      <span class="total-val">-${formatVND(discount).replace('₫', '')}</span>
+    </div>` : ""}
+    <div class="total-row">
+      <span class="total-label">Tiền thuế GTGT:</span>
+      <span class="total-val">${formatVND(vatAmount).replace('₫', '')}</span>
+    </div>
+    <div class="total-row" style="font-size: 16px;">
+      <span class="total-label" style="font-weight: bold;">Tổng cộng thanh toán:</span>
+      <span class="total-val" style="border-top: 1px solid #000;">${formatVND(totalAmount).replace('₫', '')}</span>
+    </div>
+  </div>
+
+  <div class="amount-words">
+    Số tiền viết bằng chữ: <span style="font-weight: bold;">${docSoVND(totalAmount)}</span>
+  </div>
+
+  <!-- Signatures -->
+  <div class="signatures">
+    <div class="sig-block">
+      <div class="sig-title">NGƯỜI MUA HÀNG</div>
+      <div class="sig-sub">(Ký, ghi rõ họ tên)</div>
+      <div class="sig-name" style="margin-top: 80px;">${customerName !== "Khách vãng lai" ? customerName : ""}</div>
+    </div>
+    <div class="sig-block">
+      <div class="sig-title">NGƯỜI BÁN HÀNG</div>
+      <div class="sig-sub">(Ký, ghi rõ họ tên)</div>
+      <div class="sig-name" style="margin-top: 80px;">${sellerName}</div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    ${order?.printCount > 0 ? `<div>(Bản sao hóa đơn - lần in thứ ${order.printCount + 1})</div>` : ""}
+    <div>Cảm ơn quý khách đã mua hàng!</div>
+    <div>Hệ thống quản lý SmartBiz v1.0</div>
+  </div>
+
+</body>
+</html>`;
+    },
+    [currentStore, user]
+  );
+  
+
+
+  const handleReprint = useCallback(async (orderItem: Order) => {
+    try {
+      setPrintingId(orderItem._id);
+      
+      // 1. Fetch full details
+      const res = await apiClient.get<any>(`/orders/${orderItem._id}`);
+      const fullOrder = res.data?.order;
+      if (!fullOrder) throw new Error("Không lấy được chi tiết đơn hàng");
+      
+      // Fallback seller name logic injection (since we can't easily modify buildReprintHtml signature/access scope cleanly inside duplicate code)
+      // Actually fullOrder.employeeId might be null.
+      if (!fullOrder.employeeId) {
+          // Manual patch for display
+           // We'll handle this in buildReprintHtml dynamically if we move 'user' into scope or pass it.
+           // Better: create a specialized helper or pass user name to buildReprintHtml.
+           // However, let's just use what we have in fullOrder for now.
+           // If user wants "current user logged in" as fallback, we need that info.
+           // I'll assume 'user' is available in component scope.
+      }
+      
+      const html = buildReprintHtml({ ...fullOrder,
+         // Patch seller name if missing
+         employeeId: fullOrder.employeeId || { fullName: (user as any)?.fullname || "Chủ cửa hàng" }
+      });
+
+      // 2. Generate PDF
+      const fileName = `hoa-don-${orderItem._id.slice(-8)}.pdf`;
+      let pdfUri = "";
+      
+      try {
+        const Print = require("expo-print");
+        const Sharing = require("expo-sharing");
+        
+        if (Print?.printToFileAsync) {
+           const { uri } = await Print.printToFileAsync({ html });
+           pdfUri = uri;
+           
+            if (Sharing?.isAvailableAsync && await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(uri, {
+                    mimeType: 'application/pdf',
+                    dialogTitle: fileName,
+                });
+            } else {
+                 await Share.share({
+                  url: uri,
+                  message: "Hoá đơn PDF",
+                  title: fileName,
+                });
+            }
+        }
+      } catch (e) {
+          console.log("Expo Print/Share error", e);
+          Alert.alert("Lỗi", "Không thể tạo file PDF (cần expo-print).");
+          return;
+      }
+
+      // 3. Update print count (backend)
+      await apiClient.post(`/orders/${orderItem._id}/print-bill`);
+
+      // 4. Update UI (increment locally to avoid full reload)
+      setOrders(prev => prev.map(o => {
+          if (o._id === orderItem._id) {
+              return { ...o, printCount: (o.printCount || 0) + 1 };
+          }
+          return o;
+      }));
+
+    } catch (e: any) {
+      Alert.alert("Lỗi", e?.message || "Không thể in hoá đơn.");
+    } finally {
+      setPrintingId(null);
+    }
+  }, [user, buildReprintHtml]);
+  const renderOrderItem = useCallback(
+    ({ item }: { item: Order }) => {
+      const st = statusMeta(item.status);
+      const pm = paymentMeta(item.paymentMethod);
+
+      return (
+        <View style={styles.orderCard}>
+          <View style={styles.orderTopRow}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.orderCode} numberOfLines={1}>
+                #{item._id.slice(-8)}
+              </Text>
+              <Text style={styles.orderSub} numberOfLines={1}>
+                {item.customer?.name || "Khách lẻ"} •{" "}
+                {item.customer?.phone || "N/A"}
+              </Text>
+            </View>
+
+            <View style={{ alignItems: "flex-end" }}>
+              <Text style={styles.orderAmount}>
+                {formatVND(toNumberDecimal(item.totalAmount))}
+              </Text>
+              {item.discountAmount && toNumberDecimal(item.discountAmount) > 0 ? (
+                <Text style={[styles.orderTime, { color: "#52c41a" }]}>
+                  Giảm: -{formatVND(toNumberDecimal(item.discountAmount))}
+                </Text>
+              ) : null}
+              <Text style={styles.orderTime}>
+                {dayjs(item.createdAt).format("DD/MM/YYYY HH:mm")}
+              </Text>
+            </View>
           </View>
 
-          <View style={{ alignItems: "flex-end" }}>
-            <Text style={styles.orderAmount}>
-              {formatVND(toNumberDecimal(item.totalAmount))}
-            </Text>
-            <Text style={styles.orderTime}>
-              {dayjs(item.createdAt).format("DD/MM/YYYY HH:mm")}
-            </Text>
-          </View>
-        </View>
+          <View style={styles.orderMidRow}>
+            <View style={styles.metaLine}>
+              <Ionicons name="person-outline" size={16} color="#6b7280" />
+              <Text style={styles.metaText} numberOfLines={1}>
+                NV: {item.employeeId?.fullName || "Chủ cửa hàng"}
+              </Text>
+            </View>
 
-        <View style={styles.orderMidRow}>
-          <View style={styles.metaLine}>
-            <Ionicons name="person-outline" size={16} color="#6b7280" />
-            <Text style={styles.metaText} numberOfLines={1}>
-              Nhân viên: {item.employeeId?.fullName || "N/A"}
-            </Text>
-          </View>
-
-          <View style={styles.metaLine}>
-            <Ionicons name={pm.icon} size={16} color={pm.color} />
-            <Text
-              style={[styles.metaText, { color: pm.color }]}
-              numberOfLines={1}
-            >
-              {pm.label}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.orderBottomRow}>
-          <View
-            style={[
-              styles.badge,
-              { backgroundColor: "#f6ffed", borderColor: "#b7eb8f" },
-            ]}
-          >
-            <Ionicons name="print-outline" size={14} color="#389e0d" />
-            <Text style={[styles.badgeText, { color: "#389e0d" }]}>
-              In HĐ: {item.printCount || 0} lần
-            </Text>
+            <View style={styles.metaLine}>
+              <Ionicons name={pm.icon} size={16} color={pm.color} />
+              <Text
+                style={[styles.metaText, { color: pm.color }]}
+                numberOfLines={1}
+              >
+                {pm.label}
+              </Text>
+            </View>
           </View>
 
-          <View
-            style={[
-              styles.badge,
-              {
-                backgroundColor: item.isVATInvoice ? "#e6f4ff" : "#f3f4f6",
-                borderColor: "#e5e7eb",
-              },
-            ]}
-          >
-            <Ionicons
-              name="document-text-outline"
-              size={14}
-              color={item.isVATInvoice ? "#1677ff" : "#6b7280"}
-            />
-            <Text
+          <View style={styles.orderBottomRow}>
+            <View
               style={[
-                styles.badgeText,
-                { color: item.isVATInvoice ? "#1677ff" : "#6b7280" },
+                styles.badge,
+                { backgroundColor: "#f6ffed", borderColor: "#b7eb8f" },
               ]}
             >
-              VAT: {item.isVATInvoice ? "Có" : "Không"}
-            </Text>
-          </View>
+              <Ionicons name="print-outline" size={14} color="#389e0d" />
+              <Text style={[styles.badgeText, { color: "#389e0d" }]}>
+                In HĐ: {item.printCount || 0} lần
+              </Text>
+            </View>
 
-          <View
-            style={[
-              styles.badge,
-              { backgroundColor: "#fff7e6", borderColor: "#ffd591" },
-            ]}
-          >
-            <Ionicons name={st.icon} size={14} color={st.color} />
-            <Text style={[styles.badgeText, { color: st.color }]}>
-              {st.label}
-            </Text>
+            {/* Reprint Button */}
+            <TouchableOpacity
+              onPress={() => handleReprint(item)}
+              disabled={printingId === item._id}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 4,
+                paddingHorizontal: 8,
+                paddingVertical: 4,
+                backgroundColor: "#e6f4ff",
+                borderRadius: 6,
+                borderWidth: 1,
+                borderColor: "#91caff",
+              }}
+            >
+              {printingId === item._id ? (
+                <ActivityIndicator size="small" color="#1677ff" />
+              ) : (
+                <Ionicons name="print-outline" size={16} color="#1677ff" />
+              )}
+              <Text
+                style={{ fontSize: 12, color: "#1677ff", fontWeight: "500" }}
+              >
+                {printingId === item._id ? "Đang in..." : "In lại"}
+              </Text>
+            </TouchableOpacity>
+
+            <View
+              style={[
+                styles.badge,
+                {
+                  backgroundColor: item.isVATInvoice ? "#e6f4ff" : "#f3f4f6",
+                  borderColor: "#e5e7eb",
+                },
+              ]}
+            >
+              <Ionicons
+                name="document-text-outline"
+                size={14}
+                color={item.isVATInvoice ? "#1677ff" : "#6b7280"}
+              />
+              <Text
+                style={[
+                  styles.badgeText,
+                  { color: item.isVATInvoice ? "#1677ff" : "#6b7280" },
+                ]}
+              >
+                {item.isVATInvoice 
+                  ? `VAT: ${formatVND(toNumberDecimal(item.vatAmount || 0))}`
+                  : "VAT: Không"}
+              </Text>
+            </View>
+
+            <View
+              style={[
+                styles.badge,
+                { backgroundColor: "#fff7e6", borderColor: "#ffd591" },
+              ]}
+            >
+              <Ionicons name={st.icon} size={14} color={st.color} />
+              <Text style={[styles.badgeText, { color: st.color }]}>
+                {st.label}
+              </Text>
+            </View>
           </View>
         </View>
-      </View>
-    );
-  }, []);
+      );
+    },
+    [printingId, handleReprint]
+  );
 
   // ========== Guards ==========
   if (!storeId) {
@@ -1311,6 +1723,32 @@ const OrderListScreen: React.FC = () => {
         visible={pendingVisible}
         onClose={() => setPendingVisible(false)}
         orders={pendingOrders}
+        onDelete={async (id) => {
+          Alert.alert(
+            "Xác nhận xoá",
+            "Bạn có chắc muốn xóa đơn chưa thanh toán này không? Hành động không thể hoàn tác.",
+            [
+              { text: "Hủy", style: "cancel" },
+              {
+                text: "Xóa",
+                style: "destructive",
+                onPress: async () => {
+                  try {
+                    setLoading(true);
+                    await orderApi.deletePendingOrder(id, storeId);
+                    // Refresh data
+                    setOrders(prev => prev.filter(o => o._id !== id));
+                    Alert.alert("Thành công", "Đã xóa đơn hàng.");
+                  } catch (e: any) {
+                    Alert.alert("Lỗi", e?.message || "Không thể xóa đơn hàng");
+                  } finally {
+                    setLoading(false);
+                  }
+                },
+              },
+            ]
+          );
+        }}
       />
     </View>
   );

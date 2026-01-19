@@ -8,7 +8,11 @@ const apiUrl = import.meta.env.VITE_API_URL;
  * @param {object} params - { storeId, periodType, periodKey }
  * @returns {object} { items: [], totalAmount: 0 } or { items: [] } if not found
  */
-export const getOperatingExpenseByPeriod = async ({ storeId, periodType, periodKey }) => {
+export const getOperatingExpenseByPeriod = async ({
+  storeId,
+  periodType,
+  periodKey,
+}) => {
   try {
     if (!storeId || !periodType || !periodKey) {
       return { items: [], totalAmount: 0 };
@@ -21,7 +25,7 @@ export const getOperatingExpenseByPeriod = async ({ storeId, periodType, periodK
       timeout: 5000,
     });
 
-    // ✅ Giờ luôn là 200 (success)
+    //  Giờ luôn là 200 (success)
     if (response.data.success) {
       // Nếu data = null (chưa có record) → return rỗng
       if (!response.data.data) {
@@ -35,7 +39,7 @@ export const getOperatingExpenseByPeriod = async ({ storeId, periodType, periodK
     // Fallback (không bình thường xảy ra)
     return { items: [], totalAmount: 0 };
   } catch (error) {
-    // ✅ Chỉ log lỗi thực sự (5XX, network error, v.v.)
+    //  Chỉ log lỗi thực sự (5XX, network error, v.v.)
     console.error("getOperatingExpenseByPeriod error:", error.message);
     return { items: [], totalAmount: 0 };
   }
@@ -46,7 +50,12 @@ export const getOperatingExpenseByPeriod = async ({ storeId, periodType, periodK
  * @param {object} params - { storeId, periodType, periodKey, items }
  * @returns {object} created/updated document
  */
-export const upsertOperatingExpense = async ({ storeId, periodType, periodKey, items }) => {
+export const upsertOperatingExpense = async ({
+  storeId,
+  periodType,
+  periodKey,
+  items,
+}) => {
   try {
     if (!storeId || !periodType || !periodKey || !Array.isArray(items)) {
       throw new Error("Thiếu dữ liệu: storeId, periodType, periodKey, items");
@@ -86,7 +95,11 @@ export const upsertOperatingExpense = async ({ storeId, periodType, periodKey, i
  * @param {object} params - { storeId, periodType, periodKey }
  * @returns {number} total amount
  */
-export const getOperatingExpenseTotal = async ({ storeId, periodType, periodKey }) => {
+export const getOperatingExpenseTotal = async ({
+  storeId,
+  periodType,
+  periodKey,
+}) => {
   try {
     if (!storeId || !periodType || !periodKey) return 0;
 
@@ -120,11 +133,14 @@ export const deleteMultipleItems = async ({ id, itemIds }) => {
 
   const token = localStorage.getItem("token");
 
-  const response = await axios.delete(`${apiUrl}/operating-expenses/${id}/items`, {
-    data: { itemIds },
-    headers: { Authorization: `Bearer ${token}` },
-    timeout: 3000,
-  });
+  const response = await axios.delete(
+    `${apiUrl}/operating-expenses/${id}/items`,
+    {
+      data: { itemIds },
+      headers: { Authorization: `Bearer ${token}` },
+      timeout: 3000,
+    }
+  );
 
   if (response.data?.success) return response.data.data;
   throw new Error(response.data?.message || "Lỗi khi xoá các khoản chi phí");
@@ -135,18 +151,26 @@ export const deleteMultipleItems = async ({ id, itemIds }) => {
  * @param {object} params - { storeId, fromPeriodType, fromPeriodKey, toPeriodType }
  * @returns {object} suggestion preview
  */
-export const suggestAllocation = async ({ storeId, fromPeriodType, fromPeriodKey, toPeriodType }) => {
+export const suggestAllocation = async ({
+  storeId,
+  fromPeriodType,
+  fromPeriodKey,
+  toPeriodType,
+}) => {
   try {
     if (!storeId || !fromPeriodType || !fromPeriodKey || !toPeriodType) {
       return { canAllocate: false, suggestions: [] };
     }
 
     const token = localStorage.getItem("token");
-    const response = await axios.get(`${apiUrl}/operating-expenses/allocation-suggest`, {
-      params: { storeId, fromPeriodType, fromPeriodKey, toPeriodType },
-      headers: { Authorization: `Bearer ${token}` },
-      timeout: 5000,
-    });
+    const response = await axios.get(
+      `${apiUrl}/operating-expenses/allocation-suggest`,
+      {
+        params: { storeId, fromPeriodType, fromPeriodKey, toPeriodType },
+        headers: { Authorization: `Bearer ${token}` },
+        timeout: 5000,
+      }
+    );
 
     if (response.data?.success) {
       return response.data;
@@ -164,9 +188,19 @@ export const suggestAllocation = async ({ storeId, fromPeriodType, fromPeriodKey
  * @param {object} params - { storeId, fromPeriodType, fromPeriodKey, allocations }
  * @returns {object} created records
  */
-export const executeAllocation = async ({ storeId, fromPeriodType, fromPeriodKey, allocations }) => {
+export const executeAllocation = async ({
+  storeId,
+  fromPeriodType,
+  fromPeriodKey,
+  allocations,
+}) => {
   try {
-    if (!storeId || !fromPeriodType || !fromPeriodKey || !Array.isArray(allocations)) {
+    if (
+      !storeId ||
+      !fromPeriodType ||
+      !fromPeriodKey ||
+      !Array.isArray(allocations)
+    ) {
       throw new Error("Thiếu dữ liệu bắt buộc");
     }
 

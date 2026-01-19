@@ -45,7 +45,18 @@ import {
   CaretUpOutlined,
   CaretDownOutlined,
 } from "@ant-design/icons";
-import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import {
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 import axios from "axios";
 import dayjs from "dayjs";
 import "../../premium.css";
@@ -56,11 +67,11 @@ import Swal from "sweetalert2";
 import Layout from "../../components/Layout";
 import { useAuth } from "../../context/AuthContext";
 import operatingExpenseService from "../../services/operatingExpenseService";
-import "dayjs/locale/vi"; // ✅ LOCALE VI
+import "dayjs/locale/vi"; //  LOCALE VI
 
 const { Title, Text, Paragraph } = Typography;
 
-dayjs.locale("vi"); // ✅ SET LOCALE VI
+dayjs.locale("vi"); //  SET LOCALE VI
 dayjs.extend(localizedFormat);
 dayjs.extend(quarterOfYear);
 const apiUrl = import.meta.env.VITE_API_URL;
@@ -109,7 +120,11 @@ const ReportDashboard = () => {
   const [data, setData] = useState(null);
 
   // Ưu tiên store từ AuthContext, sau đó đến URL, cuối cùng là localStorage fallback
-  const currentStore = authStore || (urlStoreId ? { _id: urlStoreId } : JSON.parse(localStorage.getItem("currentStore") || "{}"));
+  const currentStore =
+    authStore ||
+    (urlStoreId
+      ? { _id: urlStoreId }
+      : JSON.parse(localStorage.getItem("currentStore") || "{}"));
   const [groupPagination, setGroupPagination] = useState({
     current: 1,
     pageSize: 10,
@@ -155,7 +170,16 @@ const ReportDashboard = () => {
     const Icon = isPositive ? CaretUpOutlined : CaretDownOutlined;
 
     return (
-      <div style={{ fontSize: "12px", color: "#fff", display: "flex", alignItems: "center", gap: 4, marginTop: 4 }}>
+      <div
+        style={{
+          fontSize: "12px",
+          color: "#fff",
+          display: "flex",
+          alignItems: "center",
+          gap: 4,
+          marginTop: 4,
+        }}
+      >
         <div
           style={{
             background: "rgba(255, 255, 255, 0.2)",
@@ -176,7 +200,11 @@ const ReportDashboard = () => {
 
   const handleExport = (format) => {
     if (!currentStore?._id || !periodType || !periodKey) {
-      Swal.fire("Cảnh báo", "Vui lòng chọn kỳ báo cáo trước khi xuất", "warning");
+      Swal.fire(
+        "Cảnh báo",
+        "Vui lòng chọn kỳ báo cáo trước khi xuất",
+        "warning"
+      );
       return;
     }
     const token = localStorage.getItem("token");
@@ -187,13 +215,22 @@ const ReportDashboard = () => {
 
   const exportMenu = (
     <Menu onClick={({ key }) => handleExport(key)}>
-      <Menu.Item key="xlsx" icon={<FileExcelOutlined style={{ color: "#1d6f42" }} />}>
+      <Menu.Item
+        key="xlsx"
+        icon={<FileExcelOutlined style={{ color: "#1d6f42" }} />}
+      >
         Xuất file Excel (.xlsx)
       </Menu.Item>
-      <Menu.Item key="pdf" icon={<FilePdfOutlined style={{ color: "#e60101" }} />}>
+      <Menu.Item
+        key="pdf"
+        icon={<FilePdfOutlined style={{ color: "#e60101" }} />}
+      >
         Xuất file PDF (.pdf)
       </Menu.Item>
-      <Menu.Item key="csv" icon={<FileTextOutlined style={{ color: "#1890ff" }} />}>
+      <Menu.Item
+        key="csv"
+        icon={<FileTextOutlined style={{ color: "#1890ff" }} />}
+      >
         Xuất file CSV (.csv)
       </Menu.Item>
     </Menu>
@@ -223,9 +260,12 @@ const ReportDashboard = () => {
   };
 
   // ====== HELPERS ======
-  const getCurrentTotalExpense = () => expenseItems.reduce((sum, it) => sum + (Number(it.amount) || 0), 0);
-  const getUnsavedItems = () => expenseItems.filter((it) => it && it.isSaved === false);
-  const getUnsavedTotalExpense = () => getUnsavedItems().reduce((sum, it) => sum + (Number(it.amount) || 0), 0);
+  const getCurrentTotalExpense = () =>
+    expenseItems.reduce((sum, it) => sum + (Number(it.amount) || 0), 0);
+  const getUnsavedItems = () =>
+    expenseItems.filter((it) => it && it.isSaved === false);
+  const getUnsavedTotalExpense = () =>
+    getUnsavedItems().reduce((sum, it) => sum + (Number(it.amount) || 0), 0);
   const getUnsavedCount = () => getUnsavedItems().length;
 
   // Chuẩn hoá periodKey theo type (đảm bảo quarter có năm)
@@ -234,7 +274,7 @@ const ReportDashboard = () => {
     if (type === "month") return dateObj.format("YYYY-MM");
     if (type === "quarter") {
       const q = Math.floor(dateObj.month() / 3) + 1;
-      return `${dateObj.year()}-Q${q}`; // ✅ có năm
+      return `${dateObj.year()}-Q${q}`; //  có năm
     }
     if (type === "year") return dateObj.year().toString();
     return "";
@@ -314,7 +354,12 @@ const ReportDashboard = () => {
 
       // Chỉ gọi allocation khi type VỪA thay đổi (previousPeriodType != periodType)
       // Không gọi khi chuyển key trong cùng type
-      if (previousPeriodType && previousPeriodType !== periodType && prevPeriodKey && currentStore?._id) {
+      if (
+        previousPeriodType &&
+        previousPeriodType !== periodType &&
+        prevPeriodKey &&
+        currentStore?._id
+      ) {
         const suggestion = await operatingExpenseService.suggestAllocation({
           storeId: currentStore._id,
           fromPeriodType: previousPeriodType, // Type cũ
@@ -380,8 +425,16 @@ const ReportDashboard = () => {
     if (!data) return [];
     return [
       { name: "Doanh thu", value: data.totalRevenue, fill: COLORS.revenue },
-      { name: "Lợi nhuận gộp", value: data.grossProfit, fill: COLORS.grossProfit },
-      { name: "Chi phí vận hành", value: data.operatingCost, fill: COLORS.operatingCost },
+      {
+        name: "Lợi nhuận gộp",
+        value: data.grossProfit,
+        fill: COLORS.grossProfit,
+      },
+      {
+        name: "Chi phí vận hành",
+        value: data.operatingCost,
+        fill: COLORS.operatingCost,
+      },
       { name: "Lợi nhuận ròng", value: data.netProfit, fill: COLORS.netProfit },
     ];
   };
@@ -437,10 +490,13 @@ const ReportDashboard = () => {
         periodType,
         periodKey,
       });
-      // ✅ Không gửi extraExpense nữa vì backend tự lấy từ DB
+      //  Không gửi extraExpense nữa vì backend tự lấy từ DB
 
       const url = `${apiUrl}/financials?${params.toString()}`;
-      const res = await axios.get(url, { headers: { Authorization: `Bearer ${token}` }, timeout: 10000 });
+      const res = await axios.get(url, {
+        headers: { Authorization: `Bearer ${token}` },
+        timeout: 10000,
+      });
 
       setData(res.data.data);
     } catch (err) {
@@ -508,7 +564,9 @@ const ReportDashboard = () => {
       Swal.fire({
         icon: "success",
         title: "Lưu thành công",
-        text: `Chi phí kỳ này: ${getCurrentTotalExpense().toLocaleString("vi-VN")} VND`,
+        text: `Chi phí kỳ này: ${getCurrentTotalExpense().toLocaleString(
+          "vi-VN"
+        )} VND`,
         timer: 1500,
         showConfirmButton: false,
       });
@@ -541,7 +599,11 @@ const ReportDashboard = () => {
       return;
     }
 
-    if (newExpenseAmount === null || newExpenseAmount === undefined || newExpenseAmount <= 0) {
+    if (
+      newExpenseAmount === null ||
+      newExpenseAmount === undefined ||
+      newExpenseAmount <= 0
+    ) {
       Swal.fire({
         icon: "warning",
         title: "Số tiền không hợp lệ",
@@ -661,14 +723,21 @@ const ReportDashboard = () => {
 
     const deleteCount = validSelectedIds.length;
     const selectedSet = new Set(validSelectedIds.map(String));
-    const selectedItems = expenseItems.filter((it) => selectedSet.has(String(it._id)));
-    const totalSelectedAmount = selectedItems.reduce((sum, it) => sum + (Number(it?.amount) || 0), 0);
+    const selectedItems = expenseItems.filter((it) =>
+      selectedSet.has(String(it._id))
+    );
+    const totalSelectedAmount = selectedItems.reduce(
+      (sum, it) => sum + (Number(it?.amount) || 0),
+      0
+    );
 
     Swal.fire({
       title: "Xoá các khoản chi phí",
       html: `
         <div style="text-align: center; font-size: 14px;">
-          <p>Bạn chắc chắn muốn xoá ${selectedExpenseIds.length} khoản chi phí này không?</p>
+          <p>Bạn chắc chắn muốn xoá ${
+            selectedExpenseIds.length
+          } khoản chi phí này không?</p>
           <p style="font-size: 16px; font-weight: bold; color: #ff7a45; margin: 12px 0;">
             Tổng: ${formatVND(totalSelectedAmount)}
           </p>
@@ -695,7 +764,9 @@ const ReportDashboard = () => {
 
           // Cập nhật state: xoá các items theo _id
           const deletedSet = new Set(selectedExpenseIds.map(String));
-          const newItems = expenseItems.filter((it) => !deletedSet.has(String(it._id)));
+          const newItems = expenseItems.filter(
+            (it) => !deletedSet.has(String(it._id))
+          );
 
           setExpenseItems(newItems);
           setselectedExpenseIds([]);
@@ -741,12 +812,19 @@ const ReportDashboard = () => {
               .map(
                 (s, idx) =>
                   `<p style="margin: 4px 0; color: #555;">
-                    <span style="font-weight: 500;">${s.periodKey}</span>: ${formatVND(s.amount)}
+                    <span style="font-weight: 500;">${
+                      s.periodKey
+                    }</span>: ${formatVND(s.amount)}
                   </p>`
               )
               .join("")}
             <p style="margin: 8px 0 0 0; color: #faad14; font-weight: 500;">
-              Tổng: ${formatVND(allocationSuggestion.suggestions.reduce((sum, s) => sum + s.amount, 0))}
+              Tổng: ${formatVND(
+                allocationSuggestion.suggestions.reduce(
+                  (sum, s) => sum + s.amount,
+                  0
+                )
+              )}
             </p>
           </div>
         </div>
@@ -806,7 +884,11 @@ const ReportDashboard = () => {
           <Card className="glass-card" style={{ border: "1px solid #8c8c8c" }}>
             <Row gutter={[24, 24]} align="middle">
               <Col xs={24} lg={6}>
-                <Title level={2} className="premium-title" style={{ margin: 0 }}>
+                <Title
+                  level={2}
+                  className="premium-title"
+                  style={{ margin: 0 }}
+                >
                   {currentStore.name}
                 </Title>
                 <Text type="secondary" style={{ fontSize: "14px" }}>
@@ -818,7 +900,13 @@ const ReportDashboard = () => {
                 <Text strong style={{ display: "block", marginBottom: 8 }}>
                   Kỳ báo cáo
                 </Text>
-                <Select style={{ width: "100%" }} size="large" value={periodType} onChange={handlePeriodTypeChange} placeholder="Chọn kỳ">
+                <Select
+                  style={{ width: "100%" }}
+                  size="large"
+                  value={periodType}
+                  onChange={handlePeriodTypeChange}
+                  placeholder="Chọn kỳ"
+                >
                   <Select.Option value="month">Theo tháng</Select.Option>
                   <Select.Option value="quarter">Theo quý</Select.Option>
                   <Select.Option value="year">Theo năm</Select.Option>
@@ -837,22 +925,49 @@ const ReportDashboard = () => {
                   <DatePicker
                     style={{ width: "100%" }}
                     size="large"
-                    picker={periodType === "month" ? "month" : periodType === "year" ? "year" : "quarter"}
+                    picker={
+                      periodType === "month"
+                        ? "month"
+                        : periodType === "year"
+                        ? "year"
+                        : "quarter"
+                    }
                     value={pickerValue}
                     onChange={handlePeriodKeyChange}
                     format={(value) => {
-                      if (periodType === "quarter") return `Quý ${value.quarter()} - ${value.year()}`;
-                      if (periodType === "month") return `Tháng ${value.format("MM/YYYY")}`;
+                      if (periodType === "quarter")
+                        return `Quý ${value.quarter()} - ${value.year()}`;
+                      if (periodType === "month")
+                        return `Tháng ${value.format("MM/YYYY")}`;
                       return `Năm ${value.format("YYYY")}`;
                     }}
-                    placeholder={`Chọn ${periodType === "month" ? "tháng" : periodType === "quarter" ? "quý" : "năm"}`}
+                    placeholder={`Chọn ${
+                      periodType === "month"
+                        ? "tháng"
+                        : periodType === "quarter"
+                        ? "quý"
+                        : "năm"
+                    }`}
                   />
                 )}
               </Col>
 
-              <Col xs={24} lg={10} style={{ display: "flex", justifyContent: "flex-end", alignItems: "flex-end" }}>
+              <Col
+                xs={24}
+                lg={10}
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  alignItems: "flex-end",
+                }}
+              >
                 <Dropdown overlay={exportMenu} trigger={["click"]}>
-                  <Button type="primary" size="large" icon={<DownloadOutlined />} className="premium-btn">
+                  <Button
+                    type="primary"
+                    size="large"
+                    icon={<DownloadOutlined />}
+                    className="premium-btn"
+                  >
                     Xuất báo cáo <CaretDownOutlined />
                   </Button>
                 </Dropdown>
@@ -868,328 +983,580 @@ const ReportDashboard = () => {
               showIcon
               message="Thời gian ở tương lai"
               description={`Kỳ báo cáo bạn chọn (${periodKey}) chưa diễn ra. Hệ thống không cho phép ghi nhận chi phí trước cho tương lai.`}
-              style={{ padding: "24px", borderRadius: "12px", border: "1px solid #ffe58f" }}
+              style={{
+                padding: "24px",
+                borderRadius: "12px",
+                border: "1px solid #ffe58f",
+              }}
             />
           ) : (
             <Card style={{ border: "1px solid #8c8c8c" }}>
-            {/* Allocation Suggestion Alert */}
-            {allocationSuggestion && allocationSuggestion.canAllocate && (
-              <Alert
-                type="info"
-                message={
-                  <div
-                    style={{
-                      cursor: "pointer",
-                      padding: "8px 0",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 12,
-                      userSelect: "none",
-                    }}
-                    onClick={handleAllocationSuggestion}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = "rgba(24, 144, 255, 0.08)";
-                      e.currentTarget.style.borderRadius = "4px";
-                      e.currentTarget.style.padding = "8px 8px";
-                      e.currentTarget.style.marginLeft = "-8px";
-                      e.currentTarget.style.marginRight = "-8px";
-                      e.currentTarget.style.paddingLeft = "16px";
-                      e.currentTarget.style.paddingRight = "16px";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = "transparent";
-                      e.currentTarget.style.padding = "8px 0";
-                      e.currentTarget.style.marginLeft = "0";
-                      e.currentTarget.style.marginRight = "0";
-                      e.currentTarget.style.paddingLeft = "0";
-                      e.currentTarget.style.paddingRight = "0";
-                    }}
-                    title="Bấm để xem chi tiết và thực hiện phân bổ"
-                  >
-                    <div style={{ flex: 1 }}>
-                      <strong>Gợi ý phân bổ:</strong> {allocationSuggestion.message}
-                    </div>
-                    <span
-                      style={{
-                        fontSize: "12px",
-                        color: "#1890ff",
-                        fontWeight: "600",
-                        whiteSpace: "nowrap",
-                        marginLeft: "auto",
-                        paddingLeft: 12,
-                      }}
-                    >
-                      Bấm để xem →
-                    </span>
-                  </div>
-                }
-                showIcon
-                closable
-                onClose={() => setAllocationSuggestion(null)}
-                style={{ marginBottom: 16 }}
-              />
-            )}
-
-            <Space align="center" style={{ marginBottom: 12 }}>
-              <Title level={4} style={{ margin: 0 }}>
-                Chi phí ngoài lề
-              </Title>
-
-              <AntTooltip title="Bạn có thể thêm các chi phí bên ngoài hệ thống vào đây để hệ thống tính toán hộ. Số tiền này sẽ được cộng vào mục chi phí vận hành">
-                <InfoCircleOutlined style={{ color: "#1677ff", fontSize: 16, cursor: "pointer" }} />
-              </AntTooltip>
-            </Space>
-            <Row gutter={[16, 16]}>
-              <Col span={8}>
-                <label style={{ display: "block", marginBottom: 8 }}>Nhập Số Tiền</label>
-                <InputNumber
-                  min={0}
-                  value={newExpenseAmount}
-                  onChange={setNewExpenseAmount}
-                  formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
-                  parser={(v) => v.replace(/\$\s?|(,*)/g, "")}
-                  style={{ width: "100%" }}
-                  placeholder="Số tiền (VND)"
-                  size="large"
-                />
-              </Col>
-
-              <Col span={8}>
-                <label style={{ display: "block", marginBottom: 8 }}>Ghi Chú</label>
-                <Input
-                  placeholder="VD: Mặt bằng, điện, nước, lương nhân viên, tiếp thị..."
-                  value={newExpenseNote}
-                  onChange={(e) => setNewExpenseNote(e.target.value)}
-                  maxLength={100}
-                  size="large"
-                  onKeyPress={(e) => {
-                    if (e.key === "Enter" && newExpenseAmount && newExpenseAmount > 0) {
-                      addExpenseItem();
-                    }
-                  }}
-                />
-              </Col>
-
-              <Col span={8}>
-                <label style={{ display: "block", marginBottom: 8 }}>Hành Động</label>
-                <Space style={{ width: "100%", justifyContent: "space-between" }}>
-                  <Button type="primary" block onClick={addExpenseItem} disabled={!newExpenseAmount || newExpenseAmount <= 0} size="large">
-                    Thêm Khoản
-                  </Button>
-                </Space>
-              </Col>
-
-              {/* Danh sách chi phí */}
-              {expenseItems.length > 0 && (
-                <Col span={24}>
-                  <Divider style={{ margin: "12px 0" }} />
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                    <Text strong style={{ fontSize: 14 }}>
-                      Danh Sách Chi Phí ({expenseItems.length} khoản)
-                    </Text>
+              {/* Allocation Suggestion Alert */}
+              {allocationSuggestion && allocationSuggestion.canAllocate && (
+                <Alert
+                  type="info"
+                  message={
                     <div
                       style={{
-                        background: "#fff7e6",
-                        padding: "6px 16px",
-                        borderRadius: 4,
-                        fontWeight: "bold",
-                        color: "#faad14",
-                        fontSize: 14,
+                        cursor: "pointer",
+                        padding: "8px 0",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 12,
+                        userSelect: "none",
                       }}
+                      onClick={handleAllocationSuggestion}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background =
+                          "rgba(24, 144, 255, 0.08)";
+                        e.currentTarget.style.borderRadius = "4px";
+                        e.currentTarget.style.padding = "8px 8px";
+                        e.currentTarget.style.marginLeft = "-8px";
+                        e.currentTarget.style.marginRight = "-8px";
+                        e.currentTarget.style.paddingLeft = "16px";
+                        e.currentTarget.style.paddingRight = "16px";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = "transparent";
+                        e.currentTarget.style.padding = "8px 0";
+                        e.currentTarget.style.marginLeft = "0";
+                        e.currentTarget.style.marginRight = "0";
+                        e.currentTarget.style.paddingLeft = "0";
+                        e.currentTarget.style.paddingRight = "0";
+                      }}
+                      title="Bấm để xem chi tiết và thực hiện phân bổ"
                     >
-                      Tổng: {formatVND(getCurrentTotalExpense())}
-                    </div>
-                  </div>
-
-                  <Table
-                    rowKey={(record) => record._id}
-                    rowSelection={{
-                      selectedRowKeys: selectedExpenseIds,
-                      onChange: (keys) => setselectedExpenseIds(keys),
-                      getCheckboxProps: (record) => ({
-                        disabled: !!record.originPeriod,
-                      }),
-                    }}
-                    dataSource={expenseItems}
-                    columns={[
-                      {
-                        title: "STT",
-                        render: (_, __, idx) => idx + 1,
-                        width: 50,
-                        align: "center",
-                      },
-                      {
-                        title: "Số Tiền",
-                        dataIndex: "amount",
-                        render: (val) => <span style={{ fontWeight: "bold", color: "#faad14", fontSize: 14 }}>{formatVND(val)}</span>,
-                        width: "30%",
-                      },
-                      {
-                        title: "Ghi Chú",
-                        dataIndex: "note",
-                        render: (text) => <span style={{ fontSize: 13 }}>{text || "—"}</span>,
-                        flex: 1,
-                      },
-                      {
-                        title: "Kỳ Gốc",
-                        dataIndex: "originPeriod",
-                        render: (text) => (text ? <Tag color="blue">{text}</Tag> : <Tag color="green">Hiện tại</Tag>),
-                        width: 120,
-                        hidden: periodType === "month",
-                      },
-                      {
-                        title: "Trạng Thái",
-                        dataIndex: "isSaved",
-                        render: (saved) => (
-                          <span
-                            style={{
-                              padding: "2px 8px",
-                              borderRadius: "3px",
-                              fontSize: 12,
-                              fontWeight: "500",
-                              backgroundColor: saved ? "#f6ffed" : "#fff1f0",
-                              color: saved ? "#52c41a" : "#f5222d",
-                            }}
-                          >
-                            {saved ? "Đã lưu" : "Chưa lưu"}
-                          </span>
-                        ),
-                        width: 90,
-                        align: "center",
-                      },
-                      {
-                        title: "Thao Tác",
-                        width: 80,
-                        align: "center",
-                        render: (_, record, idx) => (
-                          <AntTooltip
-                            title={record.originPeriod ? `Khoản chi này thuộc ${record.originPeriod}. Vui lòng chuyển sang kỳ đó để xoá.` : ""}
-                          >
-                            <Button
-                              type="text"
-                              danger
-                              size="small"
-                              icon={<DeleteOutlined />}
-                              onClick={() => removeExpenseItem(idx)}
-                              disabled={!!record.originPeriod}
-                              title={record.originPeriod ? "" : "Xoá khoản chi phí này"}
-                            />
-                          </AntTooltip>
-                        ),
-                      },
-                    ]}
-                    pagination={false}
-                    size="small"
-                    bordered
-                  />
-
-                  {selectedExpenseIds.length > 0 && (
-                    <div style={{ marginTop: 12, display: "flex", gap: 8, padding: 8 }}>
-                      <Button
-                        type="primary"
-                        danger
-                        size="small"
-                        onClick={deleteMultipleExpenseItems}
-                        loading={loading}
-                        disabled={getUnsavedCount() > 0 || loading}
-                        title={getUnsavedCount() > 0 ? "Vui lòng lưu chi phí trước khi xoá" : ""}
+                      <div style={{ flex: 1 }}>
+                        <strong>Gợi ý phân bổ:</strong>{" "}
+                        {allocationSuggestion.message}
+                      </div>
+                      <span
+                        style={{
+                          fontSize: "12px",
+                          color: "#1890ff",
+                          fontWeight: "600",
+                          whiteSpace: "nowrap",
+                          marginLeft: "auto",
+                          paddingLeft: 12,
+                        }}
                       >
-                        Xoá {selectedExpenseIds.length} khoản đã chọn
-                      </Button>
-                      <Button size="small" onClick={() => setselectedExpenseIds([])} disabled={loading}>
-                        Bỏ chọn
-                      </Button>
+                        Bấm để xem →
+                      </span>
                     </div>
-                  )}
-                </Col>
+                  }
+                  showIcon
+                  closable
+                  onClose={() => setAllocationSuggestion(null)}
+                  style={{ marginBottom: 16 }}
+                />
               )}
 
-              {/* Nút Lưu + Alert */}
-              <Col span={24}>
-                <Space style={{ width: "100%" }}>
-                  <Button
-                    type={unsavedChanges && expenseItems.length > 0 ? "primary" : "default"}
-                    onClick={saveOperatingExpense}
-                    disabled={!unsavedChanges || expenseItems.length === 0 || loading}
-                    loading={loading}
-                    size="large"
-                    style={{ minWidth: 180 }}
-                  >
-                    {unsavedChanges && expenseItems.length > 0 ? "Lưu Chi Phí" : "Đã Lưu"}
-                  </Button>
+              <Space align="center" style={{ marginBottom: 12 }}>
+                <Title level={4} style={{ margin: 0 }}>
+                  Chi phí ngoài lề
+                </Title>
 
-                  {unsavedChanges && expenseItems.filter((it) => !it.isSaved).length > 0 && (
-                    <Alert
-                      type="warning"
-                      showIcon
-                      message={`Có ${expenseItems.filter((it) => !it.isSaved).length} khoản chi phí chưa lưu`}
-                      style={{ flex: 1, margin: 0 }}
+                <AntTooltip title="Bạn có thể thêm các chi phí bên ngoài hệ thống vào đây để hệ thống tính toán hộ. Số tiền này sẽ được cộng vào mục chi phí vận hành">
+                  <InfoCircleOutlined
+                    style={{
+                      color: "#1677ff",
+                      fontSize: 16,
+                      cursor: "pointer",
+                    }}
+                  />
+                </AntTooltip>
+              </Space>
+              <Row gutter={[16, 16]}>
+                <Col span={8}>
+                  <label style={{ display: "block", marginBottom: 8 }}>
+                    Nhập Số Tiền
+                  </label>
+                  <InputNumber
+                    min={0}
+                    value={newExpenseAmount}
+                    onChange={setNewExpenseAmount}
+                    formatter={(v) =>
+                      `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+                    }
+                    parser={(v) => v.replace(/\$\s?|(,*)/g, "")}
+                    style={{ width: "100%" }}
+                    placeholder="Số tiền (VND)"
+                    size="large"
+                  />
+                </Col>
+
+                <Col span={8}>
+                  <label style={{ display: "block", marginBottom: 8 }}>
+                    Ghi Chú
+                  </label>
+                  <Input
+                    placeholder="VD: Mặt bằng, điện, nước, lương nhân viên, tiếp thị..."
+                    value={newExpenseNote}
+                    onChange={(e) => setNewExpenseNote(e.target.value)}
+                    maxLength={100}
+                    size="large"
+                    onKeyPress={(e) => {
+                      if (
+                        e.key === "Enter" &&
+                        newExpenseAmount &&
+                        newExpenseAmount > 0
+                      ) {
+                        addExpenseItem();
+                      }
+                    }}
+                  />
+                </Col>
+
+                <Col span={8}>
+                  <label style={{ display: "block", marginBottom: 8 }}>
+                    Hành Động
+                  </label>
+                  <Space
+                    style={{ width: "100%", justifyContent: "space-between" }}
+                  >
+                    <Button
+                      type="primary"
+                      block
+                      onClick={addExpenseItem}
+                      disabled={!newExpenseAmount || newExpenseAmount <= 0}
+                      size="large"
+                    >
+                      Thêm Khoản
+                    </Button>
+                  </Space>
+                </Col>
+
+                {/* Danh sách chi phí */}
+                {expenseItems.length > 0 && (
+                  <Col span={24}>
+                    <Divider style={{ margin: "12px 0" }} />
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: 12,
+                      }}
+                    >
+                      <Text strong style={{ fontSize: 14 }}>
+                        Danh Sách Chi Phí ({expenseItems.length} khoản)
+                      </Text>
+                      <div
+                        style={{
+                          background: "#fff7e6",
+                          padding: "6px 16px",
+                          borderRadius: 4,
+                          fontWeight: "bold",
+                          color: "#faad14",
+                          fontSize: 14,
+                        }}
+                      >
+                        Tổng: {formatVND(getCurrentTotalExpense())}
+                      </div>
+                    </div>
+
+                    <Table
+                      rowKey={(record) => record._id}
+                      rowSelection={{
+                        selectedRowKeys: selectedExpenseIds,
+                        onChange: (keys) => setselectedExpenseIds(keys),
+                        getCheckboxProps: (record) => ({
+                          disabled: !!record.originPeriod,
+                        }),
+                      }}
+                      dataSource={expenseItems}
+                      columns={[
+                        {
+                          title: "STT",
+                          render: (_, __, idx) => idx + 1,
+                          width: 50,
+                          align: "center",
+                        },
+                        {
+                          title: "Số Tiền",
+                          dataIndex: "amount",
+                          render: (val) => (
+                            <span
+                              style={{
+                                fontWeight: "bold",
+                                color: "#faad14",
+                                fontSize: 14,
+                              }}
+                            >
+                              {formatVND(val)}
+                            </span>
+                          ),
+                          width: "30%",
+                        },
+                        {
+                          title: "Ghi Chú",
+                          dataIndex: "note",
+                          render: (text) => (
+                            <span style={{ fontSize: 13 }}>{text || "—"}</span>
+                          ),
+                          flex: 1,
+                        },
+                        {
+                          title: "Kỳ Gốc",
+                          dataIndex: "originPeriod",
+                          render: (text) =>
+                            text ? (
+                              <Tag color="blue">{text}</Tag>
+                            ) : (
+                              <Tag color="green">Hiện tại</Tag>
+                            ),
+                          width: 120,
+                          hidden: periodType === "month",
+                        },
+                        {
+                          title: "Trạng Thái",
+                          dataIndex: "isSaved",
+                          render: (saved) => (
+                            <span
+                              style={{
+                                padding: "2px 8px",
+                                borderRadius: "3px",
+                                fontSize: 12,
+                                fontWeight: "500",
+                                backgroundColor: saved ? "#f6ffed" : "#fff1f0",
+                                color: saved ? "#52c41a" : "#f5222d",
+                              }}
+                            >
+                              {saved ? "Đã lưu" : "Chưa lưu"}
+                            </span>
+                          ),
+                          width: 90,
+                          align: "center",
+                        },
+                        {
+                          title: "Thao Tác",
+                          width: 80,
+                          align: "center",
+                          render: (_, record, idx) => (
+                            <AntTooltip
+                              title={
+                                record.originPeriod
+                                  ? `Khoản chi này thuộc ${record.originPeriod}. Vui lòng chuyển sang kỳ đó để xoá.`
+                                  : ""
+                              }
+                            >
+                              <Button
+                                type="text"
+                                danger
+                                size="small"
+                                icon={<DeleteOutlined />}
+                                onClick={() => removeExpenseItem(idx)}
+                                disabled={!!record.originPeriod}
+                                title={
+                                  record.originPeriod
+                                    ? ""
+                                    : "Xoá khoản chi phí này"
+                                }
+                              />
+                            </AntTooltip>
+                          ),
+                        },
+                      ]}
+                      pagination={false}
+                      size="small"
+                      bordered
                     />
-                  )}
-                </Space>
-              </Col>
-            </Row>
-          </Card>
+
+                    {selectedExpenseIds.length > 0 && (
+                      <div
+                        style={{
+                          marginTop: 12,
+                          display: "flex",
+                          gap: 8,
+                          padding: 8,
+                        }}
+                      >
+                        <Button
+                          type="primary"
+                          danger
+                          size="small"
+                          onClick={deleteMultipleExpenseItems}
+                          loading={loading}
+                          disabled={getUnsavedCount() > 0 || loading}
+                          title={
+                            getUnsavedCount() > 0
+                              ? "Vui lòng lưu chi phí trước khi xoá"
+                              : ""
+                          }
+                        >
+                          Xoá {selectedExpenseIds.length} khoản đã chọn
+                        </Button>
+                        <Button
+                          size="small"
+                          onClick={() => setselectedExpenseIds([])}
+                          disabled={loading}
+                        >
+                          Bỏ chọn
+                        </Button>
+                      </div>
+                    )}
+                  </Col>
+                )}
+
+                {/* Nút Lưu + Alert */}
+                <Col span={24}>
+                  <Space style={{ width: "100%" }}>
+                    <Button
+                      type={
+                        unsavedChanges && expenseItems.length > 0
+                          ? "primary"
+                          : "default"
+                      }
+                      onClick={saveOperatingExpense}
+                      disabled={
+                        !unsavedChanges || expenseItems.length === 0 || loading
+                      }
+                      loading={loading}
+                      size="large"
+                      style={{ minWidth: 180 }}
+                    >
+                      {unsavedChanges && expenseItems.length > 0
+                        ? "Lưu Chi Phí"
+                        : "Đã Lưu"}
+                    </Button>
+
+                    {unsavedChanges &&
+                      expenseItems.filter((it) => !it.isSaved).length > 0 && (
+                        <Alert
+                          type="warning"
+                          showIcon
+                          message={`Có ${
+                            expenseItems.filter((it) => !it.isSaved).length
+                          } khoản chi phí chưa lưu`}
+                          style={{ flex: 1, margin: 0 }}
+                        />
+                      )}
+                  </Space>
+                </Col>
+              </Row>
+            </Card>
           )}
 
-          {loading && <Spin tip="Đang tải..." style={{ width: "100%", margin: "20px 0" }} />}
-          {error && <Alert message="Lỗi" description={error} type="error" showIcon style={{ marginBottom: 16 }} />}
+          {loading && (
+            <Spin
+              tip="Đang tải..."
+              style={{ width: "100%", margin: "20px 0" }}
+            />
+          )}
+          {error && (
+            <Alert
+              message="Lỗi"
+              description={error}
+              type="error"
+              showIcon
+              style={{ marginBottom: 16 }}
+            />
+          )}
 
           {(!periodType || !periodKey) && !loading && (
-            <Alert message="Vui lòng chọn kỳ báo cáo để xem dữ liệu." type="info" showIcon closable style={{ marginBottom: 16, height: 80 }} />
+            <Alert
+              message="Vui lòng chọn kỳ báo cáo để xem dữ liệu."
+              type="info"
+              showIcon
+              closable
+              style={{ marginBottom: 16, height: 80 }}
+            />
           )}
 
           {!loading && data && (
             <>
-              {/* CHỈ SỐ */}
+              {/* CHỈ SỐ - Hàng 1 */}
               <Row gutter={[20, 20]}>
                 <Col xs={24} sm={12} lg={6}>
                   <div className="stat-card-inner gradient-info">
                     <Statistic
-                      title={<span style={{ color: "rgba(255,255,255,0.8)" }}>Doanh thu</span>}
+                      title={
+                        <span style={{ color: "rgba(255,255,255,0.8)" }}>
+                          Doanh thu thực
+                        </span>
+                      }
                       value={data.totalRevenue}
                       formatter={formatVND}
-                      valueStyle={{ color: "#fff", fontWeight: 800, fontSize: "24px" }}
+                      valueStyle={{
+                        color: "#fff",
+                        fontWeight: 800,
+                        fontSize: "24px",
+                      }}
                     />
                     {renderComparison(data.comparison?.revenueChange)}
                   </div>
                 </Col>
 
                 <Col xs={24} sm={12} lg={6}>
-                  <div className="stat-card-inner gradient-success">
-                    <Statistic
-                      title={<span style={{ color: "rgba(255,255,255,0.8)" }}>Lợi nhuận gộp</span>}
-                      value={data.grossProfit}
-                      formatter={formatVND}
-                      valueStyle={{ color: "#fff", fontWeight: 800, fontSize: "24px" }}
-                    />
-                    {renderComparison(data.comparison?.grossProfitChange)}
-                  </div>
+                  <AntTooltip title="Doanh thu thuần = Doanh thu thực - VAT thu hộ">
+                    <div
+                      className="stat-card-inner"
+                      style={{
+                        background:
+                          "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)",
+                      }}
+                    >
+                      <Statistic
+                        title={
+                          <span style={{ color: "rgba(255,255,255,0.8)" }}>
+                            Doanh thu thuần
+                          </span>
+                        }
+                        value={data.netSales || 0}
+                        formatter={formatVND}
+                        valueStyle={{
+                          color: "#fff",
+                          fontWeight: 800,
+                          fontSize: "24px",
+                        }}
+                      />
+                    </div>
+                  </AntTooltip>
                 </Col>
 
                 <Col xs={24} sm={12} lg={6}>
-                  <div className="stat-card-inner gradient-warning">
-                    <AntTooltip title="Bao gồm: Lương nhân viên, Hoa hồng & Chi phí ngoài hệ thống">
+                  <AntTooltip title="Lợi nhuận gộp = Doanh thu thuần - Giá vốn hàng bán (COGS)">
+                    <div className="stat-card-inner gradient-success">
                       <Statistic
-                        title={<span style={{ color: "rgba(255,255,255,0.8)" }}>Chi phí vận hành</span>}
+                        title={
+                          <span style={{ color: "rgba(255,255,255,0.8)" }}>
+                            Lợi nhuận gộp
+                          </span>
+                        }
+                        value={data.grossProfit}
+                        formatter={formatVND}
+                        valueStyle={{
+                          color: "#fff",
+                          fontWeight: 800,
+                          fontSize: "24px",
+                        }}
+                      />
+                      {renderComparison(data.comparison?.grossProfitChange)}
+                    </div>
+                  </AntTooltip>
+                </Col>
+
+                <Col xs={24} sm={12} lg={6}>
+                  <AntTooltip title="Lợi nhuận ròng = Lợi nhuận gộp - Chi phí vận hành">
+                    <div className="stat-card-inner gradient-primary">
+                      <Statistic
+                        title={
+                          <span style={{ color: "rgba(255,255,255,0.8)" }}>
+                            Lợi nhuận ròng
+                          </span>
+                        }
+                        value={data.netProfit}
+                        formatter={formatVND}
+                        valueStyle={{
+                          color: "#fff",
+                          fontWeight: 800,
+                          fontSize: "24px",
+                        }}
+                      />
+                      {renderComparison(data.comparison?.netProfitChange)}
+                    </div>
+                  </AntTooltip>
+                </Col>
+              </Row>
+
+              {/* CHỈ SỐ - Hàng 2: Chi phí */}
+              <Row gutter={[20, 20]} style={{ marginTop: 16 }}>
+                <Col xs={24} sm={12} lg={6}>
+                  <AntTooltip title="Giá vốn hàng bán = Tổng giá nhập của hàng đã bán trong kỳ">
+                    <div
+                      className="stat-card-inner"
+                      style={{
+                        background:
+                          "linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)",
+                      }}
+                    >
+                      <Statistic
+                        title={
+                          <span style={{ color: "rgba(255,255,255,0.8)" }}>
+                            Giá vốn (COGS)
+                          </span>
+                        }
+                        value={data.totalCOGS || 0}
+                        formatter={formatVND}
+                        valueStyle={{
+                          color: "#fff",
+                          fontWeight: 800,
+                          fontSize: "24px",
+                        }}
+                      />
+                    </div>
+                  </AntTooltip>
+                </Col>
+
+                <Col xs={24} sm={12} lg={6}>
+                  <AntTooltip title="Bao gồm: Lương nhân viên, Hoa hồng & Chi phí ngoài hệ thống">
+                    <div className="stat-card-inner gradient-warning">
+                      <Statistic
+                        title={
+                          <span style={{ color: "rgba(255,255,255,0.8)" }}>
+                            Chi phí vận hành
+                          </span>
+                        }
                         value={data.operatingCost}
                         formatter={formatVND}
-                        valueStyle={{ color: "#fff", fontWeight: 800, fontSize: "24px" }}
+                        valueStyle={{
+                          color: "#fff",
+                          fontWeight: 800,
+                          fontSize: "24px",
+                        }}
                       />
-                    </AntTooltip>
-                    {renderComparison(data.comparison?.operatingCostChange)}
+                      {renderComparison(data.comparison?.operatingCostChange)}
+                    </div>
+                  </AntTooltip>
+                </Col>
+
+                <Col xs={24} sm={12} lg={6}>
+                  <div
+                    className="stat-card-inner"
+                    style={{
+                      background:
+                        "linear-gradient(135deg, #f43f5e 0%, #be123c 100%)",
+                    }}
+                  >
+                    <Statistic
+                      title={
+                        <span style={{ color: "rgba(255,255,255,0.8)" }}>
+                          VAT thu hộ
+                        </span>
+                      }
+                      value={data.totalVAT || 0}
+                      formatter={formatVND}
+                      valueStyle={{
+                        color: "#fff",
+                        fontWeight: 800,
+                        fontSize: "24px",
+                      }}
+                    />
                   </div>
                 </Col>
 
                 <Col xs={24} sm={12} lg={6}>
-                  <div className="stat-card-inner gradient-primary">
+                  <div
+                    className="stat-card-inner"
+                    style={{
+                      background:
+                        "linear-gradient(135deg, #22c55e 0%, #16a34a 100%)",
+                    }}
+                  >
                     <Statistic
-                      title={<span style={{ color: "rgba(255,255,255,0.8)" }}>Lợi nhuận ròng</span>}
-                      value={data.netProfit}
+                      title={
+                        <span style={{ color: "rgba(255,255,255,0.8)" }}>
+                          Giá trị tồn kho
+                        </span>
+                      }
+                      value={data.stockValue || 0}
                       formatter={formatVND}
-                      valueStyle={{ color: "#fff", fontWeight: 800, fontSize: "24px" }}
+                      valueStyle={{
+                        color: "#fff",
+                        fontWeight: 800,
+                        fontSize: "24px",
+                      }}
                     />
-                    {renderComparison(data.comparison?.netProfitChange)}
                   </div>
                 </Col>
               </Row>
@@ -1200,7 +1567,13 @@ const ReportDashboard = () => {
                   <Card
                     className="glass-card"
                     title={
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                        }}
+                      >
                         <Title level={4} style={{ margin: 0 }}>
                           Cơ cấu tài chính tổng quan
                         </Title>
@@ -1220,14 +1593,42 @@ const ReportDashboard = () => {
                     <ResponsiveContainer width="100%" height={380}>
                       <BarChart data={generateBarData()}>
                         <defs>
-                          <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#fff" stopOpacity={0.2} />
-                            <stop offset="100%" stopColor="#fff" stopOpacity={0} />
+                          <linearGradient
+                            id="barGradient"
+                            x1="0"
+                            y1="0"
+                            x2="0"
+                            y2="1"
+                          >
+                            <stop
+                              offset="0%"
+                              stopColor="#fff"
+                              stopOpacity={0.2}
+                            />
+                            <stop
+                              offset="100%"
+                              stopColor="#fff"
+                              stopOpacity={0}
+                            />
                           </linearGradient>
                         </defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#64748b" }} />
-                        <YAxis tickFormatter={(v) => `${(v / 1e6).toFixed(1)}tr`} axisLine={false} tickLine={false} tick={{ fill: "#64748b" }} />
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          vertical={false}
+                          stroke="#f0f0f0"
+                        />
+                        <XAxis
+                          dataKey="name"
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fill: "#64748b" }}
+                        />
+                        <YAxis
+                          tickFormatter={(v) => `${(v / 1e6).toFixed(1)}tr`}
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fill: "#64748b" }}
+                        />
                         <Tooltip
                           cursor={{ fill: "#f8fafc" }}
                           content={({ active, payload }) => {
@@ -1238,12 +1639,27 @@ const ReportDashboard = () => {
                                     background: "#fff",
                                     padding: "12px 16px",
                                     borderRadius: "12px",
-                                    boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)",
+                                    boxShadow:
+                                      "0 10px 15px -3px rgba(0,0,0,0.1)",
                                     border: "1px solid #e2e8f0",
                                   }}
                                 >
-                                  <div style={{ color: "#64748b", fontSize: "12px", marginBottom: "4px" }}>{payload[0].payload.name}</div>
-                                  <div style={{ fontWeight: 700, fontSize: "16px", color: payload[0].payload.fill }}>
+                                  <div
+                                    style={{
+                                      color: "#64748b",
+                                      fontSize: "12px",
+                                      marginBottom: "4px",
+                                    }}
+                                  >
+                                    {payload[0].payload.name}
+                                  </div>
+                                  <div
+                                    style={{
+                                      fontWeight: 700,
+                                      fontSize: "16px",
+                                      color: payload[0].payload.fill,
+                                    }}
+                                  >
                                     {formatVND(payload[0].value)}
                                   </div>
                                 </div>
@@ -1263,13 +1679,24 @@ const ReportDashboard = () => {
                 </Col>
 
                 <Col xs={24} lg={8}>
-                  <Card className="glass-card" title={<Title level={4}>Hàng tồn kho</Title>}>
+                  <Card
+                    className="glass-card"
+                    title={<Title level={4}>Hàng tồn kho</Title>}
+                  >
                     <ResponsiveContainer width="100%" height={260}>
                       <PieChart>
                         <Pie
                           data={[
-                            { name: "Doanh thu", value: data.totalRevenue, fill: COLORS.revenue },
-                            { name: "Hàng tồn kho", value: data.stockValue, fill: COLORS.stockValue },
+                            {
+                              name: "Doanh thu",
+                              value: data.totalRevenue,
+                              fill: COLORS.revenue,
+                            },
+                            {
+                              name: "Hàng tồn kho",
+                              value: data.stockValue,
+                              fill: COLORS.stockValue,
+                            },
                           ]}
                           cx="50%"
                           cy="50%"
@@ -1292,7 +1719,13 @@ const ReportDashboard = () => {
                         marginTop: 12,
                       }}
                     >
-                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                        }}
+                      >
                         <span
                           style={{
                             width: 10,
@@ -1305,7 +1738,13 @@ const ReportDashboard = () => {
                         <Text style={{ fontSize: 13 }}>Doanh thu</Text>
                       </div>
 
-                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                        }}
+                      >
                         <span
                           style={{
                             width: 10,
@@ -1320,21 +1759,47 @@ const ReportDashboard = () => {
                     </div>
 
                     <div style={{ marginTop: 20 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          marginBottom: 12,
+                        }}
+                      >
                         <Text strong color="primary">
                           Tỷ lệ Tồn/Doanh thu
                         </Text>
-                        <Tag color={data.totalRevenue > 0 && data.stockValue / data.totalRevenue < 0.5 ? "green" : "orange"} className="premium-tag">
-                          {data.totalRevenue > 0 ? ((data.stockValue / data.totalRevenue) * 100).toFixed(1) : 0}%
+                        <Tag
+                          color={
+                            data.totalRevenue > 0 &&
+                            data.stockValue / data.totalRevenue < 0.5
+                              ? "green"
+                              : "orange"
+                          }
+                          className="premium-tag"
+                        >
+                          {data.totalRevenue > 0
+                            ? (
+                                (data.stockValue / data.totalRevenue) *
+                                100
+                              ).toFixed(1)
+                            : 0}
+                          %
                         </Tag>
                       </div>
                       <Alert
                         message={
-                          data.totalRevenue > 0 && data.stockValue / data.totalRevenue < 0.5
+                          data.totalRevenue > 0 &&
+                          data.stockValue / data.totalRevenue < 0.5
                             ? "Sức khỏe kho hàng: Tốt"
                             : "Cần tối ưu vòng quay hàng tồn"
                         }
-                        type={data.totalRevenue > 0 && data.stockValue / data.totalRevenue < 0.5 ? "success" : "warning"}
+                        type={
+                          data.totalRevenue > 0 &&
+                          data.stockValue / data.totalRevenue < 0.5
+                            ? "success"
+                            : "warning"
+                        }
                         showIcon
                       />
                     </div>
@@ -1343,7 +1808,12 @@ const ReportDashboard = () => {
               </Row>
 
               {/* THỐNG KÊ NHÓM HÀNG */}
-              <Card className="glass-card" title={<Title level={4}>Phân tích hiệu quả theo nhóm hàng</Title>}>
+              <Card
+                className="glass-card"
+                title={
+                  <Title level={4}>Phân tích hiệu quả theo nhóm hàng</Title>
+                }
+              >
                 <Table
                   dataSource={data.groupStats || []}
                   rowKey="_id"
@@ -1356,7 +1826,11 @@ const ReportDashboard = () => {
                         <span style={{ color: "#1677ff", fontWeight: 600 }}>
                           {range[0]} – {range[1]}
                         </span>{" "}
-                        trên tổng số <span style={{ color: "#fa541c", fontWeight: 600 }}>{total}</span> nhóm hàng
+                        trên tổng số{" "}
+                        <span style={{ color: "#fa541c", fontWeight: 600 }}>
+                          {total}
+                        </span>{" "}
+                        nhóm hàng
                       </div>
                     ),
                   }}
@@ -1385,11 +1859,25 @@ const ReportDashboard = () => {
                       title: "Số lượng bán",
                       dataIndex: "quantitySold",
                       align: "center",
-                      render: (val) => <Badge count={val} showZero overflowCount={999999} color={val === 0 ? "#d9d9d9" : "#6366f1"} />,
+                      render: (val) => (
+                        <Badge
+                          count={val}
+                          showZero
+                          overflowCount={999999}
+                          color={val === 0 ? "#d9d9d9" : "#6366f1"}
+                        />
+                      ),
                     },
                     {
                       title: (
-                        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 6 }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "flex-end",
+                            alignItems: "center",
+                            gap: 6,
+                          }}
+                        >
                           <span>Tồn kho(theo giá vốn)</span>
 
                           <AntTooltip title="Giá trị được tính theo giá vốn: Tồn kho = Số lượng tồn × Giá vốn">
@@ -1406,7 +1894,14 @@ const ReportDashboard = () => {
                       dataIndex: "stockValueCost",
                       align: "right",
                       render: (val, record) => (
-                        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "flex-end",
+                            gap: 6,
+                          }}
+                        >
                           <Text strong color="primary">
                             {formatVND(val)}
                           </Text>
@@ -1463,7 +1958,11 @@ const ReportDashboard = () => {
                         if (val > 2)
                           return (
                             <AntTooltip title="Hàng tồn nhiều so với doanh thu → bán chậm">
-                              <Tag color="error" className="premium-tag" style={{ cursor: "help" }}>
+                              <Tag
+                                color="error"
+                                className="premium-tag"
+                                style={{ cursor: "help" }}
+                              >
                                 Tồn cao
                               </Tag>
                             </AntTooltip>
@@ -1471,7 +1970,11 @@ const ReportDashboard = () => {
 
                         return (
                           <AntTooltip title="Doanh thu và tồn kho ở mức hợp lý">
-                            <Tag color="success" className="premium-tag" style={{ cursor: "help" }}>
+                            <Tag
+                              color="success"
+                              className="premium-tag"
+                              style={{ cursor: "help" }}
+                            >
                               Ổn định
                             </Tag>
                           </AntTooltip>
@@ -1496,7 +1999,9 @@ const ReportDashboard = () => {
         footer={null}
         width={700}
       >
-        {selectedGroup && selectedGroup.productDetails && selectedGroup.productDetails.length > 0 ? (
+        {selectedGroup &&
+        selectedGroup.productDetails &&
+        selectedGroup.productDetails.length > 0 ? (
           <Table
             dataSource={selectedGroup.productDetails}
             rowKey="_id"
@@ -1509,7 +2014,11 @@ const ReportDashboard = () => {
                 render: (text, record) => (
                   <div>
                     <Text strong>{text}</Text>
-                    {record.code && <div style={{ fontSize: 12, color: "#999" }}>{record.code}</div>}
+                    {record.code && (
+                      <div style={{ fontSize: 12, color: "#999" }}>
+                        {record.code}
+                      </div>
+                    )}
                   </div>
                 ),
               },
@@ -1536,7 +2045,10 @@ const ReportDashboard = () => {
               },
             ]}
             summary={(pageData) => {
-              const total = pageData.reduce((sum, record) => sum + record.stockValueCost, 0);
+              const total = pageData.reduce(
+                (sum, record) => sum + record.stockValueCost,
+                0
+              );
               return (
                 <Table.Summary.Row style={{ fontWeight: "bold" }}>
                   <Table.Summary.Cell colSpan={3} align="right">

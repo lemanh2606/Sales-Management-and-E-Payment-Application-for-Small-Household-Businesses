@@ -90,7 +90,7 @@ const LoyaltyConfigScreen: React.FC = () => {
       setVndPerPoint(apiConfig.vndPerPoint.toString());
       setMinOrderValue(apiConfig.minOrderValue.toString());
 
-      console.log("✅ Lấy config tích điểm thành công:", apiConfig);
+      console.log(" Lấy config tích điểm thành công:", apiConfig);
     } catch (err) {
       const axiosError = err as any;
       console.error(" Lỗi lấy config:", axiosError);
@@ -133,7 +133,7 @@ const LoyaltyConfigScreen: React.FC = () => {
       );
 
       console.log(
-        "✅ Toggle isActive thành công:",
+        " Toggle isActive thành công:",
         response.data.config.isActive
       );
 
@@ -207,7 +207,7 @@ const LoyaltyConfigScreen: React.FC = () => {
         payload
       );
 
-      console.log("✅ Lưu config thành công:", response.data.config);
+      console.log(" Lưu config thành công:", response.data.config);
 
       Alert.alert("Thành công", "Cấu hình đã được lưu thành công!", [
         { text: "OK" },

@@ -66,7 +66,8 @@ type Order = {
   isVATInvoice: boolean;
   vatAmount: MongoDecimal;
   beforeTaxAmount: MongoDecimal;
-
+  grossAmount?: MongoDecimal;
+  discountAmount?: MongoDecimal;
   createdAt: string;
   updatedAt: string;
 };
@@ -787,21 +788,21 @@ const OrderTrackingScreen: React.FC = () => {
                 <Text style={styles.sectionTitle}>Thanh toán</Text>
                 <View style={styles.sectionBox}>
                   <KV
-                    k="Trước thuế"
-                    v={formatCurrency(orderDetail.order.beforeTaxAmount)}
+                    k="Tiền hàng (gồm VAT)"
+                    v={formatCurrency(orderDetail.order.grossAmount || 0)}
                   />
-                  {orderDetail.order.isVATInvoice ? (
+                  {moneyToNumber(orderDetail.order.discountAmount) > 0 ? (
                     <KV
-                      k="VAT (10%)"
-                      v={`+${formatCurrency(orderDetail.order.vatAmount)}`}
-                      valueColor="#b45309"
+                      k="Giảm từ điểm"
+                      v={`-${formatCurrency(orderDetail.order.discountAmount!)}`}
+                      valueColor="#15803d"
                     />
                   ) : null}
                   <KV
-                    k="Tổng"
+                    k="THANH TOÁN"
                     v={formatCurrency(orderDetail.order.totalAmount)}
-                    valueColor="#1d4ed8"
                     bold
+                    valueColor="#1d4ed8"
                   />
                   {orderDetail.order.refundId ? (
                     <View style={styles.refundBanner}>

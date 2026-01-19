@@ -799,7 +799,7 @@ export default function DashboardScreen() {
                 <StatCard
                   title="Lợi nhuận gộp"
                   value={formatCurrency(financials?.grossProfit || 0)}
-                  subtitle="Doanh thu - Giá vốn"
+                  subtitle="Doanh thu thuần - Giá vốn"
                   icon="💸"
                   color="#2563eb"
                   gradient={["#eff6ff", "#dbeafe"]}

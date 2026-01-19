@@ -78,8 +78,6 @@ const generateSKU = async (storeId) => {
   }
 };
 
-
-
 // ============= CREATE - Tạo sản phẩm mới =============
 const createProduct = async (req, res) => {
   const session = await mongoose.startSession();
@@ -135,7 +133,7 @@ const createProduct = async (req, res) => {
       tax_rate,
       origin,
       brand,
-      warranty_period
+      warranty_period,
     } = req.body || {};
 
     if (!name || price === undefined || cost_price === undefined) {
@@ -164,8 +162,8 @@ const createProduct = async (req, res) => {
     // UI vẫn gửi stock_quantity => coi là "tồn đầu kỳ"
     const openingQty =
       stock_quantity !== undefined &&
-        stock_quantity !== null &&
-        stock_quantity !== ""
+      stock_quantity !== null &&
+      stock_quantity !== ""
         ? Number(stock_quantity)
         : 0;
 
@@ -342,11 +340,11 @@ const createProduct = async (req, res) => {
       group_id: group_id || null,
       createdBy: userId,
 
-      // ✅ GẮN KHO MẶC ĐỊNH VÀO PRODUCT
+      //  GẮN KHO MẶC ĐỊNH VÀO PRODUCT
       default_warehouse_id: finalDefaultWarehouseId,
       default_warehouse_name: finalDefaultWarehouseName,
 
-      // ✅ LEGAL FIELDS
+      //  LEGAL FIELDS
       tax_rate: tax_rate !== undefined ? Number(tax_rate) : 0,
       origin: origin || "",
       brand: brand || "",
@@ -394,7 +392,7 @@ const createProduct = async (req, res) => {
         voucher_date: now,
         reason: "Tồn đầu kỳ khi tạo sản phẩm",
 
-        // ✅ GẮN KHO CHO PHIẾU (level header)
+        //  GẮN KHO CHO PHIẾU (level header)
         warehouse_id: finalDefaultWarehouseId || null,
         warehouse_name: finalDefaultWarehouseName || "",
 
@@ -412,7 +410,7 @@ const createProduct = async (req, res) => {
             name_snapshot: newProduct.name,
             unit_snapshot: newProduct.unit || "",
 
-            // ✅ GẮN KHO CHO TỪNG DÒNG ITEM
+            //  GẮN KHO CHO TỪNG DÒNG ITEM
             warehouse_id: finalDefaultWarehouseId || null,
             warehouse_name: finalDefaultWarehouseName || "",
 
@@ -442,9 +440,9 @@ const createProduct = async (req, res) => {
               cost_price: costNum, // Giá vốn nhập ban đầu
               quantity: openingQty,
               warehouse_id: finalDefaultWarehouseId,
-              created_at: now
-            }
-          }
+              created_at: now,
+            },
+          },
         },
         { session }
       );
@@ -482,11 +480,13 @@ const createProduct = async (req, res) => {
         entityId: createdVoucher._id,
         entityName: `Phiếu nhập kho ${createdVoucher.voucher_code}`,
         req,
-        description: `Nhập tồn đầu kỳ khi tạo sản phẩm ${newProduct.name
-          } (SKU: ${newProduct.sku}) số lượng ${openingQty} ${finalDefaultWarehouseName
+        description: `Nhập tồn đầu kỳ khi tạo sản phẩm ${
+          newProduct.name
+        } (SKU: ${newProduct.sku}) số lượng ${openingQty} ${
+          finalDefaultWarehouseName
             ? `tại kho ${finalDefaultWarehouseName}`
             : ""
-          }`,
+        }`,
       });
     }
 
@@ -496,15 +496,15 @@ const createProduct = async (req, res) => {
       openingStock: openingQty,
       inventoryVoucher: createdVoucher
         ? {
-          _id: createdVoucher._id,
-          voucher_code: createdVoucher.voucher_code,
-          type: createdVoucher.type,
-          status: createdVoucher.status,
-          voucher_date: createdVoucher.voucher_date,
-          // ✅ TRẢ VỀ THÔNG TIN KHO
-          warehouse_id: createdVoucher.warehouse_id,
-          warehouse_name: createdVoucher.warehouse_name,
-        }
+            _id: createdVoucher._id,
+            voucher_code: createdVoucher.voucher_code,
+            type: createdVoucher.type,
+            status: createdVoucher.status,
+            voucher_date: createdVoucher.voucher_date,
+            //  TRẢ VỀ THÔNG TIN KHO
+            warehouse_id: createdVoucher.warehouse_id,
+            warehouse_name: createdVoucher.warehouse_name,
+          }
         : null,
     });
   } catch (error) {
@@ -513,7 +513,7 @@ const createProduct = async (req, res) => {
     try {
       await session.abortTransaction();
       session.endSession();
-    } catch (_) { }
+    } catch (_) {}
 
     return res
       .status(500)
@@ -562,7 +562,7 @@ const updateProduct = async (req, res) => {
       tax_rate,
       origin,
       brand,
-      warranty_period
+      warranty_period,
     } = req.body || {};
 
     // ===== Check user =====
@@ -754,14 +754,15 @@ const updateProduct = async (req, res) => {
       status,
       supplier_id,
       group_id,
-      // ✅ THÊM: Legal & Warranty fields
+      //  THÊM: Legal & Warranty fields
       tax_rate: tax_rate !== undefined ? Number(tax_rate) : undefined,
       origin: origin !== undefined ? origin : undefined,
       brand: brand !== undefined ? brand : undefined,
-      warranty_period: warranty_period !== undefined ? warranty_period : undefined,
+      warranty_period:
+        warranty_period !== undefined ? warranty_period : undefined,
     };
 
-    // ✅ THÊM: Update kho mặc định nếu có thay đổi
+    //  THÊM: Update kho mặc định nếu có thay đổi
     if (default_warehouse_id !== undefined) {
       updateData.default_warehouse_id = finalDefaultWarehouseId;
       updateData.default_warehouse_name = finalDefaultWarehouseName;
@@ -823,11 +824,12 @@ const updateProduct = async (req, res) => {
             ? updateData.cost_price
             : typeof product.cost_price === "object" &&
               product.cost_price?.toString
-              ? Number(product.cost_price.toString())
-              : Number(product.cost_price || 0);
+            ? Number(product.cost_price.toString())
+            : Number(product.cost_price || 0);
 
-        const voucherCode = `${voucherType === "IN" ? "NK" : "XK"
-          }-${y}${m}${d}-${product.sku}-${Date.now()}`;
+        const voucherCode = `${
+          voucherType === "IN" ? "NK" : "XK"
+        }-${y}${m}${d}-${product.sku}-${Date.now()}`;
 
         createdVoucher = new InventoryVoucher({
           store_id: productStoreId,
@@ -837,7 +839,7 @@ const updateProduct = async (req, res) => {
           voucher_date: now,
           reason: "Điều chỉnh tồn kho khi cập nhật sản phẩm",
 
-          // ✅ GẮN KHO CHO PHIẾU (dùng kho mặc định của product)
+          //  GẮN KHO CHO PHIẾU (dùng kho mặc định của product)
           warehouse_id: finalDefaultWarehouseId || null,
           warehouse_name: finalDefaultWarehouseName || "",
 
@@ -855,7 +857,7 @@ const updateProduct = async (req, res) => {
               name_snapshot: name !== undefined ? name : product.name,
               unit_snapshot: unit !== undefined ? unit : product.unit || "",
 
-              // ✅ GẮN KHO CHO TỪNG DÒNG ITEM
+              //  GẮN KHO CHO TỪNG DÒNG ITEM
               warehouse_id: finalDefaultWarehouseId || null,
               warehouse_name: finalDefaultWarehouseName || "",
 
@@ -865,8 +867,9 @@ const updateProduct = async (req, res) => {
               unit_cost: mongoose.Types.Decimal128.fromString(
                 String(effectiveCost)
               ),
-              note: `Set tồn từ ${currentQty} -> ${targetStockQty} (delta ${delta > 0 ? "+" : "-"
-                }${absQty})`,
+              note: `Set tồn từ ${currentQty} -> ${targetStockQty} (delta ${
+                delta > 0 ? "+" : "-"
+              }${absQty})`,
             },
           ],
         });
@@ -876,7 +879,7 @@ const updateProduct = async (req, res) => {
         // cập nhật tồn kho bằng $inc: SỬA field đúng stock_quantity (không phải stockquantity)
         await Product.updateOne(
           { _id: productId, store_id: productStoreId, isDeleted: false },
-          { $inc: { stock_quantity: delta } }, // ✅ Sửa field đúng
+          { $inc: { stock_quantity: delta } }, //  Sửa field đúng
           { session }
         );
       }
@@ -924,11 +927,13 @@ const updateProduct = async (req, res) => {
         entityId: createdVoucher._id,
         entityName: `Phiếu kho ${createdVoucher.voucher_code}`,
         req,
-        description: `Điều chỉnh tồn kho sản phẩm ${updatedProduct.name}: ${createdVoucher.type
-          } ${finalDefaultWarehouseName
+        description: `Điều chỉnh tồn kho sản phẩm ${updatedProduct.name}: ${
+          createdVoucher.type
+        } ${
+          finalDefaultWarehouseName
             ? `tại kho ${finalDefaultWarehouseName}`
             : ""
-          }`,
+        }`,
       });
     }
 
@@ -937,15 +942,15 @@ const updateProduct = async (req, res) => {
       product: updatedProduct,
       inventoryVoucher: createdVoucher
         ? {
-          _id: createdVoucher._id,
-          voucher_code: createdVoucher.voucher_code,
-          type: createdVoucher.type,
-          status: createdVoucher.status,
-          voucher_date: createdVoucher.voucher_date,
-          // ✅ TRẢ VỀ THÔNG TIN KHO
-          warehouse_id: createdVoucher.warehouse_id,
-          warehouse_name: createdVoucher.warehouse_name,
-        }
+            _id: createdVoucher._id,
+            voucher_code: createdVoucher.voucher_code,
+            type: createdVoucher.type,
+            status: createdVoucher.status,
+            voucher_date: createdVoucher.voucher_date,
+            //  TRẢ VỀ THÔNG TIN KHO
+            warehouse_id: createdVoucher.warehouse_id,
+            warehouse_name: createdVoucher.warehouse_name,
+          }
         : null,
     });
   } catch (error) {
@@ -954,7 +959,7 @@ const updateProduct = async (req, res) => {
     try {
       await session.abortTransaction();
       session.endSession();
-    } catch (_) { }
+    } catch (_) {}
 
     return res
       .status(500)
@@ -1033,7 +1038,7 @@ const deleteProduct = async (req, res) => {
     try {
       await session.abortTransaction();
       session.endSession();
-    } catch (_) { }
+    } catch (_) {}
 
     return res
       .status(500)
@@ -1103,12 +1108,14 @@ const getProductsByStore = async (req, res) => {
       warehouse_name:
         p.default_warehouse_name || p.default_warehouse_id?.name || "",
 
-      // ✅ BATCHES - Include batch information for expiry and inventory tracking
+      //  BATCHES - Include batch information for expiry and inventory tracking
       batches: (p.batches || []).map((b) => ({
         batch_no: b.batch_no || "",
         expiry_date: b.expiry_date || null,
         cost_price: b.cost_price ? parseFloat(b.cost_price.toString()) : 0,
-        selling_price: b.selling_price ? parseFloat(b.selling_price.toString()) : 0, // Bổ sung selling_price
+        selling_price: b.selling_price
+          ? parseFloat(b.selling_price.toString())
+          : 0, // Bổ sung selling_price
         quantity: b.quantity || 0,
         warehouse_id: b.warehouse_id || null,
         created_at: b.created_at || null,
@@ -1116,7 +1123,7 @@ const getProductsByStore = async (req, res) => {
 
       createdAt: p.createdAt,
       updatedAt: p.updatedAt,
-      // ✅ Bổ sung thông tin pháp lý & bảo hành
+      //  Bổ sung thông tin pháp lý & bảo hành
       tax_rate: p.tax_rate ?? 0,
       origin: p.origin || "",
       brand: p.brand || "",
@@ -1146,7 +1153,7 @@ const getProductById = async (req, res) => {
       .populate("supplier_id", "name")
       .populate("store_id", "name")
       .populate("group_id", "name")
-      .populate("default_warehouse_id", "name"); // ✅ ĐÚNG schema
+      .populate("default_warehouse_id", "name"); //  ĐÚNG schema
 
     if (!product) {
       return res.status(404).json({ message: "Sản phẩm không tồn tại" });
@@ -1197,7 +1204,7 @@ const getProductById = async (req, res) => {
 
       createdAt: product.createdAt,
       updatedAt: product.updatedAt,
-      // ✅ Bổ sung thông tin pháp lý & bảo hành
+      //  Bổ sung thông tin pháp lý & bảo hành
       tax_rate: product.tax_rate ?? 0,
       origin: product.origin || "",
       brand: product.brand || "",
@@ -1327,7 +1334,8 @@ const getLowStockProducts = async (req, res) => {
       .lean(); // Lean cho nhanh
 
     console.log(
-      `Query low stock thành công, số lượng: ${lowStockProds.length
+      `Query low stock thành công, số lượng: ${
+        lowStockProds.length
       } sản phẩm cho store ${storeId || "tất cả"}`
     );
     res.json({
@@ -1354,9 +1362,9 @@ const getExpiringProducts = async (req, res) => {
       batches: {
         $elemMatch: {
           expiry_date: { $lte: thresholdDate },
-          quantity: { $gt: 0 }
-        }
-      }
+          quantity: { $gt: 0 },
+        },
+      },
     };
 
     const products = await Product.find(query)
@@ -1367,8 +1375,8 @@ const getExpiringProducts = async (req, res) => {
     const now = new Date();
     // Flatten batches for UI if needed, or just return products
     const expiringItems = [];
-    products.forEach(p => {
-      p.batches.forEach(b => {
+    products.forEach((p) => {
+      p.batches.forEach((b) => {
         if (b.expiry_date && b.expiry_date <= thresholdDate && b.quantity > 0) {
           const isExpired = new Date(b.expiry_date) <= now;
           expiringItems.push({
@@ -1387,7 +1395,7 @@ const getExpiringProducts = async (req, res) => {
             supplier_name: p.supplier_id?.name,
             supplier_contact: p.supplier_id?.contact_person,
             supplier_phone: p.supplier_id?.phone,
-            supplier_address: p.supplier_id?.address
+            supplier_address: p.supplier_id?.address,
           });
         }
       });
@@ -1395,7 +1403,9 @@ const getExpiringProducts = async (req, res) => {
 
     res.json({
       message: "Lấy danh sách sản phẩm sắp hết hạn thành công",
-      data: expiringItems.sort((a,b) => new Date(a.expiry_date) - new Date(b.expiry_date)),
+      data: expiringItems.sort(
+        (a, b) => new Date(a.expiry_date) - new Date(b.expiry_date)
+      ),
     });
   } catch (err) {
     console.error("Lỗi query expiring products:", err.message);
@@ -1415,7 +1425,7 @@ const searchProducts = async (req, res) => {
     }
 
     const searchTerm = query.trim();
-    
+
     const searchQuery = {
       $or: [
         { name: { $regex: searchTerm, $options: "i" } }, // Tìm tên (case-insensitive)
@@ -1428,10 +1438,31 @@ const searchProducts = async (req, res) => {
     };
 
     const products = await Product.find(searchQuery)
-      .select("image name sku price cost_price stock_quantity unit batches status tax_rate") // Bổ sung tax_rate
-      .sort({ stock_quantity: -1, name: 1 }) // Ưu tiên có stock, sau đó A-Z
-      .limit(parseInt(limit)) // Limit số kết quả
-      .lean(); // Lean cho nhanh
+      .select(
+        "image name sku price cost_price stock_quantity unit batches status tax_rate"
+      )
+      .sort({ stock_quantity: -1, name: 1 })
+      .limit(parseInt(limit))
+      .lean();
+
+    //  Đồng bộ logic sắp xếp lô: Hạn dùng gần nhất -> Cũ nhất (FIFO)
+    products.forEach((p) => {
+      if (p.batches && p.batches.length > 0) {
+        p.batches = p.batches
+          .filter((b) => (b.quantity || 0) > 0)
+          .sort((a, b) => {
+            // 1. Ưu tiên lô có hạn dùng (Sắp hết hạn trước)
+            if (a.expiry_date && !b.expiry_date) return -1;
+            if (!a.expiry_date && b.expiry_date) return 1;
+            if (a.expiry_date && b.expiry_date) {
+              const diff = new Date(a.expiry_date) - new Date(b.expiry_date);
+              if (diff !== 0) return diff;
+            }
+            // 2. Cùng hạn hoặc không hạn: Lô cũ nhất trước (FIFO)
+            return new Date(a.created_at || 0) - new Date(b.created_at || 0);
+          });
+      }
+    });
 
     console.log(
       `Tìm kiếm sản phẩm thành công: "${query}" trong store ${storeId}, kết quả: ${products.length} sản phẩm`
@@ -1504,8 +1535,16 @@ const importProducts = async (req, res) => {
     const { storeId } = req.params;
     const userId = req.user?.id || req.user?._id;
 
-    console.log("🚀 Starting import products for store:", storeId, "| userId:", userId);
-    console.log(" Request received - file:", req.file ? `${req.file.originalname} (${req.file.size} bytes)` : "NO FILE");
+    console.log(
+      "🚀 Starting import products for store:",
+      storeId,
+      "| userId:",
+      userId
+    );
+    console.log(
+      " Request received - file:",
+      req.file ? `${req.file.originalname} (${req.file.size} bytes)` : "NO FILE"
+    );
 
     if (!req.file) {
       return res.status(400).json({ message: "Vui lòng tải lên file" });
@@ -1539,7 +1578,7 @@ const importProducts = async (req, res) => {
 
     const data = await parseExcelToJSON(req.file.buffer);
     console.log("📊 Parsed Excel data:", data.length, "rows");
-    
+
     if (!Array.isArray(data) || data.length === 0) {
       return res.status(400).json({ message: "File không có dữ liệu hợp lệ" });
     }
@@ -1561,14 +1600,26 @@ const importProducts = async (req, res) => {
     const defaultWarehouseName = store.default_warehouse_name || "Kho mặc định";
 
     // ===== CACHE =====
-    const suppliers = await Supplier.find({ store_id: storeId, isDeleted: false }).lean();
-    const supplierMap = new Map(suppliers.map((s) => [s.name.toLowerCase().trim(), s]));
+    const suppliers = await Supplier.find({
+      store_id: storeId,
+      isDeleted: false,
+    }).lean();
+    const supplierMap = new Map(
+      suppliers.map((s) => [s.name.toLowerCase().trim(), s])
+    );
 
-    const groups = await ProductGroup.find({ storeId: storeId, isDeleted: false }).lean();
-    const groupMap = new Map(groups.map((g) => [g.name.toLowerCase().trim(), g]));
+    const groups = await ProductGroup.find({
+      storeId: storeId,
+      isDeleted: false,
+    }).lean();
+    const groupMap = new Map(
+      groups.map((g) => [g.name.toLowerCase().trim(), g])
+    );
 
     const warehouses = await Warehouse.find({ store_id: storeId }).lean();
-    const warehouseMap = new Map(warehouses.map((w) => [w.name.toLowerCase().trim(), w]));
+    const warehouseMap = new Map(
+      warehouses.map((w) => [w.name.toLowerCase().trim(), w])
+    );
 
     // Helper: Parse Date an toàn
     const parseImportDate = (str) => {
@@ -1590,7 +1641,7 @@ const importProducts = async (req, res) => {
     };
 
     // Map để theo dõi các voucher đã tạo TRONG CÙNG PHIÊN IMPORT này (để gom nhóm)
-    const sessionVouchers = new Map(); 
+    const sessionVouchers = new Map();
 
     // ================= IMPORT LOOP =================
     for (let i = 0; i < data.length; i++) {
@@ -1606,11 +1657,18 @@ const importProducts = async (req, res) => {
         const priceInput = Number(row["Giá bán"] || 0);
         const costInput = Number(row["Giá vốn"] || 0);
         const openingQty = Number(row["Tồn kho"] || 0);
-        const expiryDate = parseImportDate(row["Hạn sử dụng"] || row["Hạn dùng"]);
-        const entryDate = parseImportDate(row["Ngày chứng từ"] || row["Ngày thêm"] || row["Ngày nhập"]) || new Date();
+        const expiryDate = parseImportDate(
+          row["Hạn sử dụng"] || row["Hạn dùng"]
+        );
+        const entryDate =
+          parseImportDate(
+            row["Ngày chứng từ"] || row["Ngày thêm"] || row["Ngày nhập"]
+          ) || new Date();
 
         let sku = row["Mã SKU"] ? row["Mã SKU"].toString().trim() : "";
-        const productName = row["Tên sản phẩm"] ? row["Tên sản phẩm"].toString().trim() : "";
+        const productName = row["Tên sản phẩm"]
+          ? row["Tên sản phẩm"].toString().trim()
+          : "";
 
         if (!productName) {
           throw new Error("Tên sản phẩm là bắt buộc");
@@ -1618,10 +1676,12 @@ const importProducts = async (req, res) => {
 
         // --- 1. SUPPLIER (Auto Create or Use Existing) ---
         let supplierId = null;
-        const supplierName = row["Nhà cung cấp"] ? row["Nhà cung cấp"].toString().trim() : "";
+        const supplierName = row["Nhà cung cấp"]
+          ? row["Nhà cung cấp"].toString().trim()
+          : "";
         if (supplierName) {
           const lowerName = supplierName.toLowerCase().trim();
-          
+
           // Bước 1: Kiểm tra trong cache map
           if (supplierMap.has(lowerName)) {
             supplierId = supplierMap.get(lowerName)._id;
@@ -1631,14 +1691,21 @@ const importProducts = async (req, res) => {
             const existingSupplier = await Supplier.findOne({
               store_id: storeId,
               isDeleted: false,
-              name: { $regex: new RegExp(`^${supplierName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+              name: {
+                $regex: new RegExp(
+                  `^${supplierName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+                  "i"
+                ),
+              },
             }).session(session);
-            
+
             if (existingSupplier) {
               // Nhà cung cấp đã tồn tại trong DB - sử dụng và cập nhật cache
               supplierId = existingSupplier._id;
               supplierMap.set(lowerName, existingSupplier);
-              console.log(` Found existing supplier in DB: ${existingSupplier.name}`);
+              console.log(
+                ` Found existing supplier in DB: ${existingSupplier.name}`
+              );
             } else {
               // Bước 3: Tạo mới vì chưa tồn tại
               const newSupplier = new Supplier({
@@ -1649,17 +1716,19 @@ const importProducts = async (req, res) => {
               supplierId = newSupplier._id;
               supplierMap.set(lowerName, newSupplier.toObject());
               results.newlyCreated.suppliers++;
-              console.log(`✅ Created new supplier: ${supplierName}`);
+              console.log(` Created new supplier: ${supplierName}`);
             }
           }
         }
 
         // --- 2. GROUP (Auto Create or Use Existing) ---
         let groupId = null;
-        const groupName = row["Nhóm sản phẩm"] ? row["Nhóm sản phẩm"].toString().trim() : "";
+        const groupName = row["Nhóm sản phẩm"]
+          ? row["Nhóm sản phẩm"].toString().trim()
+          : "";
         if (groupName) {
           const lowerName = groupName.toLowerCase().trim();
-          
+
           // Bước 1: Kiểm tra trong cache map
           if (groupMap.has(lowerName)) {
             groupId = groupMap.get(lowerName)._id;
@@ -1669,14 +1738,21 @@ const importProducts = async (req, res) => {
             const existingGroup = await ProductGroup.findOne({
               storeId: storeId,
               isDeleted: false,
-              name: { $regex: new RegExp(`^${groupName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+              name: {
+                $regex: new RegExp(
+                  `^${groupName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+                  "i"
+                ),
+              },
             }).session(session);
-            
+
             if (existingGroup) {
               // Nhóm sản phẩm đã tồn tại trong DB - sử dụng và cập nhật cache
               groupId = existingGroup._id;
               groupMap.set(lowerName, existingGroup);
-              console.log(` Found existing product group in DB: ${existingGroup.name}`);
+              console.log(
+                ` Found existing product group in DB: ${existingGroup.name}`
+              );
             } else {
               // Bước 3: Tạo mới vì chưa tồn tại
               const newGroup = new ProductGroup({
@@ -1688,7 +1764,7 @@ const importProducts = async (req, res) => {
               groupId = newGroup._id;
               groupMap.set(lowerName, newGroup.toObject());
               results.newlyCreated.productGroups++;
-              console.log(`✅ Created new product group: ${groupName}`);
+              console.log(` Created new product group: ${groupName}`);
             }
           }
         }
@@ -1696,14 +1772,22 @@ const importProducts = async (req, res) => {
         // --- 3. WAREHOUSE (Auto Create or Use Existing) ---
         let warehouseIdForRow = defaultWarehouseId;
         let warehouseNameForRow = defaultWarehouseName;
-        const rowWarehouseName = row["Tên kho"] ? row["Tên kho"].toString().trim() : "";
-        const rowWhAddress = row["Địa chỉ kho"] ? row["Địa chỉ kho"].toString().trim() : "Tạo tự động từ Import";
-        const rowWhContact = row["Người quản lý kho"] ? row["Người quản lý kho"].toString().trim() : "";
-        const rowWhPhone = row["SĐT kho"] ? row["SĐT kho"].toString().trim() : "";
+        const rowWarehouseName = row["Tên kho"]
+          ? row["Tên kho"].toString().trim()
+          : "";
+        const rowWhAddress = row["Địa chỉ kho"]
+          ? row["Địa chỉ kho"].toString().trim()
+          : "Tạo tự động từ Import";
+        const rowWhContact = row["Người quản lý kho"]
+          ? row["Người quản lý kho"].toString().trim()
+          : "";
+        const rowWhPhone = row["SĐT kho"]
+          ? row["SĐT kho"].toString().trim()
+          : "";
 
         if (rowWarehouseName) {
           const lowerWName = rowWarehouseName.toLowerCase().trim();
-          
+
           // Bước 1: Kiểm tra trong cache map
           if (warehouseMap.has(lowerWName)) {
             const wh = warehouseMap.get(lowerWName);
@@ -1714,24 +1798,37 @@ const importProducts = async (req, res) => {
             // Bước 2: Fallback - Query DB trực tiếp để tránh tạo trùng (case-insensitive)
             const existingWarehouse = await Warehouse.findOne({
               store_id: storeId,
-              name: { $regex: new RegExp(`^${rowWarehouseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+              name: {
+                $regex: new RegExp(
+                  `^${rowWarehouseName.replace(
+                    /[.*+?^${}()|[\]\\]/g,
+                    "\\$&"
+                  )}$`,
+                  "i"
+                ),
+              },
             }).session(session);
-            
+
             if (existingWarehouse) {
               // Kho đã tồn tại trong DB - sử dụng và cập nhật cache
               warehouseIdForRow = existingWarehouse._id;
               warehouseNameForRow = existingWarehouse.name;
               warehouseMap.set(lowerWName, existingWarehouse);
-              console.log(` Found existing warehouse in DB: ${existingWarehouse.name} (ID: ${existingWarehouse._id})`);
+              console.log(
+                ` Found existing warehouse in DB: ${existingWarehouse.name} (ID: ${existingWarehouse._id})`
+              );
             } else {
               // Bước 3: Tạo mới kho vì chưa tồn tại
-              const generatedWHCode = rowWarehouseName
-                .toUpperCase()
-                .normalize("NFD")
-                .replace(/[\u0300-\u036f]/g, "") // Remove accents
-                .replace(/\s+/g, "_")
-                .replace(/[^A-Z0-9_]/g, "")
-                .substring(0, 10) + "_" + Date.now().toString().slice(-4);
+              const generatedWHCode =
+                rowWarehouseName
+                  .toUpperCase()
+                  .normalize("NFD")
+                  .replace(/[\u0300-\u036f]/g, "") // Remove accents
+                  .replace(/\s+/g, "_")
+                  .replace(/[^A-Z0-9_]/g, "")
+                  .substring(0, 10) +
+                "_" +
+                Date.now().toString().slice(-4);
 
               const newWh = new Warehouse({
                 code: generatedWHCode,
@@ -1748,7 +1845,9 @@ const importProducts = async (req, res) => {
               // Thêm vào cache để các dòng tiếp theo có thể sử dụng
               warehouseMap.set(lowerWName, newWh.toObject());
               results.newlyCreated.warehouses++;
-              console.log(`✅ Created new warehouse: ${rowWarehouseName} (Code: ${generatedWHCode})`);
+              console.log(
+                ` Created new warehouse: ${rowWarehouseName} (Code: ${generatedWHCode})`
+              );
             }
           }
         }
@@ -1759,32 +1858,69 @@ const importProducts = async (req, res) => {
 
         // Check by SKU first
         if (sku) {
-          product = await Product.findOne({ sku, store_id: storeId, isDeleted: false }).session(session);
+          product = await Product.findOne({
+            sku,
+            store_id: storeId,
+            isDeleted: false,
+          }).session(session);
           // NEW RULE: If SKU found but name is different -> Error and notify
           if (product && product.name !== productName) {
-            throw new Error(`Dòng ${i + 2}: Mã SKU "${sku}" đã tồn tại cho sản phẩm "${product.name}". Không thể trùng mã với tên khác phẩm ("${productName}").`);
+            throw new Error(
+              `Dòng ${i + 2}: Mã SKU "${sku}" đã tồn tại cho cửa hàng "${
+                product.name
+              }". Không thể trùng mã với tên khác phẩm ("${productName}").`
+            );
           }
         }
         // If not found by SKU, check by name
         if (!product) {
-          product = await Product.findOne({ name: productName, store_id: storeId, isDeleted: false }).session(session);
+          product = await Product.findOne({
+            name: productName,
+            store_id: storeId,
+            isDeleted: false,
+          }).session(session);
         }
 
         const unit = row["Đơn vị"] ? row["Đơn vị"].toString().trim() : "";
         const description = row["Mô tả"] ? row["Mô tả"].toString().trim() : "";
-        const minStock = row["Tồn kho tối thiểu"] !== undefined ? Number(row["Tồn kho tối thiểu"]) : 0;
-        const maxStock = row["Tồn kho tối đa"] !== undefined ? (row["Tồn kho tối đa"] === "" || row["Tồn kho tối đa"] === null ? null : Number(row["Tồn kho tối đa"])) : null;
-        const statusImport = row["Trạng thái"] ? row["Trạng thái"].toString().trim() : "Đang kinh doanh";
-        const taxRate = row["Thuế GTGT (%)"] !== undefined ? Number(row["Thuế GTGT (%)"]) : 0;
+        const minStock =
+          row["Tồn kho tối thiểu"] !== undefined
+            ? Number(row["Tồn kho tối thiểu"])
+            : 0;
+        const maxStock =
+          row["Tồn kho tối đa"] !== undefined
+            ? row["Tồn kho tối đa"] === "" || row["Tồn kho tối đa"] === null
+              ? null
+              : Number(row["Tồn kho tối đa"])
+            : null;
+        const statusImport = row["Trạng thái"]
+          ? row["Trạng thái"].toString().trim()
+          : "Đang kinh doanh";
+        const taxRate =
+          row["Thuế GTGT (%)"] !== undefined ? Number(row["Thuế GTGT (%)"]) : 0;
         const origin = row["Xuất xứ"] ? row["Xuất xứ"].toString().trim() : "";
-        const brand = row["Thương hiệu"] ? row["Thương hiệu"].toString().trim() : "";
-        const warranty = row["Bảo hành"] ? row["Bảo hành"].toString().trim() : "";
+        const brand = row["Thương hiệu"]
+          ? row["Thương hiệu"].toString().trim()
+          : "";
+        const warranty = row["Bảo hành"]
+          ? row["Bảo hành"].toString().trim()
+          : "";
 
         if (product) {
           // UPDATE existing product
-          console.log(` Found existing product: ${product.name} (${product.sku}) - Identified by ${sku && product.sku === sku ? 'SKU' : 'Name'}`);
-          const newPrice = priceInput > 0 ? priceInput : Number(product.price?.toString() || 0);
-          const newCost = costInput > 0 ? costInput : Number(product.cost_price?.toString() || 0);
+          console.log(
+            ` Found existing product: ${product.name} (${
+              product.sku
+            }) - Identified by ${sku && product.sku === sku ? "SKU" : "Name"}`
+          );
+          const newPrice =
+            priceInput > 0
+              ? priceInput
+              : Number(product.price?.toString() || 0);
+          const newCost =
+            costInput > 0
+              ? costInput
+              : Number(product.cost_price?.toString() || 0);
 
           await Product.updateOne(
             { _id: product._id },
@@ -1850,10 +1986,17 @@ const importProducts = async (req, res) => {
         // --- 5. CREATE INVENTORY VOUCHER & UPDATE STOCK ---
         let finalVoucherCode = "";
         if (openingQty > 0) {
-          const entryCost = costInput > 0 ? costInput : Number(product.cost_price?.toString() || 0);
-          const batchNo = row["Số lô"] ? row["Số lô"].toString().trim() : `BATCH-${Date.now()}`;
+          const entryCost =
+            costInput > 0
+              ? costInput
+              : Number(product.cost_price?.toString() || 0);
+          const batchNo = row["Số lô"]
+            ? row["Số lô"].toString().trim()
+            : `BATCH-${Date.now()}`;
 
-          let voucherCode = row["Số chứng từ"] ? row["Số chứng từ"].toString().trim() : "";
+          let voucherCode = row["Số chứng từ"]
+            ? row["Số chứng từ"].toString().trim()
+            : "";
           const isManualVoucher = !!voucherCode;
           if (!voucherCode) {
             voucherCode = `NK-${entryDate.getTime()}-${sku}`;
@@ -1879,7 +2022,9 @@ const importProducts = async (req, res) => {
           let voucher = null;
           // Nếu user nhập mã chứng từ, thử tìm trong phiên import này để gom nhóm
           if (isManualVoucher && sessionVouchers.has(voucherCode)) {
-            voucher = await InventoryVoucher.findById(sessionVouchers.get(voucherCode)).session(session);
+            voucher = await InventoryVoucher.findById(
+              sessionVouchers.get(voucherCode)
+            ).session(session);
           }
 
           if (voucher) {
@@ -1893,15 +2038,19 @@ const importProducts = async (req, res) => {
               $or: [
                 { store_id: storeId, voucher_code: voucherCode },
                 { store_id: null, voucher_code: voucherCode },
-                { store_id: { $exists: false }, voucher_code: voucherCode }
-              ]
+                { store_id: { $exists: false }, voucher_code: voucherCode },
+              ],
             }).session(session);
 
             if (existingVoucher) {
               // Tạo mã mới unique: thêm timestamp + random để tránh trùng
-              const uniqueSuffix = `${Date.now().toString().slice(-6)}-${Math.random().toString(36).substring(2, 5)}`;
+              const uniqueSuffix = `${Date.now()
+                .toString()
+                .slice(-6)}-${Math.random().toString(36).substring(2, 5)}`;
               voucherCode = `${voucherCode}-${uniqueSuffix}`;
-              console.log(`⚠️ Voucher code conflict detected, using new code: ${voucherCode}`);
+              console.log(
+                `⚠️ Voucher code conflict detected, using new code: ${voucherCode}`
+              );
             }
 
             // --- Auto Query Recipient/Deliverer ---
@@ -1909,12 +2058,21 @@ const importProducts = async (req, res) => {
             let receiverName = row["Người nhận"] || "";
 
             if (!delivererName) {
-              const suppDoc = supplierMap.get((supplierName || "").toLowerCase().trim());
-              delivererName = suppDoc?.contact_person || suppDoc?.name || supplierName || "Người giao hàng";
+              const suppDoc = supplierMap.get(
+                (supplierName || "").toLowerCase().trim()
+              );
+              delivererName =
+                suppDoc?.contact_person ||
+                suppDoc?.name ||
+                supplierName ||
+                "Người giao hàng";
             }
             if (!receiverName) {
-              const whDoc = Array.from(warehouseMap.values()).find(w => w._id.toString() === warehouseIdForRow.toString());
-              receiverName = whDoc?.contact_person || user.fullname || user.username;
+              const whDoc = Array.from(warehouseMap.values()).find(
+                (w) => w._id.toString() === warehouseIdForRow.toString()
+              );
+              receiverName =
+                whDoc?.contact_person || user.fullname || user.username;
             }
 
             voucher = new InventoryVoucher({
@@ -1923,7 +2081,9 @@ const importProducts = async (req, res) => {
               status: "POSTED",
               voucher_code: voucherCode,
               voucher_date: entryDate,
-              reason: isNew ? "Nhập tồn đầu kỳ khi import sản phẩm" : "Nhập bổ sung tồn kho khi import",
+              reason: isNew
+                ? "Nhập tồn đầu kỳ khi import sản phẩm"
+                : "Nhập bổ sung tồn kho khi import",
               warehouse_id: warehouseIdForRow,
               warehouse_name: warehouseNameForRow,
               supplier_id: supplierId,
@@ -1931,7 +2091,9 @@ const importProducts = async (req, res) => {
               partner_name: supplierName || "Nhập file Excel",
               deliverer_name: delivererName,
               receiver_name: receiverName,
-              ref_type: isNew ? "PRODUCT_IMPORT_CREATE" : "PRODUCT_IMPORT_UPDATE",
+              ref_type: isNew
+                ? "PRODUCT_IMPORT_CREATE"
+                : "PRODUCT_IMPORT_UPDATE",
               ref_no: row["Số chứng từ"] || "",
               ref_date: entryDate,
               created_by: userId,
@@ -1947,25 +2109,41 @@ const importProducts = async (req, res) => {
 
           // Update product batches and stock
           if (batchNo || expiryDate) {
-            const currentProduct = await Product.findById(product._id).session(session);
-            const entrySellingPrice = priceInput > 0 ? priceInput : Number(product.price?.toString() || 0);
+            const currentProduct = await Product.findById(product._id).session(
+              session
+            );
+            const entrySellingPrice =
+              priceInput > 0
+                ? priceInput
+                : Number(product.price?.toString() || 0);
 
-            // ✅ Validation: Kiểm tra tồn tối đa khi Import (Check chung trước khi xử lý lô)
-            const projectedStock = (currentProduct.stock_quantity || 0) + openingQty;
-            const limit = currentProduct.max_stock !== undefined && currentProduct.max_stock !== null 
-              ? Number(currentProduct.max_stock) : 0;
-            
+            //  Validation: Kiểm tra tồn tối đa khi Import (Check chung trước khi xử lý lô)
+            const projectedStock =
+              (currentProduct.stock_quantity || 0) + openingQty;
+            const limit =
+              currentProduct.max_stock !== undefined &&
+              currentProduct.max_stock !== null
+                ? Number(currentProduct.max_stock)
+                : 0;
+
             if (limit > 0 && projectedStock > limit) {
-              throw new Error(`Dòng ${i + 2}: Sản phẩm "${currentProduct.name}" có tồn kho tối đa là ${limit}. Nhập thêm ${openingQty} sẽ làm tổng tồn kho biểu kiến (${projectedStock}) vượt quá hạn mức.`);
+              throw new Error(
+                `Dòng ${i + 2}: Sản phẩm "${
+                  currentProduct.name
+                }" có tồn kho tối đa là ${limit}. Nhập thêm ${openingQty} sẽ làm tổng tồn kho biểu kiến (${projectedStock}) vượt quá hạn mức.`
+              );
             }
 
             const existingBatchIndex = (currentProduct.batches || []).findIndex(
               (b) =>
                 b.batch_no === batchNo &&
                 (expiryDate
-                  ? b.expiry_date && new Date(b.expiry_date).getTime() === new Date(expiryDate).getTime()
+                  ? b.expiry_date &&
+                    new Date(b.expiry_date).getTime() ===
+                      new Date(expiryDate).getTime()
                   : !b.expiry_date) &&
-                String(b.warehouse_id || "") === String(warehouseIdForRow || "") &&
+                String(b.warehouse_id || "") ===
+                  String(warehouseIdForRow || "") &&
                 b.cost_price === entryCost &&
                 b.selling_price === entrySellingPrice
             );
@@ -1982,7 +2160,9 @@ const importProducts = async (req, res) => {
                 },
                 { session }
               );
-              console.log(` Updated existing batch: ${batchNo} (cost: ${entryCost}, selling: ${entrySellingPrice})`);
+              console.log(
+                ` Updated existing batch: ${batchNo} (cost: ${entryCost}, selling: ${entrySellingPrice})`
+              );
             } else {
               // Push new batch with selling_price
               await Product.updateOne(
@@ -2003,11 +2183,17 @@ const importProducts = async (req, res) => {
                 },
                 { session }
               );
-              console.log(` Added new batch: ${batchNo} (cost: ${entryCost}, selling: ${entrySellingPrice})`);
+              console.log(
+                ` Added new batch: ${batchNo} (cost: ${entryCost}, selling: ${entrySellingPrice})`
+              );
             }
           } else {
             // No batch info, just update stock
-            await Product.updateOne({ _id: product._id }, { $inc: { stock_quantity: openingQty } }, { session });
+            await Product.updateOne(
+              { _id: product._id },
+              { $inc: { stock_quantity: openingQty } },
+              { session }
+            );
           }
         }
 
@@ -2020,7 +2206,7 @@ const importProducts = async (req, res) => {
           product: product.name,
           voucher_code: finalVoucherCode,
         });
-        console.log(`✅ Row ${rowNumber} imported successfully`);
+        console.log(` Row ${rowNumber} imported successfully`);
       } catch (err) {
         console.error(` Row ${i + 2} failed:`, err.message);
         await session.abortTransaction();
@@ -2057,68 +2243,67 @@ const downloadProductTemplate = async (req, res) => {
     // Sử dụng PRODUCT_HEADERS dùng chung để đồng bộ
     const headers = PRODUCT_HEADERS;
 
-  // Tạo dữ liệu mẫu (2 dòng ví dụ)
-const sampleData = [
-  [
-    "Coca Cola Lon 330ml",      // Tên sản phẩm
-    "Nước giải khát có gas",    // Mô tả
-    "SP000001",                 // Mã SKU
-    10000,                      // Giá bán
-    8000,                       // Giá vốn
-    100,                        // Tồn kho
-    10,                         // Tồn tối thiểu
-    1000,                       // Tồn tối đa
-    "Lon",                      // Đơn vị
-    "Đang kinh doanh",          // Trạng thái
-    "Công ty CocaCola",         // Nhà cung cấp
-    "Đồ uống",                  // Nhóm sản phẩm
-    "Kho mặc định",             // Tên kho
-    "Số 123 Đường ABC, Hà Nội", // Địa chỉ kho
-    "Nguyễn Văn A",             // Người quản lý kho
-    "0987654321",               // SĐT kho
-    "BATCH001",                 // Số lô
-    "31/12/2026",               // Hạn sử dụng (dd/mm/yyyy)
-    10,                         // Thuế GTGT (%)
-    "Việt Nam",                 // Xuất xứ
-    "CocaCola",                 // Thương hiệu
-    "12 tháng",                 // Bảo hành
-    "NK-001",                   // Số chứng từ
-    "15/05/2024",               // Ngày chứng từ
-    "15/05/2024",               // Ngày thêm
-    "Công ty CocaCola",         // Người giao
-    "Nguyễn Văn A",             // Người nhận
-  ],
-  [
-    "Mì Hảo Hảo Tôm Chua Cay",  // Tên sản phẩm
-    "Mì ăn liền Acecook",       // Mô tả
-    "SP000002",                 // Mã SKU
-    5000,                       // Giá bán
-    3500,                       // Giá vốn
-    50,                         // Tồn kho
-    20,                         // Tồn tối thiểu
-    null,                       // Tồn tối đa
-    "Gói",                      // Đơn vị
-    "Đang kinh doanh",          // Trạng thái
-    "Acecook Việt Nam",         // Nhà cung cấp
-    "Mì gói",                   // Nhóm sản phẩm
-    "Kho Hà Nội",               // Tên kho
-    "",                         // Địa chỉ kho
-    "",                         // Người quản lý kho
-    "",                         // SĐT kho
-    "BATCH-M-02",               // Số lô
-    "20/12/2025",               // Hạn sử dụng (dd/mm/yyyy)
-    8,                          // Thuế GTGT (%)
-    "Việt Nam",                 // Xuất xứ
-    "Mì Hảo Hảo",               // Thương hiệu
-    "",                         // Bảo hành
-    "",                         // Số chứng từ
-    "",                         // Ngày chứng từ
-    "",                         // Ngày thêm
-    "",                         // Người giao
-    "",                         // Người nhận
-  ],
-];
-
+    // Tạo dữ liệu mẫu (2 dòng ví dụ)
+    const sampleData = [
+      [
+        "Coca Cola Lon 330ml", // Tên sản phẩm
+        "Nước giải khát có gas", // Mô tả
+        "SP000001", // Mã SKU
+        10000, // Giá bán
+        8000, // Giá vốn
+        100, // Tồn kho
+        10, // Tồn tối thiểu
+        1000, // Tồn tối đa
+        "Lon", // Đơn vị
+        "Đang kinh doanh", // Trạng thái
+        "Công ty CocaCola", // Nhà cung cấp
+        "Đồ uống", // Nhóm sản phẩm
+        "Kho mặc định", // Tên kho
+        "Số 123 Đường ABC, Hà Nội", // Địa chỉ kho
+        "Nguyễn Văn A", // Người quản lý kho
+        "0987654321", // SĐT kho
+        "BATCH001", // Số lô
+        "31/12/2026", // Hạn sử dụng (dd/mm/yyyy)
+        10, // Thuế GTGT (%)
+        "Việt Nam", // Xuất xứ
+        "CocaCola", // Thương hiệu
+        "12 tháng", // Bảo hành
+        "NK-001", // Số chứng từ
+        "15/05/2024", // Ngày chứng từ
+        "15/05/2024", // Ngày thêm
+        "Công ty CocaCola", // Người giao
+        "Nguyễn Văn A", // Người nhận
+      ],
+      [
+        "Mì Hảo Hảo Tôm Chua Cay", // Tên sản phẩm
+        "Mì ăn liền Acecook", // Mô tả
+        "SP000002", // Mã SKU
+        5000, // Giá bán
+        3500, // Giá vốn
+        50, // Tồn kho
+        20, // Tồn tối thiểu
+        null, // Tồn tối đa
+        "Gói", // Đơn vị
+        "Đang kinh doanh", // Trạng thái
+        "Acecook Việt Nam", // Nhà cung cấp
+        "Mì gói", // Nhóm sản phẩm
+        "Kho Hà Nội", // Tên kho
+        "", // Địa chỉ kho
+        "", // Người quản lý kho
+        "", // SĐT kho
+        "BATCH-M-02", // Số lô
+        "20/12/2025", // Hạn sử dụng (dd/mm/yyyy)
+        8, // Thuế GTGT (%)
+        "Việt Nam", // Xuất xứ
+        "Mì Hảo Hảo", // Thương hiệu
+        "", // Bảo hành
+        "", // Số chứng từ
+        "", // Ngày chứng từ
+        "", // Ngày thêm
+        "", // Người giao
+        "", // Người nhận
+      ],
+    ];
 
     // Tạo sheet từ mảng
     const worksheet = XLSX.utils.aoa_to_sheet([headers, ...sampleData]);
@@ -2130,7 +2315,7 @@ const sampleData = [
     wscols[11].wch = 20; // Nhóm
     wscols[12].wch = 20; // Tên kho
     wscols[13].wch = 25; // Địa chỉ kho
-    
+
     worksheet["!cols"] = wscols;
 
     // Add sheet to workbook
@@ -2155,11 +2340,15 @@ const sampleData = [
     );
     res.setHeader("Content-Length", excelBuffer.length);
 
-    console.log("✅ Generated dynamic Import Template with Batch/Expiry/Warehouse");
+    console.log(
+      " Generated dynamic Import Template with Batch/Expiry/Warehouse"
+    );
     return res.send(excelBuffer);
   } catch (error) {
     console.error(" Lỗi downloadProductTemplate:", error);
-    return res.status(500).json({ message: "Lỗi server", error: error.message });
+    return res
+      .status(500)
+      .json({ message: "Lỗi server", error: error.message });
   }
 };
 
@@ -2196,28 +2385,43 @@ const exportProducts = async (req, res) => {
     // Nếu không có sản phẩm, vẫn xuất file Excel với thông báo thay vì trả lỗi 404
     if (products.length === 0) {
       console.log(" No products found, generating info Excel file");
-      return await sendEmptyNotificationWorkbook(res, "sản phẩm", store, "Danh_Sach_San_Pham");
+      return await sendEmptyNotificationWorkbook(
+        res,
+        "sản phẩm",
+        store,
+        "Danh_Sach_San_Pham"
+      );
     }
 
     // Chuẩn bị dữ liệu cho Excel (Cache Warehouse)
     const warehouses = await Warehouse.find({ store_id: storeId }).lean();
-    const warehouseCache = new Map(warehouses.map(w => [w._id.toString(), w]));
+    const warehouseCache = new Map(
+      warehouses.map((w) => [w._id.toString(), w])
+    );
 
     const excelData = [];
     for (const product of products) {
       // Xác định kho mặc định
-      const defaultWh = product.default_warehouse_id ? warehouseCache.get(product.default_warehouse_id.toString()) : null;
+      const defaultWh = product.default_warehouse_id
+        ? warehouseCache.get(product.default_warehouse_id.toString())
+        : null;
 
       if (product.batches && product.batches.length > 0) {
         for (const batch of product.batches) {
-          const batchWh = batch.warehouse_id ? warehouseCache.get(batch.warehouse_id.toString()) : defaultWh;
-          
+          const batchWh = batch.warehouse_id
+            ? warehouseCache.get(batch.warehouse_id.toString())
+            : defaultWh;
+
           excelData.push({
             "Tên sản phẩm": product.name || "",
             "Mô tả": product.description || "",
             "Mã SKU": product.sku || "",
             "Giá bán": product.price ? parseFloat(product.price.toString()) : 0,
-            "Giá vốn": batch.cost_price || (product.cost_price ? parseFloat(product.cost_price.toString()) : 0),
+            "Giá vốn":
+              batch.cost_price ||
+              (product.cost_price
+                ? parseFloat(product.cost_price.toString())
+                : 0),
             "Tồn kho": batch.quantity || 0,
             "Tồn kho tối thiểu": product.min_stock || 0,
             "Tồn kho tối đa": product.max_stock || "",
@@ -2225,20 +2429,31 @@ const exportProducts = async (req, res) => {
             "Trạng thái": product.status || "Đang kinh doanh",
             "Nhà cung cấp": product.supplier_id ? product.supplier_id.name : "",
             "Nhóm sản phẩm": product.group_id ? product.group_id.name : "",
-            "Tên kho": batchWh ? batchWh.name : (product.default_warehouse_name || "Kho mặc định"),
+            "Tên kho": batchWh
+              ? batchWh.name
+              : product.default_warehouse_name || "Kho mặc định",
             "Địa chỉ kho": batchWh?.address || "",
             "Người quản lý kho": batchWh?.contact_person || "",
             "SĐT kho": batchWh?.phone || "",
             "Số lô": batch.batch_no || "",
-            "Hạn sử dụng": batch.expiry_date ? new Date(batch.expiry_date).toLocaleDateString("vi-VN") : "",
+            "Hạn sử dụng": batch.expiry_date
+              ? new Date(batch.expiry_date).toLocaleDateString("vi-VN")
+              : "",
             "Thuế GTGT (%)": product.tax_rate || 0,
             "Xuất xứ": product.origin || "",
             "Thương hiệu": product.brand || "",
             "Bảo hành": product.warranty_period || "",
             "Số chứng từ": "EXPORT_AUTO",
-            "Ngày chứng từ": batch.created_at ? new Date(batch.created_at).toLocaleDateString("vi-VN") : new Date().toLocaleDateString("vi-VN"),
-            "Ngày thêm": product.createdAt ? new Date(product.createdAt).toLocaleDateString("vi-VN") : "",
-            "Người giao": product.supplier_id?.contact_person || product.supplier_id?.name || "",
+            "Ngày chứng từ": batch.created_at
+              ? new Date(batch.created_at).toLocaleDateString("vi-VN")
+              : new Date().toLocaleDateString("vi-VN"),
+            "Ngày thêm": product.createdAt
+              ? new Date(product.createdAt).toLocaleDateString("vi-VN")
+              : "",
+            "Người giao":
+              product.supplier_id?.contact_person ||
+              product.supplier_id?.name ||
+              "",
             "Người nhận": batchWh?.contact_person || "",
           });
         }
@@ -2249,7 +2464,9 @@ const exportProducts = async (req, res) => {
           "Mô tả": product.description || "",
           "Mã SKU": product.sku || "",
           "Giá bán": product.price ? parseFloat(product.price.toString()) : 0,
-          "Giá vốn": product.cost_price ? parseFloat(product.cost_price.toString()) : 0,
+          "Giá vốn": product.cost_price
+            ? parseFloat(product.cost_price.toString())
+            : 0,
           "Tồn kho": product.stock_quantity || 0,
           "Tồn kho tối thiểu": product.min_stock || 0,
           "Tồn kho tối đa": product.max_stock || "",
@@ -2257,7 +2474,9 @@ const exportProducts = async (req, res) => {
           "Trạng thái": product.status || "Đang kinh doanh",
           "Nhà cung cấp": product.supplier_id ? product.supplier_id.name : "",
           "Nhóm sản phẩm": product.group_id ? product.group_id.name : "",
-          "Tên kho": defaultWh ? defaultWh.name : (product.default_warehouse_name || "Kho mặc định"),
+          "Tên kho": defaultWh
+            ? defaultWh.name
+            : product.default_warehouse_name || "Kho mặc định",
           "Địa chỉ kho": defaultWh?.address || "",
           "Người quản lý kho": defaultWh?.contact_person || "",
           "SĐT kho": defaultWh?.phone || "",
@@ -2268,18 +2487,25 @@ const exportProducts = async (req, res) => {
           "Thương hiệu": product.brand || "",
           "Bảo hành": product.warranty_period || "",
           "Số chứng từ": "EXPORT_AUTO",
-          "Ngày chứng từ": product.createdAt ? new Date(product.createdAt).toLocaleDateString("vi-VN") : new Date().toLocaleDateString("vi-VN"),
-          "Ngày thêm": product.createdAt ? new Date(product.createdAt).toLocaleDateString("vi-VN") : "",
-          "Người giao": product.supplier_id?.contact_person || product.supplier_id?.name || "",
+          "Ngày chứng từ": product.createdAt
+            ? new Date(product.createdAt).toLocaleDateString("vi-VN")
+            : new Date().toLocaleDateString("vi-VN"),
+          "Ngày thêm": product.createdAt
+            ? new Date(product.createdAt).toLocaleDateString("vi-VN")
+            : "",
+          "Người giao":
+            product.supplier_id?.contact_person ||
+            product.supplier_id?.name ||
+            "",
           "Người nhận": defaultWh?.contact_person || "",
         });
       }
     }
 
     // --- FIX ALIGNMENT: Ensure all objects have keys in EXACT order of headers ---
-    const finalExcelData = excelData.map(row => {
+    const finalExcelData = excelData.map((row) => {
       const orderedRow = {};
-      PRODUCT_HEADERS.forEach(header => {
+      PRODUCT_HEADERS.forEach((header) => {
         orderedRow[header] = row[header] !== undefined ? row[header] : "";
       });
       return orderedRow;
@@ -2290,7 +2516,9 @@ const exportProducts = async (req, res) => {
     const workbook = XLSX.utils.book_new();
 
     // Tạo worksheet với dữ liệu, sử dụng PRODUCT_HEADERS
-    const worksheet = XLSX.utils.json_to_sheet(finalExcelData, { header: PRODUCT_HEADERS });
+    const worksheet = XLSX.utils.json_to_sheet(finalExcelData, {
+      header: PRODUCT_HEADERS,
+    });
 
     // Định dạng cột chuyên nghiệp
     const columnWidths = PRODUCT_HEADERS.map(() => ({ wch: 15 }));
@@ -2298,7 +2526,7 @@ const exportProducts = async (req, res) => {
     columnWidths[1].wch = 25; // Mô tả
     columnWidths[12].wch = 20; // Tên kho
     columnWidths[13].wch = 25; // Địa chỉ kho
-    
+
     worksheet["!cols"] = columnWidths;
 
     // Thêm worksheet vào workbook
@@ -2339,9 +2567,7 @@ const exportProducts = async (req, res) => {
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Pragma", "no-cache");
 
-    console.log(
-      `✅ Export successful: ${filename}, ${products.length} products`
-    );
+    console.log(` Export successful: ${filename}, ${products.length} products`);
 
     // Ghi log hoạt động
     try {
@@ -2355,7 +2581,7 @@ const exportProducts = async (req, res) => {
         req,
         description: `Xuất danh sách ${products.length} sản phẩm từ cửa hàng ${store.name}`,
       });
-      console.log("✅ Activity log created for export");
+      console.log(" Activity log created for export");
     } catch (logError) {
       console.error(
         " Lỗi ghi Activity Log (không ảnh hưởng export):",
@@ -2441,21 +2667,21 @@ const getAllProducts = async (req, res) => {
 // ============= UPDATE BATCH - Cập nhật thông tin lô hàng =============
 const updateProductBatch = async (req, res) => {
   let session = null;
-  
+
   try {
     const { productId } = req.params;
-    const { 
-      old_batch_no, 
-      new_batch_no, 
-      expiry_date, 
-      cost_price, 
-      selling_price, 
-      quantity, 
+    const {
+      old_batch_no,
+      new_batch_no,
+      expiry_date,
+      cost_price,
+      selling_price,
+      quantity,
       warehouse_id,
       deliverer_name,
       deliverer_phone,
       receiver_name,
-      receiver_phone
+      receiver_phone,
     } = req.body;
     const userId = req.user?._id || req.user?.id;
 
@@ -2475,62 +2701,92 @@ const updateProductBatch = async (req, res) => {
 
     // 2. Tìm sản phẩm - Ghi đè điều kiện isDeleted để tránh bị middleware lọc mất
     // Ta tìm theo store_id nếu có thể, nhưng quan trọng nhất là ID
-    let product = await Product.findOne({ 
+    let product = await Product.findOne({
       _id: objectId,
-      $or: [{ isDeleted: false }, { isDeleted: true }, { isDeleted: { $exists: false } }]
+      $or: [
+        { isDeleted: false },
+        { isDeleted: true },
+        { isDeleted: { $exists: false } },
+      ],
     }).populate("supplier_id", "name phone");
-    
+
     if (!product) {
       console.log(` Product truly not found even with raw query: ${productId}`);
-      return res.status(404).json({ message: "Sản phẩm không tồn tại trên hệ thống" });
+      return res
+        .status(404)
+        .json({ message: "Sản phẩm không tồn tại trên hệ thống" });
     }
 
     // Nếu tìm thấy bằng findOne thô, ta đảm bảo nó là Mongoose Document
     if (!(product instanceof mongoose.Document)) {
-        product = await Product.findById(product._id).populate("supplier_id").setOptions({ skipMiddleware: true });
+      product = await Product.findById(product._id)
+        .populate("supplier_id")
+        .setOptions({ skipMiddleware: true });
     }
 
-    console.log(`✅ Product found: ${product.name}, batches count: ${product.batches?.length || 0}`);
-    console.log(` Batches in DB:`, product.batches?.map(b => b.batch_no));
+    console.log(
+      ` Product found: ${product.name}, batches count: ${
+        product.batches?.length || 0
+      }`
+    );
+    console.log(
+      ` Batches in DB:`,
+      product.batches?.map((b) => b.batch_no)
+    );
 
     // Tìm index của lô hàng cũ
-    const batchIndex = product.batches.findIndex(b => b.batch_no === old_batch_no);
+    const batchIndex = product.batches.findIndex(
+      (b) => b.batch_no === old_batch_no
+    );
     if (batchIndex === -1) {
       console.log(` Batch not found: ${old_batch_no}`);
-      return res.status(404).json({ message: `Không tìm thấy lô ${old_batch_no}` });
+      return res
+        .status(404)
+        .json({ message: `Không tìm thấy lô ${old_batch_no}` });
     }
 
     // Lấy thông tin batch cũ để tính toán chênh lệch
     const oldBatch = { ...product.batches[batchIndex].toObject() };
     const newQuantity = quantity !== undefined ? quantity : oldBatch.quantity;
     const quantityDiff = newQuantity - (oldBatch.quantity || 0);
-    
+
     // So sánh giá cũ và mới
     const oldCostPrice = oldBatch.cost_price || 0;
     const oldSellingPrice = oldBatch.selling_price || 0;
     const newCostPrice = cost_price !== undefined ? cost_price : oldCostPrice;
-    const newSellingPrice = selling_price !== undefined ? selling_price : oldSellingPrice;
-    const priceChanged = oldCostPrice !== newCostPrice || oldSellingPrice !== newSellingPrice;
+    const newSellingPrice =
+      selling_price !== undefined ? selling_price : oldSellingPrice;
+    const priceChanged =
+      oldCostPrice !== newCostPrice || oldSellingPrice !== newSellingPrice;
 
     // 3. Cập nhật thông tin batch
     product.batches[batchIndex].batch_no = new_batch_no || old_batch_no;
-    product.batches[batchIndex].expiry_date = expiry_date ? new Date(expiry_date) : oldBatch.expiry_date;
+    product.batches[batchIndex].expiry_date = expiry_date
+      ? new Date(expiry_date)
+      : oldBatch.expiry_date;
     product.batches[batchIndex].cost_price = newCostPrice;
     product.batches[batchIndex].selling_price = newSellingPrice;
     product.batches[batchIndex].quantity = newQuantity;
-    product.batches[batchIndex].warehouse_id = warehouse_id || oldBatch.warehouse_id;
+    product.batches[batchIndex].warehouse_id =
+      warehouse_id || oldBatch.warehouse_id;
 
     // Cập nhật stock_quantity của product (tổng số lượng tất cả các lô)
     const projectedStock = product.batches.reduce((sum, b) => {
-      const bQty = b.batch_no === (new_batch_no || old_batch_no) ? newQuantity : (b.quantity || 0);
+      const bQty =
+        b.batch_no === (new_batch_no || old_batch_no)
+          ? newQuantity
+          : b.quantity || 0;
       return sum + bQty;
     }, 0);
 
-    // ✅ Validation: Kiểm tra tồn kho tối đa
-    const maxStock = product.max_stock !== undefined && product.max_stock !== null ? Number(product.max_stock) : 0;
+    //  Validation: Kiểm tra tồn kho tối đa
+    const maxStock =
+      product.max_stock !== undefined && product.max_stock !== null
+        ? Number(product.max_stock)
+        : 0;
     if (maxStock > 0 && projectedStock > maxStock) {
-      return res.status(400).json({ 
-        message: `Không thể cập nhật: Tổng tồn kho (${projectedStock}) sẽ vượt quá hạn mức tối đa (${maxStock}) của sản phẩm này.` 
+      return res.status(400).json({
+        message: `Không thể cập nhật: Tổng tồn kho (${projectedStock}) sẽ vượt quá hạn mức tối đa (${maxStock}) của sản phẩm này.`,
       });
     }
 
@@ -2547,26 +2803,32 @@ const updateProductBatch = async (req, res) => {
     await product.save({ session });
 
     // So sánh kho cũ và mới
-    const warehouseChanged = warehouse_id && String(oldBatch.warehouse_id || "") !== String(warehouse_id || "");
+    const warehouseChanged =
+      warehouse_id &&
+      String(oldBatch.warehouse_id || "") !== String(warehouse_id || "");
 
     // ===== TẠO PHIẾU NHẬP/XUẤT KHO NẾU CÓ THAY ĐỔI SỐ LƯỢNG, GIÁ HOẶC KHO =====
     let createdVouchers = [];
-    
+
     if (quantityDiff !== 0 || priceChanged || warehouseChanged) {
       // 📝 Thu thập thông tin chung
       const timestamp = Date.now().toString(36).toUpperCase();
-      
+
       // Lấy thông tin warehouse nếu có
       let warehouseName = "";
       if (oldBatch.warehouse_id || warehouse_id) {
-        const warehouseDoc = await Warehouse.findById(oldBatch.warehouse_id || warehouse_id);
+        const warehouseDoc = await Warehouse.findById(
+          oldBatch.warehouse_id || warehouse_id
+        );
         warehouseName = warehouseDoc?.name || "";
       }
 
       //  LẤY THÔNG TIN NHÀ CUNG CẤP (NGƯỜI GIAO)
       let supplierId = product.supplier_id?._id || product.supplier_id;
-      let finalDelivererName = deliverer_name || product.supplier_id?.name || "";
-      let finalDelivererPhone = deliverer_phone || product.supplier_id?.phone || "";
+      let finalDelivererName =
+        deliverer_name || product.supplier_id?.name || "";
+      let finalDelivererPhone =
+        deliverer_phone || product.supplier_id?.phone || "";
 
       // 👤 TỰ ĐỘNG LẤY THÔNG TIN NGƯỜI LƯU (NGƯỜI NHẬN)
       let finalReceiverName = receiver_name;
@@ -2601,7 +2863,9 @@ const updateProductBatch = async (req, res) => {
 
       if (priceChanged || warehouseChanged) {
         // TRƯỜNG HỢP 1: CÓ THAY ĐỔI GIÁ HOẶC THAY ĐỔI KHO -> "XUẤT CŨ - NHẬP MỚI"
-        console.log("🔄 Price or Warehouse changed, creating OUT and IN vouchers");
+        console.log(
+          "🔄 Price or Warehouse changed, creating OUT and IN vouchers"
+        );
 
         // 1. Phiếu Xuất (Xóa trạng thái cũ)
         if (oldBatch.quantity > 0) {
@@ -2616,26 +2880,38 @@ const updateProductBatch = async (req, res) => {
             voucher_code: `PX-ADJ-${timestamp}-OLD`,
             reason: `Điều chỉnh giá (Xuất giá cũ): ${old_batch_no} - ${product.name}`,
             total_qty: pxQty,
-            total_cost: mongoose.Types.Decimal128.fromString(String(pxLineCost)),
-            total_amount: mongoose.Types.Decimal128.fromString(String(pxTotalAmount)),
-            items: [{
-              product_id: product._id,
-              sku_snapshot: product.sku || "",
-              name_snapshot: product.name,
-              unit_snapshot: product.unit || "cái",
-              warehouse_id: voucherBase.warehouse_id,
-              warehouse_name: warehouseName,
-              batch_no: old_batch_no,
-              expiry_date: oldBatch.expiry_date,
-              qty_document: pxQty,
-              qty_actual: pxQty,
-              unit_cost: mongoose.Types.Decimal128.fromString(String(pxUnitCost)),
-              line_cost: mongoose.Types.Decimal128.fromString(String(pxLineCost)),
-              selling_price: mongoose.Types.Decimal128.fromString(String(oldSellingPrice || 0)),
-              note: `Xuất kho để cập nhật giá mới (Giá cũ: ${pxUnitCost.toLocaleString()})`,
-              supplier_id: supplierId || null,
-              supplier_name_snapshot: finalDelivererName || "",
-            }]
+            total_cost: mongoose.Types.Decimal128.fromString(
+              String(pxLineCost)
+            ),
+            total_amount: mongoose.Types.Decimal128.fromString(
+              String(pxTotalAmount)
+            ),
+            items: [
+              {
+                product_id: product._id,
+                sku_snapshot: product.sku || "",
+                name_snapshot: product.name,
+                unit_snapshot: product.unit || "cái",
+                warehouse_id: voucherBase.warehouse_id,
+                warehouse_name: warehouseName,
+                batch_no: old_batch_no,
+                expiry_date: oldBatch.expiry_date,
+                qty_document: pxQty,
+                qty_actual: pxQty,
+                unit_cost: mongoose.Types.Decimal128.fromString(
+                  String(pxUnitCost)
+                ),
+                line_cost: mongoose.Types.Decimal128.fromString(
+                  String(pxLineCost)
+                ),
+                selling_price: mongoose.Types.Decimal128.fromString(
+                  String(oldSellingPrice || 0)
+                ),
+                note: `Xuất kho để cập nhật giá mới (Giá cũ: ${pxUnitCost.toLocaleString()})`,
+                supplier_id: supplierId || null,
+                supplier_name_snapshot: finalDelivererName || "",
+              },
+            ],
           };
           const px = await InventoryVoucher.create([pxData], { session });
           createdVouchers.push(px[0]);
@@ -2653,39 +2929,61 @@ const updateProductBatch = async (req, res) => {
             ...voucherBase,
             type: "IN",
             voucher_code: `PN-ADJ-${timestamp}-NEW`,
-            reason: `Điều chỉnh giá (Nhập giá mới): ${new_batch_no || old_batch_no} - ${product.name}`,
+            reason: `Điều chỉnh giá (Nhập giá mới): ${
+              new_batch_no || old_batch_no
+            } - ${product.name}`,
             total_qty: pnQty,
-            total_cost: mongoose.Types.Decimal128.fromString(String(pnLineCost)),
-            total_amount: mongoose.Types.Decimal128.fromString(String(pnTotalAmount)),
-            items: [{
-              product_id: product._id,
-              sku_snapshot: product.sku || "",
-              name_snapshot: product.name,
-              unit_snapshot: product.unit || "cái",
-              warehouse_id: voucherBase.warehouse_id,
-              warehouse_name: warehouseName,
-              batch_no: new_batch_no || old_batch_no,
-              expiry_date: expiry_date ? new Date(expiry_date) : oldBatch.expiry_date,
-              qty_document: pnQty,
-              qty_actual: pnQty,
-              unit_cost: mongoose.Types.Decimal128.fromString(String(pnUnitCost)),
-              line_cost: mongoose.Types.Decimal128.fromString(String(pnLineCost)),
-              selling_price: mongoose.Types.Decimal128.fromString(String(pnUnitSelling)),
-              note: `Nhập kho với giá mới (${pnUnitCost.toLocaleString()})${quantityDiff !== 0 ? ` và sl mới (${pnQty})` : ""}`,
-              supplier_id: supplierId || null,
-              supplier_name_snapshot: finalDelivererName || "",
-            }]
+            total_cost: mongoose.Types.Decimal128.fromString(
+              String(pnLineCost)
+            ),
+            total_amount: mongoose.Types.Decimal128.fromString(
+              String(pnTotalAmount)
+            ),
+            items: [
+              {
+                product_id: product._id,
+                sku_snapshot: product.sku || "",
+                name_snapshot: product.name,
+                unit_snapshot: product.unit || "cái",
+                warehouse_id: voucherBase.warehouse_id,
+                warehouse_name: warehouseName,
+                batch_no: new_batch_no || old_batch_no,
+                expiry_date: expiry_date
+                  ? new Date(expiry_date)
+                  : oldBatch.expiry_date,
+                qty_document: pnQty,
+                qty_actual: pnQty,
+                unit_cost: mongoose.Types.Decimal128.fromString(
+                  String(pnUnitCost)
+                ),
+                line_cost: mongoose.Types.Decimal128.fromString(
+                  String(pnLineCost)
+                ),
+                selling_price: mongoose.Types.Decimal128.fromString(
+                  String(pnUnitSelling)
+                ),
+                note: `Nhập kho với giá mới (${pnUnitCost.toLocaleString()})${
+                  quantityDiff !== 0 ? ` và sl mới (${pnQty})` : ""
+                }`,
+                supplier_id: supplierId || null,
+                supplier_name_snapshot: finalDelivererName || "",
+              },
+            ],
           };
           const pn = await InventoryVoucher.create([pnData], { session });
           createdVouchers.push(pn[0]);
         }
       } else {
-        // TRƯỜNG HỢP 2: CHỈ THAY ĐỔI SỐ LƯỢNG (GIÁ GIỮ NGUYÊN) -> DÙNG DELTA
-        console.log("📉 Only quantity changed, creating a single delta voucher");
-        
+        // TRƯỜNG HỢP 2: CHỈ THAY ĐỔI SỐ LƯỢNG (GIÁ GIỮ NGUYÊN) -> DÙNG PHIẾU NHẬP/XUẤT (Positive)
+        console.log("📉 Quantity changed, creating IN/OUT voucher adjustment");
+
+        // Nếu quantityDiff > 0: Tăng số lượng -> Tạo phiếu NHẬP (IN)
+        // Nếu quantityDiff < 0: Giảm số lượng -> Tạo phiếu XUẤT (OUT)
+
         const voucherType = quantityDiff >= 0 ? "IN" : "OUT";
         const prefix = voucherType === "IN" ? "PN" : "PX";
-        const vQty = Math.abs(quantityDiff);
+        const vQty = Math.abs(quantityDiff); // Luôn dùng số dương
+
         const vUnitCost = Number(newCostPrice || 0);
         const vLineCost = vQty * vUnitCost;
         const vTotalAmount = vQty * Number(newSellingPrice || 0);
@@ -2697,25 +2995,41 @@ const updateProductBatch = async (req, res) => {
           reason: `Điều chỉnh số lượng lô hàng ${old_batch_no} - ${product.name}`,
           total_qty: vQty,
           total_cost: mongoose.Types.Decimal128.fromString(String(vLineCost)),
-          total_amount: mongoose.Types.Decimal128.fromString(String(vTotalAmount)),
-          items: [{
-            product_id: product._id,
-            sku_snapshot: product.sku || "",
-            name_snapshot: product.name,
-            unit_snapshot: product.unit || "cái",
-            warehouse_id: voucherBase.warehouse_id,
-            warehouse_name: warehouseName,
-            batch_no: new_batch_no || old_batch_no,
-            expiry_date: expiry_date ? new Date(expiry_date) : oldBatch.expiry_date,
-            qty_document: vQty,
-            qty_actual: vQty,
-            unit_cost: mongoose.Types.Decimal128.fromString(String(vUnitCost)),
-            line_cost: mongoose.Types.Decimal128.fromString(String(vLineCost)),
-            selling_price: mongoose.Types.Decimal128.fromString(String(newSellingPrice || 0)),
-            note: `Điều chỉnh số lượng: ${oldBatch.quantity || 0} → ${newQuantity} (${quantityDiff > 0 ? '+' : ''}${quantityDiff})`,
-            supplier_id: supplierId || null,
-            supplier_name_snapshot: finalDelivererName || "",
-          }]
+          total_amount: mongoose.Types.Decimal128.fromString(
+            String(vTotalAmount)
+          ),
+          items: [
+            {
+              product_id: product._id,
+              sku_snapshot: product.sku || "",
+              name_snapshot: product.name,
+              unit_snapshot: product.unit || "cái",
+              warehouse_id: voucherBase.warehouse_id,
+              warehouse_name: warehouseName,
+              batch_no: new_batch_no || old_batch_no,
+              expiry_date: expiry_date
+                ? new Date(expiry_date)
+                : oldBatch.expiry_date,
+              qty_document: vQty,
+              qty_actual: vQty,
+              unit_cost: mongoose.Types.Decimal128.fromString(
+                String(vUnitCost)
+              ),
+              line_cost: mongoose.Types.Decimal128.fromString(
+                String(vLineCost)
+              ),
+              selling_price: mongoose.Types.Decimal128.fromString(
+                String(newSellingPrice || 0)
+              ),
+              note: `Điều chỉnh số lượng: ${
+                oldBatch.quantity || 0
+              } → ${newQuantity} (${
+                quantityDiff > 0 ? "+" : ""
+              }${quantityDiff})`,
+              supplier_id: supplierId || null,
+              supplier_name_snapshot: finalDelivererName || "",
+            },
+          ],
         };
         const v = await InventoryVoucher.create([vData], { session });
         createdVouchers.push(v[0]);
@@ -2725,23 +3039,26 @@ const updateProductBatch = async (req, res) => {
     await session.commitTransaction();
     session.endSession();
 
-    console.log(`✅ Batch ${new_batch_no || old_batch_no} updated successfully`);
-    
+    console.log(` Batch ${new_batch_no || old_batch_no} updated successfully`);
+
     res.json({
       message: "Cập nhật lô hàng thành công",
       batch: product.batches[batchIndex],
       stock_quantity: product.stock_quantity,
-      vouchers: createdVouchers.map(v => ({
+      vouchers: createdVouchers.map((v) => ({
         code: v.voucher_code,
         type: v.type,
       })),
       // Giữ 'voucher' cho frontend cũ (lấy cái nhập mới nếu có 2 cái)
-      voucher: createdVouchers.length > 0 ? {
-        code: createdVouchers[createdVouchers.length - 1].voucher_code,
-        type: createdVouchers[createdVouchers.length - 1].type,
-        quantityDiff,
-        priceChanged,
-      } : null,
+      voucher:
+        createdVouchers.length > 0
+          ? {
+              code: createdVouchers[createdVouchers.length - 1].voucher_code,
+              type: createdVouchers[createdVouchers.length - 1].type,
+              quantityDiff,
+              priceChanged,
+            }
+          : null,
     });
   } catch (error) {
     if (session && session.inTransaction()) {

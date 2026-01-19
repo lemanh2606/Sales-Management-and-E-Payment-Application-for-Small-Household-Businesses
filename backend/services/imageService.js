@@ -21,7 +21,7 @@ class ImgBBService {
       // Optimize ảnh trước khi upload
       const optimizedBuffer = await this.optimizeImage(imageBuffer);
       console.log(
-        `✅ Image optimized: ${(optimizedBuffer.length / 1024).toFixed(2)}KB`
+        ` Image optimized: ${(optimizedBuffer.length / 1024).toFixed(2)}KB`
       );
 
       // Convert buffer to base64
@@ -47,7 +47,7 @@ class ImgBBService {
         }
       );
 
-      console.log("✅ ImgBB upload successful");
+      console.log(" ImgBB upload successful");
 
       return {
         success: true,
@@ -139,7 +139,7 @@ class ImgBBService {
       }
 
       await axios.get(deleteUrl);
-      console.log("✅ Image deleted from ImgBB");
+      console.log(" Image deleted from ImgBB");
 
       return { success: true };
     } catch (error) {

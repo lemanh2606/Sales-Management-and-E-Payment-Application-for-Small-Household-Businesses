@@ -197,7 +197,7 @@ const TopProductsReport = () => {
         </Text>
       ),
     },
-    { title: "Doanh thu", dataIndex: "totalSales", align: "right", render: formatVND },
+    { title: "Doanh thu (cogs)", dataIndex: "totalSales", align: "right", render: formatVND },
     { title: "Số đơn", dataIndex: "countOrders", align: "center" },
   ];
 

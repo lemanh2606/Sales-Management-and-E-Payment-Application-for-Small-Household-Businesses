@@ -138,7 +138,7 @@ const getCurrentSubscription = async (req, res) => {
         );
         try {
           subscription = await Subscription.createTrial(userId);
-          console.log("✅ Trial subscription created:", subscription._id);
+          console.log(" Trial subscription created:", subscription._id);
         } catch (trialErr) {
           console.error(" Failed to create trial:", trialErr);
           return res.status(500).json({
@@ -434,7 +434,7 @@ const activatePremium = async (req, res) => {
     // Update user is_premium flag (direct update - không cần load lại document)
     await User.findByIdAndUpdate(userId, { is_premium: true });
 
-    // ✅ Lưu vào lịch sử thanh toán
+    //  Lưu vào lịch sử thanh toán
     const paymentHistory = new PaymentHistory({
       user_id: userId,
       subscription_id: subscription._id,
@@ -457,7 +457,7 @@ const activatePremium = async (req, res) => {
     );
 
     console.log(
-      `✅ ${
+      ` ${
         isRenewal ? "GIA HẠN" : "KÍCH HOẠT"
       } premium cho user ${userId}, expires ${subscription.expires_at}`
     );
@@ -585,7 +585,7 @@ const getPaymentHistory = async (req, res) => {
       payment_method: item.payment_method,
       status: item.status,
       notes: item.notes,
-      // ✅ QUAN TRỌNG
+      //  QUAN TRỌNG
       eventTime: item.status === "SUCCESS" ? item.paid_at : item.updatedAt,
     }));
 
@@ -813,7 +813,7 @@ const clearPendingPayment = async (req, res) => {
 //     console.log(`🔍 Processing userId: ${userId || "ALL"}`);
 
 //     if (userId) {
-//       // ✅ SPECIFIC USER - XÓA TẤT CẢ pending của user (không check expired)
+//       //  SPECIFIC USER - XÓA TẤT CẢ pending của user (không check expired)
 //       const result = await Subscription.updateOne(
 //         { user_id: userId },
 //         {
@@ -862,7 +862,7 @@ const clearPendingPayment = async (req, res) => {
 //   }
 // };
 
-// // ✅ Helper - chỉ clear expired
+// //  Helper - chỉ clear expired
 // const clearAllExpiredPendingPayments = async () => {
 //   const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
 
@@ -873,7 +873,7 @@ const clearPendingPayment = async (req, res) => {
 //     },
 //     {
 //       $unset: {
-//         // ✅ $unset thay vì set null
+//         //  $unset thay vì set null
 //         pending_order_code: "",
 //         pending_amount: "",
 //         pending_checkout_url: "",

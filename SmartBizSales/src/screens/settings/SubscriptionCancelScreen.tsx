@@ -13,7 +13,7 @@ import subscriptionApi from "../../api/subscriptionApi";
 type RouteParams = {
   orderCode?: string | null;
   status?: string | null;
-  checkoutUrl?: string | null; // ✅ thêm để quay lại webview
+  checkoutUrl?: string | null; //  thêm để quay lại webview
 };
 
 const SubscriptionSuccessScreen: React.FC = () => {
@@ -28,7 +28,7 @@ const SubscriptionSuccessScreen: React.FC = () => {
     "loading"
   );
 
-  // ✅ Reset về Drawer screen (App -> Drawer screen)
+  //  Reset về Drawer screen (App -> Drawer screen)
   const resetToDrawerScreen = useMemo(
     () => (drawerScreen: "Subscription" | "SubscriptionPricing") => {
       navigation.reset({

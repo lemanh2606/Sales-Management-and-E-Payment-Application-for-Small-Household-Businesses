@@ -70,7 +70,8 @@ const create = async (req, res) => {
 
     if (!storeId || !periodType || !periodKey || !Array.isArray(items)) {
       return res.status(400).json({
-        message: "Thiếu dữ liệu bắt buộc: storeId, periodType, periodKey hoặc danh sách items",
+        message:
+          "Thiếu dữ liệu bắt buộc: storeId, periodType, periodKey hoặc danh sách items",
       });
     }
     if (!["month", "quarter", "year"].includes(periodType)) {
@@ -80,12 +81,14 @@ const create = async (req, res) => {
     }
     if (periodType === "month" && !/^\d{4}-(0[1-9]|1[0-2])$/.test(periodKey)) {
       return res.status(400).json({
-        message: "Định dạng periodKey theo tháng phải là YYYY-MM (ví dụ: 2025-12)",
+        message:
+          "Định dạng periodKey theo tháng phải là YYYY-MM (ví dụ: 2025-12)",
       });
     }
     if (periodType === "quarter" && !/^\d{4}-Q[1-4]$/.test(periodKey)) {
       return res.status(400).json({
-        message: "Định dạng periodKey theo quý phải là YYYY-Qn (n từ 1 đến 4, ví dụ: 2025-Q4)",
+        message:
+          "Định dạng periodKey theo quý phải là YYYY-Qn (n từ 1 đến 4, ví dụ: 2025-Q4)",
       });
     }
     if (periodType === "year" && !/^\d{4}$/.test(periodKey)) {
@@ -96,7 +99,10 @@ const create = async (req, res) => {
 
     if (isFuturePeriod(periodType, periodKey)) {
       return res.status(400).json({
-        message: `Không thể lưu chi phí cho thời gian ở tương lai (${formatPeriodVN(periodType, periodKey)})`,
+        message: `Không thể lưu chi phí cho thời gian ở tương lai (${formatPeriodVN(
+          periodType,
+          periodKey
+        )})`,
       });
     }
 
@@ -137,9 +143,26 @@ const getSubPeriodKeys = (periodType, periodKey) => {
   if (periodType === "quarter") {
     const [year, qStr] = periodKey.split("-Q");
     const q = parseInt(qStr, 10);
-    const months = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"];
-    const quarterMonths = months.slice((q - 1) * 3, q * 3).map((m) => `${year}-${m}`);
-    quarterMonths.forEach((m) => keys.push({ periodType: "month", periodKey: m }));
+    const months = [
+      "01",
+      "02",
+      "03",
+      "04",
+      "05",
+      "06",
+      "07",
+      "08",
+      "09",
+      "10",
+      "11",
+      "12",
+    ];
+    const quarterMonths = months
+      .slice((q - 1) * 3, q * 3)
+      .map((m) => `${year}-${m}`);
+    quarterMonths.forEach((m) =>
+      keys.push({ periodType: "month", periodKey: m })
+    );
   } else if (periodType === "year") {
     const year = periodKey;
     // Thêm các quý
@@ -148,7 +171,10 @@ const getSubPeriodKeys = (periodType, periodKey) => {
     }
     // Thêm các tháng
     for (let m = 1; m <= 12; m++) {
-      keys.push({ periodType: "month", periodKey: `${year}-${String(m).padStart(2, "0")}` });
+      keys.push({
+        periodType: "month",
+        periodKey: `${year}-${String(m).padStart(2, "0")}`,
+      });
     }
   }
   return keys;
@@ -160,14 +186,16 @@ const getByPeriod = async (req, res) => {
     const { storeId, periodType, periodKey } = req.query;
 
     if (!storeId || !periodType || !periodKey) {
-      return res.status(400).json({ message: "Thiếu dữ liệu bắt buộc: storeId, periodType, periodKey" });
+      return res.status(400).json({
+        message: "Thiếu dữ liệu bắt buộc: storeId, periodType, periodKey",
+      });
     }
 
     // Lấy các keys liên quan (ví dụ Quý thì lấy thêm các tháng thuộc quý đó)
     const relatedPeriods = getSubPeriodKeys(periodType, periodKey);
 
     const docs = await OperatingExpense.find({
-      storeId,
+      storeId: new mongoose.Types.ObjectId(storeId),
       $or: relatedPeriods,
       isDeleted: false,
     });
@@ -180,7 +208,9 @@ const getByPeriod = async (req, res) => {
     }
 
     // Tìm document chính của kỳ đang chọn
-    const mainDoc = docs.find((d) => d.periodType === periodType && d.periodKey === periodKey);
+    const mainDoc = docs.find(
+      (d) => d.periodType === periodType && d.periodKey === periodKey
+    );
 
     // Gộp tất cả items từ các docs lại
     let allItems = [];
@@ -200,14 +230,16 @@ const getByPeriod = async (req, res) => {
     });
 
     // Trả về dữ liệu gộp. Nếu không có mainDoc thì tạo 1 object giả để chứa items
-    const resultData = mainDoc ? mainDoc.toObject() : {
-      storeId,
-      periodType,
-      periodKey,
-      items: [],
-      status: "active",
-      isDeleted: false,
-    };
+    const resultData = mainDoc
+      ? mainDoc.toObject()
+      : {
+          storeId,
+          periodType,
+          periodKey,
+          items: [],
+          status: "active",
+          isDeleted: false,
+        };
 
     resultData.items = allItems;
 
@@ -229,9 +261,12 @@ const getAll = async (req, res) => {
 
     if (storeId) filter.storeId = storeId;
     if (periodType) filter.periodType = periodType;
-    if (status && ["active", "archived"].includes(status)) filter.status = status;
+    if (status && ["active", "archived"].includes(status))
+      filter.status = status;
 
-    const docs = await OperatingExpense.find(filter).sort({ createdAt: -1 }).lean();
+    const docs = await OperatingExpense.find(filter)
+      .sort({ createdAt: -1 })
+      .lean();
 
     return res.json({ success: true, data: docs, total: docs.length });
   } catch (error) {
@@ -258,7 +293,10 @@ const update = async (req, res) => {
 
     // Update items nếu có
     if (Array.isArray(items)) {
-      doc.items = items.map((it) => ({ amount: it.amount || 0, note: it.note || "" }));
+      doc.items = items.map((it) => ({
+        amount: it.amount || 0,
+        note: it.note || "",
+      }));
     }
 
     // Update status nếu có
@@ -315,7 +353,9 @@ const deleteItemWithCheckbox = async (req, res) => {
     const userId = req.user?._id;
 
     if (!Array.isArray(itemIds) || itemIds.length === 0) {
-      return res.status(400).json({ message: "Danh sách khoản chi được chọn không hợp lệ" });
+      return res
+        .status(400)
+        .json({ message: "Danh sách khoản chi được chọn không hợp lệ" });
     }
 
     const doc = await OperatingExpense.findById(id);
@@ -335,7 +375,9 @@ const deleteItemWithCheckbox = async (req, res) => {
     const deletedCount = beforeCount - doc.items.length;
 
     if (deletedCount === 0) {
-      return res.status(400).json({ message: "Không có khoản chi hợp lệ để xoá" });
+      return res
+        .status(400)
+        .json({ message: "Không có khoản chi hợp lệ để xoá" });
     }
 
     doc.updatedBy = userId;
@@ -363,7 +405,11 @@ const hardDelete = async (req, res) => {
       return res.status(404).json({ message: "Không tìm thấy chi phí ngoài" });
     }
 
-    return res.json({ success: true, message: "Đã xoá hẳn bản ghi", data: deleted });
+    return res.json({
+      success: true,
+      message: "Đã xoá hẳn bản ghi",
+      data: deleted,
+    });
   } catch (error) {
     console.error("operatingExpenseController.hardDelete:", error);
     return res.status(500).json({ message: error.message });
@@ -376,7 +422,9 @@ const getTotalByPeriod = async (req, res) => {
     const { storeId, periodType, periodKey } = req.query;
 
     if (!storeId || !periodType || !periodKey) {
-      return res.status(400).json({ message: "storeId, periodType, periodKey là bắt buộc" });
+      return res
+        .status(400)
+        .json({ message: "storeId, periodType, periodKey là bắt buộc" });
     }
 
     const relatedPeriods = getSubPeriodKeys(periodType, periodKey);
@@ -454,7 +502,9 @@ const suggestAllocation = async (req, res) => {
       return res.json({
         success: true,
         canAllocate: false,
-        message: `Allocation không áp dụng khi ở cùng loại kỳ báo cáo (${periodTypeVN(fromPeriodType)})`,
+        message: `Allocation không áp dụng khi ở cùng loại kỳ báo cáo (${periodTypeVN(
+          fromPeriodType
+        )})`,
         suggestions: [],
       });
     }
@@ -464,7 +514,12 @@ const suggestAllocation = async (req, res) => {
       // Year → Quarter: chia 4 quý
       const year = fromPeriodKey;
       targetPeriods = ["Q1", "Q2", "Q3", "Q4"].map((q) => `${year}-${q}`);
-      message = `${formatPeriodVN("year", year)} có tổng ${fromTotal.toLocaleString("vi-VN")} VND. Bạn có muốn phân bổ đều ra 4 quý không?`;
+      message = `${formatPeriodVN(
+        "year",
+        year
+      )} có tổng ${fromTotal.toLocaleString(
+        "vi-VN"
+      )} VND. Bạn có muốn phân bổ đều ra 4 quý không?`;
     } else if (fromPeriodType === "year" && toPeriodType === "month") {
       // Year → Month: chia 12 tháng
       const year = fromPeriodKey;
@@ -472,7 +527,12 @@ const suggestAllocation = async (req, res) => {
         const month = String(m).padStart(2, "0");
         targetPeriods.push(`${year}-${month}`);
       }
-      message = `${formatPeriodVN("year", year)} có tổng ${fromTotal.toLocaleString("vi-VN")} VND. Bạn có muốn phân bổ đều ra 12 tháng không?`;
+      message = `${formatPeriodVN(
+        "year",
+        year
+      )} có tổng ${fromTotal.toLocaleString(
+        "vi-VN"
+      )} VND. Bạn có muốn phân bổ đều ra 12 tháng không?`;
     }
     // ========== Case 3: Month → Year (Aggregation) ==========
     else if (fromPeriodType === "month" && toPeriodType === "year") {
@@ -508,7 +568,9 @@ const suggestAllocation = async (req, res) => {
       return res.json({
         success: true,
         canAllocate: true,
-        message: `Gợi ý tổng hợp từ 12 tháng năm ${fromYear} lên năm ${toYear}. Tổng chi phí: ${totalAmount.toLocaleString("vi-VN")} VND`,
+        message: `Gợi ý tổng hợp từ 12 tháng năm ${fromYear} lên năm ${toYear}. Tổng chi phí: ${totalAmount.toLocaleString(
+          "vi-VN"
+        )} VND`,
         fromData: {
           periodType: fromPeriodType,
           periodKey: fromPeriodKey,
@@ -563,7 +625,9 @@ const suggestAllocation = async (req, res) => {
       return res.json({
         success: true,
         canAllocate: true,
-        message: `Gợi ý tổng hợp từ 3 tháng (${allMonthKeys.join(", ")}) lên ${formatPeriodVN(
+        message: `Gợi ý tổng hợp từ 3 tháng (${allMonthKeys.join(
+          ", "
+        )}) lên ${formatPeriodVN(
           "quarter",
           quarterKey
         )}. Tổng chi phí: ${totalAmount.toLocaleString("vi-VN")} VND`,
@@ -586,21 +650,30 @@ const suggestAllocation = async (req, res) => {
       // Quarter → Month: chia 3 tháng
       const match = fromPeriodKey.match(/^(\d{4})-(Q[1-4])$/);
       if (!match) {
-        return res.status(400).json({ message: "Định dạng periodKey không hợp lệ" });
+        return res
+          .status(400)
+          .json({ message: "Định dạng periodKey không hợp lệ" });
       }
       const year = match[1];
       const quarter = match[2];
       const months = getMonthsFromQuarter(quarter);
       targetPeriods = months.map((m) => `${year}-${m}`);
-      message = `${formatPeriodVN("quarter", fromPeriodKey)} có tổng ${fromTotal.toLocaleString(
+      message = `${formatPeriodVN(
+        "quarter",
+        fromPeriodKey
+      )} có tổng ${fromTotal.toLocaleString(
         "vi-VN"
-      )} VND. Bạn có muốn phân bổ đều ra 3 tháng (${targetPeriods.join(", ")}) không?`;
+      )} VND. Bạn có muốn phân bổ đều ra 3 tháng (${targetPeriods.join(
+        ", "
+      )}) không?`;
     } else {
       // Không hỗ trợ phân bổ theo hướng này
       return res.json({
         success: true,
         canAllocate: false,
-        message: `Không hỗ trợ phân bổ từ ${periodTypeVN(fromPeriodType)} sang ${periodTypeVN(toPeriodType)}`,
+        message: `Không hỗ trợ phân bổ từ ${periodTypeVN(
+          fromPeriodType
+        )} sang ${periodTypeVN(toPeriodType)}`,
         suggestions: [],
       });
     }
@@ -612,7 +685,9 @@ const suggestAllocation = async (req, res) => {
     // Quarter→Month: Chỉ cho phép khi tháng nằm trong quý
     // Ví dụ: Q1 → T1/T2/T3 được, Q1 → T4+ không được
     if (detectedFromType === "quarter" && toPeriodType === "month") {
-      const [quarterYear, quarterNum] = fromPeriodKey.match(/^(\d{4})-(Q[1-4])$/).slice(1);
+      const [quarterYear, quarterNum] = fromPeriodKey
+        .match(/^(\d{4})-(Q[1-4])$/)
+        .slice(1);
       const allowedMonths = getMonthsFromQuarter(quarterNum);
       const allowedKeys = allowedMonths.map((m) => `${quarterYear}-${m}`);
 
@@ -623,7 +698,12 @@ const suggestAllocation = async (req, res) => {
         return res.json({
           success: true,
           canAllocate: false,
-          message: `Tháng ${selectedMonth.split("-")[1]} không nằm trong ${formatPeriodVN("quarter", fromPeriodKey)}. Không thể gợi ý phân bổ.`,
+          message: `Tháng ${
+            selectedMonth.split("-")[1]
+          } không nằm trong ${formatPeriodVN(
+            "quarter",
+            fromPeriodKey
+          )}. Không thể gợi ý phân bổ.`,
           suggestions: [],
         });
       }
@@ -670,7 +750,12 @@ const executeAllocation = async (req, res) => {
     const { storeId, fromPeriodType, fromPeriodKey, allocations } = req.body;
     const userId = req.user?._id;
 
-    if (!storeId || !fromPeriodType || !fromPeriodKey || !Array.isArray(allocations)) {
+    if (
+      !storeId ||
+      !fromPeriodType ||
+      !fromPeriodKey ||
+      !Array.isArray(allocations)
+    ) {
       return res.status(400).json({ message: "Thiếu dữ liệu bắt buộc" });
     }
 
@@ -683,7 +768,9 @@ const executeAllocation = async (req, res) => {
     });
 
     if (!fromDoc) {
-      return res.status(404).json({ message: "Không tìm thấy dữ liệu nguồn để phân bổ" });
+      return res
+        .status(404)
+        .json({ message: "Không tìm thấy dữ liệu nguồn để phân bổ" });
     }
 
     const createdRecords = [];
@@ -691,7 +778,9 @@ const executeAllocation = async (req, res) => {
     // ========== CASE 1: Month → Year (Aggregation) ==========
     if (fromPeriodType === "month" && allocations.length > 0) {
       // Check xem allocations có chứa year periodKey không (format YYYY)
-      const yearAllocation = allocations.find((a) => /^\d{4}$/.test(a.periodKey));
+      const yearAllocation = allocations.find((a) =>
+        /^\d{4}$/.test(a.periodKey)
+      );
 
       if (yearAllocation) {
         const [fromYear] = fromPeriodKey.split("-"); // "2025-01" → "2025"
@@ -721,7 +810,8 @@ const executeAllocation = async (req, res) => {
           // Add item aggregated từ 12 tháng
           yearDoc.items.push({
             amount: yearAllocation.amount,
-            note: yearAllocation.note || `Tổng hợp từ 12 tháng năm ${targetYear}`,
+            note:
+              yearAllocation.note || `Tổng hợp từ 12 tháng năm ${targetYear}`,
             isSaved: true,
           });
 
@@ -740,7 +830,9 @@ const executeAllocation = async (req, res) => {
     // ========== CASE 2: Month → Quarter (Aggregation) ==========
     if (fromPeriodType === "month" && allocations.length > 0) {
       // Check xem allocations có chứa quarter periodKey không (format YYYY-Qn)
-      const quarterAllocations = allocations.filter((a) => /^\d{4}-Q[1-4]$/.test(a.periodKey));
+      const quarterAllocations = allocations.filter((a) =>
+        /^\d{4}-Q[1-4]$/.test(a.periodKey)
+      );
 
       for (const quarterAlloc of quarterAllocations) {
         const quarterKey = quarterAlloc.periodKey; // "2025-Q1"
@@ -774,7 +866,8 @@ const executeAllocation = async (req, res) => {
         // Add item aggregated từ 3 tháng của quý
         quarterDoc.items.push({
           amount: quarterAlloc.amount,
-          note: quarterAlloc.note || `Tổng hợp từ 3 tháng ${quarter} năm ${year}`,
+          note:
+            quarterAlloc.note || `Tổng hợp từ 3 tháng ${quarter} năm ${year}`,
           isSaved: true,
         });
 
@@ -792,7 +885,10 @@ const executeAllocation = async (req, res) => {
 
       if (isFuturePeriod(toPeriodType, toPeriodKey)) {
         return res.status(400).json({
-          message: `Không thể phân bổ chi phí tới thời gian ở tương lai (${formatPeriodVN(toPeriodType, toPeriodKey)})`,
+          message: `Không thể phân bổ chi phí tới thời gian ở tương lai (${formatPeriodVN(
+            toPeriodType,
+            toPeriodKey
+          )})`,
         });
       }
     }
@@ -802,7 +898,10 @@ const executeAllocation = async (req, res) => {
       const { periodKey: toPeriodKey, amount, note } = alloc;
 
       // Skip year & quarter allocations nếu là month→year/quarter case (đã xử lý ở trên)
-      if (fromPeriodType === "month" && (/^\d{4}$/.test(toPeriodKey) || /^\d{4}-Q[1-4]$/.test(toPeriodKey))) {
+      if (
+        fromPeriodType === "month" &&
+        (/^\d{4}$/.test(toPeriodKey) || /^\d{4}-Q[1-4]$/.test(toPeriodKey))
+      ) {
         continue;
       }
 
@@ -823,7 +922,9 @@ const executeAllocation = async (req, res) => {
         // Record đã tồn tại → thêm item vào
         existing.items.push({
           amount,
-          note: note || `Phân bổ từ ${formatPeriodVN(fromPeriodType, fromPeriodKey)}`,
+          note:
+            note ||
+            `Phân bổ từ ${formatPeriodVN(fromPeriodType, fromPeriodKey)}`,
           isSaved: true,
         });
         existing.updatedBy = userId;
@@ -838,7 +939,9 @@ const executeAllocation = async (req, res) => {
           items: [
             {
               amount,
-              note: note || `Phân bổ từ ${formatPeriodVN(fromPeriodType, fromPeriodKey)}`,
+              note:
+                note ||
+                `Phân bổ từ ${formatPeriodVN(fromPeriodType, fromPeriodKey)}`,
               isSaved: true,
             },
           ],
@@ -887,22 +990,22 @@ Month → Year: T1-T12 → hiển thị với Year (tất cả hợp lệ)
 
 | #   | Case            | Validation Check                  | Kết quả                 | Status |
 | --- | --------------- | --------------------------------- | ----------------------- | ------ |
-| 1️⃣ | Year → Year     | Tất cả hợp lệ (tương tự năm)      | Luôn hiển thị ✅         | ✅      |
-| 2️⃣ | Year → Quarter  | [Q1,Q2,Q3,Q4] → tất cả hợp lệ     | Luôn hiển thị ✅         | ✅      |
-| 3️⃣ | Year → Month    | [T1-T12] → tất cả hợp lệ          | Luôn hiển thị ✅         | ✅      |
-| 4️⃣ | Month → Year    | Cùng năm + tất cả T1-T12 hợp lệ   | Luôn hiển thị ✅         | ✅      |
-| 5️⃣ | Month → Quarter | T1-T3→Q1, T4-T6→Q2, ...           | ✅ T1-T3 show / T4+ hide | ✅      |
-| 6️⃣ | Quarter → Month | Q1→[T1,T2,T3], Q2→[T4,T5,T6], ... | ✅ T1-T3 show / T4+ hide | ✅      |
+| 1️⃣ | Year → Year     | Tất cả hợp lệ (tương tự năm)      | Luôn hiển thị          |       |
+| 2️⃣ | Year → Quarter  | [Q1,Q2,Q3,Q4] → tất cả hợp lệ     | Luôn hiển thị          |       |
+| 3️⃣ | Year → Month    | [T1-T12] → tất cả hợp lệ          | Luôn hiển thị          |       |
+| 4️⃣ | Month → Year    | Cùng năm + tất cả T1-T12 hợp lệ   | Luôn hiển thị          |       |
+| 5️⃣ | Month → Quarter | T1-T3→Q1, T4-T6→Q2, ...           |  T1-T3 show / T4+ hide |       |
+| 6️⃣ | Quarter → Month | Q1→[T1,T2,T3], Q2→[T4,T5,T6], ... |  T1-T3 show / T4+ hide |       |
 
 
 | Aspect            | Chi tiết                               | Status |
 | ----------------- | -------------------------------------- | ------ |
-| Code compile      | Không lỗi                              | ✅      |
-| 6 cases           | Tất cả đầy đủ                          | ✅      |
-| Validation scope  | Đúng logic                             | ✅      |
-| Aggregation logic | Month→Quarter, Month→Year chuẩn        | ✅      |
-| Message rõ ràng   | Người dùng hiểu tại sao không hiển thị | ✅      |
-| Execution logic   | executeAllocation xử lý đúng           | ✅      |
+| Code compile      | Không lỗi                              |       |
+| 6 cases           | Tất cả đầy đủ                          |       |
+| Validation scope  | Đúng logic                             |       |
+| Aggregation logic | Month→Quarter, Month→Year chuẩn        |       |
+| Message rõ ràng   | Người dùng hiểu tại sao không hiển thị |       |
+| Execution logic   | executeAllocation xử lý đúng           |       |
 
 */
 }

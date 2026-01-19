@@ -464,7 +464,7 @@ const TopCustomersScreen: React.FC = () => {
         maximumDate: new Date(2100, 11, 31),
         onChange: (event: DateTimePickerEvent, date?: Date) => {
           if (event.type !== "set" || !date) return; // dismiss/cancel
-          applyPickedDate(field, date); // ✅ áp dụng ngay trên Android
+          applyPickedDate(field, date); //  áp dụng ngay trên Android
         },
       });
       return;

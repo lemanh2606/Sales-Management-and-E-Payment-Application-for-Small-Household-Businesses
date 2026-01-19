@@ -24,7 +24,7 @@ const SubscriptionCancel = () => {
   // Dùng Ref để kiểm soát việc gọi API chỉ 1 lần (tránh React StrictMode gọi 2 lần)
   const hasCalledApiRef = useRef(false);
 
-  // ✅ HÀM QUAN TRỌNG: Gửi tín hiệu Deep Link để App React Native bắt được
+  //  HÀM QUAN TRỌNG: Gửi tín hiệu Deep Link để App React Native bắt được
   const signalAppToClose = () => {
     console.log("🚀 Gửi tín hiệu đóng cho App: posapp://cancel-done");
 
@@ -32,18 +32,18 @@ const SubscriptionCancel = () => {
     window.location.href = `posapp://cancel-done?orderCode=${orderCode}`;
   };
 
-  // ✅ Xử lý hủy thanh toán (Gọi Backend)
+  //  Xử lý hủy thanh toán (Gọi Backend)
   const handleCancelPayment = async () => {
     try {
       console.log("⏳ Đang gọi API clearPendingPayment...");
       await subscriptionApi.clearPendingPayment();
-      console.log("✅ Đã hủy pending payment thành công.");
+      console.log(" Đã hủy pending payment thành công.");
     } catch (error) {
       console.error(" Lỗi khi hủy thanh toán:", error);
     }
   };
 
-  // ✅ Hàm điều hướng chung (Xử lý cả Web và App)
+  //  Hàm điều hướng chung (Xử lý cả Web và App)
   const handleNavigateAway = async (destination: "subscription" | "home") => {
     // 1. Đảm bảo API đã được gọi (phòng trường hợp người dùng bấm nhanh quá)
     if (!hasCalledApiRef.current) {
@@ -75,7 +75,7 @@ const SubscriptionCancel = () => {
     }, 300);
   };
 
-  // ✅ Lifecycle 1: Gọi API ngay khi trang vừa load
+  //  Lifecycle 1: Gọi API ngay khi trang vừa load
   useEffect(() => {
     if (!hasCalledApiRef.current) {
       hasCalledApiRef.current = true;
@@ -83,7 +83,7 @@ const SubscriptionCancel = () => {
     }
   }, []);
 
-  // ✅ Lifecycle 2: Xử lý đếm ngược
+  //  Lifecycle 2: Xử lý đếm ngược
   useEffect(() => {
     const countdownInterval = setInterval(() => {
       setCountdown((prev) => {

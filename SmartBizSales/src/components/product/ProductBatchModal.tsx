@@ -1,4 +1,4 @@
-// src/components/product/ProductBatchModal.tsx
+
 import React, { useEffect, useState } from "react";
 import {
   View,
@@ -13,12 +13,13 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { Product } from "../../type/product";
 import apiClient from "../../api/apiClient";
 import * as productApi from "../../api/productApi";
 import { useAuth } from "../../context/AuthContext";
-import { Ionicons } from "@expo/vector-icons";
-import DateTimePicker from "@react-native-community/datetimepicker";
 
 interface ProductBatchModalProps {
   product: Product;
@@ -86,7 +87,7 @@ const ProductBatchModal: React.FC<ProductBatchModalProps> = ({
     const fetchWarehouses = async () => {
       if (!storeId || !open) return;
       try {
-        const res = await apiClient.get<{ warehouses: Warehouse[] }>(`/warehouses/store/${storeId}`);
+        const res = await apiClient.get<{ warehouses: Warehouse[] }>(`/stores/${storeId}/warehouses`);
         setWarehouses(res.data.warehouses || []);
       } catch (error) {
         console.error("Lỗi tải kho:", error);
@@ -98,19 +99,15 @@ const ProductBatchModal: React.FC<ProductBatchModalProps> = ({
   const handleSave = async () => {
     if (!product._id) return;
     
-    // Validation: Kiểm tra tồn kho tối đa
     const newQty = Number(formData.quantity) || 0;
     const oldQty = Number(batch?.quantity) || 0;
     const qtyDelta = newQty - oldQty;
     const currentStock = Number(product.stock_quantity) || 0;
     const projectedStock = currentStock + qtyDelta;
     
-    // Ép kiểu cho chắc chắn
     const maxStock = product.max_stock !== undefined && product.max_stock !== null 
       ? Number(product.max_stock) 
       : 0;
-
-    console.log("Mobile Validate Max Stock:", { currentStock, oldQty, newQty, qtyDelta, projectedStock, maxStock });
 
     if (maxStock > 0 && projectedStock > maxStock) {
       Alert.alert(
@@ -120,7 +117,6 @@ const ProductBatchModal: React.FC<ProductBatchModalProps> = ({
       return;
     }
 
-    // Kiểm tra không âm
     if (newQty < 0) {
       Alert.alert("Lỗi", "Số lượng không được âm");
       return;
@@ -159,202 +155,209 @@ const ProductBatchModal: React.FC<ProductBatchModalProps> = ({
     }
   };
 
-  const getWarehouseName = (id: string) => {
-    return warehouses.find((w) => w._id === id)?.name || "Chọn kho hàng";
+  const getName = (list: any[], id: string, placeholder = "Chọn...") => {
+     return list.find(i => i._id === id)?.name || placeholder;
   };
 
   return (
-    <Modal visible={open} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.backdrop}>
-        <View style={styles.modalContainer}>
-          <View style={styles.header}>
-            <Text style={styles.title} numberOfLines={1}>
-              Điều chỉnh lô: {batch?.batch_no || "N/A"}
-            </Text>
-            <TouchableOpacity onPress={onClose} disabled={loading}>
-              <Ionicons name="close" size={24} color="#666" />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={styles.formContainer}>
-            <Text style={styles.productLabel}>Sản phẩm: <Text style={{fontWeight: '700'}}>{product.name}</Text></Text>
-            
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Thông tin lô hàng</Text>
-              
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Số lô</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.batch_no}
-                  onChangeText={(t) => setFormData({ ...formData, batch_no: t })}
-                />
-              </View>
-
-              <View style={styles.row}>
-                <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-                  <Text style={styles.label}>Số lượng</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={formData.quantity}
-                    keyboardType="numeric"
-                    onChangeText={(t) => setFormData({ ...formData, quantity: t.replace(/[^0-9]/g, "") })}
-                  />
+    <Modal visible={open} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+        <View style={styles.container}>
+            {/* Header */}
+            <LinearGradient colors={["#16a34a", "#15803d"]} style={styles.header}>
+                <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: Platform.OS === 'ios' ? 0 : 10}}>
+                     <View>
+                        <Text style={styles.headerTitle}>Điều chỉnh lô hàng</Text>
+                        <Text style={styles.headerSubtitle}>{batch?.batch_no || "N/A"}</Text>
+                     </View>
+                    <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+                        <Ionicons name="close" size={24} color="#fff" />
+                    </TouchableOpacity>
                 </View>
-                <View style={[styles.inputGroup, { flex: 1 }]}>
-                  <Text style={styles.label}>Hạn sử dụng</Text>
-                  <TouchableOpacity style={styles.input} onPress={() => setShowDatePicker(true)}>
-                    <Text style={{ color: formData.expiry_date ? "#000" : "#999" }}>
-                      {formData.expiry_date ? new Date(formData.expiry_date).toLocaleDateString("vi-VN") : "Chọn ngày"}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
+            </LinearGradient>
 
-              <View style={styles.row}>
-                <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-                  <Text style={styles.label}>Giá vốn (VND)</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={formData.cost_price}
-                    keyboardType="numeric"
-                    onChangeText={(t) => setFormData({ ...formData, cost_price: t.replace(/[^0-9]/g, "") })}
-                  />
-                </View>
-                <View style={[styles.inputGroup, { flex: 1 }]}>
-                  <Text style={styles.label}>Giá bán (VND)</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={formData.selling_price}
-                    keyboardType="numeric"
-                    onChangeText={(t) => setFormData({ ...formData, selling_price: t.replace(/[^0-9]/g, "") })}
-                  />
-                </View>
-              </View>
+            <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{flex: 1}}>
+            <ScrollView contentContainerStyle={styles.contentParams}>
+                
+                <View style={styles.card}>
+                    <Text style={styles.sectionHeader}>Thông tin lô hàng</Text>
+                    
+                     <View style={styles.videoFormGroup}>
+                        <Text style={styles.label}>Số lô</Text>
+                        <TextInput style={styles.input} 
+                             value={formData.batch_no} 
+                             onChangeText={t => setFormData({...formData, batch_no: t})}
+                        />
+                    </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Kho hàng</Text>
-                <TouchableOpacity style={styles.dropdown} onPress={() => setShowWarehouseDropdown(true)}>
-                  <Text style={styles.dropdownText}>{getWarehouseName(formData.warehouse_id)}</Text>
-                  <Ionicons name="chevron-down" size={20} color="#666" />
+                    <View style={styles.row}>
+                        <View style={[styles.col, {marginRight: 8}]}>
+                             <Text style={styles.label}>Số lượng</Text>
+                             <TextInput style={styles.input} 
+                                  value={formData.quantity} 
+                                  onChangeText={t => setFormData({...formData, quantity: t.replace(/[^0-9]/g, "")})}
+                                  keyboardType="numeric"
+                             />
+                        </View>
+                        <View style={[styles.col, {marginLeft: 8}]}>
+                             <Text style={styles.label}>Hạn sử dụng</Text>
+                             <TouchableOpacity style={styles.selectInput} onPress={() => setShowDatePicker(true)}>
+                                  <Text style={{color: formData.expiry_date ? "#333" : "#999"}}>
+                                      {formData.expiry_date ? new Date(formData.expiry_date).toLocaleDateString("vi-VN") : "Chọn ngày"}
+                                  </Text>
+                                  <Ionicons name="calendar-outline" size={20} color="#666" />
+                             </TouchableOpacity>
+                        </View>
+                    </View>
+
+                    <View style={styles.row}>
+                        <View style={[styles.col, {marginRight: 8}]}>
+                             <Text style={styles.label}>Giá vốn (VND)</Text>
+                             <TextInput style={styles.input} 
+                                  value={formData.cost_price} 
+                                  onChangeText={t => setFormData({...formData, cost_price: t.replace(/[^0-9]/g, "")})}
+                                  keyboardType="numeric"
+                             />
+                        </View>
+                        <View style={[styles.col, {marginLeft: 8}]}>
+                             <Text style={styles.label}>Giá bán (VND)</Text>
+                             <TextInput style={styles.input} 
+                                  value={formData.selling_price} 
+                                  onChangeText={t => setFormData({...formData, selling_price: t.replace(/[^0-9]/g, "")})}
+                                  keyboardType="numeric"
+                             />
+                        </View>
+                    </View>
+
+                     <View style={styles.videoFormGroup}>
+                        <Text style={styles.label}>Kho hàng</Text>
+                        <TouchableOpacity style={styles.selectInput} onPress={() => setShowWarehouseDropdown(true)}>
+                              <Text style={{color: formData.warehouse_id ? "#333" : "#999"}}>
+                                  {getName(warehouses, formData.warehouse_id, "Chọn kho hàng...")}
+                              </Text>
+                              <Ionicons name="chevron-down" size={20} color="#666" />
+                        </TouchableOpacity>
+                    </View>
+                </View>
+
+                <View style={styles.card}>
+                    <Text style={styles.sectionHeader}>Thông tin phiếu kho</Text>
+                    
+                    <View style={styles.row}>
+                        <View style={[styles.col, {marginRight: 8}]}>
+                             <Text style={styles.label}>Người giao / NCC</Text>
+                             <TextInput style={styles.input} 
+                                  value={formData.deliverer_name} 
+                                  onChangeText={t => setFormData({...formData, deliverer_name: t})}
+                             />
+                        </View>
+                        <View style={[styles.col, {marginLeft: 8}]}>
+                             <Text style={styles.label}>SĐT người giao</Text>
+                             <TextInput style={styles.input} 
+                                  value={formData.deliverer_phone} 
+                                  onChangeText={t => setFormData({...formData, deliverer_phone: t})}
+                                  keyboardType="phone-pad"
+                             />
+                        </View>
+                    </View>
+
+                    <View style={styles.videoFormGroup}>
+                        <Text style={styles.label}>Người nhận / Nhân viên</Text>
+                        <TextInput style={styles.input} 
+                             value={formData.receiver_name} 
+                             onChangeText={t => setFormData({...formData, receiver_name: t})}
+                        />
+                    </View>
+
+                     <View style={styles.videoFormGroup}>
+                        <Text style={styles.label}>Ghi chú</Text>
+                        <TextInput style={styles.input} 
+                             value={formData.note} 
+                             onChangeText={t => setFormData({...formData, note: t})}
+                             placeholder="Nhập ghi chú..."
+                        />
+                    </View>
+                </View>
+
+            </ScrollView>
+            </KeyboardAvoidingView>
+
+            {/* Footer */}
+            <View style={styles.footer}>
+                <TouchableOpacity style={styles.btnCancel} onPress={onClose} disabled={loading}>
+                    <Text style={styles.btnCancelText}>Hủy</Text>
                 </TouchableOpacity>
-              </View>
+                <TouchableOpacity style={styles.btnSave} onPress={handleSave} disabled={loading}>
+                    {loading ? <ActivityIndicator color="#fff"/> : <Text style={styles.btnSaveText}>Lưu & Điều Chỉnh</Text>}
+                </TouchableOpacity>
             </View>
 
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Thông tin phiếu kho (Tùy chọn)</Text>
-              <View style={styles.row}>
-                <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-                  <Text style={styles.label}>Người giao / NCC</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={formData.deliverer_name}
-                    onChangeText={(t) => setFormData({ ...formData, deliverer_name: t })}
-                    placeholder="Tên người giao"
-                  />
-                </View>
-                <View style={[styles.inputGroup, { flex: 1 }]}>
-                  <Text style={styles.label}>SĐT người giao</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={formData.deliverer_phone}
-                    onChangeText={(t) => setFormData({ ...formData, deliverer_phone: t })}
-                    placeholder="SĐT"
-                  />
-                </View>
-              </View>
-              <View style={styles.row}>
-                <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-                  <Text style={styles.label}>Người nhận / NV</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={formData.receiver_name}
-                    onChangeText={(t) => setFormData({ ...formData, receiver_name: t })}
-                  />
-                </View>
-                <View style={[styles.inputGroup, { flex: 1 }]}>
-                  <Text style={styles.label}>Ghi chú</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={formData.note}
-                    onChangeText={(t) => setFormData({ ...formData, note: t })}
-                  />
-                </View>
-              </View>
-            </View>
-          </ScrollView>
+            {/* Modals */}
+             <Modal visible={showWarehouseDropdown} transparent animationType="fade" onRequestClose={() => setShowWarehouseDropdown(false)}>
+                <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShowWarehouseDropdown(false)}>
+                  <View style={styles.dropdownContainer}>
+                    <View style={styles.dropdownHeader}>
+                      <Text style={styles.dropdownTitle}>Chọn kho hàng</Text>
+                      <TouchableOpacity onPress={() => setShowWarehouseDropdown(false)}><Ionicons name="close" size={24} color="#666"/></TouchableOpacity>
+                    </View>
+                    <ScrollView style={{maxHeight: 300}}>
+                      {warehouses.map(item => (
+                        <TouchableOpacity key={item._id} style={[styles.dropdownItem, formData.warehouse_id === item._id && styles.dropdownItemSelected]}
+                          onPress={() => { setFormData({...formData, warehouse_id: item._id}); setShowWarehouseDropdown(false); }}>
+                          <Text style={[styles.dropdownItemText, formData.warehouse_id === item._id && {color: "#16a34a", fontWeight: "700"}]}>{item.name}</Text>
+                          {formData.warehouse_id === item._id && <Ionicons name="checkmark" size={20} color="#16a34a" />}
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                </TouchableOpacity>
+              </Modal>
 
-          <View style={styles.actions}>
-            <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={onClose} disabled={loading}>
-              <Text style={styles.cancelText}>Hủy</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.button, styles.saveButton]} onPress={handleSave} disabled={loading}>
-              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>Lưu & Tạo phiếu</Text>}
-            </TouchableOpacity>
-          </View>
+            {showDatePicker && (
+                <DateTimePicker
+                value={formData.expiry_date ? new Date(formData.expiry_date) : new Date()}
+                mode="date"
+                display="default"
+                onChange={onDateChange}
+                />
+            )}
         </View>
-      </KeyboardAvoidingView>
-
-      {/* Warehouse Dropdown Modal */}
-      <Modal visible={showWarehouseDropdown} transparent animationType="fade">
-        <TouchableOpacity style={styles.dropdownBackdrop} activeOpacity={1} onPress={() => setShowWarehouseDropdown(false)}>
-          <View style={styles.dropdownMenu}>
-             <Text style={styles.dropdownTitle}>Chọn kho hàng</Text>
-             {warehouses.map(w => (
-               <TouchableOpacity 
-                  key={w._id} 
-                  style={styles.dropdownItem}
-                  onPress={() => {
-                    setFormData({...formData, warehouse_id: w._id});
-                    setShowWarehouseDropdown(false);
-                  }}
-               >
-                 <Text style={[styles.dropdownItemText, formData.warehouse_id === w._id && { color: '#16a34a', fontWeight: '700' }]}>{w.name}</Text>
-                 {formData.warehouse_id === w._id && <Ionicons name="checkmark" size={20} color="#16a34a" />}
-               </TouchableOpacity>
-             ))}
-          </View>
-        </TouchableOpacity>
-      </Modal>
-
-      {showDatePicker && (
-        <DateTimePicker
-          value={formData.expiry_date ? new Date(formData.expiry_date) : new Date()}
-          mode="date"
-          display="default"
-          onChange={onDateChange}
-        />
-      )}
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", padding: 16 },
-  modalContainer: { backgroundColor: "#fff", borderRadius: 16, maxHeight: "90%", overflow: "hidden" },
-  header: { flexDirection: "row", justifyContent: "space-between", padding: 16, borderBottomWidth: 1, borderBottomColor: "#eee" },
-  title: { fontSize: 18, fontWeight: "700", color: "#16a34a", flex: 1 },
-  productLabel: { paddingHorizontal: 16, paddingTop: 12, color: '#666' },
-  formContainer: { padding: 16 },
-  section: { marginBottom: 20 },
-  sectionTitle: { fontSize: 13, fontWeight: "700", color: "#666", textTransform: 'uppercase', marginBottom: 12 },
-  inputGroup: { marginBottom: 12 },
-  label: { fontSize: 13, color: "#333", marginBottom: 4 },
-  input: { borderWidth: 1, borderColor: "#ddd", borderRadius: 8, padding: 10, minHeight: 44, justifyContent: 'center' },
-  row: { flexDirection: "row", marginBottom: 0 },
-  dropdown: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderWidth: 1, borderColor: "#ddd", borderRadius: 8, padding: 10 },
-  dropdownText: { color: "#333" },
-  actions: { flexDirection: "row", padding: 16, borderTopWidth: 1, borderTopColor: "#eee" },
-  button: { flex: 1, height: 48, borderRadius: 8, justifyContent: "center", alignItems: "center" },
-  cancelButton: { backgroundColor: "#f5f5f5", marginRight: 8 },
-  saveButton: { backgroundColor: "#16a34a" },
-  cancelText: { color: "#666", fontWeight: "600" },
-  saveText: { color: "#fff", fontWeight: "600" },
-  dropdownBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'center', alignItems: 'center' },
-  dropdownMenu: { width: '80%', backgroundColor: '#fff', borderRadius: 12, padding: 16, shadowOpacity: 0.1, elevation: 5 },
-  dropdownTitle: { fontSize: 16, fontWeight: '700', marginBottom: 12, textAlign: 'center' },
-  dropdownItem: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f5f5f5', flexDirection: 'row', justifyContent: 'space-between' },
-  dropdownItemText: { fontSize: 15 },
+  container: { flex: 1, backgroundColor: "#f5f5f5" },
+  header: { padding: 16, paddingTop: 40 },
+  headerTitle: { fontSize: 18, fontWeight: "bold", color: "#fff" },
+  headerSubtitle: { fontSize: 14, color: "#e2e8f0", marginTop: 2 },
+  closeBtn: { padding: 4 },
+  contentParams: { padding: 16, paddingBottom: 100 },
+  
+  card: { backgroundColor: "#fff", borderRadius: 12, padding: 16, marginBottom: 16, shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 5, elevation: 2 },
+  sectionHeader: { fontSize: 16, fontWeight: "700", color: "#334155", marginBottom: 12, textTransform: "uppercase" },
+  
+  videoFormGroup: { marginBottom: 12 },
+  label: { fontSize: 13, fontWeight: "600", color: "#64748b", marginBottom: 6 },
+  input: { backgroundColor: "#f8fafc", borderWidth: 1, borderColor: "#e2e8f0", borderRadius: 8, padding: 12, color: "#0f172a", fontSize: 15 },
+  selectInput: { backgroundColor: "#f8fafc", borderWidth: 1, borderColor: "#e2e8f0", borderRadius: 8, padding: 12, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  
+  row: { flexDirection: "row", marginBottom: 12 },
+  col: { flex: 1 },
+
+  footer: { position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: "#fff", padding: 16, borderTopWidth: 1, borderTopColor: "#e2e8f0", flexDirection: "row", gap: 12 },
+  btnCancel: { flex: 1, padding: 14, borderRadius: 10, backgroundColor: "#f1f5f9", alignItems: "center" },
+  btnCancelText: { fontWeight: "600", color: "#64748b" },
+  btnSave: { flex: 2, padding: 14, borderRadius: 10, backgroundColor: "#16a34a", alignItems: "center" },
+  btnSaveText: { fontWeight: "700", color: "#fff" },
+
+  // Dropdown Modal
+  modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
+  dropdownContainer: { backgroundColor: "#fff", borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 16, maxHeight: "60%" },
+  dropdownHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16, borderBottomWidth: 1, borderBottomColor: "#eee", paddingBottom: 12 },
+  dropdownTitle: { fontSize: 16, fontWeight: "bold" },
+  dropdownItem: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#f1f5f9" },
+  dropdownItemSelected: { backgroundColor: "#f0fdf4" },
+  dropdownItemText: { fontSize: 15, color: "#334155" }
 });
 
 export default ProductBatchModal;
