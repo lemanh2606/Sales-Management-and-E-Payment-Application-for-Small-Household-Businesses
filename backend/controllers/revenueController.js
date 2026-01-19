@@ -815,7 +815,11 @@ const getRevenueSummaryByYear = async (req, res) => {
         { $match: orderMatch },
         {
           $group: {
-            _id: { month: { $month: "$createdAt" } },
+            _id: {
+              month: {
+                $month: { date: "$createdAt", timezone: "Asia/Ho_Chi_Minh" },
+              },
+            },
             grossRevenue: { $sum: { $toDecimal: "$totalAmount" } },
           },
         },
@@ -835,7 +839,11 @@ const getRevenueSummaryByYear = async (req, res) => {
         { $match: { "orderInfo.storeId": toObjectId(storeId) } },
         {
           $group: {
-            _id: { month: { $month: "$refundedAt" } },
+            _id: {
+              month: {
+                $month: { date: "$refundedAt", timezone: "Asia/Ho_Chi_Minh" },
+              },
+            },
             refundAmount: { $sum: { $toDecimal: "$refundAmount" } },
           },
         },
@@ -860,7 +868,14 @@ const getRevenueSummaryByYear = async (req, res) => {
         },
         {
           $group: {
-            _id: { month: { $month: "$order.createdAt" } },
+            _id: {
+              month: {
+                $month: {
+                  date: "$order.createdAt",
+                  timezone: "Asia/Ho_Chi_Minh",
+                },
+              },
+            },
             itemsSold: { $sum: "$quantity" },
           },
         },
@@ -881,7 +896,11 @@ const getRevenueSummaryByYear = async (req, res) => {
         { $unwind: "$refundItems" },
         {
           $group: {
-            _id: { month: { $month: "$refundedAt" } },
+            _id: {
+              month: {
+                $month: { date: "$refundedAt", timezone: "Asia/Ho_Chi_Minh" },
+              },
+            },
             itemsRefunded: { $sum: "$refundItems.quantity" },
           },
         },
@@ -1155,6 +1174,7 @@ const getDailyProductSales = async (req, res) => {
               $multiply: [{ $toDouble: "$priceAtTime" }, "$quantity"],
             },
             netLine: { $toDouble: "$subtotal" },
+            vatLine: { $toDouble: { $ifNull: ["$vat_amount", 0] } },
           },
         },
         {
@@ -1166,6 +1186,7 @@ const getDailyProductSales = async (req, res) => {
             qty: { $sum: "$quantity" },
             grossTotal: { $sum: "$grossLine" },
             netTotal: { $sum: "$netLine" },
+            vatTotal: { $sum: "$vatLine" },
           },
         },
       ]),
@@ -1187,6 +1208,9 @@ const getDailyProductSales = async (req, res) => {
             _id: "$refundItems.productId",
             refundedQty: { $sum: "$refundItems.quantity" },
             refundedAmount: { $sum: { $toDecimal: "$refundItems.subtotal" } },
+            refundedVAT: {
+              $sum: { $toDecimal: { $ifNull: ["$refundItems.vatAmount", 0] } },
+            },
           },
         },
       ]),
@@ -1199,9 +1223,11 @@ const getDailyProductSales = async (req, res) => {
       const ref = refundMap.get(String(s._id));
       const rQty = ref ? ref.refundedQty : 0;
       const rAmt = ref ? Number(ref.refundedAmount.toString()) : 0;
+      const rVat = ref ? Number(ref.refundedVAT.toString()) : 0;
 
       const finalQty = s.qty - rQty;
-      const finalNet = s.netTotal - rAmt;
+      // Fix: netTotal tính cả VAT = (Net + VAT) - (RefundNet + RefundVAT)
+      const finalNet = s.netTotal + (s.vatTotal || 0) - (rAmt + rVat);
 
       refundMap.delete(String(s._id));
 
@@ -1232,7 +1258,9 @@ const getDailyProductSales = async (req, res) => {
         quantity: -r.refundedQty,
         grossTotal: 0,
         discountAmount: 0,
-        netTotal: -Number(r.refundedAmount.toString()),
+        netTotal: -(
+          Number(r.refundedAmount.toString()) + Number(r.refundedVAT.toString())
+        ),
       });
     }
 
@@ -1279,6 +1307,9 @@ const exportDailyProductSales = async (req, res) => {
     );
 
     rows = Array.isArray(rows) ? rows : [];
+
+    // User request: Don't list items with quantity 0 (or less) in export
+    rows = rows.filter((r) => r.quantity > 0);
     if (!rows.length) {
       return res.status(404).json({ message: "Không có dữ liệu để xuất" });
     }
@@ -1472,8 +1503,16 @@ const getYearlyCategoryCompare = async (req, res) => {
       {
         $match: {
           "order.storeId": toObjectId(storeId),
-          "order.status": { $in: PAID_STATUSES },
+          "order.status": { $in: ["paid", "partially_refunded"] },
           "order.createdAt": { $gte: start, $lte: end },
+        },
+      },
+      // Filter: Chỉ lấy sản phẩm chưa bị hoàn hết (quantity > refundedQuantity)
+      {
+        $match: {
+          $expr: {
+            $gt: ["$quantity", { $ifNull: ["$refundedQuantity", 0] }],
+          },
         },
       },
       // Join Product -> lấy group_id
@@ -1497,11 +1536,27 @@ const getYearlyCategoryCompare = async (req, res) => {
       },
       {
         $addFields: {
+          // groupName: ... (no change in this block start)
           groupName: {
             $ifNull: [{ $arrayElemAt: ["$group.name", 0] }, "(Chưa phân nhóm)"],
           },
-          orderYear: { $year: "$order.createdAt" },
-          netLine: { $toDouble: "$subtotal" },
+          orderYear: {
+            $year: { date: "$order.createdAt", timezone: "Asia/Ho_Chi_Minh" },
+          },
+          // Fix: Net Revenue = (quantity - refundedQuantity) * priceAtTime
+          netLine: {
+            $toDouble: {
+              $multiply: [
+                {
+                  $subtract: [
+                    "$quantity",
+                    { $ifNull: ["$refundedQuantity", 0] },
+                  ],
+                },
+                "$priceAtTime",
+              ],
+            },
+          },
         },
       },
       {
@@ -1750,21 +1805,30 @@ const getMonthlyRevenueByDay = async (req, res) => {
 
     const { start, end } = periodToRange("month", month);
 
-    const [ordersByDay, itemsByDay] = await Promise.all([
+    const [ordersByDay, itemsByDay, refundsByDay] = await Promise.all([
       Order.aggregate([
         {
           $match: {
             storeId: toObjectId(storeId),
-            status: { $in: PAID_STATUSES },
+            status: { $in: ["paid", "partially_refunded"] },
             createdAt: { $gte: start, $lte: end },
           },
         },
         {
           $group: {
             _id: {
-              y: { $year: "$createdAt" },
-              m: { $month: "$createdAt" },
-              d: { $dayOfMonth: "$createdAt" },
+              y: {
+                $year: { date: "$createdAt", timezone: "Asia/Ho_Chi_Minh" },
+              },
+              m: {
+                $month: { date: "$createdAt", timezone: "Asia/Ho_Chi_Minh" },
+              },
+              d: {
+                $dayOfMonth: {
+                  date: "$createdAt",
+                  timezone: "Asia/Ho_Chi_Minh",
+                },
+              },
             },
             revenue: { $sum: { $toDecimal: "$totalAmount" } },
             orderCount: { $sum: 1 },
@@ -1794,18 +1858,37 @@ const getMonthlyRevenueByDay = async (req, res) => {
         {
           $match: {
             "order.storeId": toObjectId(storeId),
-            "order.status": { $in: PAID_STATUSES },
+            "order.status": { $in: ["paid", "partially_refunded"] },
             "order.createdAt": { $gte: start, $lte: end },
           },
         },
         {
           $group: {
             _id: {
-              y: { $year: "$order.createdAt" },
-              m: { $month: "$order.createdAt" },
-              d: { $dayOfMonth: "$order.createdAt" },
+              y: {
+                $year: {
+                  date: "$order.createdAt",
+                  timezone: "Asia/Ho_Chi_Minh",
+                },
+              },
+              m: {
+                $month: {
+                  date: "$order.createdAt",
+                  timezone: "Asia/Ho_Chi_Minh",
+                },
+              },
+              d: {
+                $dayOfMonth: {
+                  date: "$order.createdAt",
+                  timezone: "Asia/Ho_Chi_Minh",
+                },
+              },
             },
-            itemsSold: { $sum: "$quantity" },
+            itemsSold: {
+              $sum: {
+                $subtract: ["$quantity", { $ifNull: ["$refundedQuantity", 0] }],
+              },
+            },
           },
         },
         {
@@ -1815,6 +1898,39 @@ const getMonthlyRevenueByDay = async (req, res) => {
             m: "$_id.m",
             d: "$_id.d",
             itemsSold: 1,
+          },
+        },
+      ]),
+      // 3. Refunds by Day (Subtracted from Revenue)
+      mongoose.model("OrderRefund").aggregate([
+        { $match: { refundedAt: { $gte: start, $lte: end } } },
+        {
+          $lookup: {
+            from: "orders",
+            localField: "orderId",
+            foreignField: "_id",
+            as: "orderInfo",
+          },
+        },
+        { $unwind: "$orderInfo" },
+        { $match: { "orderInfo.storeId": toObjectId(storeId) } },
+        {
+          $group: {
+            _id: {
+              y: {
+                $year: { date: "$refundedAt", timezone: "Asia/Ho_Chi_Minh" },
+              },
+              m: {
+                $month: { date: "$refundedAt", timezone: "Asia/Ho_Chi_Minh" },
+              },
+              d: {
+                $dayOfMonth: {
+                  date: "$refundedAt",
+                  timezone: "Asia/Ho_Chi_Minh",
+                },
+              },
+            },
+            refundAmount: { $sum: { $toDecimal: "$refundAmount" } },
           },
         },
       ]),
@@ -1835,6 +1951,12 @@ const getMonthlyRevenueByDay = async (req, res) => {
         safeNumber(r.itemsSold),
       ])
     );
+    // Refund Map
+    const refundMap = new Map();
+    (refundsByDay || []).forEach((r) => {
+      const key = `${r._id.y}-${r._id.m}-${r._id.d}`;
+      refundMap.set(key, Number(r.refundAmount.toString()));
+    });
 
     const monthStart = dayjs(month + "-01");
     const daysInMonth = monthStart.daysInMonth();
@@ -1845,6 +1967,7 @@ const getMonthlyRevenueByDay = async (req, res) => {
       const d = idx + 1;
       const key = `${y}-${m}-${d}`;
       const o = orderMap.get(key) || { revenue: 0, orderCount: 0 };
+      const rAmt = refundMap.get(key) || 0;
       return {
         date: dayjs(
           `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`
@@ -1852,7 +1975,7 @@ const getMonthlyRevenueByDay = async (req, res) => {
         dayLabel: d, // Add dayLabel for PDF
         orderCount: o.orderCount,
         itemsSold: itemsMap.get(key) || 0,
-        revenue: o.revenue,
+        revenue: o.revenue - rAmt, // Net Revenue
       };
     });
 
@@ -2017,11 +2140,9 @@ const getMonthlyRevenueSummary = async (req, res) => {
     const month = req.query.month; // YYYY-MM (legacy)
     const year = req.query.year ? parseYear(req.query.year) : null; // new: YYYY
     if (!storeId || (!month && !year)) {
-      return res
-        .status(400)
-        .json({
-          message: "Thiếu storeId hoặc (month YYYY-MM) hoặc (year YYYY)",
-        });
+      return res.status(400).json({
+        message: "Thiếu storeId hoặc (month YYYY-MM) hoặc (year YYYY)",
+      });
     }
 
     // ===== NEW: tổng hợp theo năm (trả về đủ 12 tháng) =====
@@ -2029,7 +2150,7 @@ const getMonthlyRevenueSummary = async (req, res) => {
       const startPrevDec = new Date(Date.UTC(year - 1, 11, 1, 0, 0, 0));
       const endYear = new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999));
 
-      const [ordersByMonth, itemsByMonth] = await Promise.all([
+      const [ordersByMonth, itemsByMonth, refundsByMonth] = await Promise.all([
         Order.aggregate([
           {
             $match: {
@@ -2040,7 +2161,14 @@ const getMonthlyRevenueSummary = async (req, res) => {
           },
           {
             $group: {
-              _id: { y: { $year: "$createdAt" }, m: { $month: "$createdAt" } },
+              _id: {
+                y: {
+                  $year: { date: "$createdAt", timezone: "Asia/Ho_Chi_Minh" },
+                },
+                m: {
+                  $month: { date: "$createdAt", timezone: "Asia/Ho_Chi_Minh" },
+                },
+              },
               totalRevenue: { $sum: { $toDecimal: "$totalAmount" } },
               orderCount: { $sum: 1 },
             },
@@ -2075,10 +2203,27 @@ const getMonthlyRevenueSummary = async (req, res) => {
           {
             $group: {
               _id: {
-                y: { $year: "$order.createdAt" },
-                m: { $month: "$order.createdAt" },
+                y: {
+                  $year: {
+                    date: "$order.createdAt",
+                    timezone: "Asia/Ho_Chi_Minh",
+                  },
+                },
+                m: {
+                  $month: {
+                    date: "$order.createdAt",
+                    timezone: "Asia/Ho_Chi_Minh",
+                  },
+                },
               },
-              itemsSold: { $sum: "$quantity" },
+              itemsSold: {
+                $sum: {
+                  $subtract: [
+                    "$quantity",
+                    { $ifNull: ["$refundedQuantity", 0] },
+                  ],
+                },
+              },
             },
           },
           {
@@ -2087,6 +2232,39 @@ const getMonthlyRevenueSummary = async (req, res) => {
               y: "$_id.y",
               m: "$_id.m",
               itemsSold: 1,
+            },
+          },
+        ]),
+        // Add Refunds Aggregation
+        mongoose.model("OrderRefund").aggregate([
+          { $match: { refundedAt: { $gte: startPrevDec, $lte: endYear } } },
+          {
+            $lookup: {
+              from: "orders",
+              localField: "orderId",
+              foreignField: "_id",
+              as: "orderInfo",
+            },
+          },
+          { $unwind: "$orderInfo" },
+          { $match: { "orderInfo.storeId": toObjectId(storeId) } },
+          {
+            $group: {
+              _id: {
+                y: {
+                  $year: {
+                    date: "$refundedAt",
+                    timezone: "Asia/Ho_Chi_Minh",
+                  },
+                },
+                m: {
+                  $month: {
+                    date: "$refundedAt",
+                    timezone: "Asia/Ho_Chi_Minh",
+                  },
+                },
+              },
+              refundAmount: { $sum: { $toDecimal: "$refundAmount" } },
             },
           },
         ]),
@@ -2107,6 +2285,12 @@ const getMonthlyRevenueSummary = async (req, res) => {
           safeNumber(r.itemsSold),
         ])
       );
+      const refundMap = new Map(
+        (refundsByMonth || []).map((r) => [
+          `${r._id.y}-${r._id.m}`,
+          Number(r.refundAmount.toString()),
+        ])
+      );
 
       const data = Array.from({ length: 12 }, (_, idx) => {
         const m = idx + 1;
@@ -2115,16 +2299,19 @@ const getMonthlyRevenueSummary = async (req, res) => {
 
         const cur = revenueMap.get(key) || { revenue: 0, orderCount: 0 };
         const prev = revenueMap.get(prevKey) || { revenue: 0, orderCount: 0 };
+        const curRefund = refundMap.get(key) || 0;
+        const prevRefund = refundMap.get(prevKey) || 0;
 
         const monthStart = dayjs(`${year}-${String(m).padStart(2, "0")}-01`);
         const daysInMonth = monthStart.daysInMonth();
 
-        const totalRevenue = safeNumber(cur.revenue);
+        const totalRevenue = safeNumber(cur.revenue) - curRefund;
         const orderCount = safeNumber(cur.orderCount);
         const itemsSold = safeNumber(itemsMap.get(key) || 0);
         const avgRevenuePerDay =
           daysInMonth > 0 ? totalRevenue / daysInMonth : 0;
-        const diffVsPrevMonth = totalRevenue - safeNumber(prev.revenue);
+        const diffVsPrevMonth =
+          totalRevenue - (safeNumber(prev.revenue) - prevRefund);
 
         return {
           year,
@@ -2155,80 +2342,139 @@ const getMonthlyRevenueSummary = async (req, res) => {
       prevMonthKey
     );
 
-    const [thisMonthOrders, thisMonthItems, prevMonthOrders] =
-      await Promise.all([
-        Order.aggregate([
-          {
-            $match: {
-              storeId: toObjectId(storeId),
-              status: { $in: PAID_STATUSES },
-              createdAt: { $gte: start, $lte: end },
+    const [
+      thisMonthOrders,
+      thisMonthItems,
+      prevMonthOrders,
+      thisMonthRefunds,
+      prevMonthRefunds,
+    ] = await Promise.all([
+      Order.aggregate([
+        {
+          $match: {
+            storeId: toObjectId(storeId),
+            status: { $in: ["paid", "partially_refunded"] },
+            createdAt: { $gte: start, $lte: end },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            totalRevenue: { $sum: { $toDecimal: "$totalAmount" } },
+            orderCount: { $sum: 1 },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            totalRevenue: { $toDouble: "$totalRevenue" },
+            orderCount: 1,
+          },
+        },
+      ]),
+      OrderItem.aggregate([
+        {
+          $lookup: {
+            from: "orders",
+            localField: "orderId",
+            foreignField: "_id",
+            as: "order",
+          },
+        },
+        { $unwind: "$order" },
+        {
+          $match: {
+            "order.storeId": toObjectId(storeId),
+            "order.status": { $in: ["paid", "partially_refunded"] },
+            "order.createdAt": { $gte: start, $lte: end },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            itemsSold: {
+              $sum: {
+                $subtract: ["$quantity", { $ifNull: ["$refundedQuantity", 0] }],
+              },
             },
           },
-          {
-            $group: {
-              _id: null,
-              totalRevenue: { $sum: { $toDecimal: "$totalAmount" } },
-              orderCount: { $sum: 1 },
-            },
+        },
+        { $project: { _id: 0, itemsSold: 1 } },
+      ]),
+      Order.aggregate([
+        {
+          $match: {
+            storeId: toObjectId(storeId),
+            status: { $in: ["paid", "partially_refunded"] },
+            createdAt: { $gte: prevStart, $lte: prevEnd },
           },
-          {
-            $project: {
-              _id: 0,
-              totalRevenue: { $toDouble: "$totalRevenue" },
-              orderCount: 1,
-            },
+        },
+        {
+          $group: {
+            _id: null,
+            totalRevenue: { $sum: { $toDecimal: "$totalAmount" } },
           },
-        ]),
-        OrderItem.aggregate([
-          {
-            $lookup: {
-              from: "orders",
-              localField: "orderId",
-              foreignField: "_id",
-              as: "order",
-            },
+        },
+        {
+          $project: { _id: 0, totalRevenue: { $toDouble: "$totalRevenue" } },
+        },
+      ]),
+      // This Month Refunds
+      mongoose.model("OrderRefund").aggregate([
+        { $match: { refundedAt: { $gte: start, $lte: end } } },
+        {
+          $lookup: {
+            from: "orders",
+            localField: "orderId",
+            foreignField: "_id",
+            as: "orderInfo",
           },
-          { $unwind: "$order" },
-          {
-            $match: {
-              "order.storeId": toObjectId(storeId),
-              "order.status": { $in: PAID_STATUSES },
-              "order.createdAt": { $gte: start, $lte: end },
-            },
+        },
+        { $unwind: "$orderInfo" },
+        { $match: { "orderInfo.storeId": toObjectId(storeId) } },
+        {
+          $group: {
+            _id: null,
+            refundAmount: { $sum: { $toDecimal: "$refundAmount" } },
           },
-          {
-            $group: {
-              _id: null,
-              itemsSold: { $sum: "$quantity" },
-            },
+        },
+      ]),
+      // Prev Month Refunds
+      mongoose.model("OrderRefund").aggregate([
+        { $match: { refundedAt: { $gte: prevStart, $lte: prevEnd } } },
+        {
+          $lookup: {
+            from: "orders",
+            localField: "orderId",
+            foreignField: "_id",
+            as: "orderInfo",
           },
-          { $project: { _id: 0, itemsSold: 1 } },
-        ]),
-        Order.aggregate([
-          {
-            $match: {
-              storeId: toObjectId(storeId),
-              status: { $in: PAID_STATUSES },
-              createdAt: { $gte: prevStart, $lte: prevEnd },
-            },
+        },
+        { $unwind: "$orderInfo" },
+        { $match: { "orderInfo.storeId": toObjectId(storeId) } },
+        {
+          $group: {
+            _id: null,
+            refundAmount: { $sum: { $toDecimal: "$refundAmount" } },
           },
-          {
-            $group: {
-              _id: null,
-              totalRevenue: { $sum: { $toDecimal: "$totalAmount" } },
-            },
-          },
-          {
-            $project: { _id: 0, totalRevenue: { $toDouble: "$totalRevenue" } },
-          },
-        ]),
-      ]);
+        },
+      ]),
+    ]);
 
-    const totalRevenue = safeNumber(thisMonthOrders?.[0]?.totalRevenue);
+    const grossRevenue = safeNumber(thisMonthOrders?.[0]?.totalRevenue);
+    const refundRevenue = thisMonthRefunds?.[0]
+      ? Number(thisMonthRefunds[0].refundAmount.toString())
+      : 0;
+    const totalRevenue = grossRevenue - refundRevenue;
+
     const orderCount = safeNumber(thisMonthOrders?.[0]?.orderCount);
     const itemsSold = safeNumber(thisMonthItems?.[0]?.itemsSold);
-    const prevRevenue = safeNumber(prevMonthOrders?.[0]?.totalRevenue);
+
+    const prevGross = safeNumber(prevMonthOrders?.[0]?.totalRevenue);
+    const prevRefund = prevMonthRefunds?.[0]
+      ? Number(prevMonthRefunds[0].refundAmount.toString())
+      : 0;
+    const prevRevenue = prevGross - prevRefund;
 
     const avgRevenuePerDay = daysInMonth > 0 ? totalRevenue / daysInMonth : 0;
     const diffVsPrevMonth = totalRevenue - prevRevenue;
@@ -2263,11 +2509,9 @@ const exportMonthlyRevenueSummary = async (req, res) => {
     const { format = "xlsx" } = req.query;
 
     if (!storeId || (!month && !year)) {
-      return res
-        .status(400)
-        .json({
-          message: "Thiếu storeId hoặc (month YYYY-MM) hoặc (year YYYY)",
-        });
+      return res.status(400).json({
+        message: "Thiếu storeId hoặc (month YYYY-MM) hoặc (year YYYY)",
+      });
     }
     if (format !== "xlsx" && format !== "pdf") {
       return res
@@ -2547,8 +2791,16 @@ const getMonthlyTopProducts = async (req, res) => {
       {
         $match: {
           "order.storeId": toObjectId(storeId),
-          "order.status": { $in: PAID_STATUSES },
+          "order.status": { $in: ["paid", "partially_refunded"] },
           "order.createdAt": { $gte: start, $lte: end },
+        },
+      },
+      // Exclude fully refunded items
+      {
+        $match: {
+          $expr: {
+            $gt: ["$quantity", { $ifNull: ["$refundedQuantity", 0] }],
+          },
         },
       },
       {
@@ -2562,14 +2814,29 @@ const getMonthlyTopProducts = async (req, res) => {
       { $unwind: "$product" },
       {
         $addFields: {
-          netLine: { $toDouble: "$subtotal" },
+          netLine: {
+            $toDouble: {
+              $multiply: [
+                {
+                  $subtract: [
+                    "$quantity",
+                    { $ifNull: ["$refundedQuantity", 0] },
+                  ],
+                },
+                "$priceAtTime",
+              ],
+            },
+          },
+          netQuantity: {
+            $subtract: ["$quantity", { $ifNull: ["$refundedQuantity", 0] }],
+          },
         },
       },
       {
         $group: {
           _id: "$productId",
           productName: { $first: "$product.name" },
-          quantity: { $sum: "$quantity" },
+          quantity: { $sum: "$netQuantity" },
           revenue: { $sum: "$netLine" },
         },
       },
@@ -2770,8 +3037,16 @@ const getYearlyProductGroupProductCompare = async (req, res) => {
       {
         $match: {
           "order.storeId": toObjectId(storeId),
-          "order.status": { $in: PAID_STATUSES },
+          "order.status": { $in: ["paid", "partially_refunded"] },
           "order.createdAt": { $gte: startPrev, $lte: endThis },
+        },
+      },
+      // Exclude fully refunded
+      {
+        $match: {
+          $expr: {
+            $gt: ["$quantity", { $ifNull: ["$refundedQuantity", 0] }],
+          },
         },
       },
       {
@@ -2797,8 +3072,23 @@ const getYearlyProductGroupProductCompare = async (req, res) => {
           groupName: {
             $ifNull: [{ $arrayElemAt: ["$group.name", 0] }, "(Chưa phân nhóm)"],
           },
-          orderYear: { $year: "$order.createdAt" },
-          netLine: { $toDouble: "$subtotal" },
+          orderYear: {
+            $year: { date: "$order.createdAt", timezone: "Asia/Ho_Chi_Minh" },
+          },
+          // Fix: Net Line
+          netLine: {
+            $toDouble: {
+              $multiply: [
+                {
+                  $subtract: [
+                    "$quantity",
+                    { $ifNull: ["$refundedQuantity", 0] },
+                  ],
+                },
+                "$priceAtTime",
+              ],
+            },
+          },
         },
       },
       {
@@ -3137,8 +3427,16 @@ const getQuarterlyRevenueByCategory = async (req, res) => {
       {
         $match: {
           "order.storeId": toObjectId(storeId),
-          "order.status": { $in: PAID_STATUSES },
+          "order.status": { $in: ["paid", "partially_refunded"] },
           "order.createdAt": { $gte: start, $lte: end },
+        },
+      },
+      // Exclude fully refunded
+      {
+        $match: {
+          $expr: {
+            $gt: ["$quantity", { $ifNull: ["$refundedQuantity", 0] }],
+          },
         },
       },
       {
@@ -3163,8 +3461,22 @@ const getQuarterlyRevenueByCategory = async (req, res) => {
           groupName: {
             $ifNull: [{ $arrayElemAt: ["$group.name", 0] }, "(Chưa phân nhóm)"],
           },
-          month: { $month: "$order.createdAt" },
-          netLine: { $toDouble: "$subtotal" },
+          month: {
+            $month: { date: "$order.createdAt", timezone: "Asia/Ho_Chi_Minh" },
+          },
+          netLine: {
+            $toDouble: {
+              $multiply: [
+                {
+                  $subtract: [
+                    "$quantity",
+                    { $ifNull: ["$refundedQuantity", 0] },
+                  ],
+                },
+                "$priceAtTime",
+              ],
+            },
+          },
         },
       },
       {
@@ -3403,8 +3715,16 @@ const getYearlyTopProducts = async (req, res) => {
       {
         $match: {
           "order.storeId": toObjectId(storeId),
-          "order.status": { $in: PAID_STATUSES },
+          "order.status": { $in: ["paid", "partially_refunded"] },
           "order.createdAt": { $gte: start, $lte: end },
+        },
+      },
+      // Exclude fully refunded
+      {
+        $match: {
+          $expr: {
+            $gt: ["$quantity", { $ifNull: ["$refundedQuantity", 0] }],
+          },
         },
       },
       {
@@ -3418,7 +3738,22 @@ const getYearlyTopProducts = async (req, res) => {
       { $unwind: "$product" },
       {
         $addFields: {
-          netLine: { $toDouble: "$subtotal" },
+          netLine: {
+            $toDouble: {
+              $multiply: [
+                {
+                  $subtract: [
+                    "$quantity",
+                    { $ifNull: ["$refundedQuantity", 0] },
+                  ],
+                },
+                "$priceAtTime",
+              ],
+            },
+          },
+          netQuantity: {
+            $subtract: ["$quantity", { $ifNull: ["$refundedQuantity", 0] }],
+          },
         },
       },
       {
@@ -3426,7 +3761,7 @@ const getYearlyTopProducts = async (req, res) => {
           _id: "$productId",
           sku: { $first: "$product.sku" },
           name: { $first: "$product.name" },
-          qty: { $sum: "$quantity" },
+          qty: { $sum: "$netQuantity" },
           revenue: { $sum: "$netLine" },
         },
       },

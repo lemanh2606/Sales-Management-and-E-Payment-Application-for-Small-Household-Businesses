@@ -60,7 +60,7 @@ const RevenueReport = () => {
 
   // Format VND
   const formatVND = (value) => {
-    if (!value) return "₫0";
+    if (!value) return "0";
     const num = typeof value === "object" ? value.$numberDecimal : value;
     return new Intl.NumberFormat("vi-VN", {
       style: "currency",
@@ -417,15 +417,15 @@ const RevenueReport = () => {
       key: "orderCount",
       align: "right",
       width: 140,
-      render: (v, r) => <span style={{ fontSize: 16 }}>{r?.isTotal ? "—" : v ?? 0}</span>,
+      render: (v, r) => <span style={{ fontSize: 16, fontWeight: r?.isTotal ? 700 : 400 }}>{v ?? 0}</span>,
     },
     {
-      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Tổng số sản phẩm bán</span>,
+      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Tổng số lượng sản phẩm bán</span>,
       dataIndex: "itemsSold",
       key: "itemsSold",
       align: "right",
       width: 190,
-      render: (v, r) => <span style={{ fontSize: 16 }}>{r?.isTotal ? "—" : v ?? 0}</span>,
+      render: (v, r) => <span style={{ fontSize: 16, fontWeight: r?.isTotal ? 700 : 400 }}>{v ?? 0}</span>,
     },
     {
       title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Doanh thu trung bình / ngày</span>,
@@ -433,7 +433,7 @@ const RevenueReport = () => {
       key: "avgRevenuePerDay",
       align: "right",
       width: 220,
-      render: (v, r) => <span style={{ fontSize: 16 }}>{r?.isTotal ? "—" : formatVND(v)}</span>,
+      render: (v, r) => <span style={{ fontSize: 16, fontWeight: r?.isTotal ? 700 : 400 }}>{r?.isTotal ? "—" : formatVND(v)}</span>,
     },
     {
       title: <span style={{ fontSize: "16px", fontWeight: 600 }}>So với tháng trước (+/−)</span>,
@@ -442,7 +442,7 @@ const RevenueReport = () => {
       align: "right",
       width: 210,
       render: (v, r) => {
-        if (r?.isTotal) return <span style={{ fontSize: 16 }}>—</span>;
+        if (r?.isTotal) return <span style={{ fontSize: 16, fontWeight: 700 }}>—</span>;
         const n = toNumber(v);
         const sign = n > 0 ? "+" : "";
         return <span style={{ fontSize: 16 }}>{sign + formatVND(n)}</span>;
@@ -454,6 +454,10 @@ const RevenueReport = () => {
     const rows = Array.isArray(reportRows) ? reportRows : [];
     if (reportType !== REPORT_TYPES.MONTHLY_SUMMARY) return rows;
     const totalRevenue = rows.reduce((sum, r) => sum + toNumber(r.totalRevenue), 0);
+    const totalOrderCount = rows.reduce((sum, r) => sum + toNumber(r.orderCount), 0);
+    const totalItemsSold = rows.reduce((sum, r) => sum + toNumber(r.itemsSold), 0);
+    const totalAvgRevenuePerDay = rows.reduce((sum, r) => sum + toNumber(r.avgRevenuePerDay), 0);
+    const totalDiffVsPrevMonth = rows.reduce((sum, r) => sum + toNumber(r.diffVsPrevMonth), 0);
 
     return [
       ...rows,
@@ -461,8 +465,8 @@ const RevenueReport = () => {
         isTotal: true,
         monthLabel: "Tổng cộng",
         totalRevenue,
-        orderCount: null,
-        itemsSold: null,
+        orderCount: totalOrderCount,
+        itemsSold: totalItemsSold,
         avgRevenuePerDay: null,
         diffVsPrevMonth: null,
       },
@@ -495,7 +499,7 @@ const RevenueReport = () => {
       width: 110,
     },
     {
-      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Tổng</span>,
+      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Tổng doanh thu</span>,
       dataIndex: "grossTotal",
       key: "grossTotal",
       align: "right",
@@ -511,7 +515,7 @@ const RevenueReport = () => {
       render: (v) => <span style={{ fontSize: 16 }}>{formatVND(v)}</span>,
     },
     {
-      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Thực thu</span>,
+      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Thực thu ( tính VAT)</span>,
       dataIndex: "netTotal",
       key: "netTotal",
       align: "right",
@@ -921,7 +925,7 @@ const RevenueReport = () => {
                 }
                 style={{ border: "1px solid #8c8c8c" }}
               >
-                {/* MÔ TẢ NHẸ */}
+                {/* MÔ TẢ NHẸ
                 <Alert
                   type="info"
                   showIcon
@@ -931,11 +935,10 @@ const RevenueReport = () => {
                   }}
                   message={
                     <span style={{ fontSize: 14 }}>
-                      Bảng này <strong>chỉ thống kê doanh thu từ các hóa đơn do nhân viên trực tiếp bán</strong>. Không bao gồm các hóa đơn do{" "}
-                      <strong>chủ cửa hàng trực tiếp bán</strong>
+                      Bảng này <strong>thống kê doanh thu từ các hóa đơn do nhân viên trực tiếp bán</strong>
                     </span>
                   }
-                />
+                /> */}
 
                 {/* ĐƯỜNG NGĂN */}
                 <div
@@ -1005,7 +1008,14 @@ const RevenueReport = () => {
                     ? dailyProductColumns
                     : yearlyGroupedColumns
                 }
-                dataSource={reportTableRows.map((r, idx) => ({ key: idx, ...r }))}
+                dataSource={reportTableRows
+                  .filter((r) => {
+                    if (reportType === REPORT_TYPES.DAILY_PRODUCTS) {
+                      return toNumber(r.quantity) > 0;
+                    }
+                    return true;
+                  })
+                  .map((r, idx) => ({ key: idx, ...r }))}
                 pagination={
                   reportType === REPORT_TYPES.MONTHLY_SUMMARY
                     ? false

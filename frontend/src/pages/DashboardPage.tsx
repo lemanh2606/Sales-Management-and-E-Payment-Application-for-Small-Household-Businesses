@@ -474,7 +474,7 @@ export default function DashboardPage() {
       align: "center",
     },
     {
-      title: "Giá vốn hàng bán",
+      title: "Doanh thu",
       dataIndex: "totalSales",
       key: "totalSales",
       align: "right",

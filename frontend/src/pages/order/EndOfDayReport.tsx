@@ -132,6 +132,7 @@ interface StockData {
 }
 
 interface RefundByEmployee {
+  _id?: string;
   refundedBy: string;
   name: string;
   refundAmount: any; // Có thể là number hoặc { $numberDecimal: string }
@@ -1014,7 +1015,7 @@ const EndOfDayReport: React.FC = () => {
             </div>
             <Table
               dataSource={reportData.refundsByEmployee}
-              rowKey={(record) => record.refundedBy}
+              rowKey="_id"
               pagination={{
                 ...paginationConfig,
                 current: paginationRefund.current,

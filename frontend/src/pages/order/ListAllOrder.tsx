@@ -21,7 +21,9 @@ import {
   CheckCircleOutlined,
   RollbackOutlined,
   FileExcelOutlined,
+  PrinterOutlined,
 } from "@ant-design/icons";
+import ModalPrintBill from "./ModalPrintBill";
 import axios from "axios";
 import dayjs, { Dayjs } from "dayjs";
 import Swal from "sweetalert2";
@@ -89,6 +91,7 @@ interface OrderListResponse {
 // ========== Component ==========
 const ListAllOrder: React.FC = () => {
   const currentStore = JSON.parse(localStorage.getItem("currentStore") || "{}");
+  const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
   const storeId = currentStore._id;
   const token = localStorage.getItem("token");
   const headers = { Authorization: `Bearer ${token}` };
@@ -103,7 +106,12 @@ const ListAllOrder: React.FC = () => {
     undefined
   );
   const [pagination, setPagination] = useState({ current: 1, pageSize: 10 });
+
   const [pendingModalVisible, setPendingModalVisible] = useState(false);
+  
+  // Print Modal State
+  const [printModalVisible, setPrintModalVisible] = useState(false);
+  const [printingOrder, setPrintingOrder] = useState<any>(null);
 
   // Period filter states
   const [periodType, setPeriodType] = useState<string>("month");
@@ -302,6 +310,36 @@ const ListAllOrder: React.FC = () => {
     } catch (err) {
       Swal.fire("Lỗi!", "Không thể xuất Excel", "error");
     }
+  };
+
+  // --- LOGIC IN BILL ---
+  const handleOpenPrintModal = async (orderId: string) => {
+    try {
+      setLoading(true);
+      // Fetch full details (items)
+      const res = await axios.get(`${apiUrl}/orders/${orderId}`, { headers });
+      setPrintingOrder(res.data.order);
+      setPrintModalVisible(true);
+    } catch (err) {
+      Swal.fire("Lỗi", "Không thể tải chi tiết đơn hàng để in", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePrintConfirm = async () => {
+    try {
+      if (printingOrder && printingOrder._id) {
+        await axios.post(
+          `${apiUrl}/orders/${printingOrder._id}/print-bill`,
+          {},
+          { headers }
+        );
+        // Refresh list to update printCount
+        loadOrders();
+      }
+    } catch (err) {}
+    setPrintModalVisible(false);
   };
 
   // Pagination config
@@ -842,7 +880,80 @@ const ListAllOrder: React.FC = () => {
                     </Text>
                   ),
                 },
+                {
+                  title: <span style={{ fontWeight: 600 }}>Thao tác</span>,
+                  key: "action",
+                  width: 80,
+                  align: "center",
+                  fixed: "right",
+                  render: (_, record) => (
+                    <Button
+                      icon={<PrinterOutlined />}
+                      size="small"
+                      onClick={() => handleOpenPrintModal(record._id)}
+                    >
+                      In
+                    </Button>
+                  ),
+                },
               ]}
+            />
+          )}
+
+          {/* MODAL PRINT BILL */}
+          {printingOrder && (
+            <ModalPrintBill
+              open={printModalVisible}
+              onCancel={() => setPrintModalVisible(false)}
+              onPrint={handlePrintConfirm}
+              cart={(printingOrder.items || []).map((i: any) => ({
+                productId: i.productId,
+                name: i.product?.name || i.productName || "Sản phẩm",
+                quantity: i.quantity,
+                unit: i.product?.unit || "Cái",
+                subtotal: i.subtotal?.$numberDecimal || i.subtotal,
+                sku: i.product?.sku || "",
+                price: i.priceAtTime?.$numberDecimal || i.priceAtTime || 0,
+              }))}
+              totalAmount={
+                printingOrder.totalAmount?.$numberDecimal ||
+                printingOrder.totalAmount ||
+                0
+              }
+              // Store Info
+              storeName={currentStore.name}
+              address={currentStore.address || ""}
+              storePhone={currentStore.phone}
+              // Order Info
+              orderId={printingOrder._id}
+              createdAt={printingOrder.createdAt}
+              printCount={printingOrder.printCount} // printCount hiện tại (trước khi in lại)
+              customerName={printingOrder.customer?.name}
+              customerPhone={printingOrder.customer?.phone}
+              paymentMethod={printingOrder.paymentMethod}
+              isVAT={printingOrder.isVATInvoice}
+              vatAmount={
+                printingOrder.vatAmount?.$numberDecimal ||
+                printingOrder.vatAmount ||
+                0
+              }
+              subtotal={
+                printingOrder.beforeTaxAmount?.$numberDecimal ||
+                printingOrder.beforeTaxAmount ||
+                0
+              }
+              discount={
+                printingOrder.discountAmount?.$numberDecimal ||
+                printingOrder.discountAmount ||
+                0
+              }
+              employeeName={
+                printingOrder.employeeId?.fullName ||
+                printingOrder.employeeName ||
+                currentUser.fullname ||
+                "Chủ cửa hàng"
+              }
+              earnedPoints={0} // Có thể lấy nếu BE trả về
             />
           )}
         </Card>

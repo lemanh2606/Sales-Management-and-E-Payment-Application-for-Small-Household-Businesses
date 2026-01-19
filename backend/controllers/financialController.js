@@ -1280,11 +1280,12 @@ const generateEndOfDayReport = async (req, res) => {
       },
       {
         $project: {
-          _id: 0,
+          _id: 1,
           refundedBy: "$refundedBy",
           name: {
             $ifNull: [
               { $arrayElemAt: ["$employee.fullName", 0] },
+              "$refundedByName",
               "Chủ cửa hàng (Admin)",
             ],
           },

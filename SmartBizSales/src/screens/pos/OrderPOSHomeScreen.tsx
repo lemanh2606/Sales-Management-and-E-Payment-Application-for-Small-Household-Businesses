@@ -1269,6 +1269,13 @@ const OrderPOSHomeScreen: React.FC = () => {
         };
       }
 
+      // Explicitly send calculated amounts to match UI exactly
+      payload.vatAmount = vatAmount;
+      payload.discountAmount = discount;
+      payload.beforeTaxAmount = beforeTax;
+      payload.totalAmount = totalAmount; // Final payable
+      payload.grossAmount = subtotal + vatAmount; // Total goods + VAT before discount
+
       if (currentTab.usedPointsEnabled && currentTab.usedPoints > 0) {
         payload.usedPoints = currentTab.usedPoints;
       }

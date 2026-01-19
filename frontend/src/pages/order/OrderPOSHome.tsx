@@ -974,6 +974,12 @@ const OrderPOSHome: React.FC = () => {
         paymentMethod: currentTab.paymentMethod,
         isVATInvoice: currentTab.isVAT,
         orderId: currentTab.pendingOrderId || undefined,
+        // Explicitly send calculated amounts to match UI exactly (WYSIWYG)
+        vatAmount: vatAmount,
+        discountAmount: discount,
+        beforeTaxAmount: beforeTax,
+        totalAmount: totalAmount,
+        grossAmount: subtotal + vatAmount,
       };
 
       // Nếu có customer được chọn thì gửi customerInfo
