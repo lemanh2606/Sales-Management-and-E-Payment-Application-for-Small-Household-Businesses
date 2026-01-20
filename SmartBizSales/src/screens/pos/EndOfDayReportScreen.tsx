@@ -21,7 +21,7 @@ import DateTimePicker, {
 } from "@react-native-community/datetimepicker";
 import dayjs from "dayjs";
 import apiClient from "../../api/apiClient";
-import * as FileSystem from "expo-file-system";
+import { Directory, File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 
 import Svg, { G, Path, Circle } from "react-native-svg";
@@ -37,12 +37,12 @@ type ReportSummary = {
   grossRevenue: number; // Doanh thu gộp (trước hoàn)
   totalRefundAmount: number; // Tiền hoàn
   totalRevenue: number; // Doanh thu thực (đã trừ hoàn)
-  
+
   // Tiền mặt
   grossCashInDrawer: number; // Tiền mặt trước hoàn
   cashRefundAmount: number; // Tiền mặt hoàn
   cashInDrawer: number; // Tiền mặt thực
-  
+
   // Thống kê khác
   totalOrders: number;
   vatTotal: number;
@@ -470,9 +470,11 @@ const EndOfDayReportScreen: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeId]);
 
-  const changePeriod = (p: PeriodType) => {
+  const changePeriod = (p: PeriodType, dateOverride?: dayjs.Dayjs) => {
+    const d = dateOverride || selectedDate;
+    if (dateOverride) setSelectedDate(dateOverride);
     setPeriodType(p);
-    loadReport(selectedDate, p);
+    loadReport(d, p);
   };
 
   const openDatePicker = () => {
@@ -495,8 +497,15 @@ const EndOfDayReportScreen: React.FC = () => {
         closeDatePicker();
         return;
       }
-      if (date) setTempDate(date);
-      if (_e.type === "set") setTimeout(() => confirmDatePicker(), 0);
+      if (date) {
+        setTempDate(date);
+        if (_e.type === "set") {
+          const d = dayjs(date);
+          setSelectedDate(d);
+          closeDatePicker();
+          loadReport(d, periodType);
+        }
+      }
       return;
     }
     if (date) setTempDate(date);
@@ -564,29 +573,38 @@ const EndOfDayReportScreen: React.FC = () => {
     try {
       const periodKey = periodKeyFromDate(selectedDate, periodType);
       const filename = `Bao_Cao_Cuoi_Ngay_${periodKey.replace(/[/:]/g, "-")}.${format}`;
-      // Sử dụng type assertion để tránh lỗi TypeScript với expo-file-system
-      const fs = FileSystem as any;
-      const cacheDir = fs.cacheDirectory || fs.documentDirectory || "";
-      const fileUri = cacheDir + filename;
 
-      // Download file from API
-      const downloadRes = await fs.downloadAsync(
-        `${apiClient.defaults.baseURL}/financials/end-of-day/${storeId}/export?periodType=${periodType}&periodKey=${periodKey}&format=${format}`,
-        fileUri,
+      // 1. Prepare Directory (Cache/Reports)
+      const reportsDir = new Directory(Paths.cache, "reports");
+      if (!reportsDir.exists) {
+        await reportsDir.create();
+      }
+
+      // 2. Prepare File
+      const file = new File(reportsDir, filename);
+
+      // 3. Fetch Data as ArrayBuffer using apiClient (handles Auth automatically)
+      // Note: apiClient already includes baseURL
+      const res = await apiClient.get(
+        `/financials/end-of-day/${storeId}/export`,
         {
-          headers: authHeaders as Record<string, string>,
+          params: { periodType, periodKey, format },
+          headers: authHeaders,
+          responseType: "arraybuffer", // Important for binary files
         }
       );
 
-      if (downloadRes.status !== 200) {
-        Alert.alert("Lỗi", "Không thể tải file. Vui lòng thử lại.");
-        return;
-      }
+      // 4. Write data to file
+      const uint8Array = new Uint8Array(res.data as ArrayBuffer);
+      await file.write(uint8Array);
 
-      // Share file
+      // 5. Share file
       if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(downloadRes.uri, {
-          mimeType: format === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        await Sharing.shareAsync(file.uri, {
+          mimeType:
+            format === "pdf"
+              ? "application/pdf"
+              : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
           dialogTitle: `Chia sẻ báo cáo ${format.toUpperCase()}`,
         });
       } else {
@@ -594,7 +612,10 @@ const EndOfDayReportScreen: React.FC = () => {
       }
     } catch (err: any) {
       console.error("Export error:", err);
-      Alert.alert("Lỗi", err?.message || "Không thể xuất báo cáo. Vui lòng thử lại.");
+      Alert.alert(
+        "Lỗi",
+        err?.message || "Không thể xuất báo cáo. Vui lòng thử lại."
+      );
     } finally {
       setExporting(false);
     }
@@ -688,7 +709,7 @@ const EndOfDayReportScreen: React.FC = () => {
         >
           <Pressable style={styles.modalBackdrop} onPress={closeDatePicker}>
             <Pressable style={styles.pickerSheet} onPress={() => {}}>
-              <View style={styles.pickerHeader}>
+              {/* <View style={styles.pickerHeader}>
                 <Text style={styles.modalTitle}>Chọn ngày</Text>
                 <Pressable
                   onPress={closeDatePicker}
@@ -699,7 +720,7 @@ const EndOfDayReportScreen: React.FC = () => {
                 >
                   <Text style={styles.closeBtnText}>Đóng</Text>
                 </Pressable>
-              </View>
+              </View> */}
 
               <DateTimePicker
                 value={tempDate}
@@ -794,7 +815,11 @@ const EndOfDayReportScreen: React.FC = () => {
                     exporting && { opacity: 0.5 },
                   ]}
                 >
-                  <MaterialCommunityIcons name="file-excel-outline" size={16} color="#fff" />
+                  <MaterialCommunityIcons
+                    name="file-excel-outline"
+                    size={16}
+                    color="#fff"
+                  />
                   <Text style={styles.btnTinyText}>Excel</Text>
                 </Pressable>
                 <Pressable
@@ -806,7 +831,11 @@ const EndOfDayReportScreen: React.FC = () => {
                     exporting && { opacity: 0.5 },
                   ]}
                 >
-                  <Ionicons name="document-text-outline" size={16} color="#fff" />
+                  <Ionicons
+                    name="document-text-outline"
+                    size={16}
+                    color="#fff"
+                  />
                   <Text style={styles.btnTinyText}>PDF</Text>
                 </Pressable>
               </View>
@@ -824,7 +853,7 @@ const EndOfDayReportScreen: React.FC = () => {
             <Pill
               text="Hôm nay"
               active={periodType === "day"}
-              onPress={() => changePeriod("day")}
+              onPress={() => changePeriod("day", dayjs())}
               icon={
                 <Ionicons
                   name="today-outline"
@@ -1280,7 +1309,7 @@ const EndOfDayReportScreen: React.FC = () => {
       >
         <Pressable style={styles.modalBackdrop} onPress={closeDatePicker}>
           <Pressable style={styles.pickerSheet} onPress={() => {}}>
-            <View style={styles.pickerHeader}>
+            {/* <View style={styles.pickerHeader}>
               <Text style={styles.modalTitle}>Chọn ngày</Text>
               <Pressable
                 onPress={closeDatePicker}
@@ -1291,7 +1320,7 @@ const EndOfDayReportScreen: React.FC = () => {
               >
                 <Text style={styles.closeBtnText}>Đóng</Text>
               </Pressable>
-            </View>
+            </View> */}
 
             <DateTimePicker
               value={tempDate}

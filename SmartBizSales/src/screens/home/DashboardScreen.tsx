@@ -841,72 +841,6 @@ export default function DashboardScreen() {
                   trend={15.2}
                 />
               </View>
-
-              {/* Performance Metrics */}
-              <View style={[styles.metricsCard, styles.cardShadow]}>
-                <Text style={styles.sectionTitle}>📊 Chỉ số hiệu suất</Text>
-                <MetricProgress
-                  label="Mục tiêu doanh thu"
-                  value={totalRevenueOfMonth}
-                  target={50000000}
-                  color="#10b981"
-                  icon="🎯"
-                />
-                <MetricProgress
-                  label="Đơn hàng mục tiêu"
-                  value={orderStats.paid}
-                  target={200}
-                  color="#3b82f6"
-                  icon=""
-                />
-                <MetricProgress
-                  label="Khách hàng mới"
-                  value={45}
-                  target={100}
-                  color="#8b5cf6"
-                  icon=""
-                />
-              </View>
-
-              {/* Revenue Chart */}
-              <View style={[styles.chartCard, styles.cardShadow]}>
-                <View style={styles.chartHeader}>
-                  <Text style={styles.chartTitle}>
-                    📈 Doanh thu 7 ngày gần nhất
-                  </Text>
-                  <View style={styles.chartLegend}>
-                    <View
-                      style={[styles.legendDot, { backgroundColor: "#3b82f6" }]}
-                    />
-                    <Text style={styles.legendText}>Doanh thu</Text>
-                  </View>
-                </View>
-                <BarChart
-                  data={dailyRevenueData}
-                  width={width - 48}
-                  height={220}
-                  chartConfig={{
-                    backgroundColor: "#ffffff",
-                    backgroundGradientFrom: "#ffffff",
-                    backgroundGradientTo: "#f8fafc",
-                    decimalPlaces: 0,
-                    color: (opacity = 1) => `rgba(59, 130, 246, ${opacity})`,
-                    labelColor: (opacity = 1) => `rgba(75, 85, 99, ${opacity})`,
-                    barPercentage: 0.7,
-                    propsForBackgroundLines: {
-                      strokeDasharray: "4 4",
-                      stroke: "#e5e7eb",
-                      strokeWidth: 1,
-                    },
-                  }}
-                  yAxisLabel=""
-                  yAxisSuffix=""
-                  style={styles.chart}
-                  showValuesOnTopOfBars
-                  withInnerLines
-                  fromZero
-                />
-              </View>
             </>
           )}
 
@@ -914,10 +848,18 @@ export default function DashboardScreen() {
           {activeTab === "analytics" && (
             <>
               <View style={[styles.chartCard, styles.cardShadow]}>
-                <Text style={styles.sectionTitle}>
-                  📊 Phân tích doanh thu theo tuần
+                <View style={styles.chartHeader}>
+                  <Text style={styles.sectionTitle}>
+                    � Phân tích doanh thu theo tuần
+                  </Text>
+                  <View style={styles.monthBadge}>
+                    <Text style={styles.monthBadgeText}>Tháng {monthLabel}</Text>
+                  </View>
+                </View>
+                <Text style={styles.chartSubtitle}>
+                  Tổng doanh thu: {formatCurrency(totalRevenueOfMonth)}
                 </Text>
-                <LineChart
+                <BarChart
                   data={weeklyRevenueData}
                   width={width - 48}
                   height={220}
@@ -928,41 +870,36 @@ export default function DashboardScreen() {
                     decimalPlaces: 0,
                     color: (opacity = 1) => `rgba(139, 92, 246, ${opacity})`,
                     labelColor: (opacity = 1) => `rgba(75, 85, 99, ${opacity})`,
-                    propsForDots: {
-                      r: "5",
-                      strokeWidth: "2",
-                      stroke: "#8b5cf6",
-                      fill: "#ffffff",
-                    },
+                    barPercentage: 0.6,
                     propsForBackgroundLines: {
                       strokeDasharray: "4 4",
                       stroke: "#e5e7eb",
                     },
                   }}
-                  bezier
                   style={styles.chart}
+                  showValuesOnTopOfBars
                   withInnerLines
-                  withOuterLines
-                  withVerticalLines
-                  withHorizontalLines
+                  fromZero
+                  yAxisLabel=""
+                  yAxisSuffix="đ"
                 />
-              </View>
-
-              <View style={styles.analyticsRow}>
-                <View style={[styles.pieChartCard, styles.cardShadow]}>
-                  <Text style={styles.sectionTitle}>🎨 Phân loại sản phẩm</Text>
-                  <PieChart
-                    data={categoryData}
-                    width={width - 48}
-                    height={200}
-                    chartConfig={{
-                      color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-                    }}
-                    accessor="value"
-                    backgroundColor="transparent"
-                    paddingLeft="15"
-                    absolute
-                  />
+                <View style={styles.weeklyLegend}>
+                  <View style={styles.weeklyLegendItem}>
+                    <View style={[styles.legendDot, { backgroundColor: "#8b5cf6" }]} />
+                    <Text style={styles.legendText}>Tuần 1: Ngày 1-7</Text>
+                  </View>
+                  <View style={styles.weeklyLegendItem}>
+                    <View style={[styles.legendDot, { backgroundColor: "#8b5cf6" }]} />
+                    <Text style={styles.legendText}>Tuần 2: Ngày 8-14</Text>
+                  </View>
+                  <View style={styles.weeklyLegendItem}>
+                    <View style={[styles.legendDot, { backgroundColor: "#8b5cf6" }]} />
+                    <Text style={styles.legendText}>Tuần 3: Ngày 15-21</Text>
+                  </View>
+                  <View style={styles.weeklyLegendItem}>
+                    <View style={[styles.legendDot, { backgroundColor: "#8b5cf6" }]} />
+                    <Text style={styles.legendText}>Tuần 4: Ngày 22+</Text>
+                  </View>
                 </View>
               </View>
             </>
@@ -1433,5 +1370,33 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     color: "#10b981",
+  },
+  monthBadge: {
+    backgroundColor: "#8b5cf6",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  monthBadgeText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#fff",
+  },
+  chartSubtitle: {
+    fontSize: 14,
+    color: "#6b7280",
+    fontWeight: "600",
+    marginBottom: 12,
+  },
+  weeklyLegend: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginTop: 16,
+    gap: 12,
+  },
+  weeklyLegendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
 });
