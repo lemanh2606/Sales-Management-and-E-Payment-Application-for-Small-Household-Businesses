@@ -1100,11 +1100,11 @@ const generateEndOfDayReport = async (req, res) => {
     ]);
 
     // 3. Phân loại theo nhân viên
+    // Doanh thu thực = totalAmount - refundedAmount
     const byEmployee = await Order.aggregate([
       {
         $match: {
           storeId: new mongoose.Types.ObjectId(storeId),
-          // employeeId: { $ne: null }, // Đã mở để tính cho cả Owner
           createdAt: { $gte: start, $lte: end },
           status: { $in: ["paid", "partially_refunded"] },
         },
@@ -1112,7 +1112,12 @@ const generateEndOfDayReport = async (req, res) => {
       {
         $group: {
           _id: "$employeeId",
-          revenue: { $sum: "$totalAmount" },
+          // Tổng tiền thanh toán (đã trừ giảm giá)
+          grossRevenue: { $sum: { $toDecimal: "$totalAmount" } },
+          // Tổng tiền đã hoàn
+          refundAmount: {
+            $sum: { $toDecimal: { $ifNull: ["$refundedAmount", "0"] } },
+          },
           orders: { $sum: 1 },
         },
       },
@@ -1139,9 +1144,22 @@ const generateEndOfDayReport = async (req, res) => {
               },
             },
           },
-          revenue: 1,
+          grossRevenue: 1,
+          refundAmount: 1,
+          // Doanh thu thực = Tổng thanh toán - Tổng hoàn trả
+          revenue: { $subtract: ["$grossRevenue", "$refundAmount"] },
           orders: 1,
-          avgOrderValue: { $divide: ["$revenue", "$orders"] },
+        },
+      },
+      {
+        $addFields: {
+          avgOrderValue: {
+            $cond: [
+              { $gt: ["$orders", 0] },
+              { $divide: ["$revenue", "$orders"] },
+              0,
+            ],
+          },
         },
       },
     ]);
@@ -1431,7 +1449,9 @@ const generateEndOfDayReport = async (req, res) => {
       })),
       byEmployee: byEmployee.map((e) => ({
         ...e,
-        revenue: toNumber(e.revenue),
+        grossRevenue: toNumber(e.grossRevenue), // Tổng thanh toán
+        refundAmount: toNumber(e.refundAmount), // Tổng hoàn trả
+        revenue: toNumber(e.revenue), // Doanh thu thực = grossRevenue - refundAmount
         avgOrderValue: toNumber(e.avgOrderValue),
       })),
       byProduct: byProduct.map((p) => ({
@@ -1558,18 +1578,22 @@ const exportEndOfDayReport = async (req, res) => {
     ]);
 
     // 3. Phân loại theo nhân viên
+    // Doanh thu thực = totalAmount - refundedAmount
     const byEmployee = await Order.aggregate([
       {
         $match: {
           storeId: objectStoreId,
           createdAt: { $gte: start, $lte: end },
-          status: { $in: ["paid", "partially_refunded", "refunded"] },
+          status: { $in: ["paid", "partially_refunded"] },
         },
       },
       {
         $group: {
           _id: "$employeeId",
-          revenue: { $sum: "$totalAmount" },
+          grossRevenue: { $sum: { $toDecimal: "$totalAmount" } },
+          refundAmount: {
+            $sum: { $toDecimal: { $ifNull: ["$refundedAmount", "0"] } },
+          },
           orders: { $sum: 1 },
         },
       },
@@ -1596,9 +1620,21 @@ const exportEndOfDayReport = async (req, res) => {
               },
             },
           },
-          revenue: 1,
+          grossRevenue: 1,
+          refundAmount: 1,
+          revenue: { $subtract: ["$grossRevenue", "$refundAmount"] },
           orders: 1,
-          avgOrderValue: { $divide: ["$revenue", "$orders"] },
+        },
+      },
+      {
+        $addFields: {
+          avgOrderValue: {
+            $cond: [
+              { $gt: ["$orders", 0] },
+              { $divide: ["$revenue", "$orders"] },
+              0,
+            ],
+          },
         },
       },
     ]);

@@ -22,6 +22,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import NotificationPanel from "../../components/NotificationPanel";
 
 const { width } = Dimensions.get("window");
 
@@ -204,6 +205,7 @@ export default function DashboardScreen() {
   const [storeId, setStoreId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [notificationPanelVisible, setNotificationPanelVisible] = useState(false);
 
   const [orderStats, setOrderStats] = useState<OrderStats>({
     total: 0,
@@ -641,7 +643,7 @@ export default function DashboardScreen() {
             <View style={styles.headerButtons}>
               <TouchableOpacity
                 style={styles.notifBtn}
-                onPress={() => navigation.navigate("NotificationSettings")}
+                onPress={() => setNotificationPanelVisible(true)}
               >
                 <Ionicons name="notifications-outline" size={24} color="#fff" />
                 {unreadNotifications > 0 && (
@@ -720,8 +722,8 @@ export default function DashboardScreen() {
           {/* Overview Tab */}
           {activeTab === "overview" && (
             <>
-              {/* Expiry Alerts */}
-              {expiringItems.length > 0 && (
+              {/* Expiry Alerts - Ẩn với role STAFF */}
+              {expiringItems.length > 0 && user?.role?.toUpperCase() !== "STAFF" && (
                 <View style={styles.expiryAlertContainer}>
                   <LinearGradient
                     colors={expiringItems.some(i => i.status === 'expired') ? ["#fff1f0", "#ffccc7"] : ["#fffbe6", "#fff1b8"]}
@@ -1046,6 +1048,13 @@ export default function DashboardScreen() {
           </LinearGradient>
         </TouchableOpacity>
       )}
+
+      {/* Notification Panel */}
+      <NotificationPanel
+        storeId={storeId || undefined}
+        visible={notificationPanelVisible}
+        onClose={() => setNotificationPanelVisible(false)}
+      />
     </View>
   );
 }

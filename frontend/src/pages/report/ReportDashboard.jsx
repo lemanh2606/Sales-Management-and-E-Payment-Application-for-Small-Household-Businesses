@@ -519,6 +519,47 @@ const ReportDashboard = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStore?._id, periodType, periodKey]);
 
+  // ✅ Reload dữ liệu khi chuyển tab hoặc focus lại window
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        // Tab được active lại - reload dữ liệu
+        if (currentStore?._id && periodType && periodKey) {
+          loadOperatingExpenses();
+          fetchFinancial();
+        }
+      }
+    };
+
+    const handleWindowFocus = () => {
+      // Window được focus lại - reload dữ liệu
+      if (currentStore?._id && periodType && periodKey) {
+        loadOperatingExpenses();
+        fetchFinancial();
+      }
+    };
+
+    // Lắng nghe sự kiện
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", handleWindowFocus);
+
+    // Cleanup
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", handleWindowFocus);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStore?._id, periodType, periodKey]);
+
+  // ✅ Reload dữ liệu mỗi khi navigate đến trang này (từ menu, link, etc.)
+  useEffect(() => {
+    if (currentStore?._id && periodType && periodKey) {
+      loadOperatingExpenses();
+      fetchFinancial();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.key]);
+
   // ====== SAVE OPERATING EXPENSE =======
   const saveOperatingExpense = async () => {
     if (!currentStore?._id || !periodType || !periodKey) {
