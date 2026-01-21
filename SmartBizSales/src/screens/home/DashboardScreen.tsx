@@ -1,5 +1,5 @@
 // src/screens/DashboardScreen.tsx
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, ReactNode } from "react";
 import {
   View,
   Text,
@@ -20,7 +20,7 @@ import dayjs from "dayjs";
 import { LineChart, BarChart, PieChart } from "react-native-chart-kit";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import NotificationPanel from "../../components/NotificationPanel";
 
@@ -104,7 +104,7 @@ const StatCard: React.FC<{
   title: string;
   value: string | number;
   subtitle: string;
-  icon: string;
+  icon: ReactNode | string;
   color: string;
   gradient: readonly [string, string];
   trend?: number;
@@ -148,7 +148,7 @@ const MetricProgress: React.FC<{
   value: number;
   target: number;
   color: string;
-  icon: string;
+  icon: string | ReactNode;
 }> = ({ label, value, target, color, icon }) => {
   const progress = Math.min((value / target) * 100, 100);
 
@@ -205,7 +205,8 @@ export default function DashboardScreen() {
   const [storeId, setStoreId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [unreadNotifications, setUnreadNotifications] = useState(0);
-  const [notificationPanelVisible, setNotificationPanelVisible] = useState(false);
+  const [notificationPanelVisible, setNotificationPanelVisible] =
+    useState(false);
 
   const [orderStats, setOrderStats] = useState<OrderStats>({
     total: 0,
@@ -305,7 +306,12 @@ export default function DashboardScreen() {
   };
 
   useEffect(() => {
-    if (storeId) fetchUnreadNotifications();
+    if (storeId) {
+      fetchUnreadNotifications();
+      // Poll every 5 seconds to update unread count in "real-time"
+      const interval = setInterval(fetchUnreadNotifications, 5000);
+      return () => clearInterval(interval);
+    }
   }, [storeId]);
 
   // ==================== FETCH ORDER STATS ====================
@@ -622,7 +628,10 @@ export default function DashboardScreen() {
       <LinearGradient colors={["#10b981", "#667eea"]} style={styles.header}>
         <View style={styles.headerContent}>
           <View style={styles.headerTop}>
-            <View style={styles.avatarContainer}>
+            <TouchableOpacity
+              style={styles.avatarContainer}
+              onPress={() => navigation.navigate("ProfileScreen")}
+            >
               <LinearGradient
                 colors={["#ffffff", "#f8fafc"]}
                 style={styles.avatar}
@@ -631,11 +640,16 @@ export default function DashboardScreen() {
                   {(user?.fullname || "M").charAt(0).toUpperCase()}
                 </Text>
               </LinearGradient>
-            </View>
+            </TouchableOpacity>
             <View style={styles.headerInfo}>
-              <Text style={styles.greeting}>
-                Xin chào, {user?.fullname || "Quản lý"}! 👋
-              </Text>
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+              >
+                <Text style={styles.greeting}>
+                  Xin chào, {user?.fullname || "Quản lý"}!
+                </Text>
+                <MaterialIcons name="waving-hand" size={20} color="#f59e0b" />
+              </View>
               <Text style={styles.storeName}>
                 {currentStore?.name || "Cửa hàng"}
               </Text>
@@ -661,33 +675,53 @@ export default function DashboardScreen() {
               </View>
             </View>
           </View>
-
-        
-
           {/* Navigation Tabs */}
+
           <View style={styles.tabContainer}>
             {[
-              { id: "overview", label: "Tổng quan", icon: "📊" },
-              { id: "analytics", label: "Phân tích", icon: "📈" },
-              { id: "products", label: "Sản phẩm", icon: "" },
-            ].map((tab) => (
-              <TouchableOpacity
-                key={tab.id}
-                style={[styles.tab, activeTab === tab.id && styles.tabActive]}
-                onPress={() => setActiveTab(tab.id as any)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.tabIcon}>{tab.icon}</Text>
-                <Text
-                  style={[
-                    styles.tabText,
-                    activeTab === tab.id && styles.tabTextActive,
-                  ]}
+              {
+                id: "overview",
+                label: "Tổng quan",
+                iconComponent: MaterialIcons,
+                iconName: "dashboard",
+              },
+              {
+                id: "analytics",
+                label: "Phân tích",
+                iconComponent: Ionicons,
+                iconName: "analytics",
+              },
+              {
+                id: "products",
+                label: "Sản phẩm",
+                iconComponent: MaterialIcons,
+                iconName: "inventory",
+              },
+            ].map((tab) => {
+              const IconComponent = tab.iconComponent;
+              return (
+                <TouchableOpacity
+                  key={tab.id}
+                  style={[styles.tab, activeTab === tab.id && styles.tabActive]}
+                  onPress={() => setActiveTab(tab.id as any)}
+                  activeOpacity={0.8}
                 >
-                  {tab.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                  <IconComponent
+                    name={tab.iconName as any}
+                    size={20}
+                    color={activeTab === tab.id ? "#2563eb" : "#9ca3af"}
+                  />
+                  <Text
+                    style={[
+                      styles.tabText,
+                      activeTab === tab.id && styles.tabTextActive,
+                    ]}
+                  >
+                    {tab.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
       </LinearGradient>
@@ -723,122 +757,240 @@ export default function DashboardScreen() {
           {activeTab === "overview" && (
             <>
               {/* Expiry Alerts - Ẩn với role STAFF */}
-              {expiringItems.length > 0 && user?.role?.toUpperCase() !== "STAFF" && (
-                <View style={styles.expiryAlertContainer}>
-                  <LinearGradient
-                    colors={expiringItems.some(i => i.status === 'expired') ? ["#fff1f0", "#ffccc7"] : ["#fffbe6", "#fff1b8"]}
-                    style={styles.expiryAlert}
-                  >
-                    <View style={styles.expiryAlertHeader}>
-                      <Ionicons 
-                        name={expiringItems.some(i => i.status === 'expired') ? "alert-circle" : "warning"} 
-                        size={20} 
-                        color={expiringItems.some(i => i.status === 'expired') ? "#ff4d4f" : "#faad14"} 
-                      />
-                      <Text style={[
-                        styles.expiryAlertTitle, 
-                        { color: expiringItems.some(i => i.status === 'expired') ? "#a8071a" : "#874d00" }
-                      ]}>
-                        Cảnh báo: {expiringItems.some(i => i.status === 'expired') ? "Phát hiện hàng ĐÃ HẾT HẠN" : `${expiringItems.length} lô sắp hết hạn`}
-                      </Text>
-                      <TouchableOpacity onPress={() => setExpiringItems([])}>
-                        <Ionicons name="close" size={18} color="#999" />
-                      </TouchableOpacity>
-                    </View>
-                    <View style={styles.expiryList}>
-                      {expiringItems.slice(0, 3).map((item, idx) => {
-                        const isExp = item.status === 'expired';
-                        return (
-                          <View key={idx} style={styles.expiryLine}>
-                            <Text style={[styles.bullet, { color: isExp ? "#ff4d4f" : "#faad14" }]}>•</Text>
-                            <Text style={styles.expiryText} numberOfLines={1}>
-                              <Text style={[styles.boldText, isExp && { textDecorationLine: 'line-through', color: '#ff4d4f' }]}>{item.name}</Text>
-                              {` - Lô: ${item.batch_no} - `}
-                              <Text style={{ color: isExp ? "#ff4d4f" : "#d46b08", fontWeight: 'bold' }}>
-                                {dayjs(item.expiry_date).format("DD/MM")}
-                              </Text>
-                              <Text style={{ fontSize: 10, color: isExp ? "#ff4d4f" : "#faad14" }}>
-                                {isExp ? " [HẾT HẠN]" : " [SẮP HẾT]"}
-                              </Text>
-                            </Text>
-                          </View>
-                        );
-                      })}
-                      {expiringItems.length > 3 && (
-                        <Text style={styles.moreText}>
-                          ... và {expiringItems.length - 3} lô hàng khác.
-                        </Text>
-                      )}
-                    </View>
-                    <TouchableOpacity
-                      style={[styles.manageBtn, { borderColor: expiringItems.some(i => i.status === 'expired') ? "#ff4d4f" : "#10b981" }]}
-                      onPress={() => navigation.navigate("ProcessExpired")}
+              {expiringItems.length > 0 &&
+                user?.role?.toUpperCase() !== "STAFF" && (
+                  <View style={styles.expiryAlertContainer}>
+                    <LinearGradient
+                      colors={
+                        expiringItems.some((i) => i.status === "expired")
+                          ? ["#fff1f0", "#ffccc7"]
+                          : ["#fffbe6", "#fff1b8"]
+                      }
+                      style={styles.expiryAlert}
                     >
-                      <Text style={[styles.manageBtnText, { color: expiringItems.some(i => i.status === 'expired') ? "#ff4d4f" : "#10b981" }]}>
-                        {expiringItems.some(i => i.status === 'expired') ? "Xử lý hàng hết hạn ngay" : "Xem chi tiết kho"}
-                      </Text>
-                      <Ionicons
-                        name="chevron-forward"
-                        size={14}
-                        color={expiringItems.some(i => i.status === 'expired') ? "#ff4d4f" : "#10b981"}
-                      />
-                    </TouchableOpacity>
-                  </LinearGradient>
-                </View>
-              )}
+                      <View style={styles.expiryAlertHeader}>
+                        <Ionicons
+                          name={
+                            expiringItems.some((i) => i.status === "expired")
+                              ? "alert-circle"
+                              : "warning"
+                          }
+                          size={20}
+                          color={
+                            expiringItems.some((i) => i.status === "expired")
+                              ? "#ff4d4f"
+                              : "#faad14"
+                          }
+                        />
+                        <Text
+                          style={[
+                            styles.expiryAlertTitle,
+                            {
+                              color: expiringItems.some(
+                                (i) => i.status === "expired"
+                              )
+                                ? "#a8071a"
+                                : "#874d00",
+                            },
+                          ]}
+                        >
+                          Cảnh báo:{" "}
+                          {expiringItems.some((i) => i.status === "expired")
+                            ? "Phát hiện hàng ĐÃ HẾT HẠN"
+                            : `${expiringItems.length} lô sắp hết hạn`}
+                        </Text>
+                        <TouchableOpacity onPress={() => setExpiringItems([])}>
+                          <Ionicons name="close" size={18} color="#999" />
+                        </TouchableOpacity>
+                      </View>
+                      <View style={styles.expiryList}>
+                        {expiringItems.slice(0, 3).map((item, idx) => {
+                          const isExp = item.status === "expired";
+                          return (
+                            <View key={idx} style={styles.expiryLine}>
+                              <Text
+                                style={[
+                                  styles.bullet,
+                                  { color: isExp ? "#ff4d4f" : "#faad14" },
+                                ]}
+                              >
+                                •
+                              </Text>
+                              <Text style={styles.expiryText} numberOfLines={1}>
+                                <Text
+                                  style={[
+                                    styles.boldText,
+                                    isExp && {
+                                      textDecorationLine: "line-through",
+                                      color: "#ff4d4f",
+                                    },
+                                  ]}
+                                >
+                                  {item.name}
+                                </Text>
+                                {` - Lô: ${item.batch_no} - `}
+                                <Text
+                                  style={{
+                                    color: isExp ? "#ff4d4f" : "#d46b08",
+                                    fontWeight: "bold",
+                                  }}
+                                >
+                                  {dayjs(item.expiry_date).format("DD/MM")}
+                                </Text>
+                                <Text
+                                  style={{
+                                    fontSize: 10,
+                                    color: isExp ? "#ff4d4f" : "#faad14",
+                                  }}
+                                >
+                                  {isExp ? " [HẾT HẠN]" : " [SẮP HẾT]"}
+                                </Text>
+                              </Text>
+                            </View>
+                          );
+                        })}
+                        {expiringItems.length > 3 && (
+                          <Text style={styles.moreText}>
+                            ... và {expiringItems.length - 3} lô hàng khác.
+                          </Text>
+                        )}
+                      </View>
+                      <TouchableOpacity
+                        style={[
+                          styles.manageBtn,
+                          {
+                            borderColor: expiringItems.some(
+                              (i) => i.status === "expired"
+                            )
+                              ? "#ff4d4f"
+                              : "#10b981",
+                          },
+                        ]}
+                        onPress={() => navigation.navigate("ProcessExpired")}
+                      >
+                        <Text
+                          style={[
+                            styles.manageBtnText,
+                            {
+                              color: expiringItems.some(
+                                (i) => i.status === "expired"
+                              )
+                                ? "#ff4d4f"
+                                : "#10b981",
+                            },
+                          ]}
+                        >
+                          {expiringItems.some((i) => i.status === "expired")
+                            ? "Xử lý hàng hết hạn ngay"
+                            : "Xem chi tiết kho"}
+                        </Text>
+                        <Ionicons
+                          name="chevron-forward"
+                          size={14}
+                          color={
+                            expiringItems.some((i) => i.status === "expired")
+                              ? "#ff4d4f"
+                              : "#10b981"
+                          }
+                        />
+                      </TouchableOpacity>
+                    </LinearGradient>
+                  </View>
+                )}
 
               {/* Key Metrics Grid */}
               <View style={styles.statsGrid}>
                 <StatCard
-                  title="Doanh thu tháng"
-                  value={formatCurrency(totalRevenueOfMonth)}
-                  subtitle="Tổng doanh thu tháng này"
-                  icon="💰"
+                  title="Doanh thu"
+                  value={formatCurrency(financials?.totalRevenue || 0)}
+                  subtitle="Tổng doanh thu chưa trừ chi phí gì"
+                  icon={
+                    <MaterialIcons
+                      name="attach-money"
+                      size={24}
+                      color="#10b981"
+                    />
+                  }
                   color="#10b981"
                   gradient={["#ecfdf5", "#d1fae5"]}
                   trend={12.5}
                 />
+
+                <StatCard
+                  title="Doanh thu thuần"
+                  value={formatCurrency(financials?.netSales || 0)}
+                  subtitle="Đây là doanh thu thực tế sau khi trừ VAT"
+                  icon={
+                    <MaterialIcons
+                      name="account-balance-wallet"
+                      size={24}
+                      color="#10b981"
+                    />
+                  }
+                  color="#10b981"
+                  gradient={["#ecfdf5", "#8cd88dff"]}
+                  trend={12.5}
+                />
+
                 <StatCard
                   title="Lợi nhuận gộp"
                   value={formatCurrency(financials?.grossProfit || 0)}
                   subtitle="Doanh thu thuần - Giá vốn"
-                  icon="💸"
+                  icon={
+                    <MaterialIcons
+                      name="show-chart"
+                      size={24}
+                      color="#2563eb"
+                    />
+                  }
                   color="#2563eb"
                   gradient={["#eff6ff", "#dbeafe"]}
                 />
+
                 <StatCard
-                  title="Lợi nhuận ròng"
-                  value={formatCurrency(financials?.netProfit || 0)}
-                  subtitle="Lợi nhuận sau toàn bộ chi phí"
-                  icon="📈"
-                  color="#f59e0b"
-                  gradient={["#fffbeb", "#fef3c7"]}
+                  title="Tổng đơn hàng"
+                  value={orderStats.total || 0}
+                  subtitle="Tổng đơn hàng"
+                  icon={
+                    <MaterialIcons
+                      name="shopping-cart"
+                      size={24}
+                      color="#2563eb"
+                    />
+                  }
+                  color="#2563eb"
+                  gradient={["#eff6ff", "#dbeafe"]}
                   trend={8.3}
                 />
+
                 <StatCard
-                  title="CP vận hành"
-                  value={formatCurrency(financials?.operatingCost || 0)}
-                  subtitle="Lương, hoa hồng, phí khác"
-                  icon="📉"
-                  color="#ef4444"
-                  gradient={["#fef2f2", "#fee2e2"]}
-                />
-                <StatCard
-                  title="GT tồn kho"
-                  value={formatCurrency(financials?.stockValue || 0)}
-                  subtitle="Tổng giá trị hàng tại kho"
-                  icon=""
+                  title="Đơn chưa thanh toán"
+                  value={orderStats.pending || 0}
+                  subtitle="Cần xử lý"
+                  icon={
+                    <MaterialIcons
+                      name="pending-actions"
+                      size={24}
+                      color="#8b5cf6"
+                    />
+                  }
                   color="#8b5cf6"
                   gradient={["#faf5ff", "#e9d5ff"]}
                 />
+
                 <StatCard
-                  title="Đơn hàng"
-                  value={orderStats.paid}
-                  subtitle="Đơn đã thanh toán"
-                  icon="🛒"
-                  color="#3b82f6"
-                  gradient={["#eff6ff", "#dbeafe"]}
-                  trend={15.2}
+                  title="Đơn bị hoàn trả"
+                  value={orderStats.refunded || 0}
+                  subtitle="Đơn bị hoàn trả"
+                  icon={
+                    <MaterialIcons
+                      name="assignment-return"
+                      size={24}
+                      color="#ef4444"
+                    />
+                  }
+                  color="#ef4444"
+                  gradient={["#fef2f2", "#fecaca"]}
                 />
               </View>
             </>
@@ -853,7 +1005,9 @@ export default function DashboardScreen() {
                     � Phân tích doanh thu theo tuần
                   </Text>
                   <View style={styles.monthBadge}>
-                    <Text style={styles.monthBadgeText}>Tháng {monthLabel}</Text>
+                    <Text style={styles.monthBadgeText}>
+                      Tháng {monthLabel}
+                    </Text>
                   </View>
                 </View>
                 <Text style={styles.chartSubtitle}>
@@ -885,19 +1039,27 @@ export default function DashboardScreen() {
                 />
                 <View style={styles.weeklyLegend}>
                   <View style={styles.weeklyLegendItem}>
-                    <View style={[styles.legendDot, { backgroundColor: "#8b5cf6" }]} />
+                    <View
+                      style={[styles.legendDot, { backgroundColor: "#8b5cf6" }]}
+                    />
                     <Text style={styles.legendText}>Tuần 1: Ngày 1-7</Text>
                   </View>
                   <View style={styles.weeklyLegendItem}>
-                    <View style={[styles.legendDot, { backgroundColor: "#8b5cf6" }]} />
+                    <View
+                      style={[styles.legendDot, { backgroundColor: "#8b5cf6" }]}
+                    />
                     <Text style={styles.legendText}>Tuần 2: Ngày 8-14</Text>
                   </View>
                   <View style={styles.weeklyLegendItem}>
-                    <View style={[styles.legendDot, { backgroundColor: "#8b5cf6" }]} />
+                    <View
+                      style={[styles.legendDot, { backgroundColor: "#8b5cf6" }]}
+                    />
                     <Text style={styles.legendText}>Tuần 3: Ngày 15-21</Text>
                   </View>
                   <View style={styles.weeklyLegendItem}>
-                    <View style={[styles.legendDot, { backgroundColor: "#8b5cf6" }]} />
+                    <View
+                      style={[styles.legendDot, { backgroundColor: "#8b5cf6" }]}
+                    />
                     <Text style={styles.legendText}>Tuần 4: Ngày 22+</Text>
                   </View>
                 </View>
@@ -991,6 +1153,7 @@ export default function DashboardScreen() {
         storeId={storeId || undefined}
         visible={notificationPanelVisible}
         onClose={() => setNotificationPanelVisible(false)}
+        onUnreadCountChange={setUnreadNotifications}
       />
     </View>
   );

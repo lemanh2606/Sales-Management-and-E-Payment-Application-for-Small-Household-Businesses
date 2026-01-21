@@ -39,6 +39,7 @@ interface NotificationPanelProps {
   storeId: string | undefined;
   visible: boolean;
   onClose: () => void;
+  onUnreadCountChange?: (count: number) => void;
 }
 
 // ========== CONSTANTS ==========
@@ -55,6 +56,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({
   storeId,
   visible,
   onClose,
+  onUnreadCountChange,
 }) => {
   const navigation = useNavigation<any>();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -62,6 +64,13 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<"all" | "unread">("all");
   const slideAnim = useState(new Animated.Value(SCREEN_WIDTH))[0];
+
+  // Sync unread count to parent
+  useEffect(() => {
+    if (onUnreadCountChange) {
+      onUnreadCountChange(unreadCount);
+    }
+  }, [unreadCount, onUnreadCountChange]);
 
   // ========== FETCH ==========
   const fetchNotifications = useCallback(async () => {
@@ -78,9 +87,10 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({
       const res = await apiClient.get<any>(`/notifications?${params}`);
       const data = res.data.data || [];
       setNotifications(data);
-      setUnreadCount(
-        res.data.meta?.totalUnread || data.filter((n: NotificationItem) => !n.read).length
-      );
+      const count =
+        res.data.meta?.totalUnread ||
+        data.filter((n: NotificationItem) => !n.read).length;
+      setUnreadCount(count);
     } catch (err) {
       console.error("Lỗi tải thông báo:", err);
     } finally {
@@ -112,7 +122,8 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({
         prev.map((n) => (n._id === id ? { ...n, read } : n))
       );
       setUnreadCount((prev) => {
-        const wasUnread = notifications.find((n) => n._id === id)?.read === false;
+        const wasUnread =
+          notifications.find((n) => n._id === id)?.read === false;
         const willBeUnread = !read;
         if (wasUnread && !willBeUnread) return prev - 1;
         if (!wasUnread && willBeUnread) return prev + 1;
@@ -153,19 +164,30 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({
 
     return (
       <TouchableOpacity
-        style={[styles.notificationItem, !item.read && styles.notificationItemUnread]}
+        style={[
+          styles.notificationItem,
+          !item.read && styles.notificationItemUnread,
+        ]}
         onPress={() => {
           if (!item.read) markAsRead(item._id, true);
         }}
         activeOpacity={0.8}
       >
-        <View style={[styles.iconContainer, { backgroundColor: `${config.color}20` }]}>
+        <View
+          style={[
+            styles.iconContainer,
+            { backgroundColor: `${config.color}20` },
+          ]}
+        >
           <Ionicons name={config.icon as any} size={20} color={config.color} />
         </View>
 
         <View style={styles.contentContainer}>
           <View style={styles.titleRow}>
-            <Text style={[styles.title, !item.read && styles.titleUnread]} numberOfLines={2}>
+            <Text
+              style={[styles.title, !item.read && styles.titleUnread]}
+              numberOfLines={2}
+            >
               {item.title}
             </Text>
             {!item.read && <View style={styles.unreadDot} />}
@@ -174,7 +196,8 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({
             {item.message}
           </Text>
           <Text style={styles.time}>
-            {dayjs(item.createdAt).fromNow()} • {dayjs(item.createdAt).format("HH:mm, DD/MM")}
+            {dayjs(item.createdAt).fromNow()} •{" "}
+            {dayjs(item.createdAt).format("HH:mm, DD/MM")}
           </Text>
         </View>
 
@@ -196,9 +219,17 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({
   if (!visible) return null;
 
   return (
-    <Modal transparent visible={visible} animationType="fade" onRequestClose={handleClose}>
+    <Modal
+      transparent
+      visible={visible}
+      animationType="fade"
+      onRequestClose={handleClose}
+    >
       <View style={styles.overlay}>
-        <TouchableOpacity style={styles.overlayTouchable} onPress={handleClose} />
+        <TouchableOpacity
+          style={styles.overlayTouchable}
+          onPress={handleClose}
+        />
 
         <Animated.View
           style={[styles.panel, { transform: [{ translateX: slideAnim }] }]}
@@ -217,7 +248,10 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({
 
             <View style={styles.headerRight}>
               {unreadCount > 0 && (
-                <TouchableOpacity style={styles.markAllBtn} onPress={markAllAsRead}>
+                <TouchableOpacity
+                  style={styles.markAllBtn}
+                  onPress={markAllAsRead}
+                >
                   <Ionicons name="checkmark-done" size={16} color="#1890ff" />
                   <Text style={styles.markAllText}>Đọc hết</Text>
                 </TouchableOpacity>
@@ -234,18 +268,37 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({
               style={[styles.tab, tab === "all" && styles.tabActive]}
               onPress={() => setTab("all")}
             >
-              <Text style={[styles.tabText, tab === "all" && styles.tabTextActive]}>Tất cả</Text>
+              <Text
+                style={[styles.tabText, tab === "all" && styles.tabTextActive]}
+              >
+                Tất cả
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.tab, tab === "unread" && styles.tabActive]}
               onPress={() => setTab("unread")}
             >
-              <Text style={[styles.tabText, tab === "unread" && styles.tabTextActive]}>
+              <Text
+                style={[
+                  styles.tabText,
+                  tab === "unread" && styles.tabTextActive,
+                ]}
+              >
                 Chưa đọc
               </Text>
               {unreadCount > 0 && (
-                <View style={[styles.tabBadge, tab === "unread" && styles.tabBadgeActive]}>
-                  <Text style={[styles.tabBadgeText, tab === "unread" && styles.tabBadgeTextActive]}>
+                <View
+                  style={[
+                    styles.tabBadge,
+                    tab === "unread" && styles.tabBadgeActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.tabBadgeText,
+                      tab === "unread" && styles.tabBadgeTextActive,
+                    ]}
+                  >
                     {unreadCount}
                   </Text>
                 </View>
@@ -262,9 +315,15 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({
               </View>
             ) : notifications.length === 0 ? (
               <View style={styles.emptyContainer}>
-                <Ionicons name="notifications-off-outline" size={48} color="#d1d5db" />
+                <Ionicons
+                  name="notifications-off-outline"
+                  size={48}
+                  color="#d1d5db"
+                />
                 <Text style={styles.emptyText}>
-                  {tab === "unread" ? "Không có thông báo chưa đọc" : "Không có thông báo"}
+                  {tab === "unread"
+                    ? "Không có thông báo chưa đọc"
+                    : "Không có thông báo"}
                 </Text>
               </View>
             ) : (
@@ -279,7 +338,10 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({
           </View>
 
           {/* Footer */}
-          <TouchableOpacity style={styles.footer} onPress={goToAllNotifications}>
+          <TouchableOpacity
+            style={styles.footer}
+            onPress={goToAllNotifications}
+          >
             <Text style={styles.footerText}>Xem tất cả thông báo</Text>
             <Ionicons name="chevron-forward" size={18} color="#1890ff" />
           </TouchableOpacity>
