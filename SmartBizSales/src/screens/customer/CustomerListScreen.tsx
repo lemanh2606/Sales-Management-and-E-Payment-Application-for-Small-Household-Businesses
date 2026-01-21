@@ -1,5 +1,5 @@
 // src/screens/customer/CustomerListScreen.tsx
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -13,12 +13,13 @@ import {
   StatusBar,
   ListRenderItem,
   Platform,
-  ScrollView,
+  Animated,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
+import { LinearGradient } from "expo-linear-gradient";
 
 import { useAuth } from "../../context/AuthContext";
 import customerApi from "../../api/customerApi";
@@ -35,13 +36,15 @@ import type {
 
 type TabKey = "active" | "deleted";
 const PAGE_SIZE = 50;
+const HEADER_MAX_HEIGHT = 180;
+const HEADER_MIN_HEIGHT = 60;
+const HEADER_SCROLL_DISTANCE = HEADER_MAX_HEIGHT - HEADER_MIN_HEIGHT;
 
 const CustomerListScreen: React.FC = () => {
   const { currentStore } = useAuth();
   const storeId = currentStore?._id || null;
 
   const [tabKey, setTabKey] = useState<TabKey>("active");
-
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
@@ -60,6 +63,27 @@ const CustomerListScreen: React.FC = () => {
   const [totalActive, setTotalActive] = useState<number>(0);
   const [totalDeleted, setTotalDeleted] = useState<number>(0);
 
+  // Scroll animation
+  const scrollY = useRef(new Animated.Value(0)).current;
+
+  const headerHeight = scrollY.interpolate({
+    inputRange: [0, HEADER_SCROLL_DISTANCE],
+    outputRange: [HEADER_MAX_HEIGHT, HEADER_MIN_HEIGHT],
+    extrapolate: "clamp",
+  });
+
+  const headerOpacity = scrollY.interpolate({
+    inputRange: [0, HEADER_SCROLL_DISTANCE / 2, HEADER_SCROLL_DISTANCE],
+    outputRange: [1, 1, 0],
+    extrapolate: "clamp",
+  });
+
+  const headerTitleOpacity = scrollY.interpolate({
+    inputRange: [0, HEADER_SCROLL_DISTANCE / 2, HEADER_SCROLL_DISTANCE],
+    outputRange: [0, 0, 1],
+    extrapolate: "clamp",
+  });
+
   // ================= Helpers =================
   const parseMoney = (amount: any): number => {
     if (!amount) return 0;
@@ -77,13 +101,14 @@ const CustomerListScreen: React.FC = () => {
 
   const formatMoneyShort = (value: number): string => {
     if (value >= 1_000_000_000)
-      return `${(value / 1_000_000_000).toFixed(1).replace(/\.0$/, "")} tỷ₫`;
+      return `${(value / 1_000_000_000).toFixed(1).replace(/\.0$/, "")}tỷ`;
     if (value >= 1_000_000)
-      return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")} tr₫`;
-    return value.toLocaleString("vi-VN") + "₫";
+      return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")}tr`;
+    if (value >= 1_000) return `${(value / 1_000).toFixed(0)}k`;
+    return value.toString();
   };
 
-  const getTotalCustomersText = (): string => `${customers.length} khách hàng`;
+  const getTotalCustomersText = (): string => `${customers.length}`;
 
   // Calculate total spending
   const totalSpending = customers.reduce(
@@ -117,7 +142,7 @@ const CustomerListScreen: React.FC = () => {
         if (isDeleted) setTotalDeleted(res.total || res.customers.length);
         else setTotalActive(res.total || res.customers.length);
       } catch (e: any) {
-        console.error(" Lỗi load khách hàng:", e);
+        console.error("❌ Lỗi load khách hàng:", e);
         const errorMessage: string =
           e?.response?.data?.message ||
           e?.message ||
@@ -293,9 +318,8 @@ const CustomerListScreen: React.FC = () => {
       const fileName = `Danh_sach_khach_hang_${new Date().toISOString().slice(0, 10)}.xlsx`;
       const file = new File(Paths.cache, fileName);
 
-      // File.create & File.write là API mới của expo-file-system [web:302]
       file.create({ overwrite: true });
-      file.write(bytes); // write(string | Uint8Array) [web:302]
+      file.write(bytes);
 
       const canShare = await Sharing.isAvailableAsync();
       if (!canShare) {
@@ -303,7 +327,6 @@ const CustomerListScreen: React.FC = () => {
         return;
       }
 
-      // shareAsync nhận local file URL [web:315]
       await Sharing.shareAsync(file.uri, {
         mimeType:
           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -318,146 +341,83 @@ const CustomerListScreen: React.FC = () => {
   };
 
   // ================= SUB-COMPONENTS =================
-  const StatCard = ({
-    title,
-    value,
-    icon,
-    tone = "blue",
-  }: {
-    title: string;
-    value: string | number;
-    icon: keyof typeof Ionicons.glyphMap | string;
-    tone?: "blue" | "green" | "orange";
-  }) => {
-    const toneStyle =
-      tone === "green"
-        ? styles.statCardGreen
-        : tone === "orange"
-          ? styles.statCardOrange
-          : styles.statCardBlue;
-
-    return (
-      <View style={[styles.statCard, toneStyle]}>
-        <View style={styles.statTopRow}>
-          <View style={styles.statIconWrap}>
-            <Ionicons name={icon as any} size={20} color="#fff" />
-          </View>
-          <Text style={styles.statTitle} numberOfLines={1}>
-            {title}
-          </Text>
-        </View>
-        <Text style={styles.statValue}>{value}</Text>
-      </View>
-    );
-  };
-
+  // Compact Customer Card
   const CustomerCard = ({ customer }: { customer: Customer }) => (
     <TouchableOpacity
       style={styles.customerCard}
       onPress={() => handleViewDetail(customer)}
-      activeOpacity={0.92}
+      activeOpacity={0.7}
     >
-      <View style={styles.customerCardContent}>
-        <View style={styles.customerHeaderRow}>
-          <View style={styles.customerMainInfo}>
-            <View style={styles.avatarContainer}>
-              <Ionicons name="person-circle" size={54} color="#3b82f6" />
-            </View>
-
-            <View style={styles.customerInfo}>
-              <View style={styles.nameRow}>
-                <Text style={styles.customerName} numberOfLines={1}>
-                  {customer.name}
-                </Text>
-
-                {tabKey === "deleted" ? (
-                  <View style={[styles.badge, styles.badgeDeleted]}>
-                    <Ionicons name="trash-outline" size={12} color="#b91c1c" />
-                    <Text style={[styles.badgeText, { color: "#b91c1c" }]}>
-                      Đã xóa
-                    </Text>
-                  </View>
-                ) : (
-                  <View style={[styles.badge, styles.badgeActive]}>
-                    <Ionicons
-                      name="checkmark-circle-outline"
-                      size={12}
-                      color="#166534"
-                    />
-                    <Text style={[styles.badgeText, { color: "#166534" }]}>
-                      Hoạt động
-                    </Text>
-                  </View>
-                )}
-              </View>
-
-              <View style={styles.infoRow}>
-                <Ionicons name="call-outline" size={14} color="#64748b" />
-                <Text style={styles.customerPhone}>{customer.phone}</Text>
-              </View>
-
-              {!!customer.address && (
-                <View style={styles.infoRow}>
-                  <Ionicons name="location-outline" size={14} color="#64748b" />
-                  <Text style={styles.customerAddress} numberOfLines={1}>
-                    {customer.address}
-                  </Text>
-                </View>
-              )}
-            </View>
-          </View>
+      {/* Row 1: Avatar + Name + Badge */}
+      <View style={styles.cardRow1}>
+        <View style={styles.avatarSmall}>
+          <Ionicons name="person" size={18} color="#10b981" />
         </View>
 
-        <View style={styles.customerStats}>
-          <View style={styles.statItem}>
-            <Text style={styles.statValue2}>{customer.totalOrders || 0}</Text>
-            <Text style={styles.statLabel}>Đơn hàng</Text>
-          </View>
-
-          <View style={styles.statItem}>
-            <Text style={styles.statValue2}>
-              {formatCurrency(customer.totalSpent || 0)}
+        <View style={styles.nameSection}>
+          <Text style={styles.customerName} numberOfLines={1}>
+            {customer.name}
+          </Text>
+          <View style={styles.phoneRow}>
+            <Ionicons name="call" size={11} color="#64748b" />
+            <Text style={styles.customerPhone} numberOfLines={1}>
+              {customer.phone}
             </Text>
-            <Text style={styles.statLabel}>Tổng chi</Text>
-          </View>
-
-          <View style={styles.statItem}>
-            <Text style={styles.statValue2}>{customer.loyaltyPoints || 0}</Text>
-            <Text style={styles.statLabel}>Điểm</Text>
           </View>
         </View>
 
-        <View style={styles.cardActions}>
+        {tabKey === "deleted" ? (
+          <View style={[styles.badgeMini, styles.badgeDeleted]}>
+            <Ionicons name="trash" size={10} color="#dc2626" />
+          </View>
+        ) : (
+          <View style={[styles.badgeMini, styles.badgeActive]}>
+            <Ionicons name="checkmark-circle" size={10} color="#10b981" />
+          </View>
+        )}
+      </View>
+
+      {/* Row 2: Stats inline */}
+      <View style={styles.cardRow2}>
+        <View style={styles.statMini}>
+          <Ionicons name="cart-outline" size={12} color="#64748b" />
+          <Text style={styles.statMiniText}>{customer.totalOrders || 0}</Text>
+        </View>
+
+        <View style={styles.statDividerMini} />
+
+        <View style={styles.statMini}>
+          <Ionicons name="cash-outline" size={12} color="#64748b" />
+          <Text style={styles.statMiniText}>
+            {formatMoneyShort(parseMoney(customer.totalSpent || 0))}
+          </Text>
+        </View>
+
+        <View style={styles.statDividerMini} />
+
+        <View style={styles.statMini}>
+          <Ionicons name="star-outline" size={12} color="#64748b" />
+          <Text style={styles.statMiniText}>{customer.loyaltyPoints || 0}</Text>
+        </View>
+
+        <View style={{ flex: 1 }} />
+
+        {/* Quick actions */}
+        <TouchableOpacity
+          style={styles.quickBtn}
+          onPress={() => handleViewDetail(customer)}
+        >
+          <Ionicons name="eye-outline" size={14} color="#3b82f6" />
+        </TouchableOpacity>
+
+        {tabKey === "active" && (
           <TouchableOpacity
-            style={[styles.actionBtn, styles.detailBtn]}
-            onPress={() => handleViewDetail(customer)}
+            style={styles.quickBtn}
+            onPress={() => handleEditCustomer(customer)}
           >
-            <Ionicons name="eye-outline" size={16} color="#2563eb" />
-            <Text style={[styles.actionText, { color: "#2563eb" }]}>
-              Chi tiết
-            </Text>
+            <Ionicons name="create-outline" size={14} color="#10b981" />
           </TouchableOpacity>
-
-          {tabKey === "active" ? (
-            <TouchableOpacity
-              style={[styles.actionBtn, styles.editBtn]}
-              onPress={() => handleEditCustomer(customer)}
-            >
-              <Ionicons name="create-outline" size={16} color="#059669" />
-              <Text style={[styles.actionText, { color: "#059669" }]}>Sửa</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={[styles.actionBtn, styles.restoreBtn]}
-              onPress={() => handleRestoreCustomer(customer._id)}
-            >
-              <Ionicons name="refresh-outline" size={16} color="#16a34a" />
-              <Text style={[styles.actionText, { color: "#16a34a" }]}>
-                Khôi phục
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -470,7 +430,7 @@ const CustomerListScreen: React.FC = () => {
     <SafeAreaView style={styles.container}>
       <View style={styles.noStoreContainer}>
         <View style={styles.noStoreIcon}>
-          <Ionicons name="business-outline" size={30} color="#475569" />
+          <Ionicons name="business-outline" size={28} color="#64748b" />
         </View>
         <Text style={styles.noStoreTitle}>Chưa chọn cửa hàng</Text>
         <Text style={styles.noStoreText}>
@@ -484,204 +444,210 @@ const CustomerListScreen: React.FC = () => {
   if (!storeId) return <NoStoreState />;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" />
+    <View style={styles.container}>
+      <SafeAreaView style={styles.safeArea} edges={["left", "right"]}>
+        <StatusBar barStyle="light-content" backgroundColor="#10b981" />
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 24 }}
-      >
-        {/* Hero header */}
-        <View style={styles.hero}>
-          <View style={styles.heroRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.heroTitle}>Khách hàng</Text>
-              <Text style={styles.heroSubtitle}>
-                {getTotalCustomersText()} • Quản lý & theo dõi lịch sử mua hàng
-              </Text>
-            </View>
-
-            <View style={styles.heroActions}>
-              <TouchableOpacity style={styles.heroIconBtn} onPress={onRefresh}>
-                <Ionicons name="reload-outline" size={22} color="#fff" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.heroIconBtn}
-                onPress={handleExportExcel}
+        {/* Animated Header with Gradient */}
+        <Animated.View style={[{ height: headerHeight }, styles.headerWrapper]}>
+          <LinearGradient
+            colors={["#10b981", "#3b82f6"]}
+            // start={{ x: 0, y: 0 }}
+            // end={{ x: 1, y: 1 }}
+            style={styles.headerGradient}
+          >
+            <View style={styles.headerContent}>
+              {/* Compact title for scrolled state */}
+              <Animated.View
+                style={[
+                  styles.headerTitleCompact,
+                  { opacity: headerTitleOpacity },
+                ]}
               >
-                <Ionicons name="download-outline" size={22} color="#fff" />
+                <Text style={styles.headerTitleCompactText}>Khách hàng</Text>
+                <Text style={styles.headerSubtitleCompact}>
+                  {getTotalCustomersText()} KH
+                </Text>
+              </Animated.View>
+
+              {/* Full header content */}
+              <Animated.View style={{ opacity: headerOpacity }}>
+                <View style={styles.headerTop}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.headerTitle}>Khách hàng</Text>
+                    <Text style={styles.headerSubtitle}>
+                      Quản lý {getTotalCustomersText()} khách hàng
+                    </Text>
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.headerBtn}
+                    onPress={handleExportExcel}
+                  >
+                    <Ionicons name="download-outline" size={20} color="#fff" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.headerBtn}
+                    onPress={onRefresh}
+                  >
+                    <Ionicons name="reload-outline" size={20} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Stats row */}
+                <View style={styles.statsRow}>
+                  <View style={styles.statBox}>
+                    <Text style={styles.statBoxValue}>
+                      {totalActive + totalDeleted}
+                    </Text>
+                    <Text style={styles.statBoxLabel}>Tổng</Text>
+                  </View>
+                  <View style={styles.statBox}>
+                    <Text style={styles.statBoxValue}>
+                      {tabKey === "active" ? totalActive : totalDeleted}
+                    </Text>
+                    <Text style={styles.statBoxLabel}>
+                      {tabKey === "active" ? "Hoạt động" : "Đã xóa"}
+                    </Text>
+                  </View>
+                  <View style={styles.statBox}>
+                    <Text style={styles.statBoxValue}>
+                      {formatMoneyShort(totalSpending)}
+                    </Text>
+                    <Text style={styles.statBoxLabel}>Tổng chi</Text>
+                  </View>
+                </View>
+              </Animated.View>
+            </View>
+
+            {/* Tabs */}
+            <View style={styles.tabsContainer}>
+              <TouchableOpacity
+                style={[styles.tab, tabKey === "active" && styles.tabActive]}
+                onPress={() => {
+                  setTabKey("active");
+                  setSearch("");
+                }}
+              >
+                <Ionicons
+                  name="people"
+                  size={14}
+                  color={tabKey === "active" ? "#10b981" : "#e0f2fe"}
+                />
+                <Text
+                  style={[
+                    styles.tabText,
+                    tabKey === "active" && styles.tabTextActive,
+                  ]}
+                >
+                  Hoạt động
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.tab, tabKey === "deleted" && styles.tabActive]}
+                onPress={() => {
+                  setTabKey("deleted");
+                  setSearch("");
+                }}
+              >
+                <Ionicons
+                  name="trash"
+                  size={14}
+                  color={tabKey === "deleted" ? "#10b981" : "#e0f2fe"}
+                />
+                <Text
+                  style={[
+                    styles.tabText,
+                    tabKey === "deleted" && styles.tabTextActive,
+                  ]}
+                >
+                  Đã xóa
+                </Text>
               </TouchableOpacity>
             </View>
+          </LinearGradient>
+        </Animated.View>
+
+        {/* Search bar - fixed */}
+        <View style={styles.searchWrapper}>
+          <View style={styles.searchContainer}>
+            <Ionicons name="search" size={18} color="#94a3b8" />
+            <TextInput
+              placeholder="Tìm tên, SĐT..."
+              value={search}
+              onChangeText={setSearch}
+              style={styles.searchInput}
+              placeholderTextColor="#94a3b8"
+            />
+            {search.length > 0 && (
+              <TouchableOpacity onPress={() => setSearch("")}>
+                <Ionicons name="close-circle" size={18} color="#cbd5e1" />
+              </TouchableOpacity>
+            )}
           </View>
 
-          {/* Stats */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.statsContainer}
-          >
-            <StatCard
-              title="Tổng khách hàng"
-              value={totalActive + totalDeleted}
-              icon="people-outline"
-              tone="blue"
-            />
-            <StatCard
-              title={tabKey === "active" ? "Đang hoạt động" : "Đã xóa"}
-              value={tabKey === "active" ? totalActive : totalDeleted}
-              icon={
-                tabKey === "active"
-                  ? "checkmark-circle-outline"
-                  : "trash-outline"
-              }
-              tone={tabKey === "active" ? "green" : "orange"}
-            />
-            <StatCard
-              title="Tổng chi tiêu"
-              value={formatMoneyShort(totalSpending)}
-              icon="wallet-outline"
-              tone="blue"
-            />
-          </ScrollView>
-        </View>
-
-        {/* Tabs */}
-        <View style={styles.tabsWrap}>
-          <TouchableOpacity
-            style={[styles.tabBtn, tabKey === "active" && styles.tabBtnActive]}
-            onPress={() => {
-              setTabKey("active");
-              setSearch("");
-            }}
-          >
-            <Ionicons
-              name="people-outline"
-              size={16}
-              color={tabKey === "active" ? "#fff" : "#0f172a"}
-            />
-            <Text
-              style={[
-                styles.tabText,
-                tabKey === "active" && styles.tabTextActive,
-              ]}
-            >
-              Đang hoạt động
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.tabBtn, tabKey === "deleted" && styles.tabBtnActive]}
-            onPress={() => {
-              setTabKey("deleted");
-              setSearch("");
-            }}
-          >
-            <Ionicons
-              name="trash-outline"
-              size={16}
-              color={tabKey === "deleted" ? "#fff" : "#0f172a"}
-            />
-            <Text
-              style={[
-                styles.tabText,
-                tabKey === "deleted" && styles.tabTextActive,
-              ]}
-            >
-              Đã xóa
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Search */}
-        <View style={styles.searchContainer}>
-          <Ionicons
-            name="search"
-            size={20}
-            color="#94a3b8"
-            style={styles.searchIcon}
-          />
-          <TextInput
-            placeholder="Tìm theo tên, SĐT, địa chỉ..."
-            value={search}
-            onChangeText={setSearch}
-            style={styles.searchInput}
-            placeholderTextColor="#94a3b8"
-          />
-          {search.length > 0 && (
+          {tabKey === "active" && (
             <TouchableOpacity
-              onPress={() => setSearch("")}
-              style={styles.clearBtn}
+              style={styles.addBtn}
+              onPress={handleAddCustomer}
+              activeOpacity={0.8}
             >
-              <Ionicons name="close-circle" size={20} color="#cbd5e1" />
+              <Ionicons name="add" size={20} color="#fff" />
             </TouchableOpacity>
           )}
         </View>
 
-        {/* Add */}
-        {tabKey === "active" && (
-          <TouchableOpacity
-            style={styles.addCustomerBtn}
-            onPress={handleAddCustomer}
-            activeOpacity={0.9}
-          >
-            <Ionicons name="person-add" size={22} color="#fff" />
-            <Text style={styles.addCustomerText}>Thêm khách hàng mới</Text>
-          </TouchableOpacity>
-        )}
-
         {/* List */}
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#3b82f6" />
-            <Text style={styles.loadingText}>
-              Đang tải danh sách khách hàng...
-            </Text>
+            <ActivityIndicator size="large" color="#10b981" />
+            <Text style={styles.loadingText}>Đang tải...</Text>
           </View>
         ) : (
-          <FlatList
+          <Animated.FlatList
             data={customers}
             keyExtractor={(item) => item._id}
             renderItem={renderCustomerItem}
+            contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
-            scrollEnabled={false}
-            contentContainerStyle={[
-              styles.listContainer,
-              customers.length === 0 && styles.emptyListContainer,
-            ]}
+            onScroll={Animated.event(
+              [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+              { useNativeDriver: false }
+            )}
+            scrollEventThrottle={16}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
                 onRefresh={onRefresh}
-                colors={["#3b82f6"]}
+                colors={["#10b981"]}
+                tintColor="#10b981"
+                progressViewOffset={HEADER_MAX_HEIGHT}
               />
             }
             ListEmptyComponent={
               <View style={styles.emptyContainer}>
                 <View style={styles.emptyIcon}>
-                  <Ionicons name="people-outline" size={44} color="#94a3b8" />
+                  <Ionicons name="people-outline" size={40} color="#cbd5e1" />
                 </View>
                 <Text style={styles.emptyTitle}>
                   {search
-                    ? "Không tìm thấy khách hàng"
+                    ? "Không tìm thấy"
                     : tabKey === "active"
-                      ? "Chưa có khách hàng nào"
-                      : "Không có khách hàng đã xóa"}
+                      ? "Chưa có khách hàng"
+                      : "Không có KH đã xóa"}
                 </Text>
                 <Text style={styles.emptySubtitle}>
-                  {search
-                    ? "Thử đổi từ khóa hoặc xóa tìm kiếm."
-                    : "Bắt đầu bằng cách thêm khách hàng đầu tiên."}
+                  {search ? "Thử từ khóa khác" : "Bắt đầu thêm khách hàng mới"}
                 </Text>
 
-                {tabKey === "active" && (
+                {tabKey === "active" && !search && (
                   <TouchableOpacity
                     style={styles.emptyBtn}
-                    onPress={search ? () => setSearch("") : handleAddCustomer}
+                    onPress={handleAddCustomer}
                   >
-                    <Ionicons name="person-add" size={20} color="#fff" />
-                    <Text style={styles.emptyBtnText}>
-                      {search ? "Xem tất cả" : "Thêm khách hàng"}
-                    </Text>
+                    <Ionicons name="add" size={18} color="#fff" />
+                    <Text style={styles.emptyBtnText}>Thêm khách hàng</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -689,354 +655,442 @@ const CustomerListScreen: React.FC = () => {
           />
         )}
 
-        {/* Error */}
+        {/* Error banner */}
         {error ? (
           <View style={styles.errorContainer}>
-            <Ionicons name="warning-outline" size={18} color="#b91c1c" />
+            <Ionicons name="alert-circle" size={16} color="#dc2626" />
             <Text style={styles.errorText}>{error}</Text>
             <TouchableOpacity
               onPress={() => loadCustomers()}
-              style={styles.retryButton}
+              style={styles.retryBtn}
             >
               <Text style={styles.retryText}>Thử lại</Text>
             </TouchableOpacity>
           </View>
         ) : null}
-      </ScrollView>
 
-      {/* Modals */}
-      <CustomerFormModal
-        open={showCustomerModal}
-        onClose={() => {
-          setShowCustomerModal(false);
-          setEditingCustomer(null);
-        }}
-        customer={editingCustomer}
-        onSave={handleSaveCustomer}
-        storeId={storeId}
-      />
+        {/* Modals */}
+        <CustomerFormModal
+          open={showCustomerModal}
+          onClose={() => {
+            setShowCustomerModal(false);
+            setEditingCustomer(null);
+          }}
+          customer={editingCustomer}
+          onSave={handleSaveCustomer}
+          storeId={storeId}
+        />
 
-      <CustomerDetailModal
-        open={showDetailModal}
-        onClose={() => setShowDetailModal(false)}
-        customer={selectedCustomer}
-        onEdit={handleEditCustomer}
-        onDelete={handleDeleteCustomer}
-        onRestore={handleRestoreCustomer}
-        isDeleted={tabKey === "deleted"}
-      />
-    </SafeAreaView>
+        <CustomerDetailModal
+          open={showDetailModal}
+          onClose={() => setShowDetailModal(false)}
+          customer={selectedCustomer}
+          onEdit={handleEditCustomer}
+          onDelete={handleDeleteCustomer}
+          onRestore={handleRestoreCustomer}
+          isDeleted={tabKey === "deleted"}
+        />
+      </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f8fafc" },
+  container: {
+    flex: 1,
+    backgroundColor: "#f1f5f9",
+  },
+  safeArea: {
+    flex: 1,
+  },
 
-  // ===== No store =====
+  // ===== No Store =====
   noStoreContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 28,
+    paddingHorizontal: 24,
   },
   noStoreIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 18,
+    width: 56,
+    height: 56,
+    borderRadius: 14,
     backgroundColor: "#e2e8f0",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 10,
+    marginBottom: 12,
   },
-  noStoreTitle: { fontSize: 18, fontWeight: "800", color: "#0f172a" },
+  noStoreTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#0f172a",
+    marginBottom: 6,
+  },
   noStoreText: {
     fontSize: 14,
     color: "#64748b",
     textAlign: "center",
-    marginTop: 8,
     lineHeight: 20,
   },
 
-  // ===== Hero =====
-  hero: {
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 8,
+  // ===== Animated Header with Gradient =====
+  headerWrapper: {
+    overflow: "hidden",
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
   },
-  heroRow: {
-    backgroundColor: "#0f172a",
-    borderRadius: 18,
-    padding: 16,
+  headerGradient: {
+    flex: 1,
+  },
+  headerContent: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === "android" ? 12 : 8,
+  },
+
+  // Compact header (when scrolled)
+  headerTitleCompact: {
+    position: "absolute",
+    top: Platform.OS === "android" ? 16 : 12,
+    left: 16,
     flexDirection: "row",
     alignItems: "center",
+    gap: 10,
   },
-  heroTitle: {
-    fontSize: 26,
+  headerTitleCompactText: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#fff",
+  },
+  headerSubtitleCompact: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "rgba(255,255,255,0.85)",
+  },
+
+  // Full header
+  headerTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  headerTitle: {
+    fontSize: 24,
     fontWeight: "900",
     color: "#fff",
-    marginBottom: 4,
+    marginBottom: 2,
   },
-  heroSubtitle: { fontSize: 13, color: "#cbd5e1", lineHeight: 18 },
-
-  heroActions: { flexDirection: "row", gap: 10 },
-  heroIconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.14)",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
+  headerSubtitle: {
+    fontSize: 13,
+    color: "rgba(255,255,255,0.9)",
+    fontWeight: "600",
   },
-
-  // ===== Stats =====
-  statsContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 4,
-    gap: 12,
-  },
-  statCard: {
-    width: 160,
-    borderRadius: 16,
-    padding: 14,
-    marginRight: 12,
-  },
-  statCardBlue: { backgroundColor: "#1d4ed8" },
-  statCardGreen: { backgroundColor: "#16a34a" },
-  statCardOrange: { backgroundColor: "#f97316" },
-  statTopRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  statIconWrap: {
-    width: 30,
-    height: 30,
+  headerBtn: {
+    width: 36,
+    height: 36,
     borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,0.18)",
+    backgroundColor: "rgba(255,255,255,0.2)",
     alignItems: "center",
     justifyContent: "center",
+    marginLeft: 8,
   },
-  statTitle: { fontSize: 12, color: "#fff", fontWeight: "700", flex: 1 },
-  statValue: { fontSize: 20, fontWeight: "900", color: "#fff", marginTop: 10 },
 
-  // ===== Tabs =====
-  tabsWrap: {
+  // Stats row
+  statsRow: {
     flexDirection: "row",
     gap: 10,
-    paddingHorizontal: 16,
-    marginTop: 6,
+    marginBottom: 14,
   },
-  tabBtn: {
+  statBox: {
     flex: 1,
-    paddingVertical: 11,
-    borderRadius: 14,
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
+    backgroundColor: "rgba(255,255,255,0.2)",
+    borderRadius: 12,
+    padding: 10,
+    alignItems: "center",
+  },
+  statBoxValue: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#fff",
+    marginBottom: 2,
+  },
+  statBoxLabel: {
+    fontSize: 11,
+    color: "rgba(255,255,255,0.85)",
+    fontWeight: "600",
+  },
+
+  // Tabs
+  tabsContainer: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    gap: 8,
+    paddingBottom: 12,
+  },
+  tab: {
+    flex: 1,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    flexDirection: "row",
-    gap: 8,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    gap: 6,
   },
-  tabBtnActive: { backgroundColor: "#111827", borderColor: "#111827" },
-  tabText: { fontSize: 13, fontWeight: "800", color: "#0f172a" },
-  tabTextActive: { color: "#fff" },
+  tabActive: {
+    backgroundColor: "#fff",
+  },
+  tabText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.85)",
+  },
+  tabTextActive: {
+    color: "#10b981",
+  },
 
   // ===== Search =====
+  searchWrapper: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 10,
+    backgroundColor: "#f1f5f9",
+  },
   searchContainer: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#fff",
-    marginHorizontal: 16,
-    marginTop: 12,
-    marginBottom: 10,
-    paddingHorizontal: 14,
-    paddingVertical: Platform.select({ ios: 12, android: 10 }) as any,
-    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 8,
     borderWidth: 1,
     borderColor: "#e2e8f0",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3.84,
-    elevation: 2,
   },
-  searchIcon: { marginRight: 10 },
-  searchInput: { flex: 1, fontSize: 15, color: "#0f172a" },
-  clearBtn: { paddingLeft: 8 },
-
-  // ===== Add button =====
-  addCustomerBtn: {
-    backgroundColor: "#3b82f6",
-    marginHorizontal: 16,
-    marginBottom: 10,
-    paddingVertical: 14,
-    borderRadius: 16,
-    flexDirection: "row",
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: "#0f172a",
+    fontWeight: "500",
+  },
+  addBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "#10b981",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
-    shadowColor: "#3b82f6",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
+    shadowColor: "#10b981",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
     elevation: 6,
   },
-  addCustomerText: { color: "#fff", fontWeight: "800", fontSize: 15 },
 
-  // ===== Loading =====
-  loadingContainer: {
-    justifyContent: "center",
-    alignItems: "center",
-    paddingVertical: 60,
+  // ===== Customer Card (Compact) =====
+  listContent: {
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 20,
   },
-  loadingText: { marginTop: 12, fontSize: 14, color: "#64748b" },
-
-  // ===== List =====
-  listContainer: { paddingHorizontal: 16, paddingBottom: 16 },
-  emptyListContainer: { flexGrow: 1, justifyContent: "center" },
-
   customerCard: {
     backgroundColor: "#fff",
-    borderRadius: 20,
-    marginBottom: 14,
-    shadowColor: "#0f172a",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
-    elevation: 6,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 10,
     borderWidth: 1,
-    borderColor: "#f1f5f9",
+    borderColor: "#e2e8f0",
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  customerCardContent: { padding: 14 },
 
-  customerHeaderRow: {
+  // Row 1: Avatar + Name + Badge
+  cardRow1: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
+    alignItems: "center",
+    marginBottom: 10,
   },
-  customerMainInfo: { flexDirection: "row", flex: 1 },
-
-  avatarContainer: { marginRight: 10 },
-  customerInfo: { flex: 1, justifyContent: "center" },
-
-  nameRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  customerName: { fontSize: 17, fontWeight: "900", color: "#0f172a", flex: 1 },
-
-  badge: {
+  avatarSmall: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "#d1fae5",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+  },
+  nameSection: {
+    flex: 1,
+  },
+  customerName: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#0f172a",
+    marginBottom: 2,
+  },
+  phoneRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 999,
   },
-  badgeActive: { backgroundColor: "#dcfce7" },
-  badgeDeleted: { backgroundColor: "#fee2e2" },
-  badgeText: { fontSize: 11, fontWeight: "800" },
+  customerPhone: {
+    fontSize: 12,
+    color: "#64748b",
+    fontWeight: "600",
+  },
 
-  infoRow: { flexDirection: "row", alignItems: "center", marginTop: 4 },
-  customerPhone: { color: "#475569", fontSize: 13, marginLeft: 6 },
-  customerAddress: { color: "#475569", fontSize: 13, marginLeft: 6, flex: 1 },
+  badgeMini: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  badgeActive: {
+    backgroundColor: "#d1fae5",
+  },
+  badgeDeleted: {
+    backgroundColor: "#fee2e2",
+  },
 
-  customerStats: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    backgroundColor: "#f8fafc",
-    padding: 12,
-    borderRadius: 14,
-    marginTop: 12,
-  },
-  statItem: { alignItems: "center" },
-  statValue2: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: "#2563eb",
-    marginBottom: 2,
-  },
-  statLabel: { fontSize: 11, color: "#64748b", fontWeight: "700" },
-
-  cardActions: {
-    flexDirection: "row",
-    justifyContent: "flex-start",
-    gap: 10,
-    marginTop: 12,
-  },
-  actionBtn: {
+  // Row 2: Stats + Actions
+  cardRow2: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 12,
-    gap: 6,
-    borderWidth: 1,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#f1f5f9",
   },
-  detailBtn: { backgroundColor: "#eff6ff", borderColor: "#bfdbfe" },
-  editBtn: { backgroundColor: "#ecfdf5", borderColor: "#bbf7d0" },
-  restoreBtn: { backgroundColor: "#f0fdf4", borderColor: "#bbf7d0" },
-  actionText: { fontSize: 13, fontWeight: "900" },
+  statMini: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  statMiniText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#475569",
+  },
+  statDividerMini: {
+    width: 1,
+    height: 14,
+    backgroundColor: "#e2e8f0",
+    marginHorizontal: 10,
+  },
+  quickBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: "#f8fafc",
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 6,
+  },
 
-  // ===== Empty =====
+  // ===== Empty State =====
   emptyContainer: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 46,
+    paddingVertical: 80,
     paddingHorizontal: 24,
   },
   emptyIcon: {
-    width: 70,
-    height: 70,
-    borderRadius: 20,
-    backgroundColor: "#eef2ff",
+    width: 64,
+    height: 64,
+    borderRadius: 16,
+    backgroundColor: "#f1f5f9",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 12,
   },
   emptyTitle: {
-    fontSize: 18,
-    fontWeight: "900",
+    fontSize: 16,
+    fontWeight: "800",
     color: "#0f172a",
-    textAlign: "center",
+    marginBottom: 6,
   },
   emptySubtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: "#64748b",
     textAlign: "center",
-    marginTop: 8,
-    lineHeight: 20,
+    marginBottom: 20,
   },
   emptyBtn: {
-    marginTop: 14,
-    backgroundColor: "#3b82f6",
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 12,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: "#10b981",
+    gap: 6,
   },
-  emptyBtnText: { color: "#fff", fontSize: 14, fontWeight: "900" },
+  emptyBtnText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#fff",
+  },
+
+  // ===== Loading =====
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingTop: 60,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 13,
+    color: "#64748b",
+    fontWeight: "600",
+  },
 
   // ===== Error =====
   errorContainer: {
+    position: "absolute",
+    bottom: 20,
+    left: 16,
+    right: 16,
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#fef2f2",
-    marginHorizontal: 16,
-    marginTop: 14,
-    padding: 14,
-    borderRadius: 14,
-    borderLeftWidth: 4,
-    borderLeftColor: "#ef4444",
+    padding: 12,
+    borderRadius: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: "#dc2626",
     gap: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 6,
   },
-  errorText: { color: "#b91c1c", fontSize: 13, fontWeight: "700", flex: 1 },
-  retryButton: {
+  errorText: {
+    flex: 1,
+    fontSize: 12,
+    color: "#991b1b",
+    fontWeight: "600",
+  },
+  retryBtn: {
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: "#ef4444",
-    borderRadius: 10,
+    paddingVertical: 6,
+    backgroundColor: "#dc2626",
+    borderRadius: 8,
   },
-  retryText: { color: "#fff", fontSize: 12, fontWeight: "900" },
+  retryText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#fff",
+  },
 });
 
 export default CustomerListScreen;

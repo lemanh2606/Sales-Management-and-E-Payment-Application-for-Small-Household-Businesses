@@ -486,9 +486,9 @@ const ProfileScreen: React.FC = () => {
           showsVerticalScrollIndicator={false}
         >
           <LinearGradient
-            colors={["#10b981", "#8b5cf1", "#10b981"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
+            colors={["#10b981", "#8b5cf1"]}
+            // start={{ x: 0, y: 0 }}
+            // end={{ x: 1, y: 1 }}
             style={styles.header}
           >
             <View style={styles.headerTopRow}>

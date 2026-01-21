@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -120,7 +126,9 @@ const EmployeesScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
 
   const [activeEmployees, setActiveEmployees] = useState<EmployeeRecord[]>([]);
-  const [deletedEmployees, setDeletedEmployees] = useState<EmployeeRecord[]>([]);
+  const [deletedEmployees, setDeletedEmployees] = useState<EmployeeRecord[]>(
+    []
+  );
   const [filteredActive, setFilteredActive] = useState<EmployeeRecord[]>([]);
   const [filteredDeleted, setFilteredDeleted] = useState<EmployeeRecord[]>([]);
 
@@ -549,7 +557,9 @@ const EmployeesScreen: React.FC = () => {
               <Text style={styles.infoLabel}>LIÊN HỆ</Text>
               <View style={styles.infoValueRow}>
                 <Ionicons name="call" size={14} color="#10b981" />
-                <Text style={styles.infoValue}>{phone ? formatPhone(phone) : "—"}</Text>
+                <Text style={styles.infoValue}>
+                  {phone ? formatPhone(phone) : "—"}
+                </Text>
               </View>
             </View>
             <View style={[styles.infoCol, { alignItems: "flex-end" }]}>
@@ -572,7 +582,9 @@ const EmployeesScreen: React.FC = () => {
             <View style={styles.financeDivider} />
             <View style={styles.financeItem}>
               <Text style={styles.financeLabel}>Hoa hồng</Text>
-              <Text style={styles.financeValue}>{Number(item.commission_rate ?? 0)}%</Text>
+              <Text style={styles.financeValue}>
+                {Number(item.commission_rate ?? 0)}%
+              </Text>
             </View>
           </LinearGradient>
         </View>
@@ -650,9 +662,7 @@ const EmployeesScreen: React.FC = () => {
               >
                 <LinearGradient
                   colors={
-                    isActive
-                      ? ["#3b82f6", "#2563eb"]
-                      : ["#f1f5f9", "#e2e8f0"]
+                    isActive ? ["#3b82f6", "#2563eb"] : ["#f1f5f9", "#e2e8f0"]
                   }
                   style={styles.staffAvatarCircle}
                 >
@@ -969,10 +979,7 @@ const EmployeesScreen: React.FC = () => {
     );
   }
 
-  const activeCount = useMemo(
-    () => activeEmployees.length,
-    [activeEmployees]
-  );
+  const activeCount = useMemo(() => activeEmployees.length, [activeEmployees]);
 
   return (
     <View style={styles.container}>
@@ -988,7 +995,7 @@ const EmployeesScreen: React.FC = () => {
         ]}
       >
         <LinearGradient
-          colors={["#3b82f6", "#10b981"]}
+          colors={["#10b981", "#3b82f6"]}
           style={StyleSheet.absoluteFill}
         />
         <View style={styles.headerTopRow}>
@@ -1034,13 +1041,14 @@ const EmployeesScreen: React.FC = () => {
               Đã nghỉ
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity
+          {/* fdgvsd/
+        <TouchableOpacity
             onPress={() => handleTabChange("permissions")}
             style={[
               styles.modeTab,
               tabKey === "permissions" && styles.modeTabActive,
             ]}
-          >
+            >
             <Text
               style={[
                 styles.modeTabText,
@@ -1049,7 +1057,8 @@ const EmployeesScreen: React.FC = () => {
             >
               Phân quyền
             </Text>
-          </TouchableOpacity>
+          </TouchableOpacity> 
+                */}
         </View>
 
         {/* Stats Row */}
@@ -1372,7 +1381,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 20,
   },
-  emptyTitle: { fontSize: 18, fontWeight: "700", color: "#1e293b", marginBottom: 8 },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1e293b",
+    marginBottom: 8,
+  },
   emptySubtitle: {
     fontSize: 14,
     color: "#64748b",

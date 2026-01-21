@@ -292,7 +292,7 @@ const PricingScreen: React.FC = () => {
               {formatCurrency(
                 item.price_per_month ?? Math.round(item.price / item.duration)
               )}
-              đ/tháng
+              {"đ/tháng"}
             </Text>
 
             {item.discount_percent && item.discount_percent > 0 ? (
