@@ -11,6 +11,7 @@ import {
   Platform,
   ScrollView,
   TextInput as RNTextInput,
+  Keyboard,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "../../context/AuthContext";
@@ -28,13 +29,31 @@ export default function LoginScreen() {
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const userRef = useRef<RNTextInput | null>(null);
+  const passwordRef = useRef<RNTextInput | null>(null);
 
   useEffect(() => {
     (async () => {
       const v = await AsyncStorage.getItem("remember_session");
       setRemember(!!v);
     })();
+  }, []);
+
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      "keyboardDidShow",
+      () => setKeyboardVisible(true)
+    );
+    const keyboardDidHideListener = Keyboard.addListener(
+      "keyboardDidHide",
+      () => setKeyboardVisible(false)
+    );
+
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
   }, []);
 
   useEffect(() => {
@@ -80,18 +99,25 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
     >
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[
+          styles.scroll,
+          keyboardVisible && styles.scrollKeyboardVisible,
+        ]}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
         <View style={styles.card}>
           {/* Logo / Brand */}
-          <View style={styles.logoContainer}>
-            <Ionicons name="business" size={60} color="#2e7d32" />
-            <Text style={styles.brand}>Smallbiz-Sales</Text>
-          </View>
+          {!keyboardVisible && (
+            <View style={styles.logoContainer}>
+              <Ionicons name="business" size={60} color="#2e7d32" />
+              <Text style={styles.brand}>Smallbiz-Sales</Text>
+            </View>
+          )}
 
           <Text style={styles.title}>Chào mừng trở lại</Text>
           <Text style={styles.subtitle}>
@@ -111,6 +137,8 @@ export default function LoginScreen() {
               autoCapitalize="none"
               autoCorrect={false}
               returnKeyType="next"
+              onSubmitEditing={() => passwordRef.current?.focus()}
+              blurOnSubmit={false}
               style={styles.input}
               editable={!loading}
             />
@@ -121,6 +149,7 @@ export default function LoginScreen() {
             <Text style={styles.label}>Mật khẩu</Text>
             <View style={styles.passwordRow}>
               <TextInput
+                ref={passwordRef}
                 value={form.password}
                 onChangeText={(t) => handleChange("password", t)}
                 placeholder="Mật khẩu"
@@ -128,6 +157,7 @@ export default function LoginScreen() {
                 textContentType="password"
                 autoComplete="password"
                 returnKeyType="done"
+                onSubmitEditing={handleSubmit}
                 style={[styles.input, styles.inputPassword]}
                 editable={!loading}
               />
@@ -192,7 +222,9 @@ export default function LoginScreen() {
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.copyright}>© 2025 Smallbiz-Sales</Text>
+          {!keyboardVisible && (
+            <Text style={styles.copyright}>© 2025 Smallbiz-Sales</Text>
+          )}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -201,7 +233,15 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#ffffff" },
-  scroll: { flexGrow: 1, justifyContent: "center", padding: 20 },
+  scroll: {
+    flexGrow: 1,
+    justifyContent: "center",
+    padding: 20,
+  },
+  scrollKeyboardVisible: {
+    justifyContent: "flex-start",
+    paddingTop: 20,
+  },
   card: {
     backgroundColor: "#ffffff",
     borderRadius: 20,

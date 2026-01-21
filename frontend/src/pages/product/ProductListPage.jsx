@@ -69,6 +69,7 @@ const apiUrl = import.meta.env.VITE_API_URL;
 
 export default function ProductListPage() {
   const [api, contextHolder] = notification.useNotification();
+  const [modal, modalContextHolder] = Modal.useModal();
 
   const storeObj =
     JSON.parse(localStorage.getItem("currentStore") || "null") || {};
@@ -1426,30 +1427,107 @@ export default function ProductListPage() {
       // Show newly created items
       const createdParts = [];
       if (newlyCreated.products > 0)
-        createdParts.push(`${newlyCreated.products} sản phẩm mới`);
+        createdParts.push(
+          <li key="product">
+            <strong>{newlyCreated.products}</strong> sản phẩm mới
+          </li>
+        );
       if (newlyCreated.suppliers > 0)
-        createdParts.push(`${newlyCreated.suppliers} nhà cung cấp`);
+        createdParts.push(
+          <li key="supplier">
+            <strong>{newlyCreated.suppliers}</strong> nhà cung cấp
+          </li>
+        );
       if (newlyCreated.productGroups > 0)
-        createdParts.push(`${newlyCreated.productGroups} nhóm sản phẩm`);
+        createdParts.push(
+          <li key="group">
+            <strong>{newlyCreated.productGroups}</strong> nhóm sản phẩm
+          </li>
+        );
       if (newlyCreated.warehouses > 0)
-        createdParts.push(`${newlyCreated.warehouses} kho hàng`);
-
-      if (createdParts.length > 0) {
-        description += `. Đã tạo mới: ${createdParts.join(", ")}`;
-      }
+        createdParts.push(
+          <li key="warehouse">
+            <strong>{newlyCreated.warehouses}</strong> kho hàng
+          </li>
+        );
 
       if (failedCount > 0) {
-        description += `. Thất bại: ${failedCount} dòng`;
-        api.warning({
-          message: "⚠️ Import hoàn tất một phần",
-          description,
-          placement: "topRight",
-          duration: 8,
+        // Có lỗi => Hiển thị Modal chi tiết (Using hook 'modal')
+        modal.warning({
+          title: "⚠️ Kết quả Import (Có lỗi xảy ra)",
+          width: 650,
+          content: (
+            <div>
+              <p>
+                Thành công: <strong>{successCount}/{results.total}</strong> dòng.
+              </p>
+              {createdParts.length > 0 && (
+                <ul style={{ marginBottom: 10 }}>{createdParts}</ul>
+              )}
+              <Divider style={{ margin: "12px 0" }} />
+              <p style={{ color: "red", fontWeight: "bold", marginBottom: 8 }}>
+                Danh sách dòng lỗi ({results.failed.length}):
+              </p>
+              <div
+                style={{
+                  maxHeight: 350,
+                  overflowY: "auto",
+                  background: "#fff1f0",
+                  padding: 12,
+                  borderRadius: 6,
+                  border: "1px solid #ffa39e",
+                }}
+              >
+                {results.failed.map((fail, idx) => {
+                   const errorMsg = fail.error ? fail.error.toLowerCase() : "";
+                   let tip = "";
+                   if (errorMsg.includes("sku")) tip = "Kiểm tra lại cột 'Mã SKU'. Đảm bảo không trùng lặp với sản phẩm khác tên.";
+                   else if (errorMsg.includes("tồn kho tối đa") || errorMsg.includes("vượt quá hạn mức")) tip = "Số lượng nhập cộng với tồn hiện tại vượt quá 'Tồn kho tối đa' cho phép.";
+                   else if (errorMsg.includes("số lô") || errorMsg.includes("hạn sử dụng")) tip = "Các lô hàng có cùng 'Số lô' bắt buộc phải có cùng 'Hạn sử dụng'.";
+                   else if (errorMsg.includes("tên sản phẩm")) tip = "Cột 'Tên sản phẩm' không được để trống.";
+                   else if (errorMsg.includes("giá") || errorMsg.includes("không hợp lệ")) tip = "Giá bán/Giá vốn phải là số dương hợp lệ.";
+                   else tip = "Kiểm tra lại dữ liệu dòng này trong file Excel.";
+
+                   return (
+                  <div
+                    key={idx}
+                    style={{
+                      marginBottom: 10,
+                      borderBottom: "1px solid #ffccc7",
+                      paddingBottom: 8,
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, color: "#434343", fontSize: 15 }}>
+                      <Badge status="error" text={`Dòng ${fail.row}`} /> : <span style={{color: "#1890ff"}}>{fail.data?.["Tên sản phẩm"] || "Sản phẩm không tên"}</span>
+                    </div>
+                    <div style={{ color: "#cf1322", marginTop: 4, fontSize: 13, background: "#fff2f0", padding: "4px 8px", borderRadius: 4, border: "1px dashed #ffa39e" }}>
+                      <span style={{ fontWeight: "bold" }}> Chi tiết lỗi:</span> {fail.error}
+                    </div>
+                    {tip && (
+                       <div style={{ color: "#faad14", marginTop: 4, fontSize: 13, display: "flex", alignItems: "start", gap: 6, fontStyle: "italic" }}>
+                          <InfoCircleOutlined style={{ marginTop: 3 }} />
+                          <span><strong>Gợi ý khắc phục:</strong> {tip}</span>
+                       </div>
+                    )}
+                  </div>
+                )})}
+              </div>
+            </div>
+          ),
+          okText: "Đóng cửa sổ",
         });
       } else {
+        // Thành công 100%
         api.success({
-          message: " Nhập sản phẩm thành công",
-          description,
+          message: "🎉 Nhập sản phẩm thành công",
+          description: (
+            <div>
+              <p style={{ marginBottom: 8 }}>
+                 Đã nhập thành công <strong>{successCount}</strong> dòng dữ liệu.
+              </p>
+              {createdParts.length > 0 && <ul style={{ paddingLeft: 20 }}>{createdParts}</ul>}
+            </div>
+          ),
           placement: "topRight",
           duration: 5,
         });
@@ -1541,6 +1619,7 @@ export default function ProductListPage() {
   return (
     <Layout>
       {contextHolder}
+      {modalContextHolder}
 
       <div style={{ padding: isMobile ? 1 : 0, minHeight: "100vh" }}>
         <Card
@@ -2361,18 +2440,9 @@ export default function ProductListPage() {
                       ? Number(editingBatch.product.max_stock)
                       : 0;
 
-                  console.log("Validate Max Stock:", {
-                    currentStock,
-                    oldQty,
-                    newQty,
-                    qtyDelta,
-                    projectedStock,
-                    maxStock,
-                  });
-
                   if (maxStock > 0 && projectedStock > maxStock) {
-                    Modal.warning({
-                      title: "Không thể lưu - Vượt tồn kho tối đa",
+                    modal.error({
+                      title: "Lỗi: Vượt quá tồn kho tối đa",
                       content: (
                         <div>
                           <p>
@@ -2382,10 +2452,11 @@ export default function ProductListPage() {
                           </p>
                           <div
                             style={{
-                              background: "#f5f5f5",
+                              background: "#fff1f0",
                               padding: "10px",
                               borderRadius: "4px",
                               marginTop: "10px",
+                              border: "1px solid #ffccc7",
                             }}
                           >
                             <p style={{ margin: 0 }}>
@@ -2396,13 +2467,14 @@ export default function ProductListPage() {
                               <span
                                 style={{
                                   color: qtyDelta >= 0 ? "green" : "red",
+                                  fontWeight: "bold",
                                 }}
                               >
                                 {qtyDelta >= 0 ? "+" : ""}
                                 {qtyDelta}
                               </span>
                             </p>
-                            <p style={{ margin: 0, fontWeight: "bold" }}>
+                            <p style={{ margin: 0, fontWeight: "bold", color: "#cf1322" }}>
                               Dự kiến sau sửa: {projectedStock}
                             </p>
                           </div>
@@ -2413,26 +2485,22 @@ export default function ProductListPage() {
                   }
 
                   if (newQty < 0) {
-                    Modal.error({
+                    modal.error({
                       title: "Lỗi",
                       content: "Số lượng không được âm",
                     });
                     return;
                   }
 
-                  // Gọi API update batch thông qua update product
+                  // Gọi API update batch
                   let productId =
                     editingBatch.product._id || editingBatch.product.id;
-                  // Đảm bảo productId là string
                   if (typeof productId === "object") {
                     productId = productId.toString
                       ? productId.toString()
                       : String(productId);
                   }
-                  console.log("Submitting batch update:", {
-                    productId,
-                    values,
-                  });
+
                   const response = await fetch(
                     `${apiUrl}/products/${productId}/batch`,
                     {
@@ -2468,18 +2536,37 @@ export default function ProductListPage() {
                   }
 
                   // Hiển thị thông báo với thông tin phiếu kho
-                  let description = `Lô ${values.batch_no} đã được cập nhật`;
-                  if (result.voucher) {
-                    description += `\nĐã tạo phiếu ${
-                      result.voucher.type === "IN" ? "nhập" : "xuất"
-                    } kho: ${result.voucher.code}`;
-                  }
+                  let description = (
+                    <div>
+                      <p style={{ margin: 0 }}>
+                        Lô <strong>{values.batch_no}</strong> đã được cập nhật.
+                      </p>
+                      {result.vouchers && result.vouchers.length > 0 ? (
+                        <ul style={{ paddingLeft: 20, marginTop: 4, marginBottom: 0 }}>
+                          {result.vouchers.map((v, idx) => (
+                            <li key={idx}>
+                              Đã tạo phiếu{" "}
+                              <strong>
+                                {v.type === "IN" ? "Nhập" : "Xuất"}
+                              </strong>{" "}
+                              : {v.code}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : result.voucher ? (
+                        <div style={{ marginTop: 4 }}>
+                          Đã tạo phiếu {result.voucher.type === "IN" ? "nhập" : "xuất"} kho:{" "}
+                          <strong>{result.voucher.code}</strong>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
 
                   api.success({
-                    message: " Cập nhật lô hàng thành công!",
+                    message: "🎉 Cập nhật lô hàng thành công!",
                     description,
                     placement: "topRight",
-                    duration: 5,
+                    duration: 6,
                   });
                   closeBatchModal();
                   fetchProducts(false); // Refresh data
@@ -2490,6 +2577,7 @@ export default function ProductListPage() {
                     placement: "topRight",
                   });
                 }
+
               }}
             >
               <Row gutter={16}>
