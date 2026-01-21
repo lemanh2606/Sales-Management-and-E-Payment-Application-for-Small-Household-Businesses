@@ -125,6 +125,8 @@ export default function LoginScreen() {
                 onChangeText={(t) => handleChange("password", t)}
                 placeholder="Mật khẩu"
                 secureTextEntry={!showPassword}
+                textContentType="password"
+                autoComplete="password"
                 returnKeyType="done"
                 style={[styles.input, styles.inputPassword]}
                 editable={!loading}
@@ -238,7 +240,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   passwordRow: { flexDirection: "row", alignItems: "center" },
-  inputPassword: { flex: 1 },
+  inputPassword: {
+    flex: 1,
+    paddingRight: 8,
+  },
   toggleBtn: {
     marginLeft: 8,
     padding: 6,
