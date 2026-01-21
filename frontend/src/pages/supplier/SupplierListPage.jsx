@@ -59,8 +59,7 @@ const { Option } = Select;
 const normalizeMongoId = (idLike) => {
   if (!idLike) return null;
   if (typeof idLike === "object" && idLike.$oid) return String(idLike.$oid);
-  if (typeof idLike === "object" && typeof idLike.toString === "function")
-    return String(idLike.toString());
+  if (typeof idLike === "object" && typeof idLike.toString === "function") return String(idLike.toString());
   if (typeof idLike === "string") return idLike;
   return String(idLike);
 };
@@ -160,9 +159,7 @@ export default function SupplierListPage() {
         console.error("Fetch active suppliers error:", e);
         api.error({
           message: " Lỗi tải dữ liệu",
-          description:
-            e?.response?.data?.message ||
-            "Không thể tải danh sách nhà cung cấp.",
+          description: e?.response?.data?.message || "Không thể tải danh sách nhà cung cấp.",
           placement: "topRight",
           duration: 5,
         });
@@ -170,7 +167,7 @@ export default function SupplierListPage() {
         setLoading(false);
       }
     },
-    [storeId, token, api, statusFilter, searchTerm, paginationActive]
+    [storeId, token, api, statusFilter, searchTerm, paginationActive],
   );
 
   // Fetch deleted suppliers
@@ -209,7 +206,7 @@ export default function SupplierListPage() {
         setLoading(false);
       }
     },
-    [storeId, token, api, paginationDeleted]
+    [storeId, token, api, paginationDeleted],
   );
 
   // Auto fetch on mount + dependencies
@@ -255,9 +252,7 @@ export default function SupplierListPage() {
 
   const totalActive = activeSuppliers.length;
   const totalDeleted = deletedSuppliers.length;
-  const activeStatusCount = activeSuppliers.filter(
-    (s) => s.status === "đang hoạt động"
-  ).length;
+  const activeStatusCount = activeSuppliers.filter((s) => s.status === "đang hoạt động").length;
   const inactiveStatusCount = activeSuppliers.length - activeStatusCount;
 
   // Actions
@@ -301,10 +296,7 @@ export default function SupplierListPage() {
         placement: "topRight",
         duration: 3,
       });
-      await Promise.all([
-        fetchActiveSuppliers(false),
-        fetchDeletedSuppliers(false),
-      ]);
+      await Promise.all([fetchActiveSuppliers(false), fetchDeletedSuppliers(false)]);
     } catch (e) {
       api.error({
         message: " Lỗi xóa",
@@ -336,10 +328,7 @@ export default function SupplierListPage() {
         placement: "topRight",
         duration: 3,
       });
-      await Promise.all([
-        fetchActiveSuppliers(false),
-        fetchDeletedSuppliers(false),
-      ]);
+      await Promise.all([fetchActiveSuppliers(false), fetchDeletedSuppliers(false)]);
     } catch (e) {
       api.error({
         message: " Lỗi khôi phục",
@@ -355,10 +344,7 @@ export default function SupplierListPage() {
   const handleRefresh = async () => {
     setSearchTerm("");
     setStatusFilter("all");
-    await Promise.all([
-      fetchActiveSuppliers(false),
-      fetchDeletedSuppliers(false),
-    ]);
+    await Promise.all([fetchActiveSuppliers(false), fetchDeletedSuppliers(false)]);
   };
 
   const handleExportSuppliersExcel = async () => {
@@ -396,14 +382,8 @@ export default function SupplierListPage() {
       width: 50,
       align: "center",
       render: (_, __, index) => {
-        const pagination =
-          tabKey === "active" ? paginationActive : paginationDeleted;
-        return (
-          <Badge
-            count={(pagination.current - 1) * pagination.pageSize + index + 1}
-            style={{ backgroundColor: "#52c41a" }}
-          />
-        );
+        const pagination = tabKey === "active" ? paginationActive : paginationDeleted;
+        return <Badge count={(pagination.current - 1) * pagination.pageSize + index + 1} style={{ backgroundColor: "#52c41a" }} />;
       },
     },
     {
@@ -486,11 +466,7 @@ export default function SupplierListPage() {
       render: (text) =>
         text ? (
           <Tooltip title={text}>
-            <Text
-              type="secondary"
-              ellipsis
-              style={{ maxWidth: 160, cursor: "pointer" }}
-            >
+            <Text type="secondary" ellipsis style={{ maxWidth: 160, cursor: "pointer" }}>
               {text}
             </Text>
           </Tooltip>
@@ -517,9 +493,7 @@ export default function SupplierListPage() {
         return bankInfo.length ? (
           <Tooltip title={bankInfo.join(" | ")}>
             <Space direction="vertical" size={0} style={{ fontSize: 11 }}>
-              {record.bank_name && (
-                <Text type="secondary">{record.bank_name}</Text>
-              )}
+              {record.bank_name && <Text type="secondary">{record.bank_name}</Text>}
               {record.bank_account_no && (
                 <Text type="secondary" style={{ color: "#52c41a" }}>
                   TK: {record.bank_account_no}
@@ -562,13 +536,7 @@ export default function SupplierListPage() {
       align: "center",
       render: (status) => (
         <Tag
-          icon={
-            status === "đang hoạt động" ? (
-              <CheckCircleOutlined />
-            ) : (
-              <CloseCircleOutlined />
-            )
-          }
+          icon={status === "đang hoạt động" ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
           color={status === "đang hoạt động" ? "success" : "error"}
         >
           {status || "Không xác định"}
@@ -599,12 +567,7 @@ export default function SupplierListPage() {
         return (
           <Space size="small">
             <Tooltip title="Chi tiết">
-              <Button
-                type="primary"
-                icon={<EyeOutlined />}
-                size="small"
-                onClick={() => openDetail(supplierId)}
-              />
+              <Button type="primary" icon={<EyeOutlined />} size="small" onClick={() => openDetail(supplierId)} />
             </Tooltip>
             {!showRestore && (
               <Tooltip title="Sửa">
@@ -625,11 +588,7 @@ export default function SupplierListPage() {
                 cancelText="Hủy"
               >
                 <Tooltip title="Khôi phục">
-                  <Button
-                    icon={<UndoOutlined />}
-                    size="small"
-                    style={{ color: "#52c41a", borderColor: "#52c41a" }}
-                  />
+                  <Button icon={<UndoOutlined />} size="small" style={{ color: "#52c41a", borderColor: "#52c41a" }} />
                 </Tooltip>
               </Popconfirm>
             ) : (
@@ -659,12 +618,7 @@ export default function SupplierListPage() {
         <div style={{ padding: 24 }}>
           <Card style={{ margin: 24, borderRadius: 16 }}>
             <Title level={2}>Danh sách nhà cung cấp</Title>
-            <Alert
-              message="⚠️ Không tìm thấy cửa hàng hiện hành"
-              type="warning"
-              showIcon
-              style={{ marginTop: 16 }}
-            />
+            <Alert message="⚠️ Không tìm thấy cửa hàng hiện hành" type="warning" showIcon style={{ marginTop: 16 }} />
           </Card>
         </div>
       </Layout>
@@ -694,9 +648,7 @@ export default function SupplierListPage() {
             >
               Quản lý Nhà cung cấp
             </Title>
-            <Text type="secondary">
-              Quản lý NCC đầy đủ (MST, ngân hàng, liên hệ) theo cửa hàng
-            </Text>
+            <Text type="secondary">Quản lý NCC đầy đủ (MST, ngân hàng, liên hệ) theo cửa hàng</Text>
           </div>
 
           {/* Statistics */}
@@ -714,8 +666,7 @@ export default function SupplierListPage() {
                   <Statistic
                     title={
                       <span style={{ color: "#fff" }}>
-                        Tổng NCC{" "}
-                        <InfoCircleOutlined style={{ color: "#1890ff" }} />
+                        Tổng NCC <InfoCircleOutlined style={{ color: "#1890ff" }} />
                       </span>
                     }
                     value={totalActive + totalDeleted}
@@ -769,9 +720,7 @@ export default function SupplierListPage() {
                 }}
               >
                 <Statistic
-                  title={
-                    <span style={{ color: "#fff" }}>Trạng thái hoạt động</span>
-                  }
+                  title={<span style={{ color: "#fff" }}>Trạng thái hoạt động</span>}
                   value={`${activeStatusCount}/${inactiveStatusCount}`}
                   prefix={<CheckCircleOutlined />}
                   valueStyle={{ color: "#fff", fontWeight: "bold" }}
@@ -802,24 +751,13 @@ export default function SupplierListPage() {
                 }}
               >
                 {tabKey === "active" && (
-                  <Select
-                    value={statusFilter}
-                    onChange={setStatusFilter}
-                    style={{ width: 160 }}
-                    size="large"
-                    allowClear
-                    placeholder="Trạng thái"
-                  >
+                  <Select value={statusFilter} onChange={setStatusFilter} style={{ width: 160 }} size="large" allowClear placeholder="Trạng thái">
                     <Option value="all">Tất cả</Option>
                     <Option value="đang hoạt động">Đang hoạt động</Option>
                     <Option value="ngừng hoạt động">Ngừng hoạt động</Option>
                   </Select>
                 )}
-                <Button
-                  size="large"
-                  icon={<ReloadOutlined />}
-                  onClick={handleRefresh}
-                >
+                <Button size="large" icon={<ReloadOutlined />} onClick={handleRefresh}>
                   Làm mới
                 </Button>
                 <Button
@@ -837,8 +775,7 @@ export default function SupplierListPage() {
                     icon={<PlusOutlined />}
                     onClick={openCreate}
                     style={{
-                      background:
-                        "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                      background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
                       border: "none",
                       boxShadow: "0 4px 12px rgba(102, 126, 234, 0.4)",
                     }}
@@ -866,9 +803,7 @@ export default function SupplierListPage() {
                   <Table
                     columns={getColumns(false)}
                     dataSource={filteredSuppliers}
-                    rowKey={(record) =>
-                      record?._id || `supplier-${Math.random()}`
-                    }
+                    rowKey={(record) => record?._id || `supplier-${Math.random()}`}
                     loading={loading}
                     pagination={{
                       current: paginationActive.current,
@@ -877,17 +812,19 @@ export default function SupplierListPage() {
                       showSizeChanger: true,
                       pageSizeOptions: ["10", "20", "50", "100"],
                       showTotal: (total, range) => (
-                        <span style={{ color: "#595959" }}>
-                          Hiển thị {range[0]}-{range[1]} / {total} NCC
-                        </span>
+                        <div>
+                          Đang xem{" "}
+                          <span style={{ color: "#1890ff", fontWeight: 600 }}>
+                            {range[0]} – {range[1]}
+                          </span>{" "}
+                          trên tổng số <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> nhà cung cấp
+                        </div>
                       ),
                     }}
                     onChange={(pag) => handleTableChange(pag, "active")}
                     scroll={{ x: isMobile ? 1200 : "max-content" }}
                     size={isMobile ? "small" : "middle"}
-                    rowClassName={(_, index) =>
-                      index % 2 === 0 ? "table-row-light" : "table-row-dark"
-                    }
+                    rowClassName={(_, index) => (index % 2 === 0 ? "table-row-light" : "table-row-dark")}
                   />
                 ),
               },
@@ -898,9 +835,7 @@ export default function SupplierListPage() {
                   <Table
                     columns={getColumns(true)}
                     dataSource={filteredSuppliers}
-                    rowKey={(record) =>
-                      record?._id || `supplier-${Math.random()}`
-                    }
+                    rowKey={(record) => record?._id || `supplier-${Math.random()}`}
                     loading={loading}
                     pagination={{
                       current: paginationDeleted.current,
@@ -909,17 +844,19 @@ export default function SupplierListPage() {
                       showSizeChanger: true,
                       pageSizeOptions: ["10", "20", "50", "100"],
                       showTotal: (total, range) => (
-                        <span style={{ color: "#595959" }}>
-                          Hiển thị {range[0]}-{range[1]} / {total} NCC
-                        </span>
+                        <div>
+                          Đang xem{" "}
+                          <span style={{ color: "#1890ff", fontWeight: 600 }}>
+                            {range[0]} – {range[1]}
+                          </span>{" "}
+                          trên tổng số <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> nhà cung cấp
+                        </div>
                       ),
                     }}
                     onChange={(pag) => handleTableChange(pag, "deleted")}
                     scroll={{ x: isMobile ? 1200 : "max-content" }}
                     size={isMobile ? "small" : "middle"}
-                    rowClassName={(_, index) =>
-                      index % 2 === 0 ? "table-row-light" : "table-row-dark"
-                    }
+                    rowClassName={(_, index) => (index % 2 === 0 ? "table-row-light" : "table-row-dark")}
                   />
                 ),
               },
@@ -934,11 +871,7 @@ export default function SupplierListPage() {
             supplierId={editSupplierId}
             onSuccess={onFormSuccess}
           />
-          <SupplierDetailModal
-            open={detailModalOpen}
-            onOpenChange={setDetailModalOpen}
-            supplierId={detailSupplierId}
-          />
+          <SupplierDetailModal open={detailModalOpen} onOpenChange={setDetailModalOpen} supplierId={detailSupplierId} />
         </Card>
 
         <style>{`

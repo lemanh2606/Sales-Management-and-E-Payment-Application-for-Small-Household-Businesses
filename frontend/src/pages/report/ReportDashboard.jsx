@@ -45,18 +45,7 @@ import {
   CaretUpOutlined,
   CaretDownOutlined,
 } from "@ant-design/icons";
-import {
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
+import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import axios from "axios";
 import dayjs from "dayjs";
 import "../../premium.css";
@@ -120,11 +109,7 @@ const ReportDashboard = () => {
   const [data, setData] = useState(null);
 
   // Ưu tiên store từ AuthContext, sau đó đến URL, cuối cùng là localStorage fallback
-  const currentStore =
-    authStore ||
-    (urlStoreId
-      ? { _id: urlStoreId }
-      : JSON.parse(localStorage.getItem("currentStore") || "{}"));
+  const currentStore = authStore || (urlStoreId ? { _id: urlStoreId } : JSON.parse(localStorage.getItem("currentStore") || "{}"));
   const [groupPagination, setGroupPagination] = useState({
     current: 1,
     pageSize: 10,
@@ -200,11 +185,7 @@ const ReportDashboard = () => {
 
   const handleExport = (format) => {
     if (!currentStore?._id || !periodType || !periodKey) {
-      Swal.fire(
-        "Cảnh báo",
-        "Vui lòng chọn kỳ báo cáo trước khi xuất",
-        "warning"
-      );
+      Swal.fire("Cảnh báo", "Vui lòng chọn kỳ báo cáo trước khi xuất", "warning");
       return;
     }
     const token = localStorage.getItem("token");
@@ -215,22 +196,13 @@ const ReportDashboard = () => {
 
   const exportMenu = (
     <Menu onClick={({ key }) => handleExport(key)}>
-      <Menu.Item
-        key="xlsx"
-        icon={<FileExcelOutlined style={{ color: "#1d6f42" }} />}
-      >
+      <Menu.Item key="xlsx" icon={<FileExcelOutlined style={{ color: "#1d6f42" }} />}>
         Xuất file Excel (.xlsx)
       </Menu.Item>
-      <Menu.Item
-        key="pdf"
-        icon={<FilePdfOutlined style={{ color: "#e60101" }} />}
-      >
+      <Menu.Item key="pdf" icon={<FilePdfOutlined style={{ color: "#e60101" }} />}>
         Xuất file PDF (.pdf)
       </Menu.Item>
-      <Menu.Item
-        key="csv"
-        icon={<FileTextOutlined style={{ color: "#1890ff" }} />}
-      >
+      <Menu.Item key="csv" icon={<FileTextOutlined style={{ color: "#1890ff" }} />}>
         Xuất file CSV (.csv)
       </Menu.Item>
     </Menu>
@@ -260,12 +232,9 @@ const ReportDashboard = () => {
   };
 
   // ====== HELPERS ======
-  const getCurrentTotalExpense = () =>
-    expenseItems.reduce((sum, it) => sum + (Number(it.amount) || 0), 0);
-  const getUnsavedItems = () =>
-    expenseItems.filter((it) => it && it.isSaved === false);
-  const getUnsavedTotalExpense = () =>
-    getUnsavedItems().reduce((sum, it) => sum + (Number(it.amount) || 0), 0);
+  const getCurrentTotalExpense = () => expenseItems.reduce((sum, it) => sum + (Number(it.amount) || 0), 0);
+  const getUnsavedItems = () => expenseItems.filter((it) => it && it.isSaved === false);
+  const getUnsavedTotalExpense = () => getUnsavedItems().reduce((sum, it) => sum + (Number(it.amount) || 0), 0);
   const getUnsavedCount = () => getUnsavedItems().length;
 
   // Chuẩn hoá periodKey theo type (đảm bảo quarter có năm)
@@ -354,12 +323,7 @@ const ReportDashboard = () => {
 
       // Chỉ gọi allocation khi type VỪA thay đổi (previousPeriodType != periodType)
       // Không gọi khi chuyển key trong cùng type
-      if (
-        previousPeriodType &&
-        previousPeriodType !== periodType &&
-        prevPeriodKey &&
-        currentStore?._id
-      ) {
+      if (previousPeriodType && previousPeriodType !== periodType && prevPeriodKey && currentStore?._id) {
         const suggestion = await operatingExpenseService.suggestAllocation({
           storeId: currentStore._id,
           fromPeriodType: previousPeriodType, // Type cũ
@@ -605,9 +569,7 @@ const ReportDashboard = () => {
       Swal.fire({
         icon: "success",
         title: "Lưu thành công",
-        text: `Chi phí kỳ này: ${getCurrentTotalExpense().toLocaleString(
-          "vi-VN"
-        )} VND`,
+        text: `Chi phí kỳ này: ${getCurrentTotalExpense().toLocaleString("vi-VN")} VND`,
         timer: 1500,
         showConfirmButton: false,
       });
@@ -640,11 +602,7 @@ const ReportDashboard = () => {
       return;
     }
 
-    if (
-      newExpenseAmount === null ||
-      newExpenseAmount === undefined ||
-      newExpenseAmount <= 0
-    ) {
+    if (newExpenseAmount === null || newExpenseAmount === undefined || newExpenseAmount <= 0) {
       Swal.fire({
         icon: "warning",
         title: "Số tiền không hợp lệ",
@@ -764,21 +722,14 @@ const ReportDashboard = () => {
 
     const deleteCount = validSelectedIds.length;
     const selectedSet = new Set(validSelectedIds.map(String));
-    const selectedItems = expenseItems.filter((it) =>
-      selectedSet.has(String(it._id))
-    );
-    const totalSelectedAmount = selectedItems.reduce(
-      (sum, it) => sum + (Number(it?.amount) || 0),
-      0
-    );
+    const selectedItems = expenseItems.filter((it) => selectedSet.has(String(it._id)));
+    const totalSelectedAmount = selectedItems.reduce((sum, it) => sum + (Number(it?.amount) || 0), 0);
 
     Swal.fire({
       title: "Xoá các khoản chi phí",
       html: `
         <div style="text-align: center; font-size: 14px;">
-          <p>Bạn chắc chắn muốn xoá ${
-            selectedExpenseIds.length
-          } khoản chi phí này không?</p>
+          <p>Bạn chắc chắn muốn xoá ${selectedExpenseIds.length} khoản chi phí này không?</p>
           <p style="font-size: 16px; font-weight: bold; color: #ff7a45; margin: 12px 0;">
             Tổng: ${formatVND(totalSelectedAmount)}
           </p>
@@ -805,9 +756,7 @@ const ReportDashboard = () => {
 
           // Cập nhật state: xoá các items theo _id
           const deletedSet = new Set(selectedExpenseIds.map(String));
-          const newItems = expenseItems.filter(
-            (it) => !deletedSet.has(String(it._id))
-          );
+          const newItems = expenseItems.filter((it) => !deletedSet.has(String(it._id)));
 
           setExpenseItems(newItems);
           setselectedExpenseIds([]);
@@ -853,19 +802,12 @@ const ReportDashboard = () => {
               .map(
                 (s, idx) =>
                   `<p style="margin: 4px 0; color: #555;">
-                    <span style="font-weight: 500;">${
-                      s.periodKey
-                    }</span>: ${formatVND(s.amount)}
-                  </p>`
+                    <span style="font-weight: 500;">${s.periodKey}</span>: ${formatVND(s.amount)}
+                  </p>`,
               )
               .join("")}
             <p style="margin: 8px 0 0 0; color: #faad14; font-weight: 500;">
-              Tổng: ${formatVND(
-                allocationSuggestion.suggestions.reduce(
-                  (sum, s) => sum + s.amount,
-                  0
-                )
-              )}
+              Tổng: ${formatVND(allocationSuggestion.suggestions.reduce((sum, s) => sum + s.amount, 0))}
             </p>
           </div>
         </div>
@@ -925,11 +867,7 @@ const ReportDashboard = () => {
           <Card className="glass-card" style={{ border: "1px solid #8c8c8c" }}>
             <Row gutter={[24, 24]} align="middle">
               <Col xs={24} lg={6}>
-                <Title
-                  level={2}
-                  className="premium-title"
-                  style={{ margin: 0 }}
-                >
+                <Title level={2} className="premium-title" style={{ margin: 0 }}>
                   {currentStore.name}
                 </Title>
                 <Text type="secondary" style={{ fontSize: "14px" }}>
@@ -941,13 +879,7 @@ const ReportDashboard = () => {
                 <Text strong style={{ display: "block", marginBottom: 8 }}>
                   Kỳ báo cáo
                 </Text>
-                <Select
-                  style={{ width: "100%" }}
-                  size="large"
-                  value={periodType}
-                  onChange={handlePeriodTypeChange}
-                  placeholder="Chọn kỳ"
-                >
+                <Select style={{ width: "100%" }} size="large" value={periodType} onChange={handlePeriodTypeChange} placeholder="Chọn kỳ">
                   <Select.Option value="month">Theo tháng</Select.Option>
                   <Select.Option value="quarter">Theo quý</Select.Option>
                   <Select.Option value="year">Theo năm</Select.Option>
@@ -966,29 +898,15 @@ const ReportDashboard = () => {
                   <DatePicker
                     style={{ width: "100%" }}
                     size="large"
-                    picker={
-                      periodType === "month"
-                        ? "month"
-                        : periodType === "year"
-                        ? "year"
-                        : "quarter"
-                    }
+                    picker={periodType === "month" ? "month" : periodType === "year" ? "year" : "quarter"}
                     value={pickerValue}
                     onChange={handlePeriodKeyChange}
                     format={(value) => {
-                      if (periodType === "quarter")
-                        return `Quý ${value.quarter()} - ${value.year()}`;
-                      if (periodType === "month")
-                        return `Tháng ${value.format("MM/YYYY")}`;
+                      if (periodType === "quarter") return `Quý ${value.quarter()} - ${value.year()}`;
+                      if (periodType === "month") return `Tháng ${value.format("MM/YYYY")}`;
                       return `Năm ${value.format("YYYY")}`;
                     }}
-                    placeholder={`Chọn ${
-                      periodType === "month"
-                        ? "tháng"
-                        : periodType === "quarter"
-                        ? "quý"
-                        : "năm"
-                    }`}
+                    placeholder={`Chọn ${periodType === "month" ? "tháng" : periodType === "quarter" ? "quý" : "năm"}`}
                   />
                 )}
               </Col>
@@ -1003,12 +921,7 @@ const ReportDashboard = () => {
                 }}
               >
                 <Dropdown overlay={exportMenu} trigger={["click"]}>
-                  <Button
-                    type="primary"
-                    size="large"
-                    icon={<DownloadOutlined />}
-                    className="premium-btn"
-                  >
+                  <Button type="primary" size="large" icon={<DownloadOutlined />} className="premium-btn">
                     Xuất báo cáo <CaretDownOutlined />
                   </Button>
                 </Dropdown>
@@ -1048,8 +961,7 @@ const ReportDashboard = () => {
                       }}
                       onClick={handleAllocationSuggestion}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.background =
-                          "rgba(24, 144, 255, 0.08)";
+                        e.currentTarget.style.background = "rgba(24, 144, 255, 0.08)";
                         e.currentTarget.style.borderRadius = "4px";
                         e.currentTarget.style.padding = "8px 8px";
                         e.currentTarget.style.marginLeft = "-8px";
@@ -1068,8 +980,7 @@ const ReportDashboard = () => {
                       title="Bấm để xem chi tiết và thực hiện phân bổ"
                     >
                       <div style={{ flex: 1 }}>
-                        <strong>Gợi ý phân bổ:</strong>{" "}
-                        {allocationSuggestion.message}
+                        <strong>Gợi ý phân bổ:</strong> {allocationSuggestion.message}
                       </div>
                       <span
                         style={{
@@ -1109,16 +1020,12 @@ const ReportDashboard = () => {
               </Space>
               <Row gutter={[16, 16]}>
                 <Col span={8}>
-                  <label style={{ display: "block", marginBottom: 8 }}>
-                    Nhập Số Tiền
-                  </label>
+                  <label style={{ display: "block", marginBottom: 8 }}>Nhập Số Tiền</label>
                   <InputNumber
                     min={0}
                     value={newExpenseAmount}
                     onChange={setNewExpenseAmount}
-                    formatter={(v) =>
-                      `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")
-                    }
+                    formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
                     parser={(v) => v.replace(/\$\s?|(,*)/g, "")}
                     style={{ width: "100%" }}
                     placeholder="Số tiền (VND)"
@@ -1127,9 +1034,7 @@ const ReportDashboard = () => {
                 </Col>
 
                 <Col span={8}>
-                  <label style={{ display: "block", marginBottom: 8 }}>
-                    Ghi Chú
-                  </label>
+                  <label style={{ display: "block", marginBottom: 8 }}>Ghi Chú</label>
                   <Input
                     placeholder="VD: Mặt bằng, điện, nước, lương nhân viên, tiếp thị..."
                     value={newExpenseNote}
@@ -1137,11 +1042,7 @@ const ReportDashboard = () => {
                     maxLength={100}
                     size="large"
                     onKeyPress={(e) => {
-                      if (
-                        e.key === "Enter" &&
-                        newExpenseAmount &&
-                        newExpenseAmount > 0
-                      ) {
+                      if (e.key === "Enter" && newExpenseAmount && newExpenseAmount > 0) {
                         addExpenseItem();
                       }
                     }}
@@ -1149,19 +1050,9 @@ const ReportDashboard = () => {
                 </Col>
 
                 <Col span={8}>
-                  <label style={{ display: "block", marginBottom: 8 }}>
-                    Hành Động
-                  </label>
-                  <Space
-                    style={{ width: "100%", justifyContent: "space-between" }}
-                  >
-                    <Button
-                      type="primary"
-                      block
-                      onClick={addExpenseItem}
-                      disabled={!newExpenseAmount || newExpenseAmount <= 0}
-                      size="large"
-                    >
+                  <label style={{ display: "block", marginBottom: 8 }}>Hành Động</label>
+                  <Space style={{ width: "100%", justifyContent: "space-between" }}>
+                    <Button type="primary" block onClick={addExpenseItem} disabled={!newExpenseAmount || newExpenseAmount <= 0} size="large">
                       Thêm Khoản
                     </Button>
                   </Space>
@@ -1232,20 +1123,13 @@ const ReportDashboard = () => {
                         {
                           title: "Ghi Chú",
                           dataIndex: "note",
-                          render: (text) => (
-                            <span style={{ fontSize: 13 }}>{text || "—"}</span>
-                          ),
+                          render: (text) => <span style={{ fontSize: 13 }}>{text || "—"}</span>,
                           flex: 1,
                         },
                         {
                           title: "Kỳ Gốc",
                           dataIndex: "originPeriod",
-                          render: (text) =>
-                            text ? (
-                              <Tag color="blue">{text}</Tag>
-                            ) : (
-                              <Tag color="green">Hiện tại</Tag>
-                            ),
+                          render: (text) => (text ? <Tag color="blue">{text}</Tag> : <Tag color="green">Hiện tại</Tag>),
                           width: 120,
                           hidden: periodType === "month",
                         },
@@ -1275,11 +1159,7 @@ const ReportDashboard = () => {
                           align: "center",
                           render: (_, record, idx) => (
                             <AntTooltip
-                              title={
-                                record.originPeriod
-                                  ? `Khoản chi này thuộc ${record.originPeriod}. Vui lòng chuyển sang kỳ đó để xoá.`
-                                  : ""
-                              }
+                              title={record.originPeriod ? `Khoản chi này thuộc ${record.originPeriod}. Vui lòng chuyển sang kỳ đó để xoá.` : ""}
                             >
                               <Button
                                 type="text"
@@ -1288,11 +1168,7 @@ const ReportDashboard = () => {
                                 icon={<DeleteOutlined />}
                                 onClick={() => removeExpenseItem(idx)}
                                 disabled={!!record.originPeriod}
-                                title={
-                                  record.originPeriod
-                                    ? ""
-                                    : "Xoá khoản chi phí này"
-                                }
+                                title={record.originPeriod ? "" : "Xoá khoản chi phí này"}
                               />
                             </AntTooltip>
                           ),
@@ -1319,19 +1195,11 @@ const ReportDashboard = () => {
                           onClick={deleteMultipleExpenseItems}
                           loading={loading}
                           disabled={getUnsavedCount() > 0 || loading}
-                          title={
-                            getUnsavedCount() > 0
-                              ? "Vui lòng lưu chi phí trước khi xoá"
-                              : ""
-                          }
+                          title={getUnsavedCount() > 0 ? "Vui lòng lưu chi phí trước khi xoá" : ""}
                         >
                           Xoá {selectedExpenseIds.length} khoản đã chọn
                         </Button>
-                        <Button
-                          size="small"
-                          onClick={() => setselectedExpenseIds([])}
-                          disabled={loading}
-                        >
+                        <Button size="small" onClick={() => setselectedExpenseIds([])} disabled={loading}>
                           Bỏ chọn
                         </Button>
                       </div>
@@ -1343,65 +1211,35 @@ const ReportDashboard = () => {
                 <Col span={24}>
                   <Space style={{ width: "100%" }}>
                     <Button
-                      type={
-                        unsavedChanges && expenseItems.length > 0
-                          ? "primary"
-                          : "default"
-                      }
+                      type={unsavedChanges && expenseItems.length > 0 ? "primary" : "default"}
                       onClick={saveOperatingExpense}
-                      disabled={
-                        !unsavedChanges || expenseItems.length === 0 || loading
-                      }
+                      disabled={!unsavedChanges || expenseItems.length === 0 || loading}
                       loading={loading}
                       size="large"
                       style={{ minWidth: 180 }}
                     >
-                      {unsavedChanges && expenseItems.length > 0
-                        ? "Lưu Chi Phí"
-                        : "Đã Lưu"}
+                      {unsavedChanges && expenseItems.length > 0 ? "Lưu Chi Phí" : "Đã Lưu"}
                     </Button>
 
-                    {unsavedChanges &&
-                      expenseItems.filter((it) => !it.isSaved).length > 0 && (
-                        <Alert
-                          type="warning"
-                          showIcon
-                          message={`Có ${
-                            expenseItems.filter((it) => !it.isSaved).length
-                          } khoản chi phí chưa lưu`}
-                          style={{ flex: 1, margin: 0 }}
-                        />
-                      )}
+                    {unsavedChanges && expenseItems.filter((it) => !it.isSaved).length > 0 && (
+                      <Alert
+                        type="warning"
+                        showIcon
+                        message={`Có ${expenseItems.filter((it) => !it.isSaved).length} khoản chi phí chưa lưu`}
+                        style={{ flex: 1, margin: 0 }}
+                      />
+                    )}
                   </Space>
                 </Col>
               </Row>
             </Card>
           )}
 
-          {loading && (
-            <Spin
-              tip="Đang tải..."
-              style={{ width: "100%", margin: "20px 0" }}
-            />
-          )}
-          {error && (
-            <Alert
-              message="Lỗi"
-              description={error}
-              type="error"
-              showIcon
-              style={{ marginBottom: 16 }}
-            />
-          )}
+          {loading && <Spin tip="Đang tải..." style={{ width: "100%", margin: "20px 0" }} />}
+          {error && <Alert message="Lỗi" description={error} type="error" showIcon style={{ marginBottom: 16 }} />}
 
           {(!periodType || !periodKey) && !loading && (
-            <Alert
-              message="Vui lòng chọn kỳ báo cáo để xem dữ liệu."
-              type="info"
-              showIcon
-              closable
-              style={{ marginBottom: 16, height: 80 }}
-            />
+            <Alert message="Vui lòng chọn kỳ báo cáo để xem dữ liệu." type="info" showIcon closable style={{ marginBottom: 16, height: 80 }} />
           )}
 
           {!loading && data && (
@@ -1411,11 +1249,7 @@ const ReportDashboard = () => {
                 <Col xs={24} sm={12} lg={6}>
                   <div className="stat-card-inner gradient-info">
                     <Statistic
-                      title={
-                        <span style={{ color: "rgba(255,255,255,0.8)" }}>
-                          Doanh thu thực
-                        </span>
-                      }
+                      title={<span style={{ color: "rgba(255,255,255,0.8)" }}>Doanh thu thực</span>}
                       value={data.totalRevenue}
                       formatter={formatVND}
                       valueStyle={{
@@ -1433,16 +1267,11 @@ const ReportDashboard = () => {
                     <div
                       className="stat-card-inner"
                       style={{
-                        background:
-                          "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)",
+                        background: "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)",
                       }}
                     >
                       <Statistic
-                        title={
-                          <span style={{ color: "rgba(255,255,255,0.8)" }}>
-                            Doanh thu thuần
-                          </span>
-                        }
+                        title={<span style={{ color: "rgba(255,255,255,0.8)" }}>Doanh thu thuần</span>}
                         value={data.netSales || 0}
                         formatter={formatVND}
                         valueStyle={{
@@ -1459,11 +1288,7 @@ const ReportDashboard = () => {
                   <AntTooltip title="Lợi nhuận gộp = Doanh thu thuần - Giá vốn hàng bán (COGS)">
                     <div className="stat-card-inner gradient-success">
                       <Statistic
-                        title={
-                          <span style={{ color: "rgba(255,255,255,0.8)" }}>
-                            Lợi nhuận gộp
-                          </span>
-                        }
+                        title={<span style={{ color: "rgba(255,255,255,0.8)" }}>Lợi nhuận gộp</span>}
                         value={data.grossProfit}
                         formatter={formatVND}
                         valueStyle={{
@@ -1481,11 +1306,7 @@ const ReportDashboard = () => {
                   <AntTooltip title="Lợi nhuận ròng = Lợi nhuận gộp - Chi phí vận hành">
                     <div className="stat-card-inner gradient-primary">
                       <Statistic
-                        title={
-                          <span style={{ color: "rgba(255,255,255,0.8)" }}>
-                            Lợi nhuận ròng
-                          </span>
-                        }
+                        title={<span style={{ color: "rgba(255,255,255,0.8)" }}>Lợi nhuận ròng</span>}
                         value={data.netProfit}
                         formatter={formatVND}
                         valueStyle={{
@@ -1507,16 +1328,11 @@ const ReportDashboard = () => {
                     <div
                       className="stat-card-inner"
                       style={{
-                        background:
-                          "linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)",
+                        background: "linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)",
                       }}
                     >
                       <Statistic
-                        title={
-                          <span style={{ color: "rgba(255,255,255,0.8)" }}>
-                            Giá vốn (COGS)
-                          </span>
-                        }
+                        title={<span style={{ color: "rgba(255,255,255,0.8)" }}>Giá vốn (COGS)</span>}
                         value={data.totalCOGS || 0}
                         formatter={formatVND}
                         valueStyle={{
@@ -1533,11 +1349,7 @@ const ReportDashboard = () => {
                   <AntTooltip title="Bao gồm: Lương nhân viên, Hoa hồng & Chi phí ngoài hệ thống">
                     <div className="stat-card-inner gradient-warning">
                       <Statistic
-                        title={
-                          <span style={{ color: "rgba(255,255,255,0.8)" }}>
-                            Chi phí vận hành
-                          </span>
-                        }
+                        title={<span style={{ color: "rgba(255,255,255,0.8)" }}>Chi phí vận hành</span>}
                         value={data.operatingCost}
                         formatter={formatVND}
                         valueStyle={{
@@ -1555,16 +1367,11 @@ const ReportDashboard = () => {
                   <div
                     className="stat-card-inner"
                     style={{
-                      background:
-                        "linear-gradient(135deg, #f43f5e 0%, #be123c 100%)",
+                      background: "linear-gradient(135deg, #f43f5e 0%, #be123c 100%)",
                     }}
                   >
                     <Statistic
-                      title={
-                        <span style={{ color: "rgba(255,255,255,0.8)" }}>
-                          VAT thu hộ
-                        </span>
-                      }
+                      title={<span style={{ color: "rgba(255,255,255,0.8)" }}>VAT thu hộ</span>}
                       value={data.totalVAT || 0}
                       formatter={formatVND}
                       valueStyle={{
@@ -1580,16 +1387,11 @@ const ReportDashboard = () => {
                   <div
                     className="stat-card-inner"
                     style={{
-                      background:
-                        "linear-gradient(135deg, #22c55e 0%, #16a34a 100%)",
+                      background: "linear-gradient(135deg, #22c55e 0%, #16a34a 100%)",
                     }}
                   >
                     <Statistic
-                      title={
-                        <span style={{ color: "rgba(255,255,255,0.8)" }}>
-                          Giá trị tồn kho
-                        </span>
-                      }
+                      title={<span style={{ color: "rgba(255,255,255,0.8)" }}>Giá trị tồn kho</span>}
                       value={data.stockValue || 0}
                       formatter={formatVND}
                       valueStyle={{
@@ -1634,42 +1436,14 @@ const ReportDashboard = () => {
                     <ResponsiveContainer width="100%" height={380}>
                       <BarChart data={generateBarData()}>
                         <defs>
-                          <linearGradient
-                            id="barGradient"
-                            x1="0"
-                            y1="0"
-                            x2="0"
-                            y2="1"
-                          >
-                            <stop
-                              offset="0%"
-                              stopColor="#fff"
-                              stopOpacity={0.2}
-                            />
-                            <stop
-                              offset="100%"
-                              stopColor="#fff"
-                              stopOpacity={0}
-                            />
+                          <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#fff" stopOpacity={0.2} />
+                            <stop offset="100%" stopColor="#fff" stopOpacity={0} />
                           </linearGradient>
                         </defs>
-                        <CartesianGrid
-                          strokeDasharray="3 3"
-                          vertical={false}
-                          stroke="#f0f0f0"
-                        />
-                        <XAxis
-                          dataKey="name"
-                          axisLine={false}
-                          tickLine={false}
-                          tick={{ fill: "#64748b" }}
-                        />
-                        <YAxis
-                          tickFormatter={(v) => `${(v / 1e6).toFixed(1)}tr`}
-                          axisLine={false}
-                          tickLine={false}
-                          tick={{ fill: "#64748b" }}
-                        />
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#64748b" }} />
+                        <YAxis tickFormatter={(v) => `${(v / 1e6).toFixed(1)}tr`} axisLine={false} tickLine={false} tick={{ fill: "#64748b" }} />
                         <Tooltip
                           cursor={{ fill: "#f8fafc" }}
                           content={({ active, payload }) => {
@@ -1680,8 +1454,7 @@ const ReportDashboard = () => {
                                     background: "#fff",
                                     padding: "12px 16px",
                                     borderRadius: "12px",
-                                    boxShadow:
-                                      "0 10px 15px -3px rgba(0,0,0,0.1)",
+                                    boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)",
                                     border: "1px solid #e2e8f0",
                                   }}
                                 >
@@ -1720,10 +1493,7 @@ const ReportDashboard = () => {
                 </Col>
 
                 <Col xs={24} lg={8}>
-                  <Card
-                    className="glass-card"
-                    title={<Title level={4}>Hàng tồn kho</Title>}
-                  >
+                  <Card className="glass-card" title={<Title level={4}>Hàng tồn kho</Title>}>
                     <ResponsiveContainer width="100%" height={260}>
                       <PieChart>
                         <Pie
@@ -1810,37 +1580,17 @@ const ReportDashboard = () => {
                         <Text strong color="primary">
                           Tỷ lệ Tồn/Doanh thu
                         </Text>
-                        <Tag
-                          color={
-                            data.totalRevenue > 0 &&
-                            data.stockValue / data.totalRevenue < 0.5
-                              ? "green"
-                              : "orange"
-                          }
-                          className="premium-tag"
-                        >
-                          {data.totalRevenue > 0
-                            ? (
-                                (data.stockValue / data.totalRevenue) *
-                                100
-                              ).toFixed(1)
-                            : 0}
-                          %
+                        <Tag color={data.totalRevenue > 0 && data.stockValue / data.totalRevenue < 0.5 ? "green" : "orange"} className="premium-tag">
+                          {data.totalRevenue > 0 ? ((data.stockValue / data.totalRevenue) * 100).toFixed(1) : 0}%
                         </Tag>
                       </div>
                       <Alert
                         message={
-                          data.totalRevenue > 0 &&
-                          data.stockValue / data.totalRevenue < 0.5
+                          data.totalRevenue > 0 && data.stockValue / data.totalRevenue < 0.5
                             ? "Sức khỏe kho hàng: Tốt"
                             : "Cần tối ưu vòng quay hàng tồn"
                         }
-                        type={
-                          data.totalRevenue > 0 &&
-                          data.stockValue / data.totalRevenue < 0.5
-                            ? "success"
-                            : "warning"
-                        }
+                        type={data.totalRevenue > 0 && data.stockValue / data.totalRevenue < 0.5 ? "success" : "warning"}
                         showIcon
                       />
                     </div>
@@ -1849,12 +1599,7 @@ const ReportDashboard = () => {
               </Row>
 
               {/* THỐNG KÊ NHÓM HÀNG */}
-              <Card
-                className="glass-card"
-                title={
-                  <Title level={4}>Phân tích hiệu quả theo nhóm hàng</Title>
-                }
-              >
+              <Card className="glass-card" title={<Title level={4}>Phân tích hiệu quả theo nhóm hàng</Title>}>
                 <Table
                   dataSource={data.groupStats || []}
                   rowKey="_id"
@@ -1867,11 +1612,7 @@ const ReportDashboard = () => {
                         <span style={{ color: "#1677ff", fontWeight: 600 }}>
                           {range[0]} – {range[1]}
                         </span>{" "}
-                        trên tổng số{" "}
-                        <span style={{ color: "#fa541c", fontWeight: 600 }}>
-                          {total}
-                        </span>{" "}
-                        nhóm hàng
+                        trên tổng số <span style={{ color: "#fa541c", fontWeight: 600 }}>{total}</span> nhóm hàng
                       </div>
                     ),
                   }}
@@ -1900,14 +1641,7 @@ const ReportDashboard = () => {
                       title: "Số lượng bán",
                       dataIndex: "quantitySold",
                       align: "center",
-                      render: (val) => (
-                        <Badge
-                          count={val}
-                          showZero
-                          overflowCount={999999}
-                          color={val === 0 ? "#d9d9d9" : "#6366f1"}
-                        />
-                      ),
+                      render: (val) => <Badge count={val} showZero overflowCount={999999} color={val === 0 ? "#d9d9d9" : "#6366f1"} />,
                     },
                     {
                       title: (
@@ -1999,11 +1733,7 @@ const ReportDashboard = () => {
                         if (val > 2)
                           return (
                             <AntTooltip title="Hàng tồn nhiều so với doanh thu → bán chậm">
-                              <Tag
-                                color="error"
-                                className="premium-tag"
-                                style={{ cursor: "help" }}
-                              >
+                              <Tag color="error" className="premium-tag" style={{ cursor: "help" }}>
                                 Tồn cao
                               </Tag>
                             </AntTooltip>
@@ -2011,11 +1741,7 @@ const ReportDashboard = () => {
 
                         return (
                           <AntTooltip title="Doanh thu và tồn kho ở mức hợp lý">
-                            <Tag
-                              color="success"
-                              className="premium-tag"
-                              style={{ cursor: "help" }}
-                            >
+                            <Tag color="success" className="premium-tag" style={{ cursor: "help" }}>
                               Ổn định
                             </Tag>
                           </AntTooltip>
@@ -2034,15 +1760,20 @@ const ReportDashboard = () => {
 
       {/* ========== MODAL DRILL-DOWN: CHI TIẾT GIÁA VỐN ==========  */}
       <Modal
-        title={`Chi tiết giá vốn - Nhóm: ${selectedGroup?.groupName || ""}`}
+        title={
+          <span>
+            Chi tiết giá vốn – Nhóm:{" "}
+            <Tag color="purple" style={{ marginLeft: 6, fontSize: 14 }}>
+              {selectedGroup?.groupName || ""}
+            </Tag>
+          </span>
+        }
         open={detailModalVisible}
         onCancel={() => setDetailModalVisible(false)}
         footer={null}
         width={700}
       >
-        {selectedGroup &&
-        selectedGroup.productDetails &&
-        selectedGroup.productDetails.length > 0 ? (
+        {selectedGroup && selectedGroup.productDetails && selectedGroup.productDetails.length > 0 ? (
           <Table
             dataSource={selectedGroup.productDetails}
             rowKey="_id"
@@ -2050,16 +1781,18 @@ const ReportDashboard = () => {
             size="small"
             columns={[
               {
+                title: "STT",
+                width: 60,
+                align: "center",
+                render: (_, __, index) => index + 1,
+              },
+              {
                 title: "Sản phẩm",
                 dataIndex: "name",
                 render: (text, record) => (
                   <div>
                     <Text strong>{text}</Text>
-                    {record.code && (
-                      <div style={{ fontSize: 12, color: "#999" }}>
-                        {record.code}
-                      </div>
-                    )}
+                    {record.code && <div style={{ fontSize: 12, color: "#999" }}>{record.code}</div>}
                   </div>
                 ),
               },
@@ -2070,7 +1803,7 @@ const ReportDashboard = () => {
                 render: (val) => formatVND(val),
               },
               {
-                title: "SL tồn",
+                title: "Số lượng tồn",
                 dataIndex: "stock_quantity",
                 align: "center",
               },
@@ -2086,19 +1819,18 @@ const ReportDashboard = () => {
               },
             ]}
             summary={(pageData) => {
-              const total = pageData.reduce(
-                (sum, record) => sum + record.stockValueCost,
-                0
-              );
+              const total = pageData.reduce((sum, record) => sum + record.stockValueCost, 0);
               return (
                 <Table.Summary.Row style={{ fontWeight: "bold" }}>
-                  <Table.Summary.Cell colSpan={3} align="right">
-                    <Text strong>Tổng cộng:</Text>
+                  <Table.Summary.Cell colSpan={4} align="right">
+                    <Text strong style={{ color: "blue" }}>
+                      Tổng cộng:
+                    </Text>
                   </Table.Summary.Cell>
                   <Table.Summary.Cell align="right">
-                    <Text strong color="primary">
+                    <Tag color="geekblue" style={{ fontSize: 14, fontWeight: 600, marginRight: -8 }}>
                       {formatVND(total)}
-                    </Text>
+                    </Tag>
                   </Table.Summary.Cell>
                 </Table.Summary.Row>
               );

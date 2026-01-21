@@ -598,7 +598,7 @@ export default function ProductForm({
                   <Select
                     style={{ borderRadius: "8px" }}
                     options={[
-                      { value: "Đang kinh doanh", label: " Đang kinh doanh" },
+                      { value: "Đang kinh doanh", label: "✔️ Đang kinh doanh" },
                       {
                         value: "Ngừng kinh doanh",
                         label: "⛔ Ngừng kinh doanh",
@@ -670,7 +670,7 @@ export default function ProductForm({
                 <Form.Item
                   name="origin"
                   label={
-                    <span style={{ fontWeight: 600 }}>Xuất xứ (Nước SX)</span>
+                    <span style={{ fontWeight: 600 }}>Xuất xứ (Quốc gia sản xuất)</span>
                   }
                 >
                   <Input

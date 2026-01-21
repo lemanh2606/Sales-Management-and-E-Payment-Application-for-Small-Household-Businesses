@@ -97,7 +97,7 @@ export default function ProductListPage() {
   //  thêm warehouse
   const allColumns = [
     { key: "name", label: "Tên sản phẩm", default: true },
-    { key: "sku", label: "SKU", default: true },
+    { key: "sku", label: "Mã SKU", default: true },
     { key: "warehouse", label: "Kho hàng", default: true }, //  NEW
     { key: "price", label: "Giá bán", default: true },
     { key: "stock_quantity", label: "Tồn kho", default: true },
@@ -627,7 +627,7 @@ export default function ProductListPage() {
       },
       sku: {
         title: (
-          <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>SKU</span>
+          <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>Mã SKU</span>
         ),
         dataIndex: "sku",
         key: "sku",
@@ -675,7 +675,7 @@ export default function ProductListPage() {
         ),
         dataIndex: "price",
         key: "price",
-        width: isMobile ? 150 : 180,
+        width: isMobile ? 130 : 100,
         align: "center",
         render: (value, record) => {
           const batches = record.batches || [];
@@ -775,7 +775,6 @@ export default function ProductListPage() {
       stock_quantity: {
         title: (
           <Space>
-            <StockOutlined style={{ color: "#faad14" }} />
             <span style={{ fontSize: "clamp(12px, 2.5vw, 14px)" }}>
               Tồn kho
             </span>
@@ -783,7 +782,7 @@ export default function ProductListPage() {
         ),
         dataIndex: "stock_quantity",
         key: "stock_quantity",
-        width: isMobile ? 90 : 100,
+        width: isMobile ? 80 : 90,
         align: "center",
         render: (value, record) => {
           const qtyTotal = Number(value || 0);
@@ -933,7 +932,7 @@ export default function ProductListPage() {
         ),
         dataIndex: "cost_price",
         key: "cost_price",
-        width: isMobile ? 150 : 180,
+        width: isMobile ? 100 : 100,
         align: "center",
         render: (value, record) => {
           const batches = record.batches || [];
@@ -1307,7 +1306,6 @@ export default function ProductListPage() {
               >
                 <Button
                   type={hasBatches ? "default" : "dashed"}
-                  icon={<EyeOutlined />}
                   size={isMobile ? "small" : "middle"}
                   disabled={!hasBatches}
                   onClick={(e) => {
@@ -1561,7 +1559,7 @@ export default function ProductListPage() {
                 color: "black",
               }}
             >
-              Quản lý Sản phẩm
+              Quản lý Sản phẩmQuản lý Sản phẩm
             </Title>
             {!isMobile && (
               <Text

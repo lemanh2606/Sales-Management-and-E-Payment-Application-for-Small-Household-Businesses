@@ -698,11 +698,11 @@ const OrderRefund: React.FC = () => {
               })}
               columns={[
                 {
-                  title: "Mã Đơn Gốc",
+                  title: "Mã Đơn",
                   // Truy cập vào nested object orderId._id
                   dataIndex: ["orderId", "_id"],
                   key: "orderId",
-                  width: 120,
+                  width: 80,
                   render: (text) => (
                     <Text code copyable>
                       {text ? text.slice(-8) : "---"}
@@ -710,8 +710,9 @@ const OrderRefund: React.FC = () => {
                   ),
                 },
                 {
-                  title: "Khách Hàng",
+                  title: "Khách hàng",
                   key: "customer",
+                  width: 100,
                   render: (_: any, record: RefundOrder) => {
                     const cust = record.orderId?.customer;
                     return (
@@ -765,7 +766,7 @@ const OrderRefund: React.FC = () => {
                   dataIndex: "createdAt",
                   key: "createdAt",
                   align: "center",
-                  width: 100,
+                  width: 90,
                   render: (date: any) => (
                     <Text
                       style={{
