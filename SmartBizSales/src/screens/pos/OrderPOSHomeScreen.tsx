@@ -6,6 +6,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { printBill } from "../../utils/printBill";
 import {
   ActivityIndicator,
   Alert,
@@ -25,6 +26,7 @@ import {
   View,
   Share,
   TouchableOpacity,
+  Dimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -32,154 +34,320 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import apiClient from "../../api/apiClient";
 
 /** =========================================================
- *  Design tokens (LIGHT / WHITE)
+ *  Design tokens (Professional Design System)
  *  ========================================================= */
 const COLORS = {
-  bg: "#f5f7fb",
+  // Primary colors
+  primary: "#2563eb",
+  primaryLight: "#3b82f6",
+  primaryDark: "#1d4ed8",
+  
+  // Background & surfaces
+  bg: "#f8fafc",
   surface: "#ffffff",
   card: "#ffffff",
-  card2: "#f8fafc",
+  cardSecondary: "#f1f5f9",
   stroke: "#e2e8f0",
-
+  
+  // Text colors
   text: "#0f172a",
   textStrong: "#0b1220",
+  textSecondary: "#475569",
   muted: "#64748b",
   placeholder: "#94a3b8",
-
-  primary: "#2563eb",
-  primary2: "#1d4ed8",
-  good: "#16a34a",
-  warn: "#f59e0b",
+  
+  // Status colors
+  success: "#16a34a",
+  successLight: "#dcfce7",
+  warning: "#f59e0b",
+  warningLight: "#fef3c7",
   danger: "#ef4444",
-
+  dangerLight: "#fee2e2",
+  info: "#0ea5e9",
+  infoLight: "#e0f2fe",
+  
+  // UI elements
   chip: "#f1f5f9",
   chipActive: "#dbeafe",
-
   white: "#ffffff",
+  black: "#000000",
 };
 
 const RADIUS = {
-  xs: 10,
-  sm: 12,
-  md: 16,
-  lg: 20,
-  xl: 24,
-};
-
-const SPACING = {
-  xs: 8,
-  sm: 10,
+  xs: 6,
+  sm: 8,
   md: 12,
   lg: 16,
   xl: 20,
+  xxl: 24,
+  round: 999,
 };
 
+const SPACING = {
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 20,
+  xxl: 24,
+  xxxl: 32,
+};
+
+const TYPOGRAPHY = {
+  xs: 10,
+  sm: 12,
+  base: 14,
+  md: 16,
+  lg: 18,
+  xl: 20,
+  xxl: 24,
+  xxxl: 28,
+};
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const SHADOW = Platform.select({
   ios: {
-    shadowColor: "#0f172a",
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 10 },
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
   },
-  android: { elevation: 2 },
+  android: {
+    elevation: 4,
+  },
+});
+
+const SHADOW_LG = Platform.select({
+  ios: {
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+  },
+  android: {
+    elevation: 8,
+  },
 });
 
 /** =========================================================
- *  Small UI primitives
+ *  UI Components (Memoized for Performance)
  *  ========================================================= */
-const Divider: React.FC<{ style?: any }> = ({ style }) => (
+const Divider = React.memo(({ style }: { style?: any }) => (
   <View style={[{ height: 1, backgroundColor: COLORS.stroke }, style]} />
-);
+));
 
-const Section: React.FC<{
+const Section = React.memo(({
+  title,
+  subtitle,
+  right,
+  children,
+}: {
   title: string;
   subtitle?: string;
   right?: React.ReactNode;
   children?: React.ReactNode;
-}> = React.memo(({ title, subtitle, right, children }) => {
-  return (
-    <View style={styles.sectionCard}>
-      <View style={styles.sectionHeader}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.sectionTitle}>{title}</Text>
-          {!!subtitle && <Text style={styles.sectionSubtitle}>{subtitle}</Text>}
-        </View>
-        {right}
+}) => (
+  <View style={styles.sectionContainer}>
+    <View style={styles.sectionHeader}>
+      <View style={styles.sectionTitleContainer}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        {subtitle && <Text style={styles.sectionSubtitle}>{subtitle}</Text>}
       </View>
-
-      <View style={{ marginTop: SPACING.md }}>{children}</View>
+      {right}
     </View>
+    <View style={styles.sectionContent}>{children}</View>
+  </View>
+));
+
+const Badge = React.memo(({ value, color = COLORS.primary }: { value: number | string; color?: string }) => (
+  <View style={[styles.badge, { backgroundColor: color + "20" }]}>
+    <Text style={[styles.badgeText, { color }]}>{value}</Text>
+  </View>
+));
+
+const Card = React.memo(({ children, style }: { children: React.ReactNode; style?: any }) => (
+  <View style={[styles.card, style]}>{children}</View>
+));
+
+const IconButton = React.memo(({
+  icon,
+  onPress,
+  size = 24,
+  color = COLORS.primary,
+  style,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  onPress: () => void;
+  size?: number;
+  color?: string;
+  style?: any;
+}) => (
+  <TouchableOpacity onPress={onPress} style={[styles.iconButton, style]} hitSlop={8}>
+    <Ionicons name={icon} size={size} color={color} />
+  </TouchableOpacity>
+));
+
+/** =========================================================
+ *  Enhanced Button Component
+ *  ========================================================= */
+const Button = React.memo(({
+  title,
+  onPress,
+  variant = "primary",
+  size = "md",
+  icon,
+  iconPosition = "left",
+  disabled = false,
+  loading = false,
+  style,
+  fullWidth = false,
+}: {
+  title: string;
+  onPress: () => void;
+  variant?: "primary" | "secondary" | "outline" | "danger" | "success" | "ghost";
+  size?: "sm" | "md" | "lg";
+  icon?: keyof typeof Ionicons.glyphMap;
+  iconPosition?: "left" | "right";
+  disabled?: boolean;
+  loading?: boolean;
+  style?: any;
+  fullWidth?: boolean;
+}) => {
+  const getVariantStyles = () => {
+    switch (variant) {
+      case "primary":
+        return { bg: COLORS.primary, text: COLORS.white, border: COLORS.primary };
+      case "secondary":
+        return { bg: COLORS.cardSecondary, text: COLORS.text, border: COLORS.stroke };
+      case "outline":
+        return { bg: "transparent", text: COLORS.primary, border: COLORS.primary };
+      case "danger":
+        return { bg: COLORS.danger, text: COLORS.white, border: COLORS.danger };
+      case "success":
+        return { bg: COLORS.success, text: COLORS.white, border: COLORS.success };
+      case "ghost":
+        return { bg: "transparent", text: COLORS.text, border: "transparent" };
+      default:
+        return { bg: COLORS.primary, text: COLORS.white, border: COLORS.primary };
+    }
+  };
+
+  const getSizeStyles = () => {
+    switch (size) {
+      case "sm":
+        return { paddingVertical: 8, paddingHorizontal: 12, fontSize: 12 };
+      case "md":
+        return { paddingVertical: 12, paddingHorizontal: 16, fontSize: 14 };
+      case "lg":
+        return { paddingVertical: 16, paddingHorizontal: 20, fontSize: 16 };
+      default:
+        return { paddingVertical: 12, paddingHorizontal: 16, fontSize: 14 };
+    }
+  };
+
+  const variantStyles = getVariantStyles();
+  const sizeStyles = getSizeStyles();
+
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      disabled={disabled || loading}
+      activeOpacity={0.8}
+      style={[
+        styles.buttonBase,
+        {
+          backgroundColor: variantStyles.bg,
+          borderColor: variantStyles.border,
+          borderWidth: variant === "outline" ? 1 : 0,
+          paddingVertical: sizeStyles.paddingVertical,
+          paddingHorizontal: sizeStyles.paddingHorizontal,
+          width: fullWidth ? "100%" : undefined,
+          opacity: disabled ? 0.5 : 1,
+        },
+        style,
+      ]}
+    >
+      {loading ? (
+        <ActivityIndicator size="small" color={variantStyles.text} />
+      ) : (
+        <View style={styles.buttonContent}>
+          {icon && iconPosition === "left" && (
+            <Ionicons name={icon} size={sizeStyles.fontSize} color={variantStyles.text} style={styles.buttonIcon} />
+          )}
+          <Text
+            style={[
+              styles.buttonText,
+              {
+                color: variantStyles.text,
+                fontSize: sizeStyles.fontSize,
+                fontWeight: size === "lg" ? "700" : "600",
+              },
+            ]}
+          >
+            {title}
+          </Text>
+          {icon && iconPosition === "right" && (
+            <Ionicons name={icon} size={sizeStyles.fontSize} color={variantStyles.text} style={styles.buttonIcon} />
+          )}
+        </View>
+      )}
+    </TouchableOpacity>
   );
 });
 
-const Pill: React.FC<{
-  label: string;
-  active?: boolean;
-  onPress?: () => void;
-  right?: React.ReactNode;
-}> = ({ label, active, onPress, right }) => {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.pill,
-        active && styles.pillActive,
-        pressed && { opacity: 0.92, transform: [{ scale: 0.99 }] },
-      ]}
-      hitSlop={8}
-    >
-      <Text style={[styles.pillText, active && styles.pillTextActive]}>
-        {label}
-      </Text>
-      {right}
-    </Pressable>
-  );
-};
-
-const IconTextButton: React.FC<{
-  text: string;
-  type?: "primary" | "outline" | "danger" | "ghost";
-  onPress?: () => void;
-  disabled?: boolean;
-  right?: React.ReactNode;
+/** =========================================================
+ *  Enhanced Input Component
+ *  ========================================================= */
+const Input = React.memo(({
+  value,
+  onChangeText,
+  placeholder,
+  label,
+  error,
+  secureTextEntry,
+  keyboardType = "default",
+  multiline,
+  numberOfLines,
+  style,
+  leftIcon,
+  rightIcon,
+  editable = true,
+}: {
+  value: string;
+  onChangeText: (text: string) => void;
+  placeholder?: string;
+  label?: string;
+  error?: string;
+  secureTextEntry?: boolean;
+  keyboardType?: any;
+  multiline?: boolean;
+  numberOfLines?: number;
   style?: any;
-}> = ({ text, type = "primary", onPress, disabled, right, style }) => {
-  return (
-    <Pressable
-      onPress={disabled ? undefined : onPress}
-      style={({ pressed }) => [
-        styles.btnBase,
-        type === "primary" && styles.btnPrimary,
-        type === "outline" && styles.btnOutline,
-        type === "danger" && styles.btnDanger,
-        type === "ghost" && styles.btnGhost,
-        disabled && { opacity: 0.55 },
-        pressed && !disabled && { transform: [{ scale: 0.99 }], opacity: 0.96 },
-        style,
-      ]}
-      hitSlop={8}
-    >
-      <Text
-        style={[
-          styles.btnTextBase,
-          type === "primary" && styles.btnTextPrimary,
-          type === "outline" && styles.btnTextOutline,
-          type === "danger" && styles.btnTextDanger,
-          type === "ghost" && styles.btnTextOutline,
-        ]}
-      >
-        {text}
-      </Text>
-      {right}
-    </Pressable>
-  );
-};
-
-const Badge: React.FC<{ value: number | string }> = ({ value }) => (
-  <View style={styles.badge}>
-    <Text style={styles.badgeText}>{value}</Text>
+  leftIcon?: keyof typeof Ionicons.glyphMap;
+  rightIcon?: keyof typeof Ionicons.glyphMap;
+  editable?: boolean;
+}) => (
+  <View style={styles.inputContainer}>
+    {label && <Text style={styles.inputLabel}>{label}</Text>}
+    <View style={[styles.inputWrapper, error && styles.inputError, !editable && styles.inputDisabled]}>
+      {leftIcon && <Ionicons name={leftIcon} size={20} color={COLORS.muted} style={styles.inputLeftIcon} />}
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor={COLORS.placeholder}
+        secureTextEntry={secureTextEntry}
+        keyboardType={keyboardType}
+        multiline={multiline}
+        numberOfLines={numberOfLines}
+        editable={editable}
+        style={[styles.inputField, multiline && { height: numberOfLines ? numberOfLines * 24 : 100 }, style]}
+      />
+      {rightIcon && <Ionicons name={rightIcon} size={20} color={COLORS.muted} style={styles.inputRightIcon} />}
+    </View>
+    {error && <Text style={styles.inputErrorText}>{error}</Text>}
   </View>
-);
+));
 
 /** =========================================================
  *  Types
@@ -193,6 +361,7 @@ type ProductBatch = {
   cost_price: any;
   selling_price?: any;
   quantity: number;
+  created_at?: string;
 };
 
 type Product = {
@@ -213,11 +382,14 @@ type Customer = {
   name: string;
   phone: string;
   loyaltyPoints: number;
+  email?: string;
+  address?: string;
 };
 
 type Employee = {
   _id: string;
   fullName: string;
+  phone?: string;
   user_id?: {
     _id: string;
     username: string;
@@ -248,9 +420,9 @@ type CartItem = {
   overridePrice?: number | null;
   saleType?: SaleType;
   quantity: number;
-  subtotal: string; // giữ giống web: string .toFixed(2)
+  subtotal: string;
   tax_rate?: number;
-  stock_quantity?: number; // Store original stock for validation
+  stock_quantity?: number;
   batchId?: string | null;
   batchCode?: string | null;
   expiryDate?: string | null;
@@ -258,29 +430,29 @@ type CartItem = {
 
 type OrderTab = {
   key: string;
-
   cart: CartItem[];
   customer: Customer | null;
-  employeeId: string | null; // null = owner/không gán
+  employeeId: string | null;
   usedPoints: number;
   usedPointsEnabled: boolean;
   isVAT: boolean;
   paymentMethod: PaymentMethod;
   cashReceived: number;
-
   pendingOrderId: string | null;
   orderCreatedPaymentMethod: PaymentMethod | null;
   orderCreatedAt: string;
   orderPrintCount: number;
   orderEarnedPoints: number;
-
+  isPaid: boolean;
   qrImageUrl: string | null;
   qrPayload: string | null;
   qrExpiryTs: number | null;
-
   savedQrImageUrl: string | null;
   savedQrPayload: string | null;
   savedQrExpiryTs: number | null;
+  companyName: string;
+  taxCode: string;
+  companyAddress: string;
 };
 
 type OrderResponse = {
@@ -291,6 +463,7 @@ type OrderResponse = {
     paymentMethod: PaymentMethod;
     createdAt?: string;
     printCount?: number;
+    earnedPoints?: number;
   };
   qrDataURL?: string;
   paymentLinkUrl?: string | null;
@@ -299,6 +472,7 @@ type OrderResponse = {
 type LoyaltyConfig = {
   isActive?: boolean;
   vndPerPoint?: number;
+  minPointsToRedeem?: number;
 };
 
 const SALE_TYPE_LABEL: Record<SaleType, string> = {
@@ -310,22 +484,14 @@ const SALE_TYPE_LABEL: Record<SaleType, string> = {
 };
 
 /** =========================================================
- *  Helpers
+ *  Helper Functions
  *  ========================================================= */
-function debounce<F extends (...args: any[]) => any>(func: F, wait: number) {
+const debounce = <F extends (...args: any[]) => any>(func: F, wait: number) => {
   let timeout: ReturnType<typeof setTimeout>;
   return (...args: Parameters<F>) => {
     clearTimeout(timeout);
     timeout = setTimeout(() => func(...args), wait);
   };
-}
-
-const safeParse = (raw: string | null) => {
-  try {
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
 };
 
 const getPriceNumber = (price: any): number => {
@@ -373,17 +539,17 @@ const getItemUnitPrice = (item: CartItem): number => {
   }
   const base = getPriceNumber(item.price);
   const cost = getPriceNumber(item.cost_price);
-
   const saleType = item.saleType || "NORMAL";
+  
   switch (saleType) {
     case "NORMAL":
       return base;
     case "VIP":
-      return base; // VIP nhập tay qua overridePrice nếu muốn
+      return base;
     case "AT_COST":
       return cost || base;
     case "CLEARANCE":
-      return cost || base; // Xả kho nhập tay qua overridePrice nếu muốn
+      return cost || base;
     case "FREE":
       return 0;
     default:
@@ -391,10 +557,7 @@ const getItemUnitPrice = (item: CartItem): number => {
   }
 };
 
-const makeEmptyTab = (
-  key: string,
-  defaultEmployeeId: string | null
-): OrderTab => ({
+const makeEmptyTab = (key: string, defaultEmployeeId: string | null): OrderTab => ({
   key,
   cart: [],
   customer: null,
@@ -404,20 +567,21 @@ const makeEmptyTab = (
   isVAT: false,
   paymentMethod: "cash",
   cashReceived: 0,
-
   pendingOrderId: null,
   orderCreatedPaymentMethod: null,
   orderCreatedAt: "",
   orderPrintCount: 0,
   orderEarnedPoints: 0,
-
+  isPaid: false,
   qrImageUrl: null,
   qrPayload: null,
   qrExpiryTs: null,
-
   savedQrImageUrl: null,
   savedQrPayload: null,
   savedQrExpiryTs: null,
+  companyName: "",
+  taxCode: "",
+  companyAddress: "",
 });
 
 const clampInt = (raw: string, min = 0, max = Number.MAX_SAFE_INTEGER) => {
@@ -426,61 +590,357 @@ const clampInt = (raw: string, min = 0, max = Number.MAX_SAFE_INTEGER) => {
 };
 
 /** =========================================================
- *  Screen
+ *  Main Screen Component
  *  ========================================================= */
 const OrderPOSHomeScreen: React.FC = () => {
-  // ===== init =====
+  // ===== State Management =====
   const [loadingInit, setLoadingInit] = useState(true);
   const [loading, setLoading] = useState(false);
-
   const [storeId, setStoreId] = useState<string | null>(null);
   const [storeName, setStoreName] = useState("Cửa hàng");
-
+  const [storeInfo, setStoreInfo] = useState<any>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loggedInUser, setLoggedInUser] = useState<any>(null);
-
-  // Animation values for Phase 2: Sticky Header
-  const scrollY = useRef(new Animated.Value(0)).current;
-  const scrollViewRef = useRef<ScrollView>(null);
-
-  // Search focus state for prominent search UI
-  const [isSearchFocused, setIsSearchFocused] = useState(false);
-
-  const authHeaders = useMemo(() => {
-    return token ? { Authorization: `Bearer ${token}` } : undefined;
-  }, [token]);
-
-  // refs để tránh stale closure trong debounce
-  const storeIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    storeIdRef.current = storeId;
-  }, [storeId]);
-
-  const authHeadersRef = useRef<any>(undefined);
-  useEffect(() => {
-    authHeadersRef.current = authHeaders;
-  }, [authHeaders]);
-
-  // ===== data =====
+  
+  // Data states
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [currentUserEmployee, setCurrentUserEmployee] = useState<Seller | null>(
-    null
-  );
-  const [loyaltySetting, setLoyaltySetting] = useState<LoyaltyConfig | null>(
-    null
-  );
+  const [currentUserEmployee, setCurrentUserEmployee] = useState<Seller | null>(null);
+  const [loyaltySetting, setLoyaltySetting] = useState<LoyaltyConfig | null>(null);
   const [isStoreEmpty, setIsStoreEmpty] = useState(false);
   const [hasCheckedEmpty, setHasCheckedEmpty] = useState(false);
-
-  // ===== tabs =====
+  
+  // Order tabs
   const [orders, setOrders] = useState<OrderTab[]>([makeEmptyTab("1", null)]);
   const [activeTab, setActiveTab] = useState("1");
-
+  
+  // Search states
+  const [searchProduct, setSearchProduct] = useState("");
+  const [searchedProducts, setSearchedProducts] = useState<Product[]>([]);
+  const [showProductDropdown, setShowProductDropdown] = useState(false);
+  const [productSearchLoading, setProductSearchLoading] = useState(false);
+  const [productSearchError, setProductSearchError] = useState<string | null>(null);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  
+  // Customer states
+  const [phoneInput, setPhoneInput] = useState("");
+  const [foundCustomers, setFoundCustomers] = useState<Customer[]>([]);
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [newCustomerModal, setNewCustomerModal] = useState(false);
+  const [newCustomerName, setNewCustomerName] = useState("");
+  const [newCustomerPhone, setNewCustomerPhone] = useState("");
+  const [newCustomerEmail, setNewCustomerEmail] = useState("");
+  
+  // Modal states
+  const [employeeModal, setEmployeeModal] = useState(false);
+  const [qrModal, setQrModal] = useState(false);
+  const [billModal, setBillModal] = useState(false);
+  const [priceEditModal, setPriceEditModal] = useState<{
+    visible: boolean;
+    item?: CartItem;
+    tempSaleType?: SaleType;
+    tempOverridePrice?: number | null;
+  }>({ visible: false });
+  
+  const [qrRemainingSec, setQrRemainingSec] = useState<number | null>(null);
+  const [isPrinting, setIsPrinting] = useState(false);
+  
+  // Refs
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const scrollViewRef = useRef<ScrollView>(null);
+  const storeIdRef = useRef<string | null>(null);
+  const authHeadersRef = useRef<any>(undefined);
+  const selectingProductRef = useRef(false);
+  const selectingCustomerRef = useRef(false);
+  
+  // Current user and storage
+  const currentUserId = loggedInUser?.id || loggedInUser?._id || "anonymous";
+  const CART_STORAGE_KEY = `pos_cart_${storeId}_${currentUserId}`;
+  
+  // Auth headers
+  const authHeaders = useMemo(() => 
+    token ? { Authorization: `Bearer ${token}` } : undefined, 
+    [token]
+  );
+  
+  // Current tab
   const currentTab = useMemo(
     () => orders.find((t) => t.key === activeTab)!,
     [orders, activeTab]
   );
+  
+  // ===== Calculations =====
+  const subtotal = useMemo(
+    () => currentTab.cart.reduce(
+      (sum, item) => sum + getItemUnitPrice(item) * item.quantity,
+      0
+    ),
+    [currentTab.cart]
+  );
+  
+  const discount = useMemo(() => {
+    const vndPerPoint = loyaltySetting?.vndPerPoint || 0;
+    return currentTab.usedPointsEnabled ? (currentTab.usedPoints || 0) * vndPerPoint : 0;
+  }, [currentTab.usedPointsEnabled, currentTab.usedPoints, loyaltySetting?.vndPerPoint]);
+  
+  const beforeTax = Math.max(subtotal - discount, 0);
+  
+  const vatAmount = useMemo(() => {
+    return currentTab.cart.reduce((sum, item) => {
+      const itemPrice = getItemUnitPrice(item);
+      const itemTaxRate = item.tax_rate !== undefined && item.tax_rate !== null 
+        ? Number(item.tax_rate) 
+        : 0;
+      const effectiveRate = itemTaxRate === -1 ? 0 : itemTaxRate;
+      return sum + (itemPrice * item.quantity * effectiveRate) / 100;
+    }, 0);
+  }, [currentTab.cart]);
+  
+  const totalAmount = beforeTax + vatAmount;
+  const changeAmount = useMemo(
+    () => Math.max(0, (currentTab.cashReceived || 0) - totalAmount),
+    [currentTab.cashReceived, totalAmount]
+  );
+  
+  const employeeLabel = useMemo(() => {
+    if (currentUserEmployee?.isOwner && currentTab.employeeId === null) {
+      return `${currentUserEmployee.fullName} (Chủ cửa hàng)`;
+    }
+    const e = employees.find((x) => x._id === currentTab.employeeId);
+    return e?.fullName || "Chưa chọn";
+  }, [currentUserEmployee, currentTab.employeeId, employees]);
+  
+  // ===== Effects =====
+  useEffect(() => {
+    storeIdRef.current = storeId;
+  }, [storeId]);
+  
+  useEffect(() => {
+    authHeadersRef.current = authHeaders;
+  }, [authHeaders]);
+  
+  // Initialize
+  useEffect(() => {
+    (async () => {
+      try {
+        const [csRaw, tkn, usrRaw] = await Promise.all([
+          AsyncStorage.getItem("currentStore"),
+          AsyncStorage.getItem("token"),
+          AsyncStorage.getItem("user"),
+        ]);
+        
+        const cs = csRaw ? JSON.parse(csRaw) : null;
+        const usr = usrRaw ? JSON.parse(usrRaw) : null;
+        
+        if (!cs?._id) {
+          Alert.alert("Lỗi", "Không tìm thấy thông tin cửa hàng");
+          setLoadingInit(false);
+          return;
+        }
+        
+        setStoreId(cs._id);
+        setStoreName(cs.name || "Cửa hàng");
+        setStoreInfo(cs);
+        setToken(tkn);
+        setLoggedInUser(usr);
+      } catch (error) {
+        Alert.alert("Lỗi", "Không thể tải dữ liệu khởi tạo");
+        console.error("Init error:", error);
+      } finally {
+        setLoadingInit(false);
+      }
+    })();
+  }, []);
+  
+  // Load data
+  useEffect(() => {
+    if (!storeId) return;
+    loadEmployees();
+    loadLoyaltySetting();
+    checkStoreProducts();
+  }, [storeId]);
+  
+  // Cart persistence
+  useEffect(() => {
+    if (!storeId || !currentUserId) return;
+    
+    (async () => {
+      try {
+        const savedData = await AsyncStorage.getItem(CART_STORAGE_KEY);
+        if (savedData) {
+          const parsed = JSON.parse(savedData);
+          if (parsed.orders && Array.isArray(parsed.orders) && parsed.orders.length > 0) {
+            setOrders(parsed.orders);
+            if (parsed.activeTab) setActiveTab(parsed.activeTab);
+          }
+        }
+      } catch (err) {
+        console.error("Lỗi đọc cart:", err);
+      }
+    })();
+  }, [storeId, currentUserId]);
+  
+  useEffect(() => {
+    if (!storeId || !currentUserId) return;
+    
+    const hasItems = orders.some(
+      (tab) => tab.cart.length > 0 || tab.customer || tab.pendingOrderId
+    );
+    
+    if (hasItems) {
+      (async () => {
+        try {
+          const dataToSave = {
+            orders,
+            activeTab,
+            userId: currentUserId,
+            savedAt: new Date().toISOString(),
+          };
+          await AsyncStorage.setItem(CART_STORAGE_KEY, JSON.stringify(dataToSave));
+        } catch (err) {
+          console.error("Lỗi lưu cart:", err);
+        }
+      })();
+    }
+  }, [orders, activeTab, storeId, currentUserId]);
+  
+  // QR countdown
+  useEffect(() => {
+    if (!qrModal) return;
+    
+    let countdownId: NodeJS.Timeout | null = null;
+    const expiry = currentTab.qrExpiryTs;
+    
+    if (expiry) {
+      const tick = () => {
+        const diff = Math.max(0, Math.floor((expiry - Date.now()) / 1000));
+        setQrRemainingSec(diff);
+        
+        if (diff <= 0) {
+          updateOrderTab((t) => {
+            t.qrImageUrl = null;
+            t.qrPayload = null;
+            t.qrExpiryTs = null;
+          });
+          Alert.alert("Hết hạn", "QR đã hết hạn");
+        }
+      };
+      
+      tick();
+      countdownId = setInterval(tick, 1000);
+    }
+    
+    return () => {
+      if (countdownId) clearInterval(countdownId);
+    };
+  }, [qrModal, currentTab.qrExpiryTs]);
+  
 
+  // ===== API Functions =====
+  const loadEmployees = useCallback(async () => {
+    if (!storeId) return;
+    
+    try {
+      const user = loggedInUser;
+      if (!user?.id && !user?._id) return;
+      
+      const userId = user?.id || user?._id;
+      const role = user?.role;
+      
+      // STAFF: create employee from user data
+      if (role === "STAFF") {
+        const staffEmployee: Seller = {
+          _id: userId,
+          fullName: user?.fullname || user?.fullName || user?.username || "Nhân viên",
+          user_id: {
+            _id: userId,
+            username: user?.username || "staff",
+            role,
+            email: user?.email,
+            phone: user?.phone,
+            menu: user?.menu,
+          },
+        };
+        
+        setCurrentUserEmployee(staffEmployee);
+        setEmployees([staffEmployee as Employee]);
+        setOrders(prev => prev.map(t => ({ ...t, employeeId: userId })));
+        return;
+      }
+      
+      // MANAGER/OWNER: load employees list
+      const res: any = await apiClient.get(`/stores/${storeId}/employees`, {
+        params: { deleted: "false" },
+        headers: authHeaders,
+      });
+      
+      const employeesList: Employee[] = res?.data?.employees || res?.data?.data?.employees || [];
+      setEmployees(Array.isArray(employeesList) ? employeesList : []);
+      
+      if (role === "MANAGER" || role === "OWNER") {
+        const virtualOwner: VirtualOwner = {
+          _id: "virtual-owner",
+          fullName: user?.fullname || user?.fullName || user?.username || "Chủ cửa hàng",
+          isOwner: true,
+        };
+        
+        setCurrentUserEmployee(virtualOwner);
+        setOrders(prev => prev.map(t => ({ ...t, employeeId: null })));
+      }
+    } catch (error) {
+      console.error("Lỗi tải nhân viên:", error);
+      Alert.alert("Lỗi", "Không thể tải danh sách nhân viên");
+    }
+  }, [storeId, loggedInUser, authHeaders]);
+  
+  const loadLoyaltySetting = useCallback(async () => {
+    if (!storeId) return;
+    
+    try {
+      const res: any = await apiClient.get(`/loyaltys/config/${storeId}`, {
+        headers: authHeaders,
+      });
+      
+      if (res?.data?.isConfigured && res?.data?.config?.isActive) {
+        setLoyaltySetting(res.data.config);
+      } else {
+        setLoyaltySetting(null);
+      }
+    } catch (error) {
+      console.error("Lỗi tải cài đặt loyalty:", error);
+      setLoyaltySetting(null);
+    }
+  }, [storeId, authHeaders]);
+  
+  const checkStoreProducts = useCallback(async () => {
+    if (!storeId) return;
+    
+    try {
+      const res: any = await apiClient.get(`/products/store/${storeId}`, {
+        params: { limit: 1 },
+        headers: authHeaders,
+      });
+      
+      const products = res?.data?.products || [];
+      const isEmpty = products.length === 0;
+      setIsStoreEmpty(isEmpty);
+      setHasCheckedEmpty(true);
+      
+      if (isEmpty) {
+        const isOwner = loggedInUser?.role === "OWNER" || loggedInUser?.role === "MANAGER";
+        Alert.alert(
+          "Kho hàng trống",
+          isOwner
+            ? "Cửa hàng của bạn chưa có sản phẩm nào. Vui lòng nhập hàng trước khi bán."
+            : "Cửa hàng chưa có sản phẩm nào. Vui lòng báo chủ cửa hàng.",
+          [{ text: "OK" }]
+        );
+      }
+    } catch (error) {
+      console.error("Lỗi kiểm tra kho hàng:", error);
+    }
+  }, [storeId, authHeaders, loggedInUser]);
+  
+  // ===== Cart Functions =====
   const updateOrderTab = useCallback(
     (updater: (tab: OrderTab) => void, key = activeTab) => {
       setOrders((prev) =>
@@ -494,367 +954,78 @@ const OrderPOSHomeScreen: React.FC = () => {
     },
     [activeTab]
   );
-
+  
   const resetCurrentTab = useCallback(() => {
     updateOrderTab((tab) => {
-      const defaultEmployeeId = currentUserEmployee?.isOwner
-        ? null
+      const defaultEmployeeId = currentUserEmployee?.isOwner 
+        ? null 
         : currentUserEmployee?._id || null;
-
+      
       const fresh = makeEmptyTab(tab.key, defaultEmployeeId);
       Object.assign(tab, fresh);
     });
-
+    
     setPhoneInput("");
-    setTempPhone("");
     setFoundCustomers([]);
     setShowCustomerDropdown(false);
-
     setSearchProduct("");
     setSearchedProducts([]);
     setShowProductDropdown(false);
-
-    // 🗑️ Clear saved cart from AsyncStorage after successful order
+    
+    // Clear saved cart
     (async () => {
       try {
-        const uId = loggedInUser?.id || loggedInUser?._id || "anonymous";
-        const cartKey = `pos_cart_${storeId}_${uId}`;
-        await AsyncStorage.removeItem(cartKey);
-        console.log("🗑️ Đã xóa giỏ hàng đã lưu sau khi hoàn thành đơn");
+        await AsyncStorage.removeItem(CART_STORAGE_KEY);
       } catch (err) {
         console.error("Lỗi xóa cart:", err);
       }
     })();
   }, [updateOrderTab, currentUserEmployee, storeId, loggedInUser]);
-
-  const addNewOrderTab = () => {
+  
+  const addNewOrderTab = useCallback(() => {
     const maxKey = orders.reduce(
       (m, t) => Math.max(m, parseInt(t.key, 10) || 0),
       0
     );
     const newKey = String(maxKey + 1);
-    const defaultEmployeeId = currentUserEmployee?.isOwner
-      ? null
+    const defaultEmployeeId = currentUserEmployee?.isOwner 
+      ? null 
       : currentUserEmployee?._id || null;
+    
     setOrders((prev) => [...prev, makeEmptyTab(newKey, defaultEmployeeId)]);
     setActiveTab(newKey);
-  };
-
-  const removeOrderTab = (key: string) => {
+  }, [orders, currentUserEmployee]);
+  
+  const removeOrderTab = useCallback((key: string) => {
     if (orders.length <= 1) return;
-
+    
     setOrders((prev) => {
       const next = prev.filter((t) => t.key !== key);
       const nextActive = activeTab === key ? next[0]?.key : activeTab;
       if (nextActive) setActiveTab(nextActive);
       return next;
     });
-  };
-
-  // ===== init load AsyncStorage =====
-  useEffect(() => {
-    (async () => {
-      try {
-        const [csRaw, tkn, usrRaw] = await Promise.all([
-          AsyncStorage.getItem("currentStore"),
-          AsyncStorage.getItem("token"),
-          AsyncStorage.getItem("user"),
-        ]);
-
-        const cs = safeParse(csRaw);
-        const usr = safeParse(usrRaw);
-
-        if (!cs?._id) {
-          Alert.alert(
-            "Thiếu cửa hàng",
-            "Không tìm thấy currentStore trong bộ nhớ."
-          );
-          setLoadingInit(false);
-          return;
-        }
-
-        setStoreId(cs._id);
-        setStoreName(cs?.name || "Cửa hàng");
-        setToken(tkn);
-        setLoggedInUser(usr);
-      } catch {
-        Alert.alert("Lỗi", "Không đọc được dữ liệu khởi tạo.");
-      } finally {
-        setLoadingInit(false);
-      }
-    })();
+  }, [orders, activeTab]);
+  
+  const getAvailableStock = useCallback((product: Product) => {
+    if (!product.batches || product.batches.length === 0) {
+      return product.stock_quantity;
+    }
+    
+    const available = product.batches.reduce((sum: number, b: ProductBatch) => {
+      const isExpired = !!(b.expiry_date && new Date(b.expiry_date) < new Date());
+      return isExpired ? sum : sum + (b.quantity || 0);
+    }, 0);
+    
+    return available;
   }, []);
-
-  // ===== load employees + loyalty =====
-  const loadEmployees = useCallback(async () => {
-    if (!storeId) return;
-
-    try {
-      const user = loggedInUser;
-      if (!user?.id && !user?._id) return;
-
-      const userId = user?.id || user?._id;
-      const role = user?.role;
-
-      // STAFF: dùng user như employee
-      if (role === "STAFF") {
-        const staffEmployee: Seller = {
-          _id: userId,
-          fullName:
-            user?.fullname || user?.fullName || user?.username || "Nhân viên",
-          user_id: {
-            _id: userId,
-            username: user?.username || "staff",
-            role,
-            email: user?.email,
-            phone: user?.phone,
-            menu: user?.menu,
-          },
-        };
-
-        setCurrentUserEmployee(staffEmployee);
-        setEmployees([staffEmployee as Employee]);
-        setOrders((prev) => prev.map((t) => ({ ...t, employeeId: userId })));
-        return;
-      }
-
-      // MANAGER/OWNER: load list
-      const res: any = await apiClient.get(`/stores/${storeId}/employees`, {
-        params: { deleted: "false" },
-        headers: authHeaders,
-      });
-
-      const employeesList: Employee[] =
-        res?.data?.employees || res?.data?.data?.employees || [];
-      setEmployees(Array.isArray(employeesList) ? employeesList : []);
-
-      if (role === "MANAGER" || role === "OWNER") {
-        const virtualOwner: VirtualOwner = {
-          _id: "virtual-owner",
-          fullName:
-            user?.fullname ||
-            user?.fullName ||
-            user?.username ||
-            "Chủ cửa hàng",
-          isOwner: true,
-        };
-
-        setCurrentUserEmployee(virtualOwner);
-        setOrders((prev) => prev.map((t) => ({ ...t, employeeId: null })));
-      }
-    } catch {
-      Alert.alert("Lỗi", "Không tải được nhân viên.");
-    }
-  }, [storeId, loggedInUser, authHeaders]);
-
-  const loadLoyaltySetting = useCallback(async () => {
-    if (!storeId) return;
-
-    try {
-      const res: any = await apiClient.get(`/loyaltys/config/${storeId}`, {
-        headers: authHeaders,
-      });
-      if (res?.data?.isConfigured && res?.data?.config?.isActive) {
-        setLoyaltySetting(res.data.config);
-      } else {
-        setLoyaltySetting(null);
-      }
-    } catch {
-      setLoyaltySetting(null);
-    }
-  }, [storeId, authHeaders]);
-
-  const checkStoreProducts = useCallback(async () => {
-    if (!storeId) return;
-    try {
-      const res: any = await apiClient.get(`/products/store/${storeId}`, {
-        params: { limit: 1 },
-        headers: authHeaders,
-      });
-      const products = res?.data?.products || [];
-      const isEmpty = products.length === 0;
-      setIsStoreEmpty(isEmpty);
-      setHasCheckedEmpty(true);
-
-      if (isEmpty) {
-        showEmptyStoreAlert();
-      }
-    } catch (err) {
-      console.error("Lỗi kiểm tra danh mục sản phẩm:", err);
-    }
-  }, [storeId, authHeaders]);
-
-  const showEmptyStoreAlert = () => {
-    const isOwner =
-      loggedInUser?.role === "OWNER" || loggedInUser?.role === "MANAGER";
-
-    Alert.alert(
-      "Kho hàng trống!",
-      isOwner
-        ? "Cửa hàng của bạn chưa có sản phẩm nào. Vui lòng nhập hàng hóa vào hệ thống để bắt đầu bán hàng."
-        : "Cửa hàng chưa có sản phẩm nào. Vui lòng báo chủ cửa hàng nhập hàng hóa vào kho.",
-      [{ text: "Tôi đã hiểu" }]
-    );
-  };
-
-  useEffect(() => {
-    if (!storeId) return;
-    loadEmployees();
-    loadLoyaltySetting();
-    checkStoreProducts();
-  }, [storeId, loadEmployees, loadLoyaltySetting, checkStoreProducts]);
-
-  // ===== CART PERSISTENCE - AsyncStorage =====
-  // Include userId in key to separate carts for different users on same device
-  const currentUserId = loggedInUser?.id || loggedInUser?._id || "anonymous";
-  const CART_STORAGE_KEY = `pos_cart_${storeId}_${currentUserId}`;
-
-  // Load cart from AsyncStorage on mount (when storeId and userId are available)
-  useEffect(() => {
-    if (!storeId || !currentUserId) return;
-
-    (async () => {
-      try {
-        const savedData = await AsyncStorage.getItem(CART_STORAGE_KEY);
-        if (savedData) {
-          const parsed = JSON.parse(savedData);
-          if (
-            parsed.orders &&
-            Array.isArray(parsed.orders) &&
-            parsed.orders.length > 0
-          ) {
-            setOrders(parsed.orders);
-            if (parsed.activeTab) setActiveTab(parsed.activeTab);
-            console.log(` Đã khôi phục giỏ hàng POS cho user ${currentUserId}`);
-          }
-        }
-      } catch (err) {
-        console.error("Lỗi đọc cart từ AsyncStorage:", err);
-      }
-    })();
-  }, [storeId, currentUserId]);
-
-  // Save cart to AsyncStorage whenever orders change
-  useEffect(() => {
-    if (!storeId || !currentUserId) return;
-
-    // Don't save if all carts are empty (initial state)
-    const hasItems = orders.some(
-      (tab) => tab.cart.length > 0 || tab.customer || tab.pendingOrderId
-    );
-    if (hasItems) {
-      (async () => {
-        try {
-          const dataToSave = {
-            orders,
-            activeTab,
-            userId: currentUserId, // Store userId to verify ownership
-            savedAt: new Date().toISOString(),
-          };
-          await AsyncStorage.setItem(
-            CART_STORAGE_KEY,
-            JSON.stringify(dataToSave)
-          );
-        } catch (err) {
-          console.error("Lỗi lưu cart vào AsyncStorage:", err);
-        }
-      })();
-    }
-  }, [orders, activeTab, storeId, currentUserId]);
-
-  // Function to clear saved cart after successful order
-  const clearSavedCart = useCallback(async () => {
-    try {
-      await AsyncStorage.removeItem(CART_STORAGE_KEY);
-      console.log("🗑️ Đã xóa giỏ hàng đã lưu");
-    } catch (err) {
-      console.error("Lỗi xóa cart:", err);
-    }
-  }, [CART_STORAGE_KEY]);
-
-  // ===== product search =====
-  const [searchProduct, setSearchProduct] = useState("");
-  const [searchedProducts, setSearchedProducts] = useState<Product[]>([]);
-  const [showProductDropdown, setShowProductDropdown] = useState(false);
-  const [productSearchLoading, setProductSearchLoading] = useState(false);
-  const [productSearchError, setProductSearchError] = useState<string | null>(
-    null
-  );
-
-  // ===== Voice Recognition (Expo Go Safe Mode) =====
-  // Since native speech recognition requires dev build, we use a simpler approach
-  const [isListening, setIsListening] = useState(false);
-  const [voiceTranscript, setVoiceTranscript] = useState("");
-
-  const startVoiceSearch = () => {
-    // IOS: Use native Alert.prompt interactively (closest to voice input)
-    if (Platform.OS === "ios") {
-      Alert.prompt(
-        "🎤 Tìm kiếm bằng giọng nói",
-        "Sử dụng biểu tượng Microphone trên bàn phím của bạn để nói.",
-        [
-          { text: "Hủy", style: "cancel" },
-          {
-            text: "Tìm kiếm",
-            onPress: (text: string | undefined) => {
-              if (text && text.trim()) {
-                setSearchProduct(text.trim());
-                setShowProductDropdown(true);
-              }
-            },
-          },
-        ],
-        "plain-text",
-        searchProduct // Pre-fill with current search
-      );
-    }
-    // ANDROID: Guide user to use Google Keyboard Voice
-    else {
-      Alert.alert(
-        "🎤 Tìm kiếm bằng giọng nói",
-        "Trên Android, hãy nhấn vào ô tìm kiếm và sử dụng biểu tượng Micro 🎤 trên bàn phím để nhập liệu bằng giọng nói.",
-        [
-          {
-            text: "Mở bàn phím",
-            onPress: () => {
-              // Focus search input to open keyboard
-              // We need a ref to the TextInput, but for now just showing info is good
-            },
-          },
-        ]
-      );
-    }
-  };
-
-  const stopVoiceSearch = () => {
-    setIsListening(false);
-  };
-
-  const suggestedProducts = useMemo(() => {
-    const q = searchProduct.trim();
-    // Filter out products with stock_quantity <= 0
-    const inStockProducts = searchedProducts.filter(
-      (p) => p.stock_quantity > 0
-    );
-
-    if (!q) return inStockProducts.slice(0, 30); // Hiển thị nhiều hơn
-
-    return [...inStockProducts]
-      .map((p) => ({
-        p,
-        score: Math.max(matchScore(p.name, q), matchScore(p.sku, q)),
-      }))
-      .sort((a, b) => b.score - a.score)
-      .map((x) => x.p)
-      .slice(0, 30); // Hiển thị nhiều hơn
-  }, [searchProduct, searchedProducts]);
-
+  
   const searchProductDebounced = useMemo(
     () =>
       debounce(async (query: string) => {
         const sid = storeIdRef.current;
         const headers = authHeadersRef.current;
-
+        
         const q = query.trim();
         if (!sid || q.length < 1) {
           setProductSearchLoading(false);
@@ -862,22 +1033,18 @@ const OrderPOSHomeScreen: React.FC = () => {
           setSearchedProducts([]);
           return;
         }
-
+        
         setProductSearchLoading(true);
         setProductSearchError(null);
-
+        
         try {
           const res: any = await apiClient.get(`/products/search`, {
             params: { query: q, storeId: sid },
             headers,
           });
+          
           const list = res?.data?.products || [];
-          const products = Array.isArray(list) ? list : [];
-          setSearchedProducts(products);
-
-          if (products.length === 0 && hasCheckedEmpty && isStoreEmpty) {
-            showEmptyStoreAlert();
-          }
+          setSearchedProducts(Array.isArray(list) ? list : []);
         } catch (e: any) {
           setSearchedProducts([]);
           setProductSearchError(
@@ -886,171 +1053,140 @@ const OrderPOSHomeScreen: React.FC = () => {
         } finally {
           setProductSearchLoading(false);
         }
-      }, 220),
+      }, 300),
     []
   );
-
+  
   useEffect(() => {
     searchProductDebounced(searchProduct);
   }, [searchProduct, searchProductDebounced]);
-
-  // chặn blur khi đang bấm vào dropdown
-  const selectingCustomerRef = useRef(false);
-  const selectingProductRef = useRef(false);
-
-  // Tính toán tồn kho khả dụng (trừ đi các lô đã hết hạn)
-  const getAvailableStock = (product: Product) => {
-    if (!product.batches || product.batches.length === 0)
-      return product.stock_quantity;
-
-    // Tổng số lượng trong các lô chưa hết hạn
-    const available = product.batches.reduce((sum: number, b: ProductBatch) => {
-      const isExpired = !!(
-        b.expiry_date && new Date(b.expiry_date) < new Date()
+  
+  const addToCart = useCallback((product: Product) => {
+    const availableStock = getAvailableStock(product);
+    
+    if (availableStock <= 0) {
+      const hasExpired = product.batches && product.batches.some(
+        (b) => b.expiry_date && new Date(b.expiry_date) < new Date()
       );
-      return isExpired ? sum : sum + (b.quantity || 0);
-    }, 0);
-
-    return available;
-  };
-
-  const addToCart = useCallback(
-    (product: Product) => {
-      // 1. Calculate total available stock (exclude expired)
-      const availableStock = getAvailableStock(product);
-
-      if (availableStock <= 0) {
-        const hasExpired =
-          product.batches &&
-          product.batches.some(
-            (b) => b.expiry_date && new Date(b.expiry_date) < new Date()
-          );
-        Alert.alert(
-          hasExpired ? "Hàng hết hạn" : "Hết hàng",
-          hasExpired
-            ? `Sản phẩm "${product.name}" hiện chỉ còn các lô đã hết hạn sử dụng.`
-            : `Sản phẩm "${product.name}" đã hết hàng trong kho.`
-        );
-        return;
-      }
-
-      // 2. Select the best batch (FEFO)
-      let selectedBatchId: string | null = null;
-      let selectedBatchName: string | null = null;
-      let selectedBatchExpiry: string | null = null;
-
-      if (product.batches && product.batches.length > 0) {
-         const now = new Date();
-         const validBatches = product.batches.filter(b => {
-            const isExpired = b.expiry_date && new Date(b.expiry_date) < now;
-            return (b.quantity || 0) > 0 && !isExpired;
-         });
-
-         if (validBatches.length > 0) {
-            // Sort: Nearest Expiry first
-            validBatches.sort((a, b) => {
-               if (a.expiry_date && b.expiry_date) {
-                  return new Date(a.expiry_date).getTime() - new Date(b.expiry_date).getTime();
-               }
-               if (a.expiry_date) return -1;
-               if (b.expiry_date) return 1;
-               return 0;
-            });
-
-            const bestBatch = validBatches[0];
-            selectedBatchId = bestBatch.batch_no; 
-            selectedBatchName = bestBatch.batch_no; 
-            selectedBatchExpiry = bestBatch.expiry_date;
-         }
-      }
-
-      const priceNum = getPriceNumber(product.price);
-
-      updateOrderTab((tab) => {
-        let existingIndex = -1;
-        
-        if (selectedBatchId) {
-             existingIndex = tab.cart.findIndex(
-               (item) => item.productId === product._id && item.batchId === selectedBatchId
-             );
-        } else {
-             existingIndex = tab.cart.findIndex(
-               (item) => item.productId === product._id && !item.batchId
-             );
-        }
-
-        if (existingIndex !== -1) {
-          const existing = tab.cart[existingIndex];
-          const newQty = existing.quantity + 1;
-
-          if (newQty > availableStock) {
-             Alert.alert("Vượt tồn kho", `Tổng tồn kho khả dụng chỉ còn ${availableStock}.`);
-             return;
-          }
-
-          const newCart = [...tab.cart];
-          newCart[existingIndex] = {
-             ...existing,
-             quantity: newQty,
-             subtotal: (newQty * getItemUnitPrice(existing)).toFixed(2),
-          };
-          tab.cart = newCart;
-        } else {
-          tab.cart = [
-            ...tab.cart,
-            {
-              productId: product._id,
-              name: product.name,
-              sku: product.sku,
-              image: product.image,
-              price: product.price,
-              cost_price: product.cost_price,
-              unit: product.unit,
-              tax_rate: product.tax_rate,
-              quantity: 1,
-              overridePrice: null,
-              saleType: "NORMAL",
-              subtotal: priceNum.toFixed(2),
-              stock_quantity: availableStock,
-              batchId: selectedBatchId,
-              batchCode: selectedBatchName,
-              expiryDate: selectedBatchExpiry,
-            },
-          ];
-        }
+      
+      Alert.alert(
+        hasExpired ? "Hàng hết hạn" : "Hết hàng",
+        hasExpired
+          ? `Sản phẩm "${product.name}" chỉ còn lô đã hết hạn.`
+          : `Sản phẩm "${product.name}" đã hết hàng.`
+      );
+      return;
+    }
+    
+    // Select best batch (FEFO)
+    let selectedBatchId: string | null = null;
+    let selectedBatchName: string | null = null;
+    let selectedBatchExpiry: string | null = null;
+    
+    if (product.batches && product.batches.length > 0) {
+      const now = new Date();
+      const validBatches = product.batches.filter(b => {
+        const isExpired = b.expiry_date && new Date(b.expiry_date) < now;
+        return (b.quantity || 0) > 0 && !isExpired;
       });
-
-      setSearchProduct("");
-      setSearchedProducts([]);
-      setShowProductDropdown(false);
-      Keyboard.dismiss();
-    },
-    [updateOrderTab]
-  );
-
-  const updateQuantity = (id: string, batchId: string | null | undefined, qty: number) => {
+      
+      if (validBatches.length > 0) {
+        // Sort by expiry date (nearest first)
+        validBatches.sort((a, b) => {
+          if (a.expiry_date && b.expiry_date) {
+            return new Date(a.expiry_date).getTime() - new Date(b.expiry_date).getTime();
+          }
+          if (a.expiry_date) return -1;
+          if (b.expiry_date) return 1;
+          return 0;
+        });
+        
+        const bestBatch = validBatches[0];
+        selectedBatchId = bestBatch.batch_no;
+        selectedBatchName = bestBatch.batch_no;
+        selectedBatchExpiry = bestBatch.expiry_date;
+      }
+    }
+    
+    const priceNum = getPriceNumber(product.price);
+    
+    updateOrderTab((tab) => {
+      let existingIndex = -1;
+      
+      if (selectedBatchId) {
+        existingIndex = tab.cart.findIndex(
+          (item) => item.productId === product._id && item.batchId === selectedBatchId
+        );
+      } else {
+        existingIndex = tab.cart.findIndex(
+          (item) => item.productId === product._id && !item.batchId
+        );
+      }
+      
+      if (existingIndex !== -1) {
+        const existing = tab.cart[existingIndex];
+        const newQty = existing.quantity + 1;
+        
+        if (newQty > availableStock) {
+          Alert.alert("Vượt tồn kho", `Chỉ còn ${availableStock} sản phẩm.`);
+          return;
+        }
+        
+        const newCart = [...tab.cart];
+        newCart[existingIndex] = {
+          ...existing,
+          quantity: newQty,
+          subtotal: (newQty * getItemUnitPrice(existing)).toFixed(2),
+        };
+        tab.cart = newCart;
+      } else {
+        tab.cart = [
+          ...tab.cart,
+          {
+            productId: product._id,
+            name: product.name,
+            sku: product.sku,
+            image: product.image,
+            price: product.price,
+            cost_price: product.cost_price,
+            unit: product.unit,
+            tax_rate: product.tax_rate,
+            quantity: 1,
+            overridePrice: null,
+            saleType: "NORMAL",
+            subtotal: priceNum.toFixed(2),
+            stock_quantity: availableStock,
+            batchId: selectedBatchId,
+            batchCode: selectedBatchName,
+            expiryDate: selectedBatchExpiry,
+          },
+        ];
+      }
+    });
+    
+    setSearchProduct("");
+    setSearchedProducts([]);
+    setShowProductDropdown(false);
+    Keyboard.dismiss();
+  }, [updateOrderTab, getAvailableStock]);
+  
+  const updateQuantity = useCallback((id: string, batchId: string | null | undefined, qty: number) => {
     updateOrderTab((tab) => {
       const isMatch = (i: CartItem) => 
-         i.productId === id && ( (!batchId && !i.batchId) || (batchId && i.batchId === batchId) );
-
+        i.productId === id && ((!batchId && !i.batchId) || (batchId && i.batchId === batchId));
+      
       const item = tab.cart.find(isMatch);
       if (!item) return;
-
+      
       if (qty <= 0) {
         tab.cart = tab.cart.filter((i) => !isMatch(i));
       } else {
-        // Get max stock from cart item (stored when added) or from search results
-        const maxStock =
-          item.stock_quantity ??
-          searchedProducts.find((p) => p._id === id)?.stock_quantity ??
+        const maxStock = item.stock_quantity ?? 
+          searchedProducts.find((p) => p._id === id)?.stock_quantity ?? 
           9999;
-
+        
         if (qty > maxStock) {
-          Alert.alert(
-            "Vượt tồn kho",
-            `Sản phẩm "${item.name}" chỉ còn ${maxStock} đơn vị trong kho.`
-          );
-          // Cap the quantity to max stock
+          Alert.alert("Vượt tồn kho", `"${item.name}" chỉ còn ${maxStock} sản phẩm.`);
           const cappedQty = maxStock;
           tab.cart = tab.cart.map((i) =>
             isMatch(i)
@@ -1063,7 +1199,7 @@ const OrderPOSHomeScreen: React.FC = () => {
           );
           return;
         }
-
+        
         tab.cart = tab.cart.map((i) =>
           isMatch(i)
             ? {
@@ -1075,60 +1211,50 @@ const OrderPOSHomeScreen: React.FC = () => {
         );
       }
     });
-  };
-
-  const removeItem = (productId: string, batchId: string | null | undefined) => {
+  }, [updateOrderTab, searchedProducts]);
+  
+  const removeItem = useCallback((productId: string, batchId: string | null | undefined) => {
     updateOrderTab((tab) => {
-       const isMatch = (i: CartItem) => 
-         i.productId === productId && ( (!batchId && !i.batchId) || (batchId && i.batchId === batchId) );
-       tab.cart = tab.cart.filter((i) => !isMatch(i));
+      const isMatch = (i: CartItem) => 
+        i.productId === productId && ((!batchId && !i.batchId) || (batchId && i.batchId === batchId));
+      tab.cart = tab.cart.filter((i) => !isMatch(i));
     });
-  };
-
-  // ===== customer search + add =====
-  const [phoneInput, setPhoneInput] = useState("");
-  const [tempPhone, setTempPhone] = useState("");
-  const [foundCustomers, setFoundCustomers] = useState<Customer[]>([]);
-  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
-
-  const [newCustomerModalOpen, setNewCustomerModalOpen] = useState(false);
-  const [newCustomerName, setNewCustomerName] = useState("");
-  const [newCustomerPhone, setNewCustomerPhone] = useState("");
-
+  }, [updateOrderTab]);
+  
+  // ===== Customer Functions =====
   const searchCustomerDebounced = useMemo(
     () =>
       debounce(async (phone: string) => {
         const sid = storeIdRef.current;
         const headers = authHeadersRef.current;
-
+        
         const p = phone.trim();
-        setTempPhone(p);
-
         if (!sid || p.length < 3) {
           setFoundCustomers([]);
           return;
         }
-
+        
         try {
           const res: any = await apiClient.get(`/customers/search`, {
             params: { query: p, storeId: sid },
             headers,
           });
+          
           const list = res?.data?.customers || [];
           setFoundCustomers(Array.isArray(list) ? list : []);
         } catch {
           setFoundCustomers([]);
           setNewCustomerName("");
           setNewCustomerPhone(p);
-          setNewCustomerModalOpen(true);
+          setNewCustomerModal(true);
         }
       }, 300),
     []
   );
-
-  const onChangePhoneInput = (val: string) => {
+  
+  const onChangePhoneInput = useCallback((val: string) => {
     setPhoneInput(val);
-
+    
     if (!val.trim()) {
       setFoundCustomers([]);
       updateOrderTab((t) => {
@@ -1138,111 +1264,71 @@ const OrderPOSHomeScreen: React.FC = () => {
       });
       return;
     }
-
+    
     setShowCustomerDropdown(true);
     searchCustomerDebounced(val);
-  };
-
-  const selectCustomer = (c: Customer) => {
+  }, [updateOrderTab, searchCustomerDebounced]);
+  
+  const selectCustomer = useCallback((c: Customer) => {
     updateOrderTab((t) => {
       t.customer = c;
       t.usedPoints = 0;
       t.usedPointsEnabled = false;
     });
-
+    
     setPhoneInput(c.phone);
     setFoundCustomers([]);
     setShowCustomerDropdown(false);
-  };
-
-  const createCustomer = async () => {
+  }, [updateOrderTab]);
+  
+  const createCustomer = useCallback(async () => {
     if (!storeId) return;
-
+    
     const name = newCustomerName.trim();
     const phone = newCustomerPhone.trim();
-
+    
     if (!name || !phone) {
-      Alert.alert("Thiếu thông tin", "Vui lòng nhập tên và số điện thoại.");
+      Alert.alert("Thiếu thông tin", "Vui lòng nhập tên và số điện thoại");
       return;
     }
-
+    
     try {
       const res: any = await apiClient.post(
         `/customers`,
-        { storeId, name, phone },
+        { storeId, name, phone, email: newCustomerEmail || undefined },
         { headers: authHeaders }
       );
-
-      const created: Customer =
-        res?.data?.customer || res?.data?.data?.customer || res?.data;
-      if (!created?._id) throw new Error("create customer failed");
-
+      
+      const created: Customer = res?.data?.customer || res?.data?.data?.customer || res?.data;
+      if (!created?._id) throw new Error("Tạo khách hàng thất bại");
+      
       selectCustomer(created);
-      setNewCustomerModalOpen(false);
+      setNewCustomerModal(false);
+      setNewCustomerName("");
+      setNewCustomerPhone("");
+      setNewCustomerEmail("");
+      
+      Alert.alert("Thành công", "Đã tạo khách hàng mới");
     } catch (e: any) {
       Alert.alert(
         "Lỗi",
-        e?.response?.data?.message || "Không tạo được khách hàng."
+        e?.response?.data?.message || "Không thể tạo khách hàng"
       );
     }
-  };
-
-  // ===== totals/payment =====
-  const subtotal = useMemo(
-    () =>
-      currentTab.cart.reduce(
-        (sum, item) => sum + getItemUnitPrice(item) * item.quantity,
-        0
-      ),
-    [currentTab.cart]
-  );
-
-  const discount = useMemo(() => {
-    const vndPerPoint = loyaltySetting?.vndPerPoint || 0;
-    return currentTab.usedPointsEnabled
-      ? (currentTab.usedPoints || 0) * vndPerPoint
-      : 0;
-  }, [
-    currentTab.usedPointsEnabled,
-    currentTab.usedPoints,
-    loyaltySetting?.vndPerPoint,
-  ]);
-
-  const beforeTax = Math.max(subtotal - discount, 0);
-
-  // Tính VAT dựa trên từng sản phẩm tự động
-  const vatAmount = useMemo(() => {
-    return currentTab.cart.reduce((sum, item) => {
-      const itemPrice = getItemUnitPrice(item);
-      const itemTaxRate =
-        item.tax_rate !== undefined && item.tax_rate !== null
-          ? Number(item.tax_rate)
-          : 0;
-      const effectiveRate = itemTaxRate === -1 ? 0 : itemTaxRate;
-      return sum + (itemPrice * item.quantity * effectiveRate) / 100;
-    }, 0);
-  }, [currentTab.cart]);
-
-  const totalAmount = beforeTax + vatAmount;
-
-  const changeAmount = useMemo(
-    () => Math.max(0, (currentTab.cashReceived || 0) - totalAmount),
-    [currentTab.cashReceived, totalAmount]
-  );
-
-  // ===== create order =====
-  const createOrder = async () => {
+  }, [storeId, newCustomerName, newCustomerPhone, newCustomerEmail, authHeaders, selectCustomer]);
+  
+  // ===== Order Functions =====
+  const createOrder = useCallback(async () => {
     if (!storeId) return;
-
+    
     if (currentTab.cart.length === 0) {
-      Alert.alert("Đơn trống", "Hãy thêm sản phẩm vào giỏ.");
+      Alert.alert("Giỏ hàng trống", "Vui lòng thêm sản phẩm vào giỏ");
       return;
     }
-
-    const sendEmployeeId =
-      currentTab.employeeId === "virtual-owner" ? null : currentTab.employeeId;
-
+    
+    const sendEmployeeId = currentTab.employeeId === "virtual-owner" ? null : currentTab.employeeId;
     setLoading(true);
+    
     try {
       const items = currentTab.cart.map((item) => ({
         productId: item.productId,
@@ -1252,55 +1338,59 @@ const OrderPOSHomeScreen: React.FC = () => {
           ? { customPrice: item.overridePrice }
           : {}),
       }));
-
+      
       const payload: any = {
         storeId,
         employeeId: sendEmployeeId,
         items,
         paymentMethod: currentTab.paymentMethod,
         isVATInvoice: currentTab.isVAT,
-        orderId: currentTab.pendingOrderId || undefined, // Gửi ID nếu đang có đơn pending
+        orderId: currentTab.pendingOrderId || undefined,
+        vatAmount,
+        discountAmount: discount,
+        beforeTaxAmount: beforeTax,
+        totalAmount,
+        grossAmount: subtotal + vatAmount,
       };
-
+      
       if (currentTab.customer) {
         payload.customerInfo = {
           phone: currentTab.customer.phone,
           name: currentTab.customer.name,
         };
       }
-
-      // Explicitly send calculated amounts to match UI exactly
-      payload.vatAmount = vatAmount;
-      payload.discountAmount = discount;
-      payload.beforeTaxAmount = beforeTax;
-      payload.totalAmount = totalAmount; // Final payable
-      payload.grossAmount = subtotal + vatAmount; // Total goods + VAT before discount
-
+      
+      if (currentTab.isVAT) {
+        payload.vatInfo = {
+          companyName: currentTab.companyName,
+          taxCode: currentTab.taxCode,
+          companyAddress: currentTab.companyAddress,
+        };
+      }
+      
       if (currentTab.usedPointsEnabled && currentTab.usedPoints > 0) {
         payload.usedPoints = currentTab.usedPoints;
       }
-
+      
       const res: any = await apiClient.post<OrderResponse>(`/orders`, payload, {
         headers: authHeaders,
       });
-
+      
       const order = res?.data?.order;
       const orderId = order?._id;
       if (!orderId) throw new Error("Không lấy được orderId");
-
+      
       updateOrderTab((tab) => {
         tab.pendingOrderId = orderId;
         tab.orderCreatedAt = order?.createdAt || "";
-        tab.orderPrintCount =
-          typeof order?.printCount === "number" ? order.printCount : 0;
-        tab.orderEarnedPoints = (order as any)?.earnedPoints ?? 0;
+        tab.orderPrintCount = typeof order?.printCount === "number" ? order.printCount : 0;
+        tab.orderEarnedPoints = order?.earnedPoints ?? 0;
         tab.orderCreatedPaymentMethod = currentTab.paymentMethod;
-
+        
         if (currentTab.paymentMethod === "qr" && res?.data?.qrDataURL) {
           tab.qrImageUrl = res.data.qrDataURL;
           tab.savedQrImageUrl = res.data.qrDataURL;
-          tab.qrPayload = order?.paymentRef; // Save code for polling
-
+          tab.qrPayload = (order as any)?.paymentRef;
           tab.qrExpiryTs = order?.qrExpiry
             ? new Date(order.qrExpiry).getTime()
             : null;
@@ -1309,360 +1399,278 @@ const OrderPOSHomeScreen: React.FC = () => {
             : null;
         }
       });
-
+      
       if (currentTab.paymentMethod === "cash") {
-        Alert.alert("Thành công", "Đã tạo đơn hàng (tiền mặt).");
+        // Tiền mặt: Chỉ thông báo đơn hàng đã tạo, mở modal để xác nhận thanh toán/in
+        // Alert.alert("Thành công", "Đã tạo đơn hàng chờ thanh toán.", [
+        //   {
+        //     text: "OK",
+        //     // onPress: () => setBillModal(true),
+        //   },
+        // ]);
       } else {
-        setQrModalOpen(true);
+        setQrModal(true);
       }
     } catch (err: any) {
-      Alert.alert(
-        "Lỗi tạo đơn",
-        err?.response?.data?.message || err?.message || "Không thể tạo đơn."
-      );
+      const errorMessage = err?.response?.data?.message || err?.message || "Lỗi tạo đơn";
+      
+      if (currentTab.paymentMethod === "qr" && errorMessage.includes("PayOS")) {
+        Alert.alert(
+          "Chưa tích hợp thanh toán",
+          "Vui lòng cấu hình PayOS trong phần cài đặt thanh toán"
+        );
+      } else {
+        Alert.alert("Lỗi", errorMessage);
+      }
     } finally {
       setLoading(false);
     }
-  };
-
-  // ===== confirm paid cash =====
-  const confirmPaidCash = async () => {
+  }, [
+    storeId,
+    currentTab,
+    authHeaders,
+    vatAmount,
+    discount,
+    beforeTax,
+    totalAmount,
+    subtotal,
+    updateOrderTab,
+  ]);
+  
+  const confirmPaidCash = useCallback(async () => {
     if (!currentTab.pendingOrderId) {
-      Alert.alert("Thiếu đơn", "Chưa có orderId.");
+      Alert.alert("Lỗi", "Không tìm thấy đơn hàng");
       return;
     }
-
+    
     try {
       await apiClient.post(
         `/orders/${currentTab.pendingOrderId}/set-paid-cash`,
         {},
         { headers: authHeaders }
       );
-      setBillModalOpen(true);
+      
+      Alert.alert(
+        "Thành công",
+        "Đã xác nhận thanh toán. Bạn có muốn in hóa đơn không?",
+        [
+          { 
+            text: "Không", 
+            style: "cancel", 
+            onPress: () => {
+              setBillModal(false);
+              setQrModal(false);
+              resetCurrentTab();
+            } 
+          },
+          { 
+            text: "In hóa đơn", 
+            onPress: () => {
+              triggerPrint(currentTab.pendingOrderId!, true);
+            } 
+          },
+        ]
+      );
     } catch (e: any) {
       Alert.alert(
         "Lỗi",
-        e?.response?.data?.message || "Lỗi xác nhận thanh toán tiền mặt."
+        e?.response?.data?.message || "Lỗi xác nhận thanh toán"
       );
     }
-  };
-
-  // ===== print bill (server side) =====
-  const triggerPrintServer = async (orderId: string) => {
+  }, [currentTab.pendingOrderId, authHeaders]);
+  
+  const triggerPrint = useCallback(async (orderIdInput: string, shouldReset: boolean = false) => {
+    if (isPrinting) return;
+    
+    setIsPrinting(true);
+    
     try {
-      await apiClient.post(
-        `/orders/${orderId}/print-bill`,
-        {},
-        { headers: authHeaders }
-      );
-      Alert.alert("Thành công", "Đã gửi lệnh in hoá đơn.");
+      // 1. Lấy thông tin chi tiết đơn hàng để in
+      // Nếu là pending order hiện tại, dùng luôn dữ liệu hiện tại
+      // Nhưng tốt nhất nên gọi API lấy dữ liệu chuẩn từ server để đảm bảo chính xác (số lần in, ngày tạo, v.v.)
+      
+      let printData: any = null;
+      
+      // Check if we can use currentTab data if it matches
+      if (currentTab.pendingOrderId === orderIdInput) {
+        // Prepare local data
+          printData = {
+            storeName: storeName || "Cửa hàng",
+            storeAddress: storeInfo?.address || "",
+            storePhone: storeInfo?.phone || "",
+            storeTaxCode: storeInfo?.taxCode || "",
+            
+            orderId: orderIdInput || "",
+            createdAt: currentTab.orderCreatedAt || new Date(),
+            employeeName: employeeLabel || "Nhân viên",
+            
+            customerName: currentTab.customer?.name || "Khách vãng lai",
+            customerPhone: currentTab.customer?.phone || "",
+            companyName: currentTab.companyName || "",
+            taxCode: currentTab.taxCode || "",
+            companyAddress: currentTab.companyAddress || "",
+            
+            paymentMethod: currentTab.paymentMethod || "cash",
+            isVAT: !!currentTab.isVAT,
+            printCount: currentTab.orderPrintCount || 0,
+            
+            items: (currentTab.cart || []).map(item => ({
+              name: item.name || "Sản phẩm",
+              unit: item.unit || "",
+              quantity: item.quantity || 0,
+              price: getItemUnitPrice(item) || 0,
+              subtotal: parseFloat(item.subtotal || "0") || 0,
+            })),
+            
+            subtotal: subtotal || 0,
+            discount: discount || 0,
+            vatAmount: vatAmount || 0,
+            totalAmount: totalAmount || 0,
+          };
+      } else {
+        // Fetch order details if local data is not available or doesn't match
+        try {
+          const res: any = await apiClient.get(`/orders/${orderIdInput}`, { headers: authHeaders });
+          const order = res?.data?.order;
+          
+          if (order) {
+            printData = {
+              storeName: storeName || "Cửa hàng",
+              storeAddress: storeInfo?.address || "",
+              storePhone: storeInfo?.phone || "",
+              storeTaxCode: storeInfo?.taxCode || "",
+              
+              orderId: order._id || orderIdInput || "",
+              createdAt: order.createdAt || new Date(),
+              employeeName: employeeLabel || "Nhân viên",
+              
+              customerName: order.customerInfo?.name || "Khách vãng lai",
+              customerPhone: order.customerInfo?.phone || "",
+              companyName: order.vatInfo?.companyName || "",
+              taxCode: order.vatInfo?.taxCode || "",
+              companyAddress: order.vatInfo?.companyAddress || "",
+              
+              paymentMethod: order.paymentMethod || "cash",
+              isVAT: !!order.isVATInvoice,
+              printCount: order.printCount || 0,
+              
+              items: (order.items || []).map((item: any) => ({
+                name: item.name || item.product?.name || "Sản phẩm",
+                unit: item.unit || item.product?.unit || "",
+                quantity: item.quantity || 0,
+                price: item.price || 0,
+                subtotal: (item.quantity || 0) * (item.price || 0),
+              })),
+              
+              subtotal: order.subTotal || order.totalAmount || 0,
+              discount: order.discountAmount || 0,
+              vatAmount: order.vatAmount || 0,
+              totalAmount: order.totalAmount || 0,
+            };
+          }
+        } catch (fetchErr) {
+          console.error("Lỗi lấy thông tin đơn hàng để in:", fetchErr);
+          // throw fetchErr; // Let the main catch handle it, or handle specific error here
+          Alert.alert("Lỗi", "Không thể lấy thông tin chi tiết đơn hàng để in.");
+          return;
+        }
+      }
 
-      // reset sau khi in xong (giống logic web)
-      setBillModalOpen(false);
-      setQrModalOpen(false);
-      resetCurrentTab();
+      if (printData) {
+        await printBill(printData);
+        
+        // Gọi API để server biết đã in (tăng printCount)
+        await apiClient.post(
+          `/orders/${orderIdInput}/print-bill`,
+          {},
+          { headers: authHeaders }
+        );
+        
+        // Update print count locally if needed
+        updateOrderTab(t => t.orderPrintCount = (t.orderPrintCount || 0) + 1);
+
+        if (shouldReset) {
+            resetCurrentTab();
+        }
+      }
+      
     } catch (err: any) {
       Alert.alert(
         "Lỗi",
-        err?.response?.data?.message || "In hoá đơn không thành công!"
+        err?.response?.data?.message || "Lỗi in hóa đơn"
       );
+    } finally {
+      setIsPrinting(false);
     }
-  };
-
-  // ===== Export PDF to file =====
-  const buildInvoiceHtml = useCallback(() => {
-    const rows = currentTab.cart
-      .map((i, idx) => {
-        const unit = getItemUnitPrice(i);
-        const amount = unit * i.quantity;
-
-        return `
-          <tr>
-            <td style="padding:6px 0; border-bottom: 1px solid #eee;">
-              ${idx + 1}. ${i.name}<br/>
-              <span style="color:#666;font-size:11px;">
-                SKU: ${i.sku} • ${i.unit || ""}
-              </span>
-            </td>
-            <td style="padding:6px 0; border-bottom: 1px solid #eee; text-align:right;">${
-              i.quantity
-            }</td>
-            <td style="padding:6px 0; border-bottom: 1px solid #eee; text-align:right;">${formatPrice(
-              unit
-            )}</td>
-            <td style="padding:6px 0; border-bottom: 1px solid #eee; text-align:right; font-weight:700;">${formatPrice(
-              amount
-            )}</td>
-          </tr>
-        `;
-      })
-      .join("");
-
-    const orderId = currentTab.pendingOrderId || "";
-    const customerLine = currentTab.customer
-      ? `${currentTab.customer.name} (${currentTab.customer.phone})`
-      : "Khách vãng lai";
-
-    return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <style>
-    body { font-family: Arial, Helvetica, sans-serif; font-size: 12px; padding: 14px; }
-    .muted { color:#666; }
-    h2 { margin: 0 0 6px 0; }
-    .box { border: 1px solid #eaeaea; border-radius: 10px; padding: 10px; }
-    table { width:100%; border-collapse: collapse; margin-top: 10px; }
-    th { text-align:left; font-size: 11px; color:#666; padding-bottom: 6px; border-bottom:1px solid #eee; }
-    .right { text-align:right; }
-    .total { font-size: 16px; font-weight: 800; color: #1d4ed8; }
-  </style>
-</head>
-<body>
-  <h2>${storeName}</h2>
-  <div class="muted">POS • Hoá đơn</div>
-  <div style="height:10px"></div>
-
-  <div class="box">
-    <div><b>Mã đơn:</b> ${orderId}</div>
-    <div><b>Khách:</b> ${customerLine}</div>
-    <div><b>Thanh toán:</b> ${currentTab.paymentMethod === "cash" ? "Tiền mặt" : "QR"}</div>
-    <div><b>VAT:</b> ${currentTab.isVAT ? "Có" : "Không"}</div>
-  </div>
-
-  <table>
-    <thead>
-      <tr>
-        <th>Sản phẩm</th>
-        <th class="right">SL</th>
-        <th class="right">Đơn giá</th>
-        <th class="right">Thành tiền</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${rows}
-    </tbody>
-  </table>
-
-  <div style="height:8px"></div>
-  <div class="right muted">Tạm tính: ${formatPrice(subtotal)}</div>
-  <div class="right muted">Giảm (điểm): -${formatPrice(discount)}</div>
-  <div class="right muted">VAT: ${formatPrice(vatAmount)}</div>
-  <div class="right total">Tổng: ${formatPrice(totalAmount)}</div>
-</body>
-</html>`;
   }, [
-    currentTab.cart,
-    currentTab.pendingOrderId,
-    currentTab.customer,
-    currentTab.paymentMethod,
-    currentTab.isVAT,
-    storeName,
-    subtotal,
-    discount,
-    vatAmount,
+    authHeaders, 
+    isPrinting, 
+    currentTab, 
+    storeName, 
+    storeInfo, 
+    employeeLabel, 
+    subtotal, 
+    discount, 
+    vatAmount, 
     totalAmount,
-  ]);
-
-  const exportBillPdfToDevice = useCallback(async () => {
-    const html = buildInvoiceHtml();
-    const fileName = `hoa-don-${currentTab.pendingOrderId || "tmp"}.pdf`;
-
-    // 1) Try Expo (expo-print + expo-sharing)
-    try {
-      const Print = require("expo-print");
-      const Sharing = require("expo-sharing");
-
-      if (Print?.printToFileAsync) {
-        const { uri } = await Print.printToFileAsync({ html });
-        if (Sharing?.isAvailableAsync && (await Sharing.isAvailableAsync())) {
-          await Sharing.shareAsync(uri, {
-            mimeType: "application/pdf",
-            dialogTitle: fileName,
-          });
-          return;
-        }
-
-        await Share.share({
-          url: uri,
-          message: "Hoá đơn PDF",
-          title: fileName,
-        });
-        return;
-      }
-    } catch {
-      // ignore
-    }
-
-    // 2) Try react-native-html-to-pdf
-    try {
-      const RNHTMLtoPDF = require("react-native-html-to-pdf");
-      if (RNHTMLtoPDF?.convert) {
-        const results = await RNHTMLtoPDF.convert({
-          html,
-          fileName: `hoa-don-${currentTab.pendingOrderId || "tmp"}`,
-          base64: false,
-        });
-        const filePath = results?.filePath;
-        if (filePath) {
-          await Share.share({
-            url: filePath,
-            message: "Hoá đơn PDF",
-            title: fileName,
-          });
-          return;
-        }
-      }
-    } catch {
-      // ignore
-    }
-
-    Alert.alert(
-      "Chưa hỗ trợ xuất PDF",
-      "Thiếu thư viện tạo PDF. Nếu dùng Expo: cài expo-print + expo-sharing. Nếu RN CLI: cài react-native-html-to-pdf."
-    );
-  }, [buildInvoiceHtml, currentTab.pendingOrderId]);
-
-  // ===== UI: employee modal =====
-  const [employeeModalOpen, setEmployeeModalOpen] = useState(false);
-
-  const employeeLabel = useMemo(() => {
-    if (currentUserEmployee?.isOwner && currentTab.employeeId === null) {
-      return `${currentUserEmployee.fullName} (Chủ cửa hàng)`;
-    }
-    const e = employees.find((x) => x._id === currentTab.employeeId);
-    return e?.fullName || "Chưa chọn";
-  }, [currentUserEmployee, currentTab.employeeId, employees]);
-
-  // ===== UI: QR modal =====
-  const [qrModalOpen, setQrModalOpen] = useState(false);
-
-  // countdown QR
-  const [qrRemainingSec, setQrRemainingSec] = useState<number | null>(null);
-  useEffect(() => {
-    if (!qrModalOpen) return;
-
-    // --- 1. Countdown Logic ---
-    let countdownId: any = null;
-    const expiry = currentTab.qrExpiryTs;
-
-    if (expiry) {
-      const tick = () => {
-        const diff = Math.max(0, Math.floor((expiry - Date.now()) / 1000));
-        setQrRemainingSec(diff);
-
-        if (diff <= 0) {
-          updateOrderTab((t) => {
-            t.qrImageUrl = null;
-            t.qrPayload = null;
-            t.qrExpiryTs = null;
-          });
-          Alert.alert("Hết hạn", "QR đã hết hạn. Vui lòng tạo QR mới.");
-        }
-      };
-
-      tick();
-      countdownId = setInterval(tick, 1000);
-    } else {
-      setQrRemainingSec(null);
-    }
-
-    // --- 2. Polling Logic for PayOS ---
-    let pollId: any = null;
-    const orderCode = currentTab.qrPayload;
-
-    if (orderCode) {
-      const checkPayment = async () => {
-        try {
-          const res: any = await apiClient.get(
-            `/orders/pos/payment-status/${orderCode}?storeId=${storeId}`,
-            {
-              headers: authHeaders,
-            }
-          );
-          // PayOS status: PENDING | PAID | CANCELLED
-          if (
-            res.data.success &&
-            String(res.data.status).toUpperCase() === "PAID"
-          ) {
-            console.log("PayOS CONFIRMED PAID:", orderCode);
-            // Dừng polling ngay
-            if (pollId) clearInterval(pollId);
-            closeQrModal(); // Close QR
-
-            // Xác nhận đơn hàng thành công
-            await confirmPaidCash();
-            Alert.alert(
-              "Thanh toán thành công!",
-              "PayOS đã xác nhận thanh toán."
-            );
-          }
-        } catch (e) {
-          // ignore polling error
-        }
-      };
-
-      // Check ngay lập tức 1 phát
-      // checkPayment();
-      // Sau đó loop 3s
-      pollId = setInterval(checkPayment, 3000);
-    }
-
-    return () => {
-      if (countdownId) clearInterval(countdownId);
-      if (pollId) clearInterval(pollId);
-    };
-  }, [
-    qrModalOpen,
-    currentTab.qrExpiryTs,
-    currentTab.qrPayload,
+    vatAmount, 
+    totalAmount,
     updateOrderTab,
+    resetCurrentTab
   ]);
-
-  const closeQrModal = () => {
-    setQrModalOpen(false);
-    updateOrderTab((tab) => {
-      tab.qrImageUrl = null;
-      tab.qrPayload = null;
-      tab.qrExpiryTs = null;
-    });
-  };
-
-  // ===== UI: bill modal =====
-  const [billModalOpen, setBillModalOpen] = useState(false);
-
-  // ===== UI: price edit modal =====
-  const [priceEditModal, setPriceEditModal] = useState<{
-    visible: boolean;
-    item?: CartItem;
-    tempSaleType?: SaleType;
-    tempOverridePrice?: number | null;
-  }>({ visible: false });
-
-  const openPriceModal = (record: CartItem) => {
-    const realItem =
-      currentTab.cart.find((i) => 
-         i.productId === record.productId && 
-         ( (record.batchId && i.batchId === record.batchId) || (!record.batchId && !i.batchId) )
-      ) || record;
-
+  
+  // ===== UI Helpers =====
+  const openPriceModal = useCallback((record: CartItem) => {
+    const realItem = currentTab.cart.find((i) => 
+      i.productId === record.productId && 
+      ((record.batchId && i.batchId === record.batchId) || (!record.batchId && !i.batchId))
+    ) || record;
+    
     setPriceEditModal({
       visible: true,
       item: realItem,
       tempSaleType: realItem.saleType || "NORMAL",
       tempOverridePrice: realItem.overridePrice ?? null,
     });
-  };
-
-  const computeTempUnitPrice = () => {
+  }, [currentTab.cart]);
+  
+  const applyPriceEdit = useCallback(() => {
+    if (!priceEditModal.item || !priceEditModal.tempSaleType) return;
+    
+    const item = priceEditModal.item;
+    const st = priceEditModal.tempSaleType;
+    let override: number | null = priceEditModal.tempOverridePrice ?? null;
+    
+    if (st === "NORMAL") override = null;
+    if (st === "FREE") override = 0;
+    if (st === "AT_COST") override = getPriceNumber(item.cost_price || item.price);
+    
+    const finalUnit = st === "NORMAL"
+      ? getPriceNumber(item.price)
+      : (override ?? getPriceNumber(item.price));
+    const newSubtotal = (finalUnit * item.quantity).toFixed(2);
+    
+    updateOrderTab((tab) => {
+      tab.cart = tab.cart.map((i) => {
+        const isMatch = i.productId === item.productId && 
+          ((item.batchId && i.batchId === item.batchId) || (!item.batchId && !i.batchId));
+        return isMatch
+          ? { ...i, saleType: st, overridePrice: override, subtotal: newSubtotal }
+          : i;
+      });
+    });
+    
+    setPriceEditModal({ visible: false });
+  }, [priceEditModal, updateOrderTab]);
+  
+  const computeTempUnitPrice = useCallback(() => {
     const item = priceEditModal.item;
     if (!item) return 0;
-
+    
     const st = priceEditModal.tempSaleType || "NORMAL";
     if (st === "FREE") return 0;
     if (st === "AT_COST") return getPriceNumber(item.cost_price || item.price);
-
+    
     if (
       priceEditModal.tempOverridePrice !== null &&
       priceEditModal.tempOverridePrice !== undefined
@@ -1670,53 +1678,18 @@ const OrderPOSHomeScreen: React.FC = () => {
       return Number(priceEditModal.tempOverridePrice) || 0;
     }
     return getPriceNumber(item.price);
-  };
-
-  const applyPriceEdit = () => {
-    if (!priceEditModal.item || !priceEditModal.tempSaleType) return;
-
-    const item = priceEditModal.item;
-    const st = priceEditModal.tempSaleType;
-    let override: number | null = priceEditModal.tempOverridePrice ?? null;
-
-    if (st === "NORMAL") override = null;
-    if (st === "FREE") override = 0;
-    if (st === "AT_COST")
-      override = getPriceNumber(item.cost_price || item.price);
-
-    const finalUnit =
-      st === "NORMAL"
-        ? getPriceNumber(item.price)
-        : (override ?? getPriceNumber(item.price));
-    const newSubtotal = (finalUnit * item.quantity).toFixed(2);
-
-    updateOrderTab((tab) => {
-      tab.cart = tab.cart.map((i) => {
-        const isMatch = i.productId === item.productId && ( (item.batchId && i.batchId === item.batchId) || (!item.batchId && !i.batchId) );
-        return isMatch
-          ? {
-              ...i,
-              saleType: st,
-              overridePrice: override,
-              subtotal: newSubtotal,
-            }
-          : i;
-      });
-    });
-
-    setPriceEditModal({ visible: false });
-  };
-
-  // Numpad Logic for Cash Received
+  }, [priceEditModal]);
+  
   const handleNumpadPress = useCallback((val: string) => {
     updateOrderTab((t) => {
       let currentStr = String(t.cashReceived || 0);
       if (currentStr === "0") currentStr = "";
-
+      
       if (val === "C") {
         t.cashReceived = 0;
         return;
       }
+      
       if (val === "BACK") {
         const newStr = currentStr.slice(0, -1);
         t.cashReceived = newStr ? parseInt(newStr) : 0;
@@ -1725,403 +1698,346 @@ const OrderPOSHomeScreen: React.FC = () => {
       
       let nextStr = currentStr;
       if (val === "000") {
-         if (currentStr.length === 0) return; // avoid 000 at start
-         nextStr += "000";
+        if (currentStr.length === 0) return;
+        nextStr += "000";
       } else {
-         nextStr += val;
+        nextStr += val;
       }
-
-      // Limit to 100 billion to avoid overflow
-      if (nextStr.length > 11) return; 
-
+      
+      if (nextStr.length > 11) return;
+      
       t.cashReceived = parseInt(nextStr);
     });
-  }, []);
-
-  // ===== points block =====
-  const PointsBlock = useMemo(() => {
-    const canUse = !!loyaltySetting && !!currentTab.customer;
-    const maxPoints = currentTab.customer?.loyaltyPoints || 0;
-    const vndPerPoint = loyaltySetting?.vndPerPoint || 0;
-
-    if (!loyaltySetting) return null;
-
-    return (
-      <View style={{ marginTop: SPACING.md }}>
-        <View style={styles.rowBetween}>
-          <Text style={styles.mutedInline}>Dùng điểm</Text>
-
-          <Pressable
-            disabled={!canUse}
-            onPress={() =>
-              updateOrderTab((t) => {
-                t.usedPointsEnabled = !t.usedPointsEnabled;
-                if (!t.usedPointsEnabled) t.usedPoints = 0;
-              })
-            }
-            style={[
-              styles.toggle,
-              currentTab.usedPointsEnabled && canUse && styles.toggleOn,
-              !canUse && { opacity: 0.5 },
-            ]}
-          >
-            <Text
-              style={[
-                styles.toggleText,
-                currentTab.usedPointsEnabled && canUse && styles.toggleTextOn,
-              ]}
-            >
-              {currentTab.usedPointsEnabled ? "BẬT" : "TẮT"}
-            </Text>
-          </Pressable>
-        </View>
-
-        <Text style={styles.hint}>
-          Khách hiện có: {maxPoints.toLocaleString("vi-VN")} điểm • Quy đổi:{" "}
-          {vndPerPoint.toLocaleString("vi-VN")}đ/điểm
-        </Text>
-
-        {currentTab.usedPointsEnabled ? (
-          <View style={{ marginTop: SPACING.sm }}>
-            <Text style={styles.mutedInline}>Số điểm muốn dùng</Text>
-            <TextInput
-              value={String(currentTab.usedPoints || 0)}
-              onChangeText={(txt) => {
-                const n = clampInt(txt, 0, maxPoints);
-                updateOrderTab((t) => {
-                  t.usedPoints = n;
-                });
-              }}
-              keyboardType="numeric"
-              style={styles.input}
-              editable={canUse}
-              placeholder="0"
-              placeholderTextColor={COLORS.placeholder}
-            />
-            <Text style={styles.hint}>
-              Giảm: {formatPrice((currentTab.usedPoints || 0) * vndPerPoint)}
-            </Text>
-          </View>
-        ) : null}
-      </View>
-    );
-  }, [
-    loyaltySetting,
-    currentTab.customer,
-    currentTab.usedPointsEnabled,
-    currentTab.usedPoints,
-    updateOrderTab,
-  ]);
-
-  const CartRow = useCallback(
-    ({ item }: { item: CartItem }) => {
-      const unitPrice = getItemUnitPrice(item);
-      const amount = unitPrice * item.quantity;
-
-      const isCustom =
-        (item.saleType && item.saleType !== "NORMAL") ||
-        item.overridePrice !== null;
-
-      return (
-        <View style={styles.cartCard}>
-          <View style={styles.cartMainRow}>
-            {item.image?.url ? (
-              <Image
-                source={{ uri: item.image.url }}
-                style={styles.cartThumb}
-              />
-            ) : (
-              <View style={[styles.cartThumb, styles.cartThumbPlaceholder]}>
-                <Ionicons name="cube-outline" size={20} color={COLORS.muted} />
-              </View>
-            )}
-
-            <View style={{ flex: 1, marginLeft: 10 }}>
-              <Text style={styles.cartName} numberOfLines={1}>
-                {item.name}
-              </Text>
-              <Text style={styles.cartSub}>
-                {item.sku} • {item.unit}
-                {item.batchCode ? ` • Lô: ${item.batchCode}` : ""}
-              </Text>
-              {item.expiryDate && (
-                <Text style={[styles.cartSub, { color: COLORS.danger, fontSize: 11 }]}>
-                  HSD: {new Date(item.expiryDate).toLocaleDateString("vi-VN")}
-                </Text>
-              )}
-              {item.tax_rate !== undefined && item.tax_rate !== 0 && (
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    marginTop: 2,
-                  }}
-                >
-                  <Ionicons
-                    name="receipt-outline"
-                    size={12}
-                    color={COLORS.warn}
-                  />
-                  <Text
-                    style={{
-                      fontSize: 11,
-                      color: COLORS.warn,
-                      marginLeft: 4,
-                      fontWeight: "700",
-                    }}
-                  >
-                    Thuế:{" "}
-                    {item.tax_rate === -1 ? "Ko thuế" : `${item.tax_rate}%`}
-                  </Text>
-                </View>
-              )}
-
-              <TouchableOpacity
-                style={styles.priceTag}
-                onPress={() => openPriceModal(item)}
-              >
-                <Text style={styles.priceTagText}>
-                  {formatPrice(unitPrice)}
-                  {isCustom && <Text style={{ color: COLORS.warn }}> *</Text>}
-                </Text>
-                <Ionicons
-                  name="create-outline"
-                  size={14}
-                  color={COLORS.muted}
-                  style={{ marginLeft: 4 }}
-                />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.cartQtyBox}>
-              <TouchableOpacity
-                onPress={() =>
-                  updateQuantity(item.productId, item.batchId, item.quantity - 1)
-                }
-                style={styles.qtyBtn}
-              >
-                <Text style={styles.qtyBtnText}>-</Text>
-              </TouchableOpacity>
-
-              <Text style={styles.qtyValue}>{item.quantity}</Text>
-
-              <TouchableOpacity
-                onPress={() =>
-                  updateQuantity(item.productId, item.batchId, item.quantity + 1)
-                }
-                style={styles.qtyBtn}
-              >
-                <Text style={styles.qtyBtnText}>+</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <View style={styles.cartBottomRow}>
-            <View style={styles.quickQtyRow}>
-              {[5, 10, 20].map((q) => (
-                <TouchableOpacity
-                  key={q}
-                  onPress={() => updateQuantity(item.productId, item.batchId, q)}
-                  style={styles.quickQtyBtn}
-                >
-                  <Text style={styles.quickQtyText}>{q}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <View style={{ flex: 1 }} />
-
-            <View style={styles.rowRight}>
-              <Text style={styles.cartSubtotal}>{formatPrice(amount)}</Text>
-              <TouchableOpacity
-                onPress={() => removeItem(item.productId, item.batchId)}
-                hitSlop={8}
-                style={styles.cartRemoveBtn}
-              >
-                <Ionicons
-                  name="trash-outline"
-                  size={18}
-                  color={COLORS.danger}
-                />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      );
-    },
-    [openPriceModal, removeItem, updateQuantity]
-  );
-
-  // ===== UI: Buttons State =====
-  const canOpenBill = useMemo(() => {
-    return !!currentTab.pendingOrderId;
-  }, [currentTab.pendingOrderId]);
-
-  const canContinueQr = useMemo(() => {
-    return (
-      !!currentTab.pendingOrderId &&
-      !!currentTab.savedQrImageUrl &&
-      currentTab.paymentMethod === "qr"
-    );
-  }, [
-    currentTab.pendingOrderId,
-    currentTab.savedQrImageUrl,
-    currentTab.paymentMethod,
-  ]);
-
-  const primaryActionText = useMemo(() => {
-    if (currentTab.pendingOrderId) {
-      if (currentTab.paymentMethod === "qr") return "Cập nhật QR";
-      return "Cập nhật Đơn";
+  }, [updateOrderTab]);
+  
+  // Polling check QR Payment (Auto like Web)
+  useEffect(() => {
+    const orderCode = currentTab.qrPayload;
+    if (
+      !orderCode ||
+      !currentTab.qrImageUrl ||
+      !currentTab.pendingOrderId ||
+      currentTab.isPaid
+    ) {
+      return;
     }
-    if (currentTab.paymentMethod === "qr") return "Tạo QR";
-    return "Tạo Đơn Hàng";
-  }, [currentTab.paymentMethod, currentTab.pendingOrderId]);
 
-  const canCreateOrder = useMemo(() => {
-    // Luôn cho phép tạo/cập nhật nếu có hàng và chọn employee (nếu cần)
-    if (currentTab.cart.length === 0) return false;
-    // Cho phép update kể cả khi đã có pendingOrderId
-    return true;
-  }, [currentTab.cart, currentTab.pendingOrderId]);
+    let isActive = true;
+    const pendingOrderId = currentTab.pendingOrderId;
 
-  // ===== Phase 2: Animation setup =====
-  const HEADER_MAX = 175;
-  const HEADER_MIN = Platform.OS === "ios" ? 100 : 90;
+    const checkPayment = async () => {
+      if (!storeId || !orderCode) return;
+      
+      try {
+        const res: any = await apiClient.get(
+          `/orders/pos/payment-status/${orderCode}`,
+          { 
+            params: { storeId },
+            headers: authHeaders 
+          }
+        );
+
+        if (
+          isActive &&
+          res?.data?.success &&
+          String(res?.data?.status).toUpperCase() === "PAID"
+        ) {
+          // Stop polling
+          clearInterval(pollId);
+
+          // Update local state
+          updateOrderTab((tab) => {
+            tab.isPaid = true;
+          });
+
+          // Show success and ask to print
+          Alert.alert(
+            "Thành công",
+            "Đã nhận thanh toán QR! Bạn có muốn in hóa đơn không?",
+            [
+              { 
+                text: "Không", 
+                style: "cancel",
+                onPress: () => {
+                  setQrModal(false);
+                  setBillModal(false);
+                  resetCurrentTab();
+                }
+              },
+              {
+                text: "In hóa đơn",
+                onPress: () => {
+                  setQrModal(false);
+                  triggerPrint(pendingOrderId, true); // Pass true to reset after print
+                },
+              },
+            ]
+          );
+        }
+      } catch (e) {
+        // ignore
+      }
+    };
+
+    const pollId = setInterval(checkPayment, 3000);
+
+    return () => {
+      isActive = false;
+      clearInterval(pollId);
+    };
+  }, [
+    currentTab.qrPayload,
+    currentTab.qrImageUrl,
+    currentTab.pendingOrderId,
+    currentTab.isPaid,
+    storeId,
+    authHeaders,
+    updateOrderTab,
+    triggerPrint
+  ]);
+
+  // ===== Animation Values =====
+  const HEADER_MAX = 180;
+  const HEADER_MIN = 90;
   const SCROLL_DISTANCE = HEADER_MAX - HEADER_MIN;
-
+  
   const headerHeight = scrollY.interpolate({
     inputRange: [0, SCROLL_DISTANCE],
     outputRange: [HEADER_MAX, HEADER_MIN],
     extrapolate: "clamp",
   });
-
-  const headerTranslate = scrollY.interpolate({
+  
+  const headerTranslateY = scrollY.interpolate({
     inputRange: [0, SCROLL_DISTANCE],
     outputRange: [0, -40],
     extrapolate: "clamp",
   });
-
-  const titleOpacity = scrollY.interpolate({
-    inputRange: [0, SCROLL_DISTANCE / 2, SCROLL_DISTANCE],
-    outputRange: [1, 0.5, 0],
+  
+  const headerOpacity = scrollY.interpolate({
+    inputRange: [0, SCROLL_DISTANCE / 2],
+    outputRange: [1, 0],
     extrapolate: "clamp",
   });
-
-  const searchBoxTranslate = scrollY.interpolate({
-    inputRange: [0, SCROLL_DISTANCE],
-    outputRange: [0, 10], // Đưa ô search xuống chút khi thu gọn
-    extrapolate: "clamp",
-  });
-
-  // ===== render loading =====
+  
+  // ===== Loading State =====
   if (loadingInit) {
     return (
-      <SafeAreaView style={styles.safe}>
-        <StatusBar barStyle="dark-content" backgroundColor={COLORS.surface} />
-        <View style={styles.center}>
+      <SafeAreaView style={styles.safeContainer}>
+        <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
+        <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.mutedText}>Đang tải...</Text>
+          <Text style={styles.loadingText}>Đang tải ứng dụng...</Text>
         </View>
       </SafeAreaView>
     );
   }
-
+  
+  // ===== Cart Item Component =====
+  const CartItemRow = React.memo(({ item }: { item: CartItem }) => {
+    const unitPrice = getItemUnitPrice(item);
+    const amount = unitPrice * item.quantity;
+    const isCustom = (item.saleType && item.saleType !== "NORMAL") || item.overridePrice !== null;
+    
+    return (
+      <Card style={styles.cartItemCard}>
+        <View style={styles.cartItemHeader}>
+          <View style={styles.cartItemImageContainer}>
+            {item.image?.url ? (
+              <Image source={{ uri: item.image.url }} style={styles.cartItemImage} />
+            ) : (
+              <View style={styles.cartItemImagePlaceholder}>
+                <Ionicons name="cube-outline" size={24} color={COLORS.muted} />
+              </View>
+            )}
+          </View>
+          
+          <View style={styles.cartItemInfo}>
+            <Text style={styles.cartItemName} numberOfLines={1}>
+              {item.name}
+            </Text>
+            <View style={styles.cartItemMeta}>
+              <Text style={styles.cartItemSku}>{item.sku}</Text>
+              <Text style={styles.cartItemUnit}>• {item.unit}</Text>
+              {item.batchCode && (
+                <Text style={styles.cartItemBatch}>• Lô: {item.batchCode}</Text>
+              )}
+            </View>
+            
+            {item.expiryDate && (
+              <Text style={styles.cartItemExpiry}>
+                HSD: {new Date(item.expiryDate).toLocaleDateString("vi-VN")}
+              </Text>
+            )}
+            
+            {item.tax_rate !== undefined && item.tax_rate !== 0 && (
+              <View style={styles.taxBadge}>
+                <Ionicons name="receipt-outline" size={12} color={COLORS.warning} />
+                <Text style={styles.taxText}>
+                  Thuế: {item.tax_rate === -1 ? "Ko thuế" : `${item.tax_rate}%`}
+                </Text>
+              </View>
+            )}
+          </View>
+          
+          <TouchableOpacity
+            style={styles.priceEditButton}
+            onPress={() => openPriceModal(item)}
+          >
+            <Text style={styles.priceEditText}>
+              {formatPrice(unitPrice)}
+              {isCustom && <Text style={styles.customPriceIndicator}> *</Text>}
+            </Text>
+            <Ionicons name="create-outline" size={14} color={COLORS.muted} />
+          </TouchableOpacity>
+        </View>
+        
+        <View style={styles.cartItemFooter}>
+          <View style={styles.quantityControls}>
+            {[5, 10, 20].map((q) => (
+              <TouchableOpacity
+                key={q}
+                style={styles.quickQuantityButton}
+                onPress={() => updateQuantity(item.productId, item.batchId, q)}
+              >
+                <Text style={styles.quickQuantityText}>{q}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          
+          <View style={styles.quantityContainer}>
+            <TouchableOpacity
+              style={styles.quantityButton}
+              onPress={() => updateQuantity(item.productId, item.batchId, item.quantity - 1)}
+            >
+              <Text style={styles.quantityButtonText}>-</Text>
+            </TouchableOpacity>
+            
+            <View style={styles.quantityValueContainer}>
+              <Text style={styles.quantityValue}>{item.quantity}</Text>
+            </View>
+            
+            <TouchableOpacity
+              style={styles.quantityButton}
+              onPress={() => updateQuantity(item.productId, item.batchId, item.quantity + 1)}
+            >
+              <Text style={styles.quantityButtonText}>+</Text>
+            </TouchableOpacity>
+          </View>
+          
+          <View style={styles.cartItemActions}>
+            <Text style={styles.cartItemSubtotal}>{formatPrice(amount)}</Text>
+            <IconButton
+              icon="trash-outline"
+              onPress={() => removeItem(item.productId, item.batchId)}
+              color={COLORS.danger}
+              style={styles.removeButton}
+            />
+          </View>
+        </View>
+      </Card>
+    );
+  });
+  
   return (
     <View style={styles.safeContainer}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
       
-      {/* Search Overlay Backdrop */}
+      {/* Search Backdrop */}
       {isSearchFocused && (
-        <Pressable 
-          style={styles.searchBackdrop} 
+        <Pressable
+          style={styles.searchBackdrop}
           onPress={() => {
             setShowProductDropdown(false);
             setIsSearchFocused(false);
             Keyboard.dismiss();
-          }} 
+          }}
         />
       )}
-
-      {/* Header - Animated Sticky */}
-      <Animated.View style={[styles.header, { height: headerHeight, zIndex: 100 }]}>
-        <Animated.View style={{ opacity: titleOpacity, transform: [{ translateY: headerTranslate }] }}>
-          <View style={styles.headerTopRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.headerTitle} numberOfLines={1}>
+      
+      {/* Sticky Header */}
+      <Animated.View style={[styles.header, { height: headerHeight }]}>
+        <Animated.View style={{ opacity: headerOpacity, transform: [{ translateY: headerTranslateY }] }}>
+          <View style={styles.headerTop}>
+            <View style={styles.storeInfoContainer}>
+              <Text style={styles.storeName} numberOfLines={1}>
                 {storeName}
               </Text>
-              <Text style={styles.headerSub}>CHUYÊN NGHIỆP • TIN CẬY</Text>
+              <Text style={styles.storeSubtitle}>POS • Bán hàng chuyên nghiệp</Text>
             </View>
-
-            <IconTextButton
-              type="ghost"
-              text="Reset Đơn"
+            
+            <Button
+              title="Reset"
+              variant="ghost"
               onPress={() => {
                 Alert.alert(
                   "Xác nhận",
-                  "Xoá toàn bộ giỏ hàng và đặt lại đơn?",
+                  "Bạn có chắc muốn reset đơn hàng hiện tại?",
                   [
-                    { text: "Huỷ", style: "cancel" },
-                    {
-                      text: "Đồng ý",
-                      style: "destructive",
-                      onPress: resetCurrentTab,
-                    },
+                    { text: "Hủy", style: "cancel" },
+                    { text: "Reset", onPress: resetCurrentTab, style: "destructive" },
                   ]
                 );
               }}
-              style={{ paddingVertical: 8, paddingHorizontal: 12 }}
+              icon="refresh-outline"
+              size="sm"
             />
           </View>
-
+          
           {/* Tabs */}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            style={{ marginTop: 8 }}
-            contentContainerStyle={{ paddingBottom: 4 }}
+            style={styles.tabsScrollView}
+            contentContainerStyle={styles.tabsContentContainer}
           >
-            <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
-              {orders.map((t) => {
-                const active = t.key === activeTab;
-                return (
-                  <View key={t.key} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                    <Pill
-                      label={`Đơn${t.key}`}
-                      active={active}
-                      onPress={() => setActiveTab(t.key)}
-                    />
-                    {orders.length > 1 && (
-                      <Pressable onPress={() => removeOrderTab(t.key)} style={styles.iconClose}>
-                        <Ionicons name="close" size={14} color={active ? COLORS.primary : COLORS.muted} />
-                      </Pressable>
-                    )}
-                  </View>
-                );
-              })}
-              <TouchableOpacity onPress={addNewOrderTab} style={styles.addTabBtn}>
-                <Ionicons name="add" size={20} color={COLORS.primary} />
-              </TouchableOpacity>
-            </View>
+            {orders.map((t) => {
+              const active = t.key === activeTab;
+              return (
+                <View key={t.key} style={styles.tabWrapper}>
+                  <TouchableOpacity
+                    style={[styles.tabButton, active && styles.tabButtonActive]}
+                    onPress={() => setActiveTab(t.key)}
+                  >
+                    <Text style={[styles.tabText, active && styles.tabTextActive]}>
+                      Đơn {t.key}
+                    </Text>
+                  </TouchableOpacity>
+                  
+                  {orders.length > 1 && (
+                    <TouchableOpacity
+                      style={styles.tabCloseButton}
+                      onPress={() => removeOrderTab(t.key)}
+                    >
+                      <Ionicons
+                        name="close"
+                        size={14}
+                        color={active ? COLORS.primary : COLORS.muted}
+                      />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              );
+            })}
+            
+            <TouchableOpacity style={styles.addTabButton} onPress={addNewOrderTab}>
+              <Ionicons name="add" size={24} color={COLORS.primary} />
+            </TouchableOpacity>
           </ScrollView>
         </Animated.View>
-
-        {/* Search Section - Stays sticky but can move slightly */}
-        <Animated.View style={[
-          styles.searchSection, 
-          { transform: [{ translateY: searchBoxTranslate }] },
-          isSearchFocused && styles.searchFocusedContainer
-        ]}>
-          <View style={[
-            styles.searchBoxEnhanced,
-            isSearchFocused && styles.searchBoxActive
-          ]}>
-            <Ionicons name="search" size={20} color={isSearchFocused ? COLORS.primary : COLORS.muted} />
+        
+        {/* Search Section */}
+        <View style={styles.searchSection}>
+          <View style={[styles.searchContainer, isSearchFocused && styles.searchContainerFocused]}>
+            <Ionicons
+              name="search"
+              size={20}
+              color={isSearchFocused ? COLORS.primary : COLORS.muted}
+            />
+            
             <TextInput
               value={searchProduct}
-              onChangeText={(t) => {
-                setSearchProduct(t);
+              onChangeText={(text) => {
+                setSearchProduct(text);
                 setShowProductDropdown(true);
               }}
               onFocus={() => {
@@ -2132,133 +2048,98 @@ const OrderPOSHomeScreen: React.FC = () => {
                 setTimeout(() => {
                   if (!selectingProductRef.current) {
                     setShowProductDropdown(false);
-                    // Không set setIsSearchFocused(false) ngay để cho phép click backdrop
                   }
                 }, 180);
               }}
-              onSubmitEditing={() => {
-                if (suggestedProducts.length > 0) {
-                  const first = suggestedProducts[0];
-                  if (getAvailableStock(first) > 0) addToCart(first);
-                  else Alert.alert("Hết hàng", `Sản phẩm "${first.name}" đã hết hàng.`);
-                }
-              }}
-              blurOnSubmit={false}
-              placeholder="Tìm tên sản phẩm, mã SKU..."
+              placeholder="Tìm sản phẩm, mã SKU..."
               placeholderTextColor={COLORS.placeholder}
-              style={styles.searchInputEnhanced}
+              style={styles.searchInput}
               returnKeyType="search"
             />
-
-            {!!searchProduct && (
-              <Pressable
+            
+            {searchProduct.length > 0 && (
+              <TouchableOpacity
                 onPress={() => {
                   setSearchProduct("");
                   setSearchedProducts([]);
                   setShowProductDropdown(false);
                 }}
-                hitSlop={10}
-                style={styles.clearBtn}
+                style={styles.clearSearchButton}
               >
                 <Ionicons name="close-circle" size={20} color={COLORS.muted} />
-              </Pressable>
+              </TouchableOpacity>
             )}
-
+            
             <TouchableOpacity
-              onPress={() => isListening ? stopVoiceSearch() : startVoiceSearch()}
-              style={[styles.voiceBtn, isListening && styles.voiceBtnActive]}
-            >
-              <Ionicons name={isListening ? "mic" : "mic-outline"} size={20} color={isListening ? "#fff" : COLORS.primary} />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => Alert.alert("📷 Quét mã", "Đang mở camera...")}
-              style={styles.scanBtn}
+              style={styles.searchActionButton}
+              onPress={() => Alert.alert("Thông báo", "Chức năng quét mã đang phát triển")}
             >
               <Ionicons name="barcode-outline" size={20} color={COLORS.primary} />
             </TouchableOpacity>
           </View>
-
-          {/* Product Dropdown Overlay - Displayed when focused and sticky */}
-          {showProductDropdown && (
-            <Animated.View style={[styles.productDropdown, styles.prominentDropdown]}>
-              {productSearchLoading ? (
-                <View style={styles.dropdownCenter}>
-                  <ActivityIndicator color={COLORS.primary} size="small" />
-                  <Text style={styles.dropdownHint}>Đang tìm món...</Text>
-                </View>
-              ) : suggestedProducts.length === 0 ? (
-                <View style={styles.dropdownCenter}>
-                  <Ionicons name="cube-outline" size={32} color={COLORS.muted} />
-                  <Text style={styles.dropdownHint}>
-                    {searchProduct ? "Không tìm thấy hàng" : "Nhập để tìm hàng"}
-                  </Text>
-                </View>
-              ) : (
-                <ScrollView 
-                  style={{ maxHeight: 400 }} 
-                  keyboardShouldPersistTaps="always"
-                  showsVerticalScrollIndicator={false}
-                >
-                  {suggestedProducts.map((p) => {
-                    const avail = getAvailableStock(p);
-                    const isOut = avail <= 0;
-                    return (
-                      <Pressable
-                        key={p._id}
-                        onPressIn={() => (selectingProductRef.current = true)}
-                        onPressOut={() => (selectingProductRef.current = false)}
-                        onPress={() => !isOut && addToCart(p)}
-                        style={({ pressed }) => [
-                          styles.productCard,
-                          pressed && !isOut && styles.productCardPressed,
-                          isOut && { opacity: 0.5 },
-                        ]}
-                      >
+          
+          {/* Product Dropdown */}
+          {showProductDropdown && searchedProducts.length > 0 && (
+            <View style={styles.productDropdown}>
+              <ScrollView style={styles.dropdownScrollView} keyboardShouldPersistTaps="always">
+                {searchedProducts.map((p) => {
+                  const avail = getAvailableStock(p);
+                  const isOut = avail <= 0;
+                  
+                  return (
+                    <TouchableOpacity
+                      key={p._id}
+                      onPress={() => !isOut && addToCart(p)}
+                      onPressIn={() => (selectingProductRef.current = true)}
+                      onPressOut={() => (selectingProductRef.current = false)}
+                      style={[styles.productItem, isOut && styles.productItemDisabled]}
+                      disabled={isOut}
+                    >
+                      <View style={styles.productItemImageContainer}>
                         {p.image?.url ? (
-                          <Image source={{ uri: p.image.url }} style={styles.productThumb} />
+                          <Image source={{ uri: p.image.url }} style={styles.productItemImage} />
                         ) : (
-                          <View style={[styles.productThumb, styles.productThumbEmpty]}>
+                          <View style={styles.productItemImagePlaceholder}>
                             <Ionicons name="cube" size={20} color={COLORS.muted} />
                           </View>
                         )}
-                        <View style={styles.productInfo}>
-                          <Text style={[styles.productName, { fontSize: 15 }]} numberOfLines={1}>{p.name}</Text>
-                          <View style={styles.productMeta}>
-                            <Text style={styles.productSku}>{p.sku}</Text>
-                            <View style={[styles.stockBadge, isOut && { backgroundColor: "#fee2e2" }]}>
-                              <Text style={[styles.stockText, isOut && { color: COLORS.danger }]}>
-                                {isOut ? "HẾT HÀNG" : `TỒN: ${avail}`}
-                              </Text>
-                            </View>
-                          </View>
+                      </View>
+                      
+                      <View style={styles.productItemInfo}>
+                        <Text style={styles.productItemName} numberOfLines={1}>
+                          {p.name}
+                        </Text>
+                        <Text style={styles.productItemSku}>{p.sku}</Text>
+                      </View>
+                      
+                      <View style={styles.productItemRight}>
+                        <Text style={styles.productItemPrice}>
+                          {formatPrice(p.price)}
+                        </Text>
+                        <View style={[styles.stockBadge, isOut && styles.stockBadgeOut]}>
+                          <Text style={[styles.stockText, isOut && styles.stockTextOut]}>
+                            {isOut ? "Hết" : avail}
+                          </Text>
                         </View>
-                        <View style={styles.productRight}>
-                          <Text style={styles.productPrice}>{formatPrice(p.price)}</Text>
-                          {!isOut && (
-                            <View style={styles.addBtnMini}>
-                              <Ionicons name="add" size={16} color={COLORS.white} />
-                            </View>
-                          )}
-                        </View>
-                      </Pressable>
-                    );
-                  })}
-                </ScrollView>
-              )}
-            </Animated.View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
           )}
-        </Animated.View>
+        </View>
       </Animated.View>
-
+      
+      {/* Main Content */}
       <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={styles.keyboardAvoidingView}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <Animated.ScrollView
-          ref={scrollViewRef as any}
-          contentContainerStyle={[styles.container, { paddingTop: 20 }]}
-          keyboardShouldPersistTaps="always"
+          ref={scrollViewRef}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           scrollEventThrottle={16}
           onScroll={Animated.event(
@@ -2266,50 +2147,53 @@ const OrderPOSHomeScreen: React.FC = () => {
             { useNativeDriver: false }
           )}
         >
-          {/* Quick Info Bar - Employee & Customer inline */}
-          <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
-            {/* Employee Button */}
-            <Pressable
-              style={[styles.quickInfoBar, { flex: 0.8 }]}
-              onPress={() => setEmployeeModalOpen(true)}
+          {/* Quick Info Bar */}
+          <View style={styles.quickInfoBar}>
+            <TouchableOpacity
+              style={styles.employeeSelector}
+              onPress={() => setEmployeeModal(true)}
             >
-              <View style={styles.quickInfoItem}>
-                <Text style={styles.quickInfoLabel}>NV</Text>
-                <Text style={styles.quickInfoValue} numberOfLines={1}>
+              <View style={styles.employeeIconContainer}>
+                <Ionicons name="person-outline" size={16} color={COLORS.primary} />
+              </View>
+              <View style={styles.employeeInfo}>
+                <Text style={styles.employeeLabel}>NHÂN VIÊN</Text>
+                <Text style={styles.employeeName} numberOfLines={1}>
                   {employeeLabel}
                 </Text>
-                <Ionicons name="chevron-down" size={14} color={COLORS.muted} />
               </View>
-            </Pressable>
-
-            {/* Customer Bar - Full width or flex */}
-             <View style={[styles.customerBar, { flex: 1.2 }]}>
-                <View style={styles.customerIconBox}>
-                   <Ionicons name="person" size={20} color={COLORS.textStrong} />
-                </View>
-                <View style={styles.customerBarInfo}>
-                  <Text style={styles.customerBarLabel}>KHÁCH HÀNG</Text>
-                  <Text style={styles.customerBarName} numberOfLines={1}>
-                     {currentTab.customer ? currentTab.customer.name : "Khách vãng lai"}
-                  </Text>
-                </View>
-                <TouchableOpacity onPress={() => setNewCustomerModalOpen(true)} style={styles.customerChangeBtn}>
-                   <Text style={styles.customerChangeText}>ĐỔI</Text>
-                </TouchableOpacity>
-             </View>
+              <Ionicons name="chevron-down" size={16} color={COLORS.muted} />
+            </TouchableOpacity>
+            
+            <View style={styles.customerInfo}>
+              <View style={styles.customerIconContainer}>
+                <Ionicons name="people-outline" size={20} color={COLORS.text} />
+              </View>
+              <View style={styles.customerDetails}>
+                <Text style={styles.customerLabel}>KHÁCH HÀNG</Text>
+                <Text style={styles.customerName} numberOfLines={1}>
+                  {currentTab.customer ? currentTab.customer.name : "Khách vãng lai"}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.changeCustomerButton}
+                onPress={() => setNewCustomerModal(true)}
+              >
+                <Text style={styles.changeCustomerText}>ĐỔI</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-
-          {/* Loyalty Points - Compact */}
+          
+          {/* Loyalty Points */}
           {loyaltySetting?.isActive && currentTab.customer && (
-            <View style={styles.pointsCompactBox}>
-              <Ionicons name="gift" size={18} color={COLORS.warn} />
-              <Text style={styles.pointsCompactText}>
-                Có{" "}
-                {currentTab.customer.loyaltyPoints?.toLocaleString("vi-VN") ||
-                  0}{" "}
-                điểm
+            <View style={styles.loyaltyCard}>
+              <Ionicons name="gift-outline" size={20} color={COLORS.warning} />
+              <Text style={styles.loyaltyText}>
+                Có {currentTab.customer.loyaltyPoints?.toLocaleString("vi-VN") || 0} điểm
               </Text>
-              <Pressable
+              
+              <TouchableOpacity
+                style={[styles.loyaltyToggle, currentTab.usedPointsEnabled && styles.loyaltyToggleActive]}
                 onPress={() =>
                   updateOrderTab((t) => {
                     const nextState = !t.usedPointsEnabled;
@@ -2321,24 +2205,19 @@ const OrderPOSHomeScreen: React.FC = () => {
                     }
                   })
                 }
-                style={[
-                  styles.pointsToggle,
-                  currentTab.usedPointsEnabled && styles.pointsToggleOn,
-                ]}
               >
                 <Text
                   style={[
-                    styles.pointsToggleText,
-                    currentTab.usedPointsEnabled && styles.pointsToggleTextOn,
+                    styles.loyaltyToggleText,
+                    currentTab.usedPointsEnabled && styles.loyaltyToggleTextActive,
                   ]}
                 >
                   {currentTab.usedPointsEnabled ? "BẬT" : "TẮT"}
                 </Text>
-              </Pressable>
+              </TouchableOpacity>
+              
               {currentTab.usedPointsEnabled && (
-                <View
-                  style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
-                >
+                <View style={styles.pointsInputContainer}>
                   <TextInput
                     value={String(currentTab.usedPoints || 0)}
                     onChangeText={(txt) => {
@@ -2350,247 +2229,261 @@ const OrderPOSHomeScreen: React.FC = () => {
                     style={styles.pointsInput}
                     placeholder="0"
                   />
-                  <Pressable
+                  <TouchableOpacity
                     onPress={() =>
-                      updateOrderTab(
-                        (t) => (t.usedPoints = t.customer?.loyaltyPoints || 0)
-                      )
+                      updateOrderTab((t) => (t.usedPoints = t.customer?.loyaltyPoints || 0))
                     }
                   >
-                    <Text
-                      style={{
-                        fontSize: 10,
-                        color: COLORS.primary,
-                        fontWeight: "bold",
-                      }}
-                    >
-                      MAX
-                    </Text>
-                  </Pressable>
+                    <Text style={styles.maxPointsText}>MAX</Text>
+                  </TouchableOpacity>
                 </View>
               )}
             </View>
           )}
-
-          {/* Cart */}
+          
+          {/* Cart Section */}
           <Section
             title="Giỏ hàng"
-            subtitle="Sản phẩm đã chọn"
+            subtitle={`${currentTab.cart.length} sản phẩm`}
             right={<Badge value={currentTab.cart.length} />}
           >
             {currentTab.cart.length === 0 ? (
-              <Text style={styles.mutedText}>Chưa có sản phẩm.</Text>
+              <View style={styles.emptyCart}>
+                <Ionicons name="cart-outline" size={48} color={COLORS.muted} />
+                <Text style={styles.emptyCartText}>Chưa có sản phẩm</Text>
+                <Text style={styles.emptyCartSubtext}>
+                  Tìm kiếm và thêm sản phẩm vào giỏ hàng
+                </Text>
+              </View>
             ) : (
               <FlatList
                 data={currentTab.cart}
                 keyExtractor={(i) => `${i.productId}_${i.batchId || 'nobatch'}`}
                 scrollEnabled={false}
-                renderItem={CartRow as any}
-                ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+                renderItem={({ item }) => <CartItemRow item={item} />}
+                ItemSeparatorComponent={() => <View style={styles.cartItemSeparator} />}
               />
             )}
           </Section>
-
-          {/* Payment */}
-          <Section
-            title="Thanh toán"
-            subtitle="Tổng kết đơn hàng & phương thức"
-          >
-            <View style={styles.rowBetween}>
-              <Text style={styles.mutedInline}>Tạm tính</Text>
-              <Text style={styles.valueText}>{formatPrice(subtotal)}</Text>
-            </View>
-
-            {vatAmount > 0 && (
-              <View style={[styles.rowBetween, { marginTop: 10 }]}>
-                <Text style={[styles.mutedInline, { color: COLORS.warn }]}>
-                  Thuế GTGT (Tự động)
-                </Text>
-                <Text style={[styles.valueText, { color: COLORS.warn }]}>
-                  +{formatPrice(vatAmount)}
-                </Text>
+          
+          {/* Payment Section */}
+          <Section title="Thanh toán" subtitle="Tổng kết đơn hàng">
+            {/* Price Breakdown */}
+            <View style={styles.priceBreakdown}>
+              <View style={styles.priceRow}>
+                <Text style={styles.priceLabel}>Tạm tính</Text>
+                <Text style={styles.priceValue}>{formatPrice(subtotal)}</Text>
               </View>
-            )}
-
-            {/* LƯU Ý: Đã có phần render discount ở trên hoặc gom vào đây */}
-            {discount > 0 && (
-              <View style={[styles.rowBetween, { marginTop: 10 }]}>
-                <Text style={[styles.mutedInline, { color: COLORS.good }]}>
-                  Giảm giá điểm
-                </Text>
-                <Text style={[styles.valueText, { color: COLORS.good }]}>
-                  -{formatPrice(discount)}
-                </Text>
+              
+              {vatAmount > 0 && (
+                <View style={styles.priceRow}>
+                  <Text style={[styles.priceLabel, { color: COLORS.warning }]}>
+                    Thuế GTGT (Tự động)
+                  </Text>
+                  <Text style={[styles.priceValue, { color: COLORS.warning }]}>
+                    +{formatPrice(vatAmount)}
+                  </Text>
+                </View>
+              )}
+              
+              {discount > 0 && (
+                <View style={styles.priceRow}>
+                  <Text style={[styles.priceLabel, { color: COLORS.success }]}>
+                    Giảm giá điểm
+                  </Text>
+                  <Text style={[styles.priceValue, { color: COLORS.success }]}>
+                    -{formatPrice(discount)}
+                  </Text>
+                </View>
+              )}
+              
+              <Divider style={styles.priceDivider} />
+              
+              <View style={styles.totalRow}>
+                <Text style={styles.totalLabel}>THANH TOÁN</Text>
+                <Text style={styles.totalAmount}>{formatPrice(totalAmount)}</Text>
               </View>
-            )}
-
-            <View
-              style={[
-                styles.rowBetween,
-                {
-                  marginTop: 12,
-                  paddingTop: 12,
-                  borderTopWidth: 1,
-                  borderTopColor: COLORS.stroke,
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.mutedInline,
-                  {
-                    fontWeight: "bold",
-                    color: COLORS.textStrong,
-                    fontSize: 16,
-                  },
-                ]}
-              >
-                THANH TOÁN
-              </Text>
-              <Text
-                style={[
-                  styles.valueText,
-                  { color: COLORS.primary, fontSize: 22, fontWeight: "900" },
-                ]}
-              >
-                {formatPrice(totalAmount)}
-              </Text>
             </View>
-
-            <View style={[styles.rowBetween, { marginTop: 12 }]}>
-              <Text style={styles.mutedInline}>Cung cấp hoá đơn VAT</Text>
-              <Pressable
+            
+            {/* VAT Toggle */}
+            <View style={styles.vatToggleContainer}>
+              <Text style={styles.vatLabel}>Cung cấp hóa đơn VAT</Text>
+              <TouchableOpacity
+                style={[styles.vatToggle, currentTab.isVAT && styles.vatToggleActive]}
                 onPress={() => updateOrderTab((t) => (t.isVAT = !t.isVAT))}
-                style={[styles.toggle, currentTab.isVAT && styles.toggleOn]}
               >
                 <Text
-                  style={[
-                    styles.toggleText,
-                    currentTab.isVAT && styles.toggleTextOn,
-                  ]}
+                  style={[styles.vatToggleText, currentTab.isVAT && styles.vatToggleTextActive]}
                 >
-                  {currentTab.isVAT ? "MỞ" : "TẮT"}
+                  {currentTab.isVAT ? "BẬT" : "TẮT"}
                 </Text>
-              </Pressable>
+              </TouchableOpacity>
             </View>
-
-            <Text style={[styles.mutedInline, { marginTop: 14 }]}>
-              Phương thức
-            </Text>
-
-            <View style={styles.pmRow}>
-              <Pressable
-                onPress={() =>
-                  updateOrderTab((t) => (t.paymentMethod = "cash"))
-                }
+            
+            {currentTab.isVAT && (
+              <View style={styles.vatInfoContainer}>
+                <Input
+                  value={currentTab.companyName}
+                  onChangeText={(text) => updateOrderTab((t) => (t.companyName = text))}
+                  placeholder="Tên công ty"
+                  style={styles.vatInput}
+                />
+                <Input
+                  value={currentTab.taxCode}
+                  onChangeText={(text) => updateOrderTab((t) => (t.taxCode = text))}
+                  placeholder="Mã số thuế"
+                  style={styles.vatInput}
+                />
+                <Input
+                  value={currentTab.companyAddress}
+                  onChangeText={(text) => updateOrderTab((t) => (t.companyAddress = text))}
+                  placeholder="Địa chỉ"
+                  multiline
+                  numberOfLines={2}
+                  style={styles.vatInput}
+                />
+              </View>
+            )}
+            
+            {/* Payment Method */}
+            <Text style={styles.paymentMethodLabel}>Phương thức thanh toán</Text>
+            <View style={styles.paymentMethodContainer}>
+              <TouchableOpacity
                 style={[
-                  styles.pmBtn,
-                  currentTab.paymentMethod === "cash" && styles.pmBtnActive,
+                  styles.paymentMethodButton,
+                  currentTab.paymentMethod === "cash" && styles.paymentMethodButtonActive,
                 ]}
+                onPress={() => updateOrderTab((t) => (t.paymentMethod = "cash"))}
               >
+                <Ionicons
+                  name="cash-outline"
+                  size={20}
+                  color={currentTab.paymentMethod === "cash" ? COLORS.primary : COLORS.text}
+                />
                 <Text
                   style={[
-                    styles.pmBtnText,
-                    currentTab.paymentMethod === "cash" &&
-                      styles.pmBtnTextActive,
+                    styles.paymentMethodText,
+                    currentTab.paymentMethod === "cash" && styles.paymentMethodTextActive,
                   ]}
                 >
                   Tiền mặt
                 </Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() => updateOrderTab((t) => (t.paymentMethod = "qr"))}
+              </TouchableOpacity>
+              
+              <TouchableOpacity
                 style={[
-                  styles.pmBtn,
-                  currentTab.paymentMethod === "qr" && styles.pmBtnActive,
+                  styles.paymentMethodButton,
+                  currentTab.paymentMethod === "qr" && styles.paymentMethodButtonActive,
                 ]}
+                onPress={() => updateOrderTab((t) => (t.paymentMethod = "qr"))}
               >
+                <Ionicons
+                  name="qr-code-outline"
+                  size={20}
+                  color={currentTab.paymentMethod === "qr" ? COLORS.primary : COLORS.text}
+                />
                 <Text
                   style={[
-                    styles.pmBtnText,
-                    currentTab.paymentMethod === "qr" && styles.pmBtnTextActive,
+                    styles.paymentMethodText,
+                    currentTab.paymentMethod === "qr" && styles.paymentMethodTextActive,
                   ]}
                 >
                   QR
                 </Text>
-              </Pressable>
+              </TouchableOpacity>
             </View>
-
-            {currentTab.paymentMethod === "cash" ? (
-              <View style={{ marginTop: 14 }}>
-                <Text style={styles.mutedInline}>Tiền khách đưa</Text>
-                {/* Cash Input Display (No Keyboard) */}
-                <View style={{ alignItems: 'flex-end', marginBottom: 10, marginTop: 4 }}>
-                  <Text style={{fontSize: 28, fontWeight: '900', color: COLORS.primary}}>
-                     {formatPrice(currentTab.cashReceived || 0)}
+            
+            {/* Cash Payment Section */}
+            {currentTab.paymentMethod === "cash" && (
+              <View style={styles.cashPaymentContainer}>
+                <Text style={styles.cashReceivedLabel}>Tiền khách đưa</Text>
+                
+                <View style={styles.cashAmountContainer}>
+                  <Text style={styles.cashAmountText}>
+                    {formatPrice(currentTab.cashReceived || 0)}
                   </Text>
                 </View>
-
-                {/* Quick Suggestions */}
-                <View style={styles.suggestionRow}>
+                
+                {/* Quick Amount Suggestions */}
+                <View style={styles.quickAmountsContainer}>
                   {[totalAmount, 50000, 100000, 200000, 500000].map((amt, idx) => {
-                     if(amt <= 0) return null;
-                     if(idx > 0 && amt === totalAmount) return null;
-                     
-                     return (
-                     <TouchableOpacity key={idx} onPress={() => updateOrderTab(t => t.cashReceived = amt)} style={styles.moneyChip}>
-                       <Text style={styles.moneyChipText}>{formatPrice(amt)}</Text>
-                     </TouchableOpacity>
-                  )})}
+                    if (amt <= 0) return null;
+                    if (idx > 0 && amt === totalAmount) return null;
+                    
+                    return (
+                      <TouchableOpacity
+                        key={idx}
+                        style={styles.quickAmountButton}
+                        onPress={() => updateOrderTab((t) => (t.cashReceived = amt))}
+                      >
+                        <Text style={styles.quickAmountText}>{formatPrice(amt)}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
-
+                
                 {/* Numpad */}
                 <View style={styles.numpadContainer}>
-                   {[['1','2','3'],['4','5','6'],['7','8','9']].map((row, i) => (
-                     <View key={i} style={styles.numpadRow}>
-                       {row.map(n => (
-                         <TouchableOpacity key={n} onPress={() => handleNumpadPress(n)} style={styles.numBtn}>
-                           <Text style={styles.numBtnText}>{n}</Text>
-                         </TouchableOpacity>
-                       ))}
-                     </View>
-                   ))}
-                   <View style={styles.numpadRow}>
-                     <TouchableOpacity onPress={() => handleNumpadPress('C')} style={[styles.numBtn, styles.numBtnAction]}>
-                        <Text style={styles.numBtnActionText}>XOÁ</Text>
-                     </TouchableOpacity>
-                     <TouchableOpacity onPress={() => handleNumpadPress('0')} style={styles.numBtn}>
-                        <Text style={styles.numBtnText}>0</Text>
-                     </TouchableOpacity>
-                     
-                     <TouchableOpacity onPress={() => handleNumpadPress('000')} style={styles.numBtn}>
-                        <Text style={styles.numBtnText}>000</Text>
-                     </TouchableOpacity>
-                   </View>
+                  {[['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9']].map((row, i) => (
+                    <View key={i} style={styles.numpadRow}>
+                      {row.map((n) => (
+                        <TouchableOpacity
+                          key={n}
+                          style={styles.numpadButton}
+                          onPress={() => handleNumpadPress(n)}
+                        >
+                          <Text style={styles.numpadButtonText}>{n}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  ))}
+                  
+                  <View style={styles.numpadRow}>
+                    <TouchableOpacity
+                      style={[styles.numpadButton, styles.numpadActionButton]}
+                      onPress={() => handleNumpadPress('C')}
+                    >
+                      <Text style={styles.numpadActionText}>XOÁ</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity
+                      style={styles.numpadButton}
+                      onPress={() => handleNumpadPress('0')}
+                    >
+                      <Text style={styles.numpadButtonText}>0</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity
+                      style={styles.numpadButton}
+                      onPress={() => handleNumpadPress('000')}
+                    >
+                      <Text style={styles.numpadButtonText}>000</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
-
+                
+                {/* Change Amount */}
                 <View
                   style={[
-                    styles.changeBox,
+                    styles.changeContainer,
                     {
-                      borderColor: changeAmount >= 0 ? "#bbf7d0" : "#fecaca",
-                      backgroundColor:
-                        changeAmount >= 0 ? "#f0fdf4" : "#fff1f2",
+                      backgroundColor: changeAmount >= 0 ? COLORS.successLight : COLORS.dangerLight,
+                      borderColor: changeAmount >= 0 ? COLORS.success : COLORS.danger,
                     },
                   ]}
                 >
                   <Text
                     style={[
-                      styles.totalLabel,
-                      {
-                        color: changeAmount >= 0 ? COLORS.good : COLORS.danger,
-                      },
+                      styles.changeLabel,
+                      { color: changeAmount >= 0 ? COLORS.success : COLORS.danger },
                     ]}
                   >
                     Tiền thừa
                   </Text>
                   <Text
                     style={[
-                      styles.totalValue,
-                      {
-                        color: changeAmount >= 0 ? COLORS.good : COLORS.danger,
-                      },
+                      styles.changeAmountText,
+                      { color: changeAmount >= 0 ? COLORS.success : COLORS.danger },
                     ]}
                   >
                     {changeAmount >= 0
@@ -2598,1336 +2491,674 @@ const OrderPOSHomeScreen: React.FC = () => {
                       : `-${formatPrice(Math.abs(changeAmount))}`}
                   </Text>
                 </View>
-
-                {currentTab.pendingOrderId ? (
-                  <IconTextButton
-                    type="danger"
-                    text="Xác nhận đã thu tiền"
-                    onPress={() => {
-                      Alert.alert(
-                        "Xác nhận",
-                        `Khách đã đưa đủ ${formatPrice(totalAmount)}?`,
-                        [
-                          { text: "Huỷ", style: "cancel" },
-                          {
-                            text: "Xác nhận",
-                            style: "destructive",
-                            onPress: confirmPaidCash,
-                          },
-                        ]
-                      );
-                    }}
-                    style={{ marginTop: 10 }}
+                
+                {/* Confirm Cash Payment */}
+                {currentTab.pendingOrderId && !currentTab.isPaid && (
+                  <Button
+                    title="Xác nhận đã thu tiền"
+                    variant="danger"
+                    onPress={confirmPaidCash}
+                    style={styles.confirmPaymentButton}
+                    fullWidth
                   />
-                ) : null}
+                )}
               </View>
-            ) : null}
-          </Section>
-
-          {/* spacer for bottom bar */}
-          <View style={{ height: 108 }} />
-        </Animated.ScrollView>
-
-        {/* Bottom Bar */}
-        <View style={styles.bottomBar}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.bottomBarLabel}>Khách phải trả</Text>
-            <Text style={styles.bottomBarTotal}>
-              {formatPrice(totalAmount)}
-            </Text>
-            {currentTab.pendingOrderId ? (
-              <Text style={styles.bottomBarHint}>
-                Mã đơn: {currentTab.pendingOrderId}
-              </Text>
-            ) : (
-              <Text style={styles.bottomBarHint}>Chưa tạo đơn</Text>
             )}
+          </Section>
+          
+          {/* Bottom Spacer */}
+          <View style={styles.bottomSpacer} />
+        </Animated.ScrollView>
+      </KeyboardAvoidingView>
+      
+      {/* Bottom Action Bar */}
+      <View style={styles.bottomBar}>
+        <View style={styles.bottomBarLeft}>
+          <Text style={styles.bottomBarLabel}>Khách phải trả</Text>
+          <Text style={styles.bottomBarTotal}>{formatPrice(totalAmount)}</Text>
+          <Text style={styles.bottomBarSubtext}>
+            {currentTab.pendingOrderId
+              ? `Mã đơn: ${currentTab.pendingOrderId.slice(-8)}`
+              : "Chưa tạo đơn"}
+          </Text>
+        </View>
+        
+        <View style={styles.bottomBarRight}>
+          <View style={styles.paymentMethodChips}>
+            <TouchableOpacity
+              style={[
+                styles.paymentMethodChip,
+                currentTab.paymentMethod === "cash" && styles.paymentMethodChipActive,
+              ]}
+              onPress={() => updateOrderTab((t) => (t.paymentMethod = "cash"))}
+            >
+              <Text
+                style={[
+                  styles.paymentMethodChipText,
+                  currentTab.paymentMethod === "cash" && styles.paymentMethodChipTextActive,
+                ]}
+              >
+                CASH
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[
+                styles.paymentMethodChip,
+                currentTab.paymentMethod === "qr" && styles.paymentMethodChipActive,
+              ]}
+              onPress={() => updateOrderTab((t) => (t.paymentMethod = "qr"))}
+            >
+              <Text
+                style={[
+                  styles.paymentMethodChipText,
+                  currentTab.paymentMethod === "qr" && styles.paymentMethodChipTextActive,
+                ]}
+              >
+                QR
+              </Text>
+            </TouchableOpacity>
           </View>
-
-          <View style={{ gap: 8 }}>
-            <View style={{ flexDirection: "row", gap: 8 }}>
-              <Pressable
-                onPress={() =>
-                  updateOrderTab((t) => (t.paymentMethod = "cash"))
-                }
-                style={[
-                  styles.bottomChip,
-                  currentTab.paymentMethod === "cash" &&
-                    styles.bottomChipActive,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.bottomChipText,
-                    currentTab.paymentMethod === "cash" &&
-                      styles.bottomChipTextActive,
-                  ]}
-                >
-                  Cash
-                </Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() => updateOrderTab((t) => (t.paymentMethod = "qr"))}
-                style={[
-                  styles.bottomChip,
-                  currentTab.paymentMethod === "qr" && styles.bottomChipActive,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.bottomChipText,
-                    currentTab.paymentMethod === "qr" &&
-                      styles.bottomChipTextActive,
-                  ]}
-                >
-                  QR
-                </Text>
-              </Pressable>
-            </View>
-
-            <View style={{ flexDirection: "row", gap: 8 }}>
-              <IconTextButton
-                type="outline"
-                text="Hoá đơn"
-                disabled={!canOpenBill}
-                onPress={() => setBillModalOpen(true)}
-                style={{ flex: 1, height: 44 }}
-              />
-
-              <IconTextButton
-                type="primary"
-                text={loading ? "Đang xử lý..." : primaryActionText}
-                disabled={!canCreateOrder}
-                onPress={createOrder}
-                style={{ flex: 1.2, height: 44 }}
-              />
-            </View>
-
-            {canContinueQr && !currentTab.qrImageUrl ? (
-              <IconTextButton
-                type="outline"
-                text="Tiếp tục QR"
+          
+          <View style={styles.actionButtons}>
+            <Button
+              title="Hóa đơn"
+              variant="outline"
+              disabled={!currentTab.pendingOrderId}
+              onPress={() => setBillModal(true)}
+              style={styles.billButton}
+            />
+            
+            <Button
+              title={loading ? "Đang xử lý..." : 
+                currentTab.pendingOrderId
+                  ? currentTab.paymentMethod === "qr"
+                    ? "Cập nhật QR"
+                    : "Cập nhật đơn"
+                  : currentTab.paymentMethod === "qr"
+                  ? "Tạo QR"
+                  : "Tạo đơn"}
+              variant="primary"
+              disabled={currentTab.cart.length === 0}
+              onPress={createOrder}
+              loading={loading}
+              style={styles.createOrderButton}
+            />
+          </View>
+          
+          {currentTab.pendingOrderId &&
+            currentTab.paymentMethod === "qr" &&
+            !currentTab.qrImageUrl && (
+              <Button
+                title="Tiếp tục QR"
+                variant="outline"
                 onPress={() => {
                   if (currentTab.savedQrImageUrl) {
-                    updateOrderTab((t) => {
-                      t.qrImageUrl = t.savedQrImageUrl;
-                      t.qrPayload = t.savedQrPayload;
-                      t.qrExpiryTs = t.savedQrExpiryTs;
+                    updateOrderTab((tab) => {
+                      tab.qrImageUrl = tab.savedQrImageUrl;
+                      tab.qrPayload = tab.savedQrPayload;
+                      tab.qrExpiryTs = tab.savedQrExpiryTs;
                     });
-                    setQrModalOpen(true);
+                    setQrModal(true);
                   } else {
-                    Alert.alert(
-                      "Thông báo",
-                      "Không có QR đã lưu, vui lòng tạo QR mới."
-                    );
+                    Alert.alert("Thông báo", "Không có QR đã lưu, vui lòng tạo QR mới.");
                   }
                 }}
-                style={{ height: 44 }}
+                style={styles.continueQrButton}
+                fullWidth
               />
-            ) : null}
-          </View>
+            )}
         </View>
-
-        {/* Employee picker modal */}
-        <Modal
-          visible={employeeModalOpen}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setEmployeeModalOpen(false)}
-        >
-          <View style={styles.modalBackdrop}>
-            <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>Chọn nhân viên bán</Text>
-              <Text style={styles.modalSubtitle}>
-                Chọn người thực hiện đơn hàng
-              </Text>
-
-              <ScrollView
-                style={{ maxHeight: 360 }}
-                keyboardShouldPersistTaps="always"
-              >
-                {currentUserEmployee?.isOwner ? (
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.dropdownItem,
-                      pressed && { backgroundColor: "#eff6ff" },
-                    ]}
-                    onPress={() => {
-                      updateOrderTab((t) => (t.employeeId = null));
-                      setEmployeeModalOpen(false);
-                    }}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.dropdownTitle}>
+      </View>
+      
+      {/* Modals */}
+      
+      {/* Employee Modal */}
+      <Modal
+        visible={employeeModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setEmployeeModal(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Chọn nhân viên bán hàng</Text>
+            <Text style={styles.modalSubtitle}>
+              Chọn người thực hiện đơn hàng
+            </Text>
+            
+            <ScrollView style={styles.modalScrollView}>
+              {currentUserEmployee?.isOwner && (
+                <TouchableOpacity
+                  style={styles.employeeItem}
+                  onPress={() => {
+                    updateOrderTab((t) => (t.employeeId = null));
+                    setEmployeeModal(false);
+                  }}
+                >
+                  <View style={styles.employeeItemContent}>
+                    <Ionicons name="star" size={20} color={COLORS.warning} />
+                    <View style={styles.employeeItemInfo}>
+                      <Text style={styles.employeeItemName}>
                         {currentUserEmployee.fullName} (Chủ cửa hàng)
                       </Text>
-                      <Text style={styles.hint}>Gửi employeeId = null</Text>
+                      <Text style={styles.employeeItemHint}>
+                        Gửi employeeId = null
+                      </Text>
                     </View>
-                    <Text style={styles.addHint}>Chọn</Text>
-                  </Pressable>
-                ) : null}
-
-                {employees.map((e) => (
-                  <Pressable
-                    key={e._id}
-                    style={({ pressed }) => [
-                      styles.dropdownItem,
-                      pressed && { backgroundColor: "#eff6ff" },
-                    ]}
-                    onPress={() => {
-                      updateOrderTab((t) => (t.employeeId = e._id));
-                      setEmployeeModalOpen(false);
-                    }}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.dropdownTitle}>
+                  </View>
+                  <Text style={styles.employeeItemAction}>Chọn</Text>
+                </TouchableOpacity>
+              )}
+              
+              {employees.map((e) => (
+                <TouchableOpacity
+                  key={e._id}
+                  style={styles.employeeItem}
+                  onPress={() => {
+                    updateOrderTab((t) => (t.employeeId = e._id));
+                    setEmployeeModal(false);
+                  }}
+                >
+                  <View style={styles.employeeItemContent}>
+                    <Ionicons
+                      name="person-circle"
+                      size={20}
+                      color={currentUserEmployee?._id === e._id ? COLORS.primary : COLORS.text}
+                    />
+                    <View style={styles.employeeItemInfo}>
+                      <Text style={styles.employeeItemName}>
                         {e.fullName}
                         {currentUserEmployee?._id === e._id ? " (Bạn)" : ""}
                       </Text>
-                      <Text style={styles.hint}>ID: {e._id}</Text>
+                      <Text style={styles.employeeItemHint}>ID: {e._id}</Text>
                     </View>
-                    <Text style={styles.addHint}>Chọn</Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-
-              <IconTextButton
-                type="outline"
-                text="Đóng"
-                onPress={() => setEmployeeModalOpen(false)}
-                style={{ marginTop: 10 }}
-              />
-            </View>
+                  </View>
+                  <Text style={styles.employeeItemAction}>Chọn</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            
+            <Button
+              title="Đóng"
+              variant="outline"
+              onPress={() => setEmployeeModal(false)}
+              style={styles.modalCloseButton}
+              fullWidth
+            />
           </View>
-        </Modal>
-
-        {/* Customer Selection & Create Modal */}
-        <Modal
-          visible={newCustomerModalOpen}
-          transparent
-          animationType="slide"
-          onRequestClose={() => setNewCustomerModalOpen(false)}
-        >
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{flex:1}}>
-          <View style={styles.modalBackdrop}>
-            <View style={[styles.modalCard, { height: '80%', maxHeight: 650 }]}>
-              <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:12}}>
-                 <Text style={styles.modalTitle}>Chọn khách hàng</Text>
-                 <TouchableOpacity onPress={() => setNewCustomerModalOpen(false)} style={{padding:4}}>
-                    <Ionicons name="close" size={24} color={COLORS.muted} />
-                 </TouchableOpacity>
-              </View>
-
-              {/* Search Section */}
-              <View style={styles.searchBoxEnhanced}>
-                 <Ionicons name="search" size={20} color={COLORS.muted} />
-                 <TextInput 
-                    value={phoneInput}
-                    onChangeText={onChangePhoneInput}
-                    placeholder="Tìm theo tên hoặc SĐT..."
-                    placeholderTextColor={COLORS.placeholder}
-                    style={styles.searchInputEnhanced}
-                    autoFocus
-                 />
-                 {phoneInput ? (
-                    <TouchableOpacity onPress={() => onChangePhoneInput('')} style={{padding:4}}>
-                       <Ionicons name="close-circle" size={18} color={COLORS.muted} />
-                    </TouchableOpacity>
-                 ) : null}
-              </View>
-
-              {/* Results List */}
-              <View style={{flex: 1, marginTop: 10, marginBottom: 10, minHeight: 100}}>
-                 {loading ? (
-                    <ActivityIndicator size="small" color={COLORS.primary} style={{marginTop: 20}} />
-                 ) : (
-                    <ScrollView keyboardShouldPersistTaps="handled">
-                       {foundCustomers.map(c => (
-                          <TouchableOpacity key={c._id} onPress={() => { selectCustomer(c); setNewCustomerModalOpen(false); }} style={styles.dropdownItem}>
-                             <View style={{flex:1}}>
-                                <Text style={styles.dropdownTitle}>{c.name}</Text>
-                                <Text style={styles.hint}>{c.phone}</Text>
-                             </View>
-                             {c._id === currentTab.customer?._id ? (
-                                <Text style={{color: COLORS.good, fontWeight: 'bold'}}>Đang chọn</Text>
-                             ) : (
-                                <Text style={styles.addHint}>Chọn</Text>
-                             )}
-                          </TouchableOpacity>
-                       ))}
-                       {foundCustomers.length === 0 && phoneInput.length > 0 && !loading && (
-                          <Text style={{textAlign:'center', marginTop: 20, color: COLORS.muted}}>Chưa tìm thấy khách hàng nào.</Text>
-                       )}
-                    </ScrollView>
-                 )}
-              </View>
-
-              <View style={{height: 1, backgroundColor: COLORS.stroke, marginVertical: 10}} />
-
-              {/* Create New Section */}
-              <Text style={styles.sectionTitleMini}>Tạo khách hàng mới</Text>
-              <View style={{flexDirection:'row', gap: 10, marginTop: 10}}>
-                 <View style={{flex:1}}>
-                    <Text style={[styles.mutedInline, {fontSize: 11}]}>Tên khách</Text>
-                    <TextInput 
-                       value={newCustomerName} onChangeText={setNewCustomerName}
-                       style={styles.input} placeholder="Nhập tên..."
-                       placeholderTextColor={COLORS.placeholder}
-                    />
-                 </View>
-                 <View style={{flex:1}}>
-                    <Text style={[styles.mutedInline, {fontSize: 11}]}>SĐT</Text>
-                    <TextInput 
-                       value={newCustomerPhone} onChangeText={setNewCustomerPhone}
-                       style={styles.input} placeholder="Nhập SĐT..."
-                       placeholderTextColor={COLORS.placeholder}
-                       keyboardType="phone-pad"
-                    />
-                 </View>
-              </View>
-              <IconTextButton 
-                 type="primary" text="Tạo khách hàng" 
-                 onPress={createCustomer}
-                 style={{marginTop: 12}}
-              />
-
-            </View>
-          </View>
-          </KeyboardAvoidingView>
-        </Modal>
-
-        {/* QR modal */}
-        <Modal
-          visible={qrModalOpen}
-          transparent
-          animationType="fade"
-          onRequestClose={closeQrModal}
+        </View>
+      </Modal>
+      
+      {/* Customer Modal */}
+      <Modal
+        visible={newCustomerModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setNewCustomerModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.keyboardAvoidingView}
         >
           <View style={styles.modalBackdrop}>
-            <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>QR thanh toán</Text>
-              <Text style={styles.modalSubtitle}>
-                Khách quét mã để thanh toán
-              </Text>
-
-              {qrRemainingSec !== null ? (
-                <View style={[styles.infoStrip, { marginTop: 10 }]}>
-                  <Text style={styles.infoStripText}>
-                    Còn lại:{" "}
-                    {Math.floor(qrRemainingSec / 60)
-                      .toString()
-                      .padStart(2, "0")}
-                    :{(qrRemainingSec % 60).toString().padStart(2, "0")}
-                  </Text>
-                </View>
-              ) : null}
-
-              <View style={styles.qrBox}>
-                {currentTab.qrImageUrl ? (
-                  <Image
-                    source={{ uri: currentTab.qrImageUrl }}
-                    style={styles.qrImage}
-                    resizeMode="contain"
+            <View style={[styles.modalContainer, styles.customerModal]}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Tìm kiếm khách hàng</Text>
+                <IconButton
+                  icon="close"
+                  onPress={() => setNewCustomerModal(false)}
+                  color={COLORS.muted}
+                />
+              </View>
+              
+              {/* Search */}
+              <View style={styles.customerSearchContainer}>
+                <Ionicons name="search" size={20} color={COLORS.muted} />
+                <TextInput
+                  value={phoneInput}
+                  onChangeText={onChangePhoneInput}
+                  placeholder="Tìm theo tên hoặc SĐT..."
+                  placeholderTextColor={COLORS.placeholder}
+                  style={styles.customerSearchInput}
+                  autoFocus
+                />
+                {phoneInput.length > 0 && (
+                  <IconButton
+                    icon="close-circle"
+                    onPress={() => onChangePhoneInput("")}
+                    color={COLORS.muted}
                   />
-                ) : (
-                  <Text style={styles.hint}>
-                    Không có QR (có thể đã bị tắt / hết hạn).
-                  </Text>
                 )}
               </View>
-
-              <View style={styles.modalRow}>
-                <IconTextButton
-                  type="outline"
-                  text="Đóng"
-                  onPress={closeQrModal}
-                  style={{ flex: 1 }}
-                />
-                <IconTextButton
-                  type="danger"
-                  text="In hoá đơn"
-                  onPress={async () => {
-                    if (!currentTab.pendingOrderId) {
-                      Alert.alert("Thiếu đơn hàng", "Chưa có orderId.");
-                      return;
-                    }
-                    await triggerPrintServer(currentTab.pendingOrderId);
-                  }}
-                  style={{ flex: 1 }}
-                />
-              </View>
-            </View>
-          </View>
-        </Modal>
-
-        {/* Bill modal */}
-        <Modal
-          visible={billModalOpen}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setBillModalOpen(false)}
-        >
-          <View style={styles.modalBackdrop}>
-            <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>Hoá đơn</Text>
-              <Text style={styles.modalSubtitle}>
-                {currentTab.pendingOrderId
-                  ? `Mã đơn: ${currentTab.pendingOrderId}`
-                  : "Chưa có đơn"}
-              </Text>
-
-              <View style={{ marginTop: 10, gap: 10 }}>
-                <View style={styles.rowBetween}>
-                  <Text style={styles.mutedInline}>Khách</Text>
-                  <Text style={styles.valueText}>
-                    {currentTab.customer?.name || "Khách vãng lai"}
-                  </Text>
-                </View>
-
-                <View style={styles.rowBetween}>
-                  <Text style={styles.mutedInline}>SĐT</Text>
-                  <Text style={styles.valueText}>
-                    {currentTab.customer?.phone || "---"}
-                  </Text>
-                </View>
-
-                <Divider />
-
-                <View style={styles.rowBetween}>
-                  <Text style={styles.mutedInline}>Tổng thanh toán</Text>
-                  <Text style={styles.totalValue}>
-                    {formatPrice(totalAmount)}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={{ marginTop: 12 }}>
-                <Text style={styles.sectionTitleMini}>Danh sách sản phẩm</Text>
-
-                <ScrollView
-                  style={{ maxHeight: 220, marginTop: 8 }}
-                  keyboardShouldPersistTaps="always"
-                >
-                  {currentTab.cart.map((i) => (
-                    <View
-                      key={i.productId}
-                      style={{
-                        paddingVertical: 10,
-                        borderBottomWidth: 1,
-                        borderBottomColor: COLORS.stroke,
-                      }}
-                    >
-                      <Text
-                        style={{ fontWeight: "900", color: COLORS.textStrong }}
-                      >
-                        {i.name}
-                      </Text>
-                      <Text style={styles.hint}>
-                        {i.quantity} × {formatPrice(getItemUnitPrice(i))} ={" "}
-                        {formatPrice(getItemUnitPrice(i) * i.quantity)}
-                      </Text>
-                    </View>
-                  ))}
-                </ScrollView>
-              </View>
-
-              <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
-                <IconTextButton
-                  type="outline"
-                  text="Đóng"
-                  onPress={() => setBillModalOpen(false)}
-                  style={{ flex: 1 }}
-                />
-                <IconTextButton
-                  type="outline"
-                  text="Xuất PDF"
-                  disabled={!currentTab.cart.length}
-                  onPress={exportBillPdfToDevice}
-                  style={{ flex: 1 }}
-                />
-                <IconTextButton
-                  type="primary"
-                  text="In"
-                  disabled={!currentTab.pendingOrderId}
-                  onPress={async () => {
-                    if (!currentTab.pendingOrderId) return;
-                    await triggerPrintServer(currentTab.pendingOrderId);
-                  }}
-                  style={{ flex: 1 }}
-                />
-              </View>
-            </View>
-          </View>
-        </Modal>
-
-        {/* Price edit modal */}
-        <Modal
-          visible={priceEditModal.visible}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setPriceEditModal({ visible: false })}
-        >
-          <View style={styles.modalBackdrop}>
-            <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>Tuỳ chỉnh giá</Text>
-
-              {priceEditModal.item ? (
-                <>
-                  <Text style={styles.modalSubtitle}>
-                    {priceEditModal.item.name}
-                  </Text>
-                  <Text style={styles.hint}>
-                    Số lượng: {priceEditModal.item.quantity}
-                  </Text>
-
-                  <Text style={[styles.mutedInline, { marginTop: 12 }]}>
-                    Loại giá
-                  </Text>
-
-                  <View style={styles.optionRow}>
-                    {(
-                      [
-                        "NORMAL",
-                        "VIP",
-                        "AT_COST",
-                        "CLEARANCE",
-                        "FREE",
-                      ] as SaleType[]
-                    ).map((st) => {
-                      const active =
-                        (priceEditModal.tempSaleType || "NORMAL") === st;
-
-                      return (
-                        <Pressable
-                          key={st}
-                          onPress={() => {
-                            setPriceEditModal((prev) => {
-                              const item = prev.item!;
-                              let nextOverride = prev.tempOverridePrice ?? null;
-
-                              if (st === "FREE") nextOverride = 0;
-                              if (st === "AT_COST")
-                                nextOverride = getPriceNumber(
-                                  item.cost_price || item.price
-                                );
-                              if (st === "NORMAL") nextOverride = null;
-
-                              return {
-                                ...prev,
-                                tempSaleType: st,
-                                tempOverridePrice: nextOverride,
-                              };
-                            });
-                          }}
-                          style={[
-                            styles.optionChip,
-                            active && styles.optionChipActive,
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.optionChipText,
-                              active && styles.optionChipTextActive,
-                            ]}
-                          >
-                            {SALE_TYPE_LABEL[st]}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-
-                  {["VIP", "CLEARANCE"].includes(
-                    priceEditModal.tempSaleType || "NORMAL"
-                  ) ? (
-                    <View style={{ marginTop: 12 }}>
-                      <Text style={styles.mutedInline}>Nhập giá mới (đ)</Text>
-                      <TextInput
-                        value={String(priceEditModal.tempOverridePrice ?? "")}
-                        onChangeText={(txt) => {
-                          const n = clampInt(txt, 0);
-                          setPriceEditModal((prev) => ({
-                            ...prev,
-                            tempOverridePrice: n,
-                          }));
+              
+              {/* Results */}
+              <View style={styles.customerResultsContainer}>
+                {foundCustomers.length > 0 ? (
+                  <ScrollView keyboardShouldPersistTaps="handled">
+                    {foundCustomers.map((c) => (
+                      <TouchableOpacity
+                        key={c._id}
+                        style={styles.customerResultItem}
+                        onPress={() => {
+                          selectCustomer(c);
+                          setNewCustomerModal(false);
                         }}
-                        keyboardType="numeric"
-                        placeholder="0"
-                        placeholderTextColor={COLORS.placeholder}
-                        style={styles.input}
-                      />
-                    </View>
-                  ) : null}
-
-                  <View style={[styles.totalBox, { marginTop: 12 }]}>
-                    <Text style={styles.totalLabel}>
-                      Thành tiền sau thay đổi
-                    </Text>
-                    <Text style={styles.totalValue}>
-                      {formatPrice(
-                        computeTempUnitPrice() *
-                          (priceEditModal.item?.quantity || 1)
-                      )}
-                    </Text>
+                      >
+                        <View style={styles.customerResultContent}>
+                          <Ionicons name="person" size={20} color={COLORS.primary} />
+                          <View style={styles.customerResultInfo}>
+                            <Text style={styles.customerResultName}>{c.name}</Text>
+                            <Text style={styles.customerResultPhone}>{c.phone}</Text>
+                          </View>
+                        </View>
+                        {c._id === currentTab.customer?._id ? (
+                          <Text style={styles.customerSelectedText}>Đang chọn</Text>
+                        ) : (
+                          <Text style={styles.customerSelectText}>Chọn</Text>
+                        )}
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                ) : (
+                  <View style={styles.noResultsContainer}>
+                    <Ionicons name="people-outline" size={48} color={COLORS.muted} />
+                    <Text style={styles.noResultsText}>Không tìm thấy khách hàng</Text>
                   </View>
-
-                  <View
-                    style={{ flexDirection: "row", gap: 10, marginTop: 12 }}
-                  >
-                    <IconTextButton
-                      type="outline"
-                      text="Huỷ"
-                      onPress={() => setPriceEditModal({ visible: false })}
-                      style={{ flex: 1 }}
-                    />
-                    <IconTextButton
-                      type="primary"
-                      text="Áp dụng"
-                      onPress={applyPriceEdit}
-                      style={{ flex: 1 }}
-                    />
-                  </View>
-                </>
+                )}
+              </View>
+              
+              <Divider style={styles.modalDivider} />
+              
+              {/* Create New Customer */}
+              <Text style={styles.createCustomerTitle}>Tạo khách hàng mới</Text>
+              
+              <View style={styles.createCustomerForm}>
+                <Input
+                  value={newCustomerName}
+                  onChangeText={setNewCustomerName}
+                  placeholder="Tên khách hàng"
+                  style={styles.customerFormInput}
+                />
+                <Input
+                  value={newCustomerPhone}
+                  onChangeText={setNewCustomerPhone}
+                  placeholder="Số điện thoại"
+                  keyboardType="phone-pad"
+                  style={styles.customerFormInput}
+                />
+                <Input
+                  value={newCustomerEmail}
+                  onChangeText={setNewCustomerEmail}
+                  placeholder="Email (tùy chọn)"
+                  keyboardType="email-address"
+                  style={styles.customerFormInput}
+                />
+              </View>
+              
+              <Button
+                title="Tạo khách hàng"
+                variant="primary"
+                onPress={createCustomer}
+                style={styles.createCustomerButton}
+                fullWidth
+              />
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+      
+      {/* QR Modal */}
+      <Modal
+        visible={qrModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setQrModal(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>QR Thanh Toán</Text>
+            <Text style={styles.modalSubtitle}>
+              Khách hàng quét mã để thanh toán
+            </Text>
+            
+            {qrRemainingSec !== null && (
+              <View style={styles.qrCountdownContainer}>
+                <Text style={styles.qrCountdownText}>
+                  Còn lại:{" "}
+                  {Math.floor(qrRemainingSec / 60)
+                    .toString()
+                    .padStart(2, "0")}
+                  :{(qrRemainingSec % 60).toString().padStart(2, "0")}
+                </Text>
+              </View>
+            )}
+            
+            <View style={styles.qrContainer}>
+              {currentTab.qrImageUrl ? (
+                <Image
+                  source={{ uri: currentTab.qrImageUrl }}
+                  style={styles.qrImage}
+                  resizeMode="contain"
+                />
               ) : (
-                <Text style={styles.hint}>Không có dữ liệu sản phẩm.</Text>
+                <Text style={styles.noQrText}>Không có QR</Text>
+              )}
+            </View>
+            
+            <View style={styles.modalActions}>
+              <Button
+                title="Đóng"
+                variant="outline"
+                onPress={() => setQrModal(false)}
+                style={styles.modalActionButton}
+              />
+              
+              {currentTab.pendingOrderId && (
+                <Button
+                  title={currentTab.isPaid ? "In hóa đơn" : "In hóa đơn (Xác nhận)"}
+                  variant={currentTab.isPaid ? "success" : "primary"}
+                  onPress={() => {
+                    setQrModal(false);
+                    triggerPrint(currentTab.pendingOrderId!, true);
+                  }}
+                  loading={isPrinting}
+                  style={styles.modalActionButton}
+                />
               )}
             </View>
           </View>
-        </Modal>
-      </KeyboardAvoidingView>
+        </View>
+      </Modal>
+      
+      {/* Bill Modal */}
+      <Modal
+        visible={billModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setBillModal(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Hóa Đơn</Text>
+            <Text style={styles.modalSubtitle}>
+              {currentTab.pendingOrderId
+                ? `Mã đơn: ${currentTab.pendingOrderId}`
+                : "Chưa có đơn"}
+            </Text>
+            
+            <View style={styles.billInfoContainer}>
+              <View style={styles.billInfoRow}>
+                <Text style={styles.billInfoLabel}>Khách hàng</Text>
+                <Text style={styles.billInfoValue}>
+                  {currentTab.customer?.name || "Khách vãng lai"}
+                </Text>
+              </View>
+              
+              <View style={styles.billInfoRow}>
+                <Text style={styles.billInfoLabel}>SĐT</Text>
+                <Text style={styles.billInfoValue}>
+                  {currentTab.customer?.phone || "---"}
+                </Text>
+              </View>
+              
+              <View style={styles.billInfoRow}>
+                <Text style={styles.billInfoLabel}>Tổng thanh toán</Text>
+                <Text style={styles.billTotalAmount}>{formatPrice(totalAmount)}</Text>
+              </View>
+            </View>
+            
+            <Text style={styles.billProductsTitle}>Danh sách sản phẩm</Text>
+            
+            <ScrollView style={styles.billProductsContainer}>
+              {currentTab.cart.map((item, index) => (
+                <View key={`${item.productId}_${index}`} style={styles.billProductItem}>
+                  <Text style={styles.billProductName}>{item.name}</Text>
+                  <Text style={styles.billProductDetails}>
+                    {item.quantity} × {formatPrice(getItemUnitPrice(item))} ={" "}
+                    {formatPrice(getItemUnitPrice(item) * item.quantity)}
+                  </Text>
+                </View>
+              ))}
+            </ScrollView>
+            
+            <View style={styles.modalActions}>
+              <Button
+                title="Đóng"
+                variant="outline"
+                onPress={() => {
+                  setBillModal(false);
+                  resetCurrentTab();
+                }}
+                style={styles.modalActionButton}
+              />
+              
+              {currentTab.pendingOrderId && (
+                <Button
+                  title="In"
+                  variant="primary"
+                  onPress={() => triggerPrint(currentTab.pendingOrderId!)}
+                  loading={isPrinting}
+                  style={styles.modalActionButton}
+                />
+              )}
+            </View>
+          </View>
+        </View>
+      </Modal>
+      
+      {/* Price Edit Modal */}
+      <Modal
+        visible={priceEditModal.visible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPriceEditModal({ visible: false })}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Tùy chỉnh giá</Text>
+            
+            {priceEditModal.item && (
+              <>
+                <Text style={styles.modalSubtitle}>{priceEditModal.item.name}</Text>
+                <Text style={styles.priceEditHint}>
+                  Số lượng: {priceEditModal.item.quantity} {priceEditModal.item.unit}
+                </Text>
+                
+                <Text style={styles.priceTypeLabel}>Loại giá</Text>
+                
+                <View style={styles.priceTypeContainer}>
+                  {(["NORMAL", "VIP", "AT_COST", "CLEARANCE", "FREE"] as SaleType[]).map((st) => {
+                    const active = (priceEditModal.tempSaleType || "NORMAL") === st;
+                    
+                    return (
+                      <TouchableOpacity
+                        key={st}
+                        style={[styles.priceTypeButton, active && styles.priceTypeButtonActive]}
+                        onPress={() => {
+                          setPriceEditModal((prev) => {
+                            const item = prev.item!;
+                            let nextOverride = prev.tempOverridePrice ?? null;
+                            
+                            if (st === "FREE") nextOverride = 0;
+                            if (st === "AT_COST")
+                              nextOverride = getPriceNumber(item.cost_price || item.price);
+                            if (st === "NORMAL") nextOverride = null;
+                            
+                            return {
+                              ...prev,
+                              tempSaleType: st,
+                              tempOverridePrice: nextOverride,
+                            };
+                          });
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.priceTypeButtonText,
+                            active && styles.priceTypeButtonTextActive,
+                          ]}
+                        >
+                          {SALE_TYPE_LABEL[st]}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                
+                {["VIP", "CLEARANCE"].includes(priceEditModal.tempSaleType || "NORMAL") && (
+                  <View style={styles.customPriceContainer}>
+                    <Text style={styles.customPriceLabel}>Nhập giá mới (đ)</Text>
+                    <TextInput
+                      value={String(priceEditModal.tempOverridePrice ?? "")}
+                      onChangeText={(txt) => {
+                        const n = clampInt(txt, 0);
+                        setPriceEditModal((prev) => ({
+                          ...prev,
+                          tempOverridePrice: n,
+                        }));
+                      }}
+                      keyboardType="numeric"
+                      placeholder="0"
+                      placeholderTextColor={COLORS.placeholder}
+                      style={styles.customPriceInput}
+                    />
+                  </View>
+                )}
+                
+                <View style={styles.priceEditTotal}>
+                  <Text style={styles.priceEditTotalLabel}>Thành tiền sau thay đổi</Text>
+                  <Text style={styles.priceEditTotalValue}>
+                    {formatPrice(computeTempUnitPrice() * (priceEditModal.item?.quantity || 1))}
+                  </Text>
+                </View>
+                
+                <View style={styles.modalActions}>
+                  <Button
+                    title="Hủy"
+                    variant="outline"
+                    onPress={() => setPriceEditModal({ visible: false })}
+                    style={styles.modalActionButton}
+                  />
+                  
+                  <Button
+                    title="Áp dụng"
+                    variant="primary"
+                    onPress={applyPriceEdit}
+                    style={styles.modalActionButton}
+                  />
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
 
-export default OrderPOSHomeScreen;
-
 /** =========================================================
- *  Styles (LIGHT)
+ *  Styles
  *  ========================================================= */
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: COLORS.bg },
-
-  center: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
-  },
-  mutedText: { color: COLORS.muted, marginTop: 10, fontWeight: "800" },
-
-
-  headerTitle: { color: COLORS.textStrong, fontSize: 18, fontWeight: "900" },
-  headerSub: { color: COLORS.muted, marginTop: 4, fontWeight: "800" },
-
-  container: { padding: SPACING.lg, paddingBottom: 18, gap: SPACING.md },
-
-  // Pills (tabs)
-  pill: {
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 999,
-    backgroundColor: COLORS.chip,
-    borderWidth: 1,
-    borderColor: COLORS.stroke,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  pillActive: { backgroundColor: COLORS.chipActive, borderColor: "#93c5fd" },
-  pillText: { color: COLORS.text, fontWeight: "900" },
-  pillTextActive: { color: COLORS.primary2, fontWeight: "900" },
-
-  iconClose: {
-    width: 28,
-    height: 28,
-    borderRadius: 999,
-    backgroundColor: "#fee2e2",
-    borderWidth: 1,
-    borderColor: "#fecaca",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  iconCloseText: {
-    color: "#b91c1c",
-    fontWeight: "900",
-    marginTop: -2,
-    fontSize: 16,
-  },
-
-  // Search
-  searchBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    borderRadius: RADIUS.lg,
-    backgroundColor: "#f1f5f9",
-    borderWidth: 1,
-    borderColor: COLORS.stroke,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  searchIcon: {
-    color: COLORS.muted,
-    fontSize: 16,
-    fontWeight: "900",
-    width: 18,
-    textAlign: "center",
-  },
-  searchInput: {
-    flex: 1,
-    fontWeight: "900",
-    color: COLORS.textStrong,
-    fontSize: 15,
-    paddingVertical: 0,
-  },
-  qtyBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
-    backgroundColor: COLORS.surface,
-    alignItems: "center",
-    justifyContent: "center",
-    ...SHADOW,
-  },
-  qtyBtnText: { fontSize: 20, fontWeight: "600", color: COLORS.textStrong },
-  scannerBtn: {
-    padding: 8,
-    backgroundColor: COLORS.chip,
-    borderRadius: 10,
-    marginLeft: 10,
-  },
-  cartCard: {
-    backgroundColor: COLORS.surface,
-    padding: 12,
-    borderRadius: RADIUS.md,
-    borderWidth: 1,
-    borderColor: COLORS.stroke,
-    ...SHADOW,
-  },
-  cartMainRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  cartThumb: {
-    width: 60,
-    height: 60,
-    borderRadius: RADIUS.sm,
-    backgroundColor: COLORS.card2,
-  },
-  cartThumbPlaceholder: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  cartName: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: COLORS.textStrong,
-  },
-  cartSub: {
-    fontSize: 12,
-    color: COLORS.muted,
-    marginTop: 2,
-  },
-  priceTag: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 6,
-    alignSelf: "flex-start",
-    backgroundColor: COLORS.chip,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  priceTagText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: COLORS.primary,
-  },
-  cartQtyBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: COLORS.card2,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.stroke,
-    padding: 4,
-  },
-  qtyValue: {
-    fontSize: 16,
-    fontWeight: "900",
-    color: COLORS.textStrong,
-    minWidth: 30,
-    textAlign: "center",
-  },
-  cartBottomRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#f1f5f9",
-  },
-  quickQtyRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  quickQtyBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: COLORS.chip,
-    borderWidth: 1,
-    borderColor: COLORS.stroke,
-  },
-  quickQtyText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: COLORS.muted,
-  },
-  rowRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  cartSubtotal: {
-    fontSize: 16,
-    fontWeight: "900",
-    color: COLORS.primary,
-  },
-  cartRemoveBtn: {
-    padding: 8,
-    backgroundColor: "#fff1f2",
-    borderRadius: 8,
-  },
-  searchClear: {
-    width: 28,
-    height: 28,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#e2e8f0",
-    borderWidth: 1,
-    borderColor: "#cbd5e1",
-  },
-  searchClearText: {
-    color: COLORS.text,
-    fontWeight: "900",
-    fontSize: 16,
-    marginTop: -2,
-  },
-
-  // Dropdown
-  dropdown: {
-    marginTop: 10,
-    borderRadius: RADIUS.lg,
-    borderWidth: 1,
-    borderColor: COLORS.stroke,
-    backgroundColor: COLORS.surface,
-    overflow: "hidden",
-    ...SHADOW,
-  },
-  dropdownLoadingRow: {
-    padding: 14,
-    flexDirection: "row",
-    gap: 10,
-    alignItems: "center",
-  },
-  dropdownItem: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.stroke,
-    flexDirection: "row",
-    gap: 12,
-    alignItems: "center",
-  },
-  dropdownTitle: { fontWeight: "900", color: COLORS.textStrong },
-  hint: { marginTop: 4, color: COLORS.muted, fontWeight: "700", fontSize: 12 },
-  addHint: { fontWeight: "900", color: COLORS.primary },
-
-  // Section
-  sectionCard: {
-    backgroundColor: COLORS.card,
-    borderRadius: RADIUS.xl,
-    borderWidth: 1,
-    borderColor: COLORS.stroke,
-    padding: SPACING.lg,
-    ...SHADOW,
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  sectionTitle: { fontSize: 14, fontWeight: "900", color: COLORS.textStrong },
-  sectionTitleMini: {
-    fontSize: 13,
-    fontWeight: "900",
-    color: COLORS.textStrong,
-  },
-  sectionSubtitle: {
-    marginTop: 4,
-    color: COLORS.muted,
-    fontWeight: "700",
-    fontSize: 12,
-  },
-
-  valueText: { fontWeight: "900", color: COLORS.textStrong },
-
-  input: {
-    backgroundColor: "#f8fafc",
-    borderRadius: RADIUS.lg,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: COLORS.stroke,
-    fontWeight: "900",
-    color: COLORS.textStrong,
-    marginTop: 6,
-  },
-
-  rowBetween: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  mutedInline: { color: COLORS.muted, fontWeight: "900" },
-
-  toggle: {
-    paddingVertical: 7,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    backgroundColor: "#f1f5f9",
-    borderWidth: 1,
-    borderColor: COLORS.stroke,
-  },
-  toggleOn: { backgroundColor: "#dcfce7", borderColor: "#bbf7d0" },
-  toggleText: { fontWeight: "900", color: COLORS.text, fontSize: 12 },
-  toggleTextOn: { color: "#166534" },
-
-  badge: {
-    minWidth: 34,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: "#dbeafe",
-    borderWidth: 1,
-    borderColor: "#bfdbfe",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  badgeText: { fontWeight: "900", color: "#1d4ed8" },
-
-  removeBtn: {
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: RADIUS.md,
-    backgroundColor: "#fee2e2",
-    borderWidth: 1,
-    borderColor: "#fecaca",
-  },
-  removeBtnText: { color: "#b91c1c", fontWeight: "900", fontSize: 12 },
-
-  totalBox: {
-    borderRadius: RADIUS.xl,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "#bfdbfe",
-    backgroundColor: "#eff6ff",
-  },
-  totalLabel: { fontWeight: "900", color: COLORS.textStrong, fontSize: 13 },
-  totalValue: {
-    fontWeight: "900",
-    color: "#1d4ed8",
-    fontSize: 18,
-    marginTop: 2,
-  },
-
-  changeBox: {
-    borderRadius: RADIUS.xl,
-    padding: 14,
-    borderWidth: 1,
-    marginTop: 10,
-  },
-
-  pmRow: { flexDirection: "row", gap: 10, marginTop: 10 },
-  pmBtn: {
-    flex: 1,
-    backgroundColor: "#f8fafc",
-    borderRadius: RADIUS.lg,
-    paddingVertical: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: COLORS.stroke,
-  },
-  pmBtnActive: { backgroundColor: "#dbeafe", borderColor: "#bfdbfe" },
-  pmBtnText: { fontWeight: "900", color: COLORS.text },
-  pmBtnTextActive: { color: "#1d4ed8" },
-
-  // Buttons
-  btnBase: {
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: RADIUS.lg,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-  },
-  btnPrimary: {
-    backgroundColor: COLORS.primary,
-    borderWidth: 1,
-    borderColor: "rgba(37,99,235,0.20)",
-  },
-  btnOutline: {
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#cbd5e1",
-  },
-  btnDanger: {
-    backgroundColor: "#fee2e2",
-    borderWidth: 1,
-    borderColor: "#fecaca",
-  },
-  btnGhost: {
-    backgroundColor: "#f1f5f9",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-  },
-  btnTextBase: { fontWeight: "900" },
-  btnTextPrimary: { color: COLORS.white },
-  btnTextOutline: { color: COLORS.textStrong },
-  btnTextDanger: { color: "#b91c1c" },
-
-  // Bottom bar
-  bottomBar: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingHorizontal: SPACING.lg,
-    paddingTop: 10,
-    paddingBottom: Platform.OS === "ios" ? 18 : 12,
-    backgroundColor: COLORS.surface,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.stroke,
-    flexDirection: "row",
-    gap: 12,
-    alignItems: "flex-start",
-    ...SHADOW,
-  },
-  bottomBarLabel: { color: COLORS.muted, fontWeight: "900", fontSize: 12 },
-  bottomBarTotal: {
-    color: "#1d4ed8",
-    fontWeight: "900",
-    fontSize: 18,
-    marginTop: 2,
-  },
-  bottomBarHint: {
-    color: COLORS.muted,
-    fontWeight: "700",
-    fontSize: 12,
-    marginTop: 2,
-  },
-
-  bottomChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: RADIUS.lg,
-    backgroundColor: "#f8fafc",
-    borderWidth: 1,
-    borderColor: COLORS.stroke,
-    minWidth: 72,
-    alignItems: "center",
-  },
-  bottomChipActive: { backgroundColor: "#dbeafe", borderColor: "#bfdbfe" },
-  bottomChipText: { fontWeight: "900", color: COLORS.text },
-  bottomChipTextActive: { color: "#1d4ed8" },
-
-  // Modal
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.45)",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 16,
-  },
-  modalCard: {
-    width: "100%",
-    maxWidth: 520,
-    backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.xl,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: COLORS.stroke,
-    ...SHADOW,
-  },
-  modalTitle: { fontSize: 16, fontWeight: "900", color: COLORS.textStrong },
-  modalSubtitle: { marginTop: 6, color: COLORS.muted, fontWeight: "800" },
-  modalRow: { flexDirection: "row", gap: 10, marginTop: 12 },
-
-  qrBox: {
-    marginTop: 12,
-    borderRadius: RADIUS.xl,
-    borderWidth: 1,
-    borderColor: COLORS.stroke,
-    backgroundColor: "#f8fafc",
-    padding: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  qrImage: { width: 280, height: 280 },
-
-  infoStrip: {
-    borderRadius: RADIUS.lg,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: "#fde68a",
-    backgroundColor: "#fffbeb",
-  },
-  infoStripText: { fontWeight: "900", color: "#92400e" },
-
-  optionRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 10 },
-  optionChip: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    backgroundColor: "#f8fafc",
-    borderWidth: 1,
-    borderColor: COLORS.stroke,
-  },
-  optionChipActive: { backgroundColor: "#dbeafe", borderColor: "#bfdbfe" },
-  optionChipText: { fontWeight: "900", color: COLORS.text, fontSize: 12 },
-  optionChipTextActive: { color: "#1d4ed8" },
-
-  // Quick Info Bar - Compact employee & customer display
-  quickInfoBar: {
-    flexDirection: "row",
-    backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.lg,
-    borderWidth: 1,
-    borderColor: COLORS.stroke,
-    padding: 10,
-    gap: 8,
-    ...SHADOW,
-  },
-  quickInfoItem: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    backgroundColor: "#f8fafc",
-    borderRadius: RADIUS.sm,
-  },
-  quickInfoLabel: { fontSize: 11, fontWeight: "700", color: COLORS.muted },
-  quickInfoValue: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: "800",
-    color: COLORS.textStrong,
-  },
-  quickInfoDivider: {
-    width: 1,
-    backgroundColor: COLORS.stroke,
-    marginVertical: 4,
-  },
-
-  // Customer Search - Compact
-  customerSearchBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    backgroundColor: "#f8fafc",
-    borderRadius: RADIUS.md,
-    borderWidth: 1,
-    borderColor: COLORS.stroke,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  customerSearchInput: {
-    flex: 1,
-    fontWeight: "700",
-    color: COLORS.textStrong,
-    fontSize: 14,
-    paddingVertical: 0,
-  },
-  customerBadge: {
-    backgroundColor: "#fef3c7",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  customerBadgeText: { fontSize: 11, fontWeight: "700", color: "#92400e" },
-
-  // Points Compact
-  pointsCompactBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    backgroundColor: "#fffbeb",
-    borderRadius: RADIUS.md,
-    borderWidth: 1,
-    borderColor: "#fde68a",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  pointsCompactText: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#92400e",
-  },
-  pointsToggle: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-    backgroundColor: "#f1f5f9",
-    borderWidth: 1,
-    borderColor: COLORS.stroke,
-  },
-  pointsToggleOn: { backgroundColor: "#dcfce7", borderColor: "#86efac" },
-  pointsToggleText: { fontSize: 11, fontWeight: "800", color: COLORS.muted },
-  pointsToggleTextOn: { color: "#16a34a" },
-  pointsInput: {
-    width: 70,
-    backgroundColor: COLORS.surface,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    fontSize: 14,
-    fontWeight: "700",
-    color: COLORS.textStrong,
-    borderWidth: 1,
-    borderColor: COLORS.stroke,
-    textAlign: "center",
-  },
-
-
-
-  // Product Dropdown
-  productDropdown: {
-    marginTop: 8,
-    backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.lg,
-    borderWidth: 1,
-    borderColor: COLORS.stroke,
-    overflow: "hidden",
-    ...SHADOW,
-  },
-  dropdownCenter: {
-    padding: 24,
-    alignItems: "center",
-    gap: 8,
-  },
-  dropdownHint: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: COLORS.muted,
-    textAlign: "center",
-  },
-
-  // Product Card in Dropdown
-  productCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 10,
-    gap: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.stroke,
-  },
-  productCardPressed: {
-    backgroundColor: "#f0f9ff",
-  },
-  productThumb: {
-    width: 48,
-    height: 48,
-    borderRadius: RADIUS.sm,
-    backgroundColor: COLORS.card2,
-  },
-  productThumbEmpty: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  productInfo: {
-    flex: 1,
-    gap: 4,
-  },
-  productName: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: COLORS.textStrong,
-  },
-  productMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  productSku: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: COLORS.muted,
-  },
-  stockBadge: {
-    backgroundColor: "#dcfce7",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  stockText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#16a34a",
-  },
-  productRight: {
-    alignItems: "flex-end",
-    gap: 6,
-  },
-  productPrice: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: COLORS.primary,
-  },
-  addBtnMini: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: COLORS.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  // Professional POS Styles
+  // Container Styles
   safeContainer: {
     flex: 1,
     backgroundColor: COLORS.bg,
   },
-  searchBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.3)",
-    zIndex: 90,
+  centerContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: SPACING.xxl,
   },
+  loadingText: {
+    marginTop: SPACING.md,
+    color: COLORS.muted,
+    fontSize: TYPOGRAPHY.md,
+    fontWeight: "500",
+  },
+  
+  // Header Styles
   header: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
     backgroundColor: COLORS.surface,
-    paddingHorizontal: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.stroke,
-    justifyContent: "center",
+    zIndex: 100,
     ...SHADOW,
   },
-  headerTopRow: {
+  headerTop: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: Platform.OS === "ios" ? 10 : 5,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: Platform.OS === "ios" ? SPACING.xl : SPACING.lg,
+    paddingBottom: SPACING.sm,
   },
-  addTabBtn: {
+  storeInfoContainer: {
+    flex: 1,
+  },
+  storeName: {
+    fontSize: TYPOGRAPHY.lg,
+    fontWeight: "700",
+    color: COLORS.textStrong,
+  },
+  storeSubtitle: {
+    fontSize: TYPOGRAPHY.sm,
+    color: COLORS.muted,
+    marginTop: 2,
+  },
+  
+  // Tabs Styles
+  tabsScrollView: {
+    paddingHorizontal: SPACING.lg,
+    marginBottom: SPACING.sm,
+  },
+  tabsContentContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.xs,
+  },
+  tabWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.xs,
+  },
+  tabButton: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: RADIUS.round,
+    backgroundColor: COLORS.chip,
+    borderWidth: 1,
+    borderColor: COLORS.stroke,
+  },
+  tabButtonActive: {
+    backgroundColor: COLORS.chipActive,
+    borderColor: COLORS.primary,
+  },
+  tabText: {
+    fontSize: TYPOGRAPHY.sm,
+    fontWeight: "600",
+    color: COLORS.text,
+  },
+  tabTextActive: {
+    color: COLORS.primary,
+  },
+  tabCloseButton: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: COLORS.dangerLight,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: COLORS.danger,
+  },
+  addTabButton: {
     width: 36,
     height: 36,
     borderRadius: 18,
@@ -3936,215 +3167,1244 @@ const styles = StyleSheet.create({
     borderStyle: "dashed",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#eff6ff",
+    backgroundColor: COLORS.chipActive,
+    marginLeft: SPACING.xs,
   },
+  
+  // Search Styles
   searchSection: {
-    marginTop: 12,
-    position: "relative",
-    zIndex: 110,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.md,
   },
-  searchFocusedContainer: {
-    zIndex: 200,
-  },
-  searchBoxActive: {
-    borderColor: COLORS.primary,
-    borderWidth: 2,
-    elevation: 10,
-    shadowColor: COLORS.primary,
-    shadowOpacity: 0.2,
-    backgroundColor: "#fff",
-  },
-  prominentDropdown: {
-    position: "absolute",
-    top: 65,
-    left: 0,
-    right: 0,
-    maxHeight: 320, // Reduced to fit above keyboard
-    backgroundColor: "#fff",
-    borderRadius: RADIUS.lg,
-    elevation: 80,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    borderWidth: 1,
-    borderColor: COLORS.primary,
-    zIndex: 9999,
-  },
-  searchInputEnhanced: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: "700",
-    color: COLORS.textStrong,
-    paddingVertical: 6,
-  },
-  voiceBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#eff6ff",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  voiceBtnActive: {
-    backgroundColor: COLORS.primary,
-    elevation: 5,
-  },
-  listeningBadge: {
-    position: "absolute",
-    top: 60,
-    left: 10,
-    right: 10,
-    backgroundColor: "#fff",
-    borderRadius: RADIUS.md,
-    padding: 12,
+  searchContainer: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    ...SHADOW,
-    zIndex: 1000,
-    borderWidth: 2,
-    borderColor: COLORS.primary,
-  },
-  listeningText: {
-    flex: 1,
-    fontSize: 14,
-    color: COLORS.primary,
-    fontWeight: "700",
-  },
-  scanBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#f0fdf4",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  clearBtn: {
-    padding: 6,
-  },
-  searchBoxEnhanced: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.cardSecondary,
     borderRadius: RADIUS.lg,
     borderWidth: 1.5,
     borderColor: COLORS.stroke,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
     ...SHADOW,
   },
-
-
-  // Numpad Styles (New)
-  numpadContainer: {
-    marginTop: 10,
-    backgroundColor: "#eff6ff",
+  searchContainerFocused: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.white,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: TYPOGRAPHY.md,
+    fontWeight: "500",
+    color: COLORS.text,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+  },
+  clearSearchButton: {
+    padding: SPACING.xs,
+  },
+  searchActionButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.chipActive,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  searchBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0, 0, 0, 0.3)",
+    zIndex: 90,
+  },
+  
+  // Product Dropdown Styles
+  productDropdown: {
+    position: "absolute",
+    top: 60,
+    left: SPACING.lg,
+    right: SPACING.lg,
+    backgroundColor: COLORS.white,
     borderRadius: RADIUS.lg,
-    padding: 8,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    maxHeight: 300,
+    zIndex: 1000,
+    ...SHADOW_LG,
+  },
+  dropdownScrollView: {
+    maxHeight: 300,
+  },
+  productItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.stroke,
+  },
+  productItemDisabled: {
+    opacity: 0.5,
+  },
+  productItemImageContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: RADIUS.sm,
+    overflow: "hidden",
+    marginRight: SPACING.sm,
+  },
+  productItemImage: {
+    width: "100%",
+    height: "100%",
+  },
+  productItemImagePlaceholder: {
+    width: "100%",
+    height: "100%",
+    backgroundColor: COLORS.cardSecondary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  productItemInfo: {
+    flex: 1,
+  },
+  productItemName: {
+    fontSize: TYPOGRAPHY.base,
+    fontWeight: "600",
+    color: COLORS.text,
+    marginBottom: 2,
+  },
+  productItemSku: {
+    fontSize: TYPOGRAPHY.xs,
+    color: COLORS.muted,
+  },
+  productItemRight: {
+    alignItems: "flex-end",
+  },
+  productItemPrice: {
+    fontSize: TYPOGRAPHY.base,
+    fontWeight: "700",
+    color: COLORS.primary,
+    marginBottom: 4,
+  },
+  stockBadge: {
+    backgroundColor: COLORS.successLight,
+    paddingHorizontal: SPACING.xs,
+    paddingVertical: 2,
+    borderRadius: RADIUS.xs,
+  },
+  stockBadgeOut: {
+    backgroundColor: COLORS.dangerLight,
+  },
+  stockText: {
+    fontSize: TYPOGRAPHY.xs,
+    fontWeight: "700",
+    color: COLORS.success,
+  },
+  stockTextOut: {
+    color: COLORS.danger,
+  },
+  
+  // Keyboard Avoiding
+  keyboardAvoidingView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingTop: 180,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.xxxl,
+    gap: SPACING.lg,
+  },
+  
+  // Quick Info Bar
+  quickInfoBar: {
+    flexDirection: "row",
+    gap: SPACING.md,
+    marginBottom: SPACING.sm,
+  },
+  employeeSelector: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.stroke,
+    ...SHADOW,
+  },
+  employeeIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.chipActive,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: SPACING.sm,
+  },
+  employeeInfo: {
+    flex: 1,
+  },
+  employeeLabel: {
+    fontSize: TYPOGRAPHY.xs,
+    color: COLORS.muted,
+    fontWeight: "600",
+    marginBottom: 2,
+  },
+  employeeName: {
+    fontSize: TYPOGRAPHY.base,
+    fontWeight: "600",
+    color: COLORS.text,
+  },
+  customerInfo: {
+    flex: 1.5,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.cardSecondary,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.stroke,
+  },
+  customerIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.white,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.stroke,
+  },
+  customerDetails: {
+    flex: 1,
+  },
+  customerLabel: {
+    fontSize: TYPOGRAPHY.xs,
+    color: COLORS.muted,
+    fontWeight: "600",
+    marginBottom: 2,
+  },
+  customerName: {
+    fontSize: TYPOGRAPHY.base,
+    fontWeight: "700",
+    color: COLORS.text,
+  },
+  changeCustomerButton: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    backgroundColor: COLORS.infoLight,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    borderColor: COLORS.info,
+  },
+  changeCustomerText: {
+    fontSize: TYPOGRAPHY.xs,
+    fontWeight: "700",
+    color: COLORS.info,
+  },
+  
+  // Loyalty Card
+  loyaltyCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.warningLight,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.warning,
+    gap: SPACING.sm,
+  },
+  loyaltyText: {
+    flex: 1,
+    fontSize: TYPOGRAPHY.base,
+    fontWeight: "600",
+    color: "#92400e",
+  },
+  loyaltyToggle: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    borderColor: COLORS.stroke,
+  },
+  loyaltyToggleActive: {
+    backgroundColor: COLORS.successLight,
+    borderColor: COLORS.success,
+  },
+  loyaltyToggleText: {
+    fontSize: TYPOGRAPHY.xs,
+    fontWeight: "700",
+    color: COLORS.text,
+  },
+  loyaltyToggleTextActive: {
+    color: COLORS.success,
+  },
+  pointsInputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.xs,
+  },
+  pointsInput: {
+    width: 60,
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.sm,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    fontSize: TYPOGRAPHY.base,
+    fontWeight: "600",
+    color: COLORS.text,
+    textAlign: "center",
+    borderWidth: 1,
+    borderColor: COLORS.stroke,
+  },
+  maxPointsText: {
+    fontSize: TYPOGRAPHY.xs,
+    fontWeight: "700",
+    color: COLORS.primary,
+  },
+  
+  // Section Styles
+  sectionContainer: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.stroke,
+    ...SHADOW,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    marginBottom: SPACING.md,
+  },
+  sectionTitleContainer: {
+    flex: 1,
+  },
+  sectionTitle: {
+    fontSize: TYPOGRAPHY.md,
+    fontWeight: "700",
+    color: COLORS.textStrong,
+    marginBottom: 2,
+  },
+  sectionSubtitle: {
+    fontSize: TYPOGRAPHY.sm,
+    color: COLORS.muted,
+  },
+  sectionContent: {
+    marginTop: SPACING.sm,
+  },
+  
+  // Badge Styles
+  badge: {
+    minWidth: 30,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    borderRadius: RADIUS.round,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  badgeText: {
+    fontSize: TYPOGRAPHY.sm,
+    fontWeight: "700",
+  },
+  
+  // Empty Cart Styles
+  emptyCart: {
+    alignItems: "center",
+    paddingVertical: SPACING.xxxl,
+  },
+  emptyCartText: {
+    fontSize: TYPOGRAPHY.lg,
+    fontWeight: "600",
+    color: COLORS.muted,
+    marginTop: SPACING.md,
+  },
+  emptyCartSubtext: {
+    fontSize: TYPOGRAPHY.sm,
+    color: COLORS.muted,
+    marginTop: SPACING.xs,
+  },
+  
+  // Cart Item Styles
+  cartItemCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.stroke,
+  },
+  cartItemSeparator: {
+    height: SPACING.sm,
+  },
+  cartItemHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: SPACING.md,
+  },
+  cartItemImageContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: RADIUS.md,
+    overflow: "hidden",
+    marginRight: SPACING.sm,
+  },
+  cartItemImage: {
+    width: "100%",
+    height: "100%",
+  },
+  cartItemImagePlaceholder: {
+    width: "100%",
+    height: "100%",
+    backgroundColor: COLORS.cardSecondary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cartItemInfo: {
+    flex: 1,
+    marginRight: SPACING.sm,
+  },
+  cartItemName: {
+    fontSize: TYPOGRAPHY.base,
+    fontWeight: "700",
+    color: COLORS.textStrong,
+    marginBottom: SPACING.xs,
+  },
+  cartItemMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: SPACING.xs,
+    marginBottom: SPACING.xs,
+  },
+  cartItemSku: {
+    fontSize: TYPOGRAPHY.xs,
+    color: COLORS.muted,
+    backgroundColor: COLORS.chip,
+    paddingHorizontal: SPACING.xs,
+    paddingVertical: 2,
+    borderRadius: RADIUS.xs,
+  },
+  cartItemUnit: {
+    fontSize: TYPOGRAPHY.xs,
+    color: COLORS.muted,
+  },
+  cartItemBatch: {
+    fontSize: TYPOGRAPHY.xs,
+    color: COLORS.textSecondary,
+  },
+  cartItemExpiry: {
+    fontSize: TYPOGRAPHY.xs,
+    color: COLORS.danger,
+    marginBottom: SPACING.xs,
+  },
+  taxBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: COLORS.warningLight,
+    paddingHorizontal: SPACING.xs,
+    paddingVertical: 2,
+    borderRadius: RADIUS.xs,
+    gap: 2,
+  },
+  taxText: {
+    fontSize: TYPOGRAPHY.xs,
+    color: "#92400e",
+    fontWeight: "600",
+  },
+  priceEditButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.chip,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    borderRadius: RADIUS.sm,
+    gap: 2,
+  },
+  priceEditText: {
+    fontSize: TYPOGRAPHY.sm,
+    fontWeight: "700",
+    color: COLORS.primary,
+  },
+  customPriceIndicator: {
+    color: COLORS.warning,
+  },
+  cartItemFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  quantityControls: {
+    flexDirection: "row",
+    gap: SPACING.xs,
+  },
+  quickQuantityButton: {
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    backgroundColor: COLORS.chip,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    borderColor: COLORS.stroke,
+  },
+  quickQuantityText: {
+    fontSize: TYPOGRAPHY.xs,
+    fontWeight: "600",
+    color: COLORS.muted,
+  },
+  quantityContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.cardSecondary,
+    borderRadius: RADIUS.lg,
+    padding: 2,
+    borderWidth: 1,
+    borderColor: COLORS.stroke,
+  },
+  quantityButton: {
+    width: 32,
+    height: 32,
+    borderRadius: RADIUS.sm,
+    backgroundColor: COLORS.white,
+    alignItems: "center",
+    justifyContent: "center",
+    ...SHADOW,
+  },
+  quantityButtonText: {
+    fontSize: TYPOGRAPHY.lg,
+    fontWeight: "600",
+    color: COLORS.textStrong,
+  },
+  quantityValueContainer: {
+    minWidth: 40,
+    alignItems: "center",
+  },
+  quantityValue: {
+    fontSize: TYPOGRAPHY.md,
+    fontWeight: "700",
+    color: COLORS.textStrong,
+  },
+  cartItemActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.md,
+  },
+  cartItemSubtotal: {
+    fontSize: TYPOGRAPHY.md,
+    fontWeight: "700",
+    color: COLORS.primary,
+  },
+  removeButton: {
+    padding: SPACING.xs,
+    backgroundColor: COLORS.dangerLight,
+    borderRadius: RADIUS.sm,
+  },
+  
+  // Price Breakdown Styles
+  priceBreakdown: {
+    gap: SPACING.sm,
+  },
+  priceRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  priceLabel: {
+    fontSize: TYPOGRAPHY.base,
+    color: COLORS.text,
+    fontWeight: "500",
+  },
+  priceValue: {
+    fontSize: TYPOGRAPHY.base,
+    fontWeight: "600",
+    color: COLORS.text,
+  },
+  priceDivider: {
+    marginVertical: SPACING.sm,
+  },
+  totalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.stroke,
+  },
+  totalLabel: {
+    fontSize: TYPOGRAPHY.lg,
+    fontWeight: "700",
+    color: COLORS.textStrong,
+  },
+  totalAmount: {
+    fontSize: TYPOGRAPHY.xxl,
+    fontWeight: "700",
+    color: COLORS.primary,
+  },
+  
+  // VAT Toggle Styles
+  vatToggleContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: SPACING.lg,
+    paddingVertical: SPACING.sm,
+  },
+  vatLabel: {
+    fontSize: TYPOGRAPHY.base,
+    color: COLORS.text,
+    fontWeight: "500",
+  },
+  vatToggle: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    backgroundColor: COLORS.chip,
+    borderRadius: RADIUS.round,
+    borderWidth: 1,
+    borderColor: COLORS.stroke,
+  },
+  vatToggleActive: {
+    backgroundColor: COLORS.successLight,
+    borderColor: COLORS.success,
+  },
+  vatToggleText: {
+    fontSize: TYPOGRAPHY.xs,
+    fontWeight: "700",
+    color: COLORS.text,
+  },
+  vatToggleTextActive: {
+    color: COLORS.success,
+  },
+  
+  // VAT Info Styles
+  vatInfoContainer: {
+    marginTop: SPACING.sm,
+    gap: SPACING.sm,
+  },
+  vatInput: {
+    backgroundColor: COLORS.cardSecondary,
+    borderColor: COLORS.stroke,
+  },
+  
+  // Payment Method Styles
+  paymentMethodLabel: {
+    fontSize: TYPOGRAPHY.base,
+    color: COLORS.text,
+    fontWeight: "500",
+    marginTop: SPACING.lg,
+    marginBottom: SPACING.sm,
+  },
+  paymentMethodContainer: {
+    flexDirection: "row",
+    gap: SPACING.md,
+  },
+  paymentMethodButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: SPACING.xs,
+    paddingVertical: SPACING.md,
+    backgroundColor: COLORS.cardSecondary,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.stroke,
+  },
+  paymentMethodButtonActive: {
+    backgroundColor: COLORS.chipActive,
+    borderColor: COLORS.primary,
+  },
+  paymentMethodText: {
+    fontSize: TYPOGRAPHY.base,
+    fontWeight: "600",
+    color: COLORS.text,
+  },
+  paymentMethodTextActive: {
+    color: COLORS.primary,
+  },
+  
+  // Cash Payment Styles
+  cashPaymentContainer: {
+    marginTop: SPACING.lg,
+    gap: SPACING.md,
+  },
+  cashReceivedLabel: {
+    fontSize: TYPOGRAPHY.base,
+    color: COLORS.text,
+    fontWeight: "500",
+  },
+  cashAmountContainer: {
+    alignItems: "flex-end",
+  },
+  cashAmountText: {
+    fontSize: TYPOGRAPHY.xxxl,
+    fontWeight: "700",
+    color: COLORS.primary,
+  },
+  quickAmountsContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: SPACING.sm,
+  },
+  quickAmountButton: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    backgroundColor: COLORS.successLight,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.success,
+  },
+  quickAmountText: {
+    fontSize: TYPOGRAPHY.sm,
+    fontWeight: "600",
+    color: COLORS.success,
+  },
+  numpadContainer: {
+    backgroundColor: COLORS.chipActive,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.sm,
     borderWidth: 1,
     borderColor: "#bfdbfe",
   },
   numpadRow: {
     flexDirection: "row",
-    gap: 8,
-    marginBottom: 8,
+    gap: SPACING.sm,
+    marginBottom: SPACING.sm,
   },
-  numBtn: {
+  numpadButton: {
     flex: 1,
-    backgroundColor: COLORS.white,
     height: 48,
-    borderRadius: 8,
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.md,
     alignItems: "center",
     justifyContent: "center",
-    ...SHADOW,
     borderWidth: 1,
     borderColor: COLORS.stroke,
+    ...SHADOW,
   },
-  numBtnText: {
-    fontSize: 20,
-    fontWeight: "900",
+  numpadButtonText: {
+    fontSize: TYPOGRAPHY.xl,
+    fontWeight: "700",
     color: COLORS.textStrong,
   },
-  numBtnAction: {
-    backgroundColor: "#fee2e2",
-    borderColor: "#fecaca",
+  numpadActionButton: {
+    backgroundColor: COLORS.dangerLight,
+    borderColor: COLORS.danger,
   },
-  numBtnActionText: {
+  numpadActionText: {
+    fontSize: TYPOGRAPHY.md,
+    fontWeight: "700",
     color: COLORS.danger,
-    fontSize: 16,
+  },
+  changeContainer: {
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    borderWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  changeLabel: {
+    fontSize: TYPOGRAPHY.base,
+    fontWeight: "600",
+  },
+  changeAmountText: {
+    fontSize: TYPOGRAPHY.xl,
+    fontWeight: "700",
+  },
+  confirmPaymentButton: {
+    marginTop: SPACING.sm,
   },
   
-  // Quick Money Chips (New)
-  suggestionRow: {
+  // Bottom Bar Styles
+  bottomBar: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: COLORS.white,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.stroke,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.md,
+    paddingBottom: Platform.OS === "ios" ? SPACING.xxl : SPACING.xl,
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 10,
+    gap: SPACING.lg,
+    ...SHADOW_LG,
   },
-  moneyChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: "#d1fae5",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#6ee7b7",
+  bottomBarLeft: {
+    flex: 1,
   },
-  moneyChipText: {
-    color: "#047857",
+  bottomBarLabel: {
+    fontSize: TYPOGRAPHY.xs,
+    color: COLORS.muted,
+    fontWeight: "600",
+    marginBottom: 2,
+  },
+  bottomBarTotal: {
+    fontSize: TYPOGRAPHY.xl,
     fontWeight: "700",
-    fontSize: 13,
+    color: COLORS.primary,
+    marginBottom: 2,
   },
-
-  // Customer Bar (Professional New)
-  customerBar: {
+  bottomBarSubtext: {
+    fontSize: TYPOGRAPHY.xs,
+    color: COLORS.muted,
+  },
+  bottomBarRight: {
+    flex: 1.5,
+    gap: SPACING.sm,
+  },
+  paymentMethodChips: {
     flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f8fafc",
+    gap: SPACING.sm,
+  },
+  paymentMethodChip: {
+    flex: 1,
+    paddingVertical: SPACING.sm,
+    backgroundColor: COLORS.cardSecondary,
     borderRadius: RADIUS.lg,
     borderWidth: 1,
     borderColor: COLORS.stroke,
-    padding: 6,
-    paddingRight: 12,
-    gap: 12,
+    alignItems: "center",
   },
-  customerIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: RADIUS.md,
-    backgroundColor: "#fff",
+  paymentMethodChipActive: {
+    backgroundColor: COLORS.chipActive,
+    borderColor: COLORS.primary,
+  },
+  paymentMethodChipText: {
+    fontSize: TYPOGRAPHY.sm,
+    fontWeight: "700",
+    color: COLORS.text,
+  },
+  paymentMethodChipTextActive: {
+    color: COLORS.primary,
+  },
+  actionButtons: {
+    flexDirection: "row",
+    gap: SPACING.sm,
+  },
+  billButton: {
+    flex: 1,
+  },
+  createOrderButton: {
+    flex: 1.5,
+  },
+  continueQrButton: {
+    marginTop: 0,
+  },
+  
+  // Bottom Spacer
+  bottomSpacer: {
+    height: 120,
+  },
+  
+  // Modal Styles
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.6)",
     alignItems: "center",
     justifyContent: "center",
+    padding: SPACING.lg,
+  },
+  modalContainer: {
+    width: "100%",
+    maxWidth: 500,
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.xl,
+    borderWidth: 1,
+    borderColor: COLORS.stroke,
+    ...SHADOW_LG,
+  },
+  customerModal: {
+    maxHeight: "80%",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: SPACING.md,
+  },
+  modalTitle: {
+    fontSize: TYPOGRAPHY.lg,
+    fontWeight: "700",
+    color: COLORS.textStrong,
+    marginBottom: SPACING.xs,
+  },
+  modalSubtitle: {
+    fontSize: TYPOGRAPHY.sm,
+    color: COLORS.muted,
+    marginBottom: SPACING.lg,
+  },
+  modalScrollView: {
+    maxHeight: 300,
+    marginBottom: SPACING.lg,
+  },
+  modalCloseButton: {
+    marginTop: SPACING.md,
+  },
+  modalActions: {
+    flexDirection: "row",
+    gap: SPACING.md,
+    marginTop: SPACING.lg,
+  },
+  modalActionButton: {
+    flex: 1,
+  },
+  modalDivider: {
+    marginVertical: SPACING.lg,
+  },
+  
+  // Employee Modal Styles
+  employeeItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.stroke,
+  },
+  employeeItemContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    gap: SPACING.sm,
+  },
+  employeeItemInfo: {
+    flex: 1,
+  },
+  employeeItemName: {
+    fontSize: TYPOGRAPHY.base,
+    fontWeight: "600",
+    color: COLORS.text,
+    marginBottom: 2,
+  },
+  employeeItemHint: {
+    fontSize: TYPOGRAPHY.xs,
+    color: COLORS.muted,
+  },
+  employeeItemAction: {
+    fontSize: TYPOGRAPHY.sm,
+    fontWeight: "700",
+    color: COLORS.primary,
+  },
+  
+  // Customer Modal Styles
+  customerSearchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.cardSecondary,
+    borderRadius: RADIUS.lg,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    marginBottom: SPACING.md,
     borderWidth: 1,
     borderColor: COLORS.stroke,
   },
-  customerBarInfo: {
+  customerSearchInput: {
     flex: 1,
+    fontSize: TYPOGRAPHY.base,
+    color: COLORS.text,
+    paddingHorizontal: SPACING.sm,
+  },
+  customerResultsContainer: {
+    flex: 1,
+    minHeight: 100,
+    marginBottom: SPACING.lg,
+  },
+  customerResultItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.stroke,
+  },
+  customerResultContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    gap: SPACING.sm,
+  },
+  customerResultInfo: {
+    flex: 1,
+  },
+  customerResultName: {
+    fontSize: TYPOGRAPHY.base,
+    fontWeight: "600",
+    color: COLORS.text,
+    marginBottom: 2,
+  },
+  customerResultPhone: {
+    fontSize: TYPOGRAPHY.sm,
+    color: COLORS.muted,
+  },
+  customerSelectedText: {
+    fontSize: TYPOGRAPHY.sm,
+    fontWeight: "700",
+    color: COLORS.success,
+  },
+  customerSelectText: {
+    fontSize: TYPOGRAPHY.sm,
+    fontWeight: "700",
+    color: COLORS.primary,
+  },
+  noResultsContainer: {
+    alignItems: "center",
+    paddingVertical: SPACING.xxl,
+  },
+  noResultsText: {
+    fontSize: TYPOGRAPHY.md,
+    color: COLORS.muted,
+    marginTop: SPACING.md,
+  },
+  createCustomerTitle: {
+    fontSize: TYPOGRAPHY.md,
+    fontWeight: "700",
+    color: COLORS.textStrong,
+    marginBottom: SPACING.md,
+  },
+  createCustomerForm: {
+    gap: SPACING.sm,
+    marginBottom: SPACING.lg,
+  },
+  customerFormInput: {
+    backgroundColor: COLORS.cardSecondary,
+    borderColor: COLORS.stroke,
+  },
+  createCustomerButton: {
+    marginTop: SPACING.md,
+  },
+  
+  // QR Modal Styles
+  qrCountdownContainer: {
+    backgroundColor: COLORS.warningLight,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    alignItems: "center",
+    marginBottom: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.warning,
+  },
+  qrCountdownText: {
+    fontSize: TYPOGRAPHY.md,
+    fontWeight: "700",
+    color: "#92400e",
+  },
+  qrContainer: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.xl,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.stroke,
+  },
+  qrImage: {
+    width: 250,
+    height: 250,
+  },
+  noQrText: {
+    fontSize: TYPOGRAPHY.md,
+    color: COLORS.muted,
+    fontStyle: "italic",
+  },
+  
+  // Bill Modal Styles
+  billInfoContainer: {
+    gap: SPACING.sm,
+    marginBottom: SPACING.lg,
+  },
+  billInfoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: SPACING.xs,
+  },
+  billInfoLabel: {
+    fontSize: TYPOGRAPHY.sm,
+    color: COLORS.muted,
+  },
+  billInfoValue: {
+    fontSize: TYPOGRAPHY.base,
+    fontWeight: "600",
+    color: COLORS.text,
+  },
+  billTotalAmount: {
+    fontSize: TYPOGRAPHY.lg,
+    fontWeight: "700",
+    color: COLORS.primary,
+  },
+  billProductsTitle: {
+    fontSize: TYPOGRAPHY.md,
+    fontWeight: "700",
+    color: COLORS.textStrong,
+    marginBottom: SPACING.sm,
+  },
+  billProductsContainer: {
+    maxHeight: 200,
+    marginBottom: SPACING.lg,
+  },
+  billProductItem: {
+    paddingVertical: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.stroke,
+  },
+  billProductName: {
+    fontSize: TYPOGRAPHY.base,
+    fontWeight: "700",
+    color: COLORS.textStrong,
+    marginBottom: SPACING.xs,
+  },
+  billProductDetails: {
+    fontSize: TYPOGRAPHY.sm,
+    color: COLORS.muted,
+  },
+  
+  // Price Edit Modal Styles
+  priceEditHint: {
+    fontSize: TYPOGRAPHY.sm,
+    color: COLORS.muted,
+    marginBottom: SPACING.lg,
+  },
+  priceTypeLabel: {
+    fontSize: TYPOGRAPHY.base,
+    color: COLORS.text,
+    fontWeight: "500",
+    marginBottom: SPACING.sm,
+  },
+  priceTypeContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: SPACING.sm,
+    marginBottom: SPACING.lg,
+  },
+  priceTypeButton: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    backgroundColor: COLORS.chip,
+    borderRadius: RADIUS.round,
+    borderWidth: 1,
+    borderColor: COLORS.stroke,
+  },
+  priceTypeButtonActive: {
+    backgroundColor: COLORS.chipActive,
+    borderColor: COLORS.primary,
+  },
+  priceTypeButtonText: {
+    fontSize: TYPOGRAPHY.sm,
+    fontWeight: "600",
+    color: COLORS.text,
+  },
+  priceTypeButtonTextActive: {
+    color: COLORS.primary,
+  },
+  customPriceContainer: {
+    marginBottom: SPACING.lg,
+  },
+  customPriceLabel: {
+    fontSize: TYPOGRAPHY.base,
+    color: COLORS.text,
+    fontWeight: "500",
+    marginBottom: SPACING.xs,
+  },
+  customPriceInput: {
+    backgroundColor: COLORS.cardSecondary,
+    borderColor: COLORS.stroke,
+  },
+  priceEditTotal: {
+    backgroundColor: COLORS.cardSecondary,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.lg,
+    marginBottom: SPACING.lg,
+  },
+  priceEditTotalLabel: {
+    fontSize: TYPOGRAPHY.sm,
+    color: COLORS.text,
+    fontWeight: "500",
+    marginBottom: SPACING.xs,
+  },
+  priceEditTotalValue: {
+    fontSize: TYPOGRAPHY.xxl,
+    fontWeight: "700",
+    color: COLORS.primary,
+  },
+  
+  // Card Component
+  card: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.lg,
+    ...SHADOW,
+  },
+  
+  // Icon Button Component
+  iconButton: {
+    padding: SPACING.xs,
+    borderRadius: RADIUS.sm,
+  },
+  
+  // Button Component Styles
+  buttonBase: {
+    borderRadius: RADIUS.lg,
+    alignItems: "center",
     justifyContent: "center",
   },
-  customerBarLabel: {
-    fontSize: 11,
-    color: COLORS.muted,
-    fontWeight: "700",
-    textTransform: "uppercase",
+  buttonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  customerBarName: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: COLORS.textStrong,
+  buttonIcon: {
+    marginHorizontal: SPACING.xs,
   },
-  customerChangeBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: "#e0f2fe",
-    borderRadius: 8,
+  buttonText: {
+    fontWeight: "600",
+  },
+  
+  // Input Component Styles
+  inputContainer: {
+    marginBottom: SPACING.sm,
+  },
+  inputLabel: {
+    fontSize: TYPOGRAPHY.sm,
+    color: COLORS.text,
+    fontWeight: "500",
+    marginBottom: SPACING.xs,
+  },
+  inputWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.cardSecondary,
+    borderRadius: RADIUS.lg,
     borderWidth: 1,
-    borderColor: "#bae6fd",
+    borderColor: COLORS.stroke,
+    paddingHorizontal: SPACING.md,
   },
-  customerChangeText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#0369a1",
+  inputError: {
+    borderColor: COLORS.danger,
+  },
+  inputDisabled: {
+    opacity: 0.6,
+  },
+  inputLeftIcon: {
+    marginRight: SPACING.sm,
+  },
+  inputRightIcon: {
+    marginLeft: SPACING.sm,
+  },
+  inputField: {
+    flex: 1,
+    fontSize: TYPOGRAPHY.base,
+    color: COLORS.text,
+    paddingVertical: SPACING.sm,
+  },
+  inputErrorText: {
+    fontSize: TYPOGRAPHY.xs,
+    color: COLORS.danger,
+    marginTop: SPACING.xs,
   },
 });
+
+export default OrderPOSHomeScreen;

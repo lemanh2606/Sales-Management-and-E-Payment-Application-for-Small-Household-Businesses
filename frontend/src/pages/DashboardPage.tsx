@@ -876,8 +876,9 @@ export default function DashboardPage() {
           </div>
         )} */}
 
-        {/* Expiry Alerts */}
-        {expiringProducts.length > 0 && (
+
+        {/* Expiry Alerts - Ẩn với role STAFF */}
+        {expiringProducts.length > 0 && user?.role?.toUpperCase() !== "STAFF" && (
           <div style={{ marginBottom: 24 }}>
             <Alert
               message={
