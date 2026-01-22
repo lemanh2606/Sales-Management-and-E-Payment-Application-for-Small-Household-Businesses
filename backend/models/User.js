@@ -3,7 +3,11 @@ const mongoose = require("mongoose");
 
 const storeRoleSchema = new mongoose.Schema(
   {
-    store: { type: mongoose.Schema.Types.ObjectId, ref: "Store", required: true },
+    store: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Store",
+      required: true,
+    },
     role: { type: String, enum: ["OWNER", "STAFF"], required: true },
   },
   { _id: false }
@@ -22,7 +26,12 @@ const userSchema = new mongoose.Schema(
     image_delete_url: { type: String },
 
     // === GLOBAL ROLE ===
-    role: { type: String, enum: ["MANAGER", "STAFF"], default: "MANAGER", required: true },
+    role: {
+      type: String,
+      enum: ["MANAGER", "STAFF"],
+      default: "MANAGER",
+      required: true,
+    },
 
     // === CONTACT ===
     email: {
@@ -38,7 +47,11 @@ const userSchema = new mongoose.Schema(
 
     // === STORE CONTEXT ===
     stores: [{ type: mongoose.Schema.Types.ObjectId, ref: "Store" }],
-    current_store: { type: mongoose.Schema.Types.ObjectId, ref: "Store", default: null },
+    current_store: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Store",
+      default: null,
+    },
     store_roles: { type: [storeRoleSchema], default: [] },
 
     // === PERMISSION ===
@@ -57,6 +70,16 @@ const userSchema = new mongoose.Schema(
 
     // === SUBSCRIPTION ===
     is_premium: { type: Boolean, default: false },
+
+    // === PUSH NOTIFICATIONS ===
+    pushToken: { type: String, default: null }, // Expo Push Token
+    pushTokenPlatform: {
+      type: String,
+      enum: ["android", "ios", null],
+      default: null,
+    },
+    pushTokenDeviceName: { type: String, default: null },
+    pushTokenUpdatedAt: { type: Date, default: null },
 
     // === ACTIVITY ===
     last_login: { type: Date, default: null },

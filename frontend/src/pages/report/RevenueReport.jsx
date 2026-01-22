@@ -381,7 +381,7 @@ const RevenueReport = () => {
       render: (v) => <span style={{ fontSize: 16, color: "#52c41a", fontWeight: 700 }}>{v}</span>,
     },
     {
-      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Hoàn tất</span>,
+      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Đơn đã hoàn tất</span>,
       dataIndex: "completedOrders",
       key: "completedOrders",
       align: "center",
@@ -389,7 +389,7 @@ const RevenueReport = () => {
       render: (v) => <span style={{ fontSize: 16 }}>{v ?? 0}</span>,
     },
     {
-      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Hoàn 1 phần</span>,
+      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Đơn hoàn 1 phần</span>,
       dataIndex: "partialRefundOrders",
       key: "partialRefundOrders",
       align: "center",
@@ -1053,29 +1053,58 @@ const RevenueReport = () => {
 
                   return (
                     <Table.Summary fixed>
-                      <Table.Summary.Row style={{ backgroundColor: "#fafafa" }}>
-                        {/* Gộp 5 cột đầu */}
-                        <Table.Summary.Cell colSpan={5} align="right">
-                          <Text strong>Tổng cộng:</Text>
+                      {/* Dòng 1: Tổng tiền hàng */}
+                      <Table.Summary.Row style={{ background: "#fff" }}>
+                        <Table.Summary.Cell index={0} colSpan={5}>
+                           <div style={{ textAlign: "right", paddingRight: 8 }}>
+                              <Text type="secondary" style={{ fontSize: 13, textTransform: "uppercase", letterSpacing: 0.5 }}>Tổng tiền hàng:</Text>
+                           </div>
                         </Table.Summary.Cell>
-
-                        {/* Tổng doanh thu */}
-                        <Table.Summary.Cell align="right">
-                          <Text strong>{formatVND(totalGross)}</Text>
+                        <Table.Summary.Cell index={1} align="right">
+                          <Text strong style={{ fontSize: 15 }}>{formatVND(totalGross)}</Text>
                         </Table.Summary.Cell>
+                        <Table.Summary.Cell index={2} align="right">
+                          <Text strong style={{ fontSize: 15 }}>{formatVND(totalNetOfItems)}</Text>
+                        </Table.Summary.Cell>
+                      </Table.Summary.Row>
 
-                        {/* Thực thu + Giảm giá hóa đơn */}
-                        <Table.Summary.Cell align="right">
-                          {/* Thực thu */}
-                          <Text strong style={{ color: "#1890ff", fontSize: 16 }}>
-                            {formatVND(finalRevenue)}
-                          </Text>
+                      {/* Dòng 2: Giảm giá hóa đơn (chỉ hiện nếu có) */}
+                      {totalDiscount > 0 && (
+                        <Table.Summary.Row style={{ background: "#fff" }}>
+                          <Table.Summary.Cell index={0} colSpan={5} style={{ border: "none" }}>
+                            <div style={{ textAlign: "right", paddingRight: 8 }}>
+                               <Text type="danger" style={{ fontSize: 13 }}>- Giảm giá hóa đơn:</Text>
+                            </div>
+                          </Table.Summary.Cell>
+                          <Table.Summary.Cell index={1} align="right" style={{ border: "none" }}>
+                             {/* Empty cell to maintain alignment */}
+                          </Table.Summary.Cell>
+                          <Table.Summary.Cell index={2} align="right" style={{ border: "none" }}>
+                            <Text type="danger">-{formatVND(totalDiscount)}</Text>
+                          </Table.Summary.Cell>
+                        </Table.Summary.Row>
+                      )}
 
-                          {/* Giảm giá hóa đơn – LUÔN HIỆN */}
-                          <div style={{ marginTop: 2 }}>
-                            <Text type="danger">{totalDiscount > 0 ? `-${formatVND(totalDiscount)}` : "0"}</Text>
-                            <div style={{ fontSize: 11, color: "#8c8c8c" }}>(Giảm giá hóa đơn)</div>
-                          </div>
+                      {/* Dòng 3: Doanh thu thực tế (Highlight) */}
+                      <Table.Summary.Row style={{ background: "#fff" }}>
+                        <Table.Summary.Cell index={0} colSpan={5} style={{ borderTop: "2px solid #52c41a" }}>
+                           <div style={{ textAlign: "right", paddingRight: 8, paddingTop: 4 }}>
+                              <Text style={{ fontSize: 16, color: "#389e0d", fontWeight: 800, textTransform: "uppercase" }}>
+                                TỔNG DOANH THU THỰC TẾ:
+                              </Text>
+                           </div>
+                        </Table.Summary.Cell>
+                        <Table.Summary.Cell index={1} align="right" style={{ borderTop: "2px solid #52c41a" }}>
+                             {/* Empty cell to maintain alignment */}
+                        </Table.Summary.Cell>
+                        <Table.Summary.Cell index={2} align="right" style={{ borderTop: "2px solid #52c41a" }}>
+                           <div style={{ paddingTop: 4 }}>
+                               <div style={{ background: "#389e0d", padding: "6px 16px", borderRadius: 4, color: "#fff", display: "inline-block" }}>
+                                  <Text style={{ fontSize: 18, fontWeight: 700, color: "#fff" }}>
+                                    {formatVND(finalRevenue)}
+                                  </Text>
+                               </div>
+                           </div>
                         </Table.Summary.Cell>
                       </Table.Summary.Row>
                     </Table.Summary>

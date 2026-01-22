@@ -2,6 +2,7 @@
 const { verifyPaymentWithPayOS } = require("../services/payOSService");
 const Notification = require("../models/Notification");
 const Order = require("../models/Order");
+const { createPaymentNotification } = require("../utils/notificationHelper");
 
 module.exports = async (req, res) => {
   try {
@@ -65,6 +66,15 @@ module.exports = async (req, res) => {
           method: "qr",
           message: `Đơn hàng ${order._id} đã thanh toán thành công! Phương thức QR CODE`,
         });
+      }
+
+      // 📱 Gửi Push Notification đến thiết bị (thông báo hệ thống)
+      try {
+        await createPaymentNotification(order.store_id, order, io);
+        console.log("✅ Push notification sent for payment success");
+      } catch (pushError) {
+        console.error("⚠️ Push notification failed:", pushError.message);
+        // Không throw lỗi để không ảnh hưởng đến response
       }
 
       return res.status(200).json({ message: "Webhook received" });

@@ -17,7 +17,10 @@
       "infoPlist": {
         "NSMicrophoneUsageDescription": "SmallBizSales needs microphone access to record audio for speech recognition.",
         "NSSpeechRecognitionUsageDescription": "SmallBizSales needs speech recognition to convert your voice to text.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
       },
       "bundleIdentifier": "com.manh2606.SmartBizSales"
     },
@@ -30,7 +33,10 @@
       "predictiveBackGestureEnabled": false,
       "package": "com.manh2606.SmartBizSales",
       "permissions": [
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.VIBRATE",
+        "android.permission.POST_NOTIFICATIONS"
       ]
     },
     "scheme": "posapp",
@@ -43,12 +49,31 @@
       ],
       "expo-web-browser",
       "expo-font",
-      "expo-speech-recognition"
+      "expo-speech-recognition",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#1890ff",
+          "sounds": [],
+          "defaultChannel": "default"
+        }
+      ]
     ],
     "extra": {
       "eas": {
         "projectId": "6e2bd929-0701-48c9-899d-49778be8e9e0"
       }
+    },
+    "notification": {
+      "icon": "./assets/icon.png",
+      "color": "#1890ff"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/6e2bd929-0701-48c9-899d-49778be8e9e0"
     }
   }
 }

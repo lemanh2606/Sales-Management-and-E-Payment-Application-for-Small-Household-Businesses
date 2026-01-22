@@ -1640,8 +1640,69 @@ const importProducts = async (req, res) => {
       return isNaN(d.getTime()) ? null : d;
     };
 
+    // Helper: Validate Row Data
+    const validateRow = (row, rowNumber) => {
+      const errors = [];
+
+      // Bắt buộc: Tên sản phẩm
+      if (!row["Tên sản phẩm"] || !String(row["Tên sản phẩm"]).trim()) {
+        errors.push("Tên sản phẩm là bắt buộc");
+      }
+
+      // Giá bán phải là số không âm
+      const price = Number(row["Giá bán"] ?? 0);
+      if (row["Giá bán"] !== undefined && (isNaN(price) || price < 0)) {
+        errors.push("Giá bán phải là số không âm");
+      }
+
+      // Giá vốn phải là số không âm
+      const cost = Number(row["Giá vốn"] ?? 0);
+      if (row["Giá vốn"] !== undefined && (isNaN(cost) || cost < 0)) {
+        errors.push("Giá vốn phải là số không âm");
+      }
+
+      // Tồn kho phải là số nguyên không âm
+      const openingQty = Number(row["Tồn kho"] ?? 0);
+      if (!Number.isInteger(openingQty) || openingQty < 0) {
+        errors.push("Tồn kho phải là số nguyên không âm");
+      }
+
+      // Thuế GTGT từ 0–100
+      if (row["Thuế GTGT (%)"] !== undefined) {
+        const tax = Number(row["Thuế GTGT (%)"]);
+        if (isNaN(tax) || tax < 0 || tax > 100) {
+          errors.push("Thuế GTGT (%) phải nằm trong khoảng 0–100");
+        }
+      }
+
+      // Trạng thái chỉ cho phép một số giá trị
+      if (row["Trạng thái"]) {
+        const allowedStatus = [
+          "Đang kinh doanh",
+          "Ngừng kinh doanh",
+          "Hết hàng",
+        ];
+        const status = String(row["Trạng thái"]).trim();
+        if (!allowedStatus.includes(status)) {
+          errors.push(
+            `Trạng thái không hợp lệ (chỉ cho phép: ${allowedStatus.join(
+              ", "
+            )})`
+          );
+        }
+      }
+
+      if (errors.length) {
+        throw new Error(`Dòng ${rowNumber}: ${errors.join(" | ")}`);
+      }
+    };
+
     // Map để theo dõi các voucher đã tạo TRONG CÙNG PHIÊN IMPORT này (để gom nhóm)
     const sessionVouchers = new Map();
+
+    // Map để theo dõi trùng lặp trong cùng file import
+    // Key format: "sku|name" - cho phép trùng cả SKU và tên, nhưng không cho SKU trùng với tên khác
+    const sessionProductMap = new Map(); // key: sku (lowercase), value: productName (lowercase)
 
     // ================= IMPORT LOOP =================
     for (let i = 0; i < data.length; i++) {
@@ -1653,6 +1714,9 @@ const importProducts = async (req, res) => {
         row = sanitizeData(data[i]);
         const rowNumber = i + 2;
         console.log(`📝 Processing row ${rowNumber}:`, row["Tên sản phẩm"]);
+
+        // ===== VALIDATE ROW DATA =====
+        validateRow(row, rowNumber);
 
         const priceInput = Number(row["Giá bán"] || 0);
         const costInput = Number(row["Giá vốn"] || 0);
@@ -1672,6 +1736,30 @@ const importProducts = async (req, res) => {
 
         if (!productName) {
           throw new Error("Tên sản phẩm là bắt buộc");
+        }
+
+        // ===== CHECK TRÙNG LẶP TRONG FILE =====
+        // Cho phép trùng SKU + tên (cập nhật số lượng), nhưng KHÔNG cho SKU trùng với tên khác
+        if (sku) {
+          const skuKey = sku.toLowerCase();
+          const nameKey = productName.toLowerCase();
+
+          if (sessionProductMap.has(skuKey)) {
+            const existingName = sessionProductMap.get(skuKey);
+            // Nếu SKU trùng nhưng tên KHÁC -> báo lỗi
+            if (existingName !== nameKey) {
+              throw new Error(
+                `Mã SKU "${sku}" đã xuất hiện trong file với tên sản phẩm khác. Không thể trùng mã SKU cho các sản phẩm khác nhau.`
+              );
+            }
+            // Nếu cả SKU và tên đều trùng -> OK, cho phép (sẽ gom số lượng)
+            console.log(
+              ` Duplicate SKU+Name detected (will aggregate quantity): ${sku} | ${productName}`
+            );
+          } else {
+            // Lần đầu gặp SKU này, lưu vào map
+            sessionProductMap.set(skuKey, nameKey);
+          }
         }
 
         // --- 1. SUPPLIER (Auto Create or Use Existing) ---
@@ -1863,12 +1951,10 @@ const importProducts = async (req, res) => {
             store_id: storeId,
             isDeleted: false,
           }).session(session);
-          // NEW RULE: If SKU found but name is different -> Error and notify
+          // RULE: If SKU found but name is different -> Error
           if (product && product.name !== productName) {
             throw new Error(
-              `Dòng ${i + 2}: Mã SKU "${sku}" đã tồn tại cho cửa hàng "${
-                product.name
-              }". Không thể trùng mã với tên khác phẩm ("${productName}").`
+              `Mã SKU "${sku}" đã tồn tại cho sản phẩm "${product.name}". Không thể trùng mã với tên khác ("${productName}").`
             );
           }
         }
@@ -1907,44 +1993,67 @@ const importProducts = async (req, res) => {
           : "";
 
         if (product) {
-          // UPDATE existing product
+          // UPDATE existing product - CHỈ CẬP NHẬT SỐ LƯỢNG, không update thông tin sản phẩm khác
           console.log(
             ` Found existing product: ${product.name} (${
               product.sku
             }) - Identified by ${sku && product.sku === sku ? "SKU" : "Name"}`
           );
-          const newPrice =
-            priceInput > 0
-              ? priceInput
-              : Number(product.price?.toString() || 0);
-          const newCost =
-            costInput > 0
-              ? costInput
-              : Number(product.cost_price?.toString() || 0);
 
-          await Product.updateOne(
-            { _id: product._id },
-            {
-              $set: {
-                name: productName,
-                sku: sku || product.sku, // Update SKU if provided in Excel (and we matched by name)
-                description: description || product.description,
-                price: newPrice,
-                cost_price: newCost,
-                min_stock: isNaN(minStock) ? product.min_stock : minStock,
-                max_stock: isNaN(maxStock) ? product.max_stock : maxStock,
-                status: statusImport || product.status,
-                supplier_id: supplierId || product.supplier_id,
-                group_id: groupId || product.group_id,
-                unit: unit || product.unit,
-                tax_rate: isNaN(taxRate) ? product.tax_rate : taxRate,
-                origin: origin || product.origin,
-                brand: brand || product.brand,
-                warranty_period: warranty || product.warranty_period,
-              },
-            },
-            { session }
-          );
+          // Chỉ update các trường nếu có giá trị mới từ Excel
+          const updateFields = {};
+
+          if (priceInput > 0) {
+            updateFields.price = priceInput;
+          }
+          if (costInput > 0) {
+            updateFields.cost_price = costInput;
+          }
+          if (description) {
+            updateFields.description = description;
+          }
+          if (!isNaN(minStock)) {
+            updateFields.min_stock = minStock;
+          }
+          if (!isNaN(maxStock) && maxStock !== null) {
+            updateFields.max_stock = maxStock;
+          }
+          if (statusImport) {
+            updateFields.status = statusImport;
+          }
+          if (supplierId) {
+            updateFields.supplier_id = supplierId;
+          }
+          if (groupId) {
+            updateFields.group_id = groupId;
+          }
+          if (unit) {
+            updateFields.unit = unit;
+          }
+          if (!isNaN(taxRate)) {
+            updateFields.tax_rate = taxRate;
+          }
+          if (origin) {
+            updateFields.origin = origin;
+          }
+          if (brand) {
+            updateFields.brand = brand;
+          }
+          if (warranty) {
+            updateFields.warranty_period = warranty;
+          }
+          if (sku) {
+            updateFields.sku = sku;
+          }
+
+          if (Object.keys(updateFields).length > 0) {
+            await Product.updateOne(
+              { _id: product._id },
+              { $set: updateFields },
+              { session }
+            );
+          }
+
           // Reload product
           product = await Product.findById(product._id).session(session);
           sku = product.sku;
@@ -2117,6 +2226,28 @@ const importProducts = async (req, res) => {
                 ? priceInput
                 : Number(product.price?.toString() || 0);
 
+            // ===== CHECK NGHIỆP VỤ: Cùng số lô không được có hạn sử dụng khác nhau =====
+            const conflictBatch = (currentProduct.batches || []).find(
+              (b) =>
+                b.batch_no === batchNo &&
+                b.expiry_date &&
+                expiryDate &&
+                new Date(b.expiry_date).getTime() !==
+                  new Date(expiryDate).getTime()
+            );
+
+            if (conflictBatch) {
+              throw new Error(
+                `Số lô "${batchNo}" đã tồn tại với hạn sử dụng ${new Date(
+                  conflictBatch.expiry_date
+                ).toLocaleDateString(
+                  "vi-VN"
+                )}, không thể thêm hạn mới ${expiryDate.toLocaleDateString(
+                  "vi-VN"
+                )}`
+              );
+            }
+
             //  Validation: Kiểm tra tồn tối đa khi Import (Check chung trước khi xử lý lô)
             const projectedStock =
               (currentProduct.stock_quantity || 0) + openingQty;
@@ -2128,9 +2259,7 @@ const importProducts = async (req, res) => {
 
             if (limit > 0 && projectedStock > limit) {
               throw new Error(
-                `Dòng ${i + 2}: Sản phẩm "${
-                  currentProduct.name
-                }" có tồn kho tối đa là ${limit}. Nhập thêm ${openingQty} sẽ làm tổng tồn kho biểu kiến (${projectedStock}) vượt quá hạn mức.`
+                `Sản phẩm "${currentProduct.name}" có tồn kho tối đa là ${limit}. Nhập thêm ${openingQty} sẽ làm tổng tồn kho biểu kiến (${projectedStock}) vượt quá hạn mức.`
               );
             }
 
@@ -2174,7 +2303,7 @@ const importProducts = async (req, res) => {
                       batch_no: batchNo,
                       expiry_date: expiryDate,
                       cost_price: entryCost,
-                      selling_price: entrySellingPrice, // NEW: Add selling_price to batch
+                      selling_price: entrySellingPrice,
                       quantity: openingQty,
                       warehouse_id: warehouseIdForRow,
                       created_at: entryDate,

@@ -3,10 +3,6 @@
  * Trang: Quên mật khẩu
  * - Bước 1: Gửi OTP tới email
  * - Bước 2: Nhập OTP + mật khẩu mới
- *
- * Ghi chú:
- * - Giữ logic tương tự file JS gốc.
- * - Nếu bạn muốn chặt chẽ hơn về typing cho navigation, thay `any` bằng type của stack navigator.
  */
 
 import React, { JSX, useEffect, useRef, useState } from "react";
@@ -21,11 +17,12 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Keyboard,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import { Ionicons } from "@expo/vector-icons";
 import * as userApi from "../../api/userApi";
 
-// Local types (nhẹ) — nếu bạn đã định nghĩa DTOs trong type/user.ts có thể import thay
 type SendForgotPasswordPayload = { email: string };
 type ForgotChangePasswordPayload = {
   email: string;
@@ -37,10 +34,11 @@ type ForgotChangePasswordPayload = {
 export default function ForgotPasswordScreen(): JSX.Element {
   const navigation = useNavigation<any>();
   const emailRef = useRef<TextInput | null>(null);
+  const otpRef = useRef<TextInput | null>(null);
+  const passwordRef = useRef<TextInput | null>(null);
+  const confirmPasswordRef = useRef<TextInput | null>(null);
 
-  // 1 = gửi OTP, 2 = nhập OTP + password
   const [step, setStep] = useState<number>(1);
-
   const [email, setEmail] = useState<string>("");
   const [otp, setOtp] = useState<string>("");
   const [password, setPassword] = useState<string>("");
@@ -50,15 +48,32 @@ export default function ForgotPasswordScreen(): JSX.Element {
   const [error, setError] = useState<string>("");
   const [message, setMessage] = useState<string>("");
   const [resendTimer, setResendTimer] = useState<number>(0);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
-    // autofocus email on mount (if available)
     if (emailRef.current?.focus) {
       setTimeout(() => emailRef.current?.focus(), 300);
     }
   }, []);
 
-  // countdown for resend button
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      "keyboardDidShow",
+      () => setKeyboardVisible(true)
+    );
+    const keyboardDidHideListener = Keyboard.addListener(
+      "keyboardDidHide",
+      () => setKeyboardVisible(false)
+    );
+
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, []);
+
   useEffect(() => {
     let t: ReturnType<typeof setTimeout> | undefined;
     if (resendTimer > 0) {
@@ -69,7 +84,6 @@ export default function ForgotPasswordScreen(): JSX.Element {
     };
   }, [resendTimer]);
 
-  // ---------------- STEP 1: send OTP ----------------
   const handleSendOtp = async () => {
     setError("");
     setMessage("");
@@ -98,7 +112,6 @@ export default function ForgotPasswordScreen(): JSX.Element {
     }
   };
 
-  // ---------------- resend OTP ----------------
   const handleResend = async () => {
     if (resendTimer > 0) return;
     if (!email || !email.trim()) {
@@ -124,7 +137,6 @@ export default function ForgotPasswordScreen(): JSX.Element {
     }
   };
 
-  // ---------------- STEP 2: submit OTP + new password ----------------
   const handleResetPassword = async () => {
     setError("");
     setMessage("");
@@ -154,7 +166,6 @@ export default function ForgotPasswordScreen(): JSX.Element {
       const successMsg =
         res?.message || "Đổi mật khẩu thành công. Chuyển về trang đăng nhập...";
       setMessage(successMsg);
-      // show alert and navigate to Login
       Alert.alert("Thành công", successMsg, [
         {
           text: "Đăng nhập",
@@ -175,17 +186,30 @@ export default function ForgotPasswordScreen(): JSX.Element {
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
       style={styles.wrapper}
     >
       <ScrollView
-        contentContainerStyle={styles.container}
+        contentContainerStyle={[
+          styles.container,
+          keyboardVisible && styles.containerKeyboardVisible,
+        ]}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
         <View style={styles.card}>
+          {!keyboardVisible && (
+            <View style={styles.logoContainer}>
+              <Ionicons name="lock-closed" size={50} color="#2e7d32" />
+            </View>
+          )}
+
           <Text style={styles.title}>Quên mật khẩu</Text>
           <Text style={styles.subtitle}>
-            Nhập email để nhận mã xác thực và đặt mật khẩu mới.
+            {step === 1
+              ? "Nhập email để nhận mã xác thực"
+              : "Nhập OTP và mật khẩu mới"}
           </Text>
 
           {message ? <Text style={styles.messageBox}>{message}</Text> : null}
@@ -237,37 +261,78 @@ export default function ForgotPasswordScreen(): JSX.Element {
               <View style={styles.field}>
                 <Text style={styles.label}>Mã OTP</Text>
                 <TextInput
+                  ref={otpRef}
                   value={otp}
                   onChangeText={setOtp}
                   placeholder="Nhập mã OTP"
                   keyboardType="number-pad"
                   style={styles.input}
                   editable={!loading}
+                  returnKeyType="next"
+                  onSubmitEditing={() => passwordRef.current?.focus()}
+                  blurOnSubmit={false}
                 />
               </View>
 
               <View style={styles.field}>
                 <Text style={styles.label}>Mật khẩu mới</Text>
-                <TextInput
-                  value={password}
-                  onChangeText={setPassword}
-                  placeholder="Ít nhất 6 ký tự"
-                  secureTextEntry
-                  style={styles.input}
-                  editable={!loading}
-                />
+                <View style={styles.passwordRow}>
+                  <TextInput
+                    ref={passwordRef}
+                    value={password}
+                    onChangeText={setPassword}
+                    placeholder="Ít nhất 6 ký tự"
+                    secureTextEntry={!showPassword}
+                    textContentType="newPassword"
+                    autoComplete="password-new"
+                    style={[styles.input, styles.inputPassword]}
+                    editable={!loading}
+                    returnKeyType="next"
+                    onSubmitEditing={() => confirmPasswordRef.current?.focus()}
+                    blurOnSubmit={false}
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowPassword((s) => !s)}
+                    style={styles.toggleBtn}
+                    disabled={loading}
+                  >
+                    <Ionicons
+                      name={showPassword ? "eye-off" : "eye"}
+                      size={22}
+                      color="#2e7d32"
+                    />
+                  </TouchableOpacity>
+                </View>
               </View>
 
               <View style={styles.field}>
                 <Text style={styles.label}>Xác nhận mật khẩu</Text>
-                <TextInput
-                  value={confirmPassword}
-                  onChangeText={setConfirmPassword}
-                  placeholder="Nhập lại mật khẩu"
-                  secureTextEntry
-                  style={styles.input}
-                  editable={!loading}
-                />
+                <View style={styles.passwordRow}>
+                  <TextInput
+                    ref={confirmPasswordRef}
+                    value={confirmPassword}
+                    onChangeText={setConfirmPassword}
+                    placeholder="Nhập lại mật khẩu"
+                    secureTextEntry={!showConfirmPassword}
+                    textContentType="newPassword"
+                    autoComplete="password-new"
+                    style={[styles.input, styles.inputPassword]}
+                    editable={!loading}
+                    returnKeyType="done"
+                    onSubmitEditing={handleResetPassword}
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowConfirmPassword((s) => !s)}
+                    style={styles.toggleBtn}
+                    disabled={loading}
+                  >
+                    <Ionicons
+                      name={showConfirmPassword ? "eye-off" : "eye"}
+                      size={22}
+                      color="#2e7d32"
+                    />
+                  </TouchableOpacity>
+                </View>
               </View>
 
               <View style={styles.row}>
@@ -313,7 +378,9 @@ export default function ForgotPasswordScreen(): JSX.Element {
             <TouchableOpacity onPress={() => navigation.navigate?.("Login")}>
               <Text style={styles.link}>Quay lại đăng nhập</Text>
             </TouchableOpacity>
-            <Text style={styles.copy}>© 2025 Smallbiz-Sales</Text>
+            {!keyboardVisible && (
+              <Text style={styles.copy}>© 2025 Smallbiz-Sales</Text>
+            )}
           </View>
         </View>
       </ScrollView>
@@ -322,8 +389,16 @@ export default function ForgotPasswordScreen(): JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  wrapper: { flex: 1, backgroundColor: "#ffffff" }, // nền trắng
-  container: { flexGrow: 1, justifyContent: "center", padding: 20 },
+  wrapper: { flex: 1, backgroundColor: "#ffffff" },
+  container: {
+    flexGrow: 1,
+    justifyContent: "center",
+    padding: 20,
+  },
+  containerKeyboardVisible: {
+    justifyContent: "flex-start",
+    paddingTop: 20,
+  },
   card: {
     backgroundColor: "#ffffff",
     borderRadius: 20,
@@ -334,8 +409,22 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     elevation: 10,
   },
-  title: { fontSize: 24, fontWeight: "800", color: "#2e7d32", marginBottom: 6 },
-  subtitle: { color: "#4b5563", marginBottom: 16 },
+  logoContainer: {
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#2e7d32",
+    marginBottom: 6,
+    textAlign: "center",
+  },
+  subtitle: {
+    color: "#4b5563",
+    marginBottom: 16,
+    textAlign: "center",
+  },
   messageBox: {
     backgroundColor: "#ecfdf5",
     color: "#065f46",
@@ -343,6 +432,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 12,
     fontSize: 13,
+    textAlign: "center",
   },
   errorBox: {
     backgroundColor: "#fee2e2",
@@ -351,17 +441,29 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 12,
     fontSize: 13,
+    textAlign: "center",
   },
   field: { marginBottom: 16 },
   label: { fontSize: 14, color: "#374151", marginBottom: 6, fontWeight: "600" },
   input: {
-    backgroundColor: "#f8fafc",
+    backgroundColor: "#ffffff",
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: Platform.OS === "ios" ? 14 : 10,
     borderWidth: 1,
     borderColor: "#a5d6a7",
     fontSize: 15,
+  },
+  passwordRow: { flexDirection: "row", alignItems: "center" },
+  inputPassword: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  toggleBtn: {
+    marginLeft: 8,
+    padding: 6,
+    borderRadius: 10,
+    backgroundColor: "#d9f7be",
   },
   row: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
   rowBetween: {

@@ -6,6 +6,7 @@ const Product = require("../models/Product"); // Require Product cho low stock
 const ActivityLog = require("../models/ActivityLog"); // require activityLog để xoá log cũ > 6 tháng
 const Notification = require("../models/Notification"); // Thêm Notification model để tạo thông báo trong app
 const Store = require("../models/Store");
+const { sendPushToManager } = require("./pushNotificationService"); // Push notification service
 
 // 1. Cảnh báo tồn kho: mỗi ngày lúc 8h sáng
 cron.schedule("0 8 * * *", async () => {
@@ -285,13 +286,26 @@ cron.schedule("30 8 * * *", async () => {
             });
 
             if (!alreadyNotified) {
+              const notifMessage = `Sản phẩm "${p.name}" (${p.sku}) có ${expiringBatches.length} lô sắp hết hạn trong 30 ngày tới. Vui lòng kiểm tra kho!`;
               await Notification.create({
                 storeId: p.store_id,
                 userId: manager._id,
                 type: "inventory",
                 title: "Cảnh báo hàng sắp hết hạn",
-                message: `Sản phẩm "${p.name}" (${p.sku}) có ${expiringBatches.length} lô sắp hết hạn trong 30 ngày tới. Vui lòng kiểm tra kho!`,
+                message: notifMessage,
               });
+
+              // 📱 Gửi Push Notification
+              try {
+                await sendPushToManager(p.store_id, {
+                  title: "⏰ Cảnh báo hàng sắp hết hạn",
+                  body: notifMessage,
+                  type: "inventory",
+                  data: { productId: p._id.toString(), productName: p.name },
+                });
+              } catch (pushErr) {
+                console.warn("⚠️ Push notification failed:", pushErr.message);
+              }
             }
           }
         }
@@ -335,13 +349,26 @@ cron.schedule("30 8 * * *", async () => {
             });
 
             if (!alreadyNotified) {
+              const expiredMessage = `CẢNH BÁO: Sản phẩm "${p.name}" có ${expiredCount} lô ĐÃ HẾT HẠN sử dụng. Vui lòng kiểm tra và xử lý hủy hàng!`;
               await Notification.create({
                 storeId: p.store_id,
                 userId: manager._id,
                 type: "inventory",
                 title: "Cảnh báo hàng HẾT HẠN",
-                message: `CẢNH BÁO: Sản phẩm "${p.name}" có ${expiredCount} lô ĐÃ HẾT HẠN sử dụng. Vui lòng kiểm tra và xử lý hủy hàng!`,
+                message: expiredMessage,
               });
+
+              // 📱 Gửi Push Notification
+              try {
+                await sendPushToManager(p.store_id, {
+                  title: "⚠️ Cảnh báo hàng HẾT HẠN",
+                  body: expiredMessage,
+                  type: "inventory",
+                  data: { productId: p._id.toString(), productName: p.name },
+                });
+              } catch (pushErr) {
+                console.warn("⚠️ Push notification failed:", pushErr.message);
+              }
             }
           }
         }

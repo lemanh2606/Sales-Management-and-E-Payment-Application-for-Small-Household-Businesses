@@ -1,0 +1,65 @@
+### https://docs.expo.dev/versions/latest/sdk/constants/#appownershipAppOwnership
+```
+AppOwnership
+```
+
+Deprecated: Use [Constants.executionEnvironment](https://docs.expo.dev/versions/latest/sdk/constants/#executionenvironment) instead.
+
+```
+Constants.executionEnvironment
+```
+
+
+#### https://docs.expo.dev/versions/latest/sdk/constants/#expoExpo
+
+```
+Expo
+```
+
+
+```
+AppOwnership.Expo ＝ "expo"
+```
+
+The experience is running inside the Expo Go app.
+
+### https://docs.expo.dev/versions/latest/sdk/constants/#executionenvironmentExecutionEnvironment
+```
+ExecutionEnvironment
+```
+
+
+#### https://docs.expo.dev/versions/latest/sdk/constants/#bareBare
+
+```
+Bare
+```
+
+
+```
+ExecutionEnvironment.Bare ＝ "bare"
+```
+
+
+#### https://docs.expo.dev/versions/latest/sdk/constants/#standaloneStandalone
+
+```
+Standalone
+```
+
+
+```
+ExecutionEnvironment.Standalone ＝ "standalone"
+```
+
+
+#### https://docs.expo.dev/versions/latest/sdk/constants/#storeclientStoreClient
+
+```
+StoreClient
+```
+
+
+```
+ExecutionEnvironment.StoreClient ＝ "storeClient"
+```

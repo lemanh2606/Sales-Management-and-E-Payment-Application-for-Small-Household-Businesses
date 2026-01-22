@@ -59,7 +59,13 @@ interface NotificationResponse {
   meta: NotificationMeta;
 }
 
-type NotificationType = "all" | "order" | "payment" | "service" | "system" | "inventory";
+type NotificationType =
+  | "all"
+  | "order"
+  | "payment"
+  | "service"
+  | "system"
+  | "inventory";
 type ReadStatus = "all" | "true" | "false";
 
 // ========== CONSTANTS ==========
@@ -769,6 +775,28 @@ const NotificationScreen: React.FC = () => {
         </View>
 
         <View style={{ flexDirection: "row", gap: 10 }}>
+          <TouchableOpacity
+            style={styles.headerActionBtn}
+            onPress={async () => {
+              try {
+                setLoading(true);
+                const res = await apiClient.post(
+                  "/notifications/test-push",
+                  {}
+                );
+                Alert.alert("Thành công", (res.data as any).message);
+              } catch (err: any) {
+                console.error("Test Push Error:", err);
+                Alert.alert("Lỗi", "Không thể gửi test push");
+              } finally {
+                setLoading(false);
+              }
+            }}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="color-wand-outline" size={20} color="#722ed1" />
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.headerActionBtn}
             onPress={scanExpiry}
