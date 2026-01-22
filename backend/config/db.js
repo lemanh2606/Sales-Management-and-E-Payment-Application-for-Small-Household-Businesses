@@ -49,7 +49,7 @@ const connectDB = async () => {
       retryWrites: true, // Retry write nếu fail
       w: "majority", // Majority write concern
     });
-    console.log(" Kết nối MongoDB Compass thành công!");
+    console.log("✅Kết nối MongoDB Compass thành công!");
 
     // Cleanup legacy indexes after connection
     await cleanupLegacyIndexes();

@@ -253,9 +253,9 @@ async function bootstrap() {
   await connectDB();
 
   server.listen(PORT, () => {
-    console.log(`🔥 Server running: http://localhost:${PORT}`);
+    console.log(`🔥 Server chạy tại cổng: http://localhost:${PORT}`);
     console.log("🔔 Socket.io đang hoạt động...");
-    console.log(` API Overview: http://localhost:${PORT}/api`);
+    console.log(`🔥API Overview: http://localhost:${PORT}/api`);
   });
 }
 
