@@ -37,15 +37,7 @@ import {
 } from "@ant-design/icons";
 import axios from "axios";
 import dayjs, { Dayjs } from "dayjs";
-import {
-  PieChart,
-  Pie,
-  Cell,
-  ResponsiveContainer,
-  Legend,
-  Tooltip,
-  PieLabelRenderProps,
-} from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, PieLabelRenderProps } from "recharts";
 import debounce from "../../utils/debounce";
 import Swal from "sweetalert2";
 import utc from "dayjs/plugin/utc";
@@ -154,14 +146,7 @@ interface ReportData {
 }
 
 // Màu sắc cho biểu đồ
-const COLORS = [
-  "#55ed09ff",
-  "#1890ff",
-  "#faad14",
-  "#f5222d",
-  "#722ed1",
-  "#13c2c2",
-];
+const COLORS = ["#55ed09ff", "#1890ff", "#faad14", "#f5222d", "#722ed1", "#13c2c2"];
 
 // Mapping tên phương thức thanh toán
 const PAYMENT_METHOD_NAMES: Record<string, string> = {
@@ -183,11 +168,7 @@ const EndOfDayReport: React.FC = () => {
   const urlStoreId = queryParams.get("storeId");
 
   // Ưu tiên store từ AuthContext, sau đó đến URL, cuối cùng là localStorage fallback
-  const currentStore =
-    authStore ||
-    (urlStoreId
-      ? { _id: urlStoreId }
-      : JSON.parse(localStorage.getItem("currentStore") || "{}"));
+  const currentStore = authStore || (urlStoreId ? { _id: urlStoreId } : JSON.parse(localStorage.getItem("currentStore") || "{}"));
   const storeId = currentStore?._id;
   const token = localStorage.getItem("token");
   const headers = { Authorization: `Bearer ${token}` };
@@ -195,9 +176,7 @@ const EndOfDayReport: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [periodType, setPeriodType] = useState<string>("day");
-  const [selectedDate, setSelectedDate] = useState(
-    dayjs().tz("Asia/Ho_Chi_Minh")
-  ); //  THÊM .tz()
+  const [selectedDate, setSelectedDate] = useState(dayjs().tz("Asia/Ho_Chi_Minh")); //  THÊM .tz()
 
   //dùng setPagination riêng (đỡ giẫm nhau nếu người dùng lật trang nhiều bảng khác loại cùng lúc)
   const [paginationEmployee, setPaginationEmployee] = useState({
@@ -244,9 +223,7 @@ const EndOfDayReport: React.FC = () => {
             periodKey = vnDate.format("YYYY-MM");
             break;
           case "quarter":
-            periodKey = `${vnDate.year()}-Q${Math.floor(
-              vnDate.month() / 3 + 1
-            )}`;
+            periodKey = `${vnDate.year()}-Q${Math.floor(vnDate.month() / 3 + 1)}`;
             break;
           case "year":
             periodKey = vnDate.format("YYYY");
@@ -255,17 +232,14 @@ const EndOfDayReport: React.FC = () => {
             periodKey = vnDate.format("YYYY-MM-DD");
         }
 
-        const res = await axios.get(
-          `${API_BASE}/financials/end-of-day/${storeId}`,
-          {
-            params: {
-              periodType: period,
-              periodKey,
-              timezone: "Asia/Ho_Chi_Minh",
-            },
-            headers,
-          }
-        );
+        const res = await axios.get(`${API_BASE}/financials/end-of-day/${storeId}`, {
+          params: {
+            periodType: period,
+            periodKey,
+            timezone: "Asia/Ho_Chi_Minh",
+          },
+          headers,
+        });
         setReportData(res.data.report);
       } catch (err: any) {
         Swal.fire({
@@ -282,7 +256,7 @@ const EndOfDayReport: React.FC = () => {
         setLoading(false);
       }
     },
-    [storeId, headers]
+    [storeId, headers],
   );
 
   // Load lần đầu khi component mount
@@ -297,7 +271,7 @@ const EndOfDayReport: React.FC = () => {
     debounce((date: Dayjs, period: string) => {
       loadReport(date, period);
     }, 500),
-    [loadReport]
+    [loadReport],
   );
 
   // Xử lý thay đổi ngày
@@ -317,10 +291,7 @@ const EndOfDayReport: React.FC = () => {
   // Format số tiền
   const formatCurrency = (value: number | any): string => {
     // Xử lý trường hợp $numberDecimal từ MongoDB
-    const numValue =
-      typeof value === "object" && value.$numberDecimal
-        ? parseFloat(value.$numberDecimal)
-        : Number(value);
+    const numValue = typeof value === "object" && value.$numberDecimal ? parseFloat(value.$numberDecimal) : Number(value);
     return numValue.toLocaleString("vi-VN") + "₫";
   };
 
@@ -346,14 +317,11 @@ const EndOfDayReport: React.FC = () => {
     try {
       message.loading({ content: "Đang xuất Excel...", key: "export" });
       const periodKey = getPeriodKey();
-      const res = await axios.get(
-        `${API_BASE}/financials/end-of-day/${storeId}/export`,
-        {
-          params: { periodType, periodKey, format: "xlsx" },
-          headers,
-          responseType: "blob",
-        }
-      );
+      const res = await axios.get(`${API_BASE}/financials/end-of-day/${storeId}/export`, {
+        params: { periodType, periodKey, format: "xlsx" },
+        headers,
+        responseType: "blob",
+      });
       const blob = new Blob([res.data], {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       });
@@ -375,14 +343,11 @@ const EndOfDayReport: React.FC = () => {
     try {
       message.loading({ content: "Đang xuất PDF...", key: "export" });
       const periodKey = getPeriodKey();
-      const res = await axios.get(
-        `${API_BASE}/financials/end-of-day/${storeId}/export`,
-        {
-          params: { periodType, periodKey, format: "pdf" },
-          headers,
-          responseType: "blob",
-        }
-      );
+      const res = await axios.get(`${API_BASE}/financials/end-of-day/${storeId}/export`, {
+        params: { periodType, periodKey, format: "pdf" },
+        headers,
+        responseType: "blob",
+      });
       const blob = new Blob([res.data], { type: "application/pdf" });
       const link = document.createElement("a");
       link.href = window.URL.createObjectURL(blob);
@@ -431,7 +396,7 @@ const EndOfDayReport: React.FC = () => {
   console.log("PieData:", pieData);
   console.log(
     "Tổng value:",
-    pieData.reduce((a, b) => a + b.value, 0)
+    pieData.reduce((a, b) => a + b.value, 0),
   );
 
   //Tính toán và hiển thị thông tin range Phân trang
@@ -445,16 +410,14 @@ const EndOfDayReport: React.FC = () => {
         <span style={{ color: "#1890ff", fontWeight: 600 }}>
           {range[0]} – {range[1]}
         </span>{" "}
-        trên tổng số{" "}
-        <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> sản
-        phẩm
+        trên tổng số <span style={{ color: "#d4380d", fontWeight: 600 }}>{total}</span> sản phẩm
       </div>
     ),
   };
 
   return (
     <div className="premium-layout">
-      <Space direction="vertical" size="large" style={{ width: "100%" }}>
+      <Space direction="vertical" size="large" style={{ width: "100%", backgroundColor: "white" }}>
         {/* HEADER & FILTERS */}
         <Card className="glass-card">
           <Row gutter={[24, 24]} align="middle">
@@ -463,8 +426,7 @@ const EndOfDayReport: React.FC = () => {
                 Báo cáo kết quả bán hàng
               </Title>
               <Text type="secondary">
-                {currentStore.name} • {PERIOD_LABELS[periodType] || ""}{" "}
-                {selectedDate.format("DD/MM/YYYY")}
+                {currentStore.name} • {PERIOD_LABELS[periodType] || ""} {selectedDate.format("DD/MM/YYYY")}
               </Text>
             </Col>
 
@@ -472,16 +434,11 @@ const EndOfDayReport: React.FC = () => {
               <Text strong style={{ display: "block", marginBottom: 8 }}>
                 Chọn phạm vi
               </Text>
-              <Select
-                value={periodType}
-                onChange={handlePeriodChange}
-                style={{ width: "100%" }}
-                size="large"
-              >
-                <Option value="day">Hàng ngày</Option>
-                <Option value="month">Hàng tháng</Option>
-                <Option value="quarter">Hàng quý</Option>
-                <Option value="year">Hàng năm</Option>
+              <Select value={periodType} onChange={handlePeriodChange} style={{ width: "100%" }} size="large">
+                <Option value="day">Ngày</Option>
+                <Option value="month">Tháng</Option>
+                <Option value="quarter">Quý</Option>
+                <Option value="year">Năm</Option>
               </Select>
             </Col>
 
@@ -492,15 +449,7 @@ const EndOfDayReport: React.FC = () => {
               <DatePicker
                 value={selectedDate}
                 onChange={handleDateChange}
-                picker={
-                  periodType === "month"
-                    ? "month"
-                    : periodType === "year"
-                    ? "year"
-                    : periodType === "quarter"
-                    ? "quarter"
-                    : "date"
-                }
+                picker={periodType === "month" ? "month" : periodType === "year" ? "year" : periodType === "quarter" ? "quarter" : "date"}
                 style={{ width: "100%" }}
                 size="large"
                 allowClear={false}
@@ -509,11 +458,7 @@ const EndOfDayReport: React.FC = () => {
 
             <Col xs={24} lg={8} style={{ textAlign: "right" }}>
               <Space>
-                <Button
-                  size="large"
-                  icon={<UndoOutlined />}
-                  onClick={() => loadReport(selectedDate, periodType)}
-                >
+                <Button size="large" icon={<UndoOutlined />} onClick={() => loadReport(selectedDate, periodType)}>
                   Làm mới
                 </Button>
                 <Button
@@ -549,11 +494,7 @@ const EndOfDayReport: React.FC = () => {
           <Col xs={24} sm={12} lg={6}>
             <div className="stat-card-inner gradient-info">
               <Statistic
-                title={
-                  <span style={{ color: "rgba(255,255,255,0.8)" }}>
-                    Doanh thu thực
-                  </span>
-                }
+                title={<span style={{ color: "rgba(255,255,255,0.8)" }}>Doanh thu thực</span>}
                 value={reportData.summary.totalRevenue}
                 formatter={(v) => formatCurrency(Number(v))}
                 valueStyle={{
@@ -568,11 +509,7 @@ const EndOfDayReport: React.FC = () => {
           <Col xs={24} sm={12} lg={6}>
             <div className="stat-card-inner gradient-primary">
               <Statistic
-                title={
-                  <span style={{ color: "rgba(255,255,255,0.8)" }}>
-                    Doanh thu thuần
-                  </span>
-                }
+                title={<span style={{ color: "rgba(255,255,255,0.8)" }}>Doanh thu thuần</span>}
                 value={reportData.summary.netSales || 0}
                 formatter={(v) => formatCurrency(Number(v))}
                 valueStyle={{
@@ -587,11 +524,7 @@ const EndOfDayReport: React.FC = () => {
           <Col xs={24} sm={12} lg={6}>
             <div className="stat-card-inner gradient-success">
               <Statistic
-                title={
-                  <span style={{ color: "rgba(255,255,255,0.8)" }}>
-                    Lợi nhuận gộp
-                  </span>
-                }
+                title={<span style={{ color: "rgba(255,255,255,0.8)" }}>Lợi nhuận gộp</span>}
                 value={reportData.summary.grossProfit || 0}
                 formatter={(v) => formatCurrency(Number(v))}
                 valueStyle={{
@@ -611,11 +544,7 @@ const EndOfDayReport: React.FC = () => {
               }}
             >
               <Statistic
-                title={
-                  <span style={{ color: "rgba(255,255,255,0.8)" }}>
-                    Tiền mặt (Két)
-                  </span>
-                }
+                title={<span style={{ color: "rgba(255,255,255,0.8)" }}>Tiền mặt (Két)</span>}
                 value={reportData.summary.cashInDrawer}
                 formatter={(v) => formatCurrency(Number(v))}
                 valueStyle={{
@@ -634,11 +563,7 @@ const EndOfDayReport: React.FC = () => {
           <Col xs={24} sm={12} lg={4}>
             <div className="stat-card-inner gradient-warning">
               <Statistic
-                title={
-                  <span style={{ color: "rgba(255,255,255,0.8)" }}>
-                    Số đơn hàng
-                  </span>
-                }
+                title={<span style={{ color: "rgba(255,255,255,0.8)" }}>Số đơn hàng</span>}
                 value={reportData.summary.totalOrders}
                 valueStyle={{
                   color: "#fff",
@@ -653,11 +578,7 @@ const EndOfDayReport: React.FC = () => {
           <Col xs={24} sm={12} lg={4}>
             <div className="stat-card-inner gradient-error">
               <Statistic
-                title={
-                  <span style={{ color: "rgba(255,255,255,0.8)" }}>
-                    Tiền hoàn hàng
-                  </span>
-                }
+                title={<span style={{ color: "rgba(255,255,255,0.8)" }}>Tiền hoàn hàng</span>}
                 value={reportData.summary.totalRefundAmount}
                 formatter={(v) => formatCurrency(Number(v))}
                 valueStyle={{
@@ -677,11 +598,7 @@ const EndOfDayReport: React.FC = () => {
               }}
             >
               <Statistic
-                title={
-                  <span style={{ color: "rgba(255,255,255,0.8)" }}>
-                    Giá vốn (COGS)
-                  </span>
-                }
+                title={<span style={{ color: "rgba(255,255,255,0.8)" }}>Giá vốn (COGS)</span>}
                 value={reportData.summary.totalCOGS || 0}
                 formatter={(v) => formatCurrency(Number(v))}
                 valueStyle={{
@@ -701,11 +618,7 @@ const EndOfDayReport: React.FC = () => {
               }}
             >
               <Statistic
-                title={
-                  <span style={{ color: "rgba(255,255,255,0.8)" }}>
-                    VAT Tổng
-                  </span>
-                }
+                title={<span style={{ color: "rgba(255,255,255,0.8)" }}>VAT Tổng</span>}
                 value={reportData.summary.vatTotal}
                 formatter={(v) => formatCurrency(Number(v))}
                 valueStyle={{
@@ -725,11 +638,7 @@ const EndOfDayReport: React.FC = () => {
               }}
             >
               <Statistic
-                title={
-                  <span style={{ color: "rgba(255,255,255,0.8)" }}>
-                    Điểm tích lũy
-                  </span>
-                }
+                title={<span style={{ color: "rgba(255,255,255,0.8)" }}>Điểm tích lũy</span>}
                 value={reportData.summary.totalLoyaltyEarned}
                 valueStyle={{
                   color: "#fff",
@@ -754,7 +663,7 @@ const EndOfDayReport: React.FC = () => {
                   Phân Loại Theo Phương Thức Thanh Toán
                 </span>
               }
-              style={{ borderRadius: 12, height: "100%" }}
+              style={{ borderRadius: 12, height: "100%", border: "1px solid #8c8c8c" }}
             >
               <ResponsiveContainer width="100%" height={320}>
                 <PieChart>
@@ -776,16 +685,11 @@ const EndOfDayReport: React.FC = () => {
                     dataKey="value"
                   >
                     {pieData.map((entry, index) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={COLORS[index % COLORS.length]}
-                      />
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
 
-                  <Tooltip
-                    formatter={(value: number) => formatCurrency(value)}
-                  />
+                  <Tooltip formatter={(value: number) => formatCurrency(value)} />
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>
@@ -840,7 +744,7 @@ const EndOfDayReport: React.FC = () => {
                   </AntdTooltip>
                 </span>
               }
-              style={{ borderRadius: 12 }}
+              style={{ borderRadius: 12, border: "1px solid #8c8c8c" }}
             >
               <Table
                 dataSource={reportData.byEmployee}
@@ -849,8 +753,7 @@ const EndOfDayReport: React.FC = () => {
                   ...paginationConfig,
                   current: paginationEmployee.current,
                   pageSize: paginationEmployee.pageSize,
-                  onChange: (page, pageSize) =>
-                    setPaginationEmployee({ current: page, pageSize }),
+                  onChange: (page, pageSize) => setPaginationEmployee({ current: page, pageSize }),
                 }}
                 scroll={{ x: 600, y: 300 }}
                 columns={[
@@ -887,9 +790,7 @@ const EndOfDayReport: React.FC = () => {
                     align: "right",
                     render: (value) => {
                       const roundedValue = Math.round(
-                        typeof value === "object" && value.$numberDecimal
-                          ? parseFloat(value.$numberDecimal)
-                          : Number(value)
+                        typeof value === "object" && value.$numberDecimal ? parseFloat(value.$numberDecimal) : Number(value),
                       );
                       return (
                         <Text strong style={{ color: "#1249c1ff" }}>
@@ -912,7 +813,7 @@ const EndOfDayReport: React.FC = () => {
               Sản Phẩm Bán Chạy Trong Ngày
             </span>
           }
-          style={{ marginTop: 16, borderRadius: 12 }}
+          style={{ marginTop: 16, borderRadius: 12, border: "1px solid #8c8c8c" }}
         >
           <Table
             dataSource={reportData.byProduct}
@@ -921,8 +822,7 @@ const EndOfDayReport: React.FC = () => {
               ...paginationConfig,
               current: paginationProduct.current,
               pageSize: paginationProduct.pageSize,
-              onChange: (page, pageSize) =>
-                setPaginationProduct({ current: page, pageSize }),
+              onChange: (page, pageSize) => setPaginationProduct({ current: page, pageSize }),
             }}
             scroll={{ x: 700 }}
             columns={[
@@ -966,12 +866,7 @@ const EndOfDayReport: React.FC = () => {
                 dataIndex: "refundQuantity",
                 key: "refundQuantity",
                 align: "center",
-                render: (value) =>
-                  value > 0 ? (
-                    <Tag color="red">{value}</Tag>
-                  ) : (
-                    <Text type="secondary">0</Text>
-                  ),
+                render: (value) => (value > 0 ? <Tag color="red">{value}</Tag> : <Text type="secondary">0</Text>),
               },
               {
                 title: "Còn Lại Trong Kho",
@@ -985,74 +880,68 @@ const EndOfDayReport: React.FC = () => {
         </Card>
 
         {/* PHẦN HOÀN HÀNG */}
-        {reportData.summary.totalRefunds > 0 && (
-          <Card
-            title={
-              <span>
-                <UndoOutlined style={{ marginRight: 8, color: "#ff4d4f" }} />
-                Chi Tiết Hoàn Hàng
-              </span>
-            }
-            style={{ marginTop: 16, borderRadius: 12, borderColor: "#ffccc7" }}
+
+        <Card
+          title={
+            <span>
+              <UndoOutlined style={{ marginRight: 8, color: "#ff4d4f" }} />
+              Chi Tiết Hoàn Hàng
+            </span>
+          }
+          style={{ marginTop: 16, borderRadius: 12, border: "1px solid #8c8c8c" }}
+        >
+          <div
+            style={{
+              background: "#fff1f0",
+              padding: 16,
+              borderRadius: 8,
+              marginBottom: 16,
+            }}
           >
-            <div
-              style={{
-                background: "#fff1f0",
-                padding: 16,
-                borderRadius: 8,
-                marginBottom: 16,
-              }}
-            >
-              <Text strong style={{ fontSize: 16, color: "#ff4d4f" }}>
-                {`Trong ${
-                  PERIOD_LABELS[periodType] || "khoảng thời gian này"
-                } có ${
-                  reportData.summary.totalRefunds
-                } đơn hoàn, tổng giá trị: ${formatCurrency(
-                  reportData.summary.totalRefundAmount
-                )}`}
-              </Text>
-            </div>
-            <Table
-              dataSource={reportData.refundsByEmployee}
-              rowKey="_id"
-              pagination={{
-                ...paginationConfig,
-                current: paginationRefund.current,
-                pageSize: paginationRefund.pageSize,
-                onChange: (page, pageSize) =>
-                  setPaginationRefund({ current: page, pageSize }),
-              }}
-              scroll={{ x: 600 }}
-              columns={[
-                {
-                  title: "Nhân Viên Xử Lý",
-                  dataIndex: "name",
-                  key: "name",
-                  render: (text) => <Text strong> {text}</Text>,
-                },
-                {
-                  title: "Số Tiền Hoàn",
-                  dataIndex: "refundAmount",
-                  key: "refundAmount",
-                  align: "center",
-                  render: (value) => (
-                    <Text strong style={{ color: "#ff4d4f" }}>
-                      {formatCurrency(value)}
-                    </Text>
-                  ),
-                },
-                {
-                  title: "Thời Gian",
-                  dataIndex: "refundedAt",
-                  key: "refundedAt",
-                  align: "center",
-                  render: (value) => new Date(value).toLocaleString("vi-VN"),
-                },
-              ]}
-            />
-          </Card>
-        )}
+            <Text strong style={{ fontSize: 16, color: "#ff4d4f" }}>
+              {`Trong ${PERIOD_LABELS[periodType] || "khoảng thời gian này"} có ${
+                reportData.summary.totalRefunds
+              } đơn hoàn, tổng giá trị: ${formatCurrency(reportData.summary.totalRefundAmount)}`}
+            </Text>
+          </div>
+          <Table
+            dataSource={reportData.refundsByEmployee}
+            rowKey="_id"
+            pagination={{
+              ...paginationConfig,
+              current: paginationRefund.current,
+              pageSize: paginationRefund.pageSize,
+              onChange: (page, pageSize) => setPaginationRefund({ current: page, pageSize }),
+            }}
+            scroll={{ x: 600 }}
+            columns={[
+              {
+                title: "Nhân Viên Xử Lý",
+                dataIndex: "name",
+                key: "name",
+                render: (text) => <Text strong> {text}</Text>,
+              },
+              {
+                title: "Số Tiền Hoàn",
+                dataIndex: "refundAmount",
+                key: "refundAmount",
+                align: "center",
+                render: (value) => (
+                  <Text strong style={{ color: "#ff4d4f" }}>
+                    {formatCurrency(value)}
+                  </Text>
+                ),
+              },
+              {
+                title: "Thời Gian",
+                dataIndex: "refundedAt",
+                key: "refundedAt",
+                align: "center",
+                render: (value) => new Date(value).toLocaleString("vi-VN"),
+              },
+            ]}
+          />
+        </Card>
 
         {/* SNAPSHOT TỒN KHO */}
         <Card
@@ -1062,7 +951,7 @@ const EndOfDayReport: React.FC = () => {
               Tồn Kho Cuối Ngày
             </span>
           }
-          style={{ marginTop: 16, borderRadius: 12 }}
+          style={{ marginTop: 16, borderRadius: 12, border: "1px solid #8c8c8c" }}
         >
           <Table
             dataSource={reportData.stockSnapshot}
@@ -1071,8 +960,7 @@ const EndOfDayReport: React.FC = () => {
               ...paginationConfig,
               current: paginationStock.current,
               pageSize: paginationStock.pageSize,
-              onChange: (page, pageSize) =>
-                setPaginationStock({ current: page, pageSize }),
+              onChange: (page, pageSize) => setPaginationStock({ current: page, pageSize }),
             }}
             scroll={{ x: 600 }}
             columns={[
@@ -1097,13 +985,7 @@ const EndOfDayReport: React.FC = () => {
                 align: "center",
                 width: 150,
                 sorter: (a, b) => a.stock - b.stock,
-                render: (value) => (
-                  <Tag
-                    color={value < 10 ? "red" : value < 50 ? "orange" : "green"}
-                  >
-                    {value}
-                  </Tag>
-                ),
+                render: (value) => <Tag color={value < 10 ? "red" : value < 50 ? "orange" : "green"}>{value}</Tag>,
               },
               {
                 title: "Trạng Thái",
