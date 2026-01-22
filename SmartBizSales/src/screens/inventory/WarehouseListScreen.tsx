@@ -20,7 +20,10 @@ import * as warehouseApi from "../../api/warehouseApi";
 import { Warehouse } from "../../api/warehouseApi";
 import { useNavigation } from "@react-navigation/native";
 
-if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+if (
+  Platform.OS === "android" &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
@@ -33,11 +36,16 @@ const WAREHOUSE_STATUS_LABEL: any = {
 
 const getWarehouseStatusColor = (status: string) => {
   switch (status) {
-    case "active": return "#10b981"; // Success
-    case "inactive": return "#64748b"; // Secondary
-    case "maintenance": return "#f59e0b"; // Warning
-    case "archived": return "#ef4444"; // Error
-    default: return "#64748b";
+    case "active":
+      return "#10b981"; // Success
+    case "inactive":
+      return "#64748b"; // Secondary
+    case "maintenance":
+      return "#f59e0b"; // Warning
+    case "archived":
+      return "#ef4444"; // Error
+    default:
+      return "#64748b";
   }
 };
 
@@ -168,7 +176,9 @@ const WarehouseListScreen: React.FC = () => {
           </View>
           <View style={styles.tagRow}>
             <View style={styles.typeTag}>
-              <Text style={styles.typeTagText}>{typeLabel[item.warehouse_type] || "Kho thường"}</Text>
+              <Text style={styles.typeTagText}>
+                {typeLabel[item.warehouse_type] || "Kho thường"}
+              </Text>
             </View>
             {item.capacity && (
               <View style={styles.capacityTag}>
@@ -182,7 +192,10 @@ const WarehouseListScreen: React.FC = () => {
 
         <View style={styles.cardFooter}>
           <Text style={styles.updatedAt}>
-            Cập nhật: {item.updatedAt ? new Date(item.updatedAt).toLocaleDateString("vi-VN") : "N/A"}
+            Cập nhật:{" "}
+            {item.updatedAt
+              ? new Date(item.updatedAt).toLocaleDateString("vi-VN")
+              : "N/A"}
           </Text>
           <View style={styles.actions}>
             {!item.is_default && !deletedMode && (
@@ -236,12 +249,17 @@ const WarehouseListScreen: React.FC = () => {
               size={18}
               color={deletedMode ? "#10b981" : "#fff"}
             />
-            <Text style={[styles.filterBtnText, deletedMode && styles.filterBtnTextActive]}>
+            <Text
+              style={[
+                styles.filterBtnText,
+                deletedMode && styles.filterBtnTextActive,
+              ]}
+            >
               {deletedMode ? "Xem kho hiện tại" : "Kho đã xoá"}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.refreshHeaderBtn} onPress={onRefresh}>
-             <Ionicons name="refresh" size={18} color="#fff" />
+            <Ionicons name="refresh" size={18} color="#fff" />
           </TouchableOpacity>
         </View>
       </LinearGradient>
@@ -273,7 +291,9 @@ const WarehouseListScreen: React.FC = () => {
                 />
               </View>
               <Text style={styles.emptyText}>
-                {deletedMode ? "Không có kho nào đã xoá" : "Chưa có kho hàng nào"}
+                {deletedMode
+                  ? "Không có kho nào đã xoá"
+                  : "Chưa có kho hàng nào"}
               </Text>
               {!deletedMode && (
                 <TouchableOpacity
@@ -299,7 +319,10 @@ const WarehouseListScreen: React.FC = () => {
             navigation.navigate("WarehouseForm", { onRefresh: fetchWarehouses })
           }
         >
-          <LinearGradient colors={["#10b981", "#059669"]} style={styles.fabGradient}>
+          <LinearGradient
+            colors={["#10b981", "#059669"]}
+            style={styles.fabGradient}
+          >
             <Ionicons name="add" size={32} color="#fff" />
           </LinearGradient>
         </TouchableOpacity>
@@ -346,7 +369,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   filterBtnActive: { backgroundColor: "#fff" },
-  filterBtnText: { color: "#fff", fontSize: 13, fontWeight: "600", marginLeft: 6 },
+  filterBtnText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "600",
+    marginLeft: 6,
+  },
   filterBtnTextActive: { color: "#10b981" },
   refreshHeaderBtn: {
     width: 32,
@@ -394,10 +422,20 @@ const styles = StyleSheet.create({
     borderWidth: 0.5,
     borderColor: "#f59e0b",
   },
-  badgeText: { color: "#d97706", fontSize: 10, fontWeight: "700", marginLeft: 2 },
+  badgeText: {
+    color: "#d97706",
+    fontSize: 10,
+    fontWeight: "700",
+    marginLeft: 2,
+  },
   codeText: { fontSize: 12, color: "#94a3b8", marginTop: 2 },
   statusDot: { width: 8, height: 8, borderRadius: 4, marginLeft: 8 },
-  cardBody: { marginTop: 12, borderTopWidth: 1, borderTopColor: "#f1f5f9", paddingTop: 12 },
+  cardBody: {
+    marginTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#f1f5f9",
+    paddingTop: 12,
+  },
   infoRow: { flexDirection: "row", alignItems: "center", marginBottom: 6 },
   infoText: { flex: 1, fontSize: 13, color: "#64748b", marginLeft: 8 },
   tagRow: { flexDirection: "row", alignItems: "center", marginTop: 4, gap: 8 },

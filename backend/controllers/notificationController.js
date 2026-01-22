@@ -12,10 +12,11 @@ export const listNotifications = async (req, res) => {
     const storeId = req.store?._id || req.storeId; // checkStoreAccess gắn vào req
     const { type, read, page = 1, limit = 20, sort = "-createdAt" } = req.query;
 
-    if (!storeId) return res.status(400).json({ message: "Thiếu thông tin cửa hàng" });
+    if (!storeId)
+      return res.status(400).json({ message: "Thiếu thông tin cửa hàng" });
 
     const filter = { storeId };
-    
+
     // PHÂN QUYỀN:
     // - MANAGER: được xem tất cả thông báo thuộc storeId (bao gồm cả inventory)
     // - Các role khác: chỉ xem thông báo của chính mình (userId) và KHÔNG được xem inventory
@@ -28,7 +29,7 @@ export const listNotifications = async (req, res) => {
       // Nếu user lọc theo type, ta vẫn phải tôn trọng logic phân quyền ở trên
       if (req.user?.role !== "MANAGER" && type === "inventory") {
         // Staff cố tình lọc inventory -> Không trả về gì hoặc ép $ne
-        filter.type = "none"; 
+        filter.type = "none";
       } else {
         filter.type = type;
       }
@@ -65,6 +66,36 @@ export const listNotifications = async (req, res) => {
 };
 
 /**
+ * Đếm số thông báo chưa đọc
+ * GET /api/notifications/unread-count
+ */
+export const getUnreadCount = async (req, res) => {
+  try {
+    const storeId = req.store?._id || req.storeId || req.query.storeId;
+    if (!storeId)
+      return res.status(400).json({ message: "Thiếu thông tin cửa hàng" });
+
+    const filter = { storeId, read: false };
+
+    // PHÂN QUYỀN: Giống như listNotifications
+    if (req.user?.role !== "MANAGER") {
+      filter.userId = req.user?._id;
+      filter.type = { $ne: "inventory" };
+    }
+
+    const count = await Notification.countDocuments(filter);
+
+    return res.json({
+      count,
+      unreadCount: count, // alias cho compatibility
+    });
+  } catch (err) {
+    console.error("⚠️ Lỗi khi đếm thông báo chưa đọc:", err);
+    return res.status(500).json({ message: "Lỗi đếm thông báo" });
+  }
+};
+
+/**
  * Đánh dấu 1 thông báo là đã đọc
  */
 export const markNotificationRead = async (req, res) => {
@@ -79,7 +110,8 @@ export const markNotificationRead = async (req, res) => {
       { new: true }
     );
 
-    if (!notif) return res.status(404).json({ message: "Không tìm thấy thông báo" });
+    if (!notif)
+      return res.status(404).json({ message: "Không tìm thấy thông báo" });
     return res.json({ data: notif });
   } catch (err) {
     console.error("⚠️ Lỗi khi cập nhật thông báo:", err);
@@ -93,15 +125,18 @@ export const markNotificationRead = async (req, res) => {
 export const markAllRead = async (req, res) => {
   try {
     const storeId = req.store?._id || req.storeId || req.query.storeId;
-    if (!storeId) return res.status(400).json({ message: "Thiếu thông tin cửa hàng" });
-    
+    if (!storeId)
+      return res.status(400).json({ message: "Thiếu thông tin cửa hàng" });
+
     const filter = { storeId };
     if (req.user?.role !== "MANAGER") {
       filter.userId = req.user?._id;
       filter.type = { $ne: "inventory" };
     }
 
-    const result = await Notification.updateMany(filter, { $set: { read: true } });
+    const result = await Notification.updateMany(filter, {
+      $set: { read: true },
+    });
 
     return res.json({
       message: "Đã đánh dấu tất cả thông báo là đã đọc",
@@ -122,7 +157,8 @@ export const deleteNotification = async (req, res) => {
     const { id } = req.params;
 
     const notif = await Notification.findOneAndDelete({ _id: id, storeId });
-    if (!notif) return res.status(404).json({ message: "Không tìm thấy thông báo" });
+    if (!notif)
+      return res.status(404).json({ message: "Không tìm thấy thông báo" });
 
     return res.json({ message: "Đã xóa thông báo" });
   } catch (err) {
@@ -136,11 +172,14 @@ export const deleteNotification = async (req, res) => {
 export const scanExpiryNotifications = async (req, res) => {
   try {
     const storeId = req.store?._id || req.storeId;
-    if (!storeId) return res.status(400).json({ message: "Thiếu thông tin cửa hàng" });
+    if (!storeId)
+      return res.status(400).json({ message: "Thiếu thông tin cửa hàng" });
 
     // Chỉ manager mới được chạy quét
     if (req.user?.role !== "MANAGER") {
-      return res.status(403).json({ message: "Bạn không có quyền thực hiện thao tác này" });
+      return res
+        .status(403)
+        .json({ message: "Bạn không có quyền thực hiện thao tác này" });
     }
 
     const now = new Date();
@@ -153,21 +192,33 @@ export const scanExpiryNotifications = async (req, res) => {
       status: "Đang kinh doanh",
       isDeleted: false,
       "batches.expiry_date": { $lte: thirtyDaysFromNow },
-      "batches.quantity": { $gt: 0 }
+      "batches.quantity": { $gt: 0 },
     });
 
     let createdCount = 0;
-    const startOfDay = new Date(); startOfDay.setHours(0,0,0,0);
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
 
     for (const p of products) {
-      const expiringBatches = p.batches.filter(b => b.expiry_date && new Date(b.expiry_date) <= thirtyDaysFromNow && b.quantity > 0);
-      const expiredBatches = expiringBatches.filter(b => new Date(b.expiry_date) <= now);
-      
+      const expiringBatches = p.batches.filter(
+        (b) =>
+          b.expiry_date &&
+          new Date(b.expiry_date) <= thirtyDaysFromNow &&
+          b.quantity > 0
+      );
+      const expiredBatches = expiringBatches.filter(
+        (b) => new Date(b.expiry_date) <= now
+      );
+
       if (expiringBatches.length > 0) {
-        const title = expiredBatches.length > 0 ? "Cảnh báo hàng HẾT HẠN" : "Cảnh báo hàng sắp hết hạn";
-        const message = expiredBatches.length > 0 
-          ? `Sản phẩm "${p.name}" có ${expiredBatches.length} lô ĐÃ HẾT HẠN. Vui lòng xử lý!` 
-          : `Sản phẩm "${p.name}" có ${expiringBatches.length} lô sắp hết hạn trong 30 ngày tới.`;
+        const title =
+          expiredBatches.length > 0
+            ? "Cảnh báo hàng HẾT HẠN"
+            : "Cảnh báo hàng sắp hết hạn";
+        const message =
+          expiredBatches.length > 0
+            ? `Sản phẩm "${p.name}" có ${expiredBatches.length} lô ĐÃ HẾT HẠN. Vui lòng xử lý!`
+            : `Sản phẩm "${p.name}" có ${expiringBatches.length} lô sắp hết hạn trong 30 ngày tới.`;
 
         // Check trùng trong ngày
         const existing = await Notification.findOne({
@@ -175,7 +226,7 @@ export const scanExpiryNotifications = async (req, res) => {
           userId: req.user._id,
           title,
           message: { $regex: p.name, $options: "i" },
-          createdAt: { $gte: startOfDay }
+          createdAt: { $gte: startOfDay },
         });
 
         if (!existing) {
@@ -184,16 +235,16 @@ export const scanExpiryNotifications = async (req, res) => {
             userId: req.user._id,
             type: "inventory",
             title,
-            message
+            message,
           });
           createdCount++;
         }
       }
     }
 
-    return res.json({ 
+    return res.json({
       message: `Quét hoàn tất. Đã tạo thêm ${createdCount} thông báo mới.`,
-      foundProducts: products.length 
+      foundProducts: products.length,
     });
   } catch (err) {
     console.error("⚠️ Lỗi khi quét thông báo hết hạn:", err);

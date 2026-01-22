@@ -1,5 +1,5 @@
 // src/components/NotificationPanel.tsx
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -19,6 +19,7 @@ import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import "dayjs/locale/vi";
 import apiClient from "../api/apiClient";
+import { useNotifications } from "../context/NotificationContext";
 
 dayjs.extend(relativeTime);
 dayjs.locale("vi");
@@ -60,17 +61,39 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({
 }) => {
   const navigation = useNavigation<any>();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [localUnreadCount, setLocalUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<"all" | "unread">("all");
   const slideAnim = useState(new Animated.Value(SCREEN_WIDTH))[0];
 
+  // ========== REALTIME NOTIFICATIONS ==========
+  // Subscribe to NotificationContext for real-time updates
+  const {
+    unreadCount: globalUnreadCount,
+    isConnected,
+    connectionStatus,
+    refreshUnreadCount,
+  } = useNotifications();
+
+  // Track previous unread count to detect new notifications
+  const prevUnreadCount = useRef(globalUnreadCount);
+
   // Sync unread count to parent
   useEffect(() => {
     if (onUnreadCountChange) {
-      onUnreadCountChange(unreadCount);
+      onUnreadCountChange(localUnreadCount);
     }
-  }, [unreadCount, onUnreadCountChange]);
+  }, [localUnreadCount, onUnreadCountChange]);
+
+  // ========== AUTO REFRESH ON NEW NOTIFICATION ==========
+  useEffect(() => {
+    // If global unread count increased and panel is visible, refresh
+    if (globalUnreadCount > prevUnreadCount.current && visible) {
+      console.log("🔔 New notification detected, refreshing panel...");
+      fetchNotifications();
+    }
+    prevUnreadCount.current = globalUnreadCount;
+  }, [globalUnreadCount, visible]);
 
   // ========== FETCH ==========
   const fetchNotifications = useCallback(async () => {
@@ -90,7 +113,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({
       const count =
         res.data.meta?.totalUnread ||
         data.filter((n: NotificationItem) => !n.read).length;
-      setUnreadCount(count);
+      setLocalUnreadCount(count);
     } catch (err) {
       console.error("Lỗi tải thông báo:", err);
     } finally {
@@ -121,7 +144,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({
       setNotifications((prev) =>
         prev.map((n) => (n._id === id ? { ...n, read } : n))
       );
-      setUnreadCount((prev) => {
+      setLocalUnreadCount((prev: number) => {
         const wasUnread =
           notifications.find((n) => n._id === id)?.read === false;
         const willBeUnread = !read;
@@ -138,7 +161,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({
     try {
       await apiClient.patch(`/notifications/read-all`, {});
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-      setUnreadCount(0);
+      setLocalUnreadCount(0);
       Alert.alert("Thành công", "Đã đánh dấu tất cả là đã đọc");
     } catch (err) {
       Alert.alert("Lỗi", "Không thể đánh dấu tất cả");
@@ -239,15 +262,22 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({
             <View style={styles.headerLeft}>
               <Ionicons name="notifications" size={22} color="#1890ff" />
               <Text style={styles.headerTitle}>Thông báo</Text>
-              {unreadCount > 0 && (
+              {/* Connection status indicator */}
+              <View
+                style={[
+                  styles.connectionDot,
+                  { backgroundColor: isConnected ? "#52c41a" : "#d1d5db" },
+                ]}
+              />
+              {localUnreadCount > 0 && (
                 <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{unreadCount}</Text>
+                  <Text style={styles.badgeText}>{localUnreadCount}</Text>
                 </View>
               )}
             </View>
 
             <View style={styles.headerRight}>
-              {unreadCount > 0 && (
+              {localUnreadCount > 0 && (
                 <TouchableOpacity
                   style={styles.markAllBtn}
                   onPress={markAllAsRead}
@@ -286,7 +316,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({
               >
                 Chưa đọc
               </Text>
-              {unreadCount > 0 && (
+              {localUnreadCount > 0 && (
                 <View
                   style={[
                     styles.tabBadge,
@@ -299,7 +329,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({
                       tab === "unread" && styles.tabBadgeTextActive,
                     ]}
                   >
-                    {unreadCount}
+                    {localUnreadCount}
                   </Text>
                 </View>
               )}
@@ -392,6 +422,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     color: "#1f2937",
+  },
+  connectionDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginLeft: 4,
   },
   badge: {
     backgroundColor: "#ff4d4f",

@@ -38,7 +38,9 @@ const releaseReservedPoints = async (order, session = null) => {
 
   // Chỉ hoàn điểm cho đơn pending (chưa thanh toán)
   if (order.status !== "pending") {
-    console.log(`⚠️ [releaseReservedPoints] Order ${order._id} không phải pending (status=${order.status}). Bỏ qua.`);
+    console.log(
+      `⚠️ [releaseReservedPoints] Order ${order._id} không phải pending (status=${order.status}). Bỏ qua.`
+    );
     return false;
   }
 
@@ -48,7 +50,7 @@ const releaseReservedPoints = async (order, session = null) => {
       customer.loyaltyPoints = (customer.loyaltyPoints || 0) + order.usedPoints;
       await customer.save({ session });
       console.log(
-        `🔓 [releaseReservedPoints] Đã hoàn ${order.usedPoints} điểm cho customer ${customer.phone}. Điểm hiện tại: ${customer.loyaltyPoints}`,
+        `🔓 [releaseReservedPoints] Đã hoàn ${order.usedPoints} điểm cho customer ${customer.phone}. Điểm hiện tại: ${customer.loyaltyPoints}`
       );
       return true;
     }
@@ -342,7 +344,12 @@ const createOrder = async (req, res) => {
     const userId = req.user?.id || req.user?._id;
 
     // ================= 1. STORE =================
-    const storeId = bodyStoreId || req.store?._id?.toString() || req.store?.id || req.user?.current_store?.toString() || null;
+    const storeId =
+      bodyStoreId ||
+      req.store?._id?.toString() ||
+      req.store?.id ||
+      req.user?.current_store?.toString() ||
+      null;
 
     if (!storeId) throw new Error("Thiếu Store ID");
 
@@ -399,7 +406,9 @@ const createOrder = async (req, res) => {
       }).session(session);
 
       if (!prod) {
-        throw new Error(`Sản phẩm ID ${item.productId} không tồn tại hoặc đã ngừng kinh doanh`);
+        throw new Error(
+          `Sản phẩm ID ${item.productId} không tồn tại hoặc đã ngừng kinh doanh`
+        );
       }
 
       // Enhanced stock validation
@@ -408,20 +417,26 @@ const createOrder = async (req, res) => {
         throw new Error(`Sản phẩm "${prod.name}" đã hết hàng trong kho`);
       }
       if (currentStock < qty) {
-        throw new Error(`Sản phẩm "${prod.name}" không đủ tồn kho. Còn lại: ${currentStock}, Yêu cầu: ${qty}`);
+        throw new Error(
+          `Sản phẩm "${prod.name}" không đủ tồn kho. Còn lại: ${currentStock}, Yêu cầu: ${qty}`
+        );
       }
 
       // PRICE
       let price = Number(prod.price);
       if (item.saleType === "AT_COST") price = Number(prod.cost_price);
       if (item.saleType === "FREE") price = 0;
-      if (item.saleType === "VIP" && item.customPrice) price = Number(item.customPrice);
+      if (item.saleType === "VIP" && item.customPrice)
+        price = Number(item.customPrice);
 
       const subtotal = price * qty;
       total += subtotal;
 
       // VAT của từng item (nếu tax_rate = -1 thì coi như 0% để tính tiền)
-      const currentTaxRate = prod.tax_rate !== undefined && prod.tax_rate !== null ? Number(prod.tax_rate) : 0;
+      const currentTaxRate =
+        prod.tax_rate !== undefined && prod.tax_rate !== null
+          ? Number(prod.tax_rate)
+          : 0;
       const effectiveTaxRate = currentTaxRate === -1 ? 0 : currentTaxRate;
       const itemVatAmount = subtotal * (effectiveTaxRate / 100);
 
@@ -456,7 +471,10 @@ const createOrder = async (req, res) => {
 
     // ================= 4. VAT TOTAL =================
     // Tính tổng VAT từ từng item tự động (không phụ thuộc flag isVATInvoice)
-    const totalVatAmountTotal = orderItems.reduce((sum, it) => sum + Number(it.vat_amount), 0);
+    const totalVatAmountTotal = orderItems.reduce(
+      (sum, it) => sum + Number(it.vat_amount),
+      0
+    );
 
     let vatAmount = totalVatAmountTotal.toFixed(2);
     let beforeTax = total.toFixed(2);
@@ -528,7 +546,10 @@ const createOrder = async (req, res) => {
 
     // ================= TÍNH TOÁN GIÁ TRỊ CUỐI CÙNG =================
     // Lấy loyalty setting để tính discountAmount
-    const loyaltySetting = await mongoose.model("LoyaltySetting").findOne({ storeId: storeId }).session(session);
+    const loyaltySetting = await mongoose
+      .model("LoyaltySetting")
+      .findOne({ storeId: storeId })
+      .session(session);
     const vndPerPoint = loyaltySetting?.vndPerPoint || 0;
 
     // Tính giảm giá từ điểm tích lũy
@@ -570,7 +591,9 @@ const createOrder = async (req, res) => {
     // ================= RESERVE POINTS (TRỪ TẠM ĐIỂM) =================
     // Khi tạo/cập nhật pending order, trừ tạm điểm ngay để tránh 2 đơn dùng trùng
     if (customer && (usedPoints || 0) > 0) {
-      const freshCustomer = await Customer.findById(customer._id).session(session);
+      const freshCustomer = await Customer.findById(customer._id).session(
+        session
+      );
       if (freshCustomer) {
         // Lấy điểm đã reserve từ order cũ (nếu đang update)
         const previousReservedPoints = order.isNew ? 0 : order.usedPoints || 0;
@@ -579,26 +602,35 @@ const createOrder = async (req, res) => {
         const deltaPoints = (usedPoints || 0) - previousReservedPoints;
 
         // Kiểm tra điểm khả dụng
-        const availablePoints = (freshCustomer.loyaltyPoints || 0) + previousReservedPoints;
+        const availablePoints =
+          (freshCustomer.loyaltyPoints || 0) + previousReservedPoints;
 
         if ((usedPoints || 0) > availablePoints) {
           // Không đủ điểm → Giới hạn lại
           const actualUsedPoints = Math.max(0, availablePoints);
-          console.warn(`⚠️ [ReservePoints] Điểm yêu cầu (${usedPoints}) > Khả dụng (${availablePoints}). Giới hạn: ${actualUsedPoints}`);
+          console.warn(
+            `⚠️ [ReservePoints] Điểm yêu cầu (${usedPoints}) > Khả dụng (${availablePoints}). Giới hạn: ${actualUsedPoints}`
+          );
           order.usedPoints = actualUsedPoints;
           // Recalculate discount
           const adjustedDiscount = actualUsedPoints * vndPerPoint;
           order.discountAmount = adjustedDiscount.toFixed(2);
-          order.totalAmount = Math.max(0, grossTotal - adjustedDiscount).toFixed(2);
+          order.totalAmount = Math.max(
+            0,
+            grossTotal - adjustedDiscount
+          ).toFixed(2);
         }
 
         // Trừ tạm điểm từ customer (delta để xử lý cả create & update)
         const pointsToDeduct = order.usedPoints - previousReservedPoints;
         if (pointsToDeduct !== 0) {
-          freshCustomer.loyaltyPoints = Math.max(0, (freshCustomer.loyaltyPoints || 0) - pointsToDeduct);
+          freshCustomer.loyaltyPoints = Math.max(
+            0,
+            (freshCustomer.loyaltyPoints || 0) - pointsToDeduct
+          );
           await freshCustomer.save({ session });
           console.log(
-            `🔒 [ReservePoints] Đã trừ tạm ${pointsToDeduct} điểm từ customer ${freshCustomer.phone}. Còn lại: ${freshCustomer.loyaltyPoints}`,
+            `🔒 [ReservePoints] Đã trừ tạm ${pointsToDeduct} điểm từ customer ${freshCustomer.phone}. Còn lại: ${freshCustomer.loyaltyPoints}`
           );
         }
       }
@@ -642,12 +674,14 @@ const createOrder = async (req, res) => {
           const paymentRef = Number(
             `${Date.now()}${Math.floor(Math.random() * 1000)
               .toString()
-              .slice(0, 3)}`,
+              .slice(0, 3)}`
           )
             .toString()
             .slice(0, 14);
 
-          const { generateQRWithPayOS } = require("../../services/payOSService");
+          const {
+            generateQRWithPayOS,
+          } = require("../../services/payOSService");
 
           // Gọi Service (với creds, không null)
           const payResult = await generateQRWithPayOS(
@@ -656,7 +690,7 @@ const createOrder = async (req, res) => {
               description,
               orderCode: Number(paymentRef),
             },
-            creds,
+            creds
           );
 
           qrUrl = payResult.qrDataURL;
@@ -666,8 +700,13 @@ const createOrder = async (req, res) => {
           usedPayOS = true;
         } else if (paymentConfig?.banks?.length > 0) {
           // Ưu tiên 2: QR Tĩnh (Ngân hàng)
-          console.log("PayOS Disabled/Missing. Using Static Bank QR for Store:", storeId);
-          const bank = paymentConfig.banks.find((b) => b.isDefault) || paymentConfig.banks[0];
+          console.log(
+            "PayOS Disabled/Missing. Using Static Bank QR for Store:",
+            storeId
+          );
+          const bank =
+            paymentConfig.banks.find((b) => b.isDefault) ||
+            paymentConfig.banks[0];
 
           const addInfo = encodeURIComponent(description);
           const accName = encodeURIComponent(bank.accountName);
@@ -681,7 +720,9 @@ const createOrder = async (req, res) => {
           };
         } else {
           // Không có config nào
-          throw new Error("Cửa hàng chưa cấu hình thanh toán (PayOS hoặc Tài khoản Ngân hàng).");
+          throw new Error(
+            "Cửa hàng chưa cấu hình thanh toán (PayOS hoặc Tài khoản Ngân hàng)."
+          );
         }
 
         qrData = qrUrl;
@@ -705,7 +746,9 @@ const createOrder = async (req, res) => {
       entityId: order._id,
       entityName: `Đơn hàng #${order._id}`,
       req,
-      description: `Tạo đơn hàng mới trị giá ${order.totalAmount} (${paymentMethod.toUpperCase()})`,
+      description: `Tạo đơn hàng mới trị giá ${
+        order.totalAmount
+      } (${paymentMethod.toUpperCase()})`,
     });
 
     return res.status(201).json({
@@ -730,7 +773,9 @@ const setPaidCash = async (req, res) => {
     const orderId = req.params.orderId;
 
     // Lock đơn hàng để xử lý
-    const order = await Order.findById(orderId).populate("customer").session(session);
+    const order = await Order.findById(orderId)
+      .populate("customer")
+      .session(session);
     if (!order) {
       throw new Error("Đơn hàng không tồn tại");
     }
@@ -747,7 +792,9 @@ const setPaidCash = async (req, res) => {
     }
 
     // Nếu đơn hàng bị hủy hoặc hoàn trả thì mới báo lỗi
-    if (["refunded", "partially_refunded", "cancelled"].includes(order.status)) {
+    if (
+      ["refunded", "partially_refunded", "cancelled"].includes(order.status)
+    ) {
       throw new Error("Không thể thanh toán đơn hàng đã hủy hoặc hoàn trả");
     }
 
@@ -768,7 +815,9 @@ const setPaidCash = async (req, res) => {
 
         // a. Kiểm tra tổng tồn kho
         if (prod.stock_quantity < quantity) {
-          throw new Error(`Sản phẩm "${prod.name}" không đủ tồn kho (Còn: ${prod.stock_quantity}, Cần: ${quantity})`);
+          throw new Error(
+            `Sản phẩm "${prod.name}" không đủ tồn kho (Còn: ${prod.stock_quantity}, Cần: ${quantity})`
+          );
         }
 
         // b. Logic trừ theo lô (Batch FIFO) + Lấy đúng cost_price từng lô
@@ -813,12 +862,14 @@ const setPaidCash = async (req, res) => {
                     userId: req.user?.id || req.user?._id,
                     type: "inventory",
                     title: "Cảnh báo hàng HẾT HẠN",
-                    message: `Phát hiện sản phẩm "${prod.name}" có lô "${batch.batch_no || "N/A"}" đã hết hạn sử dụng (${new Date(
-                      batch.expiry_date,
+                    message: `Phát hiện sản phẩm "${prod.name}" có lô "${
+                      batch.batch_no || "N/A"
+                    }" đã hết hạn sử dụng (${new Date(
+                      batch.expiry_date
                     ).toLocaleDateString("vi-VN")}).`,
                   },
                 ],
-                { session },
+                { session }
               );
             }
             continue;
@@ -844,16 +895,20 @@ const setPaidCash = async (req, res) => {
                   userId: req.user?.id || req.user?._id,
                   type: "inventory",
                   title: "Cảnh báo lô hàng sắp hết",
-                  message: `Lô "${batch.batch_no || "N/A"}" của sản phẩm "${prod.name}" chỉ còn ${batch.quantity} ${prod.unit || "đơn vị"}.`,
+                  message: `Lô "${batch.batch_no || "N/A"}" của sản phẩm "${
+                    prod.name
+                  }" chỉ còn ${batch.quantity} ${prod.unit || "đơn vị"}.`,
                 },
               ],
-              { session },
+              { session }
             );
           }
         }
 
         if (remainingToDeduct > 0) {
-          throw new Error(`Sản phẩm "${prod.name}" không đủ tồn kho khả dụng (đã loại bỏ hàng hết hạn)`);
+          throw new Error(
+            `Sản phẩm "${prod.name}" không đủ tồn kho khả dụng (đã loại bỏ hàng hết hạn)`
+          );
         }
 
         // Cập nhật tổng tồn kho
@@ -871,7 +926,7 @@ const setPaidCash = async (req, res) => {
                 message: `Sản phẩm "${prod.name}" đạt ngưỡng tồn kho thấp (${prod.stock_quantity} <= ${prod.min_stock}).`,
               },
             ],
-            { session },
+            { session }
           );
           prod.lowStockAlerted = true;
         }
@@ -886,7 +941,10 @@ const setPaidCash = async (req, res) => {
         }));
 
         // Cập nhật giá vốn snapshot (Trung bình gia quyền các lô đã xuất)
-        const totalCostItem = batchDeductions.reduce((sum, bd) => sum + bd.qty * bd.cost_price, 0);
+        const totalCostItem = batchDeductions.reduce(
+          (sum, bd) => sum + bd.qty * bd.cost_price,
+          0
+        );
         it.cost_price_snapshot = totalCostItem / quantity;
 
         await it.save({ session });
@@ -910,7 +968,10 @@ const setPaidCash = async (req, res) => {
       }
 
       // 3. Tạo phiếu xuất OUT
-      const totalCost = voucherItems.reduce((acc, item) => acc + item.qty_actual * item.unit_cost, 0);
+      const totalCost = voucherItems.reduce(
+        (acc, item) => acc + item.qty_actual * item.unit_cost,
+        0
+      );
 
       const voucher = await new InventoryVoucher({
         store_id: order.storeId,
@@ -930,7 +991,8 @@ const setPaidCash = async (req, res) => {
         warehouse_id: voucherItems[0]?.warehouse_id || null,
         warehouse_name: voucherItems[0]?.warehouse_name || "",
 
-        deliverer_name: req.user?.fullname || req.user?.username || "Nhân viên bán hàng",
+        deliverer_name:
+          req.user?.fullname || req.user?.username || "Nhân viên bán hàng",
         receiver_name: order.customer?.name || "Khách lẻ",
         partner_name: order.customer?.name || "Khách lẻ",
         partner_phone: order.customer?.phone || "",
@@ -1037,7 +1099,10 @@ const printBill = async (req, res) => {
 
     // Nếu là Pending (thường là QR), auto set Paid theo tuỳ nghiệp vụ
     const prevStatus = order.status; //để socket 1 lần cho qr tĩnh
-    if (order.status === "pending" && (order.paymentMethod === "qr" || order.paymentMethod === "cash")) {
+    if (
+      order.status === "pending" &&
+      (order.paymentMethod === "qr" || order.paymentMethod === "cash")
+    ) {
       //  THÊM LOGIC TRỪ KHO + TẠO PHIẾU OUT
       const orderItems = await OrderItem.find({ orderId: order._id });
       const voucherItems = [];
@@ -1051,7 +1116,9 @@ const printBill = async (req, res) => {
 
         // a. Kiểm tra tổng tồn kho
         if (prod.stock_quantity < quantity) {
-          throw new Error(`Sản phẩm "${prod.name}" không đủ tồn kho. Còn ${prod.stock_quantity}, cần ${quantity}`);
+          throw new Error(
+            `Sản phẩm "${prod.name}" không đủ tồn kho. Còn ${prod.stock_quantity}, cần ${quantity}`
+          );
         }
 
         // b. Logic trừ theo lô (Batch FIFO) + Lấy đúng cost_price từng lô
@@ -1093,7 +1160,9 @@ const printBill = async (req, res) => {
                 userId: req.user?.id || req.user?._id || order.employeeId?._id,
                 type: "inventory",
                 title: "Cảnh báo hàng HẾT HẠN",
-                message: `Phát hiện sản phẩm "${prod.name}" có lô "${batch.batch_no || "N/A"}" đã hết hạn sử dụng.`,
+                message: `Phát hiện sản phẩm "${prod.name}" có lô "${
+                  batch.batch_no || "N/A"
+                }" đã hết hạn sử dụng.`,
               });
             }
             continue;
@@ -1117,13 +1186,17 @@ const printBill = async (req, res) => {
               userId: req.user?.id || req.user?._id || order.employeeId?._id,
               type: "inventory",
               title: "Cảnh báo lô hàng sắp hết",
-              message: `Lô "${batch.batch_no || "N/A"}" của "${prod.name}" chỉ còn ${batch.quantity} ${prod.unit || "đơn vị"}.`,
+              message: `Lô "${batch.batch_no || "N/A"}" của "${
+                prod.name
+              }" chỉ còn ${batch.quantity} ${prod.unit || "đơn vị"}.`,
             });
           }
         }
 
         if (remainingToDeduct > 0) {
-          throw new Error(`Sản phẩm "${prod.name}" không đủ tồn kho khả dụng (đã loại bỏ hàng hết hạn)`);
+          throw new Error(
+            `Sản phẩm "${prod.name}" không đủ tồn kho khả dụng (đã loại bỏ hàng hết hạn)`
+          );
         }
 
         // Cập nhật tổng tồn kho
@@ -1151,7 +1224,10 @@ const printBill = async (req, res) => {
         }));
 
         // Bổ sung snapshot giá vốn trung bình cho item
-        const totalCostItem = batchDeductions.reduce((sum, bd) => sum + bd.qty * bd.cost_price, 0);
+        const totalCostItem = batchDeductions.reduce(
+          (sum, bd) => sum + bd.qty * bd.cost_price,
+          0
+        );
         it.cost_price_snapshot = totalCostItem / quantity;
         await it.save();
 
@@ -1174,7 +1250,10 @@ const printBill = async (req, res) => {
       }
 
       // Tạo phiếu OUT
-      const totalCost = voucherItems.reduce((acc, item) => acc + item.qty_actual * item.unit_cost, 0);
+      const totalCost = voucherItems.reduce(
+        (acc, item) => acc + item.qty_actual * item.unit_cost,
+        0
+      );
 
       const voucher = await new InventoryVoucher({
         store_id: order.storeId._id || order.storeId,
@@ -1194,7 +1273,10 @@ const printBill = async (req, res) => {
         warehouse_id: voucherItems[0]?.warehouse_id || null,
         warehouse_name: voucherItems[0]?.warehouse_name || "",
 
-        deliverer_name: order.employeeId?.fullName || req.user?.fullname || "Nhân viên bán hàng",
+        deliverer_name:
+          order.employeeId?.fullName ||
+          req.user?.fullname ||
+          "Nhân viên bán hàng",
         receiver_name: order.customer?.name || "Khách lẻ",
         partner_name: order.customer?.name || "Khách lẻ",
         partner_phone: order.customer?.phone || "",
@@ -1212,7 +1294,11 @@ const printBill = async (req, res) => {
 
     //để socket io ở đây cho qr tĩnh'
     // 🔔 SOCKET + NOTIFICATION CHỈ CHẠY KHI PENDING → PAID, không ném socket đối với in hoá đơn lần 2 trở đi
-    if (order.paymentMethod === "qr" && prevStatus === "pending" && order.status === "paid") {
+    if (
+      order.paymentMethod === "qr" &&
+      prevStatus === "pending" &&
+      order.status === "paid"
+    ) {
       const io = req.app.get("io");
 
       if (io) {
@@ -1235,30 +1321,39 @@ const printBill = async (req, res) => {
     }
 
     // Di chuyển items ra ngoài, populate cho bill (read only)
-    const items = await OrderItem.find({ orderId: order._id }).populate("productId", "name sku").lean();
+    const items = await OrderItem.find({ orderId: order._id })
+      .populate("productId", "name sku")
+      .lean();
 
     //  XỬ LÝ LOYALTY (Cộng điểm thưởng + Trừ điểm đã dùng)
     const loyaltyResult = await Order.processLoyalty(order._id);
-    const roundedEarnedPoints = loyaltyResult?.earnedPoints || order.earnedPoints || 0;
+    const roundedEarnedPoints =
+      loyaltyResult?.earnedPoints || order.earnedPoints || 0;
 
     // Generate text bill
     let bill = "========== HÓA ĐƠN BÁN HÀNG ==========\n";
     bill += `ID Hóa đơn: ${order._id}\n`;
     bill += `Cửa hàng: ${order.storeId?.name || "Cửa hàng mặc định"}\n`;
     bill += `Nhân viên: ${order.employeeId?.fullName || "N/A"}\n`;
-    bill += `Khách hàng: ${order.customer?.name || "Khách vãng lai"} - ${order.customer?.phone || ""}\n`;
+    bill += `Khách hàng: ${order.customer?.name || "Khách vãng lai"} - ${
+      order.customer?.phone || ""
+    }\n`;
     bill += `Ngày: ${new Date(order.createdAt).toLocaleString("vi-VN")}\n`;
     bill += `Ngày in: ${new Date().toLocaleString("vi-VN")}\n`;
     bill += `\n===== CHI TIẾT SẢN PHẨM =====\n`;
 
     items.forEach((item) => {
-      bill += `- ${item.productId?.name} (${item.productId?.sku || "N/A"}): ${item.quantity} x ${item.priceAtTime} = ${item.subtotal} VND\n`;
+      bill += `- ${item.productId?.name} (${item.productId?.sku || "N/A"}): ${
+        item.quantity
+      } x ${item.priceAtTime} = ${item.subtotal} VND\n`;
     });
 
     bill += `\n===== TỔNG CỘNG =====\n`;
     const subtotalPrint = parseFloat(order.beforeTaxAmount?.toString() || 0);
     const vatPrint = parseFloat(order.vatAmount?.toString() || 0);
-    const grossPrint = parseFloat(order.grossAmount?.toString() || (subtotalPrint + vatPrint).toString());
+    const grossPrint = parseFloat(
+      order.grossAmount?.toString() || (subtotalPrint + vatPrint).toString()
+    );
     const discountPrint = parseFloat(order.discountAmount?.toString() || 0);
     const totalPaidPrint = parseFloat(order.totalAmount?.toString() || 0);
 
@@ -1269,15 +1364,21 @@ const printBill = async (req, res) => {
     bill += `Tổng trị giá: ${grossPrint.toLocaleString("vi-VN")} VND\n`;
 
     if (discountPrint > 0) {
-      bill += `Giảm từ điểm (${order.usedPoints} điểm): -${discountPrint.toLocaleString("vi-VN")} VND\n`;
+      bill += `Giảm từ điểm (${
+        order.usedPoints
+      } điểm): -${discountPrint.toLocaleString("vi-VN")} VND\n`;
     }
 
     bill += `-------------------------------\n`;
     bill += `THANH TOÁN: ${totalPaidPrint.toLocaleString("vi-VN")} VND\n`;
-    bill += `Phương thức: ${order.paymentMethod === "cash" ? "TIỀN MẶT" : "QR CODE"}\n`;
+    bill += `Phương thức: ${
+      order.paymentMethod === "cash" ? "TIỀN MẶT" : "QR CODE"
+    }\n`;
 
     if (roundedEarnedPoints > 0) {
-      bill += `\n🎁 Điểm tích lũy lần này: +${roundedEarnedPoints.toFixed(0)} điểm\n`;
+      bill += `\n🎁 Điểm tích lũy lần này: +${roundedEarnedPoints.toFixed(
+        0
+      )} điểm\n`;
     }
 
     bill += `\nTrạng thái thanh toán: \n`;
@@ -1290,7 +1391,7 @@ const printBill = async (req, res) => {
         printDate: new Date(),
         $inc: { printCount: 1 },
       },
-      { new: true },
+      { new: true }
     );
 
     // === LOG ACTIVITY: PRINT BILL ===
@@ -1329,7 +1430,9 @@ const vietqrReturn = async (req, res) => {
     entityId: req.query?.orderCode || null,
     entityName: `Đơn hàng #${req.query?.orderCode || "unknown"}`,
     req,
-    description: `Thanh toán VietQR thành công, số tiền ${req.query?.amount || "?"}đ`,
+    description: `Thanh toán VietQR thành công, số tiền ${
+      req.query?.amount || "?"
+    }đ`,
   });
 
   console.log(" Người dùng quay lại sau khi thanh toán thành công");
@@ -1349,7 +1452,9 @@ const vietqrCancel = async (req, res) => {
     entityId: req.query?.orderCode || null,
     entityName: `Đơn hàng #${req.query?.orderCode || "unknown"}`,
     req,
-    description: `Hủy thanh toán VietQR cho đơn hàng #${req.query?.orderCode || "unknown"}`,
+    description: `Hủy thanh toán VietQR cho đơn hàng #${
+      req.query?.orderCode || "unknown"
+    }`,
   });
 
   console.log(" Người dùng hủy thanh toán hoặc lỗi");
@@ -1431,7 +1536,9 @@ const refundOrder = async (req, res) => {
 
     // ===== LOAD ORDER =====
     console.log("🔍 Load order");
-    const order = await Order.findById(orderId).populate("employeeId").session(session);
+    const order = await Order.findById(orderId)
+      .populate("employeeId")
+      .session(session);
 
     if (!order) throw new Error("Không tìm thấy đơn hàng");
 
@@ -1449,14 +1556,21 @@ const refundOrder = async (req, res) => {
 
     if (refundedByEmployeeId) {
       // Lấy tên nhân viên
-      const emp = await mongoose.model("Employee").findById(refundedByEmployeeId).lean();
+      const emp = await mongoose
+        .model("Employee")
+        .findById(refundedByEmployeeId)
+        .lean();
       refundedByName = emp?.fullName || "Nhân viên";
     } else if (req.user?.fullname) {
       // Nếu không có employeeId nhưng có thông tin user (Manager/Admin)
       refundedByName = req.user.fullname;
     }
 
-    console.log(`👤 Refund by: ${refundedByName} (empId: ${refundedByEmployeeId || "OWNER"})`);
+    console.log(
+      `👤 Refund by: ${refundedByName} (empId: ${
+        refundedByEmployeeId || "OWNER"
+      })`
+    );
 
     // ===== LOAD ORDER ITEMS =====
     console.log(" Load OrderItems");
@@ -1469,7 +1583,9 @@ const refundOrder = async (req, res) => {
 
     console.log(" OrderItems found:", orderItems.length);
 
-    const orderItemMap = new Map(orderItems.map((oi) => [oi.productId._id.toString(), oi]));
+    const orderItemMap = new Map(
+      orderItems.map((oi) => [oi.productId._id.toString(), oi])
+    );
 
     let refundTotal = 0;
     let refundVATTotal = 0; //  Tổng VAT hoàn
@@ -1492,25 +1608,33 @@ const refundOrder = async (req, res) => {
       const refundVAT = vatPerUnit * refundQty;
 
       //  LẤY GIÁ VỐN & HOÀN KHO CHÍNH XÁC THEO LÔ
-      const currentProd = await Product.findById(oi.productId._id).session(session);
+      const currentProd = await Product.findById(oi.productId._id).session(
+        session
+      );
       let totalUnitCostForRefund = 0;
 
       // Lấy giá vốn mặc định nếu không có batch_details hoặc batch_details không có cost_price
-      const unitCost = Number(oi.cost_price_snapshot || oi.productId.cost_price || 0);
+      const unitCost = Number(
+        oi.cost_price_snapshot || oi.productId.cost_price || 0
+      );
 
       //  KIỂM TRA HẠN MỨC HOÀN
       const alreadyRefunded = Number(oi.refundedQuantity || 0);
       const maxRefundable = oi.quantity - alreadyRefunded;
 
       if (refundQty > maxRefundable) {
-        throw new Error(`Sản phẩm "${oi.productId.name}" chỉ còn ${maxRefundable} cái có thể hoàn (đã hoàn ${alreadyRefunded})`);
+        throw new Error(
+          `Sản phẩm "${oi.productId.name}" chỉ còn ${maxRefundable} cái có thể hoàn (đã hoàn ${alreadyRefunded})`
+        );
       }
 
       if (currentProd && oi.batch_details && oi.batch_details.length > 0) {
         let remainingToReturn = refundQty;
         // Hoàn theo kiểu LIFO đối với các lô đã xuất (Lô nào xuất sau trả vào trước)
         // Sắp xếp ngược lại để ưu tiên hoàn vào các lô xuất gần nhất (LIFO)
-        const sortedSoldBatches = [...oi.batch_details].sort((a, b) => b.sold_at - a.sold_at);
+        const sortedSoldBatches = [...oi.batch_details].sort(
+          (a, b) => b.sold_at - a.sold_at
+        );
 
         for (const soldBatch of sortedSoldBatches) {
           if (remainingToReturn <= 0) break;
@@ -1519,17 +1643,25 @@ const refundOrder = async (req, res) => {
           // Lưu ý: oi.batch_details.quantity ở đây là số lượng GỐC đã bán từ lô đó.
           // Cần trừ đi phần đã hoàn trước đó nếu có.
           const alreadyRefundedFromThisBatch = soldBatch.refunded || 0;
-          const availableToRefundToThisBatch = soldBatch.quantity - alreadyRefundedFromThisBatch;
+          const availableToRefundToThisBatch =
+            soldBatch.quantity - alreadyRefundedFromThisBatch;
 
           if (availableToRefundToThisBatch <= 0) continue;
 
-          const amountToReturn = Math.min(remainingToReturn, availableToRefundToThisBatch);
+          const amountToReturn = Math.min(
+            remainingToReturn,
+            availableToRefundToThisBatch
+          );
 
           // Tìm lô trong sản phẩm
-          const targetBatch = currentProd.batches.find((b) => b.batch_no === soldBatch.batch_no);
+          const targetBatch = currentProd.batches.find(
+            (b) => b.batch_no === soldBatch.batch_no
+          );
           if (targetBatch) {
             targetBatch.quantity += amountToReturn;
-            console.log(`   -> Restored ${amountToReturn} to batch ${soldBatch.batch_no}`);
+            console.log(
+              `   -> Restored ${amountToReturn} to batch ${soldBatch.batch_no}`
+            );
           } else {
             // Nếu không tìm thấy lô cũ (đã bị xóa?), tạo lại hoặc cộng vào kho chung
             currentProd.batches.push({
@@ -1538,7 +1670,9 @@ const refundOrder = async (req, res) => {
               cost_price: soldBatch.cost_price,
               created_at: new Date(), // Hoặc soldBatch.created_at nếu có
             });
-            console.log(`   -> Re-created batch ${soldBatch.batch_no} with ${amountToReturn}`);
+            console.log(
+              `   -> Re-created batch ${soldBatch.batch_no} with ${amountToReturn}`
+            );
           }
 
           totalUnitCostForRefund += amountToReturn * soldBatch.cost_price;
@@ -1599,7 +1733,9 @@ const refundOrder = async (req, res) => {
         note: refundReason || "Hoàn hàng",
       });
 
-      console.log(`➕ Restore stock ${oi.productId.name}: +${refundQty} (cost: ${avgUnitCost})`);
+      console.log(
+        `➕ Restore stock ${oi.productId.name}: +${refundQty} (cost: ${avgUnitCost})`
+      );
     }
 
     if (refundItems.length === 0) {
@@ -1639,7 +1775,9 @@ const refundOrder = async (req, res) => {
     // order.discountAmount = số tiền đã giảm từ điểm
 
     const orderTotalPaid = Number(order.totalAmount || 0); // Số tiền khách thực trả
-    const orderGrossTotal = Number(order.grossAmount || 0) || Number(order.beforeTaxAmount || 0) + Number(order.vatAmount || 0); // Tổng giá trị gốc
+    const orderGrossTotal =
+      Number(order.grossAmount || 0) ||
+      Number(order.beforeTaxAmount || 0) + Number(order.vatAmount || 0); // Tổng giá trị gốc
 
     // Tổng tiền hàng hoàn (Gross) = tiền hàng hoàn + VAT hoàn
     const grossRefundAmount = refundTotal + refundVATTotal;
@@ -1678,11 +1816,16 @@ const refundOrder = async (req, res) => {
     // ===== UPDATE ORDER STATUS & REFUNDED FIELDS =====
     const allOrderItems = await OrderItem.find({ orderId }).session(session);
     const totalOrderQty = allOrderItems.reduce((s, i) => s + i.quantity, 0);
-    const totalRefundedQtyNow = allOrderItems.reduce((s, i) => s + (i.refundedQuantity || 0), 0);
+    const totalRefundedQtyNow = allOrderItems.reduce(
+      (s, i) => s + (i.refundedQuantity || 0),
+      0
+    );
 
     // Update refundedAmount - BÂY GIỜ BAO GỒM VAT
     const prevRefundedAmount = Number(order.refundedAmount || 0);
-    order.refundedAmount = mongoose.Types.Decimal128.fromString((prevRefundedAmount + netRefundAmount).toFixed(2));
+    order.refundedAmount = mongoose.Types.Decimal128.fromString(
+      (prevRefundedAmount + netRefundAmount).toFixed(2)
+    );
     order.totalRefundedQuantity = totalRefundedQtyNow;
 
     //  XÁC ĐỊNH STATUS MỚI
@@ -1698,32 +1841,46 @@ const refundOrder = async (req, res) => {
     // ===== HOÀN ĐIỂM TÍCH LŨY CHO KHÁCH (NẾU HOÀN TOÀN BỘ) =====
     if (isFullRefund && order.customer) {
       try {
-        const customer = await mongoose.model("Customer").findById(order.customer).session(session);
+        const customer = await mongoose
+          .model("Customer")
+          .findById(order.customer)
+          .session(session);
         if (customer) {
           //  TRẢ LẠI ĐIỂM ĐÃ DÙNG (nếu có)
           const usedPoints = Number(order.usedPoints || 0);
           if (usedPoints > 0) {
             customer.loyaltyPoints = (customer.loyaltyPoints || 0) + usedPoints;
-            console.log(`🔄 Hoàn ${usedPoints} điểm đã dùng cho khách ${customer.phone}`);
+            console.log(
+              `🔄 Hoàn ${usedPoints} điểm đã dùng cho khách ${customer.phone}`
+            );
           }
 
           //  TRỪ LẠI ĐIỂM ĐÃ CỘNG (nếu có)
           const earnedPoints = Number(order.earnedPoints || 0);
           if (earnedPoints > 0) {
-            customer.loyaltyPoints = Math.max(0, (customer.loyaltyPoints || 0) - earnedPoints);
-            console.log(`🔄 Trừ ${earnedPoints} điểm đã cộng của khách ${customer.phone}`);
+            customer.loyaltyPoints = Math.max(
+              0,
+              (customer.loyaltyPoints || 0) - earnedPoints
+            );
+            console.log(
+              `🔄 Trừ ${earnedPoints} điểm đã cộng của khách ${customer.phone}`
+            );
           }
 
           //  TRỪ TỔNG CHI TIÊU
           const orderTotal = Number(order.totalAmount || 0);
           const prevSpent = Number(customer.totalSpent || 0);
-          customer.totalSpent = mongoose.Types.Decimal128.fromString(Math.max(0, prevSpent - orderTotal).toFixed(2));
+          customer.totalSpent = mongoose.Types.Decimal128.fromString(
+            Math.max(0, prevSpent - orderTotal).toFixed(2)
+          );
 
           //  TRỪ SỐ ĐƠN
           customer.totalOrders = Math.max(0, (customer.totalOrders || 0) - 1);
 
           await customer.save({ session });
-          console.log(` Đã hoàn điểm và cập nhật thống kê cho khách ${customer.phone}`);
+          console.log(
+            ` Đã hoàn điểm và cập nhật thống kê cho khách ${customer.phone}`
+          );
         }
       } catch (custErr) {
         console.error("⚠️ Lỗi hoàn điểm khách:", custErr.message);
@@ -1778,7 +1935,14 @@ const refundOrder = async (req, res) => {
 //  Top sản phẩm bán chạy (sum quantity/sales từ OrderItem, filter paid + range/date/store)
 const getTopSellingProducts = async (req, res) => {
   try {
-    const { limit = 10, storeId, periodType, periodKey, monthFrom, monthTo } = req.query;
+    const {
+      limit = 10,
+      storeId,
+      periodType,
+      periodKey,
+      monthFrom,
+      monthTo,
+    } = req.query;
 
     // Validate period
     if (!periodType) {
@@ -1795,7 +1959,10 @@ const getTopSellingProducts = async (req, res) => {
       });
     }
 
-    if (periodType === "custom" && (!req.query.monthFrom || !req.query.monthTo)) {
+    if (
+      periodType === "custom" &&
+      (!req.query.monthFrom || !req.query.monthTo)
+    ) {
       return res.status(400).json({
         success: false,
         message: "Thiếu monthFrom hoặc monthTo cho kỳ tùy chỉnh",
@@ -1815,7 +1982,12 @@ const getTopSellingProducts = async (req, res) => {
     }
 
     // --- Dùng periodToRange (đang xài trong hơn 10 hàm order) ---
-    const { start, end } = periodToRange(periodType, periodKey, monthFrom, monthTo);
+    const { start, end } = periodToRange(
+      periodType,
+      periodKey,
+      monthFrom,
+      monthTo
+    );
 
     const match = {
       "order.status": { $in: ["paid", "partially_refunded"] },
@@ -1864,7 +2036,10 @@ const getTopSellingProducts = async (req, res) => {
               $toDouble: {
                 $multiply: [
                   {
-                    $subtract: ["$quantity", { $ifNull: ["$refundedQuantity", 0] }],
+                    $subtract: [
+                      "$quantity",
+                      { $ifNull: ["$refundedQuantity", 0] },
+                    ],
                   },
                   "$priceAtTime",
                 ],
@@ -1910,14 +2085,24 @@ const getTopSellingProducts = async (req, res) => {
     });
   } catch (err) {
     console.error("Lỗi top selling products:", err.message);
-    return res.status(500).json({ message: "Lỗi server khi lấy top sản phẩm bán chạy" });
+    return res
+      .status(500)
+      .json({ message: "Lỗi server khi lấy top sản phẩm bán chạy" });
   }
 };
 
 //http://localhost:9999/api/orders/top-customers?limit=5&range=thisYear&storeId=68f8f19a4d723cad0bda9fa5
 const getTopFrequentCustomers = async (req, res) => {
   try {
-    const { storeId, periodType = "month", periodKey, monthFrom, monthTo, limit = 10, range } = req.query;
+    const {
+      storeId,
+      periodType = "month",
+      periodKey,
+      monthFrom,
+      monthTo,
+      limit = 10,
+      range,
+    } = req.query;
 
     if (!storeId) {
       return res.status(400).json({ message: "Thiếu storeId" });
@@ -1927,7 +2112,12 @@ const getTopFrequentCustomers = async (req, res) => {
 
     // ƯU TIÊN DÙNG periodType + periodKey (UI mới)
     if (periodType && periodKey) {
-      ({ start, end } = periodToRange(periodType, periodKey, monthFrom, monthTo));
+      ({ start, end } = periodToRange(
+        periodType,
+        periodKey,
+        monthFrom,
+        monthTo
+      ));
     }
     // FALLBACK: nếu vẫn dùng UI cũ (range=thisMonth...)
     else if (range) {
@@ -2024,15 +2214,26 @@ const getTopFrequentCustomers = async (req, res) => {
 // =============== EXPORT TOP CUSTOMERS (sửa xong) ===============
 const exportTopFrequentCustomers = async (req, res) => {
   try {
-    const { storeId, periodType = "month", periodKey, monthFrom, monthTo, limit = 500, format = "xlsx" } = req.query;
+    const {
+      storeId,
+      periodType = "month",
+      periodKey,
+      monthFrom,
+      monthTo,
+      limit = 500,
+      format = "xlsx",
+    } = req.query;
 
     if (!storeId) return res.status(400).json({ message: "Thiếu storeId" });
 
     const { start, end } = periodToRange(
       periodType,
-      periodKey || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`,
+      periodKey ||
+        `${new Date().getFullYear()}-${String(
+          new Date().getMonth() + 1
+        ).padStart(2, "0")}`,
       monthFrom,
-      monthTo,
+      monthTo
     );
 
     const matchStage = {
@@ -2082,7 +2283,12 @@ const exportTopFrequentCustomers = async (req, res) => {
     if (!data || data.length === 0) {
       const Store = mongoose.model("Store");
       const store = await Store.findById(storeId).select("name").lean();
-      return await sendEmptyNotificationWorkbook(res, "khách hàng", store, "Top_Khach_Hang");
+      return await sendEmptyNotificationWorkbook(
+        res,
+        "khách hàng",
+        store,
+        "Top_Khach_Hang"
+      );
     }
 
     // export xlsx
@@ -2092,8 +2298,13 @@ const exportTopFrequentCustomers = async (req, res) => {
       XLSX.utils.book_append_sheet(wb, ws, "Top Khach Hang");
       const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
 
-      res.setHeader("Content-Disposition", `attachment; filename=Top_Khach_Hang_${periodKey || "hien_tai"}.xlsx`);
-      res.type("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename=Top_Khach_Hang_${periodKey || "hien_tai"}.xlsx`
+      );
+      res.type(
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
       res.send(buffer);
     }
   } catch (err) {
@@ -2106,7 +2317,14 @@ const exportTopFrequentCustomers = async (req, res) => {
 // GET /api/orders/top-products/export?format=pdf|csv|xlsx&storeId=...&range=...
 const exportTopSellingProducts = async (req, res) => {
   try {
-    const { limit = 10, storeId, range, dateFrom, dateTo, format: rawFormat = "csv" } = req.query;
+    const {
+      limit = 10,
+      storeId,
+      range,
+      dateFrom,
+      dateTo,
+      format: rawFormat = "csv",
+    } = req.query;
 
     const format = String(rawFormat || "csv").toLowerCase();
 
@@ -2142,7 +2360,9 @@ const exportTopSellingProducts = async (req, res) => {
     const pad2 = (x) => String(x).padStart(2, "0");
     const formatDateTimeVN = (d) => {
       const dt = new Date(d);
-      return `${pad2(dt.getDate())}/${pad2(dt.getMonth() + 1)}/${dt.getFullYear()} ${pad2(dt.getHours())}:${pad2(dt.getMinutes())}`;
+      return `${pad2(dt.getDate())}/${pad2(
+        dt.getMonth() + 1
+      )}/${dt.getFullYear()} ${pad2(dt.getHours())}:${pad2(dt.getMinutes())}`;
     };
 
     const describeRange = () => {
@@ -2156,7 +2376,8 @@ const exportTopSellingProducts = async (req, res) => {
         };
         return map[range] || `range=${range}`;
       }
-      if (dateFrom || dateTo) return `Từ ${dateFrom || "..."} đến ${dateTo || "..."}`;
+      if (dateFrom || dateTo)
+        return `Từ ${dateFrom || "..."} đến ${dateTo || "..."}`;
       return "Tháng này (mặc định)";
     };
 
@@ -2167,16 +2388,48 @@ const exportTopSellingProducts = async (req, res) => {
     if (range) {
       switch (range) {
         case "today": {
-          const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-          const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+          const start = new Date(
+            now.getFullYear(),
+            now.getMonth(),
+            now.getDate(),
+            0,
+            0,
+            0,
+            0
+          );
+          const end = new Date(
+            now.getFullYear(),
+            now.getMonth(),
+            now.getDate(),
+            23,
+            59,
+            59,
+            999
+          );
           matchDate = { $gte: start, $lte: end };
           break;
         }
         case "yesterday": {
           const y = new Date(now);
           y.setDate(y.getDate() - 1);
-          const start = new Date(y.getFullYear(), y.getMonth(), y.getDate(), 0, 0, 0, 0);
-          const end = new Date(y.getFullYear(), y.getMonth(), y.getDate(), 23, 59, 59, 999);
+          const start = new Date(
+            y.getFullYear(),
+            y.getMonth(),
+            y.getDate(),
+            0,
+            0,
+            0,
+            0
+          );
+          const end = new Date(
+            y.getFullYear(),
+            y.getMonth(),
+            y.getDate(),
+            23,
+            59,
+            59,
+            999
+          );
           matchDate = { $gte: start, $lte: end };
           break;
         }
@@ -2185,12 +2438,28 @@ const exportTopSellingProducts = async (req, res) => {
           const diffToMonday = currentDay === 0 ? 6 : currentDay - 1;
           const monday = new Date(now);
           monday.setDate(monday.getDate() - diffToMonday);
-          const start = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate(), 0, 0, 0, 0);
+          const start = new Date(
+            monday.getFullYear(),
+            monday.getMonth(),
+            monday.getDate(),
+            0,
+            0,
+            0,
+            0
+          );
           matchDate = { $gte: start };
           break;
         }
         case "thisMonth": {
-          const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+          const start = new Date(
+            now.getFullYear(),
+            now.getMonth(),
+            1,
+            0,
+            0,
+            0,
+            0
+          );
           matchDate = { $gte: start };
           break;
         }
@@ -2201,7 +2470,15 @@ const exportTopSellingProducts = async (req, res) => {
         }
         default: {
           // fallback: thisMonth
-          const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+          const start = new Date(
+            now.getFullYear(),
+            now.getMonth(),
+            1,
+            0,
+            0,
+            0,
+            0
+          );
           matchDate = { $gte: start };
         }
       }
@@ -2256,7 +2533,10 @@ const exportTopSellingProducts = async (req, res) => {
               $toDouble: {
                 $multiply: [
                   {
-                    $subtract: ["$quantity", { $ifNull: ["$refundedQuantity", 0] }],
+                    $subtract: [
+                      "$quantity",
+                      { $ifNull: ["$refundedQuantity", 0] },
+                    ],
                   },
                   "$priceAtTime",
                 ],
@@ -2293,7 +2573,12 @@ const exportTopSellingProducts = async (req, res) => {
     if (!topProducts || topProducts.length === 0) {
       const Store = mongoose.model("Store");
       const store = await Store.findById(storeId).select("name").lean();
-      return await sendEmptyNotificationWorkbook(res, "sản phẩm bán chạy", store, "Top_Selling_Products");
+      return await sendEmptyNotificationWorkbook(
+        res,
+        "sản phẩm bán chạy",
+        store,
+        "Top_Selling_Products"
+      );
     }
 
     // normalize lần nữa cho chắc (nếu data bẩn)
@@ -2314,11 +2599,20 @@ const exportTopSellingProducts = async (req, res) => {
 
     // ===== CSV (thêm BOM cho Excel UTF-8) =====
     if (format === "csv") {
-      const fields = ["productName", "productSku", "totalQuantity", "totalSales", "countOrders"];
+      const fields = [
+        "productName",
+        "productSku",
+        "totalQuantity",
+        "totalSales",
+        "countOrders",
+      ];
       const csv = new Parser({ fields }).parse(normalized);
 
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
-      res.setHeader("Content-Disposition", `attachment; filename=${filenameBase}.csv`);
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename=${filenameBase}.csv`
+      );
       return res.send("\uFEFF" + csv);
     }
 
@@ -2346,21 +2640,40 @@ const exportTopSellingProducts = async (req, res) => {
       const workbook = XLSX.utils.book_new();
       const worksheet = XLSX.utils.json_to_sheet(excelData);
 
-      worksheet["!cols"] = [{ wch: 6 }, { wch: 40 }, { wch: 18 }, { wch: 10 }, { wch: 18 }, { wch: 12 }];
+      worksheet["!cols"] = [
+        { wch: 6 },
+        { wch: 40 },
+        { wch: 18 },
+        { wch: 10 },
+        { wch: 18 },
+        { wch: 12 },
+      ];
 
       XLSX.utils.book_append_sheet(workbook, worksheet, "Top bán chạy");
       const buf = XLSX.write(workbook, { bookType: "xlsx", type: "buffer" });
 
-      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-      res.setHeader("Content-Disposition", `attachment; filename=${filenameBase}.xlsx`);
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename=${filenameBase}.xlsx`
+      );
       res.setHeader("Content-Length", buf.length);
       return res.send(buf);
     }
 
     // ===== PDF (bảng chuyên nghiệp + tự xuống trang) =====
     const fontPath = {
-      normal: path.resolve(__dirname, "../../fonts/Roboto/static/Roboto-Regular.ttf"),
-      bold: path.resolve(__dirname, "../../fonts/Roboto/static/Roboto-Bold.ttf"),
+      normal: path.resolve(
+        __dirname,
+        "../../fonts/Roboto/static/Roboto-Regular.ttf"
+      ),
+      bold: path.resolve(
+        __dirname,
+        "../../fonts/Roboto/static/Roboto-Bold.ttf"
+      ),
     };
 
     const pdf = new PDFDocument({
@@ -2375,15 +2688,22 @@ const exportTopSellingProducts = async (req, res) => {
     if (hasRoboto) {
       try {
         pdf.registerFont("Roboto", fontPath.normal);
-        if (fs.existsSync(fontPath.bold)) pdf.registerFont("RobotoBold", fontPath.bold);
+        if (fs.existsSync(fontPath.bold))
+          pdf.registerFont("RobotoBold", fontPath.bold);
       } catch {}
     }
 
     const FONT_NORMAL = hasRoboto ? "Roboto" : "Helvetica";
-    const FONT_BOLD = hasRoboto && fs.existsSync(fontPath.bold) ? "RobotoBold" : "Helvetica-Bold";
+    const FONT_BOLD =
+      hasRoboto && fs.existsSync(fontPath.bold)
+        ? "RobotoBold"
+        : "Helvetica-Bold";
 
     res.setHeader("Content-Type", "application/pdf; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename=${filenameBase}.pdf`);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=${filenameBase}.pdf`
+    );
     pdf.pipe(res);
 
     // Layout constants
@@ -2446,7 +2766,9 @@ const exportTopSellingProducts = async (req, res) => {
       });
 
       const line2Left = storeId ? `StoreId: ${storeId}` : "StoreId: (tất cả)";
-      const line2Right = `Top: ${normalized.length} (limit=${parseInt(limit, 10) || 10})`;
+      const line2Right = `Top: ${normalized.length} (limit=${
+        parseInt(limit, 10) || 10
+      })`;
       pdf.text(line2Left, pageLeft, pdf.y, {
         width: contentWidth / 2,
         align: "left",
@@ -2460,7 +2782,12 @@ const exportTopSellingProducts = async (req, res) => {
 
       // divider
       const yDiv = pdf.y;
-      pdf.moveTo(pageLeft, yDiv).lineTo(pageRight, yDiv).lineWidth(1).strokeColor("#E5E7EB").stroke();
+      pdf
+        .moveTo(pageLeft, yDiv)
+        .lineTo(pageRight, yDiv)
+        .lineWidth(1)
+        .strokeColor("#E5E7EB")
+        .stroke();
       pdf.moveDown(0.8);
     };
 
@@ -2584,7 +2911,11 @@ const exportTopSellingProducts = async (req, res) => {
 
       // box
       pdf.save();
-      pdf.rect(pageLeft, y, contentWidth, 52).fill("#F9FAFB").strokeColor("#E5E7EB").stroke();
+      pdf
+        .rect(pageLeft, y, contentWidth, 52)
+        .fill("#F9FAFB")
+        .strokeColor("#E5E7EB")
+        .stroke();
       pdf.restore();
 
       pdf.font(FONT_BOLD).fontSize(11).fillColor(colors.text);
@@ -2594,13 +2925,23 @@ const exportTopSellingProducts = async (req, res) => {
       pdf.text(`Tổng SL bán: ${totalQtyAll}`, pageLeft + 10, y + 28, {
         width: contentWidth / 3,
       });
-      pdf.text(`Tổng doanh thu: ${formatVND(totalSalesAll)}`, pageLeft + 10 + contentWidth / 3, y + 28, {
-        width: contentWidth / 3,
-      });
-      pdf.text(`Tổng số đơn: ${totalOrdersAll}`, pageLeft + 10 + (contentWidth * 2) / 3, y + 28, {
-        width: contentWidth / 3 - 10,
-        align: "right",
-      });
+      pdf.text(
+        `Tổng doanh thu: ${formatVND(totalSalesAll)}`,
+        pageLeft + 10 + contentWidth / 3,
+        y + 28,
+        {
+          width: contentWidth / 3,
+        }
+      );
+      pdf.text(
+        `Tổng số đơn: ${totalOrdersAll}`,
+        pageLeft + 10 + (contentWidth * 2) / 3,
+        y + 28,
+        {
+          width: contentWidth / 3 - 10,
+          align: "right",
+        }
+      );
 
       pdf.y = y + 52;
     };
@@ -2642,7 +2983,9 @@ const getListPaidOrders = async (req, res) => {
       .populate("storeId", "name")
       .populate("employeeId", "fullName")
       .populate("customer", "name phone")
-      .select("storeId employeeId customer totalAmount paymentMethod status createdAt updatedAt")
+      .select(
+        "storeId employeeId customer totalAmount paymentMethod status createdAt updatedAt"
+      )
       .sort({ createdAt: -1 })
       .lean();
 
@@ -2652,7 +2995,9 @@ const getListPaidOrders = async (req, res) => {
     });
   } catch (err) {
     console.error("Lỗi khi lấy danh sách hóa đơn để hoàn trả:", err.message);
-    res.status(500).json({ message: "Lỗi server khi lấy danh sách hóa đơn để hoàn trả" });
+    res
+      .status(500)
+      .json({ message: "Lỗi server khi lấy danh sách hóa đơn để hoàn trả" });
   }
 };
 
@@ -2688,7 +3033,9 @@ const getListRefundOrders = async (req, res) => {
     });
   } catch (err) {
     console.error("Lỗi getListRefundOrders:", err);
-    res.status(500).json({ message: "Lỗi server khi lấy danh sách đơn hoàn hàng" });
+    res
+      .status(500)
+      .json({ message: "Lỗi server khi lấy danh sách đơn hoàn hàng" });
   }
 };
 const getOrderRefundDetail = async (req, res) => {
@@ -2721,7 +3068,9 @@ const getOrderRefundDetail = async (req, res) => {
     const refundDetail = refundRecords[0] || null;
 
     // 3. Lấy danh sách sản phẩm của đơn gốc + số lượng đã hoàn
-    const orderItems = await OrderItem.find({ orderId }).populate("productId", "name price sku cost_price").lean();
+    const orderItems = await OrderItem.find({ orderId })
+      .populate("productId", "name price sku cost_price")
+      .lean();
 
     // 4. Tính số lượng còn có thể hoàn cho mỗi item
     const orderItemsWithRefundable = orderItems.map((item) => {
@@ -2736,10 +3085,15 @@ const getOrderRefundDetail = async (req, res) => {
 
     // 5. Tính summary
     const totalRefundedAmount = refundRecords.reduce((acc, r) => {
-      const amt = r.refundAmount?.$numberDecimal ? parseFloat(r.refundAmount.$numberDecimal) : Number(r.refundAmount || 0);
+      const amt = r.refundAmount?.$numberDecimal
+        ? parseFloat(r.refundAmount.$numberDecimal)
+        : Number(r.refundAmount || 0);
       return acc + amt;
     }, 0);
-    const totalRefundedQty = orderItems.reduce((acc, it) => acc + Number(it.refundedQuantity || 0), 0);
+    const totalRefundedQty = orderItems.reduce(
+      (acc, it) => acc + Number(it.refundedQuantity || 0),
+      0
+    );
     const totalOrderQty = orderItems.reduce((acc, it) => acc + it.quantity, 0);
 
     return res.status(200).json({
@@ -2760,7 +3114,9 @@ const getOrderRefundDetail = async (req, res) => {
     });
   } catch (error) {
     console.error("getOrderRefundDetail error:", error);
-    res.status(500).json({ message: "Lỗi server khi lấy chi tiết đơn hoàn hàng" });
+    res
+      .status(500)
+      .json({ message: "Lỗi server khi lấy chi tiết đơn hoàn hàng" });
   }
 };
 
@@ -2774,7 +3130,12 @@ const getOrderListAll = async (req, res) => {
     let dateFilter = {};
     // Nếu FE gửi filter theo thời gian
     if (periodType) {
-      const { start, end } = periodToRange(periodType, periodKey, monthFrom, monthTo);
+      const { start, end } = periodToRange(
+        periodType,
+        periodKey,
+        monthFrom,
+        monthTo
+      );
       dateFilter.createdAt = {
         $gte: start,
         $lte: end,
@@ -2811,7 +3172,8 @@ const exportAllOrdersToExcel = async (req, res) => {
     // ===== Helper: Decimal128 -> number an toàn =====
     const decimalToNumber = (decimal) => {
       if (decimal == null) return 0;
-      if (typeof decimal === "number") return Number.isFinite(decimal) ? decimal : 0;
+      if (typeof decimal === "number")
+        return Number.isFinite(decimal) ? decimal : 0;
 
       if (typeof decimal === "object" && decimal.$numberDecimal != null) {
         const n = parseFloat(decimal.$numberDecimal);
@@ -2847,7 +3209,7 @@ const exportAllOrdersToExcel = async (req, res) => {
       encodeURIComponent(
         String(str ?? "")
           .replace(/[\r\n]+/g, " ")
-          .trim(),
+          .trim()
       );
 
     // ===== Build query filter (để khớp web/app) =====
@@ -2877,7 +3239,12 @@ const exportAllOrdersToExcel = async (req, res) => {
     if (!orders || orders.length === 0) {
       const Store = mongoose.model("Store");
       const store = await Store.findById(storeId).select("name").lean();
-      return await sendEmptyNotificationWorkbook(res, "đơn hàng", store, "Danh_Sach_Don_Hang");
+      return await sendEmptyNotificationWorkbook(
+        res,
+        "đơn hàng",
+        store,
+        "Danh_Sach_Don_Hang"
+      );
     }
 
     const data = orders.map((order) => ({
@@ -2887,7 +3254,8 @@ const exportAllOrdersToExcel = async (req, res) => {
       "Khách hàng": order.customer?.name || "Khách lẻ",
       "Số điện thoại": order.customer?.phone || "—",
       "Tổng tiền": decimalToNumber(order.totalAmount),
-      "Phương thức": order.paymentMethod === "cash" ? "Tiền mặt" : "Chuyển khoản",
+      "Phương thức":
+        order.paymentMethod === "cash" ? "Tiền mặt" : "Chuyển khoản",
       "Trạng thái":
         {
           pending: "Chờ thanh toán",
@@ -2895,14 +3263,26 @@ const exportAllOrdersToExcel = async (req, res) => {
           refunded: "Đã hoàn tiền",
           partially_refunded: "Hoàn 1 phần",
         }[order.status] || order.status,
-      "In hóa đơn": order.printCount > 0 ? `Có (${order.printCount} lần)` : "Chưa",
+      "In hóa đơn":
+        order.printCount > 0 ? `Có (${order.printCount} lần)` : "Chưa",
       "Ghi chú": order.isVATInvoice ? "Có VAT" : "",
     }));
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(data);
 
-    ws["!cols"] = [{ wch: 12 }, { wch: 18 }, { wch: 22 }, { wch: 22 }, { wch: 15 }, { wch: 18 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 20 }];
+    ws["!cols"] = [
+      { wch: 12 },
+      { wch: 18 },
+      { wch: 22 },
+      { wch: 22 },
+      { wch: 15 },
+      { wch: 18 },
+      { wch: 14 },
+      { wch: 16 },
+      { wch: 14 },
+      { wch: 20 },
+    ];
 
     // Format cột "Tổng tiền" (cột F -> index 5)
     if (ws["!ref"]) {
@@ -2926,20 +3306,31 @@ const exportAllOrdersToExcel = async (req, res) => {
     const dateText = dayjs().format("DD-MM-YYYY");
 
     // Name to show to users (UTF-8, can include Vietnamese)
-    const utf8Name = `Danh_Sach_Don_Hang_${storeName}_${dateText}.xlsx`.replace(/[\r\n]+/g, " ").trim();
+    const utf8Name = `Danh_Sach_Don_Hang_${storeName}_${dateText}.xlsx`
+      .replace(/[\r\n]+/g, " ")
+      .trim();
 
     // ASCII fallback (never breaks headers)
-    const asciiFallback = `Danh_Sach_Don_Hang_${toAsciiSafe(storeName).replace(/ /g, "_")}_${dateText}.xlsx`;
+    const asciiFallback = `Danh_Sach_Don_Hang_${toAsciiSafe(storeName).replace(
+      / /g,
+      "_"
+    )}_${dateText}.xlsx`;
 
     // RFC5987 for filename*
     const filenameStar = encodeRFC5987(utf8Name);
 
     res.status(200);
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
     res.setHeader("Content-Length", String(buffer.length));
 
     //  Quan trọng: gửi cả filename + filename* để mọi trình duyệt/app đều ổn
-    res.setHeader("Content-Disposition", `attachment; filename="${asciiFallback}"; filename*=UTF-8''${filenameStar}`);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${asciiFallback}"; filename*=UTF-8''${filenameStar}`
+    );
 
     return res.end(buffer);
   } catch (err) {
@@ -2950,8 +3341,19 @@ const exportAllOrdersToExcel = async (req, res) => {
 
 const getOrderStats = async (req, res) => {
   try {
-    const { storeId, periodType = "year", periodKey, monthFrom, monthTo } = req.query;
-    const { start, end } = periodToRange(periodType, periodKey, monthFrom, monthTo);
+    const {
+      storeId,
+      periodType = "year",
+      periodKey,
+      monthFrom,
+      monthTo,
+    } = req.query;
+    const { start, end } = periodToRange(
+      periodType,
+      periodKey,
+      monthFrom,
+      monthTo
+    );
 
     // Lấy ra danh sách orderId của cửa hàng trong khoảng thời gian
     const orders = await Order.find({
@@ -2964,12 +3366,18 @@ const getOrderStats = async (req, res) => {
     // Đếm đơn từng trạng thái
     const total = orders.length;
     const pending = orders.filter((o) => o.status === "pending").length;
-    const refunded = orders.filter((o) => ["refunded", "partially_refunded"].includes(o.status)).length;
+    const refunded = orders.filter((o) =>
+      ["refunded", "partially_refunded"].includes(o.status)
+    ).length;
     const paid = orders.filter((o) => o.status === "paid").length;
 
     //  CHỈ tính số lượng sản phẩm từ đơn ĐÃ THANH TOÁN (paid, partially_refunded, refunded)
     // KHÔNG tính đơn pending vì chưa thực sự bán
-    const paidOrderIds = orders.filter((o) => ["paid", "partially_refunded", "refunded"].includes(o.status)).map((o) => o._id);
+    const paidOrderIds = orders
+      .filter((o) =>
+        ["paid", "partially_refunded", "refunded"].includes(o.status)
+      )
+      .map((o) => o._id);
 
     const orderItems = await OrderItem.find({
       orderId: { $in: paidOrderIds }, // Chỉ lấy từ đơn đã thanh toán
@@ -2978,7 +3386,10 @@ const getOrderStats = async (req, res) => {
       .select("quantity")
       .lean();
 
-    const totalSoldItems = orderItems.reduce((sum, i) => sum + (i.quantity || 0), 0);
+    const totalSoldItems = orderItems.reduce(
+      (sum, i) => sum + (i.quantity || 0),
+      0
+    );
 
     //  Tổng số lượng sản phẩm bị hoàn trả (theo order_refunds)
     const refundDocs = await OrderRefund.find({
@@ -2989,7 +3400,8 @@ const getOrderStats = async (req, res) => {
       .lean();
 
     const totalRefundedItems = refundDocs.reduce((sum, refund) => {
-      const refundCount = refund.refundItems?.reduce((a, i) => a + (i.quantity || 0), 0) || 0;
+      const refundCount =
+        refund.refundItems?.reduce((a, i) => a + (i.quantity || 0), 0) || 0;
       return sum + refundCount;
     }, 0);
 
@@ -3016,7 +3428,7 @@ const genNKCode = () => {
   const pad = (n) => n.toString().padStart(2, "0");
 
   return `NK-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(
-    now.getDate(),
+    now.getDate()
   )}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
 };
 
@@ -3076,7 +3488,8 @@ const deletePendingOrder = async (req, res) => {
         const prod = await Product.findById(it.productId).session(session);
         if (!prod) continue;
 
-        prod.stock_quantity = Number(prod.stock_quantity || 0) + Number(it.quantity || 0);
+        prod.stock_quantity =
+          Number(prod.stock_quantity || 0) + Number(it.quantity || 0);
 
         await prod.save({ session });
 
@@ -3134,11 +3547,15 @@ const deletePendingOrder = async (req, res) => {
       entityId: order._id,
       entityName: `Đơn hàng #${order._id}`,
       req,
-      description: `Hủy đơn hàng đang chờ thanh toán (Pending). ${needRestoreStock ? "Đã hoàn lại kho." : "Chưa xuất kho."}`,
+      description: `Hủy đơn hàng đang chờ thanh toán (Pending). ${
+        needRestoreStock ? "Đã hoàn lại kho." : "Chưa xuất kho."
+      }`,
     });
 
     return res.json({
-      message: needRestoreStock ? "Hủy đơn pending & hoàn kho thành công" : "Hủy đơn pending thành công (chưa xuất kho)",
+      message: needRestoreStock
+        ? "Hủy đơn pending & hoàn kho thành công"
+        : "Hủy đơn pending thành công (chưa xuất kho)",
       orderId: order._id,
       status: order.status,
       reverseVoucher: needRestoreStock

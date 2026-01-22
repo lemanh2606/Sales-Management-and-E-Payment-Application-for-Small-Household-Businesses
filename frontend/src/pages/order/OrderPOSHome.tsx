@@ -2471,7 +2471,7 @@ const OrderPOSHome: React.FC = () => {
         }}
       />
 
-      {/* Modal show mã QRm=, nút xác nhận In hoá đơn và nút Huỷ */}
+      {/* Modal show mã QR, nút xác nhận In hoá đơn và nút Huỷ */}
       <Modal
         open={!!(currentTab.qrImageUrl || currentTab.qrPayload)}
         footer={
@@ -2498,6 +2498,41 @@ const OrderPOSHome: React.FC = () => {
               >
                 <Text strong style={{ color: "#52c41a", fontSize: "16px" }}>
                   Đã nhận thanh toán thành công!
+                </Text>
+              </div>
+            )}
+
+            {/* ⚠️ Thông báo QR tĩnh - không tự động xác nhận */}
+            {!currentTab.qrExpiryTs && !currentTab.isPaid && (
+              <div
+                style={{
+                  background: "#fff7e6",
+                  border: "1px solid #ffd591",
+                  borderRadius: "8px",
+                  padding: "16px",
+                  marginBottom: "8px",
+                  width: "100%",
+                  textAlign: "center",
+                }}
+              >
+                <Text strong style={{ color: "#fa8c16", fontSize: "14px" }}>
+                  ⚠️ Đây là thanh toán tĩnh VietQR
+                </Text>
+                <br />
+                <Text style={{ color: "#595959", fontSize: "13px" }}>
+                  Muốn kiểm tra thanh toán tự động, hãy tích hợp PayOS trong{" "}
+                  <a
+                    onClick={(e) => {
+                      e.preventDefault();
+                      // Navigate đến settings/payment-method
+                      window.location.href = "/settings/payment-method";
+                      // Hoặc nếu dùng React Router:
+                      // navigate('/settings/payment-method');
+                    }}
+                    style={{ color: "#1890ff", textDecoration: "underline" }}
+                  >
+                    tích hợp cổng thanh toán
+                  </a>
                 </Text>
               </div>
             )}

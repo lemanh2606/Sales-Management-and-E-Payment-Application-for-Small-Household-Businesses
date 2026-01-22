@@ -2079,7 +2079,7 @@ export default function ProductListPage() {
                             render: (val) => (
                               <Badge
                                 count={val}
-                                overflowCount={9999}
+                                overflowCount={99999999999}
                                 style={{
                                   backgroundColor:
                                     val > 0 ? "#1890ff" : "#d9d9d9",

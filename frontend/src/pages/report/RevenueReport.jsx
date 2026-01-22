@@ -381,7 +381,7 @@ const RevenueReport = () => {
       render: (v) => <span style={{ fontSize: 16, color: "#52c41a", fontWeight: 700 }}>{v}</span>,
     },
     {
-      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Hoàn tất</span>,
+      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Đơn đã hoàn tất</span>,
       dataIndex: "completedOrders",
       key: "completedOrders",
       align: "center",
@@ -389,7 +389,7 @@ const RevenueReport = () => {
       render: (v) => <span style={{ fontSize: 16 }}>{v ?? 0}</span>,
     },
     {
-      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Hoàn 1 phần</span>,
+      title: <span style={{ fontSize: "16px", fontWeight: 600 }}>Đơn hoàn 1 phần</span>,
       dataIndex: "partialRefundOrders",
       key: "partialRefundOrders",
       align: "center",
