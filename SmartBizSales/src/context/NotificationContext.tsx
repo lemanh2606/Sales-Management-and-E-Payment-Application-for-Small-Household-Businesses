@@ -27,6 +27,8 @@ import socketService, {
   ConnectionStatus,
 } from "../services/SocketService";
 import apiClient from "../api/apiClient";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import dayjs from "dayjs";
 
 // Types
 export interface NotificationContextValue {
@@ -94,7 +96,7 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({
           (notification) => {
             console.log("📬 Foreground notification:", notification.title);
             // Show toast for foreground notifications
-            notificationService.showToast(notification);
+            // Toast removed
             // Refresh unread count
             refreshUnreadCount();
           },
@@ -142,12 +144,19 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({
         console.log("🔔 Real-time notification:", notification.title);
 
         // Show toast
-        notificationService.showToast({
-          _id: notification._id,
-          type: notification.type,
-          title: notification.title,
-          message: notification.message,
-        });
+        // Toast removed
+
+        // 🚀 Trigger Local Notification (Popup) cho cả Expo Go & Real Device
+        notificationService.scheduleLocalNotification(
+          {
+            _id: notification._id,
+            type: notification.type,
+            title: notification.title,
+            message: notification.message,
+            data: { from: "socket" },
+          },
+          null
+        );
 
         // Update unread count
         setUnreadCount((prev) => prev + 1);
@@ -261,11 +270,66 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({
     };
 
     // Show toast
-    notificationService.showToast(testNotification);
+    // Toast removed
 
     // Schedule local push notification (immediate - for testing)
     notificationService.scheduleLocalNotification(testNotification, null);
   }, []);
+
+  // ========== POLLING MISSED NOTIFICATIONS ==========
+  useEffect(() => {
+    if (!currentStore?._id) return;
+
+    const checkMissed = async () => {
+      try {
+        const sid = currentStore._id;
+        // Fetch unread notifications
+        const res: any = await apiClient.get(`/notifications`, {
+          params: { storeId: sid, read: false, limit: 5, sort: "-createdAt" },
+        });
+        const unreadList = res?.data?.data || [];
+        if (unreadList.length === 0) return;
+
+        // Check history
+        const STORAGE_KEY = `POPUP_HISTORY_${sid}`;
+        const historyRaw = await AsyncStorage.getItem(STORAGE_KEY);
+        let history: string[] = historyRaw ? JSON.parse(historyRaw) : [];
+
+        // Filter new items (last 24h)
+        const oneDayAgo = dayjs().subtract(24, "hour");
+        const newItems = unreadList.filter(
+          (item: any) =>
+            !history.includes(item._id) &&
+            dayjs(item.createdAt).isAfter(oneDayAgo)
+        );
+
+        if (newItems.length > 0) {
+          const latest = newItems[0];
+          // Only Push Popup (No Toast)
+          notificationService.scheduleLocalNotification(
+            {
+              type: latest.type,
+              title: latest.title,
+              message: latest.message,
+              data: latest.data,
+            },
+            null
+          );
+
+          // Update history
+          const newIds = newItems.map((i: any) => i._id);
+          history = [...newIds, ...history].slice(0, 100);
+          await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+        }
+      } catch (err) {
+        // ignore error
+      }
+    };
+
+    checkMissed(); // Initial check
+    const interval = setInterval(checkMissed, 60000); // Poll every 60s
+    return () => clearInterval(interval);
+  }, [currentStore?._id]);
 
   // ========== CONTEXT VALUE ==========
   const contextValue: NotificationContextValue = {

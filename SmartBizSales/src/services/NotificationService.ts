@@ -44,10 +44,64 @@ class NotificationService {
   private handlers: NotificationHandler[] = [];
 
   /**
+   * Thiết lập Notification Channel cho Android
+   * Cho phép Local Notification hoạt động ngay cả trên Expo Go
+   */
+  async setupChannels(): Promise<void> {
+    if (Platform.OS !== "android") return;
+
+    try {
+      // Channel mặc định - High Importance để hiện popup
+      await Notifications.setNotificationChannelAsync("default", {
+        name: "Thông báo hệ thống",
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: "#1890ff",
+        sound: "default",
+        enableVibrate: true,
+        showBadge: true,
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      });
+
+      // Channel cho đơn hàng - Max Priority
+      await Notifications.setNotificationChannelAsync("orders", {
+        name: "Đơn hàng mới",
+        description: "Thông báo về đơn hàng mới và cập nhật trạng thái",
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 500, 250, 500],
+        lightColor: "#52c41a",
+        sound: "default",
+        enableVibrate: true,
+        showBadge: true,
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      });
+
+      // Channel cho kho hàng - High Priority
+      await Notifications.setNotificationChannelAsync("inventory", {
+        name: "Cảnh báo kho hàng",
+        description: "Cảnh báo hết hạn, tồn kho thấp",
+        importance: Notifications.AndroidImportance.HIGH,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: "#ff4d4f",
+        sound: "default",
+        enableVibrate: true,
+        showBadge: true,
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      });
+      console.log("✅ Notification Channels setup completed");
+    } catch (error) {
+      console.error("❌ Error setting up notification channels:", error);
+    }
+  }
+
+  /**
    * Đăng ký push notifications và lấy Expo Push Token
    */
   async registerForPushNotificationsAsync(): Promise<string | null> {
     let token: string | null = null;
+    
+    // 1. Setup Channel ngay lập tức (quan trọng cho Expo Go)
+    await this.setupChannels();
 
     // Push notifications chỉ hoạt động trên physical devices
     if (!Device.isDevice) {
@@ -58,6 +112,17 @@ class NotificationService {
     // Kiểm tra và yêu cầu quyền
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
+
+    // ⛔ Nếu chạy trên Expo Go -> Skip lấy Push Token để tránh lỗi SDK 53+
+    if (Constants.appOwnership === "expo") {
+      console.log("⚠️ Running in Expo Go: Skipping Push Token registration (Remote Push not supported)");
+      // Vẫn request permission để dùng Local Notification
+      if (existingStatus !== "granted") {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      return null;
+    }
 
     if (existingStatus !== "granted") {
       const { status } = await Notifications.requestPermissionsAsync();
@@ -88,39 +153,6 @@ class NotificationService {
     } catch (error) {
       console.error("❌ Error getting push token:", error);
       return null;
-    }
-
-    // Android: Setup notification channel
-    if (Platform.OS === "android") {
-      await Notifications.setNotificationChannelAsync("default", {
-        name: "Thông báo mặc định",
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: "#1890ff",
-        sound: "default",
-        enableVibrate: true,
-        showBadge: true,
-      });
-
-      // Channel cho đơn hàng
-      await Notifications.setNotificationChannelAsync("orders", {
-        name: "Đơn hàng",
-        description: "Thông báo về đơn hàng mới và cập nhật",
-        importance: Notifications.AndroidImportance.HIGH,
-        vibrationPattern: [0, 500, 250, 500],
-        lightColor: "#1890ff",
-        sound: "default",
-      });
-
-      // Channel cho kho hàng
-      await Notifications.setNotificationChannelAsync("inventory", {
-        name: "Kho hàng",
-        description: "Cảnh báo hết hạn, tồn kho thấp",
-        importance: Notifications.AndroidImportance.HIGH,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: "#ff4d4f",
-        sound: "default",
-      });
     }
 
     return token;
@@ -161,27 +193,42 @@ class NotificationService {
 
     // Listener khi notification được nhận (app đang mở)
     this.notificationListener = Notifications.addNotificationReceivedListener(
-      (notification) => {
-        console.log("📬 Notification received:", notification.request.content.title);
-        
+      async (notification) => {
+        console.log(
+          "🔔 [NotificationService] RECEIVED (Foreground):",
+          notification.request.content.title
+        );
+
         const data: NotificationData = {
           _id: notification.request.identifier,
-          type: (notification.request.content.data?.type as NotificationData["type"]) || "system",
+          type:
+            (notification.request.content.data?.type as NotificationData["type"]) ||
+            "system",
           title: notification.request.content.title || "Thông báo mới",
           message: notification.request.content.body || "",
           data: notification.request.content.data as Record<string, any>,
         };
 
         // Notify handlers
-        this.handlers.forEach(handler => handler(data));
+        this.handlers.forEach((handler) => handler(data));
         onReceived?.(data);
+
+        // ⚠️ FORCE SHOW LOCAL NOTIFICATION (Để hiện popup nổi)
+        // Lưu ý: Cần tránh loop vô tận nếu notification chính là local notification vừa tạo
+        // Ta check 'trigger' type, nếu là 'push' (remote) thì mới tạo local
+        const trigger = notification.request.trigger;
+        if (trigger && (trigger as any).type === "push") {
+          console.log("🚀 Force showing local notification for popup!");
+          await this.scheduleLocalNotification(data, null);
+        }
       }
     );
 
     // Listener khi user tap vào notification
     this.responseListener = Notifications.addNotificationResponseReceivedListener(
       (response) => {
-        console.log("👆 Notification tapped:", response.notification.request.content.title);
+        console.log("👆 [NotificationService] TAPPED:", JSON.stringify(response, null, 2));
+        console.log("👉 Action:", response.actionIdentifier);
         
         const data: NotificationData = {
           _id: response.notification.request.identifier,

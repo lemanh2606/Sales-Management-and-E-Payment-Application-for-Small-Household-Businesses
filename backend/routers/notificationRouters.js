@@ -8,6 +8,7 @@ const {
   deleteNotification,
   scanExpiryNotifications,
 } = require("../controllers/notificationController");
+const { sendPushToUser } = require("../services/pushNotificationService"); // Import service trực tiếp
 const {
   verifyToken,
   checkStoreAccess,
@@ -22,6 +23,22 @@ const router = express.Router();
  *  - read=true/false
  *  - page, limit
  */
+router.post("/test-push", verifyToken, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    console.log("🧪 Testing push notification for user:", userId);
+    const result = await sendPushToUser(userId, {
+      title: "🔔 Test Push Notification",
+      body: "Đây là thông báo kiểm tra từ hệ thống! (Nếu thấy thông báo này tức là Push hoạt động)",
+      data: { type: "system" },
+    });
+    return res.json({ message: "Đã gửi test push", result });
+  } catch (err) {
+    console.error("❌ Lỗi test push:", err);
+    return res.status(500).json({ message: "Lỗi test push" });
+  }
+});
+
 router.get("/", verifyToken, checkStoreAccess, listNotifications);
 
 // Đếm số thông báo chưa đọc - cần đặt trước các route có params

@@ -1,6 +1,7 @@
 import Notification from "../models/Notification.js";
 import Product from "../models/Product.js";
 import User from "../models/User.js";
+import { sendPushToManager } from "../services/pushNotificationService.js";
 
 /**
  * Lấy danh sách thông báo (phân trang, lọc)
@@ -238,6 +239,22 @@ export const scanExpiryNotifications = async (req, res) => {
             message,
           });
           createdCount++;
+
+          // 📱 Gửi Push Notification cho Manager
+          try {
+            await sendPushToManager(storeId, {
+              title,
+              body: message,
+              type: "inventory",
+              data: {
+                productId: p._id.toString(),
+                productName: p.name,
+                screen: "ProductDetail",
+              },
+            });
+          } catch (pushErr) {
+            console.warn("⚠️ Push notification failed:", pushErr.message);
+          }
         }
       }
     }
@@ -249,5 +266,31 @@ export const scanExpiryNotifications = async (req, res) => {
   } catch (err) {
     console.error("⚠️ Lỗi khi quét thông báo hết hạn:", err);
     return res.status(500).json({ message: "Lỗi khi quét thông báo" });
+  }
+};
+
+/**
+ * Test g?i push notification
+ * POST /api/notifications/test-push
+ */
+export const testPushNotification = async (req, res) => {
+  const { sendPushToUser } = await import("../services/pushNotificationService.js");
+  try {
+    const userId = req.user._id;
+    console.log(" Testing push notification for user:", userId);
+
+    const result = await sendPushToUser(userId, {
+      title: " Test Push Notification",
+      body: "��y l� th�ng b�o ki?m tra t? h? th?ng!",
+      data: { type: "system" },
+    });
+
+    return res.json({
+      message: "�� g?i test push notification",
+      result,
+    });
+  } catch (err) {
+    console.error(" L?i test push:", err);
+    return res.status(500).json({ message: "L?i test push" });
   }
 };

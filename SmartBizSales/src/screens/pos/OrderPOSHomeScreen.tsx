@@ -32,6 +32,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import apiClient from "../../api/apiClient";
+import notificationService from "../../services/NotificationService";
 
 /** =========================================================
  *  Design tokens (Professional Design System)
@@ -41,21 +42,21 @@ const COLORS = {
   primary: "#2563eb",
   primaryLight: "#3b82f6",
   primaryDark: "#1d4ed8",
-  
+
   // Background & surfaces
   bg: "#f8fafc",
   surface: "#ffffff",
   card: "#ffffff",
   cardSecondary: "#f1f5f9",
   stroke: "#e2e8f0",
-  
+
   // Text colors
   text: "#0f172a",
   textStrong: "#0b1220",
   textSecondary: "#475569",
   muted: "#64748b",
   placeholder: "#94a3b8",
-  
+
   // Status colors
   success: "#16a34a",
   successLight: "#dcfce7",
@@ -65,7 +66,7 @@ const COLORS = {
   dangerLight: "#fee2e2",
   info: "#0ea5e9",
   infoLight: "#e0f2fe",
-  
+
   // UI elements
   chip: "#f1f5f9",
   chipActive: "#dbeafe",
@@ -136,218 +137,308 @@ const Divider = React.memo(({ style }: { style?: any }) => (
   <View style={[{ height: 1, backgroundColor: COLORS.stroke }, style]} />
 ));
 
-const Section = React.memo(({
-  title,
-  subtitle,
-  right,
-  children,
-}: {
-  title: string;
-  subtitle?: string;
-  right?: React.ReactNode;
-  children?: React.ReactNode;
-}) => (
-  <View style={styles.sectionContainer}>
-    <View style={styles.sectionHeader}>
-      <View style={styles.sectionTitleContainer}>
-        <Text style={styles.sectionTitle}>{title}</Text>
-        {subtitle && <Text style={styles.sectionSubtitle}>{subtitle}</Text>}
+const Section = React.memo(
+  ({
+    title,
+    subtitle,
+    right,
+    children,
+  }: {
+    title: string;
+    subtitle?: string;
+    right?: React.ReactNode;
+    children?: React.ReactNode;
+  }) => (
+    <View style={styles.sectionContainer}>
+      <View style={styles.sectionHeader}>
+        <View style={styles.sectionTitleContainer}>
+          <Text style={styles.sectionTitle}>{title}</Text>
+          {subtitle && <Text style={styles.sectionSubtitle}>{subtitle}</Text>}
+        </View>
+        {right}
       </View>
-      {right}
+      <View style={styles.sectionContent}>{children}</View>
     </View>
-    <View style={styles.sectionContent}>{children}</View>
-  </View>
-));
+  )
+);
 
-const Badge = React.memo(({ value, color = COLORS.primary }: { value: number | string; color?: string }) => (
-  <View style={[styles.badge, { backgroundColor: color + "20" }]}>
-    <Text style={[styles.badgeText, { color }]}>{value}</Text>
-  </View>
-));
+const Badge = React.memo(
+  ({
+    value,
+    color = COLORS.primary,
+  }: {
+    value: number | string;
+    color?: string;
+  }) => (
+    <View style={[styles.badge, { backgroundColor: color + "20" }]}>
+      <Text style={[styles.badgeText, { color }]}>{value}</Text>
+    </View>
+  )
+);
 
-const Card = React.memo(({ children, style }: { children: React.ReactNode; style?: any }) => (
-  <View style={[styles.card, style]}>{children}</View>
-));
+const Card = React.memo(
+  ({ children, style }: { children: React.ReactNode; style?: any }) => (
+    <View style={[styles.card, style]}>{children}</View>
+  )
+);
 
-const IconButton = React.memo(({
-  icon,
-  onPress,
-  size = 24,
-  color = COLORS.primary,
-  style,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  onPress: () => void;
-  size?: number;
-  color?: string;
-  style?: any;
-}) => (
-  <TouchableOpacity onPress={onPress} style={[styles.iconButton, style]} hitSlop={8}>
-    <Ionicons name={icon} size={size} color={color} />
-  </TouchableOpacity>
-));
+const IconButton = React.memo(
+  ({
+    icon,
+    onPress,
+    size = 24,
+    color = COLORS.primary,
+    style,
+  }: {
+    icon: keyof typeof Ionicons.glyphMap;
+    onPress: () => void;
+    size?: number;
+    color?: string;
+    style?: any;
+  }) => (
+    <TouchableOpacity
+      onPress={onPress}
+      style={[styles.iconButton, style]}
+      hitSlop={8}
+    >
+      <Ionicons name={icon} size={size} color={color} />
+    </TouchableOpacity>
+  )
+);
 
 /** =========================================================
  *  Enhanced Button Component
  *  ========================================================= */
-const Button = React.memo(({
-  title,
-  onPress,
-  variant = "primary",
-  size = "md",
-  icon,
-  iconPosition = "left",
-  disabled = false,
-  loading = false,
-  style,
-  fullWidth = false,
-}: {
-  title: string;
-  onPress: () => void;
-  variant?: "primary" | "secondary" | "outline" | "danger" | "success" | "ghost";
-  size?: "sm" | "md" | "lg";
-  icon?: keyof typeof Ionicons.glyphMap;
-  iconPosition?: "left" | "right";
-  disabled?: boolean;
-  loading?: boolean;
-  style?: any;
-  fullWidth?: boolean;
-}) => {
-  const getVariantStyles = () => {
-    switch (variant) {
-      case "primary":
-        return { bg: COLORS.primary, text: COLORS.white, border: COLORS.primary };
-      case "secondary":
-        return { bg: COLORS.cardSecondary, text: COLORS.text, border: COLORS.stroke };
-      case "outline":
-        return { bg: "transparent", text: COLORS.primary, border: COLORS.primary };
-      case "danger":
-        return { bg: COLORS.danger, text: COLORS.white, border: COLORS.danger };
-      case "success":
-        return { bg: COLORS.success, text: COLORS.white, border: COLORS.success };
-      case "ghost":
-        return { bg: "transparent", text: COLORS.text, border: "transparent" };
-      default:
-        return { bg: COLORS.primary, text: COLORS.white, border: COLORS.primary };
-    }
-  };
+const Button = React.memo(
+  ({
+    title,
+    onPress,
+    variant = "primary",
+    size = "md",
+    icon,
+    iconPosition = "left",
+    disabled = false,
+    loading = false,
+    style,
+    fullWidth = false,
+  }: {
+    title: string;
+    onPress: () => void;
+    variant?:
+      | "primary"
+      | "secondary"
+      | "outline"
+      | "danger"
+      | "success"
+      | "ghost";
+    size?: "sm" | "md" | "lg";
+    icon?: keyof typeof Ionicons.glyphMap;
+    iconPosition?: "left" | "right";
+    disabled?: boolean;
+    loading?: boolean;
+    style?: any;
+    fullWidth?: boolean;
+  }) => {
+    const getVariantStyles = () => {
+      switch (variant) {
+        case "primary":
+          return {
+            bg: COLORS.primary,
+            text: COLORS.white,
+            border: COLORS.primary,
+          };
+        case "secondary":
+          return {
+            bg: COLORS.cardSecondary,
+            text: COLORS.text,
+            border: COLORS.stroke,
+          };
+        case "outline":
+          return {
+            bg: "transparent",
+            text: COLORS.primary,
+            border: COLORS.primary,
+          };
+        case "danger":
+          return {
+            bg: COLORS.danger,
+            text: COLORS.white,
+            border: COLORS.danger,
+          };
+        case "success":
+          return {
+            bg: COLORS.success,
+            text: COLORS.white,
+            border: COLORS.success,
+          };
+        case "ghost":
+          return {
+            bg: "transparent",
+            text: COLORS.text,
+            border: "transparent",
+          };
+        default:
+          return {
+            bg: COLORS.primary,
+            text: COLORS.white,
+            border: COLORS.primary,
+          };
+      }
+    };
 
-  const getSizeStyles = () => {
-    switch (size) {
-      case "sm":
-        return { paddingVertical: 8, paddingHorizontal: 12, fontSize: 12 };
-      case "md":
-        return { paddingVertical: 12, paddingHorizontal: 16, fontSize: 14 };
-      case "lg":
-        return { paddingVertical: 16, paddingHorizontal: 20, fontSize: 16 };
-      default:
-        return { paddingVertical: 12, paddingHorizontal: 16, fontSize: 14 };
-    }
-  };
+    const getSizeStyles = () => {
+      switch (size) {
+        case "sm":
+          return { paddingVertical: 8, paddingHorizontal: 12, fontSize: 12 };
+        case "md":
+          return { paddingVertical: 12, paddingHorizontal: 16, fontSize: 14 };
+        case "lg":
+          return { paddingVertical: 16, paddingHorizontal: 20, fontSize: 16 };
+        default:
+          return { paddingVertical: 12, paddingHorizontal: 16, fontSize: 14 };
+      }
+    };
 
-  const variantStyles = getVariantStyles();
-  const sizeStyles = getSizeStyles();
+    const variantStyles = getVariantStyles();
+    const sizeStyles = getSizeStyles();
 
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      disabled={disabled || loading}
-      activeOpacity={0.8}
-      style={[
-        styles.buttonBase,
-        {
-          backgroundColor: variantStyles.bg,
-          borderColor: variantStyles.border,
-          borderWidth: variant === "outline" ? 1 : 0,
-          paddingVertical: sizeStyles.paddingVertical,
-          paddingHorizontal: sizeStyles.paddingHorizontal,
-          width: fullWidth ? "100%" : undefined,
-          opacity: disabled ? 0.5 : 1,
-        },
-        style,
-      ]}
-    >
-      {loading ? (
-        <ActivityIndicator size="small" color={variantStyles.text} />
-      ) : (
-        <View style={styles.buttonContent}>
-          {icon && iconPosition === "left" && (
-            <Ionicons name={icon} size={sizeStyles.fontSize} color={variantStyles.text} style={styles.buttonIcon} />
-          )}
-          <Text
-            style={[
-              styles.buttonText,
-              {
-                color: variantStyles.text,
-                fontSize: sizeStyles.fontSize,
-                fontWeight: size === "lg" ? "700" : "600",
-              },
-            ]}
-          >
-            {title}
-          </Text>
-          {icon && iconPosition === "right" && (
-            <Ionicons name={icon} size={sizeStyles.fontSize} color={variantStyles.text} style={styles.buttonIcon} />
-          )}
-        </View>
-      )}
-    </TouchableOpacity>
-  );
-});
+    return (
+      <TouchableOpacity
+        onPress={onPress}
+        disabled={disabled || loading}
+        activeOpacity={0.8}
+        style={[
+          styles.buttonBase,
+          {
+            backgroundColor: variantStyles.bg,
+            borderColor: variantStyles.border,
+            borderWidth: variant === "outline" ? 1 : 0,
+            paddingVertical: sizeStyles.paddingVertical,
+            paddingHorizontal: sizeStyles.paddingHorizontal,
+            width: fullWidth ? "100%" : undefined,
+            opacity: disabled ? 0.5 : 1,
+          },
+          style,
+        ]}
+      >
+        {loading ? (
+          <ActivityIndicator size="small" color={variantStyles.text} />
+        ) : (
+          <View style={styles.buttonContent}>
+            {icon && iconPosition === "left" && (
+              <Ionicons
+                name={icon}
+                size={sizeStyles.fontSize}
+                color={variantStyles.text}
+                style={styles.buttonIcon}
+              />
+            )}
+            <Text
+              style={[
+                styles.buttonText,
+                {
+                  color: variantStyles.text,
+                  fontSize: sizeStyles.fontSize,
+                  fontWeight: size === "lg" ? "700" : "600",
+                },
+              ]}
+            >
+              {title}
+            </Text>
+            {icon && iconPosition === "right" && (
+              <Ionicons
+                name={icon}
+                size={sizeStyles.fontSize}
+                color={variantStyles.text}
+                style={styles.buttonIcon}
+              />
+            )}
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  }
+);
 
 /** =========================================================
  *  Enhanced Input Component
  *  ========================================================= */
-const Input = React.memo(({
-  value,
-  onChangeText,
-  placeholder,
-  label,
-  error,
-  secureTextEntry,
-  keyboardType = "default",
-  multiline,
-  numberOfLines,
-  style,
-  leftIcon,
-  rightIcon,
-  editable = true,
-}: {
-  value: string;
-  onChangeText: (text: string) => void;
-  placeholder?: string;
-  label?: string;
-  error?: string;
-  secureTextEntry?: boolean;
-  keyboardType?: any;
-  multiline?: boolean;
-  numberOfLines?: number;
-  style?: any;
-  leftIcon?: keyof typeof Ionicons.glyphMap;
-  rightIcon?: keyof typeof Ionicons.glyphMap;
-  editable?: boolean;
-}) => (
-  <View style={styles.inputContainer}>
-    {label && <Text style={styles.inputLabel}>{label}</Text>}
-    <View style={[styles.inputWrapper, error && styles.inputError, !editable && styles.inputDisabled]}>
-      {leftIcon && <Ionicons name={leftIcon} size={20} color={COLORS.muted} style={styles.inputLeftIcon} />}
-      <TextInput
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor={COLORS.placeholder}
-        secureTextEntry={secureTextEntry}
-        keyboardType={keyboardType}
-        multiline={multiline}
-        numberOfLines={numberOfLines}
-        editable={editable}
-        style={[styles.inputField, multiline && { height: numberOfLines ? numberOfLines * 24 : 100 }, style]}
-      />
-      {rightIcon && <Ionicons name={rightIcon} size={20} color={COLORS.muted} style={styles.inputRightIcon} />}
+const Input = React.memo(
+  ({
+    value,
+    onChangeText,
+    placeholder,
+    label,
+    error,
+    secureTextEntry,
+    keyboardType = "default",
+    multiline,
+    numberOfLines,
+    style,
+    leftIcon,
+    rightIcon,
+    editable = true,
+  }: {
+    value: string;
+    onChangeText: (text: string) => void;
+    placeholder?: string;
+    label?: string;
+    error?: string;
+    secureTextEntry?: boolean;
+    keyboardType?: any;
+    multiline?: boolean;
+    numberOfLines?: number;
+    style?: any;
+    leftIcon?: keyof typeof Ionicons.glyphMap;
+    rightIcon?: keyof typeof Ionicons.glyphMap;
+    editable?: boolean;
+  }) => (
+    <View style={styles.inputContainer}>
+      {label && <Text style={styles.inputLabel}>{label}</Text>}
+      <View
+        style={[
+          styles.inputWrapper,
+          error && styles.inputError,
+          !editable && styles.inputDisabled,
+        ]}
+      >
+        {leftIcon && (
+          <Ionicons
+            name={leftIcon}
+            size={20}
+            color={COLORS.muted}
+            style={styles.inputLeftIcon}
+          />
+        )}
+        <TextInput
+          value={value}
+          onChangeText={onChangeText}
+          placeholder={placeholder}
+          placeholderTextColor={COLORS.placeholder}
+          secureTextEntry={secureTextEntry}
+          keyboardType={keyboardType}
+          multiline={multiline}
+          numberOfLines={numberOfLines}
+          editable={editable}
+          style={[
+            styles.inputField,
+            multiline && { height: numberOfLines ? numberOfLines * 24 : 100 },
+            style,
+          ]}
+        />
+        {rightIcon && (
+          <Ionicons
+            name={rightIcon}
+            size={20}
+            color={COLORS.muted}
+            style={styles.inputRightIcon}
+          />
+        )}
+      </View>
+      {error && <Text style={styles.inputErrorText}>{error}</Text>}
     </View>
-    {error && <Text style={styles.inputErrorText}>{error}</Text>}
-  </View>
-));
+  )
+);
 
 /** =========================================================
  *  Types
@@ -540,7 +631,7 @@ const getItemUnitPrice = (item: CartItem): number => {
   const base = getPriceNumber(item.price);
   const cost = getPriceNumber(item.cost_price);
   const saleType = item.saleType || "NORMAL";
-  
+
   switch (saleType) {
     case "NORMAL":
       return base;
@@ -557,7 +648,10 @@ const getItemUnitPrice = (item: CartItem): number => {
   }
 };
 
-const makeEmptyTab = (key: string, defaultEmployeeId: string | null): OrderTab => ({
+const makeEmptyTab = (
+  key: string,
+  defaultEmployeeId: string | null
+): OrderTab => ({
   key,
   cart: [],
   customer: null,
@@ -601,26 +695,32 @@ const OrderPOSHomeScreen: React.FC = () => {
   const [storeInfo, setStoreInfo] = useState<any>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loggedInUser, setLoggedInUser] = useState<any>(null);
-  
+
   // Data states
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [currentUserEmployee, setCurrentUserEmployee] = useState<Seller | null>(null);
-  const [loyaltySetting, setLoyaltySetting] = useState<LoyaltyConfig | null>(null);
+  const [currentUserEmployee, setCurrentUserEmployee] = useState<Seller | null>(
+    null
+  );
+  const [loyaltySetting, setLoyaltySetting] = useState<LoyaltyConfig | null>(
+    null
+  );
   const [isStoreEmpty, setIsStoreEmpty] = useState(false);
   const [hasCheckedEmpty, setHasCheckedEmpty] = useState(false);
-  
+
   // Order tabs
   const [orders, setOrders] = useState<OrderTab[]>([makeEmptyTab("1", null)]);
   const [activeTab, setActiveTab] = useState("1");
-  
+
   // Search states
   const [searchProduct, setSearchProduct] = useState("");
   const [searchedProducts, setSearchedProducts] = useState<Product[]>([]);
   const [showProductDropdown, setShowProductDropdown] = useState(false);
   const [productSearchLoading, setProductSearchLoading] = useState(false);
-  const [productSearchError, setProductSearchError] = useState<string | null>(null);
+  const [productSearchError, setProductSearchError] = useState<string | null>(
+    null
+  );
   const [isSearchFocused, setIsSearchFocused] = useState(false);
-  
+
   // Customer states
   const [phoneInput, setPhoneInput] = useState("");
   const [foundCustomers, setFoundCustomers] = useState<Customer[]>([]);
@@ -629,7 +729,7 @@ const OrderPOSHomeScreen: React.FC = () => {
   const [newCustomerName, setNewCustomerName] = useState("");
   const [newCustomerPhone, setNewCustomerPhone] = useState("");
   const [newCustomerEmail, setNewCustomerEmail] = useState("");
-  
+
   // Modal states
   const [employeeModal, setEmployeeModal] = useState(false);
   const [qrModal, setQrModal] = useState(false);
@@ -640,10 +740,10 @@ const OrderPOSHomeScreen: React.FC = () => {
     tempSaleType?: SaleType;
     tempOverridePrice?: number | null;
   }>({ visible: false });
-  
+
   const [qrRemainingSec, setQrRemainingSec] = useState<number | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
-  
+
   // Refs
   const scrollY = useRef(new Animated.Value(0)).current;
   const scrollViewRef = useRef<ScrollView>(null);
@@ -651,56 +751,64 @@ const OrderPOSHomeScreen: React.FC = () => {
   const authHeadersRef = useRef<any>(undefined);
   const selectingProductRef = useRef(false);
   const selectingCustomerRef = useRef(false);
-  
+
   // Current user and storage
   const currentUserId = loggedInUser?.id || loggedInUser?._id || "anonymous";
   const CART_STORAGE_KEY = `pos_cart_${storeId}_${currentUserId}`;
-  
+
   // Auth headers
-  const authHeaders = useMemo(() => 
-    token ? { Authorization: `Bearer ${token}` } : undefined, 
+  const authHeaders = useMemo(
+    () => (token ? { Authorization: `Bearer ${token}` } : undefined),
     [token]
   );
-  
+
   // Current tab
   const currentTab = useMemo(
     () => orders.find((t) => t.key === activeTab)!,
     [orders, activeTab]
   );
-  
+
   // ===== Calculations =====
   const subtotal = useMemo(
-    () => currentTab.cart.reduce(
-      (sum, item) => sum + getItemUnitPrice(item) * item.quantity,
-      0
-    ),
+    () =>
+      currentTab.cart.reduce(
+        (sum, item) => sum + getItemUnitPrice(item) * item.quantity,
+        0
+      ),
     [currentTab.cart]
   );
-  
+
   const discount = useMemo(() => {
     const vndPerPoint = loyaltySetting?.vndPerPoint || 0;
-    return currentTab.usedPointsEnabled ? (currentTab.usedPoints || 0) * vndPerPoint : 0;
-  }, [currentTab.usedPointsEnabled, currentTab.usedPoints, loyaltySetting?.vndPerPoint]);
-  
+    return currentTab.usedPointsEnabled
+      ? (currentTab.usedPoints || 0) * vndPerPoint
+      : 0;
+  }, [
+    currentTab.usedPointsEnabled,
+    currentTab.usedPoints,
+    loyaltySetting?.vndPerPoint,
+  ]);
+
   const beforeTax = Math.max(subtotal - discount, 0);
-  
+
   const vatAmount = useMemo(() => {
     return currentTab.cart.reduce((sum, item) => {
       const itemPrice = getItemUnitPrice(item);
-      const itemTaxRate = item.tax_rate !== undefined && item.tax_rate !== null 
-        ? Number(item.tax_rate) 
-        : 0;
+      const itemTaxRate =
+        item.tax_rate !== undefined && item.tax_rate !== null
+          ? Number(item.tax_rate)
+          : 0;
       const effectiveRate = itemTaxRate === -1 ? 0 : itemTaxRate;
       return sum + (itemPrice * item.quantity * effectiveRate) / 100;
     }, 0);
   }, [currentTab.cart]);
-  
+
   const totalAmount = beforeTax + vatAmount;
   const changeAmount = useMemo(
     () => Math.max(0, (currentTab.cashReceived || 0) - totalAmount),
     [currentTab.cashReceived, totalAmount]
   );
-  
+
   const employeeLabel = useMemo(() => {
     if (currentUserEmployee?.isOwner && currentTab.employeeId === null) {
       return `${currentUserEmployee.fullName} (Chủ cửa hàng)`;
@@ -708,16 +816,16 @@ const OrderPOSHomeScreen: React.FC = () => {
     const e = employees.find((x) => x._id === currentTab.employeeId);
     return e?.fullName || "Chưa chọn";
   }, [currentUserEmployee, currentTab.employeeId, employees]);
-  
+
   // ===== Effects =====
   useEffect(() => {
     storeIdRef.current = storeId;
   }, [storeId]);
-  
+
   useEffect(() => {
     authHeadersRef.current = authHeaders;
   }, [authHeaders]);
-  
+
   // Initialize
   useEffect(() => {
     (async () => {
@@ -727,16 +835,16 @@ const OrderPOSHomeScreen: React.FC = () => {
           AsyncStorage.getItem("token"),
           AsyncStorage.getItem("user"),
         ]);
-        
+
         const cs = csRaw ? JSON.parse(csRaw) : null;
         const usr = usrRaw ? JSON.parse(usrRaw) : null;
-        
+
         if (!cs?._id) {
           Alert.alert("Lỗi", "Không tìm thấy thông tin cửa hàng");
           setLoadingInit(false);
           return;
         }
-        
+
         setStoreId(cs._id);
         setStoreName(cs.name || "Cửa hàng");
         setStoreInfo(cs);
@@ -750,7 +858,7 @@ const OrderPOSHomeScreen: React.FC = () => {
       }
     })();
   }, []);
-  
+
   // Load data
   useEffect(() => {
     if (!storeId) return;
@@ -758,17 +866,21 @@ const OrderPOSHomeScreen: React.FC = () => {
     loadLoyaltySetting();
     checkStoreProducts();
   }, [storeId]);
-  
+
   // Cart persistence
   useEffect(() => {
     if (!storeId || !currentUserId) return;
-    
+
     (async () => {
       try {
         const savedData = await AsyncStorage.getItem(CART_STORAGE_KEY);
         if (savedData) {
           const parsed = JSON.parse(savedData);
-          if (parsed.orders && Array.isArray(parsed.orders) && parsed.orders.length > 0) {
+          if (
+            parsed.orders &&
+            Array.isArray(parsed.orders) &&
+            parsed.orders.length > 0
+          ) {
             setOrders(parsed.orders);
             if (parsed.activeTab) setActiveTab(parsed.activeTab);
           }
@@ -778,14 +890,14 @@ const OrderPOSHomeScreen: React.FC = () => {
       }
     })();
   }, [storeId, currentUserId]);
-  
+
   useEffect(() => {
     if (!storeId || !currentUserId) return;
-    
+
     const hasItems = orders.some(
       (tab) => tab.cart.length > 0 || tab.customer || tab.pendingOrderId
     );
-    
+
     if (hasItems) {
       (async () => {
         try {
@@ -795,26 +907,29 @@ const OrderPOSHomeScreen: React.FC = () => {
             userId: currentUserId,
             savedAt: new Date().toISOString(),
           };
-          await AsyncStorage.setItem(CART_STORAGE_KEY, JSON.stringify(dataToSave));
+          await AsyncStorage.setItem(
+            CART_STORAGE_KEY,
+            JSON.stringify(dataToSave)
+          );
         } catch (err) {
           console.error("Lỗi lưu cart:", err);
         }
       })();
     }
   }, [orders, activeTab, storeId, currentUserId]);
-  
+
   // QR countdown
   useEffect(() => {
     if (!qrModal) return;
-    
+
     let countdownId: NodeJS.Timeout | null = null;
     const expiry = currentTab.qrExpiryTs;
-    
+
     if (expiry) {
       const tick = () => {
         const diff = Math.max(0, Math.floor((expiry - Date.now()) / 1000));
         setQrRemainingSec(diff);
-        
+
         if (diff <= 0) {
           updateOrderTab((t) => {
             t.qrImageUrl = null;
@@ -824,33 +939,33 @@ const OrderPOSHomeScreen: React.FC = () => {
           Alert.alert("Hết hạn", "QR đã hết hạn");
         }
       };
-      
+
       tick();
       countdownId = setInterval(tick, 1000);
     }
-    
+
     return () => {
       if (countdownId) clearInterval(countdownId);
     };
   }, [qrModal, currentTab.qrExpiryTs]);
-  
 
   // ===== API Functions =====
   const loadEmployees = useCallback(async () => {
     if (!storeId) return;
-    
+
     try {
       const user = loggedInUser;
       if (!user?.id && !user?._id) return;
-      
+
       const userId = user?.id || user?._id;
       const role = user?.role;
-      
+
       // STAFF: create employee from user data
       if (role === "STAFF") {
         const staffEmployee: Seller = {
           _id: userId,
-          fullName: user?.fullname || user?.fullName || user?.username || "Nhân viên",
+          fullName:
+            user?.fullname || user?.fullName || user?.username || "Nhân viên",
           user_id: {
             _id: userId,
             username: user?.username || "staff",
@@ -860,46 +975,51 @@ const OrderPOSHomeScreen: React.FC = () => {
             menu: user?.menu,
           },
         };
-        
+
         setCurrentUserEmployee(staffEmployee);
         setEmployees([staffEmployee as Employee]);
-        setOrders(prev => prev.map(t => ({ ...t, employeeId: userId })));
+        setOrders((prev) => prev.map((t) => ({ ...t, employeeId: userId })));
         return;
       }
-      
+
       // MANAGER/OWNER: load employees list
       const res: any = await apiClient.get(`/stores/${storeId}/employees`, {
         params: { deleted: "false" },
         headers: authHeaders,
       });
-      
-      const employeesList: Employee[] = res?.data?.employees || res?.data?.data?.employees || [];
+
+      const employeesList: Employee[] =
+        res?.data?.employees || res?.data?.data?.employees || [];
       setEmployees(Array.isArray(employeesList) ? employeesList : []);
-      
+
       if (role === "MANAGER" || role === "OWNER") {
         const virtualOwner: VirtualOwner = {
           _id: "virtual-owner",
-          fullName: user?.fullname || user?.fullName || user?.username || "Chủ cửa hàng",
+          fullName:
+            user?.fullname ||
+            user?.fullName ||
+            user?.username ||
+            "Chủ cửa hàng",
           isOwner: true,
         };
-        
+
         setCurrentUserEmployee(virtualOwner);
-        setOrders(prev => prev.map(t => ({ ...t, employeeId: null })));
+        setOrders((prev) => prev.map((t) => ({ ...t, employeeId: null })));
       }
     } catch (error) {
       console.error("Lỗi tải nhân viên:", error);
       Alert.alert("Lỗi", "Không thể tải danh sách nhân viên");
     }
   }, [storeId, loggedInUser, authHeaders]);
-  
+
   const loadLoyaltySetting = useCallback(async () => {
     if (!storeId) return;
-    
+
     try {
       const res: any = await apiClient.get(`/loyaltys/config/${storeId}`, {
         headers: authHeaders,
       });
-      
+
       if (res?.data?.isConfigured && res?.data?.config?.isActive) {
         setLoyaltySetting(res.data.config);
       } else {
@@ -910,23 +1030,24 @@ const OrderPOSHomeScreen: React.FC = () => {
       setLoyaltySetting(null);
     }
   }, [storeId, authHeaders]);
-  
+
   const checkStoreProducts = useCallback(async () => {
     if (!storeId) return;
-    
+
     try {
       const res: any = await apiClient.get(`/products/store/${storeId}`, {
         params: { limit: 1 },
         headers: authHeaders,
       });
-      
+
       const products = res?.data?.products || [];
       const isEmpty = products.length === 0;
       setIsStoreEmpty(isEmpty);
       setHasCheckedEmpty(true);
-      
+
       if (isEmpty) {
-        const isOwner = loggedInUser?.role === "OWNER" || loggedInUser?.role === "MANAGER";
+        const isOwner =
+          loggedInUser?.role === "OWNER" || loggedInUser?.role === "MANAGER";
         Alert.alert(
           "Kho hàng trống",
           isOwner
@@ -939,7 +1060,7 @@ const OrderPOSHomeScreen: React.FC = () => {
       console.error("Lỗi kiểm tra kho hàng:", error);
     }
   }, [storeId, authHeaders, loggedInUser]);
-  
+
   // ===== Cart Functions =====
   const updateOrderTab = useCallback(
     (updater: (tab: OrderTab) => void, key = activeTab) => {
@@ -954,24 +1075,24 @@ const OrderPOSHomeScreen: React.FC = () => {
     },
     [activeTab]
   );
-  
+
   const resetCurrentTab = useCallback(() => {
     updateOrderTab((tab) => {
-      const defaultEmployeeId = currentUserEmployee?.isOwner 
-        ? null 
+      const defaultEmployeeId = currentUserEmployee?.isOwner
+        ? null
         : currentUserEmployee?._id || null;
-      
+
       const fresh = makeEmptyTab(tab.key, defaultEmployeeId);
       Object.assign(tab, fresh);
     });
-    
+
     setPhoneInput("");
     setFoundCustomers([]);
     setShowCustomerDropdown(false);
     setSearchProduct("");
     setSearchedProducts([]);
     setShowProductDropdown(false);
-    
+
     // Clear saved cart
     (async () => {
       try {
@@ -981,51 +1102,56 @@ const OrderPOSHomeScreen: React.FC = () => {
       }
     })();
   }, [updateOrderTab, currentUserEmployee, storeId, loggedInUser]);
-  
+
   const addNewOrderTab = useCallback(() => {
     const maxKey = orders.reduce(
       (m, t) => Math.max(m, parseInt(t.key, 10) || 0),
       0
     );
     const newKey = String(maxKey + 1);
-    const defaultEmployeeId = currentUserEmployee?.isOwner 
-      ? null 
+    const defaultEmployeeId = currentUserEmployee?.isOwner
+      ? null
       : currentUserEmployee?._id || null;
-    
+
     setOrders((prev) => [...prev, makeEmptyTab(newKey, defaultEmployeeId)]);
     setActiveTab(newKey);
   }, [orders, currentUserEmployee]);
-  
-  const removeOrderTab = useCallback((key: string) => {
-    if (orders.length <= 1) return;
-    
-    setOrders((prev) => {
-      const next = prev.filter((t) => t.key !== key);
-      const nextActive = activeTab === key ? next[0]?.key : activeTab;
-      if (nextActive) setActiveTab(nextActive);
-      return next;
-    });
-  }, [orders, activeTab]);
-  
+
+  const removeOrderTab = useCallback(
+    (key: string) => {
+      if (orders.length <= 1) return;
+
+      setOrders((prev) => {
+        const next = prev.filter((t) => t.key !== key);
+        const nextActive = activeTab === key ? next[0]?.key : activeTab;
+        if (nextActive) setActiveTab(nextActive);
+        return next;
+      });
+    },
+    [orders, activeTab]
+  );
+
   const getAvailableStock = useCallback((product: Product) => {
     if (!product.batches || product.batches.length === 0) {
       return product.stock_quantity;
     }
-    
+
     const available = product.batches.reduce((sum: number, b: ProductBatch) => {
-      const isExpired = !!(b.expiry_date && new Date(b.expiry_date) < new Date());
+      const isExpired = !!(
+        b.expiry_date && new Date(b.expiry_date) < new Date()
+      );
       return isExpired ? sum : sum + (b.quantity || 0);
     }, 0);
-    
+
     return available;
   }, []);
-  
+
   const searchProductDebounced = useMemo(
     () =>
       debounce(async (query: string) => {
         const sid = storeIdRef.current;
         const headers = authHeadersRef.current;
-        
+
         const q = query.trim();
         if (!sid || q.length < 1) {
           setProductSearchLoading(false);
@@ -1033,16 +1159,16 @@ const OrderPOSHomeScreen: React.FC = () => {
           setSearchedProducts([]);
           return;
         }
-        
+
         setProductSearchLoading(true);
         setProductSearchError(null);
-        
+
         try {
           const res: any = await apiClient.get(`/products/search`, {
             params: { query: q, storeId: sid },
             headers,
           });
-          
+
           const list = res?.data?.products || [];
           setSearchedProducts(Array.isArray(list) ? list : []);
         } catch (e: any) {
@@ -1056,190 +1182,211 @@ const OrderPOSHomeScreen: React.FC = () => {
       }, 300),
     []
   );
-  
+
   useEffect(() => {
     searchProductDebounced(searchProduct);
   }, [searchProduct, searchProductDebounced]);
-  
-  const addToCart = useCallback((product: Product) => {
-    const availableStock = getAvailableStock(product);
-    
-    if (availableStock <= 0) {
-      const hasExpired = product.batches && product.batches.some(
-        (b) => b.expiry_date && new Date(b.expiry_date) < new Date()
-      );
-      
-      Alert.alert(
-        hasExpired ? "Hàng hết hạn" : "Hết hàng",
-        hasExpired
-          ? `Sản phẩm "${product.name}" chỉ còn lô đã hết hạn.`
-          : `Sản phẩm "${product.name}" đã hết hàng.`
-      );
-      return;
-    }
-    
-    // Select best batch (FEFO)
-    let selectedBatchId: string | null = null;
-    let selectedBatchName: string | null = null;
-    let selectedBatchExpiry: string | null = null;
-    
-    if (product.batches && product.batches.length > 0) {
-      const now = new Date();
-      const validBatches = product.batches.filter(b => {
-        const isExpired = b.expiry_date && new Date(b.expiry_date) < now;
-        return (b.quantity || 0) > 0 && !isExpired;
-      });
-      
-      if (validBatches.length > 0) {
-        // Sort by expiry date (nearest first)
-        validBatches.sort((a, b) => {
-          if (a.expiry_date && b.expiry_date) {
-            return new Date(a.expiry_date).getTime() - new Date(b.expiry_date).getTime();
-          }
-          if (a.expiry_date) return -1;
-          if (b.expiry_date) return 1;
-          return 0;
+
+  const addToCart = useCallback(
+    (product: Product) => {
+      const availableStock = getAvailableStock(product);
+
+      if (availableStock <= 0) {
+        const hasExpired =
+          product.batches &&
+          product.batches.some(
+            (b) => b.expiry_date && new Date(b.expiry_date) < new Date()
+          );
+
+        Alert.alert(
+          hasExpired ? "Hàng hết hạn" : "Hết hàng",
+          hasExpired
+            ? `Sản phẩm "${product.name}" chỉ còn lô đã hết hạn.`
+            : `Sản phẩm "${product.name}" đã hết hàng.`
+        );
+        return;
+      }
+
+      // Select best batch (FEFO)
+      let selectedBatchId: string | null = null;
+      let selectedBatchName: string | null = null;
+      let selectedBatchExpiry: string | null = null;
+
+      if (product.batches && product.batches.length > 0) {
+        const now = new Date();
+        const validBatches = product.batches.filter((b) => {
+          const isExpired = b.expiry_date && new Date(b.expiry_date) < now;
+          return (b.quantity || 0) > 0 && !isExpired;
         });
-        
-        const bestBatch = validBatches[0];
-        selectedBatchId = bestBatch.batch_no;
-        selectedBatchName = bestBatch.batch_no;
-        selectedBatchExpiry = bestBatch.expiry_date;
-      }
-    }
-    
-    const priceNum = getPriceNumber(product.price);
-    
-    updateOrderTab((tab) => {
-      let existingIndex = -1;
-      
-      if (selectedBatchId) {
-        existingIndex = tab.cart.findIndex(
-          (item) => item.productId === product._id && item.batchId === selectedBatchId
-        );
-      } else {
-        existingIndex = tab.cart.findIndex(
-          (item) => item.productId === product._id && !item.batchId
-        );
-      }
-      
-      if (existingIndex !== -1) {
-        const existing = tab.cart[existingIndex];
-        const newQty = existing.quantity + 1;
-        
-        if (newQty > availableStock) {
-          Alert.alert("Vượt tồn kho", `Chỉ còn ${availableStock} sản phẩm.`);
-          return;
+
+        if (validBatches.length > 0) {
+          // Sort by expiry date (nearest first)
+          validBatches.sort((a, b) => {
+            if (a.expiry_date && b.expiry_date) {
+              return (
+                new Date(a.expiry_date).getTime() -
+                new Date(b.expiry_date).getTime()
+              );
+            }
+            if (a.expiry_date) return -1;
+            if (b.expiry_date) return 1;
+            return 0;
+          });
+
+          const bestBatch = validBatches[0];
+          selectedBatchId = bestBatch.batch_no;
+          selectedBatchName = bestBatch.batch_no;
+          selectedBatchExpiry = bestBatch.expiry_date;
         }
-        
-        const newCart = [...tab.cart];
-        newCart[existingIndex] = {
-          ...existing,
-          quantity: newQty,
-          subtotal: (newQty * getItemUnitPrice(existing)).toFixed(2),
-        };
-        tab.cart = newCart;
-      } else {
-        tab.cart = [
-          ...tab.cart,
-          {
-            productId: product._id,
-            name: product.name,
-            sku: product.sku,
-            image: product.image,
-            price: product.price,
-            cost_price: product.cost_price,
-            unit: product.unit,
-            tax_rate: product.tax_rate,
-            quantity: 1,
-            overridePrice: null,
-            saleType: "NORMAL",
-            subtotal: priceNum.toFixed(2),
-            stock_quantity: availableStock,
-            batchId: selectedBatchId,
-            batchCode: selectedBatchName,
-            expiryDate: selectedBatchExpiry,
-          },
-        ];
       }
-    });
-    
-    setSearchProduct("");
-    setSearchedProducts([]);
-    setShowProductDropdown(false);
-    Keyboard.dismiss();
-  }, [updateOrderTab, getAvailableStock]);
-  
-  const updateQuantity = useCallback((id: string, batchId: string | null | undefined, qty: number) => {
-    updateOrderTab((tab) => {
-      const isMatch = (i: CartItem) => 
-        i.productId === id && ((!batchId && !i.batchId) || (batchId && i.batchId === batchId));
-      
-      const item = tab.cart.find(isMatch);
-      if (!item) return;
-      
-      if (qty <= 0) {
-        tab.cart = tab.cart.filter((i) => !isMatch(i));
-      } else {
-        const maxStock = item.stock_quantity ?? 
-          searchedProducts.find((p) => p._id === id)?.stock_quantity ?? 
-          9999;
-        
-        if (qty > maxStock) {
-          Alert.alert("Vượt tồn kho", `"${item.name}" chỉ còn ${maxStock} sản phẩm.`);
-          const cappedQty = maxStock;
+
+      const priceNum = getPriceNumber(product.price);
+
+      updateOrderTab((tab) => {
+        let existingIndex = -1;
+
+        if (selectedBatchId) {
+          existingIndex = tab.cart.findIndex(
+            (item) =>
+              item.productId === product._id && item.batchId === selectedBatchId
+          );
+        } else {
+          existingIndex = tab.cart.findIndex(
+            (item) => item.productId === product._id && !item.batchId
+          );
+        }
+
+        if (existingIndex !== -1) {
+          const existing = tab.cart[existingIndex];
+          const newQty = existing.quantity + 1;
+
+          if (newQty > availableStock) {
+            Alert.alert("Vượt tồn kho", `Chỉ còn ${availableStock} sản phẩm.`);
+            return;
+          }
+
+          const newCart = [...tab.cart];
+          newCart[existingIndex] = {
+            ...existing,
+            quantity: newQty,
+            subtotal: (newQty * getItemUnitPrice(existing)).toFixed(2),
+          };
+          tab.cart = newCart;
+        } else {
+          tab.cart = [
+            ...tab.cart,
+            {
+              productId: product._id,
+              name: product.name,
+              sku: product.sku,
+              image: product.image,
+              price: product.price,
+              cost_price: product.cost_price,
+              unit: product.unit,
+              tax_rate: product.tax_rate,
+              quantity: 1,
+              overridePrice: null,
+              saleType: "NORMAL",
+              subtotal: priceNum.toFixed(2),
+              stock_quantity: availableStock,
+              batchId: selectedBatchId,
+              batchCode: selectedBatchName,
+              expiryDate: selectedBatchExpiry,
+            },
+          ];
+        }
+      });
+
+      setSearchProduct("");
+      setSearchedProducts([]);
+      setShowProductDropdown(false);
+      Keyboard.dismiss();
+    },
+    [updateOrderTab, getAvailableStock]
+  );
+
+  const updateQuantity = useCallback(
+    (id: string, batchId: string | null | undefined, qty: number) => {
+      updateOrderTab((tab) => {
+        const isMatch = (i: CartItem) =>
+          i.productId === id &&
+          ((!batchId && !i.batchId) || (batchId && i.batchId === batchId));
+
+        const item = tab.cart.find(isMatch);
+        if (!item) return;
+
+        if (qty <= 0) {
+          tab.cart = tab.cart.filter((i) => !isMatch(i));
+        } else {
+          const maxStock =
+            item.stock_quantity ??
+            searchedProducts.find((p) => p._id === id)?.stock_quantity ??
+            9999;
+
+          if (qty > maxStock) {
+            Alert.alert(
+              "Vượt tồn kho",
+              `"${item.name}" chỉ còn ${maxStock} sản phẩm.`
+            );
+            const cappedQty = maxStock;
+            tab.cart = tab.cart.map((i) =>
+              isMatch(i)
+                ? {
+                    ...i,
+                    quantity: cappedQty,
+                    subtotal: (getItemUnitPrice(i) * cappedQty).toFixed(2),
+                  }
+                : i
+            );
+            return;
+          }
+
           tab.cart = tab.cart.map((i) =>
             isMatch(i)
               ? {
                   ...i,
-                  quantity: cappedQty,
-                  subtotal: (getItemUnitPrice(i) * cappedQty).toFixed(2),
+                  quantity: qty,
+                  subtotal: (getItemUnitPrice(i) * qty).toFixed(2),
                 }
               : i
           );
-          return;
         }
-        
-        tab.cart = tab.cart.map((i) =>
-          isMatch(i)
-            ? {
-                ...i,
-                quantity: qty,
-                subtotal: (getItemUnitPrice(i) * qty).toFixed(2),
-              }
-            : i
-        );
-      }
-    });
-  }, [updateOrderTab, searchedProducts]);
-  
-  const removeItem = useCallback((productId: string, batchId: string | null | undefined) => {
-    updateOrderTab((tab) => {
-      const isMatch = (i: CartItem) => 
-        i.productId === productId && ((!batchId && !i.batchId) || (batchId && i.batchId === batchId));
-      tab.cart = tab.cart.filter((i) => !isMatch(i));
-    });
-  }, [updateOrderTab]);
-  
+      });
+    },
+    [updateOrderTab, searchedProducts]
+  );
+
+  const removeItem = useCallback(
+    (productId: string, batchId: string | null | undefined) => {
+      updateOrderTab((tab) => {
+        const isMatch = (i: CartItem) =>
+          i.productId === productId &&
+          ((!batchId && !i.batchId) || (batchId && i.batchId === batchId));
+        tab.cart = tab.cart.filter((i) => !isMatch(i));
+      });
+    },
+    [updateOrderTab]
+  );
+
   // ===== Customer Functions =====
   const searchCustomerDebounced = useMemo(
     () =>
       debounce(async (phone: string) => {
         const sid = storeIdRef.current;
         const headers = authHeadersRef.current;
-        
+
         const p = phone.trim();
         if (!sid || p.length < 3) {
           setFoundCustomers([]);
           return;
         }
-        
+
         try {
           const res: any = await apiClient.get(`/customers/search`, {
             params: { query: p, storeId: sid },
             headers,
           });
-          
+
           const list = res?.data?.customers || [];
           setFoundCustomers(Array.isArray(list) ? list : []);
         } catch {
@@ -1251,63 +1398,70 @@ const OrderPOSHomeScreen: React.FC = () => {
       }, 300),
     []
   );
-  
-  const onChangePhoneInput = useCallback((val: string) => {
-    setPhoneInput(val);
-    
-    if (!val.trim()) {
-      setFoundCustomers([]);
+
+  const onChangePhoneInput = useCallback(
+    (val: string) => {
+      setPhoneInput(val);
+
+      if (!val.trim()) {
+        setFoundCustomers([]);
+        updateOrderTab((t) => {
+          t.customer = null;
+          t.usedPoints = 0;
+          t.usedPointsEnabled = false;
+        });
+        return;
+      }
+
+      setShowCustomerDropdown(true);
+      searchCustomerDebounced(val);
+    },
+    [updateOrderTab, searchCustomerDebounced]
+  );
+
+  const selectCustomer = useCallback(
+    (c: Customer) => {
       updateOrderTab((t) => {
-        t.customer = null;
+        t.customer = c;
         t.usedPoints = 0;
         t.usedPointsEnabled = false;
       });
-      return;
-    }
-    
-    setShowCustomerDropdown(true);
-    searchCustomerDebounced(val);
-  }, [updateOrderTab, searchCustomerDebounced]);
-  
-  const selectCustomer = useCallback((c: Customer) => {
-    updateOrderTab((t) => {
-      t.customer = c;
-      t.usedPoints = 0;
-      t.usedPointsEnabled = false;
-    });
-    
-    setPhoneInput(c.phone);
-    setFoundCustomers([]);
-    setShowCustomerDropdown(false);
-  }, [updateOrderTab]);
-  
+
+      setPhoneInput(c.phone);
+      setFoundCustomers([]);
+      setShowCustomerDropdown(false);
+    },
+    [updateOrderTab]
+  );
+
   const createCustomer = useCallback(async () => {
     if (!storeId) return;
-    
+
     const name = newCustomerName.trim();
     const phone = newCustomerPhone.trim();
-    
+
     if (!name || !phone) {
       Alert.alert("Thiếu thông tin", "Vui lòng nhập tên và số điện thoại");
       return;
     }
-    
+
     try {
       const res: any = await apiClient.post(
         `/customers`,
         { storeId, name, phone, email: newCustomerEmail || undefined },
         { headers: authHeaders }
       );
-      
-      const created: Customer = res?.data?.customer || res?.data?.data?.customer || res?.data;
+
+      const created: Customer =
+        res?.data?.customer || res?.data?.data?.customer || res?.data;
       if (!created?._id) throw new Error("Tạo khách hàng thất bại");
-      
+
       selectCustomer(created);
       setNewCustomerModal(false);
       setNewCustomerName("");
       setNewCustomerPhone("");
       setNewCustomerEmail("");
-      
+
       Alert.alert("Thành công", "Đã tạo khách hàng mới");
     } catch (e: any) {
       Alert.alert(
@@ -1315,20 +1469,28 @@ const OrderPOSHomeScreen: React.FC = () => {
         e?.response?.data?.message || "Không thể tạo khách hàng"
       );
     }
-  }, [storeId, newCustomerName, newCustomerPhone, newCustomerEmail, authHeaders, selectCustomer]);
-  
+  }, [
+    storeId,
+    newCustomerName,
+    newCustomerPhone,
+    newCustomerEmail,
+    authHeaders,
+    selectCustomer,
+  ]);
+
   // ===== Order Functions =====
   const createOrder = useCallback(async () => {
     if (!storeId) return;
-    
+
     if (currentTab.cart.length === 0) {
       Alert.alert("Giỏ hàng trống", "Vui lòng thêm sản phẩm vào giỏ");
       return;
     }
-    
-    const sendEmployeeId = currentTab.employeeId === "virtual-owner" ? null : currentTab.employeeId;
+
+    const sendEmployeeId =
+      currentTab.employeeId === "virtual-owner" ? null : currentTab.employeeId;
     setLoading(true);
-    
+
     try {
       const items = currentTab.cart.map((item) => ({
         productId: item.productId,
@@ -1338,7 +1500,7 @@ const OrderPOSHomeScreen: React.FC = () => {
           ? { customPrice: item.overridePrice }
           : {}),
       }));
-      
+
       const payload: any = {
         storeId,
         employeeId: sendEmployeeId,
@@ -1352,14 +1514,14 @@ const OrderPOSHomeScreen: React.FC = () => {
         totalAmount,
         grossAmount: subtotal + vatAmount,
       };
-      
+
       if (currentTab.customer) {
         payload.customerInfo = {
           phone: currentTab.customer.phone,
           name: currentTab.customer.name,
         };
       }
-      
+
       if (currentTab.isVAT) {
         payload.vatInfo = {
           companyName: currentTab.companyName,
@@ -1367,26 +1529,44 @@ const OrderPOSHomeScreen: React.FC = () => {
           companyAddress: currentTab.companyAddress,
         };
       }
-      
+
       if (currentTab.usedPointsEnabled && currentTab.usedPoints > 0) {
         payload.usedPoints = currentTab.usedPoints;
       }
-      
+
       const res: any = await apiClient.post<OrderResponse>(`/orders`, payload, {
         headers: authHeaders,
       });
-      
+
       const order = res?.data?.order;
       const orderId = order?._id;
       if (!orderId) throw new Error("Không lấy được orderId");
-      
+
+      // [FEEDBACK] Show notification immediately
+      try {
+        const msg = `Đơn #${order?.orderCode || order?._id?.slice(-6) || "..."} - ${formatPrice(totalAmount)}`;
+        // notificationService.showToast removed as requested
+        notificationService.scheduleLocalNotification(
+          {
+            type: "order",
+            title: "Đơn hàng mới",
+            message: msg,
+            data: { orderId: order?._id },
+          },
+          null
+        );
+      } catch (e) {
+        console.warn("Notification trigger failed", e);
+      }
+
       updateOrderTab((tab) => {
         tab.pendingOrderId = orderId;
         tab.orderCreatedAt = order?.createdAt || "";
-        tab.orderPrintCount = typeof order?.printCount === "number" ? order.printCount : 0;
+        tab.orderPrintCount =
+          typeof order?.printCount === "number" ? order.printCount : 0;
         tab.orderEarnedPoints = order?.earnedPoints ?? 0;
         tab.orderCreatedPaymentMethod = currentTab.paymentMethod;
-        
+
         if (currentTab.paymentMethod === "qr" && res?.data?.qrDataURL) {
           tab.qrImageUrl = res.data.qrDataURL;
           tab.savedQrImageUrl = res.data.qrDataURL;
@@ -1399,7 +1579,7 @@ const OrderPOSHomeScreen: React.FC = () => {
             : null;
         }
       });
-      
+
       if (currentTab.paymentMethod === "cash") {
         // Tiền mặt: Chỉ thông báo đơn hàng đã tạo, mở modal để xác nhận thanh toán/in
         // Alert.alert("Thành công", "Đã tạo đơn hàng chờ thanh toán.", [
@@ -1412,8 +1592,9 @@ const OrderPOSHomeScreen: React.FC = () => {
         setQrModal(true);
       }
     } catch (err: any) {
-      const errorMessage = err?.response?.data?.message || err?.message || "Lỗi tạo đơn";
-      
+      const errorMessage =
+        err?.response?.data?.message || err?.message || "Lỗi tạo đơn";
+
       if (currentTab.paymentMethod === "qr" && errorMessage.includes("PayOS")) {
         Alert.alert(
           "Chưa tích hợp thanh toán",
@@ -1436,38 +1617,54 @@ const OrderPOSHomeScreen: React.FC = () => {
     subtotal,
     updateOrderTab,
   ]);
-  
+
   const confirmPaidCash = useCallback(async () => {
     if (!currentTab.pendingOrderId) {
       Alert.alert("Lỗi", "Không tìm thấy đơn hàng");
       return;
     }
-    
+
     try {
       await apiClient.post(
         `/orders/${currentTab.pendingOrderId}/set-paid-cash`,
         {},
         { headers: authHeaders }
       );
-      
+
+      // [FEEDBACK] Payment success notification
+      try {
+        const msg = `Đơn hàng đã thanh toán thành công`;
+        // notificationService.showToast removed as requested
+        notificationService.scheduleLocalNotification(
+          {
+            type: "payment",
+            title: "Thanh toán thành công",
+            message: msg,
+          },
+          null
+        );
+      } catch (e) {
+        console.warn("Notification trigger failed", e);
+      }
+
       Alert.alert(
         "Thành công",
         "Đã xác nhận thanh toán. Bạn có muốn in hóa đơn không?",
         [
-          { 
-            text: "Không", 
-            style: "cancel", 
+          {
+            text: "Không",
+            style: "cancel",
             onPress: () => {
               setBillModal(false);
               setQrModal(false);
               resetCurrentTab();
-            } 
+            },
           },
-          { 
-            text: "In hóa đơn", 
+          {
+            text: "In hóa đơn",
             onPress: () => {
               triggerPrint(currentTab.pendingOrderId!, true);
-            } 
+            },
           },
         ]
       );
@@ -1478,199 +1675,220 @@ const OrderPOSHomeScreen: React.FC = () => {
       );
     }
   }, [currentTab.pendingOrderId, authHeaders]);
-  
-  const triggerPrint = useCallback(async (orderIdInput: string, shouldReset: boolean = false) => {
-    if (isPrinting) return;
-    
-    setIsPrinting(true);
-    
-    try {
-      // 1. Lấy thông tin chi tiết đơn hàng để in
-      // Nếu là pending order hiện tại, dùng luôn dữ liệu hiện tại
-      // Nhưng tốt nhất nên gọi API lấy dữ liệu chuẩn từ server để đảm bảo chính xác (số lần in, ngày tạo, v.v.)
-      
-      let printData: any = null;
-      
-      // Check if we can use currentTab data if it matches
-      if (currentTab.pendingOrderId === orderIdInput) {
-        // Prepare local data
+
+  const triggerPrint = useCallback(
+    async (orderIdInput: string, shouldReset: boolean = false) => {
+      if (isPrinting) return;
+
+      setIsPrinting(true);
+
+      try {
+        // 1. Lấy thông tin chi tiết đơn hàng để in
+        // Nếu là pending order hiện tại, dùng luôn dữ liệu hiện tại
+        // Nhưng tốt nhất nên gọi API lấy dữ liệu chuẩn từ server để đảm bảo chính xác (số lần in, ngày tạo, v.v.)
+
+        let printData: any = null;
+
+        // Check if we can use currentTab data if it matches
+        if (currentTab.pendingOrderId === orderIdInput) {
+          // Prepare local data
           printData = {
             storeName: storeName || "Cửa hàng",
             storeAddress: storeInfo?.address || "",
             storePhone: storeInfo?.phone || "",
             storeTaxCode: storeInfo?.taxCode || "",
-            
+
             orderId: orderIdInput || "",
             createdAt: currentTab.orderCreatedAt || new Date(),
             employeeName: employeeLabel || "Nhân viên",
-            
+
             customerName: currentTab.customer?.name || "Khách vãng lai",
             customerPhone: currentTab.customer?.phone || "",
             companyName: currentTab.companyName || "",
             taxCode: currentTab.taxCode || "",
             companyAddress: currentTab.companyAddress || "",
-            
+
             paymentMethod: currentTab.paymentMethod || "cash",
             isVAT: !!currentTab.isVAT,
             printCount: currentTab.orderPrintCount || 0,
-            
-            items: (currentTab.cart || []).map(item => ({
+
+            items: (currentTab.cart || []).map((item) => ({
               name: item.name || "Sản phẩm",
               unit: item.unit || "",
               quantity: item.quantity || 0,
               price: getItemUnitPrice(item) || 0,
               subtotal: parseFloat(item.subtotal || "0") || 0,
             })),
-            
+
             subtotal: subtotal || 0,
             discount: discount || 0,
             vatAmount: vatAmount || 0,
             totalAmount: totalAmount || 0,
           };
-      } else {
-        // Fetch order details if local data is not available or doesn't match
-        try {
-          const res: any = await apiClient.get(`/orders/${orderIdInput}`, { headers: authHeaders });
-          const order = res?.data?.order;
-          
-          if (order) {
-            printData = {
-              storeName: storeName || "Cửa hàng",
-              storeAddress: storeInfo?.address || "",
-              storePhone: storeInfo?.phone || "",
-              storeTaxCode: storeInfo?.taxCode || "",
-              
-              orderId: order._id || orderIdInput || "",
-              createdAt: order.createdAt || new Date(),
-              employeeName: employeeLabel || "Nhân viên",
-              
-              customerName: order.customerInfo?.name || "Khách vãng lai",
-              customerPhone: order.customerInfo?.phone || "",
-              companyName: order.vatInfo?.companyName || "",
-              taxCode: order.vatInfo?.taxCode || "",
-              companyAddress: order.vatInfo?.companyAddress || "",
-              
-              paymentMethod: order.paymentMethod || "cash",
-              isVAT: !!order.isVATInvoice,
-              printCount: order.printCount || 0,
-              
-              items: (order.items || []).map((item: any) => ({
-                name: item.name || item.product?.name || "Sản phẩm",
-                unit: item.unit || item.product?.unit || "",
-                quantity: item.quantity || 0,
-                price: item.price || 0,
-                subtotal: (item.quantity || 0) * (item.price || 0),
-              })),
-              
-              subtotal: order.subTotal || order.totalAmount || 0,
-              discount: order.discountAmount || 0,
-              vatAmount: order.vatAmount || 0,
-              totalAmount: order.totalAmount || 0,
-            };
+        } else {
+          // Fetch order details if local data is not available or doesn't match
+          try {
+            const res: any = await apiClient.get(`/orders/${orderIdInput}`, {
+              headers: authHeaders,
+            });
+            const order = res?.data?.order;
+
+            if (order) {
+              printData = {
+                storeName: storeName || "Cửa hàng",
+                storeAddress: storeInfo?.address || "",
+                storePhone: storeInfo?.phone || "",
+                storeTaxCode: storeInfo?.taxCode || "",
+
+                orderId: order._id || orderIdInput || "",
+                createdAt: order.createdAt || new Date(),
+                employeeName: employeeLabel || "Nhân viên",
+
+                customerName: order.customerInfo?.name || "Khách vãng lai",
+                customerPhone: order.customerInfo?.phone || "",
+                companyName: order.vatInfo?.companyName || "",
+                taxCode: order.vatInfo?.taxCode || "",
+                companyAddress: order.vatInfo?.companyAddress || "",
+
+                paymentMethod: order.paymentMethod || "cash",
+                isVAT: !!order.isVATInvoice,
+                printCount: order.printCount || 0,
+
+                items: (order.items || []).map((item: any) => ({
+                  name: item.name || item.product?.name || "Sản phẩm",
+                  unit: item.unit || item.product?.unit || "",
+                  quantity: item.quantity || 0,
+                  price: item.price || 0,
+                  subtotal: (item.quantity || 0) * (item.price || 0),
+                })),
+
+                subtotal: order.subTotal || order.totalAmount || 0,
+                discount: order.discountAmount || 0,
+                vatAmount: order.vatAmount || 0,
+                totalAmount: order.totalAmount || 0,
+              };
+            }
+          } catch (fetchErr) {
+            console.error("Lỗi lấy thông tin đơn hàng để in:", fetchErr);
+            // throw fetchErr; // Let the main catch handle it, or handle specific error here
+            Alert.alert(
+              "Lỗi",
+              "Không thể lấy thông tin chi tiết đơn hàng để in."
+            );
+            return;
           }
-        } catch (fetchErr) {
-          console.error("Lỗi lấy thông tin đơn hàng để in:", fetchErr);
-          // throw fetchErr; // Let the main catch handle it, or handle specific error here
-          Alert.alert("Lỗi", "Không thể lấy thông tin chi tiết đơn hàng để in.");
-          return;
         }
-      }
 
-      if (printData) {
-        await printBill(printData);
-        
-        // Gọi API để server biết đã in (tăng printCount)
-        await apiClient.post(
-          `/orders/${orderIdInput}/print-bill`,
-          {},
-          { headers: authHeaders }
-        );
-        
-        // Update print count locally if needed
-        updateOrderTab(t => t.orderPrintCount = (t.orderPrintCount || 0) + 1);
+        if (printData) {
+          await printBill(printData);
 
-        if (shouldReset) {
+          // Gọi API để server biết đã in (tăng printCount)
+          await apiClient.post(
+            `/orders/${orderIdInput}/print-bill`,
+            {},
+            { headers: authHeaders }
+          );
+
+          // Update print count locally if needed
+          updateOrderTab(
+            (t) => (t.orderPrintCount = (t.orderPrintCount || 0) + 1)
+          );
+
+          if (shouldReset) {
             resetCurrentTab();
+          }
         }
+      } catch (err: any) {
+        Alert.alert("Lỗi", err?.response?.data?.message || "Lỗi in hóa đơn");
+      } finally {
+        setIsPrinting(false);
       }
-      
-    } catch (err: any) {
-      Alert.alert(
-        "Lỗi",
-        err?.response?.data?.message || "Lỗi in hóa đơn"
-      );
-    } finally {
-      setIsPrinting(false);
-    }
-  }, [
-    authHeaders, 
-    isPrinting, 
-    currentTab, 
-    storeName, 
-    storeInfo, 
-    employeeLabel, 
-    subtotal, 
-    discount, 
-    vatAmount, 
-    totalAmount,
-    vatAmount, 
-    totalAmount,
-    updateOrderTab,
-    resetCurrentTab
-  ]);
-  
+    },
+    [
+      authHeaders,
+      isPrinting,
+      currentTab,
+      storeName,
+      storeInfo,
+      employeeLabel,
+      subtotal,
+      discount,
+      vatAmount,
+      totalAmount,
+      vatAmount,
+      totalAmount,
+      updateOrderTab,
+      resetCurrentTab,
+    ]
+  );
+
   // ===== UI Helpers =====
-  const openPriceModal = useCallback((record: CartItem) => {
-    const realItem = currentTab.cart.find((i) => 
-      i.productId === record.productId && 
-      ((record.batchId && i.batchId === record.batchId) || (!record.batchId && !i.batchId))
-    ) || record;
-    
-    setPriceEditModal({
-      visible: true,
-      item: realItem,
-      tempSaleType: realItem.saleType || "NORMAL",
-      tempOverridePrice: realItem.overridePrice ?? null,
-    });
-  }, [currentTab.cart]);
-  
+  const openPriceModal = useCallback(
+    (record: CartItem) => {
+      const realItem =
+        currentTab.cart.find(
+          (i) =>
+            i.productId === record.productId &&
+            ((record.batchId && i.batchId === record.batchId) ||
+              (!record.batchId && !i.batchId))
+        ) || record;
+
+      setPriceEditModal({
+        visible: true,
+        item: realItem,
+        tempSaleType: realItem.saleType || "NORMAL",
+        tempOverridePrice: realItem.overridePrice ?? null,
+      });
+    },
+    [currentTab.cart]
+  );
+
   const applyPriceEdit = useCallback(() => {
     if (!priceEditModal.item || !priceEditModal.tempSaleType) return;
-    
+
     const item = priceEditModal.item;
     const st = priceEditModal.tempSaleType;
     let override: number | null = priceEditModal.tempOverridePrice ?? null;
-    
+
     if (st === "NORMAL") override = null;
     if (st === "FREE") override = 0;
-    if (st === "AT_COST") override = getPriceNumber(item.cost_price || item.price);
-    
-    const finalUnit = st === "NORMAL"
-      ? getPriceNumber(item.price)
-      : (override ?? getPriceNumber(item.price));
+    if (st === "AT_COST")
+      override = getPriceNumber(item.cost_price || item.price);
+
+    const finalUnit =
+      st === "NORMAL"
+        ? getPriceNumber(item.price)
+        : (override ?? getPriceNumber(item.price));
     const newSubtotal = (finalUnit * item.quantity).toFixed(2);
-    
+
     updateOrderTab((tab) => {
       tab.cart = tab.cart.map((i) => {
-        const isMatch = i.productId === item.productId && 
-          ((item.batchId && i.batchId === item.batchId) || (!item.batchId && !i.batchId));
+        const isMatch =
+          i.productId === item.productId &&
+          ((item.batchId && i.batchId === item.batchId) ||
+            (!item.batchId && !i.batchId));
         return isMatch
-          ? { ...i, saleType: st, overridePrice: override, subtotal: newSubtotal }
+          ? {
+              ...i,
+              saleType: st,
+              overridePrice: override,
+              subtotal: newSubtotal,
+            }
           : i;
       });
     });
-    
+
     setPriceEditModal({ visible: false });
   }, [priceEditModal, updateOrderTab]);
-  
+
   const computeTempUnitPrice = useCallback(() => {
     const item = priceEditModal.item;
     if (!item) return 0;
-    
+
     const st = priceEditModal.tempSaleType || "NORMAL";
     if (st === "FREE") return 0;
     if (st === "AT_COST") return getPriceNumber(item.cost_price || item.price);
-    
+
     if (
       priceEditModal.tempOverridePrice !== null &&
       priceEditModal.tempOverridePrice !== undefined
@@ -1679,37 +1897,40 @@ const OrderPOSHomeScreen: React.FC = () => {
     }
     return getPriceNumber(item.price);
   }, [priceEditModal]);
-  
-  const handleNumpadPress = useCallback((val: string) => {
-    updateOrderTab((t) => {
-      let currentStr = String(t.cashReceived || 0);
-      if (currentStr === "0") currentStr = "";
-      
-      if (val === "C") {
-        t.cashReceived = 0;
-        return;
-      }
-      
-      if (val === "BACK") {
-        const newStr = currentStr.slice(0, -1);
-        t.cashReceived = newStr ? parseInt(newStr) : 0;
-        return;
-      }
-      
-      let nextStr = currentStr;
-      if (val === "000") {
-        if (currentStr.length === 0) return;
-        nextStr += "000";
-      } else {
-        nextStr += val;
-      }
-      
-      if (nextStr.length > 11) return;
-      
-      t.cashReceived = parseInt(nextStr);
-    });
-  }, [updateOrderTab]);
-  
+
+  const handleNumpadPress = useCallback(
+    (val: string) => {
+      updateOrderTab((t) => {
+        let currentStr = String(t.cashReceived || 0);
+        if (currentStr === "0") currentStr = "";
+
+        if (val === "C") {
+          t.cashReceived = 0;
+          return;
+        }
+
+        if (val === "BACK") {
+          const newStr = currentStr.slice(0, -1);
+          t.cashReceived = newStr ? parseInt(newStr) : 0;
+          return;
+        }
+
+        let nextStr = currentStr;
+        if (val === "000") {
+          if (currentStr.length === 0) return;
+          nextStr += "000";
+        } else {
+          nextStr += val;
+        }
+
+        if (nextStr.length > 11) return;
+
+        t.cashReceived = parseInt(nextStr);
+      });
+    },
+    [updateOrderTab]
+  );
+
   // Polling check QR Payment (Auto like Web)
   useEffect(() => {
     const orderCode = currentTab.qrPayload;
@@ -1727,13 +1948,13 @@ const OrderPOSHomeScreen: React.FC = () => {
 
     const checkPayment = async () => {
       if (!storeId || !orderCode) return;
-      
+
       try {
         const res: any = await apiClient.get(
           `/orders/pos/payment-status/${orderCode}`,
-          { 
+          {
             params: { storeId },
-            headers: authHeaders 
+            headers: authHeaders,
           }
         );
 
@@ -1755,14 +1976,14 @@ const OrderPOSHomeScreen: React.FC = () => {
             "Thành công",
             "Đã nhận thanh toán QR! Bạn có muốn in hóa đơn không?",
             [
-              { 
-                text: "Không", 
+              {
+                text: "Không",
                 style: "cancel",
                 onPress: () => {
                   setQrModal(false);
                   setBillModal(false);
                   resetCurrentTab();
-                }
+                },
               },
               {
                 text: "In hóa đơn",
@@ -1793,32 +2014,32 @@ const OrderPOSHomeScreen: React.FC = () => {
     storeId,
     authHeaders,
     updateOrderTab,
-    triggerPrint
+    triggerPrint,
   ]);
 
   // ===== Animation Values =====
   const HEADER_MAX = 180;
   const HEADER_MIN = 90;
   const SCROLL_DISTANCE = HEADER_MAX - HEADER_MIN;
-  
+
   const headerHeight = scrollY.interpolate({
     inputRange: [0, SCROLL_DISTANCE],
     outputRange: [HEADER_MAX, HEADER_MIN],
     extrapolate: "clamp",
   });
-  
+
   const headerTranslateY = scrollY.interpolate({
     inputRange: [0, SCROLL_DISTANCE],
     outputRange: [0, -40],
     extrapolate: "clamp",
   });
-  
+
   const headerOpacity = scrollY.interpolate({
     inputRange: [0, SCROLL_DISTANCE / 2],
     outputRange: [1, 0],
     extrapolate: "clamp",
   });
-  
+
   // ===== Loading State =====
   if (loadingInit) {
     return (
@@ -1831,26 +2052,31 @@ const OrderPOSHomeScreen: React.FC = () => {
       </SafeAreaView>
     );
   }
-  
+
   // ===== Cart Item Component =====
   const CartItemRow = React.memo(({ item }: { item: CartItem }) => {
     const unitPrice = getItemUnitPrice(item);
     const amount = unitPrice * item.quantity;
-    const isCustom = (item.saleType && item.saleType !== "NORMAL") || item.overridePrice !== null;
-    
+    const isCustom =
+      (item.saleType && item.saleType !== "NORMAL") ||
+      item.overridePrice !== null;
+
     return (
       <Card style={styles.cartItemCard}>
         <View style={styles.cartItemHeader}>
           <View style={styles.cartItemImageContainer}>
             {item.image?.url ? (
-              <Image source={{ uri: item.image.url }} style={styles.cartItemImage} />
+              <Image
+                source={{ uri: item.image.url }}
+                style={styles.cartItemImage}
+              />
             ) : (
               <View style={styles.cartItemImagePlaceholder}>
                 <Ionicons name="cube-outline" size={24} color={COLORS.muted} />
               </View>
             )}
           </View>
-          
+
           <View style={styles.cartItemInfo}>
             <Text style={styles.cartItemName} numberOfLines={1}>
               {item.name}
@@ -1862,23 +2088,27 @@ const OrderPOSHomeScreen: React.FC = () => {
                 <Text style={styles.cartItemBatch}>• Lô: {item.batchCode}</Text>
               )}
             </View>
-            
+
             {item.expiryDate && (
               <Text style={styles.cartItemExpiry}>
                 HSD: {new Date(item.expiryDate).toLocaleDateString("vi-VN")}
               </Text>
             )}
-            
+
             {item.tax_rate !== undefined && item.tax_rate !== 0 && (
               <View style={styles.taxBadge}>
-                <Ionicons name="receipt-outline" size={12} color={COLORS.warning} />
+                <Ionicons
+                  name="receipt-outline"
+                  size={12}
+                  color={COLORS.warning}
+                />
                 <Text style={styles.taxText}>
                   Thuế: {item.tax_rate === -1 ? "Ko thuế" : `${item.tax_rate}%`}
                 </Text>
               </View>
             )}
           </View>
-          
+
           <TouchableOpacity
             style={styles.priceEditButton}
             onPress={() => openPriceModal(item)}
@@ -1890,7 +2120,7 @@ const OrderPOSHomeScreen: React.FC = () => {
             <Ionicons name="create-outline" size={14} color={COLORS.muted} />
           </TouchableOpacity>
         </View>
-        
+
         <View style={styles.cartItemFooter}>
           <View style={styles.quantityControls}>
             {[5, 10, 20].map((q) => (
@@ -1903,27 +2133,31 @@ const OrderPOSHomeScreen: React.FC = () => {
               </TouchableOpacity>
             ))}
           </View>
-          
+
           <View style={styles.quantityContainer}>
             <TouchableOpacity
               style={styles.quantityButton}
-              onPress={() => updateQuantity(item.productId, item.batchId, item.quantity - 1)}
+              onPress={() =>
+                updateQuantity(item.productId, item.batchId, item.quantity - 1)
+              }
             >
               <Text style={styles.quantityButtonText}>-</Text>
             </TouchableOpacity>
-            
+
             <View style={styles.quantityValueContainer}>
               <Text style={styles.quantityValue}>{item.quantity}</Text>
             </View>
-            
+
             <TouchableOpacity
               style={styles.quantityButton}
-              onPress={() => updateQuantity(item.productId, item.batchId, item.quantity + 1)}
+              onPress={() =>
+                updateQuantity(item.productId, item.batchId, item.quantity + 1)
+              }
             >
               <Text style={styles.quantityButtonText}>+</Text>
             </TouchableOpacity>
           </View>
-          
+
           <View style={styles.cartItemActions}>
             <Text style={styles.cartItemSubtotal}>{formatPrice(amount)}</Text>
             <IconButton
@@ -1937,11 +2171,11 @@ const OrderPOSHomeScreen: React.FC = () => {
       </Card>
     );
   });
-  
+
   return (
     <View style={styles.safeContainer}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
-      
+
       {/* Search Backdrop */}
       {isSearchFocused && (
         <Pressable
@@ -1953,18 +2187,25 @@ const OrderPOSHomeScreen: React.FC = () => {
           }}
         />
       )}
-      
+
       {/* Sticky Header */}
       <Animated.View style={[styles.header, { height: headerHeight }]}>
-        <Animated.View style={{ opacity: headerOpacity, transform: [{ translateY: headerTranslateY }] }}>
+        <Animated.View
+          style={{
+            opacity: headerOpacity,
+            transform: [{ translateY: headerTranslateY }],
+          }}
+        >
           <View style={styles.headerTop}>
             <View style={styles.storeInfoContainer}>
               <Text style={styles.storeName} numberOfLines={1}>
                 {storeName}
               </Text>
-              <Text style={styles.storeSubtitle}>POS • Bán hàng chuyên nghiệp</Text>
+              <Text style={styles.storeSubtitle}>
+                POS • Bán hàng chuyên nghiệp
+              </Text>
             </View>
-            
+
             <Button
               title="Reset"
               variant="ghost"
@@ -1974,7 +2215,11 @@ const OrderPOSHomeScreen: React.FC = () => {
                   "Bạn có chắc muốn reset đơn hàng hiện tại?",
                   [
                     { text: "Hủy", style: "cancel" },
-                    { text: "Reset", onPress: resetCurrentTab, style: "destructive" },
+                    {
+                      text: "Reset",
+                      onPress: resetCurrentTab,
+                      style: "destructive",
+                    },
                   ]
                 );
               }}
@@ -1982,7 +2227,7 @@ const OrderPOSHomeScreen: React.FC = () => {
               size="sm"
             />
           </View>
-          
+
           {/* Tabs */}
           <ScrollView
             horizontal
@@ -1998,11 +2243,13 @@ const OrderPOSHomeScreen: React.FC = () => {
                     style={[styles.tabButton, active && styles.tabButtonActive]}
                     onPress={() => setActiveTab(t.key)}
                   >
-                    <Text style={[styles.tabText, active && styles.tabTextActive]}>
+                    <Text
+                      style={[styles.tabText, active && styles.tabTextActive]}
+                    >
                       Đơn {t.key}
                     </Text>
                   </TouchableOpacity>
-                  
+
                   {orders.length > 1 && (
                     <TouchableOpacity
                       style={styles.tabCloseButton}
@@ -2018,22 +2265,30 @@ const OrderPOSHomeScreen: React.FC = () => {
                 </View>
               );
             })}
-            
-            <TouchableOpacity style={styles.addTabButton} onPress={addNewOrderTab}>
+
+            <TouchableOpacity
+              style={styles.addTabButton}
+              onPress={addNewOrderTab}
+            >
               <Ionicons name="add" size={24} color={COLORS.primary} />
             </TouchableOpacity>
           </ScrollView>
         </Animated.View>
-        
+
         {/* Search Section */}
         <View style={styles.searchSection}>
-          <View style={[styles.searchContainer, isSearchFocused && styles.searchContainerFocused]}>
+          <View
+            style={[
+              styles.searchContainer,
+              isSearchFocused && styles.searchContainerFocused,
+            ]}
+          >
             <Ionicons
               name="search"
               size={20}
               color={isSearchFocused ? COLORS.primary : COLORS.muted}
             />
-            
+
             <TextInput
               value={searchProduct}
               onChangeText={(text) => {
@@ -2056,7 +2311,7 @@ const OrderPOSHomeScreen: React.FC = () => {
               style={styles.searchInput}
               returnKeyType="search"
             />
-            
+
             {searchProduct.length > 0 && (
               <TouchableOpacity
                 onPress={() => {
@@ -2069,55 +2324,84 @@ const OrderPOSHomeScreen: React.FC = () => {
                 <Ionicons name="close-circle" size={20} color={COLORS.muted} />
               </TouchableOpacity>
             )}
-            
+
             <TouchableOpacity
               style={styles.searchActionButton}
-              onPress={() => Alert.alert("Thông báo", "Chức năng quét mã đang phát triển")}
+              onPress={() =>
+                Alert.alert("Thông báo", "Chức năng quét mã đang phát triển")
+              }
             >
-              <Ionicons name="barcode-outline" size={20} color={COLORS.primary} />
+              <Ionicons
+                name="barcode-outline"
+                size={20}
+                color={COLORS.primary}
+              />
             </TouchableOpacity>
           </View>
-          
+
           {/* Product Dropdown */}
           {showProductDropdown && searchedProducts.length > 0 && (
             <View style={styles.productDropdown}>
-              <ScrollView style={styles.dropdownScrollView} keyboardShouldPersistTaps="always">
+              <ScrollView
+                style={styles.dropdownScrollView}
+                keyboardShouldPersistTaps="always"
+              >
                 {searchedProducts.map((p) => {
                   const avail = getAvailableStock(p);
                   const isOut = avail <= 0;
-                  
+
                   return (
                     <TouchableOpacity
                       key={p._id}
                       onPress={() => !isOut && addToCart(p)}
                       onPressIn={() => (selectingProductRef.current = true)}
                       onPressOut={() => (selectingProductRef.current = false)}
-                      style={[styles.productItem, isOut && styles.productItemDisabled]}
+                      style={[
+                        styles.productItem,
+                        isOut && styles.productItemDisabled,
+                      ]}
                       disabled={isOut}
                     >
                       <View style={styles.productItemImageContainer}>
                         {p.image?.url ? (
-                          <Image source={{ uri: p.image.url }} style={styles.productItemImage} />
+                          <Image
+                            source={{ uri: p.image.url }}
+                            style={styles.productItemImage}
+                          />
                         ) : (
                           <View style={styles.productItemImagePlaceholder}>
-                            <Ionicons name="cube" size={20} color={COLORS.muted} />
+                            <Ionicons
+                              name="cube"
+                              size={20}
+                              color={COLORS.muted}
+                            />
                           </View>
                         )}
                       </View>
-                      
+
                       <View style={styles.productItemInfo}>
                         <Text style={styles.productItemName} numberOfLines={1}>
                           {p.name}
                         </Text>
                         <Text style={styles.productItemSku}>{p.sku}</Text>
                       </View>
-                      
+
                       <View style={styles.productItemRight}>
                         <Text style={styles.productItemPrice}>
                           {formatPrice(p.price)}
                         </Text>
-                        <View style={[styles.stockBadge, isOut && styles.stockBadgeOut]}>
-                          <Text style={[styles.stockText, isOut && styles.stockTextOut]}>
+                        <View
+                          style={[
+                            styles.stockBadge,
+                            isOut && styles.stockBadgeOut,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.stockText,
+                              isOut && styles.stockTextOut,
+                            ]}
+                          >
                             {isOut ? "Hết" : avail}
                           </Text>
                         </View>
@@ -2130,7 +2414,7 @@ const OrderPOSHomeScreen: React.FC = () => {
           )}
         </View>
       </Animated.View>
-      
+
       {/* Main Content */}
       <KeyboardAvoidingView
         style={styles.keyboardAvoidingView}
@@ -2154,7 +2438,11 @@ const OrderPOSHomeScreen: React.FC = () => {
               onPress={() => setEmployeeModal(true)}
             >
               <View style={styles.employeeIconContainer}>
-                <Ionicons name="person-outline" size={16} color={COLORS.primary} />
+                <Ionicons
+                  name="person-outline"
+                  size={16}
+                  color={COLORS.primary}
+                />
               </View>
               <View style={styles.employeeInfo}>
                 <Text style={styles.employeeLabel}>NHÂN VIÊN</Text>
@@ -2164,7 +2452,7 @@ const OrderPOSHomeScreen: React.FC = () => {
               </View>
               <Ionicons name="chevron-down" size={16} color={COLORS.muted} />
             </TouchableOpacity>
-            
+
             <View style={styles.customerInfo}>
               <View style={styles.customerIconContainer}>
                 <Ionicons name="people-outline" size={20} color={COLORS.text} />
@@ -2172,7 +2460,9 @@ const OrderPOSHomeScreen: React.FC = () => {
               <View style={styles.customerDetails}>
                 <Text style={styles.customerLabel}>KHÁCH HÀNG</Text>
                 <Text style={styles.customerName} numberOfLines={1}>
-                  {currentTab.customer ? currentTab.customer.name : "Khách vãng lai"}
+                  {currentTab.customer
+                    ? currentTab.customer.name
+                    : "Khách vãng lai"}
                 </Text>
               </View>
               <TouchableOpacity
@@ -2183,17 +2473,23 @@ const OrderPOSHomeScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
           </View>
-          
+
           {/* Loyalty Points */}
           {loyaltySetting?.isActive && currentTab.customer && (
             <View style={styles.loyaltyCard}>
               <Ionicons name="gift-outline" size={20} color={COLORS.warning} />
               <Text style={styles.loyaltyText}>
-                Có {currentTab.customer.loyaltyPoints?.toLocaleString("vi-VN") || 0} điểm
+                Có{" "}
+                {currentTab.customer.loyaltyPoints?.toLocaleString("vi-VN") ||
+                  0}{" "}
+                điểm
               </Text>
-              
+
               <TouchableOpacity
-                style={[styles.loyaltyToggle, currentTab.usedPointsEnabled && styles.loyaltyToggleActive]}
+                style={[
+                  styles.loyaltyToggle,
+                  currentTab.usedPointsEnabled && styles.loyaltyToggleActive,
+                ]}
                 onPress={() =>
                   updateOrderTab((t) => {
                     const nextState = !t.usedPointsEnabled;
@@ -2209,13 +2505,14 @@ const OrderPOSHomeScreen: React.FC = () => {
                 <Text
                   style={[
                     styles.loyaltyToggleText,
-                    currentTab.usedPointsEnabled && styles.loyaltyToggleTextActive,
+                    currentTab.usedPointsEnabled &&
+                      styles.loyaltyToggleTextActive,
                   ]}
                 >
                   {currentTab.usedPointsEnabled ? "BẬT" : "TẮT"}
                 </Text>
               </TouchableOpacity>
-              
+
               {currentTab.usedPointsEnabled && (
                 <View style={styles.pointsInputContainer}>
                   <TextInput
@@ -2231,7 +2528,9 @@ const OrderPOSHomeScreen: React.FC = () => {
                   />
                   <TouchableOpacity
                     onPress={() =>
-                      updateOrderTab((t) => (t.usedPoints = t.customer?.loyaltyPoints || 0))
+                      updateOrderTab(
+                        (t) => (t.usedPoints = t.customer?.loyaltyPoints || 0)
+                      )
                     }
                   >
                     <Text style={styles.maxPointsText}>MAX</Text>
@@ -2240,7 +2539,7 @@ const OrderPOSHomeScreen: React.FC = () => {
               )}
             </View>
           )}
-          
+
           {/* Cart Section */}
           <Section
             title="Giỏ hàng"
@@ -2258,14 +2557,16 @@ const OrderPOSHomeScreen: React.FC = () => {
             ) : (
               <FlatList
                 data={currentTab.cart}
-                keyExtractor={(i) => `${i.productId}_${i.batchId || 'nobatch'}`}
+                keyExtractor={(i) => `${i.productId}_${i.batchId || "nobatch"}`}
                 scrollEnabled={false}
                 renderItem={({ item }) => <CartItemRow item={item} />}
-                ItemSeparatorComponent={() => <View style={styles.cartItemSeparator} />}
+                ItemSeparatorComponent={() => (
+                  <View style={styles.cartItemSeparator} />
+                )}
               />
             )}
           </Section>
-          
+
           {/* Payment Section */}
           <Section title="Thanh toán" subtitle="Tổng kết đơn hàng">
             {/* Price Breakdown */}
@@ -2274,7 +2575,7 @@ const OrderPOSHomeScreen: React.FC = () => {
                 <Text style={styles.priceLabel}>Tạm tính</Text>
                 <Text style={styles.priceValue}>{formatPrice(subtotal)}</Text>
               </View>
-              
+
               {vatAmount > 0 && (
                 <View style={styles.priceRow}>
                   <Text style={[styles.priceLabel, { color: COLORS.warning }]}>
@@ -2285,7 +2586,7 @@ const OrderPOSHomeScreen: React.FC = () => {
                   </Text>
                 </View>
               )}
-              
+
               {discount > 0 && (
                 <View style={styles.priceRow}>
                   <Text style={[styles.priceLabel, { color: COLORS.success }]}>
@@ -2296,47 +2597,61 @@ const OrderPOSHomeScreen: React.FC = () => {
                   </Text>
                 </View>
               )}
-              
+
               <Divider style={styles.priceDivider} />
-              
+
               <View style={styles.totalRow}>
                 <Text style={styles.totalLabel}>THANH TOÁN</Text>
-                <Text style={styles.totalAmount}>{formatPrice(totalAmount)}</Text>
+                <Text style={styles.totalAmount}>
+                  {formatPrice(totalAmount)}
+                </Text>
               </View>
             </View>
-            
+
             {/* VAT Toggle */}
             <View style={styles.vatToggleContainer}>
               <Text style={styles.vatLabel}>Cung cấp hóa đơn VAT</Text>
               <TouchableOpacity
-                style={[styles.vatToggle, currentTab.isVAT && styles.vatToggleActive]}
+                style={[
+                  styles.vatToggle,
+                  currentTab.isVAT && styles.vatToggleActive,
+                ]}
                 onPress={() => updateOrderTab((t) => (t.isVAT = !t.isVAT))}
               >
                 <Text
-                  style={[styles.vatToggleText, currentTab.isVAT && styles.vatToggleTextActive]}
+                  style={[
+                    styles.vatToggleText,
+                    currentTab.isVAT && styles.vatToggleTextActive,
+                  ]}
                 >
                   {currentTab.isVAT ? "BẬT" : "TẮT"}
                 </Text>
               </TouchableOpacity>
             </View>
-            
+
             {currentTab.isVAT && (
               <View style={styles.vatInfoContainer}>
                 <Input
                   value={currentTab.companyName}
-                  onChangeText={(text) => updateOrderTab((t) => (t.companyName = text))}
+                  onChangeText={(text) =>
+                    updateOrderTab((t) => (t.companyName = text))
+                  }
                   placeholder="Tên công ty"
                   style={styles.vatInput}
                 />
                 <Input
                   value={currentTab.taxCode}
-                  onChangeText={(text) => updateOrderTab((t) => (t.taxCode = text))}
+                  onChangeText={(text) =>
+                    updateOrderTab((t) => (t.taxCode = text))
+                  }
                   placeholder="Mã số thuế"
                   style={styles.vatInput}
                 />
                 <Input
                   value={currentTab.companyAddress}
-                  onChangeText={(text) => updateOrderTab((t) => (t.companyAddress = text))}
+                  onChangeText={(text) =>
+                    updateOrderTab((t) => (t.companyAddress = text))
+                  }
                   placeholder="Địa chỉ"
                   multiline
                   numberOfLines={2}
@@ -2344,87 +2659,113 @@ const OrderPOSHomeScreen: React.FC = () => {
                 />
               </View>
             )}
-            
+
             {/* Payment Method */}
-            <Text style={styles.paymentMethodLabel}>Phương thức thanh toán</Text>
+            <Text style={styles.paymentMethodLabel}>
+              Phương thức thanh toán
+            </Text>
             <View style={styles.paymentMethodContainer}>
               <TouchableOpacity
                 style={[
                   styles.paymentMethodButton,
-                  currentTab.paymentMethod === "cash" && styles.paymentMethodButtonActive,
+                  currentTab.paymentMethod === "cash" &&
+                    styles.paymentMethodButtonActive,
                 ]}
-                onPress={() => updateOrderTab((t) => (t.paymentMethod = "cash"))}
+                onPress={() =>
+                  updateOrderTab((t) => (t.paymentMethod = "cash"))
+                }
               >
                 <Ionicons
                   name="cash-outline"
                   size={20}
-                  color={currentTab.paymentMethod === "cash" ? COLORS.primary : COLORS.text}
+                  color={
+                    currentTab.paymentMethod === "cash"
+                      ? COLORS.primary
+                      : COLORS.text
+                  }
                 />
                 <Text
                   style={[
                     styles.paymentMethodText,
-                    currentTab.paymentMethod === "cash" && styles.paymentMethodTextActive,
+                    currentTab.paymentMethod === "cash" &&
+                      styles.paymentMethodTextActive,
                   ]}
                 >
                   Tiền mặt
                 </Text>
               </TouchableOpacity>
-              
+
               <TouchableOpacity
                 style={[
                   styles.paymentMethodButton,
-                  currentTab.paymentMethod === "qr" && styles.paymentMethodButtonActive,
+                  currentTab.paymentMethod === "qr" &&
+                    styles.paymentMethodButtonActive,
                 ]}
                 onPress={() => updateOrderTab((t) => (t.paymentMethod = "qr"))}
               >
                 <Ionicons
                   name="qr-code-outline"
                   size={20}
-                  color={currentTab.paymentMethod === "qr" ? COLORS.primary : COLORS.text}
+                  color={
+                    currentTab.paymentMethod === "qr"
+                      ? COLORS.primary
+                      : COLORS.text
+                  }
                 />
                 <Text
                   style={[
                     styles.paymentMethodText,
-                    currentTab.paymentMethod === "qr" && styles.paymentMethodTextActive,
+                    currentTab.paymentMethod === "qr" &&
+                      styles.paymentMethodTextActive,
                   ]}
                 >
                   QR
                 </Text>
               </TouchableOpacity>
             </View>
-            
+
             {/* Cash Payment Section */}
             {currentTab.paymentMethod === "cash" && (
               <View style={styles.cashPaymentContainer}>
                 <Text style={styles.cashReceivedLabel}>Tiền khách đưa</Text>
-                
+
                 <View style={styles.cashAmountContainer}>
                   <Text style={styles.cashAmountText}>
                     {formatPrice(currentTab.cashReceived || 0)}
                   </Text>
                 </View>
-                
+
                 {/* Quick Amount Suggestions */}
                 <View style={styles.quickAmountsContainer}>
-                  {[totalAmount, 50000, 100000, 200000, 500000].map((amt, idx) => {
-                    if (amt <= 0) return null;
-                    if (idx > 0 && amt === totalAmount) return null;
-                    
-                    return (
-                      <TouchableOpacity
-                        key={idx}
-                        style={styles.quickAmountButton}
-                        onPress={() => updateOrderTab((t) => (t.cashReceived = amt))}
-                      >
-                        <Text style={styles.quickAmountText}>{formatPrice(amt)}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
+                  {[totalAmount, 50000, 100000, 200000, 500000].map(
+                    (amt, idx) => {
+                      if (amt <= 0) return null;
+                      if (idx > 0 && amt === totalAmount) return null;
+
+                      return (
+                        <TouchableOpacity
+                          key={idx}
+                          style={styles.quickAmountButton}
+                          onPress={() =>
+                            updateOrderTab((t) => (t.cashReceived = amt))
+                          }
+                        >
+                          <Text style={styles.quickAmountText}>
+                            {formatPrice(amt)}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    }
+                  )}
                 </View>
-                
+
                 {/* Numpad */}
                 <View style={styles.numpadContainer}>
-                  {[['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9']].map((row, i) => (
+                  {[
+                    ["1", "2", "3"],
+                    ["4", "5", "6"],
+                    ["7", "8", "9"],
+                  ].map((row, i) => (
                     <View key={i} style={styles.numpadRow}>
                       {row.map((n) => (
                         <TouchableOpacity
@@ -2437,45 +2778,52 @@ const OrderPOSHomeScreen: React.FC = () => {
                       ))}
                     </View>
                   ))}
-                  
+
                   <View style={styles.numpadRow}>
                     <TouchableOpacity
                       style={[styles.numpadButton, styles.numpadActionButton]}
-                      onPress={() => handleNumpadPress('C')}
+                      onPress={() => handleNumpadPress("C")}
                     >
                       <Text style={styles.numpadActionText}>XOÁ</Text>
                     </TouchableOpacity>
-                    
+
                     <TouchableOpacity
                       style={styles.numpadButton}
-                      onPress={() => handleNumpadPress('0')}
+                      onPress={() => handleNumpadPress("0")}
                     >
                       <Text style={styles.numpadButtonText}>0</Text>
                     </TouchableOpacity>
-                    
+
                     <TouchableOpacity
                       style={styles.numpadButton}
-                      onPress={() => handleNumpadPress('000')}
+                      onPress={() => handleNumpadPress("000")}
                     >
                       <Text style={styles.numpadButtonText}>000</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
-                
+
                 {/* Change Amount */}
                 <View
                   style={[
                     styles.changeContainer,
                     {
-                      backgroundColor: changeAmount >= 0 ? COLORS.successLight : COLORS.dangerLight,
-                      borderColor: changeAmount >= 0 ? COLORS.success : COLORS.danger,
+                      backgroundColor:
+                        changeAmount >= 0
+                          ? COLORS.successLight
+                          : COLORS.dangerLight,
+                      borderColor:
+                        changeAmount >= 0 ? COLORS.success : COLORS.danger,
                     },
                   ]}
                 >
                   <Text
                     style={[
                       styles.changeLabel,
-                      { color: changeAmount >= 0 ? COLORS.success : COLORS.danger },
+                      {
+                        color:
+                          changeAmount >= 0 ? COLORS.success : COLORS.danger,
+                      },
                     ]}
                   >
                     Tiền thừa
@@ -2483,7 +2831,10 @@ const OrderPOSHomeScreen: React.FC = () => {
                   <Text
                     style={[
                       styles.changeAmountText,
-                      { color: changeAmount >= 0 ? COLORS.success : COLORS.danger },
+                      {
+                        color:
+                          changeAmount >= 0 ? COLORS.success : COLORS.danger,
+                      },
                     ]}
                   >
                     {changeAmount >= 0
@@ -2491,7 +2842,7 @@ const OrderPOSHomeScreen: React.FC = () => {
                       : `-${formatPrice(Math.abs(changeAmount))}`}
                   </Text>
                 </View>
-                
+
                 {/* Confirm Cash Payment */}
                 {currentTab.pendingOrderId && !currentTab.isPaid && (
                   <Button
@@ -2505,12 +2856,12 @@ const OrderPOSHomeScreen: React.FC = () => {
               </View>
             )}
           </Section>
-          
+
           {/* Bottom Spacer */}
           <View style={styles.bottomSpacer} />
         </Animated.ScrollView>
       </KeyboardAvoidingView>
-      
+
       {/* Bottom Action Bar */}
       <View style={styles.bottomBar}>
         <View style={styles.bottomBarLeft}>
@@ -2522,44 +2873,48 @@ const OrderPOSHomeScreen: React.FC = () => {
               : "Chưa tạo đơn"}
           </Text>
         </View>
-        
+
         <View style={styles.bottomBarRight}>
           <View style={styles.paymentMethodChips}>
             <TouchableOpacity
               style={[
                 styles.paymentMethodChip,
-                currentTab.paymentMethod === "cash" && styles.paymentMethodChipActive,
+                currentTab.paymentMethod === "cash" &&
+                  styles.paymentMethodChipActive,
               ]}
               onPress={() => updateOrderTab((t) => (t.paymentMethod = "cash"))}
             >
               <Text
                 style={[
                   styles.paymentMethodChipText,
-                  currentTab.paymentMethod === "cash" && styles.paymentMethodChipTextActive,
+                  currentTab.paymentMethod === "cash" &&
+                    styles.paymentMethodChipTextActive,
                 ]}
               >
                 CASH
               </Text>
             </TouchableOpacity>
-            
+
             <TouchableOpacity
               style={[
                 styles.paymentMethodChip,
-                currentTab.paymentMethod === "qr" && styles.paymentMethodChipActive,
+                currentTab.paymentMethod === "qr" &&
+                  styles.paymentMethodChipActive,
               ]}
               onPress={() => updateOrderTab((t) => (t.paymentMethod = "qr"))}
             >
               <Text
                 style={[
                   styles.paymentMethodChipText,
-                  currentTab.paymentMethod === "qr" && styles.paymentMethodChipTextActive,
+                  currentTab.paymentMethod === "qr" &&
+                    styles.paymentMethodChipTextActive,
                 ]}
               >
                 QR
               </Text>
             </TouchableOpacity>
           </View>
-          
+
           <View style={styles.actionButtons}>
             <Button
               title="Hóa đơn"
@@ -2568,16 +2923,19 @@ const OrderPOSHomeScreen: React.FC = () => {
               onPress={() => setBillModal(true)}
               style={styles.billButton}
             />
-            
+
             <Button
-              title={loading ? "Đang xử lý..." : 
-                currentTab.pendingOrderId
-                  ? currentTab.paymentMethod === "qr"
-                    ? "Cập nhật QR"
-                    : "Cập nhật đơn"
-                  : currentTab.paymentMethod === "qr"
-                  ? "Tạo QR"
-                  : "Tạo đơn"}
+              title={
+                loading
+                  ? "Đang xử lý..."
+                  : currentTab.pendingOrderId
+                    ? currentTab.paymentMethod === "qr"
+                      ? "Cập nhật QR"
+                      : "Cập nhật đơn"
+                    : currentTab.paymentMethod === "qr"
+                      ? "Tạo QR"
+                      : "Tạo đơn"
+              }
               variant="primary"
               disabled={currentTab.cart.length === 0}
               onPress={createOrder}
@@ -2585,7 +2943,7 @@ const OrderPOSHomeScreen: React.FC = () => {
               style={styles.createOrderButton}
             />
           </View>
-          
+
           {currentTab.pendingOrderId &&
             currentTab.paymentMethod === "qr" &&
             !currentTab.qrImageUrl && (
@@ -2601,7 +2959,10 @@ const OrderPOSHomeScreen: React.FC = () => {
                     });
                     setQrModal(true);
                   } else {
-                    Alert.alert("Thông báo", "Không có QR đã lưu, vui lòng tạo QR mới.");
+                    Alert.alert(
+                      "Thông báo",
+                      "Không có QR đã lưu, vui lòng tạo QR mới."
+                    );
                   }
                 }}
                 style={styles.continueQrButton}
@@ -2610,9 +2971,9 @@ const OrderPOSHomeScreen: React.FC = () => {
             )}
         </View>
       </View>
-      
+
       {/* Modals */}
-      
+
       {/* Employee Modal */}
       <Modal
         visible={employeeModal}
@@ -2626,7 +2987,7 @@ const OrderPOSHomeScreen: React.FC = () => {
             <Text style={styles.modalSubtitle}>
               Chọn người thực hiện đơn hàng
             </Text>
-            
+
             <ScrollView style={styles.modalScrollView}>
               {currentUserEmployee?.isOwner && (
                 <TouchableOpacity
@@ -2650,7 +3011,7 @@ const OrderPOSHomeScreen: React.FC = () => {
                   <Text style={styles.employeeItemAction}>Chọn</Text>
                 </TouchableOpacity>
               )}
-              
+
               {employees.map((e) => (
                 <TouchableOpacity
                   key={e._id}
@@ -2664,7 +3025,11 @@ const OrderPOSHomeScreen: React.FC = () => {
                     <Ionicons
                       name="person-circle"
                       size={20}
-                      color={currentUserEmployee?._id === e._id ? COLORS.primary : COLORS.text}
+                      color={
+                        currentUserEmployee?._id === e._id
+                          ? COLORS.primary
+                          : COLORS.text
+                      }
                     />
                     <View style={styles.employeeItemInfo}>
                       <Text style={styles.employeeItemName}>
@@ -2678,7 +3043,7 @@ const OrderPOSHomeScreen: React.FC = () => {
                 </TouchableOpacity>
               ))}
             </ScrollView>
-            
+
             <Button
               title="Đóng"
               variant="outline"
@@ -2689,7 +3054,7 @@ const OrderPOSHomeScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
-      
+
       {/* Customer Modal */}
       <Modal
         visible={newCustomerModal}
@@ -2711,7 +3076,7 @@ const OrderPOSHomeScreen: React.FC = () => {
                   color={COLORS.muted}
                 />
               </View>
-              
+
               {/* Search */}
               <View style={styles.customerSearchContainer}>
                 <Ionicons name="search" size={20} color={COLORS.muted} />
@@ -2731,7 +3096,7 @@ const OrderPOSHomeScreen: React.FC = () => {
                   />
                 )}
               </View>
-              
+
               {/* Results */}
               <View style={styles.customerResultsContainer}>
                 {foundCustomers.length > 0 ? (
@@ -2746,14 +3111,24 @@ const OrderPOSHomeScreen: React.FC = () => {
                         }}
                       >
                         <View style={styles.customerResultContent}>
-                          <Ionicons name="person" size={20} color={COLORS.primary} />
+                          <Ionicons
+                            name="person"
+                            size={20}
+                            color={COLORS.primary}
+                          />
                           <View style={styles.customerResultInfo}>
-                            <Text style={styles.customerResultName}>{c.name}</Text>
-                            <Text style={styles.customerResultPhone}>{c.phone}</Text>
+                            <Text style={styles.customerResultName}>
+                              {c.name}
+                            </Text>
+                            <Text style={styles.customerResultPhone}>
+                              {c.phone}
+                            </Text>
                           </View>
                         </View>
                         {c._id === currentTab.customer?._id ? (
-                          <Text style={styles.customerSelectedText}>Đang chọn</Text>
+                          <Text style={styles.customerSelectedText}>
+                            Đang chọn
+                          </Text>
                         ) : (
                           <Text style={styles.customerSelectText}>Chọn</Text>
                         )}
@@ -2762,17 +3137,23 @@ const OrderPOSHomeScreen: React.FC = () => {
                   </ScrollView>
                 ) : (
                   <View style={styles.noResultsContainer}>
-                    <Ionicons name="people-outline" size={48} color={COLORS.muted} />
-                    <Text style={styles.noResultsText}>Không tìm thấy khách hàng</Text>
+                    <Ionicons
+                      name="people-outline"
+                      size={48}
+                      color={COLORS.muted}
+                    />
+                    <Text style={styles.noResultsText}>
+                      Không tìm thấy khách hàng
+                    </Text>
                   </View>
                 )}
               </View>
-              
+
               <Divider style={styles.modalDivider} />
-              
+
               {/* Create New Customer */}
               <Text style={styles.createCustomerTitle}>Tạo khách hàng mới</Text>
-              
+
               <View style={styles.createCustomerForm}>
                 <Input
                   value={newCustomerName}
@@ -2795,7 +3176,7 @@ const OrderPOSHomeScreen: React.FC = () => {
                   style={styles.customerFormInput}
                 />
               </View>
-              
+
               <Button
                 title="Tạo khách hàng"
                 variant="primary"
@@ -2807,7 +3188,7 @@ const OrderPOSHomeScreen: React.FC = () => {
           </View>
         </KeyboardAvoidingView>
       </Modal>
-      
+
       {/* QR Modal */}
       <Modal
         visible={qrModal}
@@ -2821,7 +3202,7 @@ const OrderPOSHomeScreen: React.FC = () => {
             <Text style={styles.modalSubtitle}>
               Khách hàng quét mã để thanh toán
             </Text>
-            
+
             {qrRemainingSec !== null && (
               <View style={styles.qrCountdownContainer}>
                 <Text style={styles.qrCountdownText}>
@@ -2833,7 +3214,7 @@ const OrderPOSHomeScreen: React.FC = () => {
                 </Text>
               </View>
             )}
-            
+
             <View style={styles.qrContainer}>
               {currentTab.qrImageUrl ? (
                 <Image
@@ -2845,7 +3226,7 @@ const OrderPOSHomeScreen: React.FC = () => {
                 <Text style={styles.noQrText}>Không có QR</Text>
               )}
             </View>
-            
+
             <View style={styles.modalActions}>
               <Button
                 title="Đóng"
@@ -2853,10 +3234,12 @@ const OrderPOSHomeScreen: React.FC = () => {
                 onPress={() => setQrModal(false)}
                 style={styles.modalActionButton}
               />
-              
+
               {currentTab.pendingOrderId && (
                 <Button
-                  title={currentTab.isPaid ? "In hóa đơn" : "In hóa đơn (Xác nhận)"}
+                  title={
+                    currentTab.isPaid ? "In hóa đơn" : "In hóa đơn (Xác nhận)"
+                  }
                   variant={currentTab.isPaid ? "success" : "primary"}
                   onPress={() => {
                     setQrModal(false);
@@ -2870,7 +3253,7 @@ const OrderPOSHomeScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
-      
+
       {/* Bill Modal */}
       <Modal
         visible={billModal}
@@ -2886,7 +3269,7 @@ const OrderPOSHomeScreen: React.FC = () => {
                 ? `Mã đơn: ${currentTab.pendingOrderId}`
                 : "Chưa có đơn"}
             </Text>
-            
+
             <View style={styles.billInfoContainer}>
               <View style={styles.billInfoRow}>
                 <Text style={styles.billInfoLabel}>Khách hàng</Text>
@@ -2894,25 +3277,30 @@ const OrderPOSHomeScreen: React.FC = () => {
                   {currentTab.customer?.name || "Khách vãng lai"}
                 </Text>
               </View>
-              
+
               <View style={styles.billInfoRow}>
                 <Text style={styles.billInfoLabel}>SĐT</Text>
                 <Text style={styles.billInfoValue}>
                   {currentTab.customer?.phone || "---"}
                 </Text>
               </View>
-              
+
               <View style={styles.billInfoRow}>
                 <Text style={styles.billInfoLabel}>Tổng thanh toán</Text>
-                <Text style={styles.billTotalAmount}>{formatPrice(totalAmount)}</Text>
+                <Text style={styles.billTotalAmount}>
+                  {formatPrice(totalAmount)}
+                </Text>
               </View>
             </View>
-            
+
             <Text style={styles.billProductsTitle}>Danh sách sản phẩm</Text>
-            
+
             <ScrollView style={styles.billProductsContainer}>
               {currentTab.cart.map((item, index) => (
-                <View key={`${item.productId}_${index}`} style={styles.billProductItem}>
+                <View
+                  key={`${item.productId}_${index}`}
+                  style={styles.billProductItem}
+                >
                   <Text style={styles.billProductName}>{item.name}</Text>
                   <Text style={styles.billProductDetails}>
                     {item.quantity} × {formatPrice(getItemUnitPrice(item))} ={" "}
@@ -2921,7 +3309,7 @@ const OrderPOSHomeScreen: React.FC = () => {
                 </View>
               ))}
             </ScrollView>
-            
+
             <View style={styles.modalActions}>
               <Button
                 title="Đóng"
@@ -2932,7 +3320,7 @@ const OrderPOSHomeScreen: React.FC = () => {
                 }}
                 style={styles.modalActionButton}
               />
-              
+
               {currentTab.pendingOrderId && (
                 <Button
                   title="In"
@@ -2946,7 +3334,7 @@ const OrderPOSHomeScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
-      
+
       {/* Price Edit Modal */}
       <Modal
         visible={priceEditModal.visible}
@@ -2957,34 +3345,51 @@ const OrderPOSHomeScreen: React.FC = () => {
         <View style={styles.modalBackdrop}>
           <View style={styles.modalContainer}>
             <Text style={styles.modalTitle}>Tùy chỉnh giá</Text>
-            
+
             {priceEditModal.item && (
               <>
-                <Text style={styles.modalSubtitle}>{priceEditModal.item.name}</Text>
-                <Text style={styles.priceEditHint}>
-                  Số lượng: {priceEditModal.item.quantity} {priceEditModal.item.unit}
+                <Text style={styles.modalSubtitle}>
+                  {priceEditModal.item.name}
                 </Text>
-                
+                <Text style={styles.priceEditHint}>
+                  Số lượng: {priceEditModal.item.quantity}{" "}
+                  {priceEditModal.item.unit}
+                </Text>
+
                 <Text style={styles.priceTypeLabel}>Loại giá</Text>
-                
+
                 <View style={styles.priceTypeContainer}>
-                  {(["NORMAL", "VIP", "AT_COST", "CLEARANCE", "FREE"] as SaleType[]).map((st) => {
-                    const active = (priceEditModal.tempSaleType || "NORMAL") === st;
-                    
+                  {(
+                    [
+                      "NORMAL",
+                      "VIP",
+                      "AT_COST",
+                      "CLEARANCE",
+                      "FREE",
+                    ] as SaleType[]
+                  ).map((st) => {
+                    const active =
+                      (priceEditModal.tempSaleType || "NORMAL") === st;
+
                     return (
                       <TouchableOpacity
                         key={st}
-                        style={[styles.priceTypeButton, active && styles.priceTypeButtonActive]}
+                        style={[
+                          styles.priceTypeButton,
+                          active && styles.priceTypeButtonActive,
+                        ]}
                         onPress={() => {
                           setPriceEditModal((prev) => {
                             const item = prev.item!;
                             let nextOverride = prev.tempOverridePrice ?? null;
-                            
+
                             if (st === "FREE") nextOverride = 0;
                             if (st === "AT_COST")
-                              nextOverride = getPriceNumber(item.cost_price || item.price);
+                              nextOverride = getPriceNumber(
+                                item.cost_price || item.price
+                              );
                             if (st === "NORMAL") nextOverride = null;
-                            
+
                             return {
                               ...prev,
                               tempSaleType: st,
@@ -3005,10 +3410,14 @@ const OrderPOSHomeScreen: React.FC = () => {
                     );
                   })}
                 </View>
-                
-                {["VIP", "CLEARANCE"].includes(priceEditModal.tempSaleType || "NORMAL") && (
+
+                {["VIP", "CLEARANCE"].includes(
+                  priceEditModal.tempSaleType || "NORMAL"
+                ) && (
                   <View style={styles.customPriceContainer}>
-                    <Text style={styles.customPriceLabel}>Nhập giá mới (đ)</Text>
+                    <Text style={styles.customPriceLabel}>
+                      Nhập giá mới (đ)
+                    </Text>
                     <TextInput
                       value={String(priceEditModal.tempOverridePrice ?? "")}
                       onChangeText={(txt) => {
@@ -3025,14 +3434,19 @@ const OrderPOSHomeScreen: React.FC = () => {
                     />
                   </View>
                 )}
-                
+
                 <View style={styles.priceEditTotal}>
-                  <Text style={styles.priceEditTotalLabel}>Thành tiền sau thay đổi</Text>
+                  <Text style={styles.priceEditTotalLabel}>
+                    Thành tiền sau thay đổi
+                  </Text>
                   <Text style={styles.priceEditTotalValue}>
-                    {formatPrice(computeTempUnitPrice() * (priceEditModal.item?.quantity || 1))}
+                    {formatPrice(
+                      computeTempUnitPrice() *
+                        (priceEditModal.item?.quantity || 1)
+                    )}
                   </Text>
                 </View>
-                
+
                 <View style={styles.modalActions}>
                   <Button
                     title="Hủy"
@@ -3040,7 +3454,7 @@ const OrderPOSHomeScreen: React.FC = () => {
                     onPress={() => setPriceEditModal({ visible: false })}
                     style={styles.modalActionButton}
                   />
-                  
+
                   <Button
                     title="Áp dụng"
                     variant="primary"
@@ -3078,7 +3492,7 @@ const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.md,
     fontWeight: "500",
   },
-  
+
   // Header Styles
   header: {
     position: "absolute",
@@ -3112,7 +3526,7 @@ const styles = StyleSheet.create({
     color: COLORS.muted,
     marginTop: 2,
   },
-  
+
   // Tabs Styles
   tabsScrollView: {
     paddingHorizontal: SPACING.lg,
@@ -3170,7 +3584,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.chipActive,
     marginLeft: SPACING.xs,
   },
-  
+
   // Search Styles
   searchSection: {
     paddingHorizontal: SPACING.lg,
@@ -3215,7 +3629,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.3)",
     zIndex: 90,
   },
-  
+
   // Product Dropdown Styles
   productDropdown: {
     position: "absolute",
@@ -3300,7 +3714,7 @@ const styles = StyleSheet.create({
   stockTextOut: {
     color: COLORS.danger,
   },
-  
+
   // Keyboard Avoiding
   keyboardAvoidingView: {
     flex: 1,
@@ -3311,7 +3725,7 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.xxxl,
     gap: SPACING.lg,
   },
-  
+
   // Quick Info Bar
   quickInfoBar: {
     flexDirection: "row",
@@ -3400,7 +3814,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: COLORS.info,
   },
-  
+
   // Loyalty Card
   loyaltyCard: {
     flexDirection: "row",
@@ -3461,7 +3875,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: COLORS.primary,
   },
-  
+
   // Section Styles
   sectionContainer: {
     backgroundColor: COLORS.white,
@@ -3493,7 +3907,7 @@ const styles = StyleSheet.create({
   sectionContent: {
     marginTop: SPACING.sm,
   },
-  
+
   // Badge Styles
   badge: {
     minWidth: 30,
@@ -3507,7 +3921,7 @@ const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.sm,
     fontWeight: "700",
   },
-  
+
   // Empty Cart Styles
   emptyCart: {
     alignItems: "center",
@@ -3524,7 +3938,7 @@ const styles = StyleSheet.create({
     color: COLORS.muted,
     marginTop: SPACING.xs,
   },
-  
+
   // Cart Item Styles
   cartItemCard: {
     backgroundColor: COLORS.white,
@@ -3698,7 +4112,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.dangerLight,
     borderRadius: RADIUS.sm,
   },
-  
+
   // Price Breakdown Styles
   priceBreakdown: {
     gap: SPACING.sm,
@@ -3739,7 +4153,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: COLORS.primary,
   },
-  
+
   // VAT Toggle Styles
   vatToggleContainer: {
     flexDirection: "row",
@@ -3773,7 +4187,7 @@ const styles = StyleSheet.create({
   vatToggleTextActive: {
     color: COLORS.success,
   },
-  
+
   // VAT Info Styles
   vatInfoContainer: {
     marginTop: SPACING.sm,
@@ -3783,7 +4197,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.cardSecondary,
     borderColor: COLORS.stroke,
   },
-  
+
   // Payment Method Styles
   paymentMethodLabel: {
     fontSize: TYPOGRAPHY.base,
@@ -3820,7 +4234,7 @@ const styles = StyleSheet.create({
   paymentMethodTextActive: {
     color: COLORS.primary,
   },
-  
+
   // Cash Payment Styles
   cashPaymentContainer: {
     marginTop: SPACING.lg,
@@ -3913,7 +4327,7 @@ const styles = StyleSheet.create({
   confirmPaymentButton: {
     marginTop: SPACING.sm,
   },
-  
+
   // Bottom Bar Styles
   bottomBar: {
     position: "absolute",
@@ -3991,12 +4405,12 @@ const styles = StyleSheet.create({
   continueQrButton: {
     marginTop: 0,
   },
-  
+
   // Bottom Spacer
   bottomSpacer: {
     height: 120,
   },
-  
+
   // Modal Styles
   modalBackdrop: {
     flex: 1,
@@ -4053,7 +4467,7 @@ const styles = StyleSheet.create({
   modalDivider: {
     marginVertical: SPACING.lg,
   },
-  
+
   // Employee Modal Styles
   employeeItem: {
     flexDirection: "row",
@@ -4088,7 +4502,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: COLORS.primary,
   },
-  
+
   // Customer Modal Styles
   customerSearchContainer: {
     flexDirection: "row",
@@ -4176,7 +4590,7 @@ const styles = StyleSheet.create({
   createCustomerButton: {
     marginTop: SPACING.md,
   },
-  
+
   // QR Modal Styles
   qrCountdownContainer: {
     backgroundColor: COLORS.warningLight,
@@ -4211,7 +4625,7 @@ const styles = StyleSheet.create({
     color: COLORS.muted,
     fontStyle: "italic",
   },
-  
+
   // Bill Modal Styles
   billInfoContainer: {
     gap: SPACING.sm,
@@ -4262,7 +4676,7 @@ const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.sm,
     color: COLORS.muted,
   },
-  
+
   // Price Edit Modal Styles
   priceEditHint: {
     fontSize: TYPOGRAPHY.sm,
@@ -4331,20 +4745,20 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: COLORS.primary,
   },
-  
+
   // Card Component
   card: {
     backgroundColor: COLORS.white,
     borderRadius: RADIUS.lg,
     ...SHADOW,
   },
-  
+
   // Icon Button Component
   iconButton: {
     padding: SPACING.xs,
     borderRadius: RADIUS.sm,
   },
-  
+
   // Button Component Styles
   buttonBase: {
     borderRadius: RADIUS.lg,
@@ -4362,7 +4776,7 @@ const styles = StyleSheet.create({
   buttonText: {
     fontWeight: "600",
   },
-  
+
   // Input Component Styles
   inputContainer: {
     marginBottom: SPACING.sm,

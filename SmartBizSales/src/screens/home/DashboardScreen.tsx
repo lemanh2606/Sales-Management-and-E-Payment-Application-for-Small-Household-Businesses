@@ -314,6 +314,8 @@ export default function DashboardScreen() {
     }
   }, [storeId]);
 
+  // Check missed notifications logic moved to NotificationContext
+
   // ==================== FETCH ORDER STATS ====================
   const fetchOrderStats = async (): Promise<void> => {
     if (!storeId) return;

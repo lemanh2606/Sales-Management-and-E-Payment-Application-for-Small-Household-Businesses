@@ -15,6 +15,7 @@ const Notification = require("../../models/Notification");
 const StorePaymentConfig = require("../../models/StorePaymentConfig");
 const InventoryVoucher = require("../../models/InventoryVoucher");
 const Warehouse = require("../../models/Warehouse"); //  Đã thêm import Warehouse
+const { createOrderNotification } = require("../../utils/notificationHelper"); // Push notification helper
 
 const { periodToRange } = require("../../utils/period");
 const { v2: cloudinary } = require("cloudinary");
@@ -750,6 +751,15 @@ const createOrder = async (req, res) => {
         order.totalAmount
       } (${paymentMethod.toUpperCase()})`,
     });
+
+    // 📱 Gửi Push Notification (sau khi commit transaction)
+    try {
+      const io = req.app.get("io");
+      await createOrderNotification(storeId, order, io);
+      console.log("✅ Push notification sent for new order");
+    } catch (pushErr) {
+      console.warn("⚠️ Push notification failed:", pushErr.message);
+    }
 
     return res.status(201).json({
       message: "Tạo đơn hàng thành công",
